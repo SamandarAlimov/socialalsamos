@@ -201,7 +201,7 @@ export default function AuthPage() {
               type="button"
               variant="outline"
               className="h-12"
-              onClick={() => handleSocialLogin('alsamos')}
+              onClick={() => toast.info('Alsamos ID login coming soon!')}
               disabled={isSubmitting}
             >
               <AlsamosIcon />
@@ -231,7 +231,7 @@ export default function AuthPage() {
             type="button"
             variant="ghost"
             className="w-full mt-4 text-muted-foreground"
-            onClick={() => handleSocialLogin('phone')}
+            onClick={() => toast.info('Phone login coming soon!')}
             disabled={isSubmitting}
           >
             <Phone className="h-4 w-4 mr-2" />
