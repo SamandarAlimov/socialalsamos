@@ -9,7 +9,6 @@ import {
   MoreVertical,
   Phone,
   Video,
-  Paperclip,
   Smile,
   Mic,
   Send,
@@ -31,6 +30,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useConversations, useMessages, Conversation, Message } from '@/hooks/useMessages';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { format } from 'date-fns';
+import { FileUploadButton } from '@/components/FileUploadButton';
+import { MessageAttachment } from '@/components/MessageAttachment';
 
 type MessageTab = 'private' | 'groups' | 'channels';
 
@@ -43,6 +44,7 @@ export default function MessagesPage() {
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [isInCall, setIsInCall] = useState(false);
   const [callType, setCallType] = useState<'audio' | 'video'>('video');
+  const [pendingAttachment, setPendingAttachment] = useState<{ url: string; type: string; name: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -104,14 +106,23 @@ export default function MessagesPage() {
   }, [messages, scrollToBottom]);
 
   const handleSendMessage = async () => {
-    if (!messageInput.trim()) return;
+    if (!messageInput.trim() && !pendingAttachment) return;
     
-    await sendMessage(messageInput);
+    await sendMessage(
+      messageInput || (pendingAttachment ? `[${pendingAttachment.name}]` : ''),
+      pendingAttachment?.url,
+      pendingAttachment?.type
+    );
     setMessageInput('');
+    setPendingAttachment(null);
     setTyping(false);
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
+  };
+
+  const handleFileUpload = (url: string, type: string, name: string) => {
+    setPendingAttachment({ url, type, name });
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -485,13 +496,16 @@ export default function MessagesPage() {
                             <p className="text-sm italic opacity-50">Message deleted</p>
                           ) : (
                             <>
-                              <p className="text-sm leading-relaxed">{message.content}</p>
-                              {message.media_url && (
-                                <img 
-                                  src={message.media_url} 
-                                  alt="Media" 
-                                  className="mt-2 rounded-lg max-w-full"
-                                />
+                              {message.content && !message.content.startsWith('[') && (
+                                <p className="text-sm leading-relaxed">{message.content}</p>
+                              )}
+                              {message.media_url && message.media_type && (
+                                <div className="mt-2">
+                                  <MessageAttachment 
+                                    url={message.media_url} 
+                                    type={message.media_type as 'image' | 'video' | 'audio' | 'document'}
+                                  />
+                                </div>
                               )}
                             </>
                           )}
@@ -534,10 +548,24 @@ export default function MessagesPage() {
 
             {/* Message Input */}
             <div className="p-4 border-t border-border bg-card">
+              {/* Pending Attachment Preview */}
+              {pendingAttachment && (
+                <div className="mb-2 p-2 bg-muted rounded-lg flex items-center gap-2">
+                  {pendingAttachment.type === 'image' ? (
+                    <img src={pendingAttachment.url} alt="Preview" className="h-12 w-12 object-cover rounded" />
+                  ) : (
+                    <div className="h-12 w-12 bg-accent rounded flex items-center justify-center text-xs">
+                      {pendingAttachment.type}
+                    </div>
+                  )}
+                  <span className="flex-1 text-sm truncate">{pendingAttachment.name}</span>
+                  <Button variant="ghost" size="icon" onClick={() => setPendingAttachment(null)}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
               <div className="flex items-center gap-2">
-                <Button variant="ghost" size="icon" className="text-muted-foreground">
-                  <Paperclip className="h-5 w-5" />
-                </Button>
+                <FileUploadButton onUpload={handleFileUpload} />
                 
                 <div className="flex-1 relative">
                   <input
@@ -553,7 +581,7 @@ export default function MessagesPage() {
                   </button>
                 </div>
 
-                {messageInput ? (
+                {(messageInput || pendingAttachment) ? (
                   <Button variant="hero" size="icon" onClick={handleSendMessage}>
                     <Send className="h-5 w-5" />
                   </Button>
