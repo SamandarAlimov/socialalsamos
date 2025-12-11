@@ -331,3 +331,21 @@
   background-size: 200% 200%;
   animation: gradientShift 8s ease infinite;
 }
+
+@keyframes storyProgress {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+.animate-story-progress {
+  animation: storyProgress 5s linear forwards;
+}
+
+/* Video mirror effect for local video */
+.mirror {
+  transform: scaleX(-1);
+}
