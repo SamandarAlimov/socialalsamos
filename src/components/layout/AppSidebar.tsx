@@ -6,35 +6,38 @@ import {
   MessageCircle, 
   ShoppingBag, 
   Map, 
-  Bell, 
   PlusSquare, 
   User, 
   Settings,
   LogOut,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Users
 } from 'lucide-react';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
+import { NotificationsDropdown } from '@/components/NotificationsDropdown';
+import { UserSearchDialog } from '@/components/UserSearchDialog';
+import { Button } from '@/components/ui/button';
 
 interface NavItem {
   icon: React.ElementType;
   label: string;
-  path: string;
+  path?: string;
   badge?: number;
+  action?: 'notifications' | 'search';
 }
 
 const navItems: NavItem[] = [
   { icon: Home, label: 'Home', path: '/home' },
   { icon: Search, label: 'Search', path: '/search' },
+  { icon: Users, label: 'Discover', action: 'search' },
   { icon: Video, label: 'Videos', path: '/videos' },
-  { icon: MessageCircle, label: 'Messages', path: '/messages', badge: 3 },
+  { icon: MessageCircle, label: 'Messages', path: '/messages' },
   { icon: ShoppingBag, label: 'Marketplace', path: '/marketplace' },
   { icon: Map, label: 'Map', path: '/map' },
-  { icon: Bell, label: 'Notifications', path: '/notifications', badge: 12 },
   { icon: PlusSquare, label: 'Create', path: '/create' },
 ];
 
@@ -55,19 +58,40 @@ export function AppSidebar() {
         collapsed ? "w-[72px]" : "w-64"
       )}
     >
-      {/* Logo */}
-      <div className="h-16 flex items-center px-4 border-b border-sidebar-border">
+      {/* Logo + Notifications */}
+      <div className="h-16 flex items-center justify-between px-4 border-b border-sidebar-border">
         <AlsamosLogo size="sm" showText={!collapsed} />
+        {!collapsed && <NotificationsDropdown />}
       </div>
 
       {/* Main Navigation */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto scrollbar-hidden">
         {navItems.map((item) => {
-          const isActive = location.pathname === item.path;
+          const isActive = item.path ? location.pathname === item.path : false;
+          
+          // Handle special action items
+          if (item.action === 'search') {
+            return (
+              <UserSearchDialog key={item.label}>
+                <button
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative w-full text-left",
+                    "text-sidebar-foreground hover:bg-sidebar-accent"
+                  )}
+                >
+                  <item.icon className="h-5 w-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110" />
+                  {!collapsed && (
+                    <span className="font-medium text-sm">{item.label}</span>
+                  )}
+                </button>
+              </UserSearchDialog>
+            );
+          }
+          
           return (
             <NavLink
               key={item.path}
-              to={item.path}
+              to={item.path!}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative",
                 isActive 
