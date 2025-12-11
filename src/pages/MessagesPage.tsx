@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Search, 
   Plus, 
@@ -15,105 +15,158 @@ import {
   Send,
   Check,
   CheckCheck,
-  Image as ImageIcon,
-  File,
-  MapPin,
-  Contact
+  MessageCircle,
+  X,
+  PhoneOff,
+  VideoOff,
+  MicOff,
+  Monitor,
+  Hand
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import { useConversations, useMessages, Conversation, Message } from '@/hooks/useMessages';
+import { useWebRTC } from '@/hooks/useWebRTC';
+import { format } from 'date-fns';
 
-type MessageTab = 'private' | 'groups' | 'channels' | 'requests';
-
-interface Chat {
-  id: string;
-  name: string;
-  avatar?: string;
-  lastMessage: string;
-  time: string;
-  unread: number;
-  isOnline?: boolean;
-  isTyping?: boolean;
-  isMuted?: boolean;
-  isPinned?: boolean;
-  type: 'private' | 'group' | 'channel';
-}
-
-interface Message {
-  id: string;
-  content: string;
-  time: string;
-  isMine: boolean;
-  status: 'sent' | 'delivered' | 'read';
-  type: 'text' | 'image' | 'file' | 'voice';
-}
-
-// Mock data
-const privateChats: Chat[] = [
-  { id: '1', name: 'Sarah Johnson', avatar: 'https://i.pravatar.cc/150?img=1', lastMessage: 'Hey! How are you doing?', time: '2m', unread: 2, isOnline: true, type: 'private' },
-  { id: '2', name: 'Alex Chen', avatar: 'https://i.pravatar.cc/150?img=2', lastMessage: 'The project is ready for review', time: '15m', unread: 0, isOnline: true, type: 'private', isPinned: true },
-  { id: '3', name: 'Mike Wilson', avatar: 'https://i.pravatar.cc/150?img=3', lastMessage: 'Thanks for the help!', time: '1h', unread: 0, isOnline: false, type: 'private' },
-  { id: '4', name: 'Emma Davis', avatar: 'https://i.pravatar.cc/150?img=4', lastMessage: 'Let\'s catch up tomorrow', time: '3h', unread: 5, isOnline: false, type: 'private' },
-  { id: '5', name: 'John Smith', avatar: 'https://i.pravatar.cc/150?img=5', lastMessage: '📎 Document.pdf', time: 'Yesterday', unread: 0, isOnline: true, type: 'private' },
-];
-
-const groupChats: Chat[] = [
-  { id: 'g1', name: 'Alsamos Team', avatar: '', lastMessage: 'Alex: Meeting at 3pm', time: '10m', unread: 12, type: 'group', isPinned: true },
-  { id: 'g2', name: 'Project Alpha', avatar: '', lastMessage: 'Sarah: Updated the docs', time: '2h', unread: 0, type: 'group' },
-  { id: 'g3', name: 'Design Squad', avatar: '', lastMessage: 'New mockups ready!', time: '5h', unread: 3, type: 'group' },
-];
-
-const channelChats: Chat[] = [
-  { id: 'c1', name: 'Alsamos News', avatar: '', lastMessage: 'New feature announcement', time: '1h', unread: 8, type: 'channel' },
-  { id: 'c2', name: 'Tech Updates', avatar: '', lastMessage: 'Weekly digest available', time: '3h', unread: 0, type: 'channel' },
-];
-
-const requestChats: Chat[] = [
-  { id: 'r1', name: 'Unknown User', avatar: '', lastMessage: 'Hi, I found you through...', time: '2d', unread: 1, type: 'private' },
-];
-
-const mockMessages: Message[] = [
-  { id: '1', content: 'Hey! How are you doing?', time: '10:30 AM', isMine: false, status: 'read', type: 'text' },
-  { id: '2', content: 'I\'m doing great, thanks for asking! How about you?', time: '10:32 AM', isMine: true, status: 'read', type: 'text' },
-  { id: '3', content: 'Pretty good! Just finished the project we discussed last week.', time: '10:33 AM', isMine: false, status: 'read', type: 'text' },
-  { id: '4', content: 'That\'s awesome! Can\'t wait to see it.', time: '10:34 AM', isMine: true, status: 'read', type: 'text' },
-  { id: '5', content: 'I\'ll send you the link in a bit. Also, wanted to ask if you\'re free for a call tomorrow?', time: '10:35 AM', isMine: false, status: 'read', type: 'text' },
-  { id: '6', content: 'Sure! What time works for you?', time: '10:36 AM', isMine: true, status: 'delivered', type: 'text' },
-];
+type MessageTab = 'private' | 'groups' | 'channels';
 
 export default function MessagesPage() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<MessageTab>('private');
-  const [selectedChat, setSelectedChat] = useState<Chat | null>(privateChats[0]);
+  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [messageInput, setMessageInput] = useState('');
   const [showCreateMenu, setShowCreateMenu] = useState(false);
+  const [isInCall, setIsInCall] = useState(false);
+  const [callType, setCallType] = useState<'audio' | 'video'>('video');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const { conversations, isLoading: conversationsLoading, refresh: refreshConversations } = useConversations(
+    activeTab === 'private' ? 'private' : activeTab === 'groups' ? 'group' : 'channel'
+  );
+  
+  const { 
+    messages, 
+    isLoading: messagesLoading, 
+    typingUsers, 
+    sendMessage, 
+    setTyping 
+  } = useMessages(selectedConversation?.id || null);
+
+  const {
+    localStream,
+    participants,
+    isConnected,
+    isMuted,
+    isVideoOn,
+    isScreenSharing,
+    isHandRaised,
+    joinRoom,
+    leaveRoom,
+    toggleMute,
+    toggleVideo,
+    toggleScreenShare,
+    toggleHandRaise,
+  } = useWebRTC(isInCall && selectedConversation ? selectedConversation.id : null);
+
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream]);
 
   const tabs: { id: MessageTab; label: string; count?: number }[] = [
-    { id: 'private', label: 'Private', count: privateChats.reduce((acc, c) => acc + c.unread, 0) },
-    { id: 'groups', label: 'Groups', count: groupChats.reduce((acc, c) => acc + c.unread, 0) },
-    { id: 'channels', label: 'Channels', count: channelChats.reduce((acc, c) => acc + c.unread, 0) },
-    { id: 'requests', label: 'Requests', count: requestChats.length },
+    { id: 'private', label: 'Private' },
+    { id: 'groups', label: 'Groups' },
+    { id: 'channels', label: 'Channels' },
   ];
 
-  const getChatsForTab = (): Chat[] => {
-    switch (activeTab) {
-      case 'private': return privateChats;
-      case 'groups': return groupChats;
-      case 'channels': return channelChats;
-      case 'requests': return requestChats;
-      default: return [];
+  const filteredConversations = conversations.filter(conv => {
+    const name = conv.type === 'private' 
+      ? conv.other_participant?.display_name || conv.other_participant?.username 
+      : conv.name;
+    return name?.toLowerCase().includes(searchQuery.toLowerCase());
+  });
+
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, []);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
+
+  const handleSendMessage = async () => {
+    if (!messageInput.trim()) return;
+    
+    await sendMessage(messageInput);
+    setMessageInput('');
+    setTyping(false);
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
     }
   };
 
-  const filteredChats = getChatsForTab().filter(chat => 
-    chat.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setMessageInput(e.target.value);
+    setTyping(true);
+    
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    
+    typingTimeoutRef.current = setTimeout(() => {
+      setTyping(false);
+    }, 2000);
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  const startCall = async (type: 'audio' | 'video') => {
+    setCallType(type);
+    setIsInCall(true);
+    await joinRoom();
+  };
+
+  const endCall = () => {
+    leaveRoom();
+    setIsInCall(false);
+  };
+
+  const getConversationName = (conv: Conversation) => {
+    if (conv.type === 'private') {
+      return conv.other_participant?.display_name || conv.other_participant?.username || 'Unknown';
+    }
+    return conv.name || 'Unnamed';
+  };
+
+  const getConversationAvatar = (conv: Conversation) => {
+    if (conv.type === 'private') {
+      return conv.other_participant?.avatar_url;
+    }
+    return conv.avatar_url;
+  };
+
+  const formatMessageTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return format(date, 'HH:mm');
+  };
 
   return (
     <div className="h-screen flex">
-      {/* Left Panel - Chat List */}
+      {/* Left Panel - Conversation List */}
       <div className="w-80 lg:w-96 border-r border-border flex flex-col bg-card">
         {/* Search & Create */}
         <div className="p-4 border-b border-border">
@@ -136,7 +189,6 @@ export default function MessagesPage() {
                 <Plus className="h-5 w-5" />
               </Button>
               
-              {/* Create Menu Dropdown */}
               {showCreateMenu && (
                 <div className="absolute right-0 top-12 w-56 bg-popover border border-border rounded-xl shadow-lg py-2 z-50 animate-scale-in">
                   <button className="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-accent transition-colors text-sm">
@@ -176,11 +228,6 @@ export default function MessagesPage() {
             >
               <span className="flex items-center justify-center gap-1.5">
                 {tab.label}
-                {tab.count && tab.count > 0 && (
-                  <span className="bg-primary text-primary-foreground text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-                    {tab.count > 99 ? '99+' : tab.count}
-                  </span>
-                )}
               </span>
               {activeTab === tab.id && (
                 <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
@@ -189,85 +236,100 @@ export default function MessagesPage() {
           ))}
         </div>
 
-        {/* Chat List */}
+        {/* Conversation List */}
         <div className="flex-1 overflow-y-auto scrollbar-custom">
-          {filteredChats.map((chat) => (
-            <button
-              key={chat.id}
-              onClick={() => setSelectedChat(chat)}
-              className={cn(
-                "w-full p-3 flex items-center gap-3 hover:bg-accent/50 transition-colors border-b border-border/50",
-                selectedChat?.id === chat.id && "bg-accent"
-              )}
-            >
-              <div className="relative">
-                <Avatar className="h-12 w-12">
-                  <AvatarImage src={chat.avatar} />
-                  <AvatarFallback className={chat.type === 'group' ? 'bg-blue-500' : chat.type === 'channel' ? 'bg-violet-500' : 'bg-primary'}>
-                    {chat.type === 'group' ? <Users className="h-5 w-5 text-primary-foreground" /> : 
-                     chat.type === 'channel' ? <Megaphone className="h-5 w-5 text-primary-foreground" /> :
-                     chat.name[0]}
-                  </AvatarFallback>
-                </Avatar>
-                {chat.isOnline && (
-                  <span className="absolute bottom-0 right-0 h-3.5 w-3.5 bg-green-500 rounded-full border-2 border-card" />
+          {conversationsLoading ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+            </div>
+          ) : filteredConversations.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
+              <MessageCircle className="h-8 w-8 mb-2" />
+              <p className="text-sm">No conversations yet</p>
+            </div>
+          ) : (
+            filteredConversations.map((conv) => (
+              <button
+                key={conv.id}
+                onClick={() => setSelectedConversation(conv)}
+                className={cn(
+                  "w-full p-3 flex items-center gap-3 hover:bg-accent/50 transition-colors border-b border-border/50",
+                  selectedConversation?.id === conv.id && "bg-accent"
                 )}
-              </div>
-              
-              <div className="flex-1 min-w-0 text-left">
-                <div className="flex items-center justify-between mb-0.5">
-                  <span className="font-medium text-sm truncate">{chat.name}</span>
-                  <span className="text-xs text-muted-foreground flex-shrink-0">{chat.time}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <p className={cn(
-                    "text-sm truncate",
-                    chat.unread > 0 ? "text-foreground" : "text-muted-foreground"
-                  )}>
-                    {chat.isTyping ? (
-                      <span className="text-primary">typing...</span>
-                    ) : (
-                      chat.lastMessage
-                    )}
-                  </p>
-                  {chat.unread > 0 && (
-                    <span className="bg-primary text-primary-foreground text-xs rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5 ml-2">
-                      {chat.unread}
-                    </span>
+              >
+                <div className="relative">
+                  <Avatar className="h-12 w-12">
+                    <AvatarImage src={getConversationAvatar(conv) || ''} />
+                    <AvatarFallback className={conv.type === 'group' ? 'bg-blue-500' : conv.type === 'channel' ? 'bg-violet-500' : 'bg-primary'}>
+                      {conv.type === 'group' ? <Users className="h-5 w-5 text-primary-foreground" /> : 
+                       conv.type === 'channel' ? <Megaphone className="h-5 w-5 text-primary-foreground" /> :
+                       getConversationName(conv)[0]}
+                    </AvatarFallback>
+                  </Avatar>
+                  {conv.type === 'private' && conv.other_participant?.is_online && (
+                    <span className="absolute bottom-0 right-0 h-3.5 w-3.5 bg-green-500 rounded-full border-2 border-card" />
                   )}
                 </div>
-              </div>
-            </button>
-          ))}
+                
+                <div className="flex-1 min-w-0 text-left">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="font-medium text-sm truncate">{getConversationName(conv)}</span>
+                    <span className="text-xs text-muted-foreground flex-shrink-0">
+                      {conv.last_message_at && format(new Date(conv.last_message_at), 'HH:mm')}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className={cn(
+                      "text-sm truncate",
+                      conv.unread_count && conv.unread_count > 0 ? "text-foreground" : "text-muted-foreground"
+                    )}>
+                      {conv.last_message || 'No messages yet'}
+                    </p>
+                    {conv.unread_count && conv.unread_count > 0 && (
+                      <span className="bg-primary text-primary-foreground text-xs rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5 ml-2">
+                        {conv.unread_count}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </button>
+            ))
+          )}
         </div>
       </div>
 
       {/* Right Panel - Chat Window */}
       <div className="flex-1 flex flex-col bg-background">
-        {selectedChat ? (
+        {selectedConversation ? (
           <>
             {/* Chat Header */}
             <div className="h-16 px-4 flex items-center justify-between border-b border-border bg-card">
               <div className="flex items-center gap-3">
                 <Avatar className="h-10 w-10">
-                  <AvatarImage src={selectedChat.avatar} />
+                  <AvatarImage src={getConversationAvatar(selectedConversation) || ''} />
                   <AvatarFallback className="bg-primary text-primary-foreground">
-                    {selectedChat.name[0]}
+                    {getConversationName(selectedConversation)[0]}
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <h2 className="font-semibold text-sm">{selectedChat.name}</h2>
+                  <h2 className="font-semibold text-sm">{getConversationName(selectedConversation)}</h2>
                   <p className="text-xs text-muted-foreground">
-                    {selectedChat.isOnline ? 'online' : 'last seen recently'}
+                    {typingUsers.length > 0 ? (
+                      <span className="text-primary animate-pulse">typing...</span>
+                    ) : selectedConversation.type === 'private' && selectedConversation.other_participant?.is_online ? (
+                      'online'
+                    ) : (
+                      'last seen recently'
+                    )}
                   </p>
                 </div>
               </div>
               
               <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" onClick={() => startCall('audio')}>
                   <Phone className="h-5 w-5 text-muted-foreground" />
                 </Button>
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" onClick={() => startCall('video')}>
                   <Video className="h-5 w-5 text-muted-foreground" />
                 </Button>
                 <Button variant="ghost" size="icon">
@@ -279,41 +341,195 @@ export default function MessagesPage() {
               </div>
             </div>
 
+            {/* Video Call Overlay */}
+            {isInCall && (
+              <div className="absolute inset-0 bg-background/95 z-50 flex flex-col">
+                <div className="flex-1 relative">
+                  {/* Remote Videos */}
+                  <div className="grid grid-cols-2 gap-4 p-4 h-full">
+                    {participants.map((participant) => (
+                      <div key={participant.id} className="relative bg-muted rounded-xl overflow-hidden">
+                        {participant.stream ? (
+                          <video
+                            autoPlay
+                            playsInline
+                            ref={(el) => {
+                              if (el && participant.stream) el.srcObject = participant.stream;
+                            }}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Avatar className="h-24 w-24">
+                              <AvatarFallback className="text-2xl">U</AvatarFallback>
+                            </Avatar>
+                          </div>
+                        )}
+                        <div className="absolute bottom-4 left-4 flex items-center gap-2">
+                          {participant.isMuted && <MicOff className="h-4 w-4 text-red-500" />}
+                          {!participant.isVideoOn && <VideoOff className="h-4 w-4 text-red-500" />}
+                          {participant.isHandRaised && <Hand className="h-4 w-4 text-yellow-500" />}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Local Video (Picture-in-Picture) */}
+                  <div className="absolute bottom-24 right-4 w-48 h-36 bg-muted rounded-xl overflow-hidden shadow-lg">
+                    {localStream ? (
+                      <video
+                        ref={localVideoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover mirror"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Avatar className="h-12 w-12">
+                          <AvatarFallback>
+                            {user?.email?.[0]?.toUpperCase() || 'U'}
+                          </AvatarFallback>
+                        </Avatar>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Call Controls */}
+                <div className="h-20 flex items-center justify-center gap-4 bg-card/80 backdrop-blur">
+                  <Button
+                    variant={isMuted ? "destructive" : "outline"}
+                    size="icon"
+                    className="rounded-full h-12 w-12"
+                    onClick={toggleMute}
+                  >
+                    {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                  </Button>
+                  <Button
+                    variant={!isVideoOn ? "destructive" : "outline"}
+                    size="icon"
+                    className="rounded-full h-12 w-12"
+                    onClick={toggleVideo}
+                  >
+                    {isVideoOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
+                  </Button>
+                  <Button
+                    variant={isScreenSharing ? "secondary" : "outline"}
+                    size="icon"
+                    className="rounded-full h-12 w-12"
+                    onClick={toggleScreenShare}
+                  >
+                    <Monitor className="h-5 w-5" />
+                  </Button>
+                  <Button
+                    variant={isHandRaised ? "secondary" : "outline"}
+                    size="icon"
+                    className="rounded-full h-12 w-12"
+                    onClick={toggleHandRaise}
+                  >
+                    <Hand className="h-5 w-5" />
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    className="rounded-full h-14 w-14"
+                    onClick={endCall}
+                  >
+                    <PhoneOff className="h-6 w-6" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-custom bg-muted/30">
-              {mockMessages.map((message) => (
-                <div
-                  key={message.id}
-                  className={cn(
-                    "flex",
-                    message.isMine ? "justify-end" : "justify-start"
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "max-w-[70%] rounded-2xl px-4 py-2.5 animate-scale-in",
-                      message.isMine 
-                        ? "bg-primary text-primary-foreground rounded-br-md" 
-                        : "bg-card text-card-foreground rounded-bl-md border border-border"
-                    )}
-                  >
-                    <p className="text-sm leading-relaxed">{message.content}</p>
-                    <div className={cn(
-                      "flex items-center justify-end gap-1 mt-1",
-                      message.isMine ? "text-primary-foreground/70" : "text-muted-foreground"
-                    )}>
-                      <span className="text-xs">{message.time}</span>
-                      {message.isMine && (
-                        message.status === 'read' ? (
-                          <CheckCheck className="h-3.5 w-3.5" />
-                        ) : (
-                          <Check className="h-3.5 w-3.5" />
-                        )
+              {messagesLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                  <MessageCircle className="h-12 w-12 mb-4" />
+                  <p>No messages yet. Start the conversation!</p>
+                </div>
+              ) : (
+                messages.map((message) => {
+                  const isMine = message.sender_id === user?.id;
+                  return (
+                    <div
+                      key={message.id}
+                      className={cn(
+                        "flex",
+                        isMine ? "justify-end" : "justify-start"
                       )}
+                    >
+                      <div className="flex items-end gap-2 max-w-[70%]">
+                        {!isMine && (
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={message.sender?.avatar_url || ''} />
+                            <AvatarFallback className="text-xs">
+                              {message.sender?.display_name?.[0] || message.sender?.username?.[0] || 'U'}
+                            </AvatarFallback>
+                          </Avatar>
+                        )}
+                        <div
+                          className={cn(
+                            "rounded-2xl px-4 py-2.5 animate-scale-in",
+                            isMine 
+                              ? "bg-primary text-primary-foreground rounded-br-md" 
+                              : "bg-card text-card-foreground rounded-bl-md border border-border"
+                          )}
+                        >
+                          {message.is_deleted ? (
+                            <p className="text-sm italic opacity-50">Message deleted</p>
+                          ) : (
+                            <>
+                              <p className="text-sm leading-relaxed">{message.content}</p>
+                              {message.media_url && (
+                                <img 
+                                  src={message.media_url} 
+                                  alt="Media" 
+                                  className="mt-2 rounded-lg max-w-full"
+                                />
+                              )}
+                            </>
+                          )}
+                          <div className={cn(
+                            "flex items-center justify-end gap-1 mt-1",
+                            isMine ? "text-primary-foreground/70" : "text-muted-foreground"
+                          )}>
+                            <span className="text-xs">{formatMessageTime(message.created_at)}</span>
+                            {message.is_edited && <span className="text-xs">(edited)</span>}
+                            {isMine && (
+                              message.is_read ? (
+                                <CheckCheck className="h-3.5 w-3.5 text-blue-400" />
+                              ) : (
+                                <Check className="h-3.5 w-3.5" />
+                              )
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              
+              {/* Typing Indicator */}
+              {typingUsers.length > 0 && (
+                <div className="flex justify-start">
+                  <div className="bg-card border border-border rounded-2xl rounded-bl-md px-4 py-3">
+                    <div className="flex gap-1">
+                      <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                     </div>
                   </div>
                 </div>
-              ))}
+              )}
+              
+              <div ref={messagesEndRef} />
             </div>
 
             {/* Message Input */}
@@ -327,7 +543,8 @@ export default function MessagesPage() {
                   <input
                     type="text"
                     value={messageInput}
-                    onChange={(e) => setMessageInput(e.target.value)}
+                    onChange={handleInputChange}
+                    onKeyPress={handleKeyPress}
                     placeholder="Write a message..."
                     className="w-full h-11 px-4 pr-12 rounded-xl bg-muted/50 border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                   />
@@ -337,7 +554,7 @@ export default function MessagesPage() {
                 </div>
 
                 {messageInput ? (
-                  <Button variant="hero" size="icon">
+                  <Button variant="hero" size="icon" onClick={handleSendMessage}>
                     <Send className="h-5 w-5" />
                   </Button>
                 ) : (
@@ -363,6 +580,3 @@ export default function MessagesPage() {
     </div>
   );
 }
-
-// Import icon that wasn't declared
-import { MessageCircle } from 'lucide-react';
