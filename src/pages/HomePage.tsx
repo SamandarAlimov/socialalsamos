@@ -142,7 +142,7 @@ export default function HomePage() {
         <div className="flex gap-3">
           <Avatar className="h-10 w-10">
             <AvatarFallback className="bg-primary text-primary-foreground">
-              {user?.name?.[0]?.toUpperCase() || 'U'}
+              {user?.email?.[0]?.toUpperCase() || 'U'}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1">
