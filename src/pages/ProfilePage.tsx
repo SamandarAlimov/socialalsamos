@@ -43,14 +43,14 @@ export default function ProfilePage() {
           <Avatar className="h-32 w-32 border-4 border-background shadow-lg">
             <AvatarImage src="" />
             <AvatarFallback className="text-4xl bg-primary text-primary-foreground">
-              {user?.name?.[0]?.toUpperCase() || 'U'}
+              {user?.email?.[0]?.toUpperCase() || 'U'}
             </AvatarFallback>
           </Avatar>
 
           <div className="flex-1 pb-2">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div>
-                <h1 className="text-2xl font-bold">{user?.name || 'User'}</h1>
+                <h1 className="text-2xl font-bold">{user?.email?.split('@')[0] || 'User'}</h1>
                 <p className="text-muted-foreground">@{user?.email?.split('@')[0] || 'username'}</p>
               </div>
               <div className="flex gap-2">

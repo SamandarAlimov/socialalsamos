@@ -71,7 +71,7 @@ export default function AuthPage() {
     }
   };
 
-  const handleSocialLogin = async (provider: string) => {
+  const handleSocialLogin = async (provider: 'google' | 'apple') => {
     setIsSubmitting(true);
     try {
       await loginWithProvider(provider);
