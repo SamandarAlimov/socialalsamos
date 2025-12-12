@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -7,11 +8,87 @@ const corsHeaders = {
 
 // In-memory storage for rooms (in production, use Redis)
 const rooms = new Map<string, Map<string, WebSocket>>();
-const participants = new Map<string, { odsp: string; userId: string; roomId: string }>();
+const roomCallIds = new Map<string, string>(); // roomId -> callId mapping
+
+// Helper to verify user is participant in a conversation/call
+async function verifyParticipant(userId: string, roomId: string): Promise<boolean> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Check if the roomId corresponds to a video_call or conversation
+    // First check if user is a call participant
+    const { data: callParticipant } = await supabase
+      .from('call_participants')
+      .select('id')
+      .eq('call_id', roomId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (callParticipant) return true;
+
+    // Check if user is part of the conversation (roomId could be conversation_id)
+    const { data: convParticipant } = await supabase
+      .from('conversation_participants')
+      .select('id')
+      .eq('conversation_id', roomId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (convParticipant) return true;
+
+    // Check if there's a video_call for this room and user is host or conversation participant
+    const { data: videoCall } = await supabase
+      .from('video_calls')
+      .select('id, host_id, conversation_id')
+      .eq('id', roomId)
+      .maybeSingle();
+
+    if (videoCall) {
+      if (videoCall.host_id === userId) return true;
+      
+      if (videoCall.conversation_id) {
+        const { data: isConvParticipant } = await supabase
+          .from('conversation_participants')
+          .select('id')
+          .eq('conversation_id', videoCall.conversation_id)
+          .eq('user_id', userId)
+          .maybeSingle();
+        
+        if (isConvParticipant) return true;
+      }
+    }
+
+    return false;
+  } catch (error) {
+    console.error('Error verifying participant:', error);
+    return false;
+  }
+}
+
+// Helper to extract user ID from JWT token
+function getUserIdFromToken(authHeader: string | null): string | null {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+  
+  try {
+    const token = authHeader.substring(7);
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.sub || null;
+  } catch {
+    return null;
+  }
+}
 
 serve(async (req) => {
   const { headers } = req;
   const upgradeHeader = headers.get("upgrade") || "";
+  const authHeader = headers.get("authorization");
 
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -24,12 +101,16 @@ serve(async (req) => {
     
     let currentRoomId: string | null = null;
     let currentUserId: string | null = null;
+    let isAuthenticated = false;
+
+    // Try to get user ID from auth header
+    const tokenUserId = getUserIdFromToken(authHeader);
 
     socket.onopen = () => {
       console.log("WebSocket connection established");
     };
 
-    socket.onmessage = (event) => {
+    socket.onmessage = async (event) => {
       try {
         const data = JSON.parse(event.data);
         console.log("Received message:", data.type);
@@ -37,6 +118,30 @@ serve(async (req) => {
         switch (data.type) {
           case 'join': {
             const { roomId, userId } = data;
+            
+            // Verify the user ID matches the token (if token provided)
+            if (tokenUserId && tokenUserId !== userId) {
+              socket.send(JSON.stringify({
+                type: 'error',
+                message: 'User ID mismatch with authentication token',
+              }));
+              socket.close();
+              return;
+            }
+
+            // Verify user is authorized to join this room
+            const isAuthorized = await verifyParticipant(userId, roomId);
+            if (!isAuthorized) {
+              console.log(`User ${userId} not authorized for room ${roomId}`);
+              socket.send(JSON.stringify({
+                type: 'error',
+                message: 'Not authorized to join this call',
+              }));
+              socket.close();
+              return;
+            }
+
+            isAuthenticated = true;
             currentRoomId = roomId;
             currentUserId = userId;
 
