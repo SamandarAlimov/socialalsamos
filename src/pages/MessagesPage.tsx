@@ -9,7 +9,6 @@ import {
   MoreVertical,
   Phone,
   Video,
-  Smile,
   Mic,
   Send,
   Check,
@@ -29,9 +28,13 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConversations, useMessages, Conversation, Message } from '@/hooks/useMessages';
 import { useWebRTC } from '@/hooks/useWebRTC';
+import { useMessageReactions } from '@/hooks/useMessageReactions';
 import { format } from 'date-fns';
 import { FileUploadButton } from '@/components/FileUploadButton';
 import { MessageAttachment } from '@/components/MessageAttachment';
+import { EmojiPicker } from '@/components/EmojiPicker';
+import { VoiceMessageRecorder } from '@/components/VoiceMessageRecorder';
+import { MessageBubble } from '@/components/MessageBubble';
 
 type MessageTab = 'private' | 'groups' | 'channels';
 
@@ -45,6 +48,7 @@ export default function MessagesPage() {
   const [isInCall, setIsInCall] = useState(false);
   const [callType, setCallType] = useState<'audio' | 'video'>('video');
   const [pendingAttachment, setPendingAttachment] = useState<{ url: string; type: string; name: string } | null>(null);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -465,69 +469,14 @@ export default function MessagesPage() {
                   <p>No messages yet. Start the conversation!</p>
                 </div>
               ) : (
-                messages.map((message) => {
-                  const isMine = message.sender_id === user?.id;
-                  return (
-                    <div
-                      key={message.id}
-                      className={cn(
-                        "flex",
-                        isMine ? "justify-end" : "justify-start"
-                      )}
-                    >
-                      <div className="flex items-end gap-2 max-w-[70%]">
-                        {!isMine && (
-                          <Avatar className="h-8 w-8">
-                            <AvatarImage src={message.sender?.avatar_url || ''} />
-                            <AvatarFallback className="text-xs">
-                              {message.sender?.display_name?.[0] || message.sender?.username?.[0] || 'U'}
-                            </AvatarFallback>
-                          </Avatar>
-                        )}
-                        <div
-                          className={cn(
-                            "rounded-2xl px-4 py-2.5 animate-scale-in",
-                            isMine 
-                              ? "bg-primary text-primary-foreground rounded-br-md" 
-                              : "bg-card text-card-foreground rounded-bl-md border border-border"
-                          )}
-                        >
-                          {message.is_deleted ? (
-                            <p className="text-sm italic opacity-50">Message deleted</p>
-                          ) : (
-                            <>
-                              {message.content && !message.content.startsWith('[') && (
-                                <p className="text-sm leading-relaxed">{message.content}</p>
-                              )}
-                              {message.media_url && message.media_type && (
-                                <div className="mt-2">
-                                  <MessageAttachment 
-                                    url={message.media_url} 
-                                    type={message.media_type as 'image' | 'video' | 'audio' | 'document'}
-                                  />
-                                </div>
-                              )}
-                            </>
-                          )}
-                          <div className={cn(
-                            "flex items-center justify-end gap-1 mt-1",
-                            isMine ? "text-primary-foreground/70" : "text-muted-foreground"
-                          )}>
-                            <span className="text-xs">{formatMessageTime(message.created_at)}</span>
-                            {message.is_edited && <span className="text-xs">(edited)</span>}
-                            {isMine && (
-                              message.is_read ? (
-                                <CheckCheck className="h-3.5 w-3.5 text-blue-400" />
-                              ) : (
-                                <Check className="h-3.5 w-3.5" />
-                              )
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
+                messages.map((message) => (
+                  <MessageBubble 
+                    key={message.id} 
+                    message={message} 
+                    isMine={message.sender_id === user?.id}
+                    formatTime={formatMessageTime}
+                  />
+                ))
               )}
               
               {/* Typing Indicator */}
@@ -576,9 +525,10 @@ export default function MessagesPage() {
                     placeholder="Write a message..."
                     className="w-full h-11 px-4 pr-12 rounded-xl bg-muted/50 border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                   />
-                  <button className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                    <Smile className="h-5 w-5" />
-                  </button>
+                  <EmojiPicker 
+                    onSelect={(emoji) => setMessageInput(prev => prev + emoji)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground h-8 w-8"
+                  />
                 </div>
 
                 {(messageInput || pendingAttachment) ? (
@@ -586,9 +536,11 @@ export default function MessagesPage() {
                     <Send className="h-5 w-5" />
                   </Button>
                 ) : (
-                  <Button variant="ghost" size="icon" className="text-muted-foreground">
-                    <Mic className="h-5 w-5" />
-                  </Button>
+                  <VoiceMessageRecorder 
+                    onSend={(url, duration) => {
+                      sendMessage(`Voice message (${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})`, url, 'audio');
+                    }}
+                  />
                 )}
               </div>
             </div>
