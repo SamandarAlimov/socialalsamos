@@ -10,6 +10,7 @@ import AuthPage from "./pages/AuthPage";
 import HomePage from "./pages/HomePage";
 import MessagesPage from "./pages/MessagesPage";
 import ProfilePage from "./pages/ProfilePage";
+import UserProfilePage from "./pages/UserProfilePage";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
 
@@ -81,6 +82,7 @@ function AppRoutes() {
         <Route path="/notifications" element={<PlaceholderPage title="Notifications" />} />
         <Route path="/create" element={<PlaceholderPage title="Create" />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/user/:userId" element={<UserProfilePage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
       
