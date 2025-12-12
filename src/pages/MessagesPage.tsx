@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Search, 
   Plus, 
@@ -40,6 +41,7 @@ type MessageTab = 'private' | 'groups' | 'channels';
 
 export default function MessagesPage() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<MessageTab>('private');
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -55,6 +57,19 @@ export default function MessagesPage() {
   const { conversations, isLoading: conversationsLoading, refresh: refreshConversations } = useConversations(
     activeTab === 'private' ? 'private' : activeTab === 'groups' ? 'group' : 'channel'
   );
+
+  // Handle conversation query param from deep link (e.g., from profile Message button)
+  useEffect(() => {
+    const conversationId = searchParams.get('conversation');
+    if (conversationId && conversations.length > 0 && !selectedConversation) {
+      const conv = conversations.find(c => c.id === conversationId);
+      if (conv) {
+        setSelectedConversation(conv);
+        // Clear the query param after selecting
+        setSearchParams({}, { replace: true });
+      }
+    }
+  }, [searchParams, conversations, selectedConversation, setSearchParams]);
   
   const { 
     messages, 

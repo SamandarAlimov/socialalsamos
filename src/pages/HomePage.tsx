@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -354,14 +355,25 @@ function PostCard({
   onLike: () => void;
   formatTime: (date: string) => string;
 }) {
+  const navigate = useNavigate();
   const [isBookmarked, setIsBookmarked] = useState(false);
+
+  const handleUserClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (post.user_id) {
+      navigate(`/user/${post.user_id}`);
+    }
+  };
 
   return (
     <article className="bg-card rounded-2xl border border-border overflow-hidden animate-fade-in">
       {/* Post Header */}
       <div className="flex items-center justify-between p-4">
         <div className="flex items-center gap-3">
-          <Avatar className="h-10 w-10">
+          <Avatar 
+            className="h-10 w-10 cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={handleUserClick}
+          >
             <AvatarImage src={post.profile?.avatar_url || ''} />
             <AvatarFallback>
               {post.profile?.display_name?.[0] || post.profile?.username?.[0] || 'U'}
@@ -369,7 +381,10 @@ function PostCard({
           </Avatar>
           <div>
             <div className="flex items-center gap-1">
-              <span className="font-semibold text-sm">
+              <span 
+                className="font-semibold text-sm cursor-pointer hover:underline"
+                onClick={handleUserClick}
+              >
                 {post.profile?.display_name || post.profile?.username || 'Anonymous'}
               </span>
               {post.profile?.is_verified && (
@@ -379,7 +394,13 @@ function PostCard({
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              @{post.profile?.username || 'user'} · {formatTime(post.created_at)}
+              <span 
+                className="cursor-pointer hover:underline"
+                onClick={handleUserClick}
+              >
+                @{post.profile?.username || 'user'}
+              </span>
+              {' '}· {formatTime(post.created_at)}
             </p>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, UserPlus, UserMinus, BadgeCheck, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -13,12 +14,14 @@ interface UserCardProps {
   user: UserProfile;
   onFollow: (userId: string) => Promise<boolean>;
   onUnfollow: (userId: string) => Promise<boolean>;
+  onNavigate: (userId: string) => void;
 }
 
-function UserCard({ user, onFollow, onUnfollow }: UserCardProps) {
+function UserCard({ user, onFollow, onUnfollow, onNavigate }: UserCardProps) {
   const [loading, setLoading] = useState(false);
 
-  const handleFollowToggle = async () => {
+  const handleFollowToggle = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     setLoading(true);
     if (user.is_following) {
       const success = await onUnfollow(user.id);
@@ -31,7 +34,10 @@ function UserCard({ user, onFollow, onUnfollow }: UserCardProps) {
   };
 
   return (
-    <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent/50 transition-colors">
+    <div 
+      className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+      onClick={() => onNavigate(user.id)}
+    >
       <Avatar className="h-12 w-12">
         <AvatarImage src={user.avatar_url || undefined} />
         <AvatarFallback>
@@ -80,6 +86,7 @@ function UserCard({ user, onFollow, onUnfollow }: UserCardProps) {
 export function UserSearchDialog({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const navigate = useNavigate();
   const debouncedQuery = useDebounce(query, 300);
   const { results, loading, suggestedUsers, searchUsers, fetchSuggestedUsers, followUser, unfollowUser } = useUserSearch();
 
@@ -94,6 +101,11 @@ export function UserSearchDialog({ children }: { children: React.ReactNode }) {
   }, [debouncedQuery, searchUsers]);
 
   const displayUsers = query.trim() ? results : suggestedUsers;
+
+  const handleNavigateToProfile = (userId: string) => {
+    setOpen(false);
+    navigate(`/user/${userId}`);
+  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -143,6 +155,7 @@ export function UserSearchDialog({ children }: { children: React.ReactNode }) {
                   user={user}
                   onFollow={followUser}
                   onUnfollow={unfollowUser}
+                  onNavigate={handleNavigateToProfile}
                 />
               ))}
             </div>
