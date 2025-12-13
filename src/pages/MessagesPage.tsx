@@ -29,13 +29,12 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConversations, useMessages, Conversation, Message } from '@/hooks/useMessages';
 import { useWebRTC } from '@/hooks/useWebRTC';
-import { useMessageReactions } from '@/hooks/useMessageReactions';
 import { format } from 'date-fns';
 import { FileUploadButton } from '@/components/FileUploadButton';
-import { MessageAttachment } from '@/components/MessageAttachment';
 import { EmojiPicker } from '@/components/EmojiPicker';
 import { VoiceMessageRecorder } from '@/components/VoiceMessageRecorder';
 import { MessageBubble } from '@/components/MessageBubble';
+import { ForwardMessageDialog } from '@/components/ForwardMessageDialog';
 
 type MessageTab = 'private' | 'groups' | 'channels';
 
@@ -50,7 +49,7 @@ export default function MessagesPage() {
   const [isInCall, setIsInCall] = useState(false);
   const [callType, setCallType] = useState<'audio' | 'video'>('video');
   const [pendingAttachment, setPendingAttachment] = useState<{ url: string; type: string; name: string } | null>(null);
-  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -490,9 +489,18 @@ export default function MessagesPage() {
                     message={message} 
                     isMine={message.sender_id === user?.id}
                     formatTime={formatMessageTime}
+                    isGroup={selectedConversation?.type === 'group'}
+                    onForward={(msg) => setForwardMessage(msg as Message)}
                   />
                 ))
               )}
+              
+              {/* Forward Message Dialog */}
+              <ForwardMessageDialog
+                message={forwardMessage}
+                open={!!forwardMessage}
+                onOpenChange={(open) => !open && setForwardMessage(null)}
+              />
               
               {/* Typing Indicator */}
               {typingUsers.length > 0 && (

@@ -19,6 +19,7 @@ import {
 import { toast } from 'sonner';
 import { useConversations } from '@/hooks/useMessages';
 import { Skeleton } from '@/components/ui/skeleton';
+import { FollowersFollowingDialog } from '@/components/FollowersFollowingDialog';
 
 interface UserProfile {
   id: string;
@@ -45,6 +46,10 @@ export default function UserProfilePage() {
   const [loading, setLoading] = useState(true);
   const [followLoading, setFollowLoading] = useState(false);
   const [messageLoading, setMessageLoading] = useState(false);
+  const [followDialog, setFollowDialog] = useState<{ open: boolean; type: 'followers' | 'following' }>({ 
+    open: false, 
+    type: 'followers' 
+  });
   const { createPrivateConversation } = useConversations();
 
   const isOwnProfile = user?.id === userId;
@@ -299,12 +304,32 @@ export default function UserProfilePage() {
         {/* Stats */}
         <div className="flex gap-8 mt-6 py-4 border-y border-border">
           {stats.map((stat) => (
-            <div key={stat.label} className="text-center">
+            <button
+              key={stat.label}
+              onClick={() => {
+                if (stat.label === 'Followers') {
+                  setFollowDialog({ open: true, type: 'followers' });
+                } else if (stat.label === 'Following') {
+                  setFollowDialog({ open: true, type: 'following' });
+                }
+              }}
+              className={stat.label !== 'Posts' ? 'text-center hover:opacity-70 transition-opacity' : 'text-center cursor-default'}
+            >
               <span className="text-xl font-bold">{stat.value}</span>
               <span className="text-muted-foreground text-sm ml-1">{stat.label}</span>
-            </div>
+            </button>
           ))}
         </div>
+
+        {/* Followers/Following Dialog */}
+        {userId && (
+          <FollowersFollowingDialog
+            userId={userId}
+            type={followDialog.type}
+            open={followDialog.open}
+            onOpenChange={(open) => setFollowDialog(prev => ({ ...prev, open }))}
+          />
+        )}
 
         {/* Tabs */}
         <div className="flex mt-6 border-b border-border">

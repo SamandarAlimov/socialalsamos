@@ -1,15 +1,23 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Check, CheckCheck, Plus } from 'lucide-react';
+import { Check, CheckCheck, Plus, Forward, MoreVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MessageAttachment } from './MessageAttachment';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 import { EmojiPicker } from './EmojiPicker';
+import { ReadReceipts } from './ReadReceipts';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface Message {
   id: string;
+  conversation_id: string;
   content: string | null;
   sender_id: string | null;
   media_url: string | null;
@@ -36,9 +44,11 @@ interface MessageBubbleProps {
   message: Message;
   isMine: boolean;
   formatTime: (date: string) => string;
+  isGroup?: boolean;
+  onForward?: (message: Message) => void;
 }
 
-export function MessageBubble({ message, isMine, formatTime }: MessageBubbleProps) {
+export function MessageBubble({ message, isMine, formatTime, isGroup = false, onForward }: MessageBubbleProps) {
   const { user } = useAuth();
   const [reactions, setReactions] = useState<ReactionGroup[]>([]);
 
@@ -146,7 +156,27 @@ export function MessageBubble({ message, isMine, formatTime }: MessageBubbleProp
             </AvatarFallback>
           </Avatar>
         )}
-        <div className="flex flex-col">
+        <div className="flex flex-col relative">
+          {/* Message Actions */}
+          <div className={cn(
+            "absolute top-0 opacity-0 group-hover:opacity-100 transition-opacity z-10",
+            isMine ? "left-0 -translate-x-full pr-2" : "right-0 translate-x-full pl-2"
+          )}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="p-1.5 rounded-full bg-card border border-border hover:bg-accent transition-colors">
+                  <MoreVertical className="h-3.5 w-3.5 text-muted-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align={isMine ? "end" : "start"}>
+                <DropdownMenuItem onClick={() => onForward?.(message)}>
+                  <Forward className="h-4 w-4 mr-2" />
+                  Forward
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          
           <div
             className={cn(
               "rounded-2xl px-4 py-2.5 animate-scale-in",
@@ -192,6 +222,16 @@ export function MessageBubble({ message, isMine, formatTime }: MessageBubbleProp
                 )
               )}
             </div>
+            
+            {/* Read Receipts for Group Chats */}
+            {isGroup && isMine && (
+              <div className="flex justify-end mt-1">
+                <ReadReceipts 
+                  messageId={message.id} 
+                  conversationId={message.conversation_id} 
+                />
+              </div>
+            )}
           </div>
           
           {/* Reactions */}

@@ -10,8 +10,6 @@ import {
   Bookmark, 
   MoreHorizontal,
   Plus,
-  Play,
-  Image as ImageIcon,
   Loader2,
   X,
   ChevronLeft,
@@ -21,11 +19,10 @@ import { usePosts, Post } from '@/hooks/usePosts';
 import { useStories, StoryGroup } from '@/hooks/useStories';
 import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
+import { CreatePostForm } from '@/components/CreatePostForm';
 
 export default function HomePage() {
   const { user, profile } = useAuth();
-  const [postContent, setPostContent] = useState('');
-  const [isPosting, setIsPosting] = useState(false);
   const [activeStoryGroup, setActiveStoryGroup] = useState<StoryGroup | null>(null);
   const [activeStoryIndex, setActiveStoryIndex] = useState(0);
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -36,7 +33,6 @@ export default function HomePage() {
     isLoading, 
     hasMore, 
     loadMore, 
-    refresh, 
     createPost, 
     likePost 
   } = usePosts('global');
@@ -64,15 +60,6 @@ export default function HomePage() {
       }
     };
   }, [hasMore, isLoading, loadMore]);
-
-  const handleCreatePost = async () => {
-    if (!postContent.trim()) return;
-    
-    setIsPosting(true);
-    await createPost(postContent);
-    setPostContent('');
-    setIsPosting(false);
-  };
 
   const formatPostTime = (dateString: string) => {
     const date = new Date(dateString);
@@ -277,45 +264,7 @@ export default function HomePage() {
       </div>
 
       {/* Create Post */}
-      <div className="bg-card rounded-2xl border border-border p-4 mb-6">
-        <div className="flex gap-3">
-          <Avatar className="h-10 w-10">
-            <AvatarImage src={profile?.avatar_url || ''} />
-            <AvatarFallback className="bg-primary text-primary-foreground">
-              {profile?.display_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1">
-            <textarea
-              value={postContent}
-              onChange={(e) => setPostContent(e.target.value)}
-              placeholder="What's on your mind?"
-              className="w-full bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none resize-none min-h-[60px]"
-              rows={2}
-            />
-          </div>
-        </div>
-        <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
-          <div className="flex gap-2">
-            <Button variant="ghost" size="sm" className="text-muted-foreground">
-              <ImageIcon className="h-4 w-4 mr-2" />
-              Photo
-            </Button>
-            <Button variant="ghost" size="sm" className="text-muted-foreground">
-              <Play className="h-4 w-4 mr-2" />
-              Video
-            </Button>
-          </div>
-          <Button 
-            variant="hero" 
-            size="sm" 
-            onClick={handleCreatePost}
-            disabled={!postContent.trim() || isPosting}
-          >
-            {isPosting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Post'}
-          </Button>
-        </div>
-      </div>
+      <CreatePostForm onPost={createPost} />
 
       {/* Feed */}
       <div className="space-y-6">
