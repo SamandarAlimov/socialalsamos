@@ -20,13 +20,20 @@ import { useStories, StoryGroup } from '@/hooks/useStories';
 import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
 import { CreatePostForm } from '@/components/CreatePostForm';
+import { CreateStoryDialog } from '@/components/CreateStoryDialog';
+import { CommentsSection } from '@/components/CommentsSection';
+import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 
 export default function HomePage() {
   const { user, profile } = useAuth();
   const [activeStoryGroup, setActiveStoryGroup] = useState<StoryGroup | null>(null);
   const [activeStoryIndex, setActiveStoryIndex] = useState(0);
+  const [showCreateStory, setShowCreateStory] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  // Enable push notifications
+  const { permission, requestPermission } = useNotificationPermission();
 
   const { 
     posts, 
@@ -37,7 +44,14 @@ export default function HomePage() {
     likePost 
   } = usePosts('global');
 
-  const { storyGroups, isLoading: storiesLoading } = useStories();
+  const { storyGroups, isLoading: storiesLoading, refresh: refreshStories } = useStories();
+
+  // Request notification permission on first load
+  useEffect(() => {
+    if (permission === 'default') {
+      requestPermission();
+    }
+  }, [permission, requestPermission]);
 
   // Infinite scroll
   useEffect(() => {
@@ -203,11 +217,21 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* Story Creation Dialog */}
+      <CreateStoryDialog 
+        open={showCreateStory} 
+        onOpenChange={setShowCreateStory}
+        onSuccess={refreshStories}
+      />
+
       {/* Stories Section */}
       <div className="mb-6">
         <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hidden">
           {/* Add Story Button */}
-          <button className="flex flex-col items-center gap-2 flex-shrink-0">
+          <button 
+            onClick={() => setShowCreateStory(true)}
+            className="flex flex-col items-center gap-2 flex-shrink-0"
+          >
             <div className="relative">
               <div className="bg-background p-0.5 rounded-full">
                 <Avatar className="h-16 w-16">
@@ -306,6 +330,7 @@ function PostCard({
 }) {
   const navigate = useNavigate();
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const [showComments, setShowComments] = useState(false);
 
   const handleUserClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -397,8 +422,14 @@ function PostCard({
             <Heart className={cn("h-5 w-5", post.is_liked && 'fill-current')} />
             <span className="text-sm">{post.likes_count}</span>
           </button>
-          <button className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors">
-            <MessageCircle className="h-5 w-5" />
+          <button 
+            onClick={() => setShowComments(!showComments)}
+            className={cn(
+              "flex items-center gap-2 transition-colors",
+              showComments ? 'text-primary' : 'text-muted-foreground hover:text-primary'
+            )}
+          >
+            <MessageCircle className={cn("h-5 w-5", showComments && 'fill-current')} />
             <span className="text-sm">{post.comments_count}</span>
           </button>
           <button className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors">
@@ -416,6 +447,11 @@ function PostCard({
           <Bookmark className={cn("h-5 w-5", isBookmarked && 'fill-current')} />
         </button>
       </div>
+
+      {/* Comments Section */}
+      {showComments && (
+        <CommentsSection postId={post.id} />
+      )}
     </article>
   );
 }

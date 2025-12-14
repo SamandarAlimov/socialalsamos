@@ -1,0 +1,188 @@
+import { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useComments, Comment } from '@/hooks/useComments';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Heart, MessageCircle, MoreHorizontal, Send, Trash2, Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { formatDistanceToNow } from 'date-fns';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+
+interface CommentsSectionProps {
+  postId: string;
+}
+
+export function CommentsSection({ postId }: CommentsSectionProps) {
+  const { user } = useAuth();
+  const { comments, isLoading, addComment, likeComment, deleteComment } = useComments(postId);
+  const [newComment, setNewComment] = useState('');
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [replyContent, setReplyContent] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newComment.trim()) return;
+    
+    setSubmitting(true);
+    await addComment(newComment);
+    setNewComment('');
+    setSubmitting(false);
+  };
+
+  const handleReply = async (parentId: string) => {
+    if (!replyContent.trim()) return;
+    
+    setSubmitting(true);
+    await addComment(replyContent, parentId);
+    setReplyContent('');
+    setReplyingTo(null);
+    setSubmitting(false);
+  };
+
+  const CommentItem = ({ comment, depth = 0 }: { comment: Comment; depth?: number }) => (
+    <div className={cn("group", depth > 0 && "ml-10 border-l-2 border-border pl-4")}>
+      <div className="flex gap-3 py-3">
+        <Avatar className="h-8 w-8 flex-shrink-0">
+          <AvatarImage src={comment.profile?.avatar_url || ''} />
+          <AvatarFallback className="text-xs">
+            {(comment.profile?.display_name || comment.profile?.username || 'U')[0].toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+        
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-sm">
+              {comment.profile?.display_name || comment.profile?.username || 'User'}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
+            </span>
+            
+            {user?.id === comment.user_id && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem 
+                    onClick={() => deleteComment(comment.id)}
+                    className="text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+          
+          <p className="text-sm mt-1">{comment.content}</p>
+          
+          <div className="flex items-center gap-4 mt-2">
+            <button
+              onClick={() => likeComment(comment.id)}
+              className={cn(
+                "flex items-center gap-1 text-xs transition-colors",
+                comment.is_liked ? "text-red-500" : "text-muted-foreground hover:text-red-500"
+              )}
+            >
+              <Heart className={cn("h-3.5 w-3.5", comment.is_liked && "fill-current")} />
+              {comment.likes_count > 0 && comment.likes_count}
+            </button>
+            
+            {depth === 0 && (
+              <button
+                onClick={() => setReplyingTo(replyingTo === comment.id ? null : comment.id)}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <MessageCircle className="h-3.5 w-3.5" />
+                Reply
+              </button>
+            )}
+          </div>
+          
+          {/* Reply input */}
+          {replyingTo === comment.id && (
+            <div className="flex gap-2 mt-3">
+              <Input
+                value={replyContent}
+                onChange={(e) => setReplyContent(e.target.value)}
+                placeholder="Write a reply..."
+                className="flex-1 h-9 text-sm"
+                onKeyPress={(e) => e.key === 'Enter' && handleReply(comment.id)}
+              />
+              <Button 
+                size="sm" 
+                onClick={() => handleReply(comment.id)}
+                disabled={!replyContent.trim() || submitting}
+              >
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      {/* Replies */}
+      {comment.replies && comment.replies.length > 0 && (
+        <div className="space-y-0">
+          {comment.replies.map((reply) => (
+            <CommentItem key={reply.id} comment={reply} depth={depth + 1} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="border-t border-border">
+      {/* Add comment form */}
+      {user && (
+        <form onSubmit={handleSubmit} className="flex gap-2 p-4 border-b border-border">
+          <Input
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+            placeholder="Write a comment..."
+            className="flex-1"
+          />
+          <Button type="submit" disabled={!newComment.trim() || submitting}>
+            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          </Button>
+        </form>
+      )}
+
+      {/* Comments list */}
+      <div className="px-4">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : comments.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">No comments yet. Be the first!</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {comments.map((comment) => (
+              <CommentItem key={comment.id} comment={comment} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
