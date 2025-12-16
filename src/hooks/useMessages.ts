@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { RealtimeChannel } from '@supabase/supabase-js';
 
 export interface Conversation {
   id: string;
@@ -43,13 +44,48 @@ export interface Message {
     avatar_url: string | null;
   };
   is_read?: boolean;
+  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+  tempId?: string;
 }
+
+// Global connection manager for persistent realtime
+class RealtimeConnectionManager {
+  private static instance: RealtimeConnectionManager;
+  private channels: Map<string, RealtimeChannel> = new Map();
+  private listeners: Map<string, Set<(payload: any) => void>> = new Map();
+
+  static getInstance() {
+    if (!this.instance) {
+      this.instance = new RealtimeConnectionManager();
+    }
+    return this.instance;
+  }
+
+  subscribe(channelName: string, callback: (payload: any) => void) {
+    if (!this.listeners.has(channelName)) {
+      this.listeners.set(channelName, new Set());
+    }
+    this.listeners.get(channelName)!.add(callback);
+
+    // Return unsubscribe function
+    return () => {
+      this.listeners.get(channelName)?.delete(callback);
+    };
+  }
+
+  notifyListeners(channelName: string, payload: any) {
+    this.listeners.get(channelName)?.forEach(cb => cb(payload));
+  }
+}
+
+const connectionManager = RealtimeConnectionManager.getInstance();
 
 export function useConversations(type?: 'private' | 'group' | 'channel') {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuth();
   const { toast } = useToast();
+  const channelRef = useRef<RealtimeChannel | null>(null);
 
   const fetchConversations = useCallback(async () => {
     if (!user) return;
@@ -127,7 +163,7 @@ export function useConversations(type?: 'private' | 'group' | 'channel') {
             ...conv,
             other_participant: otherParticipant,
             last_message: lastMessage,
-            unread_count: 0, // TODO: Calculate unread count
+            unread_count: 0,
           } as Conversation;
         })
       );
@@ -149,14 +185,17 @@ export function useConversations(type?: 'private' | 'group' | 'channel') {
     if (!user) return null;
 
     try {
-      // Check if conversation already exists
-      const { data: existingParticipations } = await supabase
+      console.log('Creating private conversation with:', otherUserId);
+      
+      // Check if conversation already exists between these two users
+      const { data: myParticipations } = await supabase
         .from('conversation_participants')
         .select('conversation_id')
         .eq('user_id', user.id);
 
-      if (existingParticipations) {
-        for (const p of existingParticipations) {
+      if (myParticipations && myParticipations.length > 0) {
+        for (const p of myParticipations) {
+          // Check if other user is in this conversation
           const { data: otherParticipant } = await supabase
             .from('conversation_participants')
             .select('conversation_id')
@@ -165,43 +204,67 @@ export function useConversations(type?: 'private' | 'group' | 'channel') {
             .single();
 
           if (otherParticipant) {
-            const { data: conv } = await supabase
+            // Check if it's a private conversation
+            const { data: existingConv } = await supabase
               .from('conversations')
               .select('*')
               .eq('id', p.conversation_id)
               .eq('type', 'private')
               .single();
 
-            if (conv) return conv;
+            if (existingConv) {
+              console.log('Found existing conversation:', existingConv.id);
+              return existingConv;
+            }
           }
         }
       }
 
-      // Create new conversation
+      // Create new conversation - use a transaction-like approach
+      console.log('Creating new conversation...');
+      
       const { data: newConv, error: convError } = await supabase
         .from('conversations')
         .insert({
           type: 'private',
           owner_id: user.id,
+          last_message_at: new Date().toISOString(),
         })
         .select()
         .single();
 
-      if (convError) throw convError;
+      if (convError) {
+        console.error('Error creating conversation:', convError);
+        throw convError;
+      }
 
-      // Add participants
-      await supabase.from('conversation_participants').insert([
-        { conversation_id: newConv.id, user_id: user.id, role: 'owner' },
-        { conversation_id: newConv.id, user_id: otherUserId, role: 'member' },
-      ]);
+      console.log('Created conversation:', newConv.id);
 
+      // Add both participants
+      const { error: partError } = await supabase
+        .from('conversation_participants')
+        .insert([
+          { conversation_id: newConv.id, user_id: user.id, role: 'owner' },
+          { conversation_id: newConv.id, user_id: otherUserId, role: 'member' },
+        ]);
+
+      if (partError) {
+        console.error('Error adding participants:', partError);
+        // Try to clean up the conversation if participants failed
+        await supabase.from('conversations').delete().eq('id', newConv.id);
+        throw partError;
+      }
+
+      console.log('Added participants successfully');
+      
+      // Refresh conversations list
       fetchConversations();
       return newConv;
     } catch (error: any) {
       console.error('Error creating conversation:', error);
       toast({
         title: 'Error',
-        description: 'Failed to create conversation',
+        description: error.message || 'Failed to create conversation',
         variant: 'destructive',
       });
       return null;
@@ -249,6 +312,47 @@ export function useConversations(type?: 'private' | 'group' | 'channel') {
     }
   }, [user, toast, fetchConversations]);
 
+  // Subscribe to conversation updates
+  useEffect(() => {
+    if (!user) return;
+
+    channelRef.current = supabase
+      .channel(`conversations-list-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversations',
+        },
+        () => {
+          // Refresh conversations when any change happens
+          fetchConversations();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'messages',
+        },
+        () => {
+          // Refresh to get latest last_message
+          fetchConversations();
+        }
+      )
+      .subscribe((status) => {
+        console.log('Conversations channel status:', status);
+      });
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+      }
+    };
+  }, [user, fetchConversations]);
+
   useEffect(() => {
     if (user) {
       fetchConversations();
@@ -270,10 +374,15 @@ export function useMessages(conversationId: string | null) {
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const { user } = useAuth();
   const { toast } = useToast();
+  const messageChannelRef = useRef<RealtimeChannel | null>(null);
+  const typingChannelRef = useRef<RealtimeChannel | null>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const processedMessageIds = useRef<Set<string>>(new Set());
 
   const fetchMessages = useCallback(async () => {
     if (!conversationId) {
       setMessages([]);
+      setIsLoading(false);
       return;
     }
     setIsLoading(true);
@@ -294,13 +403,22 @@ export function useMessages(conversationId: string | null) {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setMessages(data as Message[]);
+      
+      const messagesWithStatus = (data || []).map(m => ({
+        ...m,
+        status: 'delivered' as const,
+      }));
+      
+      setMessages(messagesWithStatus as Message[]);
+      
+      // Track all fetched message IDs
+      processedMessageIds.current = new Set(data?.map(m => m.id) || []);
 
       // Mark messages as read
-      if (user) {
+      if (user && data) {
         const unreadMessageIds = data
-          ?.filter(m => m.sender_id !== user.id)
-          .map(m => m.id) || [];
+          .filter(m => m.sender_id !== user.id)
+          .map(m => m.id);
 
         if (unreadMessageIds.length > 0) {
           await supabase.from('message_reads').upsert(
@@ -319,8 +437,38 @@ export function useMessages(conversationId: string | null) {
     }
   }, [conversationId, user]);
 
+  // OPTIMISTIC message sending - show immediately, then confirm
   const sendMessage = useCallback(async (content: string, mediaUrl?: string, mediaType?: string) => {
     if (!conversationId || !user) return null;
+
+    // Generate temp ID for optimistic update
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Create optimistic message
+    const optimisticMessage: Message = {
+      id: tempId,
+      tempId,
+      conversation_id: conversationId,
+      sender_id: user.id,
+      content,
+      media_url: mediaUrl || null,
+      media_type: mediaType || null,
+      reply_to_id: null,
+      is_edited: false,
+      is_deleted: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      status: 'sending',
+      sender: {
+        id: user.id,
+        username: null,
+        display_name: user.email?.split('@')[0] || 'You',
+        avatar_url: null,
+      },
+    };
+
+    // Add optimistic message immediately
+    setMessages(prev => [...prev, optimisticMessage]);
 
     try {
       const { data, error } = await supabase
@@ -345,6 +493,16 @@ export function useMessages(conversationId: string | null) {
 
       if (error) throw error;
 
+      // Track this message ID to prevent duplicate from realtime
+      processedMessageIds.current.add(data.id);
+
+      // Replace optimistic message with real one
+      setMessages(prev => prev.map(m => 
+        m.tempId === tempId 
+          ? { ...data, status: 'sent' as const } as Message
+          : m
+      ));
+
       // Update conversation's last_message_at
       await supabase
         .from('conversations')
@@ -354,6 +512,14 @@ export function useMessages(conversationId: string | null) {
       return data;
     } catch (error: any) {
       console.error('Error sending message:', error);
+      
+      // Mark message as failed
+      setMessages(prev => prev.map(m => 
+        m.tempId === tempId 
+          ? { ...m, status: 'failed' as const }
+          : m
+      ));
+      
       toast({
         title: 'Error',
         description: 'Failed to send message',
@@ -407,7 +573,7 @@ export function useMessages(conversationId: string | null) {
     }
   }, [toast]);
 
-  // Set typing indicator
+  // Set typing indicator with debounce
   const setTyping = useCallback(async (isTyping: boolean) => {
     if (!conversationId || !user) return;
 
@@ -418,6 +584,14 @@ export function useMessages(conversationId: string | null) {
           user_id: user.id,
           started_at: new Date().toISOString(),
         }, { onConflict: 'conversation_id,user_id' });
+
+        // Auto-clear typing after 3 seconds
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+        }
+        typingTimeoutRef.current = setTimeout(() => {
+          setTyping(false);
+        }, 3000);
       } else {
         await supabase
           .from('typing_indicators')
@@ -430,18 +604,25 @@ export function useMessages(conversationId: string | null) {
     }
   }, [conversationId, user]);
 
+  // Fetch messages when conversation changes
   useEffect(() => {
+    processedMessageIds.current.clear();
     if (conversationId) {
       fetchMessages();
+    } else {
+      setMessages([]);
+      setIsLoading(false);
     }
   }, [conversationId, fetchMessages]);
 
-  // Real-time subscription for new messages
+  // Real-time subscription for NEW messages
   useEffect(() => {
     if (!conversationId) return;
 
-    const channel = supabase
-      .channel(`messages:${conversationId}`)
+    console.log('Setting up realtime for conversation:', conversationId);
+
+    messageChannelRef.current = supabase
+      .channel(`messages-realtime-${conversationId}`)
       .on(
         'postgres_changes',
         {
@@ -451,7 +632,17 @@ export function useMessages(conversationId: string | null) {
           filter: `conversation_id=eq.${conversationId}`,
         },
         async (payload) => {
-          // Fetch full message with sender
+          console.log('Realtime INSERT received:', payload.new.id);
+          
+          // Skip if we already have this message (from optimistic update)
+          if (processedMessageIds.current.has(payload.new.id)) {
+            console.log('Skipping duplicate message:', payload.new.id);
+            return;
+          }
+          
+          processedMessageIds.current.add(payload.new.id);
+
+          // Fetch full message with sender info
           const { data } = await supabase
             .from('messages')
             .select(`
@@ -467,23 +658,60 @@ export function useMessages(conversationId: string | null) {
             .single();
 
           if (data) {
-            setMessages(prev => [...prev, data as Message]);
+            console.log('Adding new message to state:', data.id);
+            setMessages(prev => {
+              // Double-check no duplicate
+              if (prev.some(m => m.id === data.id)) {
+                return prev;
+              }
+              return [...prev, { ...data, status: 'delivered' as const } as Message];
+            });
+
+            // Auto-mark as read if not from current user
+            if (user && data.sender_id !== user.id) {
+              await supabase.from('message_reads').upsert({
+                message_id: data.id,
+                user_id: user.id,
+              }, { onConflict: 'message_id,user_id' });
+            }
           }
         }
       )
-      .subscribe();
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          console.log('Realtime UPDATE received:', payload.new.id);
+          setMessages(prev => prev.map(m =>
+            m.id === payload.new.id
+              ? { ...m, ...payload.new }
+              : m
+          ));
+        }
+      )
+      .subscribe((status) => {
+        console.log('Messages channel status:', status);
+      });
 
     return () => {
-      supabase.removeChannel(channel);
+      if (messageChannelRef.current) {
+        console.log('Cleaning up messages channel');
+        supabase.removeChannel(messageChannelRef.current);
+      }
     };
-  }, [conversationId]);
+  }, [conversationId, user]);
 
   // Real-time subscription for typing indicators
   useEffect(() => {
     if (!conversationId || !user) return;
 
-    const channel = supabase
-      .channel(`typing:${conversationId}`)
+    typingChannelRef.current = supabase
+      .channel(`typing-realtime-${conversationId}`)
       .on(
         'postgres_changes',
         {
@@ -502,10 +730,17 @@ export function useMessages(conversationId: string | null) {
           setTypingUsers(data?.map(t => t.user_id) || []);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Typing channel status:', status);
+      });
 
     return () => {
-      supabase.removeChannel(channel);
+      if (typingChannelRef.current) {
+        supabase.removeChannel(typingChannelRef.current);
+      }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
     };
   }, [conversationId, user]);
 

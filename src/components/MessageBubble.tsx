@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Check, CheckCheck, Plus, Forward, MoreVertical } from 'lucide-react';
+import { Check, CheckCheck, Plus, Forward, MoreVertical, Clock, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MessageAttachment } from './MessageAttachment';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
@@ -26,6 +26,8 @@ interface Message {
   is_edited: boolean | null;
   is_read?: boolean;
   created_at: string;
+  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+  tempId?: string;
   sender?: {
     avatar_url: string | null;
     display_name: string | null;
@@ -215,8 +217,14 @@ export function MessageBubble({ message, isMine, formatTime, isGroup = false, on
               <span className="text-xs">{formatTime(message.created_at)}</span>
               {message.is_edited && <span className="text-xs">(edited)</span>}
               {isMine && (
-                message.is_read ? (
+                message.status === 'sending' ? (
+                  <Clock className="h-3.5 w-3.5 animate-pulse" />
+                ) : message.status === 'failed' ? (
+                  <AlertCircle className="h-3.5 w-3.5 text-red-400" />
+                ) : message.status === 'read' || message.is_read ? (
                   <CheckCheck className="h-3.5 w-3.5 text-blue-400" />
+                ) : message.status === 'delivered' ? (
+                  <CheckCheck className="h-3.5 w-3.5" />
                 ) : (
                   <Check className="h-3.5 w-3.5" />
                 )
