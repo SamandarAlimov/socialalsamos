@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { 
+import { supabase } from '@/integrations/supabase/client';
+import {
   Search, 
   Plus, 
   Users, 
@@ -60,15 +61,62 @@ export default function MessagesPage() {
   // Handle conversation query param from deep link (e.g., from profile Message button)
   useEffect(() => {
     const conversationId = searchParams.get('conversation');
-    if (conversationId && conversations.length > 0 && !selectedConversation) {
+    if (conversationId && !selectedConversation) {
+      // First try to find in loaded conversations
       const conv = conversations.find(c => c.id === conversationId);
       if (conv) {
         setSelectedConversation(conv);
-        // Clear the query param after selecting
         setSearchParams({}, { replace: true });
+      } else if (!conversationsLoading) {
+        // If not found and not loading, try to fetch it directly
+        const fetchConversation = async () => {
+          try {
+            const { data: convData } = await supabase
+              .from('conversations')
+              .select('*')
+              .eq('id', conversationId)
+              .single();
+            
+            if (convData) {
+              // Fetch other participant for private chats
+              let otherParticipant = null;
+              if (convData.type === 'private' && user) {
+                const { data: participants } = await supabase
+                  .from('conversation_participants')
+                  .select('user_id')
+                  .eq('conversation_id', conversationId)
+                  .neq('user_id', user.id)
+                  .limit(1);
+
+                if (participants && participants.length > 0) {
+                  const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('id, username, display_name, avatar_url, is_online')
+                    .eq('id', participants[0].user_id)
+                    .single();
+                  otherParticipant = profile;
+                }
+              }
+
+              const fullConv: Conversation = {
+                ...convData,
+                type: convData.type as 'private' | 'group' | 'channel',
+                other_participant: otherParticipant,
+                last_message: undefined,
+                unread_count: 0,
+              };
+              
+              setSelectedConversation(fullConv);
+              setSearchParams({}, { replace: true });
+            }
+          } catch (error) {
+            console.error('Error fetching conversation:', error);
+          }
+        };
+        fetchConversation();
       }
     }
-  }, [searchParams, conversations, selectedConversation, setSearchParams]);
+  }, [searchParams, conversations, selectedConversation, conversationsLoading, setSearchParams, user]);
   
   const { 
     messages, 
