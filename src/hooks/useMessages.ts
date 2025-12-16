@@ -181,12 +181,24 @@ export function useConversations(type?: 'private' | 'group' | 'channel') {
     }
   }, [user, type, toast]);
 
-  const createPrivateConversation = useCallback(async (otherUserId: string) => {
+  const createPrivateConversation = useCallback(async (otherUserId: string): Promise<Conversation | null> => {
     if (!user) return null;
 
     try {
       console.log('Creating private conversation with:', otherUserId);
       
+      // First, fetch the other user's profile (we'll need this regardless)
+      const { data: otherUserProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, username, display_name, avatar_url, is_online')
+        .eq('id', otherUserId)
+        .single();
+
+      if (profileError || !otherUserProfile) {
+        console.error('Error fetching other user profile:', profileError);
+        throw new Error('User not found');
+      }
+
       // Check if conversation already exists between these two users
       const { data: myParticipations } = await supabase
         .from('conversation_participants')
@@ -214,13 +226,21 @@ export function useConversations(type?: 'private' | 'group' | 'channel') {
 
             if (existingConv) {
               console.log('Found existing conversation:', existingConv.id);
-              return existingConv;
+              // Return with other_participant populated
+              const fullConversation: Conversation = {
+                ...existingConv,
+                type: existingConv.type as 'private' | 'group' | 'channel',
+                other_participant: otherUserProfile,
+                last_message: undefined,
+                unread_count: 0,
+              };
+              return fullConversation;
             }
           }
         }
       }
 
-      // Create new conversation - use a transaction-like approach
+      // Create new conversation
       console.log('Creating new conversation...');
       
       const { data: newConv, error: convError } = await supabase
@@ -240,7 +260,7 @@ export function useConversations(type?: 'private' | 'group' | 'channel') {
 
       console.log('Created conversation:', newConv.id);
 
-      // Add both participants
+      // Add both participants atomically
       const { error: partError } = await supabase
         .from('conversation_participants')
         .insert([
@@ -250,16 +270,33 @@ export function useConversations(type?: 'private' | 'group' | 'channel') {
 
       if (partError) {
         console.error('Error adding participants:', partError);
-        // Try to clean up the conversation if participants failed
+        // Clean up on failure
         await supabase.from('conversations').delete().eq('id', newConv.id);
         throw partError;
       }
 
       console.log('Added participants successfully');
       
-      // Refresh conversations list
+      // Return COMPLETE conversation with other_participant populated
+      const fullConversation: Conversation = {
+        id: newConv.id,
+        type: 'private',
+        name: null,
+        avatar_url: null,
+        description: null,
+        owner_id: newConv.owner_id,
+        is_encrypted: newConv.is_encrypted,
+        last_message_at: newConv.last_message_at,
+        created_at: newConv.created_at,
+        other_participant: otherUserProfile,
+        last_message: undefined,
+        unread_count: 0,
+      };
+
+      // Refresh conversations list in background
       fetchConversations();
-      return newConv;
+      
+      return fullConversation;
     } catch (error: any) {
       console.error('Error creating conversation:', error);
       toast({
