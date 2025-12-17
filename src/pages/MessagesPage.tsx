@@ -15,6 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useConversations, useMessages, Conversation, Message } from '@/hooks/useMessages';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { useVideoCall } from '@/hooks/useVideoCall';
+import { useIncomingCalls } from '@/hooks/useIncomingCalls';
 import { useToast } from '@/hooks/use-toast';
 
 // Components
@@ -25,6 +26,7 @@ import { MessageInput } from '@/components/messages/MessageInput';
 import { CreateChatDialog } from '@/components/messages/CreateChatDialog';
 import { VideoCallOverlay } from '@/components/messages/VideoCallOverlay';
 import { ForwardMessageDialog } from '@/components/ForwardMessageDialog';
+import { IncomingCallDialog } from '@/components/messages/IncomingCallDialog';
 
 type MessageTab = 'private' | 'groups' | 'channels' | 'requests';
 
@@ -79,11 +81,19 @@ export default function MessagesPage() {
     callParticipants,
     isCreatingCall,
     createCall,
+    joinCall,
     leaveCall: leaveVideoCall,
     updateMediaState,
     fetchParticipants,
     subscribeToParticipants,
   } = useVideoCall();
+
+  // Incoming call notifications
+  const {
+    incomingCall,
+    handleCallHandled,
+    declineCall,
+  } = useIncomingCalls();
 
   // WebRTC for actual peer connections - use call ID as room ID for authorization
   const {
@@ -256,9 +266,33 @@ export default function MessagesPage() {
     // Create call record in database for authorization
     const callId = await createCall(selectedConversation.id, type);
     if (callId) {
+      handleCallHandled(callId); // Mark as handled so we don't get incoming notification
       setActiveCallId(callId);
       setIsInCall(true);
       // WebRTC will auto-join when activeCallId is set
+    }
+  };
+
+  const acceptIncomingCall = async () => {
+    if (!incomingCall) return;
+    
+    const success = await joinCall(incomingCall.id);
+    if (success) {
+      handleCallHandled(incomingCall.id);
+      setCallType(incomingCall.call_type);
+      setActiveCallId(incomingCall.id);
+      setIsInCall(true);
+      
+      toast({
+        title: 'Call joined',
+        description: `Connected to ${incomingCall.host_profile?.display_name || 'caller'}`,
+      });
+    } else {
+      toast({
+        title: 'Error',
+        description: 'Failed to join call',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -356,7 +390,16 @@ export default function MessagesPage() {
         />
       )}
 
-      {/* Left Panel - Conversation List */}
+      {/* Incoming Call Dialog */}
+      <IncomingCallDialog
+        isOpen={!!incomingCall && !isInCall}
+        callerName={incomingCall?.host_profile?.display_name || incomingCall?.host_profile?.username || 'Unknown'}
+        callerAvatar={incomingCall?.host_profile?.avatar_url || undefined}
+        callType={incomingCall?.call_type || 'video'}
+        onAccept={acceptIncomingCall}
+        onDecline={declineCall}
+      />
+
       <div className={cn(
         "w-full md:w-80 lg:w-96 border-r border-border flex flex-col bg-card",
         showMobileChat && "hidden md:flex"
