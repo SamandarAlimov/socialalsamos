@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConversations, useMessages, Conversation, Message } from '@/hooks/useMessages';
 import { useWebRTC } from '@/hooks/useWebRTC';
+import { useVideoCall } from '@/hooks/useVideoCall';
 import { useToast } from '@/hooks/use-toast';
 
 // Components
@@ -46,6 +47,7 @@ export default function MessagesPage() {
   // Call State
   const [isInCall, setIsInCall] = useState(false);
   const [callType, setCallType] = useState<'audio' | 'video'>('video');
+  const [activeCallId, setActiveCallId] = useState<string | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -71,9 +73,22 @@ export default function MessagesPage() {
     setTyping 
   } = useMessages(selectedConversation?.id || null);
 
+  // Video call management
+  const {
+    currentCall,
+    callParticipants,
+    isCreatingCall,
+    createCall,
+    leaveCall: leaveVideoCall,
+    updateMediaState,
+    fetchParticipants,
+    subscribeToParticipants,
+  } = useVideoCall();
+
+  // WebRTC for actual peer connections - use call ID as room ID for authorization
   const {
     localStream,
-    participants,
+    participants: webrtcParticipants,
     isConnected,
     isMuted,
     isVideoOn,
@@ -85,7 +100,17 @@ export default function MessagesPage() {
     toggleVideo,
     toggleScreenShare,
     toggleHandRaise,
-  } = useWebRTC(isInCall && selectedConversation ? selectedConversation.id : null);
+  } = useWebRTC(activeCallId);
+
+  // Merge WebRTC participants with profile data from database
+  const participantsWithProfiles = webrtcParticipants.map(p => {
+    const dbParticipant = callParticipants.find(cp => cp.user_id === p.id);
+    return {
+      ...p,
+      name: dbParticipant?.profile?.display_name || dbParticipant?.profile?.username || 'Participant',
+      avatarUrl: dbParticipant?.profile?.avatar_url || undefined,
+    };
+  });
 
   // Deep link handling
   useEffect(() => {
@@ -217,15 +242,61 @@ export default function MessagesPage() {
   };
 
   const startCall = async (type: 'audio' | 'video') => {
+    if (!selectedConversation) {
+      toast({
+        title: 'Error',
+        description: 'No conversation selected',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setCallType(type);
-    setIsInCall(true);
-    await joinRoom();
+    
+    // Create call record in database for authorization
+    const callId = await createCall(selectedConversation.id, type);
+    if (callId) {
+      setActiveCallId(callId);
+      setIsInCall(true);
+      // WebRTC will auto-join when activeCallId is set
+    }
   };
 
-  const endCall = () => {
+  const endCall = async () => {
     leaveRoom();
+    await leaveVideoCall();
     setIsInCall(false);
+    setActiveCallId(null);
   };
+
+  // Subscribe to participant changes and sync media state
+  useEffect(() => {
+    if (!isInCall || !currentCall) return;
+
+    // Fetch initial participants
+    fetchParticipants();
+
+    // Subscribe to changes
+    const unsubscribe = subscribeToParticipants();
+
+    return () => {
+      unsubscribe();
+    };
+  }, [isInCall, currentCall, fetchParticipants, subscribeToParticipants]);
+
+  // Sync media state to database
+  useEffect(() => {
+    if (isInCall && currentCall) {
+      updateMediaState(isMuted, isVideoOn, isScreenSharing, isHandRaised);
+    }
+  }, [isMuted, isVideoOn, isScreenSharing, isHandRaised, isInCall, currentCall, updateMediaState]);
+
+  // Auto-join WebRTC room when call is created
+  useEffect(() => {
+    if (activeCallId && isInCall && !isConnected) {
+      joinRoom();
+    }
+  }, [activeCallId, isInCall, isConnected, joinRoom]);
 
   const handleCreatePrivate = async (userId: string) => {
     const conv = await createPrivateConversation(userId);
@@ -270,7 +341,7 @@ export default function MessagesPage() {
       {isInCall && (
         <VideoCallOverlay
           localStream={localStream}
-          participants={participants}
+          participants={participantsWithProfiles}
           isMuted={isMuted}
           isVideoOn={isVideoOn}
           isScreenSharing={isScreenSharing}
