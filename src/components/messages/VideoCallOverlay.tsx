@@ -40,6 +40,8 @@ interface VideoCallOverlayProps {
   isScreenSharing: boolean;
   isHandRaised: boolean;
   callType: 'audio' | 'video';
+  callStartedAt?: string | null;
+  isCallConnected?: boolean;
   onToggleMute: () => void;
   onToggleVideo: () => void;
   onToggleScreenShare: () => void;
@@ -57,6 +59,8 @@ export function VideoCallOverlay({
   isScreenSharing,
   isHandRaised,
   callType,
+  callStartedAt,
+  isCallConnected,
   onToggleMute,
   onToggleVideo,
   onToggleScreenShare,
@@ -84,13 +88,20 @@ export function VideoCallOverlay({
     }
   }, [localStream]);
 
-  // Call duration timer
+  // Call duration timer (starts only after call is actually connected and we have a shared start time)
   useEffect(() => {
-    const interval = setInterval(() => {
-      setCallDuration(prev => prev + 1);
-    }, 1000);
+    if (!isCallConnected || !callStartedAt) {
+      setCallDuration(0);
+      return;
+    }
+
+    const startedMs = new Date(callStartedAt).getTime();
+    const tick = () => setCallDuration(Math.max(0, Math.floor((Date.now() - startedMs) / 1000)));
+
+    tick();
+    const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [callStartedAt, isCallConnected]);
 
   // Format duration
   const formatDuration = (seconds: number) => {
@@ -190,8 +201,13 @@ export function VideoCallOverlay({
       )}>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 text-white">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-sm font-medium">{formatDuration(callDuration)}</span>
+            <div className={cn(
+              "w-2 h-2 rounded-full animate-pulse",
+              isCallConnected ? "bg-green-500" : "bg-yellow-500"
+            )} />
+            <span className="text-sm font-medium">
+              {isCallConnected && callStartedAt ? formatDuration(callDuration) : 'Connecting…'}
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-2 text-white/80">

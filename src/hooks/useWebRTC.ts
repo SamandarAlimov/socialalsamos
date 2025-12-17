@@ -97,6 +97,25 @@ export function useWebRTC(roomId: string | null) {
   const makingOfferRef = useRef<Map<string, boolean>>(new Map());
   const ignoreOfferRef = useRef<Map<string, boolean>>(new Map());
 
+  // Shared call timer start (persisted once to backend so both clients match)
+  const callStartedStampedRef = useRef(false);
+  const stampCallStartedAt = useCallback(async () => {
+    if (!roomId) return;
+    if (callStartedStampedRef.current) return;
+    callStartedStampedRef.current = true;
+
+    const startedAt = new Date().toISOString();
+    try {
+      await supabase
+        .from('video_calls')
+        .update({ started_at: startedAt })
+        .eq('id', roomId)
+        .is('started_at', null);
+    } catch {
+      // ignore
+    }
+  }, [roomId]);
+
   const calculateQuality = useCallback(
     (bitrate: number, packetLoss: number, latency: number): ConnectionQuality["quality"] => {
       if (bitrate === 0) return "disconnected";
@@ -211,10 +230,26 @@ export function useWebRTC(roomId: string | null) {
 
       const pc = new RTCPeerConnection(DEFAULT_CONFIG);
 
-      // Add local tracks
-      stream.getTracks().forEach((track) => {
-        pc.addTrack(track, stream);
-      });
+      // Perfect negotiation: respond to negotiationneeded
+      pc.onnegotiationneeded = async () => {
+        try {
+          makingOfferRef.current.set(peerId, true);
+          const offer = await pc.createOffer();
+          if (pc.signalingState !== "stable") return;
+          await pc.setLocalDescription(offer);
+
+          if (!user?.id) return;
+          await sendSignal("offer", {
+            from: user.id,
+            to: peerId,
+            sdp: pc.localDescription ?? offer,
+          });
+        } catch (e) {
+          console.error("[WebRTC] negotiationneeded error", e);
+        } finally {
+          makingOfferRef.current.set(peerId, false);
+        }
+      };
 
       pc.onicecandidate = (event) => {
         if (!event.candidate || !user?.id) return;
@@ -226,8 +261,12 @@ export function useWebRTC(roomId: string | null) {
       };
 
       pc.ontrack = (event) => {
-        const remote = event.streams?.[0];
-        if (!remote) return;
+        const remoteFromStreams = event.streams?.[0] ?? null;
+        const remote = remoteFromStreams ?? (() => {
+          const ms = new MediaStream();
+          ms.addTrack(event.track);
+          return ms;
+        })();
 
         setParticipants((prev) => {
           const existingP = prev.find((p) => p.id === peerId);
@@ -251,6 +290,7 @@ export function useWebRTC(roomId: string | null) {
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === "connected") {
           setIsConnected(true);
+          void stampCallStartedAt();
         }
         if (pc.connectionState === "failed") {
           pc.restartIce();
@@ -266,31 +306,15 @@ export function useWebRTC(roomId: string | null) {
         if (pc.iceConnectionState === "failed") pc.restartIce();
       };
 
-      // Perfect negotiation: respond to negotiationneeded
-      pc.onnegotiationneeded = async () => {
-        try {
-          makingOfferRef.current.set(peerId, true);
-          const offer = await pc.createOffer();
-          if (pc.signalingState !== "stable") return;
-          await pc.setLocalDescription(offer);
-
-          if (!user?.id) return;
-          await sendSignal("offer", {
-            from: user.id,
-            to: peerId,
-            sdp: pc.localDescription ?? offer,
-          });
-        } catch (e) {
-          console.error("[WebRTC] negotiationneeded error", e);
-        } finally {
-          makingOfferRef.current.set(peerId, false);
-        }
-      };
+      // Add local tracks *after* handlers are attached so we don't miss negotiationneeded.
+      stream.getTracks().forEach((track) => {
+        pc.addTrack(track, stream);
+      });
 
       peerConnectionsRef.current.set(peerId, pc);
       return pc;
     },
-    [sendSignal, user?.id]
+    [sendSignal, stampCallStartedAt, user?.id]
   );
 
   const handleOffer = useCallback(
@@ -437,6 +461,31 @@ export function useWebRTC(roomId: string | null) {
       await supabase.removeChannel(channelRef.current);
       channelRef.current = null;
     }
+    const maybeMakeOffer = async (peerId: string) => {
+      // Deterministic initiator to avoid both sides waiting: lower user id initiates.
+      if (!user?.id) return;
+      if (user.id.localeCompare(peerId) > 0) return;
+
+      const pc = peerConnectionsRef.current.get(peerId);
+      if (!pc) return;
+      if (pc.signalingState !== "stable") return;
+
+      try {
+        makingOfferRef.current.set(peerId, true);
+        const offer = await pc.createOffer();
+        if (pc.signalingState !== "stable") return;
+        await pc.setLocalDescription(offer);
+        await sendSignal("offer", {
+          from: user.id,
+          to: peerId,
+          sdp: pc.localDescription ?? offer,
+        });
+      } catch (e) {
+        console.error("[WebRTC] initial offer error", e);
+      } finally {
+        makingOfferRef.current.set(peerId, false);
+      }
+    };
 
     const channel = supabase.channel(`webrtc:${roomId}`, {
       config: {
@@ -469,13 +518,15 @@ export function useWebRTC(roomId: string | null) {
           return next;
         });
 
-        // Ensure connections exist; negotiationneeded will create offers when needed.
+        // Ensure connections exist.
         for (const peerId of ids) {
           ensurePeerConnection(peerId, stream);
         }
 
-        setIsConnected(true);
-        setIsConnecting(false);
+        // Kick off an initial offer deterministically so SDP exchange always starts.
+        for (const peerId of ids) {
+          void maybeMakeOffer(peerId);
+        }
       })
       .on("presence", { event: "leave" }, ({ leftPresences }) => {
         for (const p of leftPresences as any[]) {
@@ -529,6 +580,8 @@ export function useWebRTC(roomId: string | null) {
         await channel.track({ online_at: new Date().toISOString() });
         startQualityMonitoring();
         setIsConnecting(false);
+
+        // (call start time is stamped when peer connection reaches "connected")
       }
       if (s === "CHANNEL_ERROR" || s === "TIMED_OUT" || s === "CLOSED") {
         setError("Signaling connection error");
@@ -540,7 +593,7 @@ export function useWebRTC(roomId: string | null) {
         });
       }
     });
-  }, [roomId, user?.id, startLocalStream, ensurePeerConnection, closePeer, handleOffer, handleAnswer, handleIce, startQualityMonitoring, toast]);
+  }, [roomId, user?.id, startLocalStream, ensurePeerConnection, closePeer, handleOffer, handleAnswer, handleIce, startQualityMonitoring, toast, sendSignal]);
 
   const leaveRoom = useCallback(() => {
     if (user?.id) {

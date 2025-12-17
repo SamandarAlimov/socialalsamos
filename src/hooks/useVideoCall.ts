@@ -59,7 +59,9 @@ export function useVideoCall() {
         (payload) => {
           const updated = payload.new as VideoCallRecord;
           console.log('[VideoCall] Call status updated:', updated.status);
-          
+
+          setCurrentCall(updated);
+
           if (updated.status === 'ended') {
             console.log('[VideoCall] Call ended by other participant');
             setCallEnded(true);
@@ -107,7 +109,7 @@ export function useVideoCall() {
           host_id: user.id,
           call_type: callType,
           status: 'active',
-          started_at: new Date().toISOString(),
+          started_at: null,
         })
         .select()
         .single();
