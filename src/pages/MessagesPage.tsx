@@ -337,11 +337,14 @@ export default function MessagesPage() {
   useEffect(() => {
     if (callEnded && isInCall) {
       console.log('[MessagesPage] Call ended by other participant, cleaning up');
-      leaveRoom();
-      setIsInCall(false);
-      setActiveCallId(null);
+      (async () => {
+        leaveRoom();
+        await leaveVideoCall();
+        setIsInCall(false);
+        setActiveCallId(null);
+      })();
     }
-  }, [callEnded, isInCall, leaveRoom]);
+  }, [callEnded, isInCall, leaveRoom, leaveVideoCall]);
 
   const handleCreatePrivate = async (userId: string) => {
     const conv = await createPrivateConversation(userId);
