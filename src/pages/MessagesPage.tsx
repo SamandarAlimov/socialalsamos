@@ -370,7 +370,7 @@ export default function MessagesPage() {
   const messageGroups = groupMessagesByDate(messages);
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex bg-background">
+    <div className="h-[calc(100vh-4rem)] md:h-[calc(100vh-4rem)] flex flex-col md:flex-row bg-background overflow-hidden">
       {/* Video Call Overlay */}
       {isInCall && (
         <VideoCallOverlay
@@ -400,12 +400,13 @@ export default function MessagesPage() {
         onDecline={declineCall}
       />
 
+      {/* Left Panel - Conversation List */}
       <div className={cn(
-        "w-full md:w-80 lg:w-96 border-r border-border flex flex-col bg-card",
+        "w-full md:w-80 lg:w-96 border-r border-border flex flex-col bg-card flex-shrink-0",
         showMobileChat && "hidden md:flex"
       )}>
         {/* Search & Create */}
-        <div className="p-3 border-b border-border">
+        <div className="p-3 border-b border-border flex-shrink-0">
           <div className="flex gap-2">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -426,7 +427,7 @@ export default function MessagesPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-border">
+        <div className="flex border-b border-border flex-shrink-0">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -447,7 +448,7 @@ export default function MessagesPage() {
         </div>
 
         {/* Conversation List */}
-        <ScrollArea className="flex-1">
+        <ScrollArea className="flex-1 min-h-0">
           {conversationsLoading ? (
             <div className="flex items-center justify-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -488,7 +489,7 @@ export default function MessagesPage() {
 
       {/* Right Panel - Chat */}
       <div className={cn(
-        "flex-1 flex flex-col bg-background",
+        "flex-1 flex flex-col bg-background min-h-0 min-w-0",
         !showMobileChat && "hidden md:flex"
       )}>
         {selectedConversation ? (
@@ -505,7 +506,7 @@ export default function MessagesPage() {
             />
 
             {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto scrollbar-custom bg-muted/20">
+            <div className="flex-1 overflow-y-auto scrollbar-custom bg-muted/20 min-h-0">
               {messagesLoading ? (
                 <div className="flex items-center justify-center h-full">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -576,12 +577,14 @@ export default function MessagesPage() {
             </div>
 
             {/* Message Input */}
-            <MessageInput
-              onSend={handleSendMessage}
-              onTyping={setTyping}
-              replyTo={replyTo}
-              onCancelReply={() => setReplyTo(null)}
-            />
+            <div className="flex-shrink-0 border-t border-border">
+              <MessageInput
+                onSend={handleSendMessage}
+                onTyping={setTyping}
+                replyTo={replyTo}
+                onCancelReply={() => setReplyTo(null)}
+              />
+            </div>
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center">
