@@ -75,16 +75,13 @@ export function VideoCallOverlay({
   const [activeView, setActiveView] = useState<'grid' | 'speaker'>('grid');
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const participantsArray = Array.isArray(participants) ? participants : Array.from(participants.values());
-  
+  const totalParticipants = participants.length + 1; // +1 for local user
+
   useEffect(() => {
     if (localVideoRef.current && localStream) {
       localVideoRef.current.srcObject = localStream;
     }
   }, [localStream]);
-
-  const participantsArray = Array.from(participants.values());
-  const totalParticipants = participantsArray.length + 1; // +1 for local user
 
   const handleMouseMove = () => {
     setShowControls(true);
@@ -123,7 +120,7 @@ export function VideoCallOverlay({
       <div className="flex-1 relative p-4">
         <div className={cn("grid gap-4 h-full", getGridLayout())}>
           {/* Remote participants */}
-          {participantsArray.map((participant) => (
+          {participants.map((participant) => (
             <div 
               key={participant.id} 
               className="relative bg-gray-800 rounded-2xl overflow-hidden aspect-video"
@@ -168,7 +165,7 @@ export function VideoCallOverlay({
           ))}
 
           {/* Local video (if no participants, show full, otherwise PIP) */}
-          {participantsArray.length === 0 ? (
+          {participants.length === 0 ? (
             <div className="relative bg-gray-800 rounded-2xl overflow-hidden">
               {localStream && isVideoOn ? (
                 <video
@@ -197,7 +194,7 @@ export function VideoCallOverlay({
         </div>
 
         {/* Picture-in-Picture Local Video */}
-        {participantsArray.length > 0 && (
+        {participants.length > 0 && (
           <div className="absolute bottom-24 right-6 w-48 aspect-video bg-gray-800 rounded-xl overflow-hidden shadow-2xl border border-white/10">
             {localStream && isVideoOn ? (
               <video
