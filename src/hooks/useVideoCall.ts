@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -37,6 +37,49 @@ export function useVideoCall() {
   const [currentCall, setCurrentCall] = useState<VideoCallRecord | null>(null);
   const [callParticipants, setCallParticipants] = useState<CallParticipant[]>([]);
   const [isCreatingCall, setIsCreatingCall] = useState(false);
+  const [callEnded, setCallEnded] = useState(false);
+  const callSubscriptionRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  // Subscribe to call status changes
+  useEffect(() => {
+    if (!currentCall) return;
+
+    console.log('[VideoCall] Subscribing to call status:', currentCall.id);
+    
+    callSubscriptionRef.current = supabase
+      .channel(`call_status_${currentCall.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'video_calls',
+          filter: `id=eq.${currentCall.id}`,
+        },
+        (payload) => {
+          const updated = payload.new as VideoCallRecord;
+          console.log('[VideoCall] Call status updated:', updated.status);
+          
+          if (updated.status === 'ended') {
+            console.log('[VideoCall] Call ended by other participant');
+            setCallEnded(true);
+            toast({
+              title: 'Call Ended',
+              description: 'The call has ended',
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      if (callSubscriptionRef.current) {
+        console.log('[VideoCall] Unsubscribing from call status');
+        supabase.removeChannel(callSubscriptionRef.current);
+        callSubscriptionRef.current = null;
+      }
+    };
+  }, [currentCall, toast]);
 
   // Create a new video call
   const createCall = useCallback(async (
@@ -53,6 +96,7 @@ export function useVideoCall() {
     }
 
     setIsCreatingCall(true);
+    setCallEnded(false);
 
     try {
       // Create the video call record
@@ -87,7 +131,6 @@ export function useVideoCall() {
 
       if (participantError) {
         console.error('Error adding participant:', participantError);
-        // Cleanup the call if participant insert fails
         await supabase.from('video_calls').delete().eq('id', call.id);
         throw participantError;
       }
@@ -117,7 +160,25 @@ export function useVideoCall() {
   const joinCall = useCallback(async (callId: string): Promise<boolean> => {
     if (!user?.id) return false;
 
+    setCallEnded(false);
+
     try {
+      // Check if call is still active
+      const { data: callData } = await supabase
+        .from('video_calls')
+        .select('*')
+        .eq('id', callId)
+        .single();
+
+      if (!callData || callData.status === 'ended') {
+        toast({
+          title: 'Call Ended',
+          description: 'This call has already ended',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
       // Check if already a participant
       const { data: existing } = await supabase
         .from('call_participants')
@@ -149,27 +210,19 @@ export function useVideoCall() {
           });
       }
 
-      // Fetch call details
-      const { data: call } = await supabase
-        .from('video_calls')
-        .select('*')
-        .eq('id', callId)
-        .single();
-
-      if (call) {
-        setCurrentCall(call);
-      }
-
+      setCurrentCall(callData as VideoCallRecord);
       return true;
     } catch (error) {
       console.error('Failed to join call:', error);
       return false;
     }
-  }, [user?.id]);
+  }, [user?.id, toast]);
 
-  // Leave call
+  // Leave call - updates database and ends call if last participant
   const leaveCall = useCallback(async () => {
     if (!currentCall || !user?.id) return;
+
+    console.log('[VideoCall] Leaving call:', currentCall.id);
 
     try {
       // Update participant record
@@ -186,19 +239,23 @@ export function useVideoCall() {
         .eq('call_id', currentCall.id)
         .is('left_at', null);
 
-      // If no participants remain, end the call
-      if (count === 0) {
-        await supabase
-          .from('video_calls')
-          .update({ 
-            status: 'ended',
-            ended_at: new Date().toISOString() 
-          })
-          .eq('id', currentCall.id);
-      }
+      console.log('[VideoCall] Remaining participants:', count);
+
+      // Always end the call when someone leaves in 1:1 calls
+      // This ensures both users are notified
+      await supabase
+        .from('video_calls')
+        .update({ 
+          status: 'ended',
+          ended_at: new Date().toISOString() 
+        })
+        .eq('id', currentCall.id);
+
+      console.log('[VideoCall] Call marked as ended');
 
       setCurrentCall(null);
       setCallParticipants([]);
+      setCallEnded(false);
     } catch (error) {
       console.error('Error leaving call:', error);
     }
@@ -262,7 +319,7 @@ export function useVideoCall() {
     if (!currentCall) return () => {};
 
     const channel = supabase
-      .channel(`call_${currentCall.id}`)
+      .channel(`call_participants_${currentCall.id}`)
       .on(
         'postgres_changes',
         {
@@ -286,6 +343,7 @@ export function useVideoCall() {
     currentCall,
     callParticipants,
     isCreatingCall,
+    callEnded,
     createCall,
     joinCall,
     leaveCall,

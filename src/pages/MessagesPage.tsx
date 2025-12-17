@@ -80,6 +80,7 @@ export default function MessagesPage() {
     currentCall,
     callParticipants,
     isCreatingCall,
+    callEnded,
     createCall,
     joinCall,
     leaveCall: leaveVideoCall,
@@ -331,6 +332,16 @@ export default function MessagesPage() {
       joinRoom();
     }
   }, [activeCallId, isInCall, isConnected, joinRoom]);
+
+  // Auto-end call when other participant ends it
+  useEffect(() => {
+    if (callEnded && isInCall) {
+      console.log('[MessagesPage] Call ended by other participant, cleaning up');
+      leaveRoom();
+      setIsInCall(false);
+      setActiveCallId(null);
+    }
+  }, [callEnded, isInCall, leaveRoom]);
 
   const handleCreatePrivate = async (userId: string) => {
     const conv = await createPrivateConversation(userId);
