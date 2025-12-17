@@ -50,7 +50,8 @@ export default function MessagesPage() {
   const [isInCall, setIsInCall] = useState(false);
   const [callType, setCallType] = useState<'audio' | 'video'>('video');
   const [activeCallId, setActiveCallId] = useState<string | null>(null);
-  
+  const hasJoinedRoomRef = useRef(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Hooks
@@ -302,6 +303,7 @@ export default function MessagesPage() {
     await leaveVideoCall();
     setIsInCall(false);
     setActiveCallId(null);
+    hasJoinedRoomRef.current = false;
   };
 
   // Subscribe to participant changes and sync media state
@@ -326,12 +328,14 @@ export default function MessagesPage() {
     }
   }, [isMuted, isVideoOn, isScreenSharing, isHandRaised, isInCall, currentCall, updateMediaState]);
 
-  // Auto-join WebRTC room when call is created
+  // Auto-join WebRTC room when call is created/joined (only once per call)
   useEffect(() => {
-    if (activeCallId && isInCall && !isConnected) {
-      joinRoom();
-    }
-  }, [activeCallId, isInCall, isConnected, joinRoom]);
+    if (!activeCallId || !isInCall) return;
+    if (hasJoinedRoomRef.current) return;
+
+    hasJoinedRoomRef.current = true;
+    joinRoom();
+  }, [activeCallId, isInCall, joinRoom]);
 
   // Auto-end call when other participant ends it
   useEffect(() => {
@@ -342,6 +346,7 @@ export default function MessagesPage() {
         await leaveVideoCall();
         setIsInCall(false);
         setActiveCallId(null);
+        hasJoinedRoomRef.current = false;
       })();
     }
   }, [callEnded, isInCall, leaveRoom, leaveVideoCall]);
@@ -395,6 +400,8 @@ export default function MessagesPage() {
           isScreenSharing={isScreenSharing}
           isHandRaised={isHandRaised}
           callType={callType}
+          callStartedAt={currentCall?.started_at ?? null}
+          isCallConnected={isConnected}
           onToggleMute={toggleMute}
           onToggleVideo={toggleVideo}
           onToggleScreenShare={toggleScreenShare}
