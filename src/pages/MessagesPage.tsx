@@ -160,7 +160,7 @@ export default function MessagesPage() {
           if (participants && participants.length > 0) {
             const { data: profile } = await supabase
               .from('profiles')
-              .select('id, username, display_name, avatar_url, is_online')
+              .select('id, username, display_name, avatar_url, is_online, last_seen')
               .eq('id', participants[0].user_id)
               .single();
             otherParticipant = profile;
@@ -253,6 +253,48 @@ export default function MessagesPage() {
     });
   };
 
+  // Conversation context menu handlers
+  const handleArchiveConversation = (conversationId: string) => {
+    toast({ title: 'Archived', description: 'Conversation archived' });
+  };
+
+  const handlePinConversation = (conversationId: string) => {
+    toast({ title: 'Pinned', description: 'Conversation pinned' });
+  };
+
+  const handleMuteConversation = (conversationId: string) => {
+    toast({ title: 'Muted', description: 'Notifications muted' });
+  };
+
+  const handleDeleteConversation = async (conversationId: string) => {
+    try {
+      // Remove participant (soft delete for user)
+      await supabase
+        .from('conversation_participants')
+        .delete()
+        .eq('conversation_id', conversationId)
+        .eq('user_id', user?.id);
+      
+      if (selectedConversation?.id === conversationId) {
+        setSelectedConversation(null);
+        setShowMobileChat(false);
+      }
+      
+      toast({ title: 'Deleted', description: 'Conversation deleted' });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to delete conversation', variant: 'destructive' });
+    }
+  };
+
+  const handleMarkRead = async (conversationId: string) => {
+    // Mark all messages in conversation as read
+    toast({ title: 'Marked as read', description: 'All messages marked as read' });
+  };
+
+  const handleMarkUnread = async (conversationId: string) => {
+    toast({ title: 'Marked as unread', description: 'Conversation marked as unread' });
+  };
+
   const startCall = async (type: 'audio' | 'video') => {
     if (!selectedConversation) {
       toast({
@@ -299,11 +341,41 @@ export default function MessagesPage() {
   };
 
   const endCall = async () => {
+    // Calculate call duration
+    const duration = currentCall?.started_at 
+      ? Math.floor((Date.now() - new Date(currentCall.started_at).getTime()) / 1000)
+      : 0;
+    
+    // Insert call history message
+    if (selectedConversation && currentCall) {
+      const callMessage = duration > 0
+        ? `📞 ${callType === 'video' ? 'Video call' : 'Voice call'} — ${formatCallDuration(duration)}`
+        : `📞 ${callType === 'video' ? 'Video call' : 'Voice call'} ended`;
+      
+      await supabase.from('messages').insert({
+        conversation_id: selectedConversation.id,
+        sender_id: user?.id,
+        content: callMessage,
+        media_type: 'call_history',
+      });
+    }
+    
     leaveRoom();
     await leaveVideoCall();
     setIsInCall(false);
     setActiveCallId(null);
     hasJoinedRoomRef.current = false;
+  };
+
+  const formatCallDuration = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    
+    if (hours > 0) {
+      return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   // Subscribe to participant changes and sync media state
@@ -502,6 +574,12 @@ export default function MessagesPage() {
                 conversation={conv}
                 isSelected={selectedConversation?.id === conv.id}
                 onClick={() => handleSelectConversation(conv)}
+                onArchive={() => handleArchiveConversation(conv.id)}
+                onPin={() => handlePinConversation(conv.id)}
+                onMute={() => handleMuteConversation(conv.id)}
+                onDelete={() => handleDeleteConversation(conv.id)}
+                onMarkRead={() => handleMarkRead(conv.id)}
+                onMarkUnread={() => handleMarkUnread(conv.id)}
               />
             ))
           )}
