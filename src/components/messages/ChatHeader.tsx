@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Conversation } from '@/hooks/useMessages';
 import { cn } from '@/lib/utils';
+import { formatLastSeen } from '@/utils/formatLastSeen';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -73,7 +74,8 @@ export function ChatHeader({
     }
     
     if (conversation.type === 'private') {
-      return conversation.other_participant?.is_online ? 'online' : 'last seen recently';
+      const participant = conversation.other_participant;
+      return formatLastSeen(participant?.last_seen, participant?.is_online);
     }
     
     if (conversation.type === 'group') {
