@@ -16,6 +16,7 @@ import { useConversations, useMessages, Conversation, Message } from '@/hooks/us
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { useVideoCall } from '@/hooks/useVideoCall';
 import { useIncomingCalls } from '@/hooks/useIncomingCalls';
+import { usePinnedMessages } from '@/hooks/usePinnedMessages';
 import { useToast } from '@/hooks/use-toast';
 
 // Components
@@ -24,9 +25,13 @@ import { ChatHeader } from '@/components/messages/ChatHeader';
 import { EnhancedMessageBubble } from '@/components/messages/EnhancedMessageBubble';
 import { MessageInput } from '@/components/messages/MessageInput';
 import { CreateChatDialog } from '@/components/messages/CreateChatDialog';
+import { CreateGroupChannelDialog } from '@/components/messages/CreateGroupChannelDialog';
 import { VideoCallOverlay } from '@/components/messages/VideoCallOverlay';
 import { ForwardMessageDialog } from '@/components/ForwardMessageDialog';
 import { IncomingCallDialog } from '@/components/messages/IncomingCallDialog';
+import { PinnedMessagesBar } from '@/components/messages/PinnedMessagesBar';
+import { EditMessageDialog } from '@/components/messages/EditMessageDialog';
+import { DeleteMessageDialog } from '@/components/messages/DeleteMessageDialog';
 
 type MessageTab = 'private' | 'groups' | 'channels' | 'requests';
 
@@ -45,6 +50,9 @@ export default function MessagesPage() {
   // Message State
   const [replyTo, setReplyTo] = useState<{ id: string; content: string; sender_name: string } | null>(null);
   const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [deletingMessage, setDeletingMessage] = useState<Message | null>(null);
+  const [showGroupDialog, setShowGroupDialog] = useState(false);
   
   // Call State
   const [isInCall, setIsInCall] = useState(false);
@@ -234,15 +242,26 @@ export default function MessagesPage() {
   };
 
   const handleEdit = (message: Message) => {
-    // TODO: Implement edit dialog
-    toast({
-      title: 'Edit',
-      description: 'Edit functionality coming soon',
-    });
+    setEditingMessage(message);
+  };
+
+  const handleEditSave = async (messageId: string, newContent: string) => {
+    await editMessage(messageId, newContent);
+    setEditingMessage(null);
   };
 
   const handleDelete = async (messageId: string) => {
-    await deleteMessage(messageId);
+    const message = messages.find(m => m.id === messageId);
+    if (message) {
+      setDeletingMessage(message);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (deletingMessage) {
+      await deleteMessage(deletingMessage.id);
+      setDeletingMessage(null);
+    }
   };
 
   const handlePin = (messageId: string) => {
@@ -710,10 +729,33 @@ export default function MessagesPage() {
         onCreateGroup={handleCreateGroup}
       />
 
+      <CreateGroupChannelDialog
+        open={showGroupDialog}
+        onOpenChange={setShowGroupDialog}
+        onCreated={(id) => {
+          setShowGroupDialog(false);
+          setActiveTab('groups');
+        }}
+      />
+
       <ForwardMessageDialog
         message={forwardMessage}
         open={!!forwardMessage}
         onOpenChange={(open) => !open && setForwardMessage(null)}
+      />
+
+      <EditMessageDialog
+        message={editingMessage}
+        open={!!editingMessage}
+        onOpenChange={(open) => !open && setEditingMessage(null)}
+        onSave={handleEditSave}
+      />
+
+      <DeleteMessageDialog
+        open={!!deletingMessage}
+        onOpenChange={(open) => !open && setDeletingMessage(null)}
+        onConfirm={handleDeleteConfirm}
+        messagePreview={deletingMessage?.content || undefined}
       />
     </div>
   );
