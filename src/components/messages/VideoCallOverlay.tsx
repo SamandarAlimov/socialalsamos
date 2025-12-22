@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, memo } from 'react';
 import { Button } from '@/components/ui/button';
 import { 
   Mic, 
@@ -10,8 +10,6 @@ import {
   PhoneOff,
   Maximize2,
   Minimize2,
-  Wifi,
-  WifiOff,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
@@ -20,6 +18,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { NetworkQualityIndicator } from './NetworkQualityIndicator';
+import { CallDebugPanel } from './CallDebugPanel';
+import type { CallStats, ICEDebugInfo } from '@/hooks/useCallStats';
 
 interface Participant {
   id: string;
@@ -42,6 +43,9 @@ interface VideoCallOverlayProps {
   callType: 'audio' | 'video';
   callStartedAt?: string | null;
   isCallConnected?: boolean;
+  isReconnecting?: boolean;
+  callStats?: CallStats;
+  debugInfo?: ICEDebugInfo;
   onToggleMute: () => void;
   onToggleVideo: () => void;
   onToggleScreenShare: () => void;
@@ -61,6 +65,9 @@ export function VideoCallOverlay({
   callType,
   callStartedAt,
   isCallConnected,
+  isReconnecting = false,
+  callStats,
+  debugInfo,
   onToggleMute,
   onToggleVideo,
   onToggleScreenShare,
@@ -81,10 +88,11 @@ export function VideoCallOverlay({
   const isOneOnOne = participants.length === 1;
   const hasRemoteVideo = participants.some(p => p.stream && p.isVideoOn);
 
-  // Set up local video
+  // Set up local video - only set srcObject once to prevent flickering
   useEffect(() => {
-    if (localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = localStream;
+    const videoEl = localVideoRef.current;
+    if (videoEl && localStream && videoEl.srcObject !== localStream) {
+      videoEl.srcObject = localStream;
     }
   }, [localStream]);
 
@@ -210,10 +218,26 @@ export function VideoCallOverlay({
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-white/80">
-          <Wifi className="h-4 w-4" />
-        </div>
+        <NetworkQualityIndicator
+          quality={callStats?.quality || 'disconnected'}
+          rtt={callStats?.rtt}
+          packetLoss={callStats?.packetLoss}
+          bitrate={callStats?.bitrate}
+          isReconnecting={isReconnecting}
+        />
       </div>
+
+      {/* Reconnecting Banner */}
+      {isReconnecting && (
+        <div className="absolute top-14 left-0 right-0 z-20 bg-yellow-500/90 text-black text-center py-2 text-sm font-medium animate-pulse">
+          Reconnecting...
+        </div>
+      )}
+
+      {/* Debug Panel (dev mode only) */}
+      {callStats && debugInfo && (
+        <CallDebugPanel stats={callStats} debugInfo={debugInfo} />
+      )}
 
       {/* Main Video Area */}
       <div className="flex-1 relative">

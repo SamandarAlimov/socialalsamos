@@ -14,6 +14,77 @@ export type Database = {
   }
   public: {
     Tables: {
+      call_history: {
+        Row: {
+          call_id: string
+          call_type: string
+          callee_id: string | null
+          caller_id: string
+          conversation_id: string
+          created_at: string
+          duration_seconds: number | null
+          ended_at: string | null
+          id: string
+          started_at: string | null
+          status: string
+        }
+        Insert: {
+          call_id: string
+          call_type?: string
+          callee_id?: string | null
+          caller_id: string
+          conversation_id: string
+          created_at?: string
+          duration_seconds?: number | null
+          ended_at?: string | null
+          id?: string
+          started_at?: string | null
+          status?: string
+        }
+        Update: {
+          call_id?: string
+          call_type?: string
+          callee_id?: string | null
+          caller_id?: string
+          conversation_id?: string
+          created_at?: string
+          duration_seconds?: number | null
+          ended_at?: string | null
+          id?: string
+          started_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_history_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "video_calls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_history_callee_id_fkey"
+            columns: ["callee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_history_caller_id_fkey"
+            columns: ["caller_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_history_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       call_participants: {
         Row: {
           call_id: string
@@ -157,7 +228,9 @@ export type Database = {
         Row: {
           conversation_id: string
           id: string
+          is_archived: boolean | null
           is_muted: boolean | null
+          is_pinned: boolean | null
           joined_at: string | null
           last_read_at: string | null
           role: string | null
@@ -166,7 +239,9 @@ export type Database = {
         Insert: {
           conversation_id: string
           id?: string
+          is_archived?: boolean | null
           is_muted?: boolean | null
+          is_pinned?: boolean | null
           joined_at?: string | null
           last_read_at?: string | null
           role?: string | null
@@ -175,7 +250,9 @@ export type Database = {
         Update: {
           conversation_id?: string
           id?: string
+          is_archived?: boolean | null
           is_muted?: boolean | null
+          is_pinned?: boolean | null
           joined_at?: string | null
           last_read_at?: string | null
           role?: string | null
@@ -205,9 +282,11 @@ export type Database = {
           description: string | null
           id: string
           is_encrypted: boolean | null
+          is_public: boolean | null
           last_message_at: string | null
           name: string | null
           owner_id: string | null
+          subscribers_count: number | null
           type: string | null
         }
         Insert: {
@@ -216,9 +295,11 @@ export type Database = {
           description?: string | null
           id?: string
           is_encrypted?: boolean | null
+          is_public?: boolean | null
           last_message_at?: string | null
           name?: string | null
           owner_id?: string | null
+          subscribers_count?: number | null
           type?: string | null
         }
         Update: {
@@ -227,9 +308,11 @@ export type Database = {
           description?: string | null
           id?: string
           is_encrypted?: boolean | null
+          is_public?: boolean | null
           last_message_at?: string | null
           name?: string | null
           owner_id?: string | null
+          subscribers_count?: number | null
           type?: string | null
         }
         Relationships: [
@@ -358,11 +441,13 @@ export type Database = {
           content: string | null
           conversation_id: string
           created_at: string | null
+          edited_at: string | null
           id: string
           is_deleted: boolean | null
           is_edited: boolean | null
           media_type: string | null
           media_url: string | null
+          original_content: string | null
           reply_to_id: string | null
           sender_id: string | null
           updated_at: string | null
@@ -371,11 +456,13 @@ export type Database = {
           content?: string | null
           conversation_id: string
           created_at?: string | null
+          edited_at?: string | null
           id?: string
           is_deleted?: boolean | null
           is_edited?: boolean | null
           media_type?: string | null
           media_url?: string | null
+          original_content?: string | null
           reply_to_id?: string | null
           sender_id?: string | null
           updated_at?: string | null
@@ -384,11 +471,13 @@ export type Database = {
           content?: string | null
           conversation_id?: string
           created_at?: string | null
+          edited_at?: string | null
           id?: string
           is_deleted?: boolean | null
           is_edited?: boolean | null
           media_type?: string | null
           media_url?: string | null
+          original_content?: string | null
           reply_to_id?: string | null
           sender_id?: string | null
           updated_at?: string | null
@@ -452,6 +541,52 @@ export type Database = {
           {
             foreignKeyName: "notifications_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pinned_messages: {
+        Row: {
+          conversation_id: string
+          id: string
+          message_id: string
+          pinned_at: string
+          pinned_by: string
+        }
+        Insert: {
+          conversation_id: string
+          id?: string
+          message_id: string
+          pinned_at?: string
+          pinned_by: string
+        }
+        Update: {
+          conversation_id?: string
+          id?: string
+          message_id?: string
+          pinned_at?: string
+          pinned_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pinned_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pinned_messages_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pinned_messages_pinned_by_fkey"
+            columns: ["pinned_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -679,6 +814,109 @@ export type Database = {
             foreignKeyName: "typing_indicators_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_sessions: {
+        Row: {
+          browser_name: string | null
+          created_at: string
+          device_name: string | null
+          device_type: string | null
+          id: string
+          ip_address: string | null
+          is_current: boolean | null
+          last_active_at: string | null
+          os_name: string | null
+          user_id: string
+        }
+        Insert: {
+          browser_name?: string | null
+          created_at?: string
+          device_name?: string | null
+          device_type?: string | null
+          id?: string
+          ip_address?: string | null
+          is_current?: boolean | null
+          last_active_at?: string | null
+          os_name?: string | null
+          user_id: string
+        }
+        Update: {
+          browser_name?: string | null
+          created_at?: string
+          device_name?: string | null
+          device_type?: string | null
+          id?: string
+          ip_address?: string | null
+          is_current?: boolean | null
+          last_active_at?: string | null
+          os_name?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_settings: {
+        Row: {
+          call_permissions: string | null
+          created_at: string
+          group_invite_permissions: string | null
+          id: string
+          language: string | null
+          last_seen_visibility: string | null
+          notification_preview: boolean | null
+          notification_sounds: boolean | null
+          read_receipts_enabled: boolean | null
+          theme: string | null
+          two_factor_enabled: boolean | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          call_permissions?: string | null
+          created_at?: string
+          group_invite_permissions?: string | null
+          id?: string
+          language?: string | null
+          last_seen_visibility?: string | null
+          notification_preview?: boolean | null
+          notification_sounds?: boolean | null
+          read_receipts_enabled?: boolean | null
+          theme?: string | null
+          two_factor_enabled?: boolean | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          call_permissions?: string | null
+          created_at?: string
+          group_invite_permissions?: string | null
+          id?: string
+          language?: string | null
+          last_seen_visibility?: string | null
+          notification_preview?: boolean | null
+          notification_sounds?: boolean | null
+          read_receipts_enabled?: boolean | null
+          theme?: string | null
+          two_factor_enabled?: boolean | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_settings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },

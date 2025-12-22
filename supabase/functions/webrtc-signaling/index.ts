@@ -270,6 +270,23 @@ serve(async (req) => {
             handleLeave(currentRoomId, currentUserId, socket);
             break;
           }
+
+          case 'call-ended': {
+            // Broadcast CALL_ENDED to all participants immediately
+            if (currentRoomId) {
+              const room = rooms.get(currentRoomId);
+              room?.forEach((ws, participantId) => {
+                if (participantId !== currentUserId && ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({
+                    type: 'call-ended',
+                    userId: currentUserId,
+                  }));
+                }
+              });
+            }
+            handleLeave(currentRoomId, currentUserId, socket);
+            break;
+          }
         }
       } catch (error) {
         console.error("Error handling message:", error);
