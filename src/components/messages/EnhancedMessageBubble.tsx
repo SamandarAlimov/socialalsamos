@@ -166,17 +166,39 @@ export function EnhancedMessageBubble({
   const formatFullTime = (date: string) => format(new Date(date), 'HH:mm · dd.MM.yyyy');
 
   const isVoiceMessage = message.media_type === 'audio' && message.media_url;
-  const isLocationMessage = message.media_type === 'location' && message.media_url;
   
-  // Parse location from media_url
-  const parseLocation = () => {
-    if (!isLocationMessage || !message.media_url) return null;
-    try {
-      const [lat, lng] = message.media_url.split(',').map(Number);
-      return { latitude: lat, longitude: lng };
-    } catch {
-      return null;
+  // Check for location message - either via media_type or text format
+  const isLocationFromMediaType = message.media_type === 'location' && message.media_url;
+  const isLocationFromText = message.content?.startsWith('📍 LOCATION:');
+  const isLocationMessage = isLocationFromMediaType || isLocationFromText;
+  
+  // Parse location from media_url or text content
+  const parseLocation = (): { latitude: number; longitude: number; address?: string } | null => {
+    // First try media_url format
+    if (isLocationFromMediaType && message.media_url) {
+      try {
+        const [lat, lng] = message.media_url.split(',').map(Number);
+        return { latitude: lat, longitude: lng, address: message.content || undefined };
+      } catch {
+        return null;
+      }
     }
+    
+    // Then try text format: 📍 LOCATION:lat,lng|address
+    if (isLocationFromText && message.content) {
+      try {
+        const locationPart = message.content.replace('📍 LOCATION:', '');
+        const [coords, address] = locationPart.split('|');
+        const [lat, lng] = coords.split(',').map(Number);
+        if (!isNaN(lat) && !isNaN(lng)) {
+          return { latitude: lat, longitude: lng, address: address || undefined };
+        }
+      } catch {
+        return null;
+      }
+    }
+    
+    return null;
   };
   const locationData = parseLocation();
   const formatContent = (content: string) => {
@@ -245,7 +267,7 @@ export function EnhancedMessageBubble({
                 <LocationMessage
                   latitude={locationData.latitude}
                   longitude={locationData.longitude}
-                  address={message.content || undefined}
+                  address={locationData.address}
                   isMine={isMine}
                   senderName={message.sender?.display_name || undefined}
                 />
