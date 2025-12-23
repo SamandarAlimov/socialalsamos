@@ -6,6 +6,7 @@ import { MessageAttachment } from '@/components/MessageAttachment';
 import { VoiceMessagePlayer } from '@/components/VoiceMessagePlayer';
 import { EmojiPicker } from '@/components/EmojiPicker';
 import { MessageContextMenu } from './MessageContextMenu';
+import { LocationMessage } from './LocationMessage';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
@@ -165,8 +166,19 @@ export function EnhancedMessageBubble({
   const formatFullTime = (date: string) => format(new Date(date), 'HH:mm · dd.MM.yyyy');
 
   const isVoiceMessage = message.media_type === 'audio' && message.media_url;
-
-  // Format message content with markdown-like syntax
+  const isLocationMessage = message.media_type === 'location' && message.media_url;
+  
+  // Parse location from media_url
+  const parseLocation = () => {
+    if (!isLocationMessage || !message.media_url) return null;
+    try {
+      const [lat, lng] = message.media_url.split(',').map(Number);
+      return { latitude: lat, longitude: lng };
+    } catch {
+      return null;
+    }
+  };
+  const locationData = parseLocation();
   const formatContent = (content: string) => {
     let formatted = content
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
@@ -229,6 +241,14 @@ export function EnhancedMessageBubble({
 
               {message.is_deleted ? (
                 <p className="text-sm italic opacity-50">Message deleted</p>
+              ) : isLocationMessage && locationData ? (
+                <LocationMessage
+                  latitude={locationData.latitude}
+                  longitude={locationData.longitude}
+                  address={message.content || undefined}
+                  isMine={isMine}
+                  senderName={message.sender?.display_name || undefined}
+                />
               ) : (
                 <>
                   {isVoiceMessage ? (

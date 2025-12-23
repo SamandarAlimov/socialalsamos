@@ -13,6 +13,7 @@ import ProfilePage from "./pages/ProfilePage";
 import UserProfilePage from "./pages/UserProfilePage";
 import SettingsPage from "./pages/SettingsPage";
 import CreatePage from "./pages/CreatePage";
+import MapPage from "./pages/MapPage";
 import NotFound from "./pages/NotFound";
 
 // Layout
@@ -79,7 +80,7 @@ function AppRoutes() {
         <Route path="/videos" element={<PlaceholderPage title="Videos" />} />
         <Route path="/messages" element={<MessagesPage />} />
         <Route path="/marketplace" element={<PlaceholderPage title="Marketplace" />} />
-        <Route path="/map" element={<PlaceholderPage title="Map" />} />
+        <Route path="/map" element={<MapPage />} />
         <Route path="/notifications" element={<PlaceholderPage title="Notifications" />} />
         <Route path="/create" element={<CreatePage />} />
         <Route path="/profile" element={<ProfilePage />} />

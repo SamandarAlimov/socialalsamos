@@ -8,7 +8,6 @@ import {
   X, 
   Image as ImageIcon, 
   FileText, 
-  MapPin, 
   User as UserIcon,
   Sticker,
   Bold,
@@ -21,6 +20,7 @@ import {
 import { EmojiPicker } from '@/components/EmojiPicker';
 import { FileUploadButton } from '@/components/FileUploadButton';
 import { VoiceMessageRecorder } from '@/components/VoiceMessageRecorder';
+import { LocationShareButton } from './LocationShareButton';
 import { cn } from '@/lib/utils';
 import {
   Popover,
@@ -40,6 +40,7 @@ interface MessageInputProps {
   replyTo?: ReplyTo | null;
   onCancelReply?: () => void;
   disabled?: boolean;
+  onShareLocation?: (location: { latitude: number; longitude: number; address?: string }) => void;
 }
 
 export function MessageInput({ 
@@ -47,7 +48,8 @@ export function MessageInput({
   onTyping, 
   replyTo, 
   onCancelReply,
-  disabled 
+  disabled,
+  onShareLocation
 }: MessageInputProps) {
   const [message, setMessage] = useState('');
   const [pendingAttachment, setPendingAttachment] = useState<{ url: string; type: string; name: string } | null>(null);
@@ -153,7 +155,6 @@ export function MessageInput({
   const attachmentOptions = [
     { icon: ImageIcon, label: 'Photo or Video', accept: 'image/*,video/*' },
     { icon: FileText, label: 'Document', accept: '.pdf,.doc,.docx,.xls,.xlsx,.txt' },
-    { icon: MapPin, label: 'Location', onClick: () => {} },
     { icon: UserIcon, label: 'Contact', onClick: () => {} },
     { icon: Sticker, label: 'Sticker', onClick: () => {} },
   ];
@@ -208,6 +209,9 @@ export function MessageInput({
                 <span className="text-sm">{option.label}</span>
               </button>
             ))}
+            {onShareLocation && (
+              <LocationShareButton onShareLocation={onShareLocation} />
+            )}
           </PopoverContent>
         </Popover>
 

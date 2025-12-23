@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline, Circle } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,7 +49,9 @@ import {
   Route,
   Car,
   Bike,
-  PersonStanding
+  PersonStanding,
+  X,
+  Home
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -64,11 +69,117 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Progress } from '@/components/ui/progress';
 
+// Fix default marker icon
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
+
+// Custom user marker
+const createUserIcon = (avatarUrl?: string, isCurrentUser = false, isOnline = false) => {
+  const color = isCurrentUser ? '#3b82f6' : isOnline ? '#22c55e' : '#6b7280';
+  return L.divIcon({
+    className: 'custom-marker',
+    html: `
+      <div style="
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: 3px solid ${color};
+        background: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        ${isCurrentUser ? 'animation: pulse 2s infinite;' : ''}
+      ">
+        ${avatarUrl 
+          ? `<img src="${avatarUrl}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;" />`
+          : `<div style="width: 32px; height: 32px; border-radius: 50%; background: ${color}; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">?</div>`
+        }
+      </div>
+      ${isCurrentUser ? '<div style="position: absolute; inset: -8px; border-radius: 50%; border: 2px solid #3b82f6; animation: ping 1.5s infinite;"></div>' : ''}
+    `,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+  });
+};
+
+// Destination marker
+const destinationIcon = L.divIcon({
+  className: 'destination-marker',
+  html: `
+    <div style="
+      width: 32px;
+      height: 32px;
+      background: #ef4444;
+      border-radius: 50% 50% 50% 0;
+      transform: rotate(-45deg);
+      border: 2px solid white;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    "></div>
+  `,
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
+});
+
 type MapLayer = 'standard' | 'satellite' | 'terrain';
 type TransportMode = 'driving' | 'walking' | 'cycling';
 
+// Map controller component
+function MapController({ center, zoom }: { center: [number, number] | null; zoom: number }) {
+  const map = useMap();
+  
+  useEffect(() => {
+    if (center) {
+      map.setView(center, zoom);
+    }
+  }, [center, zoom, map]);
+  
+  return null;
+}
+
+// Locate button controller
+function LocateControl({ onLocate }: { onLocate: () => void }) {
+  const map = useMap();
+  
+  useEffect(() => {
+    const control = new L.Control({ position: 'topright' });
+    control.onAdd = () => {
+      const div = L.DomUtil.create('div', 'leaflet-bar');
+      div.innerHTML = `
+        <a href="#" title="My Location" style="
+          width: 34px;
+          height: 34px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: white;
+          border-radius: 4px;
+        ">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M2 12h2"/><path d="M20 12h2"/>
+          </svg>
+        </a>
+      `;
+      div.onclick = (e) => {
+        e.preventDefault();
+        onLocate();
+      };
+      return div;
+    };
+    control.addTo(map);
+    return () => { map.removeControl(control); };
+  }, [map, onLocate]);
+  
+  return null;
+}
+
 export default function MapPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, profile } = useAuth();
   const {
     currentLocation,
@@ -90,8 +201,8 @@ export default function MapPage() {
     calculateDistance,
   } = useLocation();
   
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-  const [mapLoaded, setMapLoaded] = useState(false);
+  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
+  const [zoom, setZoom] = useState(15);
   const [mapLayer, setMapLayer] = useState<MapLayer>('standard');
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -102,9 +213,26 @@ export default function MapPage() {
   const [transportMode, setTransportMode] = useState<TransportMode>('driving');
   const [batteryLevel, setBatteryLevel] = useState(100);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [offlineLocations, setOfflineLocations] = useState<any[]>([]);
-  const [zoom, setZoom] = useState(15);
   const [activeTab, setActiveTab] = useState<'nearby' | 'following' | 'activity'>('nearby');
+  const [destination, setDestination] = useState<{ lat: number; lng: number; name: string } | null>(null);
+  const [showDirections, setShowDirections] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  
+  // Parse destination from URL params (from chat location share)
+  useEffect(() => {
+    const destLat = searchParams.get('destLat');
+    const destLng = searchParams.get('destLng');
+    const destName = searchParams.get('destName');
+    
+    if (destLat && destLng) {
+      setDestination({
+        lat: parseFloat(destLat),
+        lng: parseFloat(destLng),
+        name: destName || 'Shared Location'
+      });
+      setShowDirections(true);
+    }
+  }, [searchParams]);
   
   // Daily step goal
   const DAILY_STEP_GOAL = 10000;
@@ -127,11 +255,6 @@ export default function MapPage() {
     const handleOnline = () => {
       setIsOnline(true);
       toast.success('Back online!');
-      // Sync offline locations
-      if (offlineLocations.length > 0) {
-        // Would sync to backend here
-        setOfflineLocations([]);
-      }
     };
     
     const handleOffline = () => {
@@ -146,13 +269,12 @@ export default function MapPage() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [offlineLocations]);
+  }, []);
   
   // Start tracking on mount
   useEffect(() => {
     startTracking();
     
-    // Fetch users periodically
     const interval = setInterval(() => {
       if (isOnline) {
         fetchNearbyUsers(nearbyRadius);
@@ -166,6 +288,13 @@ export default function MapPage() {
     };
   }, [startTracking, stopTracking, fetchNearbyUsers, fetchFollowingLocations, nearbyRadius, isOnline]);
   
+  // Set map center when location available
+  useEffect(() => {
+    if (currentLocation && !mapCenter) {
+      setMapCenter([currentLocation.latitude, currentLocation.longitude]);
+    }
+  }, [currentLocation, mapCenter]);
+  
   // Initial fetch
   useEffect(() => {
     if (currentLocation && isOnline) {
@@ -177,7 +306,8 @@ export default function MapPage() {
   // Center map on current location
   const centerOnLocation = useCallback(async () => {
     try {
-      await getCurrentPosition();
+      const loc = await getCurrentPosition();
+      setMapCenter([loc.latitude, loc.longitude]);
       toast.success('Location updated');
     } catch (err) {
       toast.error('Failed to get location');
@@ -185,15 +315,32 @@ export default function MapPage() {
   }, [getCurrentPosition]);
   
   // Open directions
-  const openDirections = useCallback((destLat: number, destLng: number, userName: string) => {
-    const url = getDirectionsUrl(destLat, destLng);
-    if (url) {
-      window.open(url, '_blank');
-      toast.success(`Opening directions to ${userName}`);
-    } else {
+  const openDirections = useCallback((destLat: number, destLng: number, userName: string, mode: TransportMode = 'driving') => {
+    if (!currentLocation) {
       toast.error('Current location not available');
+      return;
     }
-  }, [getDirectionsUrl]);
+    
+    // Build URL based on mode
+    let url = '';
+    if (mode === 'driving') {
+      url = `https://www.google.com/maps/dir/?api=1&origin=${currentLocation.latitude},${currentLocation.longitude}&destination=${destLat},${destLng}&travelmode=driving`;
+    } else if (mode === 'walking') {
+      url = `https://www.google.com/maps/dir/?api=1&origin=${currentLocation.latitude},${currentLocation.longitude}&destination=${destLat},${destLng}&travelmode=walking`;
+    } else {
+      url = `https://www.google.com/maps/dir/?api=1&origin=${currentLocation.latitude},${currentLocation.longitude}&destination=${destLat},${destLng}&travelmode=bicycling`;
+    }
+    
+    window.open(url, '_blank');
+    toast.success(`Opening directions to ${userName}`);
+  }, [currentLocation]);
+  
+  // Set destination for directions
+  const setDirectionTo = useCallback((lat: number, lng: number, name: string) => {
+    setDestination({ lat, lng, name });
+    setShowDirections(true);
+    toast.success(`Directions to ${name}`);
+  }, []);
   
   // Filter users by search
   const filteredNearby = nearbyUsers.filter((u) =>
@@ -210,58 +357,47 @@ export default function MapPage() {
   const getConnectionQuality = () => {
     if (!isOnline) return { icon: SignalZero, color: 'text-destructive', label: 'Offline' };
     if (batteryLevel < 20) return { icon: SignalLow, color: 'text-yellow-500', label: 'Low Battery' };
-    return { icon: Signal, color: 'text-success', label: 'Connected' };
+    return { icon: Signal, color: 'text-green-500', label: 'Connected' };
   };
   
   const connectionStatus = getConnectionQuality();
-  
+
+  // Get tile layer URL based on layer type
+  const getTileUrl = () => {
+    switch (mapLayer) {
+      case 'satellite':
+        return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+      case 'terrain':
+        return 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png';
+      default:
+        return 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    }
+  };
+
   return (
-    <div className="h-screen flex flex-col bg-background overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-border bg-background/95 backdrop-blur-sm z-10">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-            <ChevronLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-lg font-semibold flex items-center gap-2">
-              <MapPin className="h-5 w-5 text-primary" />
-              Map
-            </h1>
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <connectionStatus.icon className={cn("h-3 w-3", connectionStatus.color)} />
-              {connectionStatus.label}
-            </p>
+    <div className="h-screen flex bg-background overflow-hidden">
+      {/* Sidebar */}
+      <div className={cn(
+        "flex flex-col border-r border-border bg-background transition-all duration-300",
+        sidebarOpen ? "w-80" : "w-0 overflow-hidden"
+      )}>
+        {/* Sidebar Header */}
+        <div className="flex items-center justify-between p-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/home')}>
+              <Home className="h-5 w-5" />
+            </Button>
+            <div>
+              <h1 className="text-lg font-semibold flex items-center gap-2">
+                <MapPin className="h-5 w-5 text-primary" />
+                Map
+              </h1>
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <connectionStatus.icon className={cn("h-3 w-3", connectionStatus.color)} />
+                {connectionStatus.label}
+              </p>
+            </div>
           </div>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={centerOnLocation}>
-            <Locate className="h-5 w-5" />
-          </Button>
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <Layers className="h-5 w-5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem onClick={() => setMapLayer('standard')}>
-                <Globe className="h-4 w-4 mr-2" />
-                Standard
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setMapLayer('satellite')}>
-                <Target className="h-4 w-4 mr-2" />
-                Satellite
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setMapLayer('terrain')}>
-                <Compass className="h-4 w-4 mr-2" />
-                Terrain
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon">
@@ -354,6 +490,37 @@ export default function MapPage() {
                   </div>
                 </div>
                 
+                {/* Map Layer */}
+                <div className="space-y-2">
+                  <p className="font-medium">Map Style</p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={mapLayer === 'standard' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setMapLayer('standard')}
+                    >
+                      <Globe className="h-4 w-4 mr-1" />
+                      Standard
+                    </Button>
+                    <Button
+                      variant={mapLayer === 'satellite' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setMapLayer('satellite')}
+                    >
+                      <Target className="h-4 w-4 mr-1" />
+                      Satellite
+                    </Button>
+                    <Button
+                      variant={mapLayer === 'terrain' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setMapLayer('terrain')}
+                    >
+                      <Compass className="h-4 w-4 mr-1" />
+                      Terrain
+                    </Button>
+                  </div>
+                </div>
+                
                 {/* Transport Mode */}
                 <div className="space-y-2">
                   <p className="font-medium">Default Transport</p>
@@ -388,380 +555,511 @@ export default function MapPage() {
             </SheetContent>
           </Sheet>
         </div>
+        
+        {/* Search */}
+        <div className="p-3 border-b border-border">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search users..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+        </div>
+        
+        {/* Steps Card */}
+        <div className="p-3 border-b border-border">
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Footprints className="h-5 w-5 text-primary" />
+                  <span className="font-medium">Today's Steps</span>
+                </div>
+                <Badge variant="secondary">{stepsToday.toLocaleString()}</Badge>
+              </div>
+              <Progress value={stepProgress} className="h-2" />
+              <p className="text-xs text-muted-foreground mt-1">
+                {stepsToday.toLocaleString()} / {DAILY_STEP_GOAL.toLocaleString()} goal
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+        
+        {/* Users Tabs */}
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="flex-1 flex flex-col overflow-hidden">
+          <TabsList className="w-full justify-start px-3 pt-2">
+            <TabsTrigger value="nearby" className="flex-1">
+              <Users className="h-4 w-4 mr-1" />
+              Nearby
+            </TabsTrigger>
+            <TabsTrigger value="following" className="flex-1">
+              <UserPlus className="h-4 w-4 mr-1" />
+              Following
+            </TabsTrigger>
+            <TabsTrigger value="activity" className="flex-1">
+              <Activity className="h-4 w-4 mr-1" />
+              Activity
+            </TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="nearby" className="flex-1 overflow-hidden m-0">
+            <ScrollArea className="h-full p-3">
+              {filteredNearby.length === 0 ? (
+                <div className="text-center text-muted-foreground py-8">
+                  <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>No nearby users found</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredNearby.map((u) => (
+                    <div
+                      key={u.user_id}
+                      className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                      onClick={() => {
+                        setMapCenter([u.latitude, u.longitude]);
+                        setSelectedUser(u.user_id);
+                      }}
+                    >
+                      <div className="relative">
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage src={u.profile?.avatar_url || ''} />
+                          <AvatarFallback>{u.profile?.display_name?.[0] || '?'}</AvatarFallback>
+                        </Avatar>
+                        {u.profile?.is_online && (
+                          <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-background" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{u.profile?.display_name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {currentLocation && calculateDistance(
+                            currentLocation.latitude,
+                            currentLocation.longitude,
+                            u.latitude,
+                            u.longitude
+                          ).toFixed(1)}km away
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openDirections(u.latitude, u.longitude, u.profile?.display_name || 'User', transportMode);
+                        }}
+                      >
+                        <Navigation className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          </TabsContent>
+          
+          <TabsContent value="following" className="flex-1 overflow-hidden m-0">
+            <ScrollArea className="h-full p-3">
+              {filteredFollowing.length === 0 ? (
+                <div className="text-center text-muted-foreground py-8">
+                  <UserPlus className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>No followed users sharing location</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredFollowing.map((u) => (
+                    <div
+                      key={u.user_id}
+                      className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                      onClick={() => {
+                        setMapCenter([u.latitude, u.longitude]);
+                        setSelectedUser(u.user_id);
+                      }}
+                    >
+                      <div className="relative">
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage src={u.profile?.avatar_url || ''} />
+                          <AvatarFallback>{u.profile?.display_name?.[0] || '?'}</AvatarFallback>
+                        </Avatar>
+                        {u.profile?.is_online && (
+                          <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-background" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{u.profile?.display_name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {currentLocation && calculateDistance(
+                            currentLocation.latitude,
+                            currentLocation.longitude,
+                            u.latitude,
+                            u.longitude
+                          ).toFixed(1)}km away
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openDirections(u.latitude, u.longitude, u.profile?.display_name || 'User', transportMode);
+                        }}
+                      >
+                        <Navigation className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          </TabsContent>
+          
+          <TabsContent value="activity" className="flex-1 overflow-hidden m-0">
+            <ScrollArea className="h-full p-3">
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4" />
+                      Weekly Steps
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {stepHistory.map((day) => (
+                        <div key={day.date} className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">{day.date}</span>
+                          <span className="font-medium">{day.steps.toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Battery className="h-4 w-4" />
+                      Battery
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-2">
+                      <Progress value={batteryLevel} className="flex-1" />
+                      <span className="text-sm font-medium">{batteryLevel}%</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </ScrollArea>
+          </TabsContent>
+        </Tabs>
       </div>
+      
+      {/* Toggle Sidebar Button */}
+      <Button
+        variant="secondary"
+        size="icon"
+        className="absolute left-[320px] top-1/2 -translate-y-1/2 z-[1000] rounded-l-none"
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        style={{ left: sidebarOpen ? '320px' : '0' }}
+      >
+        {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+      </Button>
       
       {/* Map Container */}
       <div className="flex-1 relative">
-        {/* Map Placeholder - In production, integrate with Mapbox/Google Maps */}
-        <div 
-          ref={mapContainerRef}
-          className={cn(
-            "absolute inset-0 bg-gradient-to-br",
-            mapLayer === 'standard' && "from-blue-100 to-green-100 dark:from-blue-950 dark:to-green-950",
-            mapLayer === 'satellite' && "from-gray-800 to-gray-900",
-            mapLayer === 'terrain' && "from-amber-100 to-green-200 dark:from-amber-950 dark:to-green-900"
-          )}
-        >
-          {/* Simulated map with users */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            {/* Current user marker */}
-            {currentLocation && (
-              <div className="absolute z-20" style={{ 
-                left: '50%', 
-                top: '50%',
-                transform: 'translate(-50%, -50%)'
-              }}>
-                <div className="relative">
-                  <div className="absolute -inset-4 bg-primary/20 rounded-full animate-ping" />
-                  <div className="relative w-12 h-12 rounded-full border-4 border-primary bg-primary/20 flex items-center justify-center">
-                    <Navigation className="h-6 w-6 text-primary" />
-                  </div>
-                  <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs font-medium whitespace-nowrap bg-background/90 px-2 py-0.5 rounded">
-                    You
-                  </span>
-                </div>
-              </div>
+        {mapCenter ? (
+          <MapContainer
+            center={mapCenter}
+            zoom={zoom}
+            style={{ height: '100%', width: '100%' }}
+            zoomControl={false}
+          >
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              url={getTileUrl()}
+            />
+            <MapController center={mapCenter} zoom={zoom} />
+            <LocateControl onLocate={centerOnLocation} />
+            
+            {/* Nearby radius circle */}
+            {currentLocation && showNearby && (
+              <Circle
+                center={[currentLocation.latitude, currentLocation.longitude]}
+                radius={nearbyRadius * 1000}
+                pathOptions={{ 
+                  color: '#3b82f6', 
+                  fillColor: '#3b82f6', 
+                  fillOpacity: 0.1,
+                  weight: 2,
+                  dashArray: '5, 5'
+                }}
+              />
             )}
             
-            {/* Nearby users markers */}
-            {showNearby && filteredNearby.map((user, i) => {
-              const angle = (i / filteredNearby.length) * Math.PI * 2;
-              const distance = 80 + Math.random() * 60;
-              const x = Math.cos(angle) * distance;
-              const y = Math.sin(angle) * distance;
-              
-              return (
-                <div
-                  key={user.user_id}
-                  className="absolute z-10 cursor-pointer transition-transform hover:scale-110"
-                  style={{
-                    left: `calc(50% + ${x}px)`,
-                    top: `calc(50% + ${y}px)`,
-                    transform: 'translate(-50%, -50%)',
-                  }}
-                  onClick={() => setSelectedUser(user.user_id)}
-                >
-                  <div className="relative group">
-                    <Avatar className="h-10 w-10 border-2 border-background shadow-lg">
-                      <AvatarImage src={user.profile?.avatar_url || ''} />
-                      <AvatarFallback className="bg-secondary text-secondary-foreground">
-                        {user.profile?.display_name?.[0] || '?'}
-                      </AvatarFallback>
+            {/* Current user marker */}
+            {currentLocation && (
+              <Marker
+                position={[currentLocation.latitude, currentLocation.longitude]}
+                icon={createUserIcon(profile?.avatar_url || undefined, true)}
+              >
+                <Popup>
+                  <div className="text-center">
+                    <Avatar className="h-12 w-12 mx-auto mb-2">
+                      <AvatarImage src={profile?.avatar_url || ''} />
+                      <AvatarFallback>{profile?.display_name?.[0] || 'Me'}</AvatarFallback>
                     </Avatar>
-                    {user.profile?.is_online && (
-                      <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-background" />
-                    )}
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                      <div className="bg-background/95 backdrop-blur-sm rounded-lg px-2 py-1 shadow-lg border border-border whitespace-nowrap">
-                        <p className="text-xs font-medium">{user.profile?.display_name}</p>
-                      </div>
-                    </div>
+                    <p className="font-medium">{profile?.display_name || 'You'}</p>
+                    <p className="text-xs text-muted-foreground">Your location</p>
                   </div>
-                </div>
-              );
-            })}
+                </Popup>
+              </Marker>
+            )}
             
-            {/* Following users markers */}
-            {showFollowing && filteredFollowing.map((user, i) => {
-              const angle = ((i + 5) / (filteredFollowing.length + 5)) * Math.PI * 2;
-              const distance = 120 + Math.random() * 80;
-              const x = Math.cos(angle) * distance;
-              const y = Math.sin(angle) * distance;
-              
-              return (
-                <div
-                  key={user.user_id}
-                  className="absolute z-10 cursor-pointer transition-transform hover:scale-110"
-                  style={{
-                    left: `calc(50% + ${x}px)`,
-                    top: `calc(50% + ${y}px)`,
-                    transform: 'translate(-50%, -50%)',
-                  }}
-                  onClick={() => setSelectedUser(user.user_id)}
-                >
-                  <div className="relative group">
-                    <Avatar className="h-10 w-10 border-2 border-primary shadow-lg">
-                      <AvatarImage src={user.profile?.avatar_url || ''} />
-                      <AvatarFallback className="bg-primary text-primary-foreground">
-                        {user.profile?.display_name?.[0] || '?'}
-                      </AvatarFallback>
+            {/* Nearby users */}
+            {showNearby && filteredNearby.map((u) => (
+              <Marker
+                key={u.user_id}
+                position={[u.latitude, u.longitude]}
+                icon={createUserIcon(u.profile?.avatar_url || undefined, false, u.profile?.is_online)}
+              >
+                <Popup>
+                  <div className="text-center min-w-[150px]">
+                    <Avatar className="h-12 w-12 mx-auto mb-2">
+                      <AvatarImage src={u.profile?.avatar_url || ''} />
+                      <AvatarFallback>{u.profile?.display_name?.[0] || '?'}</AvatarFallback>
                     </Avatar>
-                    {user.profile?.is_online && (
-                      <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-background" />
-                    )}
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                      <div className="bg-background/95 backdrop-blur-sm rounded-lg px-2 py-1 shadow-lg border border-border whitespace-nowrap">
-                        <p className="text-xs font-medium">{user.profile?.display_name}</p>
-                        <p className="text-xs text-muted-foreground">Following</p>
-                      </div>
-                    </div>
+                    <p className="font-medium">{u.profile?.display_name}</p>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      {currentLocation && calculateDistance(
+                        currentLocation.latitude,
+                        currentLocation.longitude,
+                        u.latitude,
+                        u.longitude
+                      ).toFixed(1)}km away
+                    </p>
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      onClick={() => openDirections(u.latitude, u.longitude, u.profile?.display_name || 'User', transportMode)}
+                    >
+                      <Navigation className="h-4 w-4 mr-1" />
+                      Directions
+                    </Button>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-          
-          {/* Zoom controls */}
-          <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-2">
-            <Button 
-              variant="secondary" 
-              size="icon" 
-              className="shadow-lg"
-              onClick={() => setZoom((z) => Math.min(z + 1, 20))}
-            >
-              <ZoomIn className="h-4 w-4" />
-            </Button>
-            <Button 
-              variant="secondary" 
-              size="icon" 
-              className="shadow-lg"
-              onClick={() => setZoom((z) => Math.max(z - 1, 1))}
-            >
-              <ZoomOut className="h-4 w-4" />
-            </Button>
-          </div>
-          
-          {/* Location error */}
-          {error && (
-            <div className="absolute top-4 left-4 right-4 bg-destructive/10 border border-destructive/20 rounded-lg p-3 text-sm text-destructive">
-              {error}
-            </div>
-          )}
-          
-          {/* Offline indicator */}
-          {!isOnline && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-yellow-500/90 text-yellow-950 rounded-lg px-4 py-2 text-sm font-medium flex items-center gap-2">
-              <SignalZero className="h-4 w-4" />
-              Offline Mode - Locations saved locally
-            </div>
-          )}
-        </div>
-        
-        {/* Bottom Panel */}
-        <div className="absolute bottom-0 left-0 right-0 bg-background/95 backdrop-blur-xl border-t border-border rounded-t-3xl max-h-[50vh] overflow-hidden">
-          {/* Activity Summary Card */}
-          <div className="p-4 border-b border-border">
-            <Card className="bg-gradient-to-br from-primary/10 to-accent/10 border-primary/20">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-full bg-primary/20 flex items-center justify-center">
-                      <Footprints className="h-7 w-7 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">{stepsToday.toLocaleString()}</p>
-                      <p className="text-sm text-muted-foreground">
-                        steps today • {Math.round(stepsToday * 0.7)}m
+                </Popup>
+              </Marker>
+            ))}
+            
+            {/* Following users */}
+            {showFollowing && filteredFollowing.map((u) => (
+              <Marker
+                key={u.user_id}
+                position={[u.latitude, u.longitude]}
+                icon={createUserIcon(u.profile?.avatar_url || undefined, false, u.profile?.is_online)}
+              >
+                <Popup>
+                  <div className="text-center min-w-[150px]">
+                    <Avatar className="h-12 w-12 mx-auto mb-2">
+                      <AvatarImage src={u.profile?.avatar_url || ''} />
+                      <AvatarFallback>{u.profile?.display_name?.[0] || '?'}</AvatarFallback>
+                    </Avatar>
+                    <p className="font-medium">{u.profile?.display_name}</p>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      {currentLocation && calculateDistance(
+                        currentLocation.latitude,
+                        currentLocation.longitude,
+                        u.latitude,
+                        u.longitude
+                      ).toFixed(1)}km away
+                    </p>
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      onClick={() => openDirections(u.latitude, u.longitude, u.profile?.display_name || 'User', transportMode)}
+                    >
+                      <Navigation className="h-4 w-4 mr-1" />
+                      Directions
+                    </Button>
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+            
+            {/* Destination marker */}
+            {destination && (
+              <Marker
+                position={[destination.lat, destination.lng]}
+                icon={destinationIcon}
+              >
+                <Popup>
+                  <div className="text-center min-w-[150px]">
+                    <MapPin className="h-8 w-8 mx-auto mb-2 text-destructive" />
+                    <p className="font-medium">{destination.name}</p>
+                    {currentLocation && (
+                      <p className="text-xs text-muted-foreground mb-2">
+                        {calculateDistance(
+                          currentLocation.latitude,
+                          currentLocation.longitude,
+                          destination.lat,
+                          destination.lng
+                        ).toFixed(1)}km away
                       </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium">{Math.round(stepProgress)}%</p>
-                    <p className="text-xs text-muted-foreground">of {DAILY_STEP_GOAL.toLocaleString()}</p>
-                  </div>
-                </div>
-                <Progress value={stepProgress} className="mt-3 h-2" />
-              </CardContent>
-            </Card>
-          </div>
-          
-          {/* Search */}
-          <div className="px-4 py-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search people..."
-                className="pl-10"
-              />
-            </div>
-          </div>
-          
-          {/* Tabs */}
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-            <TabsList className="grid grid-cols-3 mx-4">
-              <TabsTrigger value="nearby" className="gap-1">
-                <Users className="h-4 w-4" />
-                Nearby
-                {filteredNearby.length > 0 && (
-                  <Badge variant="secondary" className="ml-1 h-5 px-1.5">
-                    {filteredNearby.length}
-                  </Badge>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="following" className="gap-1">
-                <UserPlus className="h-4 w-4" />
-                Following
-                {filteredFollowing.length > 0 && (
-                  <Badge variant="secondary" className="ml-1 h-5 px-1.5">
-                    {filteredFollowing.length}
-                  </Badge>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="activity" className="gap-1">
-                <Activity className="h-4 w-4" />
-                Activity
-              </TabsTrigger>
-            </TabsList>
-            
-            <ScrollArea className="h-[200px]">
-              {/* Nearby Users */}
-              <TabsContent value="nearby" className="p-4 space-y-2 mt-0">
-                {filteredNearby.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                    <p>No nearby users found</p>
-                    <p className="text-sm">Try increasing the radius</p>
-                  </div>
-                ) : (
-                  filteredNearby.map((user) => (
-                    <div
-                      key={user.user_id}
-                      className="flex items-center gap-3 p-3 rounded-xl bg-secondary/50 hover:bg-secondary transition-colors"
-                    >
-                      <Avatar className="h-12 w-12">
-                        <AvatarImage src={user.profile?.avatar_url || ''} />
-                        <AvatarFallback>
-                          {user.profile?.display_name?.[0] || '?'}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">
-                          {user.profile?.display_name}
-                        </p>
-                        <p className="text-sm text-muted-foreground flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {user.profile?.is_online ? 'Online now' : 'Last seen recently'}
-                        </p>
-                      </div>
+                    )}
+                    <div className="flex gap-1">
                       <Button
-                        variant="default"
                         size="sm"
-                        onClick={() => openDirections(user.latitude, user.longitude, user.profile?.display_name || 'User')}
-                      >
-                        <Route className="h-4 w-4 mr-1" />
-                        Directions
-                      </Button>
-                    </div>
-                  ))
-                )}
-              </TabsContent>
-              
-              {/* Following Users */}
-              <TabsContent value="following" className="p-4 space-y-2 mt-0">
-                {filteredFollowing.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <UserPlus className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                    <p>No following users sharing location</p>
-                    <p className="text-sm">They may have location sharing off</p>
-                  </div>
-                ) : (
-                  filteredFollowing.map((user) => (
-                    <div
-                      key={user.user_id}
-                      className="flex items-center gap-3 p-3 rounded-xl bg-secondary/50 hover:bg-secondary transition-colors"
-                    >
-                      <Avatar className="h-12 w-12 border-2 border-primary">
-                        <AvatarImage src={user.profile?.avatar_url || ''} />
-                        <AvatarFallback className="bg-primary text-primary-foreground">
-                          {user.profile?.display_name?.[0] || '?'}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate flex items-center gap-1">
-                          {user.profile?.display_name}
-                          <Badge variant="secondary" className="text-xs">Following</Badge>
-                        </p>
-                        <p className="text-sm text-muted-foreground flex items-center gap-1">
-                          {user.profile?.is_online ? (
-                            <>
-                              <div className="w-2 h-2 rounded-full bg-green-500" />
-                              Online now
-                            </>
-                          ) : (
-                            'Last seen recently'
-                          )}
-                        </p>
-                      </div>
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => openDirections(user.latitude, user.longitude, user.profile?.display_name || 'User')}
+                        className="flex-1"
+                        onClick={() => openDirections(destination.lat, destination.lng, destination.name, transportMode)}
                       >
                         <Navigation className="h-4 w-4 mr-1" />
                         Go
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setDestination(null);
+                          setShowDirections(false);
+                        }}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
                     </div>
-                  ))
-                )}
-              </TabsContent>
-              
-              {/* Activity */}
-              <TabsContent value="activity" className="p-4 space-y-4 mt-0">
-                {/* Weekly steps chart */}
-                <div className="space-y-2">
-                  <h4 className="font-medium flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4 text-primary" />
-                    Weekly Activity
-                  </h4>
-                  <div className="flex items-end gap-1 h-24">
-                    {stepHistory.length > 0 ? (
-                      stepHistory.map((day, i) => {
-                        const height = (day.steps / DAILY_STEP_GOAL) * 100;
-                        return (
-                          <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                            <div 
-                              className="w-full bg-primary/80 rounded-t-sm transition-all"
-                              style={{ height: `${Math.min(height, 100)}%` }}
-                            />
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(day.date).toLocaleDateString('en', { weekday: 'short' }).charAt(0)}
-                            </span>
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-                        No activity data yet
-                      </div>
-                    )}
                   </div>
-                </div>
-                
-                {/* Stats */}
-                <div className="grid grid-cols-3 gap-3">
-                  <Card className="p-3 text-center">
-                    <p className="text-lg font-bold text-primary">{Math.round(stepsToday * 0.0007)}</p>
-                    <p className="text-xs text-muted-foreground">km today</p>
-                  </Card>
-                  <Card className="p-3 text-center">
-                    <p className="text-lg font-bold text-primary">{Math.round(stepsToday * 0.04)}</p>
-                    <p className="text-xs text-muted-foreground">calories</p>
-                  </Card>
-                  <Card className="p-3 text-center">
-                    <p className="text-lg font-bold text-primary">{Math.round(stepsToday / 100)}</p>
-                    <p className="text-xs text-muted-foreground">minutes</p>
-                  </Card>
-                </div>
-                
-                {/* Battery status */}
-                <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/50">
-                  <div className="flex items-center gap-2">
-                    <Battery className={cn(
-                      "h-5 w-5",
-                      batteryLevel > 50 ? "text-green-500" :
-                      batteryLevel > 20 ? "text-yellow-500" : "text-red-500"
-                    )} />
-                    <span className="text-sm">Battery</span>
-                  </div>
-                  <span className="font-medium">{batteryLevel}%</span>
-                </div>
-              </TabsContent>
-            </ScrollArea>
-          </Tabs>
+                </Popup>
+              </Marker>
+            )}
+            
+            {/* Route line to destination */}
+            {currentLocation && destination && showDirections && (
+              <Polyline
+                positions={[
+                  [currentLocation.latitude, currentLocation.longitude],
+                  [destination.lat, destination.lng]
+                ]}
+                pathOptions={{ 
+                  color: '#3b82f6', 
+                  weight: 4,
+                  dashArray: '10, 10'
+                }}
+              />
+            )}
+          </MapContainer>
+        ) : (
+          <div className="h-full flex items-center justify-center bg-muted/20">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
+              <p className="text-muted-foreground">Getting your location...</p>
+              <Button variant="outline" className="mt-4" onClick={centerOnLocation}>
+                <Locate className="h-4 w-4 mr-2" />
+                Enable Location
+              </Button>
+            </div>
+          </div>
+        )}
+        
+        {/* Destination Bar */}
+        {destination && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] bg-background rounded-lg shadow-lg border p-3 flex items-center gap-3">
+            <MapPin className="h-5 w-5 text-destructive" />
+            <div>
+              <p className="font-medium">{destination.name}</p>
+              {currentLocation && (
+                <p className="text-xs text-muted-foreground">
+                  {calculateDistance(
+                    currentLocation.latitude,
+                    currentLocation.longitude,
+                    destination.lat,
+                    destination.lng
+                  ).toFixed(1)}km away
+                </p>
+              )}
+            </div>
+            <div className="flex gap-1">
+              <Button
+                size="sm"
+                variant={transportMode === 'driving' ? 'default' : 'ghost'}
+                onClick={() => setTransportMode('driving')}
+              >
+                <Car className="h-4 w-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant={transportMode === 'walking' ? 'default' : 'ghost'}
+                onClick={() => setTransportMode('walking')}
+              >
+                <PersonStanding className="h-4 w-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant={transportMode === 'cycling' ? 'default' : 'ghost'}
+                onClick={() => setTransportMode('cycling')}
+              >
+                <Bike className="h-4 w-4" />
+              </Button>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => openDirections(destination.lat, destination.lng, destination.name, transportMode)}
+            >
+              <ExternalLink className="h-4 w-4 mr-1" />
+              Open in Maps
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setDestination(null);
+                setShowDirections(false);
+              }}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+        
+        {/* Zoom Controls */}
+        <div className="absolute bottom-4 right-4 z-[1000] flex flex-col gap-1">
+          <Button
+            variant="secondary"
+            size="icon"
+            className="shadow-lg"
+            onClick={() => setZoom(Math.min(zoom + 1, 18))}
+          >
+            <ZoomIn className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="secondary"
+            size="icon"
+            className="shadow-lg"
+            onClick={() => setZoom(Math.max(zoom - 1, 3))}
+          >
+            <ZoomOut className="h-4 w-4" />
+          </Button>
         </div>
       </div>
+
+      {/* Global styles for marker animation */}
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.05); }
+        }
+        @keyframes ping {
+          75%, 100% { transform: scale(2); opacity: 0; }
+        }
+        .custom-marker {
+          background: transparent !important;
+          border: none !important;
+        }
+        .destination-marker {
+          background: transparent !important;
+          border: none !important;
+        }
+      `}</style>
     </div>
   );
 }
