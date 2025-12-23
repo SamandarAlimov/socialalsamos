@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocation } from '@/hooks/useLocation';
+import { useMapPresence } from '@/hooks/useMapPresence';
 import { toast } from 'sonner';
 import {
   MapPin,
@@ -181,6 +182,9 @@ export default function MapPage() {
     getGoogleMapsUrl,
     calculateDistance,
   } = useLocation();
+  
+  // Map presence - show who's viewing the map
+  const { usersOnMap } = useMapPresence(user?.id || null, profile);
   
   // Default to Tashkent, Uzbekistan if no location available
   const DEFAULT_CENTER: [number, number] = [41.2995, 69.2401];
@@ -568,6 +572,39 @@ export default function MapPage() {
             />
           </div>
         </div>
+        
+        {/* Presence Indicator - Who's viewing the map */}
+        {usersOnMap.length > 0 && (
+          <div className="p-3 border-b border-border">
+            <div className="flex items-center gap-2 mb-2">
+              <Eye className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium">Viewing Now</span>
+              <Badge variant="secondary" className="ml-auto">{usersOnMap.length}</Badge>
+            </div>
+            <div className="flex items-center gap-1 overflow-x-auto pb-1">
+              {usersOnMap.slice(0, 8).map((presenceUser) => (
+                <div 
+                  key={presenceUser.user_id} 
+                  className="relative group shrink-0"
+                  title={presenceUser.display_name || presenceUser.username || 'User'}
+                >
+                  <Avatar className="h-8 w-8 border-2 border-primary ring-2 ring-primary/20">
+                    <AvatarImage src={presenceUser.avatar_url || ''} />
+                    <AvatarFallback className="text-xs">
+                      {presenceUser.display_name?.[0] || presenceUser.username?.[0] || '?'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-background animate-pulse" />
+                </div>
+              ))}
+              {usersOnMap.length > 8 && (
+                <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center shrink-0">
+                  <span className="text-xs font-medium">+{usersOnMap.length - 8}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         
         {/* Steps Card */}
         <div className="p-3 border-b border-border">
