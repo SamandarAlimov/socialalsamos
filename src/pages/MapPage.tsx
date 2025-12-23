@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline, Circle } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline, Circle, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -128,51 +128,32 @@ const destinationIcon = L.divIcon({
 type MapLayer = 'standard' | 'satellite' | 'terrain';
 type TransportMode = 'driving' | 'walking' | 'cycling';
 
-// Map controller component
-function MapController({ center, zoom }: { center: [number, number] | null; zoom: number }) {
+// Map event handler component - simplified to avoid context issues
+function MapEventHandler({ 
+  center, 
+  zoom,
+  onLocate 
+}: { 
+  center: [number, number]; 
+  zoom: number;
+  onLocate: () => void;
+}) {
   const map = useMap();
+  const hasSetInitialView = useRef(false);
   
   useEffect(() => {
-    if (center) {
+    if (center && !hasSetInitialView.current) {
       map.setView(center, zoom);
+      hasSetInitialView.current = true;
     }
   }, [center, zoom, map]);
   
-  return null;
-}
-
-// Locate button controller
-function LocateControl({ onLocate }: { onLocate: () => void }) {
-  const map = useMap();
-  
+  // Update view when center changes after initial load
   useEffect(() => {
-    const control = new L.Control({ position: 'topright' });
-    control.onAdd = () => {
-      const div = L.DomUtil.create('div', 'leaflet-bar');
-      div.innerHTML = `
-        <a href="#" title="My Location" style="
-          width: 34px;
-          height: 34px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: white;
-          border-radius: 4px;
-        ">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M2 12h2"/><path d="M20 12h2"/>
-          </svg>
-        </a>
-      `;
-      div.onclick = (e) => {
-        e.preventDefault();
-        onLocate();
-      };
-      return div;
-    };
-    control.addTo(map);
-    return () => { map.removeControl(control); };
-  }, [map, onLocate]);
+    if (center && hasSetInitialView.current) {
+      map.flyTo(center, zoom, { duration: 0.5 });
+    }
+  }, [center, map, zoom]);
   
   return null;
 }
@@ -799,8 +780,7 @@ export default function MapPage() {
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url={getTileUrl()}
           />
-          <MapController center={mapCenter} zoom={zoom} />
-          <LocateControl onLocate={centerOnLocation} />
+          <MapEventHandler center={mapCenter} zoom={zoom} onLocate={centerOnLocation} />
           
           {/* Nearby radius circle */}
           {currentLocation && showNearby && (
@@ -1044,8 +1024,16 @@ export default function MapPage() {
           </div>
         )}
         
-        {/* Zoom Controls */}
+        {/* Map Controls */}
         <div className="absolute bottom-4 right-4 z-[1000] flex flex-col gap-1">
+          <Button
+            variant="secondary"
+            size="icon"
+            className="shadow-lg"
+            onClick={centerOnLocation}
+          >
+            <Locate className="h-4 w-4" />
+          </Button>
           <Button
             variant="secondary"
             size="icon"
