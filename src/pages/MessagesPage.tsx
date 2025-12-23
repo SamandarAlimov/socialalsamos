@@ -701,6 +701,10 @@ export default function MessagesPage() {
                 onTyping={setTyping}
                 replyTo={replyTo}
                 onCancelReply={() => setReplyTo(null)}
+                onShareLocation={async (location) => {
+                  const locationMessage = `📍 LOCATION:${location.latitude},${location.longitude}${location.address ? `|${location.address}` : ''}`;
+                  await sendMessage(locationMessage);
+                }}
               />
             </div>
           </>

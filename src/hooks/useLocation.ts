@@ -45,6 +45,7 @@ export function useLocation() {
   const watchIdRef = useRef<number | null>(null);
   const stepCounterRef = useRef<number>(0);
   const lastStepTimeRef = useRef<number>(Date.now());
+  const realtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   
   // Get current position
   const getCurrentPosition = useCallback((): Promise<Location> => {
@@ -137,7 +138,6 @@ export function useLocation() {
     
     try {
       // Using profiles table to store location temporarily
-      // In production, you'd have a dedicated user_locations table
       await supabase
         .from('profiles')
         .update({
@@ -273,6 +273,101 @@ export function useLocation() {
     }
   }, [user]);
   
+  // Subscribe to realtime location updates for followed users
+  const subscribeToRealtimeLocations = useCallback(async () => {
+    if (!user) return;
+    
+    // Clean up existing subscription
+    if (realtimeChannelRef.current) {
+      supabase.removeChannel(realtimeChannelRef.current);
+    }
+    
+    // Get list of users I'm following
+    const { data: follows } = await supabase
+      .from('follows')
+      .select('following_id')
+      .eq('follower_id', user.id);
+    
+    if (!follows?.length) return;
+    
+    const followingIds = follows.map((f) => f.following_id);
+    
+    // Subscribe to profile updates for followed users
+    realtimeChannelRef.current = supabase
+      .channel('following-locations')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=in.(${followingIds.join(',')})`,
+        },
+        (payload) => {
+          const updatedProfile = payload.new as any;
+          
+          if (updatedProfile.location) {
+            const [lat, lng] = updatedProfile.location.split(',').map(Number);
+            
+            setFollowingLocations((prev) => {
+              const existing = prev.find((u) => u.user_id === updatedProfile.id);
+              
+              const updatedUser: UserLocation = {
+                user_id: updatedProfile.id,
+                latitude: lat,
+                longitude: lng,
+                is_sharing: true,
+                last_updated: updatedProfile.last_seen,
+                profile: {
+                  id: updatedProfile.id,
+                  username: updatedProfile.username,
+                  display_name: updatedProfile.display_name,
+                  avatar_url: updatedProfile.avatar_url,
+                  is_online: updatedProfile.is_online,
+                },
+              };
+              
+              if (existing) {
+                return prev.map((u) => (u.user_id === updatedProfile.id ? updatedUser : u));
+              } else {
+                return [...prev, updatedUser];
+              }
+            });
+            
+            // Also update nearby users if they're in range
+            setNearbyUsers((prev) => {
+              const existing = prev.find((u) => u.user_id === updatedProfile.id);
+              if (existing) {
+                return prev.map((u) =>
+                  u.user_id === updatedProfile.id
+                    ? {
+                        ...u,
+                        latitude: lat,
+                        longitude: lng,
+                        last_updated: updatedProfile.last_seen,
+                        profile: {
+                          id: updatedProfile.id,
+                          username: updatedProfile.username,
+                          display_name: updatedProfile.display_name,
+                          avatar_url: updatedProfile.avatar_url,
+                          is_online: updatedProfile.is_online,
+                        },
+                      }
+                    : u
+                );
+              }
+              return prev;
+            });
+          } else {
+            // User stopped sharing location
+            setFollowingLocations((prev) => prev.filter((u) => u.user_id !== updatedProfile.id));
+            setNearbyUsers((prev) => prev.filter((u) => u.user_id !== updatedProfile.id));
+          }
+        }
+      )
+      .subscribe();
+  }, [user]);
+  
   // Calculate distance between two points (Haversine formula)
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
     const R = 6371; // Earth's radius in km
@@ -335,6 +430,19 @@ export function useLocation() {
     return () => clearInterval(interval);
   }, []);
   
+  // Subscribe to realtime updates when user is available
+  useEffect(() => {
+    if (user) {
+      subscribeToRealtimeLocations();
+    }
+    
+    return () => {
+      if (realtimeChannelRef.current) {
+        supabase.removeChannel(realtimeChannelRef.current);
+      }
+    };
+  }, [user, subscribeToRealtimeLocations]);
+  
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -362,5 +470,6 @@ export function useLocation() {
     getDirectionsUrl,
     getGoogleMapsUrl,
     calculateDistance,
+    subscribeToRealtimeLocations,
   };
 }
