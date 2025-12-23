@@ -201,7 +201,10 @@ export default function MapPage() {
     calculateDistance,
   } = useLocation();
   
-  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
+  // Default to Tashkent, Uzbekistan if no location available
+  const DEFAULT_CENTER: [number, number] = [41.2995, 69.2401];
+  const [mapCenter, setMapCenter] = useState<[number, number]>(DEFAULT_CENTER);
+  const [hasLocationPermission, setHasLocationPermission] = useState<boolean | null>(null);
   const [zoom, setZoom] = useState(15);
   const [mapLayer, setMapLayer] = useState<MapLayer>('standard');
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
@@ -271,9 +274,24 @@ export default function MapPage() {
     };
   }, []);
   
-  // Start tracking on mount
+  // Check for location permission and start tracking
   useEffect(() => {
-    startTracking();
+    const checkPermissionAndTrack = async () => {
+      try {
+        // Try to get initial location
+        const loc = await getCurrentPosition();
+        setMapCenter([loc.latitude, loc.longitude]);
+        setHasLocationPermission(true);
+        startTracking();
+      } catch (err) {
+        console.warn('Location permission denied or unavailable:', err);
+        setHasLocationPermission(false);
+        // Still start tracking in case permission is granted later
+        startTracking();
+      }
+    };
+    
+    checkPermissionAndTrack();
     
     const interval = setInterval(() => {
       if (isOnline) {
@@ -286,14 +304,15 @@ export default function MapPage() {
       stopTracking();
       clearInterval(interval);
     };
-  }, [startTracking, stopTracking, fetchNearbyUsers, fetchFollowingLocations, nearbyRadius, isOnline]);
+  }, []);
   
-  // Set map center when location available
+  // Update map center when location becomes available
   useEffect(() => {
-    if (currentLocation && !mapCenter) {
+    if (currentLocation) {
       setMapCenter([currentLocation.latitude, currentLocation.longitude]);
+      setHasLocationPermission(true);
     }
-  }, [currentLocation, mapCenter]);
+  }, [currentLocation]);
   
   // Initial fetch
   useEffect(() => {
@@ -770,190 +789,194 @@ export default function MapPage() {
       
       {/* Map Container */}
       <div className="flex-1 relative">
-        {mapCenter ? (
-          <MapContainer
-            center={mapCenter}
-            zoom={zoom}
-            style={{ height: '100%', width: '100%' }}
-            zoomControl={false}
-          >
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url={getTileUrl()}
+        <MapContainer
+          center={mapCenter}
+          zoom={zoom}
+          style={{ height: '100%', width: '100%' }}
+          zoomControl={false}
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            url={getTileUrl()}
+          />
+          <MapController center={mapCenter} zoom={zoom} />
+          <LocateControl onLocate={centerOnLocation} />
+          
+          {/* Nearby radius circle */}
+          {currentLocation && showNearby && (
+            <Circle
+              center={[currentLocation.latitude, currentLocation.longitude]}
+              radius={nearbyRadius * 1000}
+              pathOptions={{ 
+                color: '#3b82f6', 
+                fillColor: '#3b82f6', 
+                fillOpacity: 0.1,
+                weight: 2,
+                dashArray: '5, 5'
+              }}
             />
-            <MapController center={mapCenter} zoom={zoom} />
-            <LocateControl onLocate={centerOnLocation} />
-            
-            {/* Nearby radius circle */}
-            {currentLocation && showNearby && (
-              <Circle
-                center={[currentLocation.latitude, currentLocation.longitude]}
-                radius={nearbyRadius * 1000}
-                pathOptions={{ 
-                  color: '#3b82f6', 
-                  fillColor: '#3b82f6', 
-                  fillOpacity: 0.1,
-                  weight: 2,
-                  dashArray: '5, 5'
-                }}
-              />
-            )}
-            
-            {/* Current user marker */}
-            {currentLocation && (
-              <Marker
-                position={[currentLocation.latitude, currentLocation.longitude]}
-                icon={createUserIcon(profile?.avatar_url || undefined, true)}
-              >
-                <Popup>
-                  <div className="text-center">
-                    <Avatar className="h-12 w-12 mx-auto mb-2">
-                      <AvatarImage src={profile?.avatar_url || ''} />
-                      <AvatarFallback>{profile?.display_name?.[0] || 'Me'}</AvatarFallback>
-                    </Avatar>
-                    <p className="font-medium">{profile?.display_name || 'You'}</p>
-                    <p className="text-xs text-muted-foreground">Your location</p>
-                  </div>
-                </Popup>
-              </Marker>
-            )}
-            
-            {/* Nearby users */}
-            {showNearby && filteredNearby.map((u) => (
-              <Marker
-                key={u.user_id}
-                position={[u.latitude, u.longitude]}
-                icon={createUserIcon(u.profile?.avatar_url || undefined, false, u.profile?.is_online)}
-              >
-                <Popup>
-                  <div className="text-center min-w-[150px]">
-                    <Avatar className="h-12 w-12 mx-auto mb-2">
-                      <AvatarImage src={u.profile?.avatar_url || ''} />
-                      <AvatarFallback>{u.profile?.display_name?.[0] || '?'}</AvatarFallback>
-                    </Avatar>
-                    <p className="font-medium">{u.profile?.display_name}</p>
+          )}
+          
+          {/* Current user marker */}
+          {currentLocation && (
+            <Marker
+              position={[currentLocation.latitude, currentLocation.longitude]}
+              icon={createUserIcon(profile?.avatar_url || undefined, true)}
+            >
+              <Popup>
+                <div className="text-center">
+                  <Avatar className="h-12 w-12 mx-auto mb-2">
+                    <AvatarImage src={profile?.avatar_url || ''} />
+                    <AvatarFallback>{profile?.display_name?.[0] || 'Me'}</AvatarFallback>
+                  </Avatar>
+                  <p className="font-medium">{profile?.display_name || 'You'}</p>
+                  <p className="text-xs text-muted-foreground">Your location</p>
+                </div>
+              </Popup>
+            </Marker>
+          )}
+          
+          {/* Nearby users */}
+          {showNearby && filteredNearby.map((u) => (
+            <Marker
+              key={u.user_id}
+              position={[u.latitude, u.longitude]}
+              icon={createUserIcon(u.profile?.avatar_url || undefined, false, u.profile?.is_online)}
+            >
+              <Popup>
+                <div className="text-center min-w-[150px]">
+                  <Avatar className="h-12 w-12 mx-auto mb-2">
+                    <AvatarImage src={u.profile?.avatar_url || ''} />
+                    <AvatarFallback>{u.profile?.display_name?.[0] || '?'}</AvatarFallback>
+                  </Avatar>
+                  <p className="font-medium">{u.profile?.display_name}</p>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    {currentLocation && calculateDistance(
+                      currentLocation.latitude,
+                      currentLocation.longitude,
+                      u.latitude,
+                      u.longitude
+                    ).toFixed(1)}km away
+                  </p>
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    onClick={() => openDirections(u.latitude, u.longitude, u.profile?.display_name || 'User', transportMode)}
+                  >
+                    <Navigation className="h-4 w-4 mr-1" />
+                    Directions
+                  </Button>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+          
+          {/* Following users */}
+          {showFollowing && filteredFollowing.map((u) => (
+            <Marker
+              key={u.user_id}
+              position={[u.latitude, u.longitude]}
+              icon={createUserIcon(u.profile?.avatar_url || undefined, false, u.profile?.is_online)}
+            >
+              <Popup>
+                <div className="text-center min-w-[150px]">
+                  <Avatar className="h-12 w-12 mx-auto mb-2">
+                    <AvatarImage src={u.profile?.avatar_url || ''} />
+                    <AvatarFallback>{u.profile?.display_name?.[0] || '?'}</AvatarFallback>
+                  </Avatar>
+                  <p className="font-medium">{u.profile?.display_name}</p>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    {currentLocation && calculateDistance(
+                      currentLocation.latitude,
+                      currentLocation.longitude,
+                      u.latitude,
+                      u.longitude
+                    ).toFixed(1)}km away
+                  </p>
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    onClick={() => openDirections(u.latitude, u.longitude, u.profile?.display_name || 'User', transportMode)}
+                  >
+                    <Navigation className="h-4 w-4 mr-1" />
+                    Directions
+                  </Button>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+          
+          {/* Destination marker */}
+          {destination && (
+            <Marker
+              position={[destination.lat, destination.lng]}
+              icon={destinationIcon}
+            >
+              <Popup>
+                <div className="text-center min-w-[150px]">
+                  <MapPin className="h-8 w-8 mx-auto mb-2 text-destructive" />
+                  <p className="font-medium">{destination.name}</p>
+                  {currentLocation && (
                     <p className="text-xs text-muted-foreground mb-2">
-                      {currentLocation && calculateDistance(
+                      {calculateDistance(
                         currentLocation.latitude,
                         currentLocation.longitude,
-                        u.latitude,
-                        u.longitude
+                        destination.lat,
+                        destination.lng
                       ).toFixed(1)}km away
                     </p>
+                  )}
+                  <div className="flex gap-1">
                     <Button
                       size="sm"
-                      className="w-full"
-                      onClick={() => openDirections(u.latitude, u.longitude, u.profile?.display_name || 'User', transportMode)}
+                      className="flex-1"
+                      onClick={() => openDirections(destination.lat, destination.lng, destination.name, transportMode)}
                     >
                       <Navigation className="h-4 w-4 mr-1" />
-                      Directions
+                      Go
                     </Button>
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
-            
-            {/* Following users */}
-            {showFollowing && filteredFollowing.map((u) => (
-              <Marker
-                key={u.user_id}
-                position={[u.latitude, u.longitude]}
-                icon={createUserIcon(u.profile?.avatar_url || undefined, false, u.profile?.is_online)}
-              >
-                <Popup>
-                  <div className="text-center min-w-[150px]">
-                    <Avatar className="h-12 w-12 mx-auto mb-2">
-                      <AvatarImage src={u.profile?.avatar_url || ''} />
-                      <AvatarFallback>{u.profile?.display_name?.[0] || '?'}</AvatarFallback>
-                    </Avatar>
-                    <p className="font-medium">{u.profile?.display_name}</p>
-                    <p className="text-xs text-muted-foreground mb-2">
-                      {currentLocation && calculateDistance(
-                        currentLocation.latitude,
-                        currentLocation.longitude,
-                        u.latitude,
-                        u.longitude
-                      ).toFixed(1)}km away
-                    </p>
                     <Button
                       size="sm"
-                      className="w-full"
-                      onClick={() => openDirections(u.latitude, u.longitude, u.profile?.display_name || 'User', transportMode)}
+                      variant="outline"
+                      onClick={() => {
+                        setDestination(null);
+                        setShowDirections(false);
+                      }}
                     >
-                      <Navigation className="h-4 w-4 mr-1" />
-                      Directions
+                      <X className="h-4 w-4" />
                     </Button>
                   </div>
-                </Popup>
-              </Marker>
-            ))}
-            
-            {/* Destination marker */}
-            {destination && (
-              <Marker
-                position={[destination.lat, destination.lng]}
-                icon={destinationIcon}
-              >
-                <Popup>
-                  <div className="text-center min-w-[150px]">
-                    <MapPin className="h-8 w-8 mx-auto mb-2 text-destructive" />
-                    <p className="font-medium">{destination.name}</p>
-                    {currentLocation && (
-                      <p className="text-xs text-muted-foreground mb-2">
-                        {calculateDistance(
-                          currentLocation.latitude,
-                          currentLocation.longitude,
-                          destination.lat,
-                          destination.lng
-                        ).toFixed(1)}km away
-                      </p>
-                    )}
-                    <div className="flex gap-1">
-                      <Button
-                        size="sm"
-                        className="flex-1"
-                        onClick={() => openDirections(destination.lat, destination.lng, destination.name, transportMode)}
-                      >
-                        <Navigation className="h-4 w-4 mr-1" />
-                        Go
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setDestination(null);
-                          setShowDirections(false);
-                        }}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </Popup>
-              </Marker>
-            )}
-            
-            {/* Route line to destination */}
-            {currentLocation && destination && showDirections && (
-              <Polyline
-                positions={[
-                  [currentLocation.latitude, currentLocation.longitude],
-                  [destination.lat, destination.lng]
-                ]}
-                pathOptions={{ 
-                  color: '#3b82f6', 
-                  weight: 4,
-                  dashArray: '10, 10'
-                }}
-              />
-            )}
-          </MapContainer>
-        ) : (
-          <div className="h-full flex items-center justify-center bg-muted/20">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
-              <p className="text-muted-foreground">Getting your location...</p>
-              <Button variant="outline" className="mt-4" onClick={centerOnLocation}>
+                </div>
+              </Popup>
+            </Marker>
+          )}
+          
+          {/* Route line to destination */}
+          {currentLocation && destination && showDirections && (
+            <Polyline
+              positions={[
+                [currentLocation.latitude, currentLocation.longitude],
+                [destination.lat, destination.lng]
+              ]}
+              pathOptions={{ 
+                color: '#3b82f6', 
+                weight: 4,
+                dashArray: '10, 10'
+              }}
+            />
+          )}
+        </MapContainer>
+        
+        {/* Location permission prompt overlay */}
+        {hasLocationPermission === false && !currentLocation && (
+          <div className="absolute inset-0 z-[1000] bg-background/80 backdrop-blur-sm flex items-center justify-center">
+            <div className="text-center p-6 bg-card rounded-lg shadow-lg border max-w-sm">
+              <MapPin className="h-12 w-12 text-primary mx-auto mb-4" />
+              <h3 className="font-semibold text-lg mb-2">Enable Location</h3>
+              <p className="text-muted-foreground text-sm mb-4">
+                Allow location access to see your position on the map and find nearby users.
+              </p>
+              <Button onClick={centerOnLocation} className="w-full">
                 <Locate className="h-4 w-4 mr-2" />
                 Enable Location
               </Button>
