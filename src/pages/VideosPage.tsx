@@ -1,86 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Heart, MessageCircle, Share2, Bookmark, Music2, Volume2, VolumeX, Play, Pause } from 'lucide-react';
+import { Heart, MessageCircle, Share2, Bookmark, Music2, Volume2, VolumeX, Play, Pause, Repeat2, UserPlus } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
-
-interface VideoItem {
-  id: string;
-  videoUrl: string;
-  thumbnail: string;
-  user: {
-    username: string;
-    displayName: string;
-    avatar: string;
-    isVerified: boolean;
-  };
-  description: string;
-  music: string;
-  likes: number;
-  comments: number;
-  shares: number;
-  isLiked: boolean;
-  isBookmarked: boolean;
-}
-
-// Mock data for demo
-const mockVideos: VideoItem[] = [
-  {
-    id: '1',
-    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-    thumbnail: '',
-    user: {
-      username: '@alex_travels',
-      displayName: 'Alex Travels',
-      avatar: '',
-      isVerified: true,
-    },
-    description: 'Beautiful sunset at the beach 🌅 #travel #sunset #vibes',
-    music: 'Original Sound - Alex',
-    likes: 12500,
-    comments: 342,
-    shares: 156,
-    isLiked: false,
-    isBookmarked: false,
-  },
-  {
-    id: '2',
-    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
-    thumbnail: '',
-    user: {
-      username: '@foodie_sam',
-      displayName: 'Sam Cooks',
-      avatar: '',
-      isVerified: false,
-    },
-    description: 'Quick recipe for the best pasta ever! 🍝 #cooking #foodie #recipe',
-    music: 'Cooking Vibes - Chef Mix',
-    likes: 8900,
-    comments: 567,
-    shares: 234,
-    isLiked: true,
-    isBookmarked: true,
-  },
-  {
-    id: '3',
-    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
-    thumbnail: '',
-    user: {
-      username: '@fitness_pro',
-      displayName: 'Pro Fitness',
-      avatar: '',
-      isVerified: true,
-    },
-    description: '5 minute morning workout routine 💪 #fitness #workout #motivation',
-    music: 'Pump It Up - Workout Hits',
-    likes: 45200,
-    comments: 1230,
-    shares: 890,
-    isLiked: false,
-    isBookmarked: false,
-  },
-];
+import { useVideoPosts, VideoPost } from '@/hooks/useVideoPosts';
+import { Skeleton } from '@/components/ui/skeleton';
 
 function formatNumber(num: number): string {
   if (num >= 1000000) {
@@ -93,7 +18,7 @@ function formatNumber(num: number): string {
 }
 
 interface VideoCardProps {
-  video: VideoItem;
+  video: VideoPost;
   isActive: boolean;
   onLike: () => void;
   onBookmark: () => void;
@@ -104,7 +29,10 @@ function VideoCard({ video, isActive, onLike, onBookmark }: VideoCardProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [showPlayButton, setShowPlayButton] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
   const { lightTap, successFeedback } = useHapticFeedback();
+
+  const videoUrl = video.media_urls?.[0] || '';
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -156,131 +84,219 @@ function VideoCard({ video, isActive, onLike, onBookmark }: VideoCardProps) {
     onBookmark();
   };
 
+  const handleFollow = () => {
+    lightTap();
+    setIsFollowing(!isFollowing);
+  };
+
+  const handleShare = () => {
+    lightTap();
+  };
+
+  const handleRepost = () => {
+    lightTap();
+  };
+
   return (
-    <div className="relative h-full w-full bg-black snap-start snap-always">
-      {/* Video */}
-      <video
-        ref={videoRef}
-        src={video.videoUrl}
-        className="absolute inset-0 h-full w-full object-cover"
-        loop
-        muted={isMuted}
-        playsInline
-        onClick={togglePlay}
-      />
+    <div className="relative h-full w-full bg-black flex items-center justify-center snap-start snap-always">
+      {/* Video Container - Fixed aspect ratio for desktop/tablet */}
+      <div className="relative h-full w-full md:h-full md:w-auto md:aspect-[9/16] md:max-h-[calc(100vh-5rem)] lg:max-h-[calc(100vh-4rem)]">
+        {/* Video */}
+        <video
+          ref={videoRef}
+          src={videoUrl}
+          className="absolute inset-0 h-full w-full object-cover md:rounded-xl"
+          loop
+          muted={isMuted}
+          playsInline
+          onClick={togglePlay}
+          poster={video.media_urls?.[1]}
+        />
 
-      {/* Play/Pause Overlay */}
-      <div 
-        className={cn(
-          "absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-300",
-          showPlayButton ? "opacity-100" : "opacity-0"
-        )}
-      >
-        <div className="h-20 w-20 rounded-full bg-black/40 flex items-center justify-center">
-          {isPlaying ? (
-            <Pause className="h-10 w-10 text-white" />
-          ) : (
-            <Play className="h-10 w-10 text-white ml-1" />
+        {/* Play/Pause Overlay */}
+        <div 
+          className={cn(
+            "absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-300",
+            showPlayButton ? "opacity-100" : "opacity-0"
           )}
+        >
+          <div className="h-20 w-20 rounded-full bg-black/40 flex items-center justify-center">
+            {isPlaying ? (
+              <Pause className="h-10 w-10 text-white" />
+            ) : (
+              <Play className="h-10 w-10 text-white ml-1" />
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Gradient overlay for text readability */}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 pointer-events-none" />
+        {/* Gradient overlay for text readability */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 pointer-events-none md:rounded-xl" />
 
-      {/* Mute button */}
-      <button
-        onClick={toggleMute}
-        className="absolute top-4 right-4 h-10 w-10 rounded-full bg-black/40 flex items-center justify-center active:scale-95 transition-transform"
-      >
-        {isMuted ? (
-          <VolumeX className="h-5 w-5 text-white" />
-        ) : (
-          <Volume2 className="h-5 w-5 text-white" />
-        )}
-      </button>
+        {/* Mute button */}
+        <button
+          onClick={toggleMute}
+          className="absolute top-4 right-4 h-10 w-10 rounded-full bg-black/40 flex items-center justify-center active:scale-95 transition-transform"
+        >
+          {isMuted ? (
+            <VolumeX className="h-5 w-5 text-white" />
+          ) : (
+            <Volume2 className="h-5 w-5 text-white" />
+          )}
+        </button>
 
-      {/* Right side actions */}
-      <div className="absolute right-3 bottom-24 flex flex-col items-center gap-5">
-        {/* Profile */}
-        <div className="relative">
-          <Avatar className="h-12 w-12 border-2 border-white">
-            <AvatarImage src={video.user.avatar} />
-            <AvatarFallback className="bg-primary text-primary-foreground">
-              {video.user.displayName[0]}
-            </AvatarFallback>
-          </Avatar>
-          <button className="absolute -bottom-2 left-1/2 -translate-x-1/2 h-6 w-6 rounded-full bg-primary text-primary-foreground text-lg flex items-center justify-center">
-            +
+        {/* Right side actions */}
+        <div className="absolute right-3 bottom-28 md:bottom-24 flex flex-col items-center gap-4">
+          {/* Like */}
+          <button 
+            onClick={handleLike}
+            className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
+          >
+            <div className={cn(
+              "h-11 w-11 rounded-full bg-black/40 flex items-center justify-center",
+              video.is_liked && "text-red-500"
+            )}>
+              <Heart className={cn("h-6 w-6", video.is_liked && "fill-current")} />
+            </div>
+            <span className="text-white text-xs font-medium">{formatNumber(video.likes_count || 0)}</span>
+          </button>
+
+          {/* Comments */}
+          <button className="flex flex-col items-center gap-1 active:scale-90 transition-transform">
+            <div className="h-11 w-11 rounded-full bg-black/40 flex items-center justify-center text-white">
+              <MessageCircle className="h-6 w-6" />
+            </div>
+            <span className="text-white text-xs font-medium">{formatNumber(video.comments_count || 0)}</span>
+          </button>
+
+          {/* Bookmark */}
+          <button 
+            onClick={handleBookmark}
+            className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
+          >
+            <div className={cn(
+              "h-11 w-11 rounded-full bg-black/40 flex items-center justify-center text-white",
+              video.is_bookmarked && "text-yellow-400"
+            )}>
+              <Bookmark className={cn("h-6 w-6", video.is_bookmarked && "fill-current")} />
+            </div>
+          </button>
+
+          {/* Share */}
+          <button 
+            onClick={handleShare}
+            className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
+          >
+            <div className="h-11 w-11 rounded-full bg-black/40 flex items-center justify-center text-white">
+              <Share2 className="h-6 w-6" />
+            </div>
+            <span className="text-white text-xs font-medium">{formatNumber(video.shares_count || 0)}</span>
+          </button>
+
+          {/* Repost */}
+          <button 
+            onClick={handleRepost}
+            className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
+          >
+            <div className="h-11 w-11 rounded-full bg-black/40 flex items-center justify-center text-white">
+              <Repeat2 className="h-6 w-6" />
+            </div>
           </button>
         </div>
 
-        {/* Like */}
-        <button 
-          onClick={handleLike}
-          className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
-        >
-          <div className={cn(
-            "h-12 w-12 rounded-full bg-black/40 flex items-center justify-center",
-            video.isLiked && "text-red-500"
-          )}>
-            <Heart className={cn("h-7 w-7", video.isLiked && "fill-current")} />
+        {/* Bottom info - User info and description */}
+        <div className="absolute left-4 right-20 bottom-6 md:bottom-4">
+          {/* User info with follow button */}
+          <div className="flex items-center gap-3 mb-3">
+            <Avatar className="h-10 w-10 border-2 border-white">
+              <AvatarImage src={video.profile?.avatar_url || ''} />
+              <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+                {video.profile?.display_name?.[0] || video.profile?.username?.[0] || 'U'}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex items-center gap-2">
+              <span className="text-white font-bold text-sm">
+                @{video.profile?.username || 'user'}
+              </span>
+              {video.profile?.is_verified && (
+                <span className="h-4 w-4 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                  <span className="text-[10px] text-white">✓</span>
+                </span>
+              )}
+              <span className="text-white/60 mx-1">•</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleFollow}
+                className={cn(
+                  "h-7 px-3 text-xs font-semibold rounded-md border-white/30",
+                  isFollowing 
+                    ? "bg-white/10 text-white hover:bg-white/20" 
+                    : "bg-white text-black hover:bg-white/90"
+                )}
+              >
+                {isFollowing ? 'Following' : 'Follow'}
+              </Button>
+            </div>
           </div>
-          <span className="text-white text-xs font-medium">{formatNumber(video.likes)}</span>
-        </button>
-
-        {/* Comments */}
-        <button className="flex flex-col items-center gap-1 active:scale-90 transition-transform">
-          <div className="h-12 w-12 rounded-full bg-black/40 flex items-center justify-center text-white">
-            <MessageCircle className="h-7 w-7" />
-          </div>
-          <span className="text-white text-xs font-medium">{formatNumber(video.comments)}</span>
-        </button>
-
-        {/* Bookmark */}
-        <button 
-          onClick={handleBookmark}
-          className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
-        >
-          <div className={cn(
-            "h-12 w-12 rounded-full bg-black/40 flex items-center justify-center text-white",
-            video.isBookmarked && "text-yellow-400"
-          )}>
-            <Bookmark className={cn("h-7 w-7", video.isBookmarked && "fill-current")} />
-          </div>
-        </button>
-
-        {/* Share */}
-        <button className="flex flex-col items-center gap-1 active:scale-90 transition-transform">
-          <div className="h-12 w-12 rounded-full bg-black/40 flex items-center justify-center text-white">
-            <Share2 className="h-7 w-7" />
-          </div>
-          <span className="text-white text-xs font-medium">{formatNumber(video.shares)}</span>
-        </button>
-      </div>
-
-      {/* Bottom info */}
-      <div className="absolute left-4 right-20 bottom-6">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-white font-bold">{video.user.username}</span>
-          {video.user.isVerified && (
-            <span className="h-4 w-4 rounded-full bg-primary flex items-center justify-center">
-              <span className="text-[10px] text-white">✓</span>
-            </span>
+          
+          {/* Description */}
+          {video.content && (
+            <p className="text-white text-sm mb-2 line-clamp-2">{video.content}</p>
           )}
-        </div>
-        <p className="text-white text-sm mb-3 line-clamp-2">{video.description}</p>
-        <div className="flex items-center gap-2">
-          <Music2 className="h-4 w-4 text-white animate-spin" style={{ animationDuration: '3s' }} />
-          <span className="text-white text-xs">{video.music}</span>
+          
+          {/* Music/Sound */}
+          <div className="flex items-center gap-2">
+            <Music2 className="h-4 w-4 text-white animate-spin" style={{ animationDuration: '3s' }} />
+            <span className="text-white text-xs">Original Sound - {video.profile?.display_name || video.profile?.username}</span>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
+function VideoSkeleton() {
+  return (
+    <div className="relative h-full w-full bg-black flex items-center justify-center">
+      <div className="relative h-full w-full md:h-full md:w-auto md:aspect-[9/16] md:max-h-[calc(100vh-5rem)]">
+        <Skeleton className="absolute inset-0 bg-muted/20 md:rounded-xl" />
+        <div className="absolute right-3 bottom-28 flex flex-col items-center gap-4">
+          {[...Array(5)].map((_, i) => (
+            <Skeleton key={i} className="h-11 w-11 rounded-full bg-muted/20" />
+          ))}
+        </div>
+        <div className="absolute left-4 right-20 bottom-6">
+          <div className="flex items-center gap-3 mb-3">
+            <Skeleton className="h-10 w-10 rounded-full bg-muted/20" />
+            <Skeleton className="h-4 w-24 bg-muted/20" />
+            <Skeleton className="h-7 w-16 rounded-md bg-muted/20" />
+          </div>
+          <Skeleton className="h-4 w-full bg-muted/20 mb-2" />
+          <Skeleton className="h-3 w-32 bg-muted/20" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="h-full w-full flex items-center justify-center bg-black">
+      <div className="text-center px-8">
+        <div className="h-20 w-20 rounded-full bg-muted/20 flex items-center justify-center mx-auto mb-4">
+          <Play className="h-10 w-10 text-muted-foreground" />
+        </div>
+        <h3 className="text-white text-lg font-semibold mb-2">No videos yet</h3>
+        <p className="text-muted-foreground text-sm">
+          Be the first to share a video!
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function VideosPage() {
-  const [videos, setVideos] = useState(mockVideos);
+  const { videos, isLoading, likeVideo, toggleBookmark } = useVideoPosts();
   const [activeIndex, setActiveIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const { mediumTap } = useHapticFeedback();
@@ -307,21 +323,21 @@ export default function VideosPage() {
     return () => container.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
 
-  const toggleLike = (id: string) => {
-    setVideos(prev => prev.map(v => 
-      v.id === id 
-        ? { ...v, isLiked: !v.isLiked, likes: v.isLiked ? v.likes - 1 : v.likes + 1 }
-        : v
-    ));
-  };
+  if (isLoading) {
+    return (
+      <div className="h-[calc(100vh-4rem)] md:h-[calc(100vh-4rem)] overflow-hidden bg-black flex items-center justify-center">
+        <VideoSkeleton />
+      </div>
+    );
+  }
 
-  const toggleBookmark = (id: string) => {
-    setVideos(prev => prev.map(v => 
-      v.id === id 
-        ? { ...v, isBookmarked: !v.isBookmarked }
-        : v
-    ));
-  };
+  if (videos.length === 0) {
+    return (
+      <div className="h-[calc(100vh-4rem)] md:h-[calc(100vh-4rem)] overflow-hidden">
+        <EmptyState />
+      </div>
+    );
+  }
 
   return (
     <div 
@@ -334,7 +350,7 @@ export default function VideosPage() {
           <VideoCard
             video={video}
             isActive={index === activeIndex}
-            onLike={() => toggleLike(video.id)}
+            onLike={() => likeVideo(video.id)}
             onBookmark={() => toggleBookmark(video.id)}
           />
         </div>
