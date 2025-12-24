@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Check, CheckCheck, Plus, Clock, AlertCircle, Reply as ReplyIcon, Forward } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -9,6 +9,7 @@ import { MessageContextMenu } from './MessageContextMenu';
 import { LocationMessage } from './LocationMessage';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { format } from 'date-fns';
 
 interface Message {
@@ -71,6 +72,49 @@ export function EnhancedMessageBubble({
 }: EnhancedMessageBubbleProps) {
   const { user } = useAuth();
   const [reactions, setReactions] = useState<ReactionGroup[]>([]);
+  const { lightTap, mediumTap, successFeedback } = useHapticFeedback();
+  
+  // Swipe to reply state
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const startX = useRef(0);
+  const hasTriggeredHaptic = useRef(false);
+  const swipeThreshold = 60;
+  const maxSwipe = 80;
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    startX.current = e.touches[0].clientX;
+    hasTriggeredHaptic.current = false;
+    setIsDragging(true);
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isDragging) return;
+    
+    const currentX = e.touches[0].clientX;
+    const diff = isMine ? startX.current - currentX : currentX - startX.current;
+    
+    if (diff > 0) {
+      const newOffset = Math.min(diff, maxSwipe);
+      setSwipeOffset(newOffset);
+      
+      if (newOffset >= swipeThreshold && !hasTriggeredHaptic.current) {
+        hasTriggeredHaptic.current = true;
+        mediumTap();
+      } else if (newOffset < swipeThreshold && hasTriggeredHaptic.current) {
+        hasTriggeredHaptic.current = false;
+      }
+    }
+  }, [isDragging, isMine, mediumTap]);
+
+  const handleTouchEnd = useCallback(() => {
+    if (swipeOffset >= swipeThreshold && onReply) {
+      successFeedback();
+      onReply(message);
+    }
+    setSwipeOffset(0);
+    setIsDragging(false);
+  }, [swipeOffset, onReply, message, successFeedback]);
 
   const fetchReactions = useCallback(async () => {
     const { data, error } = await supabase
@@ -125,6 +169,7 @@ export function EnhancedMessageBubble({
 
   const toggleReaction = async (emoji: string) => {
     if (!user) return;
+    lightTap();
     const hasReacted = reactions.some(r => r.hasReacted && r.emoji === emoji);
     
     if (hasReacted) {
@@ -147,6 +192,7 @@ export function EnhancedMessageBubble({
 
   const addReaction = async (emoji: string) => {
     if (!user) return;
+    lightTap();
     await supabase
       .from('message_reactions')
       .insert({
@@ -159,11 +205,11 @@ export function EnhancedMessageBubble({
   const copyToClipboard = () => {
     if (message.content) {
       navigator.clipboard.writeText(message.content);
+      successFeedback();
     }
   };
 
   const formatTime = (date: string) => format(new Date(date), 'HH:mm');
-  const formatFullTime = (date: string) => format(new Date(date), 'HH:mm · dd.MM.yyyy');
 
   const isVoiceMessage = message.media_type === 'audio' && message.media_url;
   
@@ -174,7 +220,6 @@ export function EnhancedMessageBubble({
   
   // Parse location from media_url or text content
   const parseLocation = (): { latitude: number; longitude: number; address?: string } | null => {
-    // First try media_url format
     if (isLocationFromMediaType && message.media_url) {
       try {
         const [lat, lng] = message.media_url.split(',').map(Number);
@@ -184,7 +229,6 @@ export function EnhancedMessageBubble({
       }
     }
     
-    // Then try text format: 📍 LOCATION:lat,lng|address
     if (isLocationFromText && message.content) {
       try {
         const locationPart = message.content.replace('📍 LOCATION:', '');
@@ -201,6 +245,7 @@ export function EnhancedMessageBubble({
     return null;
   };
   const locationData = parseLocation();
+
   const formatContent = (content: string) => {
     let formatted = content
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
@@ -213,6 +258,8 @@ export function EnhancedMessageBubble({
     return formatted;
   };
 
+  const isReadyToReply = swipeOffset >= swipeThreshold;
+
   return (
     <MessageContextMenu
       isMine={isMine}
@@ -224,8 +271,62 @@ export function EnhancedMessageBubble({
       onCopy={message.content ? copyToClipboard : undefined}
       hasMedia={!!message.media_url}
     >
-      <div className={cn("flex group", isMine ? "justify-end" : "justify-start")}>
-        <div className="flex items-end gap-2 max-w-[75%]">
+      <div 
+        className={cn("flex group relative", isMine ? "justify-end" : "justify-start")}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* Reply indicator for non-mine messages */}
+        {!isMine && (
+          <div 
+            className={cn(
+              "absolute left-0 top-1/2 -translate-y-1/2 flex items-center justify-center transition-opacity",
+              isReadyToReply ? "opacity-100" : "opacity-50"
+            )}
+            style={{ 
+              width: swipeOffset,
+              opacity: swipeOffset > 10 ? Math.min(swipeOffset / swipeThreshold, 1) : 0 
+            }}
+          >
+            <div className={cn(
+              "h-8 w-8 rounded-full bg-primary flex items-center justify-center transition-transform",
+              isReadyToReply && "scale-110"
+            )}>
+              <ReplyIcon className="h-4 w-4 text-primary-foreground" />
+            </div>
+          </div>
+        )}
+
+        {/* Reply indicator for mine messages */}
+        {isMine && (
+          <div 
+            className={cn(
+              "absolute right-0 top-1/2 -translate-y-1/2 flex items-center justify-center transition-opacity",
+              isReadyToReply ? "opacity-100" : "opacity-50"
+            )}
+            style={{ 
+              width: swipeOffset,
+              opacity: swipeOffset > 10 ? Math.min(swipeOffset / swipeThreshold, 1) : 0 
+            }}
+          >
+            <div className={cn(
+              "h-8 w-8 rounded-full bg-primary flex items-center justify-center transition-transform",
+              isReadyToReply && "scale-110"
+            )}>
+              <ReplyIcon className="h-4 w-4 text-primary-foreground" />
+            </div>
+          </div>
+        )}
+
+        <div 
+          className="flex items-end gap-2 max-w-[85%] md:max-w-[75%] transition-transform"
+          style={{ 
+            transform: isMine 
+              ? `translateX(-${swipeOffset}px)` 
+              : `translateX(${swipeOffset}px)` 
+          }}
+        >
           {!isMine && showAvatar && (
             <Avatar className="h-8 w-8 flex-shrink-0">
               <AvatarImage src={message.sender?.avatar_url || ''} />
@@ -327,7 +428,7 @@ export function EnhancedMessageBubble({
                     key={reaction.emoji}
                     onClick={() => toggleReaction(reaction.emoji)}
                     className={cn(
-                      "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-all",
+                      "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-all active:scale-95",
                       reaction.hasReacted
                         ? "bg-primary/20 text-primary border border-primary/30"
                         : "bg-muted hover:bg-accent border border-transparent"
@@ -340,7 +441,7 @@ export function EnhancedMessageBubble({
                 <EmojiPicker
                   onSelect={addReaction}
                   trigger={
-                    <button className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center justify-center h-6 w-6 rounded-full hover:bg-accent">
+                    <button className="opacity-0 group-hover:opacity-100 md:transition-opacity inline-flex items-center justify-center h-6 w-6 rounded-full hover:bg-accent active:scale-95">
                       <Plus className="h-3 w-3 text-muted-foreground" />
                     </button>
                   }

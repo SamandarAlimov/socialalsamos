@@ -1,11 +1,12 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Users, Megaphone, Pin, VolumeX } from 'lucide-react';
+import { Users, Megaphone, Pin, VolumeX, Reply } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
 import { Conversation } from '@/hooks/useMessages';
 import { ChatListContextMenu } from './ChatListContextMenu';
-import { formatLastSeen } from '@/utils/formatLastSeen';
+import { useSwipeToReply } from '@/hooks/useSwipeToReply';
+import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 
 interface ChatListItemProps {
   conversation: Conversation;
@@ -34,6 +35,17 @@ export function ChatListItem({
   onMarkRead,
   onMarkUnread,
 }: ChatListItemProps) {
+  const { lightTap } = useHapticFeedback();
+  
+  // Swipe to archive functionality
+  const { offset, isReadyToReply, swipeHandlers } = useSwipeToReply({
+    threshold: 80,
+    maxSwipe: 120,
+    onReply: () => {
+      if (onArchive) onArchive();
+    },
+  });
+
   const getName = () => {
     if (conversation.type === 'private') {
       return conversation.other_participant?.display_name || 
@@ -65,8 +77,12 @@ export function ChatListItem({
   };
 
   const isOnline = conversation.type === 'private' && conversation.other_participant?.is_online;
-
   const isUnread = (conversation.unread_count ?? 0) > 0;
+
+  const handleClick = () => {
+    lightTap();
+    onClick();
+  };
 
   return (
     <ChatListContextMenu
@@ -81,80 +97,96 @@ export function ChatListItem({
       onMarkRead={onMarkRead}
       onMarkUnread={onMarkUnread}
     >
-      <button
-        onClick={onClick}
-        className={cn(
-          "w-full px-3 py-2.5 flex items-center gap-3 transition-all duration-200 border-b border-border/30",
-          "hover:bg-accent/50",
-          isSelected && "bg-accent"
-        )}
-      >
-        <div className="relative flex-shrink-0">
-          <Avatar className="h-12 w-12">
-            <AvatarImage src={getAvatar() || ''} />
-            <AvatarFallback 
-              className={cn(
-                "text-primary-foreground font-medium",
-                conversation.type === 'group' && 'bg-blue-500',
-                conversation.type === 'channel' && 'bg-violet-500',
-                conversation.type === 'private' && 'bg-primary'
-              )}
-            >
-              {conversation.type === 'group' ? (
-                <Users className="h-5 w-5" />
-              ) : conversation.type === 'channel' ? (
-                <Megaphone className="h-5 w-5" />
-              ) : (
-                getName()[0]?.toUpperCase()
-              )}
-            </AvatarFallback>
-          </Avatar>
-          {isOnline && (
-            <span className="absolute bottom-0 right-0 h-3.5 w-3.5 bg-green-500 rounded-full border-2 border-card" />
+      <div className="relative overflow-hidden">
+        {/* Swipe action indicator */}
+        <div 
+          className={cn(
+            "absolute left-0 top-0 bottom-0 flex items-center justify-center bg-orange-500 transition-opacity",
+            isReadyToReply ? "opacity-100" : "opacity-70"
           )}
+          style={{ width: Math.max(offset, 0) }}
+        >
+          <Reply className="h-5 w-5 text-white" />
         </div>
-        
-        <div className="flex-1 min-w-0 text-left">
-          <div className="flex items-center justify-between mb-0.5">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="font-medium text-sm truncate">{getName()}</span>
-              {conversation.type === 'channel' && (
-                <Megaphone className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-              )}
-              {isPinned && (
-                <Pin className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-              )}
-              {isMuted && (
-                <VolumeX className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-              )}
-            </div>
-            <div className="flex items-center gap-1 flex-shrink-0 ml-2">
-              <span className="text-xs text-muted-foreground">
-                {conversation.last_message_at && formatTime(conversation.last_message_at)}
-              </span>
-            </div>
+
+        <button
+          onClick={handleClick}
+          {...swipeHandlers}
+          className={cn(
+            "w-full px-4 py-3 md:px-3 md:py-2.5 flex items-center gap-3 transition-all duration-200 border-b border-border/30",
+            "hover:bg-accent/50 active:bg-accent/70",
+            "min-h-[72px] md:min-h-0", // Larger touch target on mobile
+            isSelected && "bg-accent"
+          )}
+          style={{ transform: `translateX(${offset}px)` }}
+        >
+          <div className="relative flex-shrink-0">
+            <Avatar className="h-14 w-14 md:h-12 md:w-12">
+              <AvatarImage src={getAvatar() || ''} />
+              <AvatarFallback 
+                className={cn(
+                  "text-primary-foreground font-medium text-lg md:text-base",
+                  conversation.type === 'group' && 'bg-blue-500',
+                  conversation.type === 'channel' && 'bg-violet-500',
+                  conversation.type === 'private' && 'bg-primary'
+                )}
+              >
+                {conversation.type === 'group' ? (
+                  <Users className="h-6 w-6 md:h-5 md:w-5" />
+                ) : conversation.type === 'channel' ? (
+                  <Megaphone className="h-6 w-6 md:h-5 md:w-5" />
+                ) : (
+                  getName()[0]?.toUpperCase()
+                )}
+              </AvatarFallback>
+            </Avatar>
+            {isOnline && (
+              <span className="absolute bottom-0 right-0 h-4 w-4 md:h-3.5 md:w-3.5 bg-green-500 rounded-full border-2 border-card" />
+            )}
           </div>
           
-          <div className="flex items-center justify-between gap-2">
-            <p className={cn(
-              "text-sm truncate",
-              isUnread
-                ? "text-foreground font-medium" 
-                : "text-muted-foreground"
-            )}>
-              {conversation.last_message || 'No messages yet'}
-            </p>
+          <div className="flex-1 min-w-0 text-left">
+            <div className="flex items-center justify-between mb-0.5">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="font-medium text-base md:text-sm truncate">{getName()}</span>
+                {conversation.type === 'channel' && (
+                  <Megaphone className="h-4 w-4 md:h-3.5 md:w-3.5 text-muted-foreground flex-shrink-0" />
+                )}
+                {isPinned && (
+                  <Pin className="h-3.5 w-3.5 md:h-3 md:w-3 text-muted-foreground flex-shrink-0" />
+                )}
+                {isMuted && (
+                  <VolumeX className="h-3.5 w-3.5 md:h-3 md:w-3 text-muted-foreground flex-shrink-0" />
+                )}
+              </div>
+              <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                <span className="text-sm md:text-xs text-muted-foreground">
+                  {conversation.last_message_at && formatTime(conversation.last_message_at)}
+                </span>
+              </div>
+            </div>
             
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              {isUnread && (
-                <Badge variant="default" className="h-5 min-w-[20px] rounded-full px-1.5 text-xs">
-                  {(conversation.unread_count ?? 0) > 99 ? '99+' : conversation.unread_count}
-                </Badge>
-              )}
+            <div className="flex items-center justify-between gap-2">
+              <p className={cn(
+                "text-sm truncate",
+                isUnread
+                  ? "text-foreground font-medium" 
+                  : "text-muted-foreground"
+              )}>
+                {conversation.last_message || 'No messages yet'}
+              </p>
+              
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {isUnread && (
+                  <Badge variant="default" className="h-6 min-w-[24px] md:h-5 md:min-w-[20px] rounded-full px-2 md:px-1.5 text-sm md:text-xs">
+                    {(conversation.unread_count ?? 0) > 99 ? '99+' : conversation.unread_count}
+                  </Badge>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      </button>
+        </button>
+      </div>
     </ChatListContextMenu>
   );
 }
