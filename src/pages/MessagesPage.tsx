@@ -518,34 +518,35 @@ export default function MessagesPage() {
         showMobileChat && "hidden md:flex"
       )}>
         {/* Search & Create */}
-        <div className="p-3 border-b border-border flex-shrink-0">
+        <div className="p-4 md:p-3 border-b border-border flex-shrink-0">
           <div className="flex gap-2">
             <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 md:h-4 md:w-4 text-muted-foreground" />
               <Input
                 placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 bg-muted/50"
+                className="pl-11 md:pl-10 h-12 md:h-10 text-base md:text-sm bg-muted/50"
               />
             </div>
             <Button 
               size="icon"
+              className="h-12 w-12 md:h-10 md:w-10"
               onClick={() => setShowCreateDialog(true)}
             >
-              <Plus className="h-5 w-5" />
+              <Plus className="h-6 w-6 md:h-5 md:w-5" />
             </Button>
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-border flex-shrink-0">
+        <div className="flex border-b border-border flex-shrink-0 overflow-x-auto scrollbar-hide">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                "flex-1 py-2.5 text-sm font-medium relative transition-colors",
+                "flex-1 min-w-fit px-4 py-3 md:py-2.5 text-base md:text-sm font-medium relative transition-colors active:bg-accent/50",
                 activeTab === tab.id 
                   ? "text-primary" 
                   : "text-muted-foreground hover:text-foreground"
