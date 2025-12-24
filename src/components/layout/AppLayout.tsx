@@ -1,6 +1,8 @@
 import { Outlet, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppSidebar } from './AppSidebar';
+import { BottomNavbar } from './BottomNavbar';
+import { MobileHeader } from './MobileHeader';
 import { Loader2 } from 'lucide-react';
 
 export function AppLayout() {
@@ -23,10 +25,19 @@ export function AppLayout() {
 
   return (
     <div className="min-h-screen flex w-full bg-background">
+      {/* Desktop Sidebar */}
       <AppSidebar />
-      <main className="flex-1 overflow-auto">
+      
+      {/* Mobile Header */}
+      <MobileHeader />
+      
+      {/* Main Content */}
+      <main className="flex-1 overflow-auto md:ml-0 pt-14 pb-20 md:pt-0 md:pb-0">
         <Outlet />
       </main>
+      
+      {/* Mobile Bottom Navigation */}
+      <BottomNavbar />
     </div>
   );
 }
