@@ -15,6 +15,9 @@ import SettingsPage from "./pages/SettingsPage";
 import CreatePage from "./pages/CreatePage";
 import MapPage from "./pages/MapPage";
 import VideosPage from "./pages/VideosPage";
+import DiscoveryPage from "./pages/DiscoveryPage";
+import SearchPage from "./pages/SearchPage";
+import MarketplacePage from "./pages/MarketplacePage";
 import NotFound from "./pages/NotFound";
 
 // Layout
@@ -77,10 +80,11 @@ function AppRoutes() {
       {/* Protected App Routes */}
       <Route element={<AppLayout />}>
         <Route path="/home" element={<HomePage />} />
-        <Route path="/search" element={<PlaceholderPage title="Search" />} />
+        <Route path="/discover" element={<DiscoveryPage />} />
+        <Route path="/search" element={<SearchPage />} />
         <Route path="/videos" element={<VideosPage />} />
         <Route path="/messages" element={<MessagesPage />} />
-        <Route path="/marketplace" element={<PlaceholderPage title="Marketplace" />} />
+        <Route path="/marketplace" element={<MarketplacePage />} />
         <Route path="/map" element={<MapPage />} />
         <Route path="/notifications" element={<PlaceholderPage title="Notifications" />} />
         <Route path="/create" element={<CreatePage />} />
