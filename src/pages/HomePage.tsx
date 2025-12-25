@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { usePosts, Post } from '@/hooks/usePosts';
 import { useStories, StoryGroup } from '@/hooks/useStories';
+import { useStoryViews } from '@/hooks/useRealtimeCounts';
 import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
 import { CreatePostForm } from '@/components/CreatePostForm';
@@ -53,6 +54,7 @@ export default function HomePage() {
   } = usePosts('global');
 
   const { storyGroups, isLoading: storiesLoading, refresh: refreshStories } = useStories();
+  const { markAsViewed, hasViewedAll } = useStoryViews(user?.id || null);
 
   // Request notification permission on first load
   useEffect(() => {
@@ -97,6 +99,10 @@ export default function HomePage() {
   const openStory = (group: StoryGroup) => {
     setActiveStoryGroup(group);
     setActiveStoryIndex(0);
+    // Mark the first story as viewed
+    if (group.stories[0]) {
+      markAsViewed(group.stories[0].id);
+    }
   };
 
   const closeStory = () => {
@@ -108,13 +114,18 @@ export default function HomePage() {
     if (!activeStoryGroup) return;
     
     if (activeStoryIndex < activeStoryGroup.stories.length - 1) {
-      setActiveStoryIndex(prev => prev + 1);
+      const nextIndex = activeStoryIndex + 1;
+      setActiveStoryIndex(nextIndex);
+      // Mark next story as viewed
+      markAsViewed(activeStoryGroup.stories[nextIndex].id);
     } else {
       // Move to next group
       const currentGroupIndex = storyGroups.findIndex(g => g.user_id === activeStoryGroup.user_id);
       if (currentGroupIndex < storyGroups.length - 1) {
-        setActiveStoryGroup(storyGroups[currentGroupIndex + 1]);
+        const nextGroup = storyGroups[currentGroupIndex + 1];
+        setActiveStoryGroup(nextGroup);
         setActiveStoryIndex(0);
+        if (nextGroup.stories[0]) markAsViewed(nextGroup.stories[0].id);
       } else {
         closeStory();
       }
@@ -289,7 +300,7 @@ export default function HomePage() {
               >
                 <div className={cn(
                   "relative p-0.5 rounded-full",
-                  group.has_unviewed 
+                  !hasViewedAll(group.all_story_ids)
                     ? "bg-gradient-to-tr from-alsamos-orange-light to-alsamos-orange-dark" 
                     : "bg-muted"
                 )}>

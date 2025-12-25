@@ -29,6 +29,7 @@ export interface StoryGroup {
   is_verified: boolean;
   stories: Story[];
   has_unviewed: boolean;
+  all_story_ids: string[];
 }
 
 export function useStories() {
@@ -73,11 +74,16 @@ export function useStories() {
             avatar_url: profile?.avatar_url ?? null,
             is_verified: profile?.is_verified ?? false,
             stories: [],
-            has_unviewed: true, // TODO: Track viewed stories
+            has_unviewed: true, // Will be calculated by component using useStoryViews
+            all_story_ids: [],
           });
         }
 
-        groupsMap.get(userId)?.stories.push(story as Story);
+        const group = groupsMap.get(userId);
+        if (group) {
+          group.stories.push(story as Story);
+          group.all_story_ids.push(story.id);
+        }
       });
 
       // Put current user's stories first

@@ -378,11 +378,94 @@ export default function MapPage() {
     }
   };
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
-    <div className="h-screen flex bg-background overflow-hidden">
-      {/* Sidebar */}
+    <div className="h-screen flex flex-col md:flex-row bg-background overflow-hidden">
+      {/* Mobile Header */}
+      <div className="md:hidden flex items-center justify-between p-3 border-b border-border bg-background z-10">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/home')}>
+            <Home className="h-5 w-5" />
+          </Button>
+          <h1 className="text-lg font-semibold flex items-center gap-2">
+            <MapPin className="h-5 w-5 text-primary" />
+            Map
+          </h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" onClick={centerOnLocation}>
+            <Locate className="h-5 w-5" />
+          </Button>
+          <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <Users className="h-5 w-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="bottom" className="h-[70vh] rounded-t-xl">
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  People Nearby
+                </SheetTitle>
+              </SheetHeader>
+              <ScrollArea className="h-full mt-4 pb-8">
+                {/* Nearby Users */}
+                {filteredNearby.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-8">
+                    <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>No nearby users found</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredNearby.map((u) => (
+                      <div
+                        key={u.user_id}
+                        className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 cursor-pointer"
+                        onClick={() => {
+                          setMapCenter([u.latitude, u.longitude]);
+                          setMobileMenuOpen(false);
+                        }}
+                      >
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage src={u.profile?.avatar_url || ''} />
+                          <AvatarFallback>{u.profile?.display_name?.[0] || '?'}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{u.profile?.display_name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {currentLocation && calculateDistance(
+                              currentLocation.latitude,
+                              currentLocation.longitude,
+                              u.latitude,
+                              u.longitude
+                            ).toFixed(1)}km away
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDirections(u.latitude, u.longitude, u.profile?.display_name || 'User', transportMode);
+                          }}
+                        >
+                          <Navigation className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
+            </SheetContent>
+          </Sheet>
+        </div>
+      </div>
+
+      {/* Desktop Sidebar */}
       <div className={cn(
-        "flex flex-col border-r border-border bg-background transition-all duration-300",
+        "hidden md:flex flex-col border-r border-border bg-background transition-all duration-300",
         sidebarOpen ? "w-80" : "w-0 overflow-hidden"
       )}>
         {/* Sidebar Header */}
@@ -794,11 +877,11 @@ export default function MapPage() {
         </Tabs>
       </div>
       
-      {/* Toggle Sidebar Button */}
+      {/* Toggle Sidebar Button - Desktop only */}
       <Button
         variant="secondary"
         size="icon"
-        className="absolute left-[320px] top-1/2 -translate-y-1/2 z-[1000] rounded-l-none"
+        className="hidden md:flex absolute left-[320px] top-1/2 -translate-y-1/2 z-[1000] rounded-l-none"
         onClick={() => setSidebarOpen(!sidebarOpen)}
         style={{ left: sidebarOpen ? '320px' : '0' }}
       >
