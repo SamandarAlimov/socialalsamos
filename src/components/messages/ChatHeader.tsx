@@ -17,6 +17,7 @@ import {
 import { Conversation } from '@/hooks/useMessages';
 import { cn } from '@/lib/utils';
 import { formatLastSeen } from '@/utils/formatLastSeen';
+import { useUserOnlineStatus } from '@/hooks/useRealtimeStatus';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,6 +53,10 @@ export function ChatHeader({
   onDelete,
   isMuted,
 }: ChatHeaderProps) {
+  // Get real-time status for private chats
+  const otherUserId = conversation.type === 'private' ? conversation.other_participant?.id : null;
+  const { isOnline: realtimeIsOnline, lastSeen: realtimeLastSeen } = useUserOnlineStatus(otherUserId || null);
+
   const getName = () => {
     if (conversation.type === 'private') {
       return conversation.other_participant?.display_name || 
@@ -74,8 +79,15 @@ export function ChatHeader({
     }
     
     if (conversation.type === 'private') {
-      const participant = conversation.other_participant;
-      return formatLastSeen(participant?.last_seen, participant?.is_online);
+      // Use real-time status if available
+      const isOnlineNow = realtimeIsOnline || conversation.other_participant?.is_online;
+      const lastSeenTime = realtimeLastSeen || conversation.other_participant?.last_seen;
+      
+      if (isOnlineNow) {
+        return <span className="text-green-500 font-medium">online</span>;
+      }
+      
+      return formatLastSeen(lastSeenTime, false);
     }
     
     if (conversation.type === 'group') {
@@ -89,7 +101,7 @@ export function ChatHeader({
     return null;
   };
 
-  const isOnline = conversation.type === 'private' && conversation.other_participant?.is_online;
+  const isOnline = conversation.type === 'private' && (realtimeIsOnline || conversation.other_participant?.is_online);
 
   return (
     <div className="h-16 px-4 flex items-center justify-between border-b border-border bg-card/95 backdrop-blur">
