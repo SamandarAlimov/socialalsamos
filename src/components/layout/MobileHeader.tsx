@@ -9,7 +9,8 @@ import {
   Settings, 
   LogOut,
   Users,
-  Bell
+  Bell,
+  MapPin
 } from 'lucide-react';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
@@ -35,6 +36,7 @@ interface NavItem {
 const menuItems: NavItem[] = [
   { icon: Search, label: 'Search', path: '/search' },
   { icon: Users, label: 'Discover', action: 'search' },
+  { icon: MapPin, label: 'Map', path: '/map' },
   { icon: Video, label: 'Videos', path: '/videos' },
   { icon: ShoppingBag, label: 'Marketplace', path: '/marketplace' },
   { icon: Settings, label: 'Settings', path: '/settings' },
