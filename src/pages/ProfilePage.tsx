@@ -6,31 +6,17 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FollowersFollowingDialog } from '@/components/FollowersFollowingDialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { ProfilePostsGrid } from '@/components/profile/ProfilePostsGrid';
 import { 
   Settings, 
   Edit3, 
   Grid, 
   Video, 
-  Bookmark, 
-  Heart,
-  MessageCircle,
-  Share2,
-  MoreHorizontal,
-  Pin,
-  Trash2,
-  Eye,
+  Bookmark,
   MapPin,
   Link as LinkIcon,
   Calendar,
   CheckCircle2,
-  Loader2,
   ImageIcon
 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -251,76 +237,19 @@ export default function ProfilePage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-3 gap-1 mt-4">
-            {filteredPosts.map((post) => (
-              <div 
-                key={post.id} 
-                className="relative aspect-square bg-muted rounded-lg overflow-hidden group cursor-pointer"
-              >
-                {post.media_urls && post.media_urls.length > 0 ? (
-                  <img 
-                    src={post.media_urls[0]}
-                    alt=""
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.src = '/placeholder.svg';
-                    }}
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center p-4 bg-card">
-                    <p className="text-sm text-foreground line-clamp-4">{post.content}</p>
-                  </div>
-                )}
-
-                {/* Pinned indicator */}
-                {post.is_pinned && (
-                  <div className="absolute top-2 left-2 bg-primary text-primary-foreground rounded-full p-1">
-                    <Pin className="h-3 w-3" />
-                  </div>
-                )}
-
-                {/* Hover overlay with stats */}
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-6">
-                  <div className="flex items-center gap-1 text-white">
-                    <Heart className={`h-5 w-5 ${post.is_liked ? 'fill-red-500 text-red-500' : ''}`} />
-                    <span className="font-semibold">{post.likes_count}</span>
-                  </div>
-                  <div className="flex items-center gap-1 text-white">
-                    <MessageCircle className="h-5 w-5" />
-                    <span className="font-semibold">{post.comments_count}</span>
-                  </div>
-
-                  {/* Post actions for own profile */}
-                  {isOwnProfile && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button className="absolute top-2 right-2 p-1 bg-black/50 rounded-full hover:bg-black/70 transition-colors">
-                          <MoreHorizontal className="h-4 w-4 text-white" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => likePost(post.id)}>
-                          <Heart className={`h-4 w-4 mr-2 ${post.is_liked ? 'fill-red-500 text-red-500' : ''}`} />
-                          {post.is_liked ? 'Unlike' : 'Like'}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => pinPost(post.id)}>
-                          <Pin className="h-4 w-4 mr-2" />
-                          {post.is_pinned ? 'Unpin from profile' : 'Pin to profile'}
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem 
-                          onClick={() => deletePost(post.id)}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete post
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </div>
-              </div>
-            ))}
+          <div className="mt-4">
+            <ProfilePostsGrid
+              posts={filteredPosts}
+              isOwnProfile={isOwnProfile}
+              profile={{
+                username: profile.username,
+                avatar_url: profile.avatar_url,
+                display_name: profile.display_name,
+              }}
+              onLike={likePost}
+              onDelete={deletePost}
+              onPin={pinPost}
+            />
           </div>
         )}
       </div>

@@ -12,7 +12,7 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Users
+  Compass
 } from 'lucide-react';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
@@ -33,7 +33,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { icon: Home, label: 'Home', path: '/home' },
   { icon: Search, label: 'Search', path: '/search' },
-  { icon: Users, label: 'Discover', action: 'search' },
+  { icon: Compass, label: 'Discover', path: '/discover' },
   { icon: Video, label: 'Videos', path: '/videos' },
   { icon: MessageCircle, label: 'Messages', path: '/messages' },
   { icon: ShoppingBag, label: 'Marketplace', path: '/marketplace' },
@@ -69,25 +69,6 @@ export function AppSidebar() {
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto scrollbar-hidden">
         {navItems.map((item) => {
           const isActive = item.path ? location.pathname === item.path : false;
-          
-          // Handle special action items
-          if (item.action === 'search') {
-            return (
-              <UserSearchDialog key={item.label}>
-                <button
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative w-full text-left",
-                    "text-sidebar-foreground hover:bg-sidebar-accent"
-                  )}
-                >
-                  <item.icon className="h-5 w-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110" />
-                  {!collapsed && (
-                    <span className="font-medium text-sm">{item.label}</span>
-                  )}
-                </button>
-              </UserSearchDialog>
-            );
-          }
           
           return (
             <NavLink
