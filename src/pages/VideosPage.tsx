@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Heart, MessageCircle, Share2, Bookmark, Music2, Volume2, VolumeX, Play, Pause, Repeat2 } from 'lucide-react';
+import { Heart, MessageCircle, Share2, Bookmark, Music2, Volume2, VolumeX, Play, Pause, Repeat2, ArrowLeft } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -7,6 +7,8 @@ import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useVideoPosts, VideoPost } from '@/hooks/useVideoPosts';
 import { Skeleton } from '@/components/ui/skeleton';
 import { VideoCommentsSheet } from '@/components/VideoCommentsSheet';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { useNavigate } from 'react-router-dom';
 
 function formatNumber(num: number): string {
   if (num >= 1000000) {
@@ -24,9 +26,10 @@ interface VideoCardProps {
   onLike: () => void;
   onBookmark: () => void;
   onCommentClick: () => void;
+  isMobile: boolean;
 }
 
-function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick }: VideoCardProps) {
+function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobile }: VideoCardProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
@@ -101,13 +104,19 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick }: Vide
 
   return (
     <div className="relative h-full w-full bg-black flex items-center justify-center snap-start snap-always">
-      {/* Video Container - Full screen on mobile, aspect ratio on desktop */}
-      <div className="relative h-full w-full md:h-full md:w-auto md:aspect-[9/16] md:max-h-full lg:max-h-full">
+      {/* Video Container */}
+      <div className={cn(
+        "relative h-full w-full",
+        !isMobile && "max-w-md aspect-[9/16] h-auto max-h-[calc(100vh-2rem)]"
+      )}>
         {/* Video */}
         <video
           ref={videoRef}
           src={videoUrl}
-          className="absolute inset-0 h-full w-full object-cover md:rounded-xl"
+          className={cn(
+            "absolute inset-0 h-full w-full object-cover",
+            !isMobile && "rounded-xl"
+          )}
           loop
           muted={isMuted}
           playsInline
@@ -132,12 +141,18 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick }: Vide
         </div>
 
         {/* Gradient overlay for text readability */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 pointer-events-none md:rounded-xl" />
+        <div className={cn(
+          "absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 pointer-events-none",
+          !isMobile && "rounded-xl"
+        )} />
 
-        {/* Mute button */}
+        {/* Mute button - positioned below mobile header safe area */}
         <button
           onClick={toggleMute}
-          className="absolute top-4 right-4 h-10 w-10 rounded-full bg-black/40 flex items-center justify-center active:scale-95 transition-transform"
+          className={cn(
+            "absolute right-4 h-10 w-10 rounded-full bg-black/40 flex items-center justify-center active:scale-95 transition-transform z-10",
+            isMobile ? "top-16" : "top-4"
+          )}
         >
           {isMuted ? (
             <VolumeX className="h-5 w-5 text-white" />
@@ -147,7 +162,10 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick }: Vide
         </button>
 
         {/* Right side actions */}
-        <div className="absolute right-3 bottom-28 md:bottom-24 flex flex-col items-center gap-4">
+        <div className={cn(
+          "absolute right-3 flex flex-col items-center gap-4",
+          isMobile ? "bottom-24" : "bottom-20"
+        )}>
           {/* Like */}
           <button 
             onClick={handleLike}
@@ -213,7 +231,10 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick }: Vide
         </div>
 
         {/* Bottom info - User info and description */}
-        <div className="absolute left-4 right-20 bottom-6 md:bottom-4">
+        <div className={cn(
+          "absolute left-4 right-20",
+          isMobile ? "bottom-20" : "bottom-4"
+        )}>
           {/* User info with follow button */}
           <div className="flex items-center gap-3 mb-3">
             <Avatar className="h-10 w-10 border-2 border-white">
@@ -264,11 +285,17 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick }: Vide
   );
 }
 
-function VideoSkeleton() {
+function VideoSkeleton({ isMobile }: { isMobile: boolean }) {
   return (
     <div className="relative h-full w-full bg-black flex items-center justify-center">
-      <div className="relative h-full w-full md:aspect-[9/16] md:max-h-full">
-        <Skeleton className="absolute inset-0 bg-muted/20 md:rounded-xl" />
+      <div className={cn(
+        "relative h-full w-full",
+        !isMobile && "max-w-md aspect-[9/16] h-auto max-h-[calc(100vh-2rem)]"
+      )}>
+        <Skeleton className={cn(
+          "absolute inset-0 bg-muted/20",
+          !isMobile && "rounded-xl"
+        )} />
         <div className="absolute right-3 bottom-28 flex flex-col items-center gap-4">
           {[...Array(5)].map((_, i) => (
             <Skeleton key={i} className="h-11 w-11 rounded-full bg-muted/20" />
@@ -305,12 +332,19 @@ function EmptyState() {
 }
 
 export default function VideosPage() {
+  const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const { videos, isLoading, likeVideo, toggleBookmark } = useVideoPosts();
   const [activeIndex, setActiveIndex] = useState(0);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { mediumTap } = useHapticFeedback();
+  
+  // Touch gesture tracking
+  const touchStartY = useRef<number>(0);
+  const touchStartTime = useRef<number>(0);
+  const [swipeProgress, setSwipeProgress] = useState(0);
 
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
@@ -325,6 +359,47 @@ export default function VideosPage() {
       setActiveIndex(newIndex);
     }
   }, [activeIndex, videos.length, mediumTap]);
+
+  // Swipe gesture handlers for mobile
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY;
+    touchStartTime.current = Date.now();
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    const deltaY = e.touches[0].clientY - touchStartY.current;
+    const progress = Math.max(-1, Math.min(1, deltaY / 150));
+    setSwipeProgress(progress);
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    const swipeThreshold = 0.3;
+    const timeElapsed = Date.now() - touchStartTime.current;
+    const isQuickSwipe = timeElapsed < 300;
+    
+    if (Math.abs(swipeProgress) > swipeThreshold || (isQuickSwipe && Math.abs(swipeProgress) > 0.1)) {
+      if (swipeProgress < 0 && activeIndex < videos.length - 1) {
+        // Swipe up - next video
+        const nextIndex = activeIndex + 1;
+        setActiveIndex(nextIndex);
+        mediumTap();
+        containerRef.current?.scrollTo({
+          top: nextIndex * (containerRef.current?.clientHeight || 0),
+          behavior: 'smooth'
+        });
+      } else if (swipeProgress > 0 && activeIndex > 0) {
+        // Swipe down - previous video
+        const prevIndex = activeIndex - 1;
+        setActiveIndex(prevIndex);
+        mediumTap();
+        containerRef.current?.scrollTo({
+          top: prevIndex * (containerRef.current?.clientHeight || 0),
+          behavior: 'smooth'
+        });
+      }
+    }
+    setSwipeProgress(0);
+  }, [swipeProgress, activeIndex, videos.length, mediumTap]);
 
   const openComments = (videoId: string) => {
     setSelectedVideoId(videoId);
@@ -343,37 +418,65 @@ export default function VideosPage() {
 
   if (isLoading) {
     return (
-      <div className="fixed inset-0 z-40 bg-black flex items-center justify-center">
-        <VideoSkeleton />
+      <div className={cn(
+        "bg-black flex items-center justify-center",
+        isMobile ? "fixed inset-0 z-40" : "h-[calc(100vh-4rem)] ml-64"
+      )}>
+        <VideoSkeleton isMobile={isMobile} />
       </div>
     );
   }
 
   if (videos.length === 0) {
     return (
-      <div className="fixed inset-0 z-40 bg-black">
+      <div className={cn(
+        "bg-black",
+        isMobile ? "fixed inset-0 z-40" : "h-[calc(100vh-4rem)] ml-64"
+      )}>
         <EmptyState />
       </div>
     );
   }
 
   return (
-    <div 
-      ref={containerRef}
-      className="fixed inset-0 z-40 overflow-y-scroll snap-y snap-mandatory scrollbar-hide bg-black"
-      style={{ scrollSnapType: 'y mandatory' }}
-    >
-      {videos.map((video, index) => (
-        <div key={video.id} className="h-full w-full" style={{ scrollSnapAlign: 'start' }}>
-          <VideoCard
-            video={video}
-            isActive={index === activeIndex}
-            onLike={() => likeVideo(video.id)}
-            onBookmark={() => toggleBookmark(video.id)}
-            onCommentClick={() => openComments(video.id)}
-          />
-        </div>
-      ))}
+    <div className={cn(
+      "bg-black",
+      isMobile ? "fixed inset-0 z-40" : "h-[calc(100vh-4rem)] ml-64 flex items-center justify-center"
+    )}>
+      {/* Mobile back button */}
+      {isMobile && (
+        <button
+          onClick={() => navigate(-1)}
+          className="absolute top-4 left-4 z-50 h-10 w-10 rounded-full bg-black/40 flex items-center justify-center"
+        >
+          <ArrowLeft className="h-5 w-5 text-white" />
+        </button>
+      )}
+
+      <div 
+        ref={containerRef}
+        className={cn(
+          "overflow-y-scroll snap-y snap-mandatory scrollbar-hide",
+          isMobile ? "h-full w-full" : "h-[calc(100vh-4rem)] w-full max-w-md"
+        )}
+        style={{ scrollSnapType: 'y mandatory' }}
+        onTouchStart={isMobile ? handleTouchStart : undefined}
+        onTouchMove={isMobile ? handleTouchMove : undefined}
+        onTouchEnd={isMobile ? handleTouchEnd : undefined}
+      >
+        {videos.map((video, index) => (
+          <div key={video.id} className="h-full w-full" style={{ scrollSnapAlign: 'start' }}>
+            <VideoCard
+              video={video}
+              isActive={index === activeIndex}
+              onLike={() => likeVideo(video.id)}
+              onBookmark={() => toggleBookmark(video.id)}
+              onCommentClick={() => openComments(video.id)}
+              isMobile={isMobile}
+            />
+          </div>
+        ))}
+      </div>
 
       {/* Comments Sheet */}
       <VideoCommentsSheet

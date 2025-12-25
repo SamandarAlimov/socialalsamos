@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { 
   Heart, 
   MessageCircle, 
@@ -13,11 +14,14 @@ import {
   Loader2,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Send,
+  Smile
 } from 'lucide-react';
 import { usePosts, Post } from '@/hooks/usePosts';
 import { useStories, StoryGroup } from '@/hooks/useStories';
 import { useStoryViews } from '@/hooks/useRealtimeCounts';
+import { useRealtimePostCounts } from '@/hooks/useRealtimePostCounts';
 import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
 import { CreatePostForm } from '@/components/CreatePostForm';
@@ -34,8 +38,10 @@ export default function HomePage() {
   const [activeStoryGroup, setActiveStoryGroup] = useState<StoryGroup | null>(null);
   const [activeStoryIndex, setActiveStoryIndex] = useState(0);
   const [showCreateStory, setShowCreateStory] = useState(false);
+  const [storyReply, setStoryReply] = useState('');
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  const storyTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Swipe navigation
   const { swipeOffset, handleTouchStart, handleTouchMove, handleTouchEnd } = useSwipeNavigation();
@@ -55,6 +61,10 @@ export default function HomePage() {
 
   const { storyGroups, isLoading: storiesLoading, refresh: refreshStories } = useStories();
   const { markAsViewed, hasViewedAll } = useStoryViews(user?.id || null);
+
+  // Get post IDs for real-time counts
+  const postIds = useMemo(() => posts.map(p => p.id), [posts]);
+  const { getPostCounts } = useRealtimePostCounts(postIds, user?.id || null);
 
   // Request notification permission on first load
   useEffect(() => {
@@ -85,6 +95,21 @@ export default function HomePage() {
     };
   }, [hasMore, isLoading, loadMore]);
 
+  // Auto-advance story timer
+  useEffect(() => {
+    if (activeStoryGroup && activeStoryGroup.stories[activeStoryIndex]?.media_type !== 'video') {
+      storyTimerRef.current = setTimeout(() => {
+        nextStory();
+      }, 5000);
+    }
+
+    return () => {
+      if (storyTimerRef.current) {
+        clearTimeout(storyTimerRef.current);
+      }
+    };
+  }, [activeStoryGroup, activeStoryIndex]);
+
   const formatPostTime = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -108,6 +133,7 @@ export default function HomePage() {
   const closeStory = () => {
     setActiveStoryGroup(null);
     setActiveStoryIndex(0);
+    setStoryReply('');
   };
 
   const nextStory = () => {
@@ -148,6 +174,13 @@ export default function HomePage() {
     }
   };
 
+  const handleStoryReply = () => {
+    if (!storyReply.trim() || !activeStoryGroup) return;
+    // TODO: Send story reply via messages
+    console.log('Reply to story:', storyReply);
+    setStoryReply('');
+  };
+
   const handleRefresh = async () => {
     await Promise.all([refreshPosts(), refreshStories()]);
   };
@@ -179,16 +212,17 @@ export default function HomePage() {
               <div key={idx} className="flex-1 h-1 bg-white/30 rounded-full overflow-hidden">
                 <div 
                   className={cn(
-                    "h-full bg-white transition-all duration-300",
+                    "h-full bg-white transition-all",
                     idx < activeStoryIndex ? "w-full" : idx === activeStoryIndex ? "w-full animate-story-progress" : "w-0"
                   )}
+                  style={idx === activeStoryIndex ? { animationDuration: '5s' } : undefined}
                 />
               </div>
             ))}
           </div>
 
           {/* Story Header */}
-          <div className="absolute top-10 left-4 flex items-center gap-3 safe-area-top">
+          <div className="absolute top-10 left-4 flex items-center gap-3 safe-area-top z-10">
             <Avatar className="h-10 w-10 border-2 border-white">
               <AvatarImage src={activeStoryGroup.avatar_url || ''} />
               <AvatarFallback>{activeStoryGroup.display_name?.[0] || activeStoryGroup.username?.[0] || 'U'}</AvatarFallback>
@@ -204,13 +238,16 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Story Content */}
-          <div className="relative w-full h-full md:max-w-md md:aspect-[9/16] md:h-auto bg-muted md:rounded-xl overflow-hidden">
+          {/* Story Content - Fixed sizing for mobile */}
+          <div className={cn(
+            "relative bg-black overflow-hidden flex items-center justify-center",
+            isMobile ? "w-full h-full" : "w-full max-w-md aspect-[9/16] rounded-xl"
+          )}>
             {activeStoryGroup.stories[activeStoryIndex] && (
               activeStoryGroup.stories[activeStoryIndex].media_type === 'video' ? (
                 <video 
                   src={activeStoryGroup.stories[activeStoryIndex].media_url}
-                  className="w-full h-full object-cover"
+                  className="max-w-full max-h-full object-contain"
                   autoPlay
                   playsInline
                   onEnded={nextStory}
@@ -219,14 +256,14 @@ export default function HomePage() {
                 <img 
                   src={activeStoryGroup.stories[activeStoryIndex].media_url}
                   alt="Story"
-                  className="w-full h-full object-cover"
+                  className="max-w-full max-h-full object-contain"
                 />
               )
             )}
             
             {/* Caption */}
             {activeStoryGroup.stories[activeStoryIndex]?.caption && (
-              <div className="absolute bottom-4 left-4 right-4 text-white text-center safe-area-bottom">
+              <div className="absolute bottom-20 left-4 right-4 text-white text-center">
                 <p className="bg-black/50 rounded-lg px-4 py-2 text-sm">
                   {activeStoryGroup.stories[activeStoryIndex].caption}
                 </p>
@@ -234,16 +271,41 @@ export default function HomePage() {
             )}
           </div>
 
+          {/* Story Reply Input */}
+          <div className="absolute bottom-4 left-4 right-4 flex items-center gap-2 safe-area-bottom z-10">
+            <div className="flex-1 relative">
+              <Input
+                value={storyReply}
+                onChange={(e) => setStoryReply(e.target.value)}
+                placeholder="Send message..."
+                className="bg-white/10 border-white/20 text-white placeholder:text-white/50 pr-10"
+                onKeyDown={(e) => e.key === 'Enter' && handleStoryReply()}
+              />
+              <button className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white">
+                <Smile className="h-5 w-5" />
+              </button>
+            </div>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="text-white hover:bg-white/20"
+              onClick={handleStoryReply}
+              disabled={!storyReply.trim()}
+            >
+              <Send className="h-5 w-5" />
+            </Button>
+          </div>
+
           {/* Navigation - Touch areas */}
           <div 
             onClick={prevStory}
-            className="absolute left-0 top-0 bottom-0 w-1/3 md:w-auto md:left-4 md:top-1/2 md:-translate-y-1/2 flex items-center justify-start md:justify-center"
+            className="absolute left-0 top-20 bottom-20 w-1/3 md:w-auto md:left-4 md:top-1/2 md:-translate-y-1/2 flex items-center justify-start md:justify-center cursor-pointer"
           >
             <ChevronLeft className="h-8 w-8 text-white hidden md:block" />
           </div>
           <div 
             onClick={nextStory}
-            className="absolute right-0 top-0 bottom-0 w-1/3 md:w-auto md:right-4 md:top-1/2 md:-translate-y-1/2 flex items-center justify-end md:justify-center"
+            className="absolute right-0 top-20 bottom-20 w-1/3 md:w-auto md:right-4 md:top-1/2 md:-translate-y-1/2 flex items-center justify-end md:justify-center cursor-pointer"
           >
             <ChevronRight className="h-8 w-8 text-white hidden md:block" />
           </div>
@@ -334,6 +396,7 @@ export default function HomePage() {
             onLike={() => likePost(post.id)}
             formatTime={formatPostTime}
             isMobile={isMobile}
+            realtimeCounts={getPostCounts(post.id)}
           />
         ))}
 
@@ -366,20 +429,34 @@ export default function HomePage() {
   return pageContent;
 }
 
+interface RealtimePostCounts {
+  id: string;
+  likes_count: number;
+  comments_count: number;
+  is_liked?: boolean;
+}
+
 function PostCard({ 
   post, 
   onLike, 
   formatTime,
-  isMobile
+  isMobile,
+  realtimeCounts
 }: { 
   post: Post; 
   onLike: () => void;
   formatTime: (date: string) => string;
   isMobile: boolean;
+  realtimeCounts: RealtimePostCounts;
 }) {
   const navigate = useNavigate();
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [showComments, setShowComments] = useState(false);
+
+  // Use real-time counts
+  const likesCount = realtimeCounts.likes_count;
+  const commentsCount = realtimeCounts.comments_count;
+  const isLiked = realtimeCounts.is_liked ?? post.is_liked;
 
   const handleUserClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -467,11 +544,11 @@ function PostCard({
             onClick={onLike}
             className={cn(
               "flex items-center gap-1.5 md:gap-2 transition-colors touch-feedback",
-              post.is_liked ? 'text-red-500' : 'text-muted-foreground hover:text-red-500'
+              isLiked ? 'text-red-500' : 'text-muted-foreground hover:text-red-500'
             )}
           >
-            <Heart className={cn("h-5 w-5 md:h-5 md:w-5", post.is_liked && 'fill-current')} />
-            <span className="text-xs md:text-sm font-medium">{post.likes_count}</span>
+            <Heart className={cn("h-5 w-5 md:h-5 md:w-5", isLiked && 'fill-current')} />
+            <span className="text-xs md:text-sm font-medium">{likesCount}</span>
           </button>
           <button 
             onClick={() => setShowComments(!showComments)}
@@ -481,7 +558,7 @@ function PostCard({
             )}
           >
             <MessageCircle className={cn("h-5 w-5 md:h-5 md:w-5", showComments && 'fill-current')} />
-            <span className="text-xs md:text-sm font-medium">{post.comments_count}</span>
+            <span className="text-xs md:text-sm font-medium">{commentsCount}</span>
           </button>
           <button className="flex items-center gap-1.5 md:gap-2 text-muted-foreground hover:text-primary transition-colors touch-feedback">
             <Share2 className="h-5 w-5 md:h-5 md:w-5" />
