@@ -1,4 +1,4 @@
-import { format, isToday, isYesterday, differenceInMinutes, differenceInHours } from 'date-fns';
+import { format, isToday, isYesterday, differenceInMinutes, differenceInHours, differenceInDays } from 'date-fns';
 
 export function formatLastSeen(lastSeenDate: string | null | undefined, isOnline?: boolean): string {
   if (isOnline) {
@@ -14,6 +14,7 @@ export function formatLastSeen(lastSeenDate: string | null | undefined, isOnline
   
   const minutesAgo = differenceInMinutes(now, date);
   const hoursAgo = differenceInHours(now, date);
+  const daysAgo = differenceInDays(now, date);
   
   // Within last minute
   if (minutesAgo < 1) {
@@ -22,26 +23,31 @@ export function formatLastSeen(lastSeenDate: string | null | undefined, isOnline
   
   // Within last hour
   if (minutesAgo < 60) {
-    return `last seen ${minutesAgo} minute${minutesAgo === 1 ? '' : 's'} ago`;
+    return `last seen ${minutesAgo}m ago`;
   }
   
-  // Within last few hours
-  if (hoursAgo < 4) {
-    return `last seen ${hoursAgo} hour${hoursAgo === 1 ? '' : 's'} ago`;
+  // Within last few hours today
+  if (hoursAgo < 4 && isToday(date)) {
+    return `last seen ${hoursAgo}h ago`;
   }
   
-  // Today
+  // Today - show time only
   if (isToday(date)) {
-    return `last seen at ${format(date, 'HH:mm')}`;
+    return format(date, 'HH:mm');
   }
   
   // Yesterday
   if (isYesterday(date)) {
-    return `last seen yesterday at ${format(date, 'HH:mm')}`;
+    return `yesterday ${format(date, 'HH:mm')}`;
   }
   
-  // Older - show full date and time
-  return `last seen at ${format(date, 'HH:mm')} · ${format(date, 'dd/MM/yyyy')}`;
+  // Within last week
+  if (daysAgo < 7) {
+    return `${daysAgo}d ago ${format(date, 'HH:mm')}`;
+  }
+  
+  // Older - show time and full date (HH:mm dd/MM/yyyy format)
+  return `${format(date, 'HH:mm')} ${format(date, 'dd/MM/yyyy')}`;
 }
 
 export function formatMessageTime(dateString: string): string {

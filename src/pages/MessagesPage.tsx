@@ -17,6 +17,7 @@ import { useWebRTC } from '@/hooks/useWebRTC';
 import { useVideoCall } from '@/hooks/useVideoCall';
 import { useIncomingCalls } from '@/hooks/useIncomingCalls';
 import { usePinnedMessages } from '@/hooks/usePinnedMessages';
+import { useReadReceipts } from '@/hooks/useReadReceipts';
 import { useToast } from '@/hooks/use-toast';
 
 // Components
@@ -83,6 +84,9 @@ export default function MessagesPage() {
     deleteMessage,
     setTyping 
   } = useMessages(selectedConversation?.id || null);
+
+  // Read receipts
+  const { markAsRead, isMessageRead } = useReadReceipts(selectedConversation?.id || null);
 
   // Video call management
   const {
@@ -199,7 +203,17 @@ export default function MessagesPage() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, scrollToBottom]);
+    
+    // Mark messages as read when viewing them
+    if (messages.length > 0 && user) {
+      const otherUserMessages = messages
+        .filter(m => m.sender_id !== user.id)
+        .map(m => m.id);
+      if (otherUserMessages.length > 0) {
+        markAsRead(otherUserMessages);
+      }
+    }
+  }, [messages, scrollToBottom, markAsRead, user]);
 
   // Tab definitions
   const tabs: { id: MessageTab; label: string }[] = [
@@ -656,12 +670,18 @@ export default function MessagesPage() {
                         {group.messages.map((message, idx) => {
                           const prevMessage = group.messages[idx - 1];
                           const showAvatar = !prevMessage || prevMessage.sender_id !== message.sender_id;
+                          const isMine = message.sender_id === user?.id;
+                          const readByOther = isMine && message.sender_id ? isMessageRead(message.id, message.sender_id) : false;
                           
                           return (
                             <EnhancedMessageBubble
                               key={message.id}
-                              message={message}
-                              isMine={message.sender_id === user?.id}
+                              message={{
+                                ...message,
+                                is_read: readByOther,
+                                status: readByOther ? 'read' : message.status,
+                              }}
+                              isMine={isMine}
                               isGroup={selectedConversation.type === 'group'}
                               onReply={handleReply}
                               onForward={handleForward}
