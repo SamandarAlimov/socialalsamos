@@ -22,6 +22,7 @@ import { usePosts, Post } from '@/hooks/usePosts';
 import { useStories, StoryGroup } from '@/hooks/useStories';
 import { useStoryViews } from '@/hooks/useRealtimeCounts';
 import { useRealtimePostCounts } from '@/hooks/useRealtimePostCounts';
+import { useLiveStreams } from '@/hooks/useLiveStream';
 import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
 import { CreatePostForm } from '@/components/CreatePostForm';
@@ -31,6 +32,8 @@ import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { GoLiveButton } from '@/components/live/GoLiveButton';
+import { LiveStreamCard } from '@/components/live/LiveStreamCard';
 
 export default function HomePage() {
   const { user, profile } = useAuth();
@@ -61,6 +64,7 @@ export default function HomePage() {
 
   const { storyGroups, isLoading: storiesLoading, refresh: refreshStories } = useStories();
   const { markAsViewed, hasViewedAll } = useStoryViews(user?.id || null);
+  const { liveStreams } = useLiveStreams();
 
   // Get post IDs for real-time counts
   const postIds = useMemo(() => posts.map(p => p.id), [posts]);
@@ -344,6 +348,14 @@ export default function HomePage() {
               Your Story
             </span>
           </button>
+
+          {/* Go Live Button */}
+          <GoLiveButton variant="story" />
+
+          {/* Live Streams */}
+          {liveStreams.map((stream) => (
+            <LiveStreamCard key={stream.id} stream={stream} variant="story" />
+          ))}
 
           {/* Story Groups */}
           {storiesLoading ? (
