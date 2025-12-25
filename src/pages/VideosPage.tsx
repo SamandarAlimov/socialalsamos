@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Heart, MessageCircle, Share2, Bookmark, Music2, Volume2, VolumeX, Play, Pause, Repeat2, UserPlus } from 'lucide-react';
+import { Heart, MessageCircle, Share2, Bookmark, Music2, Volume2, VolumeX, Play, Pause, Repeat2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useVideoPosts, VideoPost } from '@/hooks/useVideoPosts';
 import { Skeleton } from '@/components/ui/skeleton';
+import { VideoCommentsSheet } from '@/components/VideoCommentsSheet';
 
 function formatNumber(num: number): string {
   if (num >= 1000000) {
@@ -22,9 +23,10 @@ interface VideoCardProps {
   isActive: boolean;
   onLike: () => void;
   onBookmark: () => void;
+  onCommentClick: () => void;
 }
 
-function VideoCard({ video, isActive, onLike, onBookmark }: VideoCardProps) {
+function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick }: VideoCardProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
@@ -161,7 +163,14 @@ function VideoCard({ video, isActive, onLike, onBookmark }: VideoCardProps) {
           </button>
 
           {/* Comments */}
-          <button className="flex flex-col items-center gap-1 active:scale-90 transition-transform">
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              lightTap();
+              onCommentClick();
+            }}
+            className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
+          >
             <div className="h-11 w-11 rounded-full bg-black/40 flex items-center justify-center text-white">
               <MessageCircle className="h-6 w-6" />
             </div>
@@ -298,6 +307,8 @@ function EmptyState() {
 export default function VideosPage() {
   const { videos, isLoading, likeVideo, toggleBookmark } = useVideoPosts();
   const [activeIndex, setActiveIndex] = useState(0);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { mediumTap } = useHapticFeedback();
 
@@ -314,6 +325,13 @@ export default function VideosPage() {
       setActiveIndex(newIndex);
     }
   }, [activeIndex, videos.length, mediumTap]);
+
+  const openComments = (videoId: string) => {
+    setSelectedVideoId(videoId);
+    setCommentsOpen(true);
+  };
+
+  const selectedVideo = videos.find(v => v.id === selectedVideoId);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -352,9 +370,18 @@ export default function VideosPage() {
             isActive={index === activeIndex}
             onLike={() => likeVideo(video.id)}
             onBookmark={() => toggleBookmark(video.id)}
+            onCommentClick={() => openComments(video.id)}
           />
         </div>
       ))}
+
+      {/* Comments Sheet */}
+      <VideoCommentsSheet
+        isOpen={commentsOpen}
+        onClose={() => setCommentsOpen(false)}
+        postId={selectedVideoId || ''}
+        commentsCount={selectedVideo?.comments_count || 0}
+      />
     </div>
   );
 }
