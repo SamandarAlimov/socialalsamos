@@ -101,8 +101,8 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick }: Vide
 
   return (
     <div className="relative h-full w-full bg-black flex items-center justify-center snap-start snap-always">
-      {/* Video Container - Fixed aspect ratio for desktop/tablet */}
-      <div className="relative h-full w-full md:h-full md:w-auto md:aspect-[9/16] md:max-h-[calc(100vh-5rem)] lg:max-h-[calc(100vh-4rem)]">
+      {/* Video Container - Full screen on mobile, aspect ratio on desktop */}
+      <div className="relative h-full w-full md:h-full md:w-auto md:aspect-[9/16] md:max-h-full lg:max-h-full">
         {/* Video */}
         <video
           ref={videoRef}
@@ -267,7 +267,7 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick }: Vide
 function VideoSkeleton() {
   return (
     <div className="relative h-full w-full bg-black flex items-center justify-center">
-      <div className="relative h-full w-full md:h-full md:w-auto md:aspect-[9/16] md:max-h-[calc(100vh-5rem)]">
+      <div className="relative h-full w-full md:aspect-[9/16] md:max-h-full">
         <Skeleton className="absolute inset-0 bg-muted/20 md:rounded-xl" />
         <div className="absolute right-3 bottom-28 flex flex-col items-center gap-4">
           {[...Array(5)].map((_, i) => (
@@ -343,7 +343,7 @@ export default function VideosPage() {
 
   if (isLoading) {
     return (
-      <div className="h-[calc(100vh-4rem)] md:h-[calc(100vh-4rem)] overflow-hidden bg-black flex items-center justify-center">
+      <div className="fixed inset-0 z-40 bg-black flex items-center justify-center">
         <VideoSkeleton />
       </div>
     );
@@ -351,7 +351,7 @@ export default function VideosPage() {
 
   if (videos.length === 0) {
     return (
-      <div className="h-[calc(100vh-4rem)] md:h-[calc(100vh-4rem)] overflow-hidden">
+      <div className="fixed inset-0 z-40 bg-black">
         <EmptyState />
       </div>
     );
@@ -360,7 +360,7 @@ export default function VideosPage() {
   return (
     <div 
       ref={containerRef}
-      className="h-[calc(100vh-4rem)] md:h-[calc(100vh-4rem)] overflow-y-scroll snap-y snap-mandatory scrollbar-hide bg-black"
+      className="fixed inset-0 z-40 overflow-y-scroll snap-y snap-mandatory scrollbar-hide bg-black"
       style={{ scrollSnapType: 'y mandatory' }}
     >
       {videos.map((video, index) => (
