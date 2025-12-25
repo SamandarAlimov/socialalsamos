@@ -11,6 +11,7 @@ import {
   Share2,
   Bookmark
 } from 'lucide-react';
+import { PostViewModal } from '@/components/PostViewModal';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -57,7 +58,13 @@ export function ProfilePostsGrid({
   onPin 
 }: ProfilePostsGridProps) {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [selectedPost, setSelectedPost] = useState<string | null>(null);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [showPostModal, setShowPostModal] = useState(false);
+
+  const handlePostClick = (post: Post) => {
+    setSelectedPost(post);
+    setShowPostModal(true);
+  };
 
   const formatCount = (count: number) => {
     if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
@@ -105,7 +112,7 @@ export function ProfilePostsGrid({
             <div 
               key={post.id} 
               className="relative aspect-square bg-muted rounded-lg overflow-hidden group cursor-pointer"
-              onClick={() => setSelectedPost(selectedPost === post.id ? null : post.id)}
+              onClick={() => handlePostClick(post)}
             >
               {post.media_urls && post.media_urls.length > 0 ? (
                 post.media_type === 'video' ? (
@@ -310,6 +317,21 @@ export function ProfilePostsGrid({
             </div>
           ))}
         </div>
+      )}
+
+      {/* Post View Modal */}
+      {selectedPost && (
+        <PostViewModal
+          post={selectedPost}
+          profile={profile}
+          open={showPostModal}
+          onOpenChange={(open) => {
+            setShowPostModal(open);
+            if (!open) setSelectedPost(null);
+          }}
+          onLike={() => onLike(selectedPost.id)}
+          isOwnProfile={isOwnProfile}
+        />
       )}
     </div>
   );
