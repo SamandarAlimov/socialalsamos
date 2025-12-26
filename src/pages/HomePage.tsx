@@ -32,7 +32,6 @@ import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { GoLiveButton } from '@/components/live/GoLiveButton';
 import { LiveStreamCard } from '@/components/live/LiveStreamCard';
 
 export default function HomePage() {
@@ -348,9 +347,6 @@ export default function HomePage() {
               Your Story
             </span>
           </button>
-
-          {/* Go Live Button */}
-          <GoLiveButton variant="story" />
 
           {/* Live Streams */}
           {liveStreams.map((stream) => (

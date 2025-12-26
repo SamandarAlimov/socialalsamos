@@ -1,39 +1,104 @@
-import { useState, useEffect, useRef } from 'react';
-import { X, Camera, CameraOff, Mic, MicOff, SwitchCamera, Users, Clock, Radio, MessageCircle } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { X, Camera, CameraOff, Mic, MicOff, SwitchCamera, Users, Clock, Radio, MessageCircle, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import { useLiveStreamBroadcast, useLiveStreamComments, useLiveStreamReactions, useLiveStreamViewer } from '@/hooks/useLiveStream';
+import { useLiveStreamComments, useLiveStreamReactions, useLiveStreamViewer } from '@/hooks/useLiveStream';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
+import { toast } from 'sonner';
 
 interface LiveStreamBroadcastProps {
   onClose: () => void;
   initialTitle?: string;
 }
 
+interface LiveStream {
+  id: string;
+  user_id: string;
+  title: string | null;
+  status: 'live' | 'ended';
+  viewer_count: number;
+  peak_viewers: number;
+  started_at: string;
+  ended_at: string | null;
+}
+
 export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadcastProps) {
-  const { profile } = useAuth();
-  const { stream, isLive, localStream, startBroadcast, endBroadcast } = useLiveStreamBroadcast();
-  const { comments } = useLiveStreamComments(stream?.id || null);
-  const { reactions } = useLiveStreamReactions(stream?.id || null);
-  const { viewerCount } = useLiveStreamViewer(stream?.id || null);
+  const { user, profile } = useAuth();
   
   const [title, setTitle] = useState(initialTitle || '');
+  const [isLive, setIsLive] = useState(false);
+  const [stream, setStream] = useState<LiveStream | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [showComments, setShowComments] = useState(true);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [isStarting, setIsStarting] = useState(false);
+  
   const videoRef = useRef<HTMLVideoElement>(null);
   const commentsRef = useRef<HTMLDivElement>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
 
-  // Connect video to stream
-  useEffect(() => {
-    if (videoRef.current && localStream) {
-      videoRef.current.srcObject = localStream;
+  const { comments } = useLiveStreamComments(stream?.id || null);
+  const { reactions } = useLiveStreamReactions(stream?.id || null);
+  const { viewerCount } = useLiveStreamViewer(stream?.id || null);
+
+  // Initialize camera on mount
+  const initializeCamera = useCallback(async () => {
+    try {
+      setIsInitializing(true);
+      
+      // Stop any existing stream
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { 
+          facingMode: facingMode, 
+          width: { ideal: 1280 }, 
+          height: { ideal: 720 } 
+        },
+        audio: true,
+      });
+
+      localStreamRef.current = mediaStream;
+      
+      // Connect to video element
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+      }
+      
+      setIsInitializing(false);
+    } catch (error: any) {
+      console.error('Error initializing camera:', error);
+      toast.error('Failed to access camera: ' + error.message);
+      setIsInitializing(false);
     }
-  }, [localStream]);
+  }, [facingMode]);
+
+  // Initialize on mount
+  useEffect(() => {
+    initializeCamera();
+    
+    return () => {
+      // Cleanup on unmount
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
+
+  // Update video element when ref changes
+  useEffect(() => {
+    if (videoRef.current && localStreamRef.current) {
+      videoRef.current.srcObject = localStreamRef.current;
+    }
+  }, [isLive]);
 
   // Auto-scroll comments
   useEffect(() => {
@@ -42,18 +107,137 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
     }
   }, [comments]);
 
+  // Cleanup on page unload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (stream && isLive) {
+        // Stop media stream
+        if (localStreamRef.current) {
+          localStreamRef.current.getTracks().forEach(track => track.stop());
+        }
+        
+        // Use sendBeacon for reliable cleanup
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/live_streams?id=eq.${stream.id}`;
+        const headers = {
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          'Prefer': 'return=minimal'
+        };
+        
+        const body = JSON.stringify({ status: 'ended', ended_at: new Date().toISOString() });
+        
+        // Create a Blob for sendBeacon
+        const blob = new Blob([body], { type: 'application/json' });
+        navigator.sendBeacon && navigator.sendBeacon(url, blob);
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [stream, isLive]);
+
   const handleStartLive = async () => {
-    await startBroadcast(title || 'Live Stream');
+    if (!user) {
+      toast.error('You must be logged in to go live');
+      return;
+    }
+
+    setIsStarting(true);
+
+    try {
+      // First end any existing live streams
+      await supabase
+        .from('live_streams')
+        .update({
+          status: 'ended',
+          ended_at: new Date().toISOString(),
+        })
+        .eq('user_id', user.id)
+        .eq('status', 'live');
+
+      // Create live stream record
+      const { data, error } = await supabase
+        .from('live_streams')
+        .insert({
+          user_id: user.id,
+          title: title || 'Live Stream',
+          status: 'live',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setStream(data as LiveStream);
+      setIsLive(true);
+
+      toast.success('You are now LIVE!');
+    } catch (error: any) {
+      console.error('Error starting broadcast:', error);
+      toast.error(error.message || 'Failed to start broadcast');
+    } finally {
+      setIsStarting(false);
+    }
   };
 
-  const handleEndLive = () => {
-    endBroadcast();
-    onClose();
+  const handleEndLive = async () => {
+    try {
+      // Stop media stream
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
+        localStreamRef.current = null;
+      }
+
+      // Update stream status
+      if (stream) {
+        await supabase
+          .from('live_streams')
+          .update({
+            status: 'ended',
+            ended_at: new Date().toISOString(),
+          })
+          .eq('id', stream.id);
+      }
+      
+      // Also ensure all user's streams are ended
+      if (user) {
+        await supabase
+          .from('live_streams')
+          .update({
+            status: 'ended',
+            ended_at: new Date().toISOString(),
+          })
+          .eq('user_id', user.id)
+          .eq('status', 'live');
+      }
+
+      toast.success('Live ended');
+      onClose();
+    } catch (error) {
+      console.error('Error ending broadcast:', error);
+      onClose();
+    }
+  };
+
+  const handleClose = () => {
+    // Stop media stream
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
+    }
+    
+    // If live, end the broadcast
+    if (isLive && stream) {
+      handleEndLive();
+    } else {
+      onClose();
+    }
   };
 
   const toggleMute = () => {
-    if (localStream) {
-      localStream.getAudioTracks().forEach(track => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getAudioTracks().forEach(track => {
         track.enabled = isMuted;
       });
       setIsMuted(!isMuted);
@@ -61,8 +245,8 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
   };
 
   const toggleCamera = () => {
-    if (localStream) {
-      localStream.getVideoTracks().forEach(track => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getVideoTracks().forEach(track => {
         track.enabled = !isCameraOn;
       });
       setIsCameraOn(!isCameraOn);
@@ -70,29 +254,37 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
   };
 
   const switchCamera = async () => {
-    if (!localStream) return;
-    
-    // Stop current video tracks
-    localStream.getVideoTracks().forEach(track => track.stop());
-    
-    // Get new stream with opposite facing mode
     const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
+    setFacingMode(newFacingMode);
+    
+    // Reinitialize with new facing mode
     try {
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+
       const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: newFacingMode, width: 1280, height: 720 },
-        audio: false,
+        video: { 
+          facingMode: newFacingMode, 
+          width: { ideal: 1280 }, 
+          height: { ideal: 720 } 
+        },
+        audio: true,
       });
       
-      const newVideoTrack = newStream.getVideoTracks()[0];
-      const sender = localStream.getVideoTracks()[0];
+      localStreamRef.current = newStream;
       
-      // Replace the video track
-      localStream.removeTrack(sender);
-      localStream.addTrack(newVideoTrack);
+      if (videoRef.current) {
+        videoRef.current.srcObject = newStream;
+      }
       
-      setFacingMode(newFacingMode);
+      // Maintain mute state
+      if (isMuted) {
+        newStream.getAudioTracks().forEach(track => { track.enabled = false; });
+      }
     } catch (error) {
       console.error('Error switching camera:', error);
+      toast.error('Failed to switch camera');
     }
   };
 
@@ -101,8 +293,8 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
     return (
       <div className="fixed inset-0 z-50 bg-black flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-4">
-          <button onClick={onClose} className="text-white">
+        <div className="flex items-center justify-between p-4 safe-area-top">
+          <button onClick={handleClose} className="text-white">
             <X className="h-6 w-6" />
           </button>
           <span className="text-white font-semibold">New Live Video</span>
@@ -111,19 +303,34 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
 
         {/* Preview */}
         <div className="flex-1 relative">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="absolute inset-0 w-full h-full object-cover"
-          />
+          {isInitializing ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-black">
+              <Loader2 className="h-8 w-8 animate-spin text-white" />
+            </div>
+          ) : (
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="absolute inset-0 w-full h-full object-cover"
+              style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
+            />
+          )}
           
           {/* Overlay */}
           <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/80" />
           
+          {/* Camera switch button */}
+          <button
+            onClick={switchCamera}
+            className="absolute top-4 right-4 h-10 w-10 rounded-full bg-white/20 flex items-center justify-center"
+          >
+            <SwitchCamera className="h-5 w-5 text-white" />
+          </button>
+          
           {/* Title input */}
-          <div className="absolute bottom-0 left-0 right-0 p-4">
+          <div className="absolute bottom-0 left-0 right-0 p-4 safe-area-bottom">
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -133,9 +340,14 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
             
             <Button
               onClick={handleStartLive}
+              disabled={isStarting || isInitializing}
               className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-6"
             >
-              <Radio className="h-5 w-5 mr-2" />
+              {isStarting ? (
+                <Loader2 className="h-5 w-5 animate-spin mr-2" />
+              ) : (
+                <Radio className="h-5 w-5 mr-2" />
+              )}
               Go Live
             </Button>
           </div>
@@ -161,7 +373,7 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
       <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/80 pointer-events-none" />
 
       {/* Header */}
-      <div className="relative z-10 p-4">
+      <div className="relative z-10 p-4 safe-area-top">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Avatar className="h-10 w-10 border-2 border-red-500">
@@ -254,7 +466,7 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
       )}
 
       {/* Bottom controls */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 flex items-center justify-center gap-4">
+      <div className="absolute bottom-0 left-0 right-0 p-4 safe-area-bottom flex items-center justify-center gap-4">
         <button
           onClick={toggleMute}
           className={cn(
