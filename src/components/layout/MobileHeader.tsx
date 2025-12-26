@@ -8,7 +8,7 @@ import {
   ShoppingBag, 
   Settings, 
   LogOut,
-  Users,
+  Compass,
   Bell,
   MapPin
 } from 'lucide-react';
@@ -35,7 +35,7 @@ interface NavItem {
 
 const menuItems: NavItem[] = [
   { icon: Search, label: 'Search', path: '/search' },
-  { icon: Users, label: 'Discover', action: 'search' },
+  { icon: Compass, label: 'Discover', path: '/discover' },
   { icon: MapPin, label: 'Map', path: '/map' },
   { icon: Video, label: 'Videos', path: '/videos' },
   { icon: ShoppingBag, label: 'Marketplace', path: '/marketplace' },
