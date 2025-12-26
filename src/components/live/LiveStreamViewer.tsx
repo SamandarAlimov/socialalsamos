@@ -49,15 +49,24 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
   useEffect(() => {
     if (stream && stream.status === 'live' && !isConnected && !isConnecting) {
       console.log('[Viewer] Connecting to WebRTC stream');
-      connectWebRTC();
+      // Small delay to ensure broadcaster is ready
+      const timer = setTimeout(() => {
+        connectWebRTC();
+      }, 1000);
+      return () => clearTimeout(timer);
     }
   }, [stream, isConnected, isConnecting, connectWebRTC]);
 
   // Connect remote stream to video element
   useEffect(() => {
     if (videoRef.current && remoteStream) {
-      console.log('[Viewer] Setting remote stream to video element');
+      console.log('[Viewer] Setting remote stream to video element, tracks:', remoteStream.getTracks().length);
       videoRef.current.srcObject = remoteStream;
+      
+      // Force play
+      videoRef.current.play().catch(err => {
+        console.log('[Viewer] Auto-play failed, user interaction needed:', err);
+      });
     }
   }, [remoteStream]);
 

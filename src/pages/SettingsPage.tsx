@@ -21,7 +21,8 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
-  Save
+  Save,
+  BadgeCheck
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -44,6 +45,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { formatDistanceToNow } from 'date-fns';
+import { VerificationRequestDialog } from '@/components/profile/VerificationRequestDialog';
 
 interface Profile {
   display_name: string | null;
@@ -71,6 +73,7 @@ export default function SettingsPage() {
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [logoutAllDialogOpen, setLogoutAllDialogOpen] = useState(false);
+  const [verificationDialogOpen, setVerificationDialogOpen] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -298,6 +301,24 @@ export default function SettingsPage() {
             </Button>
           </div>
 
+          {/* Verification Request */}
+          <div className="bg-card rounded-xl border border-border p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <BadgeCheck className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold">Get Verified</h3>
+                  <p className="text-sm text-muted-foreground">Request a verified badge for your account</p>
+                </div>
+              </div>
+              <Button variant="outline" onClick={() => setVerificationDialogOpen(true)}>
+                Request
+              </Button>
+            </div>
+          </div>
+
           {/* Logout */}
           <div className="pt-4">
             <Button 
@@ -309,6 +330,11 @@ export default function SettingsPage() {
               Log Out
             </Button>
           </div>
+
+          <VerificationRequestDialog 
+            open={verificationDialogOpen} 
+            onOpenChange={setVerificationDialogOpen} 
+          />
         </TabsContent>
 
         {/* Privacy Tab */}
