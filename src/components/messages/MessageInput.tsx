@@ -3,8 +3,6 @@ import { Button } from '@/components/ui/button';
 import { 
   Send, 
   Paperclip, 
-  Smile, 
-  Mic, 
   X, 
   Image as ImageIcon, 
   FileText, 
@@ -16,12 +14,10 @@ import {
   Strikethrough,
   Code,
   Quote,
-  Video,
 } from 'lucide-react';
 import { EmojiPicker } from '@/components/EmojiPicker';
 import { FileUploadButton } from '@/components/FileUploadButton';
-import { VoiceMessageRecorder } from '@/components/VoiceMessageRecorder';
-import { VideoMessageRecorder } from './VideoMessageRecorder';
+import { MediaRecorderToggle } from './MediaRecorderToggle';
 import { LocationShareButton } from './LocationShareButton';
 import { cn } from '@/lib/utils';
 import {
@@ -156,7 +152,6 @@ export function MessageInput({
 
   const attachmentOptions = [
     { icon: ImageIcon, label: 'Photo or Video', accept: 'image/*,video/*' },
-    { icon: Video, label: 'Record Video', isVideoRecord: true },
     { icon: FileText, label: 'Document', accept: '.pdf,.doc,.docx,.xls,.xlsx,.txt' },
     { icon: UserIcon, label: 'Contact', onClick: () => {} },
     { icon: Sticker, label: 'Sticker', onClick: () => {} },
@@ -204,23 +199,13 @@ export function MessageInput({
           </PopoverTrigger>
           <PopoverContent className="w-56 p-2" align="start">
             {attachmentOptions.map((option) => (
-              option.isVideoRecord ? (
-                <div key={option.label} className="w-full">
-                  <VideoMessageRecorder
-                    onSend={(url, duration) => {
-                      onSend(`Video message (${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})`, url, 'video');
-                    }}
-                  />
-                </div>
-              ) : (
-                <button
-                  key={option.label}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-accent transition-colors text-left"
-                >
-                  <option.icon className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">{option.label}</span>
-                </button>
-              )
+              <button
+                key={option.label}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-accent transition-colors text-left"
+              >
+                <option.icon className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">{option.label}</span>
+              </button>
             ))}
             {onShareLocation && (
               <LocationShareButton onShareLocation={onShareLocation} />
@@ -261,7 +246,7 @@ export function MessageInput({
           </div>
         </div>
 
-        {/* Send / Voice Button */}
+        {/* Send / Voice-Video Button */}
         {message.trim() || pendingAttachment ? (
           <Button 
             variant="default" 
@@ -273,9 +258,10 @@ export function MessageInput({
             <Send className="h-5 w-5" />
           </Button>
         ) : (
-          <VoiceMessageRecorder 
-            onSend={(url, duration) => {
-              onSend(`Voice message (${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})`, url, 'audio');
+          <MediaRecorderToggle 
+            onSend={(url, duration, type) => {
+              const durationStr = `${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')}`;
+              onSend(`${type === 'video' ? 'Video' : 'Voice'} message (${durationStr})`, url, type);
             }}
           />
         )}

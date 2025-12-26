@@ -45,7 +45,8 @@ import {
   Filter,
   RotateCcw,
   ZoomIn,
-  Trash2
+  Trash2,
+  Radio
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -62,7 +63,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { EmojiPicker } from '@/components/EmojiPicker';
-
+import { LiveStreamBroadcast } from '@/components/live/LiveStreamBroadcast';
 // Predefined music tracks (in a real app, these would come from a backend)
 const MUSIC_TRACKS = [
   { id: '1', name: 'Chill Vibes', artist: 'Alsamos Music', duration: 30, url: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3' },
@@ -102,7 +103,8 @@ export default function CreatePage() {
   const { createPost } = usePosts();
 
   // State
-  const [activeTab, setActiveTab] = useState<'post' | 'story' | 'reel'>('post');
+  const [activeTab, setActiveTab] = useState<'post' | 'story' | 'reel' | 'live'>('post');
+  const [showLiveBroadcast, setShowLiveBroadcast] = useState(false);
   const [postContent, setPostContent] = useState('');
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
@@ -357,7 +359,7 @@ export default function CreatePage() {
       {/* Tabs */}
       <div className="max-w-4xl mx-auto px-4 py-4">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-          <TabsList className="grid grid-cols-3 mb-6">
+          <TabsList className="grid grid-cols-4 mb-6">
             <TabsTrigger value="post" className="gap-2">
               <FileText className="h-4 w-4" />
               Post
@@ -369,6 +371,10 @@ export default function CreatePage() {
             <TabsTrigger value="reel" className="gap-2">
               <Film className="h-4 w-4" />
               Reel
+            </TabsTrigger>
+            <TabsTrigger value="live" className="gap-2">
+              <Radio className="h-4 w-4" />
+              Live
             </TabsTrigger>
           </TabsList>
 
@@ -820,8 +826,36 @@ export default function CreatePage() {
               onChange={(e) => handleFileSelect(e, 'video')}
             />
           </TabsContent>
+
+          {/* Live Tab */}
+          <TabsContent value="live" className="space-y-6">
+            <div className="text-center py-8">
+              <div className="w-20 h-20 mx-auto bg-red-500/10 rounded-full flex items-center justify-center mb-4">
+                <Radio className="h-10 w-10 text-red-500" />
+              </div>
+              <h3 className="text-xl font-semibold mb-2">Go Live</h3>
+              <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
+                Broadcast live video to your followers in real-time. They can comment and react to your stream.
+              </p>
+              <Button 
+                size="lg" 
+                className="bg-red-500 hover:bg-red-600 text-white"
+                onClick={() => setShowLiveBroadcast(true)}
+              >
+                <Radio className="h-5 w-5 mr-2" />
+                Start Live Video
+              </Button>
+            </div>
+          </TabsContent>
         </Tabs>
       </div>
+
+      {/* Live Broadcast Modal */}
+      {showLiveBroadcast && (
+        <LiveStreamBroadcast 
+          onClose={() => setShowLiveBroadcast(false)}
+        />
+      )}
 
       {/* Filter Picker Dialog */}
       <Dialog open={showFilterPicker} onOpenChange={setShowFilterPicker}>

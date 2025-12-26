@@ -103,6 +103,54 @@ export function useLiveStreamBroadcast() {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  // Check for existing live stream on mount and end any abandoned ones
+  useEffect(() => {
+    if (!user) return;
+
+    const checkAndCleanupExistingStream = async () => {
+      const { data: existingStreams } = await supabase
+        .from('live_streams')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'live');
+
+      if (existingStreams && existingStreams.length > 0) {
+        // End all existing live streams for this user
+        await supabase
+          .from('live_streams')
+          .update({
+            status: 'ended',
+            ended_at: new Date().toISOString(),
+          })
+          .eq('user_id', user.id)
+          .eq('status', 'live');
+      }
+    };
+
+    checkAndCleanupExistingStream();
+  }, [user]);
+
+  // Cleanup on page unload
+  useEffect(() => {
+    const handleBeforeUnload = async () => {
+      if (stream && isLive) {
+        // Stop media stream
+        if (localStream) {
+          localStream.getTracks().forEach(track => track.stop());
+        }
+        
+        // Update stream status synchronously
+        navigator.sendBeacon && navigator.sendBeacon(
+          `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/live_streams?id=eq.${stream.id}`,
+          JSON.stringify({ status: 'ended', ended_at: new Date().toISOString() })
+        );
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [stream, isLive, localStream]);
+
   const startBroadcast = useCallback(async (title?: string) => {
     if (!user) {
       toast({
@@ -114,6 +162,16 @@ export function useLiveStreamBroadcast() {
     }
 
     try {
+      // First end any existing live streams
+      await supabase
+        .from('live_streams')
+        .update({
+          status: 'ended',
+          ended_at: new Date().toISOString(),
+        })
+        .eq('user_id', user.id)
+        .eq('status', 'live');
+
       // Get camera and microphone access
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user', width: 1280, height: 720 },
@@ -156,8 +214,6 @@ export function useLiveStreamBroadcast() {
   }, [user, toast]);
 
   const endBroadcast = useCallback(async () => {
-    if (!stream) return;
-
     try {
       // Stop media stream
       if (localStream) {
@@ -165,14 +221,28 @@ export function useLiveStreamBroadcast() {
         setLocalStream(null);
       }
 
-      // Update stream status
-      await supabase
-        .from('live_streams')
-        .update({
-          status: 'ended',
-          ended_at: new Date().toISOString(),
-        })
-        .eq('id', stream.id);
+      // Update stream status - either specific stream or all user's live streams
+      if (stream) {
+        await supabase
+          .from('live_streams')
+          .update({
+            status: 'ended',
+            ended_at: new Date().toISOString(),
+          })
+          .eq('id', stream.id);
+      }
+      
+      // Also ensure all user's streams are ended
+      if (user) {
+        await supabase
+          .from('live_streams')
+          .update({
+            status: 'ended',
+            ended_at: new Date().toISOString(),
+          })
+          .eq('user_id', user.id)
+          .eq('status', 'live');
+      }
 
       setStream(null);
       setIsLive(false);
@@ -184,7 +254,7 @@ export function useLiveStreamBroadcast() {
     } catch (error) {
       console.error('Error ending broadcast:', error);
     }
-  }, [stream, localStream, toast]);
+  }, [stream, localStream, user, toast]);
 
   // Connect video element to stream
   useEffect(() => {
