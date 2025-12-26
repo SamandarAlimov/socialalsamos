@@ -1,10 +1,11 @@
 import { useEffect, useState, useRef } from 'react';
-import { X, Heart, Send, Users, Radio } from 'lucide-react';
+import { X, Heart, Send, Users, Radio, Loader2, WifiOff } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import { useLiveStreamViewer, useLiveStreamComments, useLiveStreamReactions } from '@/hooks/useLiveStream';
+import { useLiveStreamViewer as useLiveStreamViewerDB, useLiveStreamComments, useLiveStreamReactions } from '@/hooks/useLiveStream';
+import { useLiveStreamViewer as useLiveStreamViewerWebRTC } from '@/hooks/useLiveStreamWebRTC';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface LiveStreamViewerProps {
@@ -16,11 +17,23 @@ const REACTION_EMOJIS = ['❤️', '🔥', '😍', '👏', '😂', '😮'];
 
 export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
   const { user } = useAuth();
-  const { stream, viewerCount, joinStream, leaveStream } = useLiveStreamViewer(streamId);
+  const { stream, viewerCount: dbViewerCount, joinStream, leaveStream } = useLiveStreamViewerDB(streamId);
   const { comments, sendComment } = useLiveStreamComments(streamId);
   const { reactions, sendReaction } = useLiveStreamReactions(streamId);
+  
+  // WebRTC connection
+  const { 
+    remoteStream, 
+    isConnected, 
+    isConnecting, 
+    error: webrtcError,
+    connect: connectWebRTC, 
+    disconnect: disconnectWebRTC 
+  } = useLiveStreamViewerWebRTC(streamId);
+  
   const [commentText, setCommentText] = useState('');
   const [showReactions, setShowReactions] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const commentsRef = useRef<HTMLDivElement>(null);
 
   // Join stream on mount
@@ -28,8 +41,25 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
     joinStream();
     return () => {
       leaveStream();
+      disconnectWebRTC();
     };
   }, []);
+
+  // Connect to WebRTC when stream is loaded
+  useEffect(() => {
+    if (stream && stream.status === 'live' && !isConnected && !isConnecting) {
+      console.log('[Viewer] Connecting to WebRTC stream');
+      connectWebRTC();
+    }
+  }, [stream, isConnected, isConnecting, connectWebRTC]);
+
+  // Connect remote stream to video element
+  useEffect(() => {
+    if (videoRef.current && remoteStream) {
+      console.log('[Viewer] Setting remote stream to video element');
+      videoRef.current.srcObject = remoteStream;
+    }
+  }, [remoteStream]);
 
   // Auto-scroll comments
   useEffect(() => {
@@ -52,7 +82,10 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
   if (!stream) {
     return (
       <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
-        <div className="text-white">Loading stream...</div>
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-white mx-auto mb-4" />
+          <p className="text-white">Loading stream...</p>
+        </div>
       </div>
     );
   }
@@ -75,7 +108,7 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col">
       {/* Header */}
-      <div className="absolute top-0 left-0 right-0 z-10 p-4 bg-gradient-to-b from-black/80 to-transparent">
+      <div className="absolute top-0 left-0 right-0 z-10 p-4 bg-gradient-to-b from-black/80 to-transparent safe-area-top">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Avatar className="h-10 w-10 border-2 border-red-500">
@@ -89,13 +122,18 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
                 <span className="text-white font-semibold text-sm">
                   {stream.profile?.display_name || stream.profile?.username}
                 </span>
-                <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+                <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded animate-pulse">
                   LIVE
                 </span>
+                {isConnected && (
+                  <span className="bg-green-500/20 text-green-400 text-[10px] font-medium px-1.5 py-0.5 rounded">
+                    HD
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-1 text-white/70 text-xs">
                 <Users className="h-3 w-3" />
-                <span>{viewerCount.toLocaleString()}</span>
+                <span>{dbViewerCount.toLocaleString()}</span>
               </div>
             </div>
           </div>
@@ -112,12 +150,46 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
         )}
       </div>
 
-      {/* Video placeholder - In a real app, this would be the WebRTC video stream */}
-      <div className="flex-1 bg-gradient-to-br from-purple-900 to-pink-900 flex items-center justify-center">
-        <div className="text-center">
-          <Radio className="h-20 w-20 text-white/50 mx-auto mb-4 animate-pulse" />
-          <p className="text-white/50">Live streaming...</p>
-        </div>
+      {/* Video Stream */}
+      <div className="flex-1 relative bg-black">
+        {isConnected && remoteStream ? (
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            className="absolute inset-0 w-full h-full object-contain"
+          />
+        ) : isConnecting ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-purple-900/50 to-pink-900/50">
+            <div className="text-center">
+              <Loader2 className="h-12 w-12 text-white animate-spin mx-auto mb-4" />
+              <p className="text-white/80 text-sm">Connecting to stream...</p>
+            </div>
+          </div>
+        ) : webrtcError ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-red-900/30 to-orange-900/30">
+            <div className="text-center">
+              <WifiOff className="h-12 w-12 text-white/50 mx-auto mb-4" />
+              <p className="text-white/80 text-sm mb-2">Connection issue</p>
+              <p className="text-white/50 text-xs">{webrtcError}</p>
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                className="mt-4"
+                onClick={() => connectWebRTC()}
+              >
+                Retry
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-purple-900 to-pink-900">
+            <div className="text-center">
+              <Radio className="h-20 w-20 text-white/50 mx-auto mb-4 animate-pulse" />
+              <p className="text-white/50">Waiting for video...</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Floating reactions */}
@@ -165,7 +237,7 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
       </div>
 
       {/* Bottom actions */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black to-transparent">
+      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black to-transparent safe-area-bottom">
         <div className="flex items-center gap-2">
           <div className="flex-1 relative">
             <Input

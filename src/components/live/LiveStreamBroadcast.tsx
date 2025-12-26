@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Camera, CameraOff, Mic, MicOff, SwitchCamera, Users, Clock, Radio, MessageCircle, Loader2 } from 'lucide-react';
+import { X, Camera, CameraOff, Mic, MicOff, SwitchCamera, Users, Clock, Radio, MessageCircle, Loader2, Wifi } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useLiveStreamComments, useLiveStreamReactions, useLiveStreamViewer } from '@/hooks/useLiveStream';
+import { useLiveStreamBroadcaster } from '@/hooks/useLiveStreamWebRTC';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
@@ -43,9 +44,21 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
   const commentsRef = useRef<HTMLDivElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
 
+  // WebRTC broadcaster hook
+  const { 
+    isConnected: isWebRTCConnected, 
+    viewerCount: webrtcViewerCount, 
+    connect: connectWebRTC, 
+    disconnect: disconnectWebRTC,
+    error: webrtcError 
+  } = useLiveStreamBroadcaster(stream?.id || null);
+
   const { comments } = useLiveStreamComments(stream?.id || null);
   const { reactions } = useLiveStreamReactions(stream?.id || null);
-  const { viewerCount } = useLiveStreamViewer(stream?.id || null);
+  const { viewerCount: dbViewerCount } = useLiveStreamViewer(stream?.id || null);
+  
+  // Use WebRTC viewer count if connected, otherwise DB count
+  const viewerCount = isWebRTCConnected ? webrtcViewerCount : dbViewerCount;
 
   // Initialize camera on mount
   const initializeCamera = useCallback(async () => {
@@ -143,6 +156,11 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
       return;
     }
 
+    if (!localStreamRef.current) {
+      toast.error('Camera not initialized');
+      return;
+    }
+
     setIsStarting(true);
 
     try {
@@ -181,8 +199,19 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
     }
   };
 
+  // Connect WebRTC when stream is created
+  useEffect(() => {
+    if (stream && isLive && localStreamRef.current && !isWebRTCConnected) {
+      console.log('[Broadcast] Connecting WebRTC for stream:', stream.id);
+      connectWebRTC(localStreamRef.current);
+    }
+  }, [stream, isLive, isWebRTCConnected, connectWebRTC]);
+
   const handleEndLive = async () => {
     try {
+      // Disconnect WebRTC first
+      disconnectWebRTC();
+      
       // Stop media stream
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => track.stop());
