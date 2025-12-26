@@ -1092,6 +1092,72 @@ export type Database = {
           },
         ]
       }
+      verification_requests: {
+        Row: {
+          additional_info: string | null
+          bio_link: string | null
+          category: string
+          created_at: string
+          full_name: string
+          id: string
+          id_document_url: string | null
+          known_as: string | null
+          rejection_reason: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          additional_info?: string | null
+          bio_link?: string | null
+          category: string
+          created_at?: string
+          full_name: string
+          id?: string
+          id_document_url?: string | null
+          known_as?: string | null
+          rejection_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          additional_info?: string | null
+          bio_link?: string | null
+          category?: string
+          created_at?: string
+          full_name?: string
+          id?: string
+          id_document_url?: string | null
+          known_as?: string | null
+          rejection_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "verification_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "verification_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       video_calls: {
         Row: {
           call_type: string | null

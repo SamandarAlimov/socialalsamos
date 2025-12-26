@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Camera, CameraOff, Mic, MicOff, SwitchCamera, Users, Clock, Radio, MessageCircle, Loader2, Wifi } from 'lucide-react';
+import { X, Camera, CameraOff, Mic, MicOff, SwitchCamera, Users, Clock, Radio, MessageCircle, Loader2, Wifi, Monitor, MonitorOff } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,6 +35,7 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
   const [stream, setStream] = useState<LiveStream | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(true);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [showComments, setShowComments] = useState(true);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -43,6 +44,7 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
   const videoRef = useRef<HTMLVideoElement>(null);
   const commentsRef = useRef<HTMLDivElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const screenStreamRef = useRef<MediaStream | null>(null);
 
   // WebRTC broadcaster hook
   const { 
@@ -317,6 +319,82 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
     }
   };
 
+  // Toggle screen sharing
+  const toggleScreenShare = async () => {
+    try {
+      if (isScreenSharing) {
+        // Stop screen sharing, switch back to camera
+        if (screenStreamRef.current) {
+          screenStreamRef.current.getTracks().forEach(track => track.stop());
+          screenStreamRef.current = null;
+        }
+        
+        // Re-enable camera
+        const cameraStream = await navigator.mediaDevices.getUserMedia({
+          video: { 
+            facingMode, 
+            width: { ideal: 1280 }, 
+            height: { ideal: 720 } 
+          },
+          audio: true,
+        });
+        
+        localStreamRef.current = cameraStream;
+        
+        if (videoRef.current) {
+          videoRef.current.srcObject = cameraStream;
+        }
+        
+        // Re-apply mute state
+        if (isMuted) {
+          cameraStream.getAudioTracks().forEach(track => { track.enabled = false; });
+        }
+        
+        setIsScreenSharing(false);
+        toast.success('Switched back to camera');
+      } else {
+        // Start screen sharing
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { 
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+          audio: true,
+        });
+        
+        screenStreamRef.current = screenStream;
+        
+        // Keep audio from camera
+        const audioTracks = localStreamRef.current?.getAudioTracks() || [];
+        
+        // Create combined stream
+        const combinedStream = new MediaStream([
+          ...screenStream.getVideoTracks(),
+          ...audioTracks,
+        ]);
+        
+        localStreamRef.current = combinedStream;
+        
+        if (videoRef.current) {
+          videoRef.current.srcObject = combinedStream;
+        }
+        
+        // Handle when user stops sharing via browser UI
+        screenStream.getVideoTracks()[0].onended = () => {
+          toggleScreenShare();
+        };
+        
+        setIsScreenSharing(true);
+        toast.success('Screen sharing started');
+      }
+    } catch (error: any) {
+      console.error('Error toggling screen share:', error);
+      if (error.name !== 'NotAllowedError') {
+        toast.error('Failed to share screen');
+      }
+    }
+  };
+
   // Pre-live screen
   if (!isLive) {
     return (
@@ -527,8 +605,24 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
         <button
           onClick={switchCamera}
           className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center"
+          disabled={isScreenSharing}
         >
-          <SwitchCamera className="h-6 w-6 text-white" />
+          <SwitchCamera className={cn("h-6 w-6 text-white", isScreenSharing && "opacity-50")} />
+        </button>
+        
+        {/* Screen share button */}
+        <button
+          onClick={toggleScreenShare}
+          className={cn(
+            "h-12 w-12 rounded-full flex items-center justify-center",
+            isScreenSharing ? "bg-primary" : "bg-white/20"
+          )}
+        >
+          {isScreenSharing ? (
+            <MonitorOff className="h-6 w-6 text-white" />
+          ) : (
+            <Monitor className="h-6 w-6 text-white" />
+          )}
         </button>
         
         <button
