@@ -18,6 +18,7 @@ import VideosPage from "./pages/VideosPage";
 import DiscoveryPage from "./pages/DiscoveryPage";
 import SearchPage from "./pages/SearchPage";
 import MarketplacePage from "./pages/MarketplacePage";
+import AdminPage from "./pages/AdminPage";
 import NotFound from "./pages/NotFound";
 
 // Layout
@@ -91,6 +92,7 @@ function AppRoutes() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/user/:userId" element={<UserProfilePage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/admin" element={<AdminPage />} />
       </Route>
       
       {/* 404 */}

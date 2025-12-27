@@ -410,9 +410,7 @@ export function EnhancedMessageBubble({
                   ) : message.status === 'failed' ? (
                     <AlertCircle className="h-3 w-3 text-destructive" />
                   ) : message.status === 'read' || message.is_read ? (
-                    <CheckCheck className="h-3 w-3 text-blue-400" />
-                  ) : message.status === 'delivered' ? (
-                    <CheckCheck className="h-3 w-3" />
+                    <CheckCheck className="h-3.5 w-3.5 text-[#0095F6]" />
                   ) : (
                     <Check className="h-3 w-3" />
                   )
