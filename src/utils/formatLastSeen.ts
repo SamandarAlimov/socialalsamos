@@ -33,21 +33,21 @@ export function formatLastSeen(lastSeenDate: string | null | undefined, isOnline
   
   // Today - show time only
   if (isToday(date)) {
-    return format(date, 'HH:mm');
+    return `last seen at ${format(date, 'HH:mm')}`;
   }
   
   // Yesterday
   if (isYesterday(date)) {
-    return `yesterday ${format(date, 'HH:mm')}`;
+    return `last seen yesterday at ${format(date, 'HH:mm')}`;
   }
   
   // Within last week
   if (daysAgo < 7) {
-    return `${daysAgo}d ago ${format(date, 'HH:mm')}`;
+    return `last seen ${daysAgo}d ago at ${format(date, 'HH:mm')}`;
   }
   
   // Older - show time and full date (HH:mm dd/MM/yyyy format)
-  return `${format(date, 'HH:mm')} ${format(date, 'dd/MM/yyyy')}`;
+  return `last seen ${format(date, 'HH:mm dd/MM/yyyy')}`;
 }
 
 export function formatMessageTime(dateString: string): string {
