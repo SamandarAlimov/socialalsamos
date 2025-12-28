@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FollowersFollowingDialog } from '@/components/FollowersFollowingDialog';
 import { ProfilePostsGrid } from '@/components/profile/ProfilePostsGrid';
+import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { 
   Settings, 
   Edit3, 
@@ -16,7 +17,6 @@ import {
   MapPin,
   Link as LinkIcon,
   Calendar,
-  CheckCircle2,
   ImageIcon
 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -130,7 +130,7 @@ export default function ProfilePage() {
                     {profile.display_name || profile.username || 'User'}
                   </h1>
                   {profile.is_verified && (
-                    <CheckCircle2 className="h-5 w-5 text-primary fill-primary" />
+                    <VerifiedBadge size="md" />
                   )}
                 </div>
                 <p className="text-muted-foreground">@{profile.username || 'username'}</p>

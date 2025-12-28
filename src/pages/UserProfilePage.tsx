@@ -8,7 +8,6 @@ import {
   MessageCircle, 
   UserPlus, 
   UserMinus,
-  BadgeCheck,
   Grid, 
   Video, 
   MapPin,
@@ -16,6 +15,7 @@ import {
   Calendar,
   ArrowLeft
 } from 'lucide-react';
+import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { toast } from 'sonner';
 import { useConversations } from '@/hooks/useMessages';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -220,7 +220,7 @@ export default function UserProfilePage() {
                     {profile.display_name || profile.username || 'User'}
                   </h1>
                   {profile.is_verified && (
-                    <BadgeCheck className="h-6 w-6 text-primary" />
+                    <VerifiedBadge size="lg" />
                   )}
                 </div>
                 <p className="text-muted-foreground">

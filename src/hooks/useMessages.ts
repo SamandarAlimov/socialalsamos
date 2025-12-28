@@ -23,6 +23,7 @@ export interface Conversation {
     avatar_url: string | null;
     is_online: boolean;
     last_seen: string | null;
+    is_verified?: boolean;
   };
 }
 
@@ -140,7 +141,7 @@ export function useConversations(type?: 'private' | 'group' | 'channel') {
             if (participants && participants.length > 0) {
               const { data: profile } = await supabase
                 .from('profiles')
-                .select('id, username, display_name, avatar_url, is_online, last_seen')
+                .select('id, username, display_name, avatar_url, is_online, last_seen, is_verified')
                 .eq('id', participants[0].user_id)
                 .single();
 
@@ -191,7 +192,7 @@ export function useConversations(type?: 'private' | 'group' | 'channel') {
       // First, fetch the other user's profile (we'll need this regardless)
       const { data: otherUserProfile, error: profileError } = await supabase
         .from('profiles')
-        .select('id, username, display_name, avatar_url, is_online, last_seen')
+        .select('id, username, display_name, avatar_url, is_online, last_seen, is_verified')
         .eq('id', otherUserId)
         .single();
 
