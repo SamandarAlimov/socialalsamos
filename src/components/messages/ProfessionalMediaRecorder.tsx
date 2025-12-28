@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mic, Video, StopCircle, X, Send, Play, Pause, RotateCcw, SwitchCamera, Lock, Trash2 } from 'lucide-react';
+import { Mic, Video, StopCircle, X, Send, Play, Pause, RotateCcw, SwitchCamera, Lock, Trash2, Check } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -35,7 +35,6 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
   const startPosRef = useRef<{ x: number; y: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       cleanup();
@@ -232,7 +231,16 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Handle touch/mouse events for hold-to-record (Telegram style)
+  // Handle tap to start/stop recording (Telegram style)
+  const handleTap = useCallback(() => {
+    if (state === 'idle') {
+      startRecording();
+    } else if (state === 'recording' || state === 'locked') {
+      stopRecording();
+    }
+  }, [state, startRecording, stopRecording]);
+
+  // Handle long press for hold-to-record
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (state !== 'idle') return;
     
@@ -241,7 +249,7 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
     
     holdTimeoutRef.current = setTimeout(() => {
       startRecording();
-    }, 150);
+    }, 200);
   }, [state, startRecording]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
@@ -285,16 +293,16 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
     }
   }, [state, mode]);
 
-  // Video preview mode
+  // Video preview mode - fullscreen with clear send button
   if (state === 'preview' && mediaUrl && mode === 'video') {
     return (
-      <div className="fixed inset-0 z-50 bg-background flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <Button variant="ghost" size="icon" onClick={cancelRecording}>
+      <div className="fixed inset-0 z-50 bg-black flex flex-col">
+        <div className="flex items-center justify-between p-4 border-b border-white/10">
+          <Button variant="ghost" size="icon" onClick={cancelRecording} className="text-white hover:bg-white/10">
             <X className="h-5 w-5" />
           </Button>
-          <span className="text-sm font-medium">Video Preview</span>
-          <span className="text-sm text-muted-foreground">{formatDuration(duration)}</span>
+          <span className="text-sm font-medium text-white">Video Preview</span>
+          <span className="text-sm text-white/60">{formatDuration(duration)}</span>
         </div>
         
         <div className="flex-1 flex items-center justify-center p-4">
@@ -321,8 +329,15 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
           </div>
         </div>
         
-        <div className="flex items-center justify-center gap-4 p-4 pb-8 border-t border-border safe-area-bottom">
-          <Button variant="outline" size="lg" onClick={cancelRecording} disabled={isUploading}>
+        {/* Clear send and retake buttons at bottom */}
+        <div className="flex items-center justify-center gap-6 p-6 pb-8 border-t border-white/10 safe-area-bottom bg-black">
+          <Button 
+            variant="outline" 
+            size="lg" 
+            onClick={cancelRecording} 
+            disabled={isUploading}
+            className="border-white/30 text-white hover:bg-white/10 px-6"
+          >
             <RotateCcw className="h-5 w-5 mr-2" />
             Retake
           </Button>
@@ -330,7 +345,7 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
             size="lg" 
             onClick={handleSend} 
             disabled={isUploading}
-            className="min-w-[120px]"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 min-w-[140px]"
           >
             {isUploading ? (
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-foreground" />
@@ -349,16 +364,16 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
   // Video recording mode
   if ((state === 'recording' || state === 'locked') && mode === 'video') {
     return (
-      <div className="fixed inset-0 z-50 bg-background flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <Button variant="ghost" size="icon" onClick={cancelRecording}>
+      <div className="fixed inset-0 z-50 bg-black flex flex-col">
+        <div className="flex items-center justify-between p-4 border-b border-white/10">
+          <Button variant="ghost" size="icon" onClick={cancelRecording} className="text-white hover:bg-white/10">
             <X className="h-5 w-5" />
           </Button>
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-            <span className="text-sm font-medium">Recording</span>
+            <span className="text-sm font-medium text-white">Recording</span>
           </div>
-          <span className="text-sm text-muted-foreground">{formatDuration(duration)}</span>
+          <span className="text-sm text-white/60">{formatDuration(duration)}</span>
         </div>
         
         <div className="flex-1 flex items-center justify-center p-4">
@@ -373,36 +388,37 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
           </div>
         </div>
         
-        <div className="flex items-center justify-center gap-4 p-4 pb-8 border-t border-border safe-area-bottom">
+        <div className="flex items-center justify-center gap-8 p-6 pb-8 border-t border-white/10 safe-area-bottom bg-black">
           <Button
             variant="ghost"
             size="icon"
-            className="h-12 w-12"
+            className="h-14 w-14 text-white hover:bg-white/10"
             onClick={switchCamera}
           >
-            <SwitchCamera className="h-6 w-6" />
+            <SwitchCamera className="h-7 w-7" />
           </Button>
           <Button 
             size="lg" 
             variant="destructive"
-            className="h-16 w-16 rounded-full"
+            className="h-18 w-18 rounded-full p-0 flex items-center justify-center"
+            style={{ width: '72px', height: '72px' }}
             onClick={stopRecording}
           >
-            <StopCircle className="h-8 w-8" />
+            <StopCircle className="h-10 w-10" />
           </Button>
-          <div className="w-12" />
+          <div className="w-14" />
         </div>
       </div>
     );
   }
 
-  // Voice recording state (Telegram style)
+  // Voice recording state (Telegram style) - inline
   if ((state === 'recording' || state === 'locked') && mode === 'voice') {
     return (
       <div 
         ref={containerRef}
         className={cn(
-          "flex items-center gap-2 bg-destructive/10 rounded-2xl px-3 py-2 transition-transform",
+          "flex items-center gap-3 bg-destructive/10 rounded-full px-4 py-2 transition-transform w-full",
           swipeOffset < -30 && "bg-destructive/20"
         )}
         style={{ transform: `translateX(${Math.max(swipeOffset, -100)}px)` }}
@@ -414,8 +430,8 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
           </div>
         )}
         
-        <div className="h-3 w-3 rounded-full bg-destructive animate-pulse" />
-        <span className="text-sm font-medium text-destructive">{formatDuration(duration)}</span>
+        <div className="h-3 w-3 rounded-full bg-destructive animate-pulse flex-shrink-0" />
+        <span className="text-sm font-medium text-destructive tabular-nums min-w-[40px]">{formatDuration(duration)}</span>
         
         {state === 'locked' ? (
           <>
@@ -423,27 +439,26 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-muted-foreground"
+              className="h-9 w-9 text-muted-foreground hover:text-destructive flex-shrink-0"
               onClick={cancelRecording}
             >
-              <X className="h-4 w-4" />
+              <Trash2 className="h-4 w-4" />
             </Button>
             <Button
               variant="default"
               size="icon"
-              className="h-10 w-10 rounded-full"
+              className="h-11 w-11 rounded-full flex-shrink-0 bg-primary hover:bg-primary/90"
               onClick={stopRecording}
             >
-              <Send className="h-4 w-4" />
+              <Send className="h-5 w-5" />
             </Button>
           </>
         ) : (
           <>
-            <span className="text-xs text-muted-foreground animate-pulse ml-2">
+            <span className="text-xs text-muted-foreground animate-pulse flex-1">
               ← Slide to cancel
             </span>
-            <div className="flex-1" />
-            <div className="flex flex-col items-center text-muted-foreground">
+            <div className="flex flex-col items-center text-muted-foreground flex-shrink-0">
               <Lock className="h-3 w-3" />
               <span className="text-[10px]">↑</span>
             </div>
@@ -453,79 +468,100 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
     );
   }
 
-  // Voice preview state
+  // Voice preview state with prominent send button
   if (state === 'preview' && mediaUrl && mode === 'voice') {
     return (
-      <div className="flex items-center gap-2 bg-muted rounded-2xl px-3 py-2">
+      <div className="flex items-center gap-3 bg-muted rounded-full px-4 py-2 w-full">
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-9 w-9 flex-shrink-0"
           onClick={togglePlayback}
         >
           {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
         </Button>
         
-        <div className="flex-1">
-          <div className="h-1 bg-border rounded-full overflow-hidden">
+        <div className="flex-1 min-w-0">
+          <div className="h-1.5 bg-border rounded-full overflow-hidden">
             <div 
               className={cn(
-                "h-full bg-primary transition-all",
+                "h-full bg-primary transition-all duration-300",
                 isPlaying && "animate-pulse"
               )} 
               style={{ width: isPlaying ? '100%' : '0%' }}
             />
           </div>
-          <span className="text-xs text-muted-foreground">{formatDuration(duration)}</span>
+          <span className="text-xs text-muted-foreground tabular-nums">{formatDuration(duration)}</span>
         </div>
 
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 text-muted-foreground"
+          className="h-9 w-9 text-muted-foreground hover:text-destructive flex-shrink-0"
           onClick={cancelRecording}
         >
-          <X className="h-4 w-4" />
+          <Trash2 className="h-4 w-4" />
         </Button>
         
+        {/* Prominent send button */}
         <Button
           variant="default"
           size="icon"
-          className="h-10 w-10 rounded-full flex-shrink-0"
+          className="h-11 w-11 rounded-full flex-shrink-0 bg-primary hover:bg-primary/90"
           onClick={handleSend}
           disabled={isUploading}
         >
           {isUploading ? (
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground" />
           ) : (
-            <Send className="h-4 w-4" />
+            <Send className="h-5 w-5" />
           )}
         </Button>
       </div>
     );
   }
 
-  // Idle state - show mic/video button
+  // Idle state - show mic/video toggle buttons
   return (
-    <div className="flex items-center">
+    <div className="flex items-center gap-1">
+      {/* Video mode button */}
       <Button
         variant="ghost"
         size="icon"
         className={cn(
-          "h-10 w-10 rounded-full flex-shrink-0 transition-colors touch-none select-none",
-          mode === 'video' && "text-primary"
+          "h-10 w-10 rounded-full flex-shrink-0 transition-colors",
+          mode === 'video' && "text-primary bg-primary/10"
         )}
-        onClick={handleModeSwitch}
-        onPointerDown={handlePointerDown}
+        onClick={() => setMode('video')}
+        onPointerDown={(e) => {
+          setMode('video');
+          handlePointerDown(e);
+        }}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
       >
-        {mode === 'voice' ? (
-          <Mic className="h-5 w-5" />
-        ) : (
-          <Video className="h-5 w-5" />
+        <Video className="h-5 w-5" />
+      </Button>
+      
+      {/* Voice mode button */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className={cn(
+          "h-10 w-10 rounded-full flex-shrink-0 transition-colors",
+          mode === 'voice' && "text-primary bg-primary/10"
         )}
+        onClick={() => setMode('voice')}
+        onPointerDown={(e) => {
+          setMode('voice');
+          handlePointerDown(e);
+        }}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+      >
+        <Mic className="h-5 w-5" />
       </Button>
     </div>
   );

@@ -33,6 +33,7 @@ import { PullToRefresh } from '@/components/PullToRefresh';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { LiveStreamCard } from '@/components/live/LiveStreamCard';
+import { VerifiedBadge } from '@/components/VerifiedBadge';
 
 export default function HomePage() {
   const { user, profile } = useAuth();
@@ -496,9 +497,7 @@ function PostCard({
                 {post.profile?.display_name || post.profile?.username || 'Anonymous'}
               </span>
               {post.profile?.is_verified && (
-                <svg className="h-3.5 w-3.5 md:h-4 md:w-4 text-primary" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                </svg>
+                <VerifiedBadge size="xs" />
               )}
             </div>
             <p className="text-[11px] md:text-xs text-muted-foreground">

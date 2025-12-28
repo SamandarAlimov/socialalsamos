@@ -18,6 +18,7 @@ import { Conversation } from '@/hooks/useMessages';
 import { cn } from '@/lib/utils';
 import { formatLastSeen } from '@/utils/formatLastSeen';
 import { useUserOnlineStatus } from '@/hooks/useRealtimeStatus';
+import { VerifiedBadge } from '@/components/VerifiedBadge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -140,7 +141,12 @@ export function ChatHeader({
           </div>
           
           <div className="text-left">
-            <h2 className="font-semibold text-sm">{getName()}</h2>
+            <div className="flex items-center gap-1">
+              <h2 className="font-semibold text-sm">{getName()}</h2>
+              {conversation.type === 'private' && conversation.other_participant?.is_verified && (
+                <VerifiedBadge size="xs" />
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">{getStatus()}</p>
           </div>
         </button>
