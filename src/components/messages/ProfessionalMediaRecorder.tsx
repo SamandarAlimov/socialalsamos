@@ -1,12 +1,26 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mic, Video, StopCircle, X, Send, Play, Pause, RotateCcw, SwitchCamera, Lock, Trash2, Check } from 'lucide-react';
+import {
+  Mic,
+  Video,
+  StopCircle,
+  X,
+  Send,
+  Play,
+  Pause,
+  RotateCcw,
+  SwitchCamera,
+  Lock,
+  Trash2,
+} from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 type RecordMode = 'voice' | 'video';
 type RecordState = 'idle' | 'recording' | 'locked' | 'preview';
+
+type VideoQuality = '480p' | '720p' | '1080p';
 
 interface ProfessionalMediaRecorderProps {
   onSend: (url: string, duration: number, type: 'audio' | 'video') => void;
@@ -23,7 +37,8 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
   const [isPlaying, setIsPlaying] = useState(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [swipeOffset, setSwipeOffset] = useState(0);
-  
+  const [videoQuality, setVideoQuality] = useState<VideoQuality>('720p');
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -35,15 +50,19 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
   const startPosRef = useRef<{ x: number; y: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    return () => {
-      cleanup();
-    };
-  }, []);
+  // Which mode we *actually* recorded (fixes async setState race that can hide video preview/send UI)
+  const recordingModeRef = useRef<RecordMode>('voice');
 
-  const cleanup = () => {
+  const qualityVideoConstraints = (q: VideoQuality) => {
+    // Portrait-ish targets (9:16). Browser may clamp to device capabilities.
+    if (q === '480p') return { width: { ideal: 480 }, height: { ideal: 854 } };
+    if (q === '1080p') return { width: { ideal: 1080 }, height: { ideal: 1920 } };
+    return { width: { ideal: 720 }, height: { ideal: 1280 } };
+  };
+
+  const cleanup = useCallback(() => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
     if (timerRef.current) {
@@ -54,75 +73,97 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
       clearTimeout(holdTimeoutRef.current);
       holdTimeoutRef.current = null;
     }
-    if (mediaUrl) {
-      URL.revokeObjectURL(mediaUrl);
-    }
+    if (mediaUrl) URL.revokeObjectURL(mediaUrl);
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
     }
+    mediaRecorderRef.current = null;
+    chunksRef.current = [];
+  }, [mediaUrl]);
+
+  useEffect(() => {
+    return () => {
+      cleanup();
+    };
+  }, [cleanup]);
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const startRecording = useCallback(async () => {
-    try {
-      const constraints = mode === 'video' 
-        ? { video: { facingMode, width: { ideal: 720 }, height: { ideal: 1280 } }, audio: true }
-        : { audio: true };
-      
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      streamRef.current = stream;
-      
-      if (mode === 'video' && videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+  const startRecording = useCallback(
+    async (desiredMode?: RecordMode) => {
+      const recordMode = desiredMode ?? mode;
+      recordingModeRef.current = recordMode;
+
+      try {
+        const constraints =
+          recordMode === 'video'
+            ? {
+                video: { facingMode, ...qualityVideoConstraints(videoQuality) },
+                audio: true,
+              }
+            : { audio: true };
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        streamRef.current = stream;
+
+        if (recordMode === 'video' && videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+
+        const mimeType =
+          recordMode === 'video'
+            ? MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+              ? 'video/webm;codecs=vp9'
+              : 'video/webm'
+            : MediaRecorder.isTypeSupported('audio/webm')
+              ? 'audio/webm'
+              : 'audio/mp4';
+
+        const mediaRecorder = new MediaRecorder(stream, { mimeType });
+        chunksRef.current = [];
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) chunksRef.current.push(e.data);
+        };
+
+        mediaRecorder.onstop = () => {
+          const actualMode = recordingModeRef.current;
+          const type = actualMode === 'video' ? 'video/webm' : 'audio/webm';
+          const blob = new Blob(chunksRef.current, { type });
+          const url = URL.createObjectURL(blob);
+          setMediaBlob(blob);
+          setMediaUrl(url);
+          setState('preview');
+
+          if (streamRef.current) {
+            streamRef.current.getTracks().forEach((track) => track.stop());
+            streamRef.current = null;
+          }
+        };
+
+        mediaRecorderRef.current = mediaRecorder;
+        mediaRecorder.start(100);
+        setState('recording');
+        setDuration(0);
+
+        timerRef.current = setInterval(() => setDuration((prev) => prev + 1), 1000);
+      } catch (error) {
+        console.error('Error starting recording:', error);
+        toast.error('Failed to access camera/microphone');
       }
-      
-      const mimeType = mode === 'video'
-        ? (MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm')
-        : (MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4');
-      
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
-      chunksRef.current = [];
-      
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
-        }
-      };
-      
-      mediaRecorder.onstop = () => {
-        const type = mode === 'video' ? 'video/webm' : 'audio/webm';
-        const blob = new Blob(chunksRef.current, { type });
-        const url = URL.createObjectURL(blob);
-        setMediaBlob(blob);
-        setMediaUrl(url);
-        setState('preview');
-        
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach(track => track.stop());
-          streamRef.current = null;
-        }
-      };
-      
-      mediaRecorderRef.current = mediaRecorder;
-      mediaRecorder.start(100);
-      setState('recording');
-      setDuration(0);
-      
-      timerRef.current = setInterval(() => {
-        setDuration(prev => prev + 1);
-      }, 1000);
-      
-    } catch (error) {
-      console.error('Error starting recording:', error);
-      toast.error('Failed to access camera/microphone');
-    }
-  }, [mode, facingMode]);
+    },
+    [mode, facingMode, videoQuality]
+  );
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && (state === 'recording' || state === 'locked')) {
       mediaRecorderRef.current.stop();
-      
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -137,54 +178,53 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
     setMediaBlob(null);
     setDuration(0);
     setSwipeOffset(0);
+    setIsPlaying(false);
     onCancel?.();
-  }, [mediaUrl, onCancel]);
+  }, [cleanup, onCancel]);
 
   const handleSend = useCallback(async () => {
     if (!mediaBlob) return;
-    
+
     setIsUploading(true);
-    
     try {
-      const ext = mode === 'video' ? 'webm' : 'webm';
-      const fileName = `${mode}-${Date.now()}.${ext}`;
-      
+      const actualMode = recordingModeRef.current;
+      const fileName = `${actualMode}-${Date.now()}.webm`;
+
       const { data, error } = await supabase.storage
         .from('message-attachments')
         .upload(fileName, mediaBlob, {
-          contentType: mode === 'video' ? 'video/webm' : 'audio/webm',
+          contentType: actualMode === 'video' ? 'video/webm' : 'audio/webm',
         });
-      
+
       if (error) throw error;
-      
+
       const { data: urlData } = supabase.storage
         .from('message-attachments')
         .getPublicUrl(data.path);
-      
-      onSend(urlData.publicUrl, duration, mode === 'video' ? 'video' : 'audio');
-      
+
+      onSend(urlData.publicUrl, duration, actualMode === 'video' ? 'video' : 'audio');
+
       cleanup();
       setState('idle');
       setMediaUrl(null);
       setMediaBlob(null);
       setDuration(0);
-      
+      setIsPlaying(false);
     } catch (error) {
       console.error('Error uploading media:', error);
       toast.error('Failed to send message');
     } finally {
       setIsUploading(false);
     }
-  }, [mediaBlob, mediaUrl, duration, mode, onSend]);
+  }, [cleanup, duration, mediaBlob, onSend]);
 
   const togglePlayback = useCallback(() => {
-    if (mode === 'video') {
+    const actualMode = recordingModeRef.current;
+
+    if (actualMode === 'video') {
       if (!previewVideoRef.current) return;
-      if (isPlaying) {
-        previewVideoRef.current.pause();
-      } else {
-        previewVideoRef.current.play();
-      }
+      if (isPlaying) previewVideoRef.current.pause();
+      else previewVideoRef.current.play();
     } else {
       if (!audioRef.current && mediaUrl) {
         audioRef.current = new Audio(mediaUrl);
@@ -199,112 +239,100 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
         }
       }
     }
+
     setIsPlaying(!isPlaying);
-  }, [isPlaying, mode, mediaUrl]);
+  }, [isPlaying, mediaUrl]);
 
   const switchCamera = async () => {
-    if (!streamRef.current || mode !== 'video') return;
-    
-    streamRef.current.getVideoTracks().forEach(track => track.stop());
-    
+    if (!streamRef.current || recordingModeRef.current !== 'video') return;
+
+    streamRef.current.getVideoTracks().forEach((track) => track.stop());
+
     const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
     try {
       const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: newFacingMode, width: { ideal: 720 }, height: { ideal: 1280 } },
+        video: { facingMode: newFacingMode, ...qualityVideoConstraints(videoQuality) },
         audio: true,
       });
-      
+
       streamRef.current = newStream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = newStream;
-      }
-      
+      if (videoRef.current) videoRef.current.srcObject = newStream;
       setFacingMode(newFacingMode);
     } catch (error) {
       console.error('Error switching camera:', error);
+      toast.error('Failed to switch camera');
     }
   };
 
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  const beginHoldToRecord = useCallback(
+    (e: React.PointerEvent, desiredMode: RecordMode) => {
+      if (state !== 'idle') return;
 
-  // Handle tap to start/stop recording (Telegram style)
-  const handleTap = useCallback(() => {
-    if (state === 'idle') {
-      startRecording();
-    } else if (state === 'recording' || state === 'locked') {
-      stopRecording();
-    }
-  }, [state, startRecording, stopRecording]);
+      setMode(desiredMode);
+      recordingModeRef.current = desiredMode;
+      startPosRef.current = { x: e.clientX, y: e.clientY };
+      setSwipeOffset(0);
 
-  // Handle long press for hold-to-record
-  const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    if (state !== 'idle') return;
-    
-    startPosRef.current = { x: e.clientX, y: e.clientY };
-    setSwipeOffset(0);
-    
-    holdTimeoutRef.current = setTimeout(() => {
-      startRecording();
-    }, 200);
-  }, [state, startRecording]);
+      holdTimeoutRef.current = setTimeout(() => {
+        startRecording(desiredMode);
+      }, 150);
+    },
+    [state, startRecording]
+  );
 
-  const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    if (!startPosRef.current || state !== 'recording') return;
-    
-    const deltaX = e.clientX - startPosRef.current.x;
-    const deltaY = startPosRef.current.y - e.clientY;
-    
-    // Swipe left to cancel
-    if (deltaX < -50) {
-      setSwipeOffset(deltaX);
-      if (deltaX < -120) {
-        cancelRecording();
-        return;
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!startPosRef.current || state !== 'recording') return;
+
+      const deltaX = e.clientX - startPosRef.current.x;
+      const deltaY = startPosRef.current.y - e.clientY;
+
+      // Swipe left to cancel
+      if (deltaX < -50) {
+        setSwipeOffset(deltaX);
+        if (deltaX < -120) {
+          cancelRecording();
+          return;
+        }
       }
-    }
-    
-    // Swipe up to lock
-    if (deltaY > 60 && state === 'recording') {
-      setState('locked');
-    }
-  }, [state, cancelRecording]);
+
+      // Swipe up to lock
+      if (deltaY > 60 && state === 'recording') {
+        setState('locked');
+      }
+    },
+    [state, cancelRecording]
+  );
 
   const handlePointerUp = useCallback(() => {
     if (holdTimeoutRef.current) {
       clearTimeout(holdTimeoutRef.current);
+      holdTimeoutRef.current = null;
     }
-    
+
     startPosRef.current = null;
     setSwipeOffset(0);
-    
-    // If recording (not locked), stop and go to preview
-    if (state === 'recording') {
-      stopRecording();
-    }
+
+    // Release-to-stop (preview) if not locked
+    if (state === 'recording') stopRecording();
   }, [state, stopRecording]);
 
-  const handleModeSwitch = useCallback(() => {
-    if (state === 'idle') {
-      setMode(mode === 'voice' ? 'video' : 'voice');
-    }
-  }, [state, mode]);
+  const cycleQuality = () => {
+    setVideoQuality((q) => (q === '480p' ? '720p' : q === '720p' ? '1080p' : '480p'));
+  };
 
-  // Video preview mode - fullscreen with clear send button
-  if (state === 'preview' && mediaUrl && mode === 'video') {
+  // ===== Video preview (fullscreen) =====
+  if (state === 'preview' && mediaUrl && recordingModeRef.current === 'video') {
     return (
       <div className="fixed inset-0 z-50 bg-black flex flex-col">
         <div className="flex items-center justify-between p-4 border-b border-white/10">
           <Button variant="ghost" size="icon" onClick={cancelRecording} className="text-white hover:bg-white/10">
             <X className="h-5 w-5" />
           </Button>
-          <span className="text-sm font-medium text-white">Video Preview</span>
+          <span className="text-sm font-medium text-white">Video</span>
           <span className="text-sm text-white/60">{formatDuration(duration)}</span>
         </div>
-        
+
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="relative max-w-md w-full aspect-[9/16] bg-black rounded-xl overflow-hidden">
             <video
@@ -315,35 +343,31 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
               onEnded={() => setIsPlaying(false)}
             />
             <button
+              type="button"
               onClick={togglePlayback}
               className="absolute inset-0 flex items-center justify-center bg-black/20"
             >
               <div className="h-16 w-16 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                {isPlaying ? (
-                  <Pause className="h-8 w-8 text-white" />
-                ) : (
-                  <Play className="h-8 w-8 text-white ml-1" />
-                )}
+                {isPlaying ? <Pause className="h-8 w-8 text-white" /> : <Play className="h-8 w-8 text-white ml-1" />}
               </div>
             </button>
           </div>
         </div>
-        
-        {/* Clear send and retake buttons at bottom */}
-        <div className="flex items-center justify-center gap-6 p-6 pb-8 border-t border-white/10 safe-area-bottom bg-black">
-          <Button 
-            variant="outline" 
-            size="lg" 
-            onClick={cancelRecording} 
+
+        <div className="flex items-center justify-center gap-6 p-6 border-t border-white/10 safe-area-bottom bg-black">
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={cancelRecording}
             disabled={isUploading}
             className="border-white/30 text-white hover:bg-white/10 px-6"
           >
             <RotateCcw className="h-5 w-5 mr-2" />
             Retake
           </Button>
-          <Button 
-            size="lg" 
-            onClick={handleSend} 
+          <Button
+            size="lg"
+            onClick={handleSend}
             disabled={isUploading}
             className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 min-w-[140px]"
           >
@@ -361,8 +385,8 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
     );
   }
 
-  // Video recording mode
-  if ((state === 'recording' || state === 'locked') && mode === 'video') {
+  // ===== Video recording (fullscreen) =====
+  if ((state === 'recording' || state === 'locked') && recordingModeRef.current === 'video') {
     return (
       <div className="fixed inset-0 z-50 bg-black flex flex-col">
         <div className="flex items-center justify-between p-4 border-b border-white/10">
@@ -375,7 +399,7 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
           </div>
           <span className="text-sm text-white/60">{formatDuration(duration)}</span>
         </div>
-        
+
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="relative max-w-md w-full aspect-[9/16] bg-black rounded-xl overflow-hidden">
             <video
@@ -387,52 +411,48 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
             />
           </div>
         </div>
-        
-        <div className="flex items-center justify-center gap-8 p-6 pb-8 border-t border-white/10 safe-area-bottom bg-black">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-14 w-14 text-white hover:bg-white/10"
-            onClick={switchCamera}
-          >
+
+        <div className="flex items-center justify-center gap-8 p-6 border-t border-white/10 safe-area-bottom bg-black">
+          <Button variant="ghost" size="icon" className="h-14 w-14 text-white hover:bg-white/10" onClick={switchCamera}>
             <SwitchCamera className="h-7 w-7" />
           </Button>
-          <Button 
-            size="lg" 
+
+          <Button
+            size="lg"
             variant="destructive"
-            className="h-18 w-18 rounded-full p-0 flex items-center justify-center"
+            className="rounded-full p-0 flex items-center justify-center"
             style={{ width: '72px', height: '72px' }}
             onClick={stopRecording}
           >
             <StopCircle className="h-10 w-10" />
           </Button>
+
           <div className="w-14" />
         </div>
       </div>
     );
   }
 
-  // Voice recording state (Telegram style) - inline
-  if ((state === 'recording' || state === 'locked') && mode === 'voice') {
+  // ===== Voice recording (inline) =====
+  if ((state === 'recording' || state === 'locked') && recordingModeRef.current === 'voice') {
     return (
-      <div 
+      <div
         ref={containerRef}
         className={cn(
-          "flex items-center gap-3 bg-destructive/10 rounded-full px-4 py-2 transition-transform w-full",
-          swipeOffset < -30 && "bg-destructive/20"
+          'flex items-center gap-3 bg-destructive/10 rounded-full px-4 py-2 transition-transform w-full relative',
+          swipeOffset < -30 && 'bg-destructive/20'
         )}
         style={{ transform: `translateX(${Math.max(swipeOffset, -100)}px)` }}
       >
-        {/* Cancel indicator */}
         {swipeOffset < -50 && (
           <div className="absolute -left-8 flex items-center gap-1 text-destructive">
             <Trash2 className="h-4 w-4" />
           </div>
         )}
-        
+
         <div className="h-3 w-3 rounded-full bg-destructive animate-pulse flex-shrink-0" />
         <span className="text-sm font-medium text-destructive tabular-nums min-w-[40px]">{formatDuration(duration)}</span>
-        
+
         {state === 'locked' ? (
           <>
             <div className="flex-1" />
@@ -455,9 +475,7 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
           </>
         ) : (
           <>
-            <span className="text-xs text-muted-foreground animate-pulse flex-1">
-              ← Slide to cancel
-            </span>
+            <span className="text-xs text-muted-foreground animate-pulse flex-1">← Slide to cancel</span>
             <div className="flex flex-col items-center text-muted-foreground flex-shrink-0">
               <Lock className="h-3 w-3" />
               <span className="text-[10px]">↑</span>
@@ -468,26 +486,18 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
     );
   }
 
-  // Voice preview state with prominent send button
-  if (state === 'preview' && mediaUrl && mode === 'voice') {
+  // ===== Voice preview (inline) =====
+  if (state === 'preview' && mediaUrl && recordingModeRef.current === 'voice') {
     return (
       <div className="flex items-center gap-3 bg-muted rounded-full px-4 py-2 w-full">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-9 w-9 flex-shrink-0"
-          onClick={togglePlayback}
-        >
+        <Button variant="ghost" size="icon" className="h-9 w-9 flex-shrink-0" onClick={togglePlayback}>
           {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
         </Button>
-        
+
         <div className="flex-1 min-w-0">
           <div className="h-1.5 bg-border rounded-full overflow-hidden">
-            <div 
-              className={cn(
-                "h-full bg-primary transition-all duration-300",
-                isPlaying && "animate-pulse"
-              )} 
+            <div
+              className={cn('h-full bg-primary transition-all duration-300', isPlaying && 'animate-pulse')}
               style={{ width: isPlaying ? '100%' : '0%' }}
             />
           </div>
@@ -502,8 +512,7 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
         >
           <Trash2 className="h-4 w-4" />
         </Button>
-        
-        {/* Prominent send button */}
+
         <Button
           variant="default"
           size="icon"
@@ -521,48 +530,53 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
     );
   }
 
-  // Idle state - show mic/video toggle buttons
+  // ===== Idle =====
   return (
     <div className="flex items-center gap-1">
-      {/* Video mode button */}
+      <div className="relative">
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn('h-10 w-10 rounded-full flex-shrink-0 transition-colors', mode === 'video' && 'text-primary bg-primary/10')}
+          onClick={() => setMode('video')}
+          onPointerDown={(e) => beginHoldToRecord(e, 'video')}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+        >
+          <Video className="h-5 w-5" />
+        </Button>
+
+        {mode === 'video' && (
+          <button
+            type="button"
+            onClick={cycleQuality}
+            className="absolute -top-1 -right-1 rounded-full bg-card border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground shadow-sm"
+            aria-label="Change video quality"
+            title="Video quality"
+          >
+            {videoQuality}
+          </button>
+        )}
+      </div>
+
       <Button
         variant="ghost"
         size="icon"
-        className={cn(
-          "h-10 w-10 rounded-full flex-shrink-0 transition-colors",
-          mode === 'video' && "text-primary bg-primary/10"
-        )}
-        onClick={() => setMode('video')}
-        onPointerDown={(e) => {
-          setMode('video');
-          handlePointerDown(e);
-        }}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-      >
-        <Video className="h-5 w-5" />
-      </Button>
-      
-      {/* Voice mode button */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className={cn(
-          "h-10 w-10 rounded-full flex-shrink-0 transition-colors",
-          mode === 'voice' && "text-primary bg-primary/10"
-        )}
+        className={cn('h-10 w-10 rounded-full flex-shrink-0 transition-colors', mode === 'voice' && 'text-primary bg-primary/10')}
         onClick={() => setMode('voice')}
-        onPointerDown={(e) => {
-          setMode('voice');
-          handlePointerDown(e);
-        }}
+        onPointerDown={(e) => beginHoldToRecord(e, 'voice')}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
       >
         <Mic className="h-5 w-5" />
       </Button>
+
+      {/* Optional quick tap to record (desktop friendly) */}
+      <button type="button" onClick={() => state === 'idle' && startRecording(mode)} className="sr-only">
+        Start recording
+      </button>
     </div>
   );
 }
