@@ -143,12 +143,16 @@ export function useUserOnlineStatus(userId: string | null) {
   const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastSeenRef = useRef<string | null>(null);
 
-  // Keep ref in sync
-  useEffect(() => {
-    lastSeenRef.current = lastSeen;
-  }, [lastSeen]);
+  // Keep ref in sync - always runs
+  lastSeenRef.current = lastSeen;
 
   useEffect(() => {
+    // Clear interval on every effect run
+    if (checkIntervalRef.current) {
+      clearInterval(checkIntervalRef.current);
+      checkIntervalRef.current = null;
+    }
+
     if (!userId) {
       setIsOnline(false);
       setLastSeen(null);
@@ -197,7 +201,6 @@ export function useUserOnlineStatus(userId: string | null) {
         },
         (payload) => {
           const { is_online, last_seen: newLastSeen } = payload.new as any;
-          console.log('Realtime status update for', userId, { is_online, last_seen: newLastSeen });
           
           setLastSeen(newLastSeen);
           
@@ -212,9 +215,7 @@ export function useUserOnlineStatus(userId: string | null) {
           }
         }
       )
-      .subscribe((status) => {
-        console.log(`Status channel for ${userId}:`, status);
-      });
+      .subscribe();
 
     // Periodically check if user went offline (for stale status)
     checkIntervalRef.current = setInterval(() => {
