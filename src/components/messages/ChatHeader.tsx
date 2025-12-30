@@ -80,14 +80,13 @@ export function ChatHeader({
     }
     
     if (conversation.type === 'private') {
-      // Use real-time status if available
-      const isOnlineNow = realtimeIsOnline || conversation.other_participant?.is_online;
-      const lastSeenTime = realtimeLastSeen || conversation.other_participant?.last_seen;
-      
-      if (isOnlineNow) {
+      // Use real-time status - prioritize presence API result
+      if (realtimeIsOnline) {
         return <span className="text-green-500 font-medium">online</span>;
       }
       
+      // Fall back to last seen time
+      const lastSeenTime = realtimeLastSeen || conversation.other_participant?.last_seen;
       return formatLastSeen(lastSeenTime, false);
     }
     
@@ -102,7 +101,8 @@ export function ChatHeader({
     return null;
   };
 
-  const isOnline = conversation.type === 'private' && (realtimeIsOnline || conversation.other_participant?.is_online);
+  // Use realtime status for online indicator
+  const isOnline = conversation.type === 'private' && realtimeIsOnline;
 
   return (
     <div className="h-16 px-4 flex items-center justify-between border-b border-border bg-card/95 backdrop-blur">
