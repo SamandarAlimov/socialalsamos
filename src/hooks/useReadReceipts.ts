@@ -77,6 +77,7 @@ export function useReadReceipts(conversationId: string | null) {
 
     fetchReadReceipts();
 
+    // Subscribe to new read receipts for messages in this conversation
     const channel = supabase
       .channel(`read-receipts-${conversationId}`)
       .on(
@@ -86,17 +87,27 @@ export function useReadReceipts(conversationId: string | null) {
           schema: 'public',
           table: 'message_reads',
         },
-        (payload) => {
+        async (payload) => {
           const newReceipt = payload.new as ReadReceipt;
-          setReadReceipts(prev => {
-            const newMap = new Map(prev);
-            const existing = newMap.get(newReceipt.message_id) || [];
-            if (!existing.some(r => r.user_id === newReceipt.user_id)) {
-              existing.push(newReceipt);
-              newMap.set(newReceipt.message_id, existing);
-            }
-            return newMap;
-          });
+          
+          // Verify this receipt is for a message in our conversation
+          const { data: message } = await supabase
+            .from('messages')
+            .select('conversation_id')
+            .eq('id', newReceipt.message_id)
+            .single();
+          
+          if (message?.conversation_id === conversationId) {
+            setReadReceipts(prev => {
+              const newMap = new Map(prev);
+              const existing = newMap.get(newReceipt.message_id) || [];
+              if (!existing.some(r => r.user_id === newReceipt.user_id)) {
+                existing.push(newReceipt);
+                newMap.set(newReceipt.message_id, existing);
+              }
+              return newMap;
+            });
+          }
         }
       )
       .subscribe();

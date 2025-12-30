@@ -531,52 +531,72 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
   }
 
   // ===== Idle =====
+  const handleClickToRecord = (desiredMode: RecordMode) => {
+    if (state !== 'idle') return;
+    setMode(desiredMode);
+    recordingModeRef.current = desiredMode;
+    startRecording(desiredMode);
+  };
+
   return (
     <div className="flex items-center gap-1">
+      {/* Video button with quality badge */}
       <div className="relative">
         <Button
           variant="ghost"
           size="icon"
-          className={cn('h-10 w-10 rounded-full flex-shrink-0 transition-colors', mode === 'video' && 'text-primary bg-primary/10')}
-          onClick={() => setMode('video')}
-          onPointerDown={(e) => beginHoldToRecord(e, 'video')}
+          className={cn(
+            'h-10 w-10 rounded-full flex-shrink-0 transition-colors touch-none select-none',
+            mode === 'video' && 'text-primary bg-primary/10'
+          )}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            beginHoldToRecord(e, 'video');
+          }}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
+          onDoubleClick={() => handleClickToRecord('video')}
+          title="Hold to record video, double-click for hands-free"
         >
           <Video className="h-5 w-5" />
         </Button>
 
-        {mode === 'video' && (
-          <button
-            type="button"
-            onClick={cycleQuality}
-            className="absolute -top-1 -right-1 rounded-full bg-card border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground shadow-sm"
-            aria-label="Change video quality"
-            title="Video quality"
-          >
-            {videoQuality}
-          </button>
-        )}
+        {/* Quality badge - click to cycle */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            cycleQuality();
+          }}
+          className="absolute -top-1 -right-1 rounded-full bg-card border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground shadow-sm hover:bg-accent transition-colors"
+          aria-label="Change video quality"
+          title={`Video quality: ${videoQuality}`}
+        >
+          {videoQuality}
+        </button>
       </div>
 
+      {/* Voice button */}
       <Button
         variant="ghost"
         size="icon"
-        className={cn('h-10 w-10 rounded-full flex-shrink-0 transition-colors', mode === 'voice' && 'text-primary bg-primary/10')}
-        onClick={() => setMode('voice')}
-        onPointerDown={(e) => beginHoldToRecord(e, 'voice')}
+        className={cn(
+          'h-10 w-10 rounded-full flex-shrink-0 transition-colors touch-none select-none',
+          mode === 'voice' && 'text-primary bg-primary/10'
+        )}
+        onPointerDown={(e) => {
+          e.preventDefault();
+          beginHoldToRecord(e, 'voice');
+        }}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
+        onDoubleClick={() => handleClickToRecord('voice')}
+        title="Hold to record voice, double-click for hands-free"
       >
         <Mic className="h-5 w-5" />
       </Button>
-
-      {/* Optional quick tap to record (desktop friendly) */}
-      <button type="button" onClick={() => state === 'idle' && startRecording(mode)} className="sr-only">
-        Start recording
-      </button>
     </div>
   );
 }

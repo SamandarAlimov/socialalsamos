@@ -21,17 +21,12 @@ export function formatLastSeen(lastSeenDate: string | null | undefined, isOnline
     return 'last seen just now';
   }
   
-  // Within last hour
-  if (minutesAgo < 60) {
+  // Within last 5 minutes
+  if (minutesAgo < 5) {
     return `last seen ${minutesAgo}m ago`;
   }
   
-  // Within last few hours today
-  if (hoursAgo < 4 && isToday(date)) {
-    return `last seen ${hoursAgo}h ago`;
-  }
-  
-  // Today - show time only
+  // Today - show time only (e.g., "last seen at 18:30")
   if (isToday(date)) {
     return `last seen at ${format(date, 'HH:mm')}`;
   }
@@ -41,12 +36,7 @@ export function formatLastSeen(lastSeenDate: string | null | undefined, isOnline
     return `last seen yesterday at ${format(date, 'HH:mm')}`;
   }
   
-  // Within last week
-  if (daysAgo < 7) {
-    return `last seen ${daysAgo}d ago at ${format(date, 'HH:mm')}`;
-  }
-  
-  // Older - show time and full date (HH:mm dd/MM/yyyy format)
+  // Older - show time and full date (e.g., "last seen 18:30 15/11/2025")
   return `last seen ${format(date, 'HH:mm dd/MM/yyyy')}`;
 }
 
