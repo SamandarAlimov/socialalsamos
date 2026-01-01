@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Users, Megaphone, Pin, VolumeX, Reply, BadgeCheck } from 'lucide-react';
+import { Users, Megaphone, Pin, VolumeX, Reply } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
 import { Conversation } from '@/hooks/useMessages';
@@ -9,7 +9,7 @@ import { ChatListContextMenu } from './ChatListContextMenu';
 import { useSwipeToReply } from '@/hooks/useSwipeToReply';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { supabase } from '@/integrations/supabase/client';
-
+import { VerifiedBadge } from '@/components/VerifiedBadge';
 interface ChatListItemProps {
   conversation: Conversation;
   isSelected: boolean;
@@ -200,9 +200,9 @@ export function ChatListItem({
             <div className="flex items-center justify-between mb-0.5">
               <div className="flex items-center gap-1.5 min-w-0">
                 <span className="font-medium text-base md:text-sm truncate">{getName()}</span>
-                {/* Verification badge */}
+                {/* Instagram-style verification badge */}
                 {conversation.type === 'private' && isVerified && (
-                  <BadgeCheck className="h-4 w-4 md:h-3.5 md:w-3.5 text-[#0095F6] flex-shrink-0" />
+                  <VerifiedBadge size="xs" className="md:h-3.5 md:w-3.5" />
                 )}
                 {conversation.type === 'channel' && (
                   <Megaphone className="h-4 w-4 md:h-3.5 md:w-3.5 text-muted-foreground flex-shrink-0" />

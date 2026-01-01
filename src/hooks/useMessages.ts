@@ -16,6 +16,9 @@ export interface Conversation {
   created_at: string;
   last_message?: string;
   unread_count?: number;
+  is_pinned?: boolean;
+  is_muted?: boolean;
+  is_archived?: boolean;
   other_participant?: {
     id: string;
     username: string | null;
@@ -94,11 +97,12 @@ export function useConversations(type?: 'private' | 'group' | 'channel') {
     setIsLoading(true);
 
     try {
-      // Get user's conversations
+      // Get user's conversations with participation info (pinned, muted, archived)
       const { data: participations, error: partError } = await supabase
         .from('conversation_participants')
-        .select('conversation_id')
-        .eq('user_id', user.id);
+        .select('conversation_id, is_pinned, is_muted, is_archived')
+        .eq('user_id', user.id)
+        .eq('is_archived', false); // Don't show archived conversations
 
       if (partError) throw partError;
 
@@ -109,6 +113,15 @@ export function useConversations(type?: 'private' | 'group' | 'channel') {
       }
 
       const conversationIds = participations.map(p => p.conversation_id);
+      
+      // Create a map for quick lookup of participation settings
+      const participationMap = new Map(
+        participations.map(p => [p.conversation_id, { 
+          is_pinned: p.is_pinned ?? false, 
+          is_muted: p.is_muted ?? false,
+          is_archived: p.is_archived ?? false,
+        }])
+      );
 
       let query = supabase
         .from('conversations')
@@ -183,14 +196,26 @@ export function useConversations(type?: 'private' | 'group' | 'channel') {
             unreadCount = messageIds.filter(id => !readMessageIds.has(id)).length;
           }
 
+          const participantSettings = participationMap.get(conv.id);
+
           return {
             ...conv,
             other_participant: otherParticipant,
             last_message: lastMessage,
             unread_count: unreadCount,
+            is_pinned: participantSettings?.is_pinned ?? false,
+            is_muted: participantSettings?.is_muted ?? false,
+            is_archived: participantSettings?.is_archived ?? false,
           } as Conversation;
         })
       );
+
+      // Sort: pinned conversations first, then by last_message_at
+      conversationsWithDetails.sort((a, b) => {
+        if (a.is_pinned && !b.is_pinned) return -1;
+        if (!a.is_pinned && b.is_pinned) return 1;
+        return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime();
+      });
 
       setConversations(conversationsWithDetails);
     } catch (error: any) {
