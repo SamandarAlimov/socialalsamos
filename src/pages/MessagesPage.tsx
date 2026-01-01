@@ -70,7 +70,8 @@ export default function MessagesPage() {
     conversations, 
     isLoading: conversationsLoading, 
     createPrivateConversation, 
-    createGroup 
+    createGroup,
+    refresh: refreshConversations,
   } = useConversations(
     activeTab === 'private' ? 'private' : 
     activeTab === 'groups' ? 'group' : 
@@ -296,16 +297,80 @@ export default function MessagesPage() {
   };
 
   // Conversation context menu handlers
-  const handleArchiveConversation = (conversationId: string) => {
-    toast({ title: 'Archived', description: 'Conversation archived' });
+  const handleArchiveConversation = async (conversationId: string) => {
+    try {
+      await supabase
+        .from('conversation_participants')
+        .update({ is_archived: true })
+        .eq('conversation_id', conversationId)
+        .eq('user_id', user?.id);
+      
+      if (selectedConversation?.id === conversationId) {
+        setSelectedConversation(null);
+        setShowMobileChat(false);
+      }
+      
+      refreshConversations();
+      toast({ title: 'Archived', description: 'Conversation archived' });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to archive conversation', variant: 'destructive' });
+    }
   };
 
-  const handlePinConversation = (conversationId: string) => {
-    toast({ title: 'Pinned', description: 'Conversation pinned' });
+  const handlePinConversation = async (conversationId: string) => {
+    try {
+      // Toggle pin status
+      const { data: participant } = await supabase
+        .from('conversation_participants')
+        .select('is_pinned')
+        .eq('conversation_id', conversationId)
+        .eq('user_id', user?.id)
+        .single();
+      
+      const newPinnedStatus = !(participant?.is_pinned ?? false);
+      
+      await supabase
+        .from('conversation_participants')
+        .update({ is_pinned: newPinnedStatus })
+        .eq('conversation_id', conversationId)
+        .eq('user_id', user?.id);
+      
+      refreshConversations();
+      toast({ 
+        title: newPinnedStatus ? 'Pinned' : 'Unpinned', 
+        description: newPinnedStatus ? 'Conversation pinned to top' : 'Conversation unpinned' 
+      });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to update pin status', variant: 'destructive' });
+    }
   };
 
-  const handleMuteConversation = (conversationId: string) => {
-    toast({ title: 'Muted', description: 'Notifications muted' });
+  const handleMuteConversation = async (conversationId: string) => {
+    try {
+      // Toggle mute status
+      const { data: participant } = await supabase
+        .from('conversation_participants')
+        .select('is_muted')
+        .eq('conversation_id', conversationId)
+        .eq('user_id', user?.id)
+        .single();
+      
+      const newMutedStatus = !(participant?.is_muted ?? false);
+      
+      await supabase
+        .from('conversation_participants')
+        .update({ is_muted: newMutedStatus })
+        .eq('conversation_id', conversationId)
+        .eq('user_id', user?.id);
+      
+      refreshConversations();
+      toast({ 
+        title: newMutedStatus ? 'Muted' : 'Unmuted', 
+        description: newMutedStatus ? 'Notifications muted' : 'Notifications enabled' 
+      });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to update mute status', variant: 'destructive' });
+    }
   };
 
   const handleDeleteConversation = async (conversationId: string) => {
@@ -322,6 +387,7 @@ export default function MessagesPage() {
         setShowMobileChat(false);
       }
       
+      refreshConversations();
       toast({ title: 'Deleted', description: 'Conversation deleted' });
     } catch (error) {
       toast({ title: 'Error', description: 'Failed to delete conversation', variant: 'destructive' });
@@ -329,12 +395,57 @@ export default function MessagesPage() {
   };
 
   const handleMarkRead = async (conversationId: string) => {
-    // Mark all messages in conversation as read
-    toast({ title: 'Marked as read', description: 'All messages marked as read' });
+    try {
+      // Get all unread messages in this conversation
+      const { data: unreadMessages } = await supabase
+        .from('messages')
+        .select('id')
+        .eq('conversation_id', conversationId)
+        .neq('sender_id', user?.id);
+      
+      if (unreadMessages && unreadMessages.length > 0) {
+        // Insert read receipts for all messages
+        const readReceipts = unreadMessages.map(m => ({
+          message_id: m.id,
+          user_id: user?.id,
+        }));
+        
+        await supabase
+          .from('message_reads')
+          .upsert(readReceipts, { onConflict: 'message_id,user_id' });
+      }
+      
+      refreshConversations();
+      toast({ title: 'Marked as read', description: 'All messages marked as read' });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to mark as read', variant: 'destructive' });
+    }
   };
 
   const handleMarkUnread = async (conversationId: string) => {
-    toast({ title: 'Marked as unread', description: 'Conversation marked as unread' });
+    try {
+      // Delete read receipts for the last few messages to make it appear unread
+      const { data: recentMessages } = await supabase
+        .from('messages')
+        .select('id')
+        .eq('conversation_id', conversationId)
+        .neq('sender_id', user?.id)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      
+      if (recentMessages && recentMessages.length > 0) {
+        await supabase
+          .from('message_reads')
+          .delete()
+          .eq('user_id', user?.id)
+          .in('message_id', recentMessages.map(m => m.id));
+      }
+      
+      refreshConversations();
+      toast({ title: 'Marked as unread', description: 'Conversation marked as unread' });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to mark as unread', variant: 'destructive' });
+    }
   };
 
   const startCall = async (type: 'audio' | 'video') => {
@@ -645,6 +756,8 @@ export default function MessagesPage() {
                 key={conv.id}
                 conversation={conv}
                 isSelected={selectedConversation?.id === conv.id}
+                isPinned={conv.is_pinned}
+                isMuted={conv.is_muted}
                 onClick={() => handleSelectConversation(conv)}
                 onArchive={() => handleArchiveConversation(conv.id)}
                 onPin={() => handlePinConversation(conv.id)}
