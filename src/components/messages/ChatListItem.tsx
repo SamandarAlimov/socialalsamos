@@ -8,6 +8,7 @@ import { Conversation } from '@/hooks/useMessages';
 import { ChatListContextMenu } from './ChatListContextMenu';
 import { useSwipeToReply } from '@/hooks/useSwipeToReply';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
+import { useUserOnlineStatus } from '@/hooks/useRealtimeStatus';
 import { supabase } from '@/integrations/supabase/client';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 interface ChatListItemProps {
@@ -42,8 +43,12 @@ export function ChatListItem({
   onMarkUnread,
 }: ChatListItemProps) {
   const { lightTap } = useHapticFeedback();
-  const [isOnline, setIsOnline] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
+  
+  const otherUserId = conversation.type === 'private' ? conversation.other_participant?.id : null;
+  
+  // Use the realtime status hook for online status
+  const { isOnline } = useUserOnlineStatus(otherUserId);
   
   // Swipe to archive functionality
   const { offset, isReadyToReply, swipeHandlers } = useSwipeToReply({
@@ -54,30 +59,16 @@ export function ChatListItem({
     },
   });
 
-  const otherUserId = conversation.type === 'private' ? conversation.other_participant?.id : null;
-
-  // Real-time presence subscription for online status
+  // Subscribe to profile changes for verification status
   useEffect(() => {
     if (!otherUserId) return;
 
     // Set initial values from conversation data
-    setIsOnline(conversation.other_participant?.is_online || false);
     setIsVerified(conversation.other_participant?.is_verified || false);
 
-    // Subscribe to presence channel for real-time updates
-    const presenceChannel = supabase.channel(`presence-status-${otherUserId}`);
-    
-    presenceChannel
-      .on('presence', { event: 'sync' }, () => {
-        const state = presenceChannel.presenceState();
-        const isUserOnline = Object.keys(state).length > 0;
-        setIsOnline(isUserOnline);
-      })
-      .subscribe();
-
-    // Also subscribe to profile changes for verification status
+    // Subscribe to profile changes for verification status
     const profileChannel = supabase
-      .channel(`profile-${otherUserId}`)
+      .channel(`profile-verified-${otherUserId}`)
       .on(
         'postgres_changes',
         {
@@ -88,7 +79,6 @@ export function ChatListItem({
         },
         (payload) => {
           if (payload.new) {
-            setIsOnline(payload.new.is_online || false);
             setIsVerified(payload.new.is_verified || false);
           }
         }
@@ -96,7 +86,6 @@ export function ChatListItem({
       .subscribe();
 
     return () => {
-      supabase.removeChannel(presenceChannel);
       supabase.removeChannel(profileChannel);
     };
   }, [otherUserId, conversation.other_participant]);

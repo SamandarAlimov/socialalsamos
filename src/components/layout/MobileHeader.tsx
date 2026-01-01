@@ -2,15 +2,12 @@ import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { 
   Menu, 
-  X, 
   Search, 
-  Video, 
   ShoppingBag, 
-  Settings, 
   LogOut,
   Compass,
-  Bell,
-  MapPin
+  MapPin,
+  CreditCard
 } from 'lucide-react';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
@@ -29,17 +26,14 @@ import {
 interface NavItem {
   icon: React.ElementType;
   label: string;
-  path?: string;
-  action?: 'search';
+  path: string;
 }
 
 const menuItems: NavItem[] = [
-  { icon: Search, label: 'Search', path: '/search' },
   { icon: Compass, label: 'Discover', path: '/discover' },
-  { icon: MapPin, label: 'Map', path: '/map' },
-  { icon: Video, label: 'Videos', path: '/videos' },
   { icon: ShoppingBag, label: 'Marketplace', path: '/marketplace' },
-  { icon: Settings, label: 'Settings', path: '/settings' },
+  { icon: MapPin, label: 'Map', path: '/map' },
+  { icon: CreditCard, label: 'Payment', path: '/payment' },
 ];
 
 export function MobileHeader() {
@@ -54,8 +48,14 @@ export function MobileHeader() {
         <AlsamosLogo size="sm" showText />
 
         {/* Right Actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <NotificationsDropdown />
+          
+          <UserSearchDialog>
+            <Button variant="ghost" size="icon" className="h-9 w-9">
+              <Search className="h-5 w-5" />
+            </Button>
+          </UserSearchDialog>
           
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
@@ -70,29 +70,12 @@ export function MobileHeader() {
               
               <nav className="p-3 space-y-1">
                 {menuItems.map((item) => {
-                  const isActive = item.path ? location.pathname === item.path : false;
-                  
-                  if (item.action === 'search') {
-                    return (
-                      <UserSearchDialog key={item.label}>
-                        <button
-                          onClick={() => setOpen(false)}
-                          className={cn(
-                            "flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 w-full text-left",
-                            "text-foreground hover:bg-accent"
-                          )}
-                        >
-                          <item.icon className="h-5 w-5 text-muted-foreground" />
-                          <span className="font-medium">{item.label}</span>
-                        </button>
-                      </UserSearchDialog>
-                    );
-                  }
+                  const isActive = location.pathname === item.path;
                   
                   return (
                     <NavLink
                       key={item.path}
-                      to={item.path!}
+                      to={item.path}
                       onClick={() => setOpen(false)}
                       className={cn(
                         "flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200",
