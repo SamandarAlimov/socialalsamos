@@ -83,10 +83,21 @@ function UserCard({ user, onFollow, onUnfollow, onNavigate }: UserCardProps) {
   );
 }
 
-export function UserSearchDialog({ children }: { children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
+interface UserSearchDialogProps {
+  children: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+export function UserSearchDialog({ children, open: controlledOpen, onOpenChange }: UserSearchDialogProps) {
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const navigate = useNavigate();
+  
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : uncontrolledOpen;
+  const setOpen = isControlled ? (onOpenChange || (() => {})) : setUncontrolledOpen;
+  
+  const [query, setQuery] = useState('');
   const debouncedQuery = useDebounce(query, 300);
   const { results, loading, suggestedUsers, searchUsers, fetchSuggestedUsers, followUser, unfollowUser } = useUserSearch();
 

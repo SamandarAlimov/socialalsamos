@@ -7,6 +7,7 @@ import { VoiceMessagePlayer } from '@/components/VoiceMessagePlayer';
 import { EmojiPicker } from '@/components/EmojiPicker';
 import { MessageContextMenu } from './MessageContextMenu';
 import { LocationMessage } from './LocationMessage';
+import { GroupReadReceipts } from './GroupReadReceipts';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
@@ -455,6 +456,15 @@ export function EnhancedMessageBubble({
                 )}
               </div>
             </div>
+            
+            {/* Group Read Receipts */}
+            {isGroup && isMine && (
+              <GroupReadReceipts
+                messageId={message.id}
+                senderId={message.sender_id}
+                isMine={isMine}
+              />
+            )}
             
             {/* Reactions */}
             {(reactions.length > 0 || true) && (
