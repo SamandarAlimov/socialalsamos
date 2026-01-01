@@ -15,8 +15,10 @@ interface ChatListItemProps {
   isSelected: boolean;
   isPinned?: boolean;
   isMuted?: boolean;
+  isArchived?: boolean;
   onClick: () => void;
   onArchive?: () => void;
+  onUnarchive?: () => void;
   onPin?: () => void;
   onMute?: () => void;
   onDelete?: () => void;
@@ -29,8 +31,10 @@ export function ChatListItem({
   isSelected, 
   isPinned = false,
   isMuted = false,
+  isArchived = false,
   onClick,
   onArchive,
+  onUnarchive,
   onPin,
   onMute,
   onDelete,
@@ -139,8 +143,10 @@ export function ChatListItem({
       conversation={conversation}
       isPinned={isPinned}
       isMuted={isMuted}
+      isArchived={isArchived}
       isUnread={isUnread}
       onArchive={onArchive}
+      onUnarchive={onUnarchive}
       onPin={onPin}
       onMute={onMute}
       onDelete={onDelete}

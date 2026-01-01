@@ -1,4 +1,4 @@
-import { Outlet, Navigate } from 'react-router-dom';
+import { Outlet, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppSidebar } from './AppSidebar';
 import { BottomNavbar } from './BottomNavbar';
@@ -7,6 +7,10 @@ import { Loader2 } from 'lucide-react';
 
 export function AppLayout() {
   const { isAuthenticated, isLoading } = useAuth();
+  const location = useLocation();
+  
+  // Hide mobile header on messages page (it has its own header)
+  const hideHeaderOnMessages = location.pathname === '/messages';
 
   if (isLoading) {
     return (
@@ -28,11 +32,11 @@ export function AppLayout() {
       {/* Desktop Sidebar */}
       <AppSidebar />
       
-      {/* Mobile Header */}
-      <MobileHeader />
+      {/* Mobile Header - Hidden on messages page */}
+      {!hideHeaderOnMessages && <MobileHeader />}
       
       {/* Main Content */}
-      <main className="flex-1 overflow-auto md:ml-0 pt-14 pb-20 md:pt-0 md:pb-0">
+      <main className={`flex-1 overflow-auto md:ml-0 ${hideHeaderOnMessages ? 'pt-0' : 'pt-14'} pb-20 md:pt-0 md:pb-0`}>
         <Outlet />
       </main>
       
