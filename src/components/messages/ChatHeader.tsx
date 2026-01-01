@@ -13,6 +13,7 @@ import {
   BellOff,
   Trash2,
   LogOut,
+  Users2,
 } from 'lucide-react';
 import { Conversation } from '@/hooks/useMessages';
 import { cn } from '@/lib/utils';
@@ -38,7 +39,9 @@ interface ChatHeaderProps {
   onMute?: () => void;
   onLeave?: () => void;
   onDelete?: () => void;
+  onManageMembers?: () => void;
   isMuted?: boolean;
+  isAdmin?: boolean;
 }
 
 export function ChatHeader({
@@ -52,7 +55,9 @@ export function ChatHeader({
   onMute,
   onLeave,
   onDelete,
+  onManageMembers,
   isMuted,
+  isAdmin,
 }: ChatHeaderProps) {
   // Get real-time status for private chats
   const otherUserId = conversation.type === 'private' ? conversation.other_participant?.id : null;
@@ -199,13 +204,23 @@ export function ChatHeader({
                 )}
               </DropdownMenuItem>
             )}
-            {(conversation.type === 'group' || conversation.type === 'channel') && onLeave && (
+            {(conversation.type === 'group' || conversation.type === 'channel') && (
               <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onLeave} className="text-destructive">
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Leave {conversation.type === 'group' ? 'Group' : 'Channel'}
-                </DropdownMenuItem>
+                {onManageMembers && (
+                  <DropdownMenuItem onClick={onManageMembers}>
+                    <Users2 className="h-4 w-4 mr-2" />
+                    Manage Members
+                  </DropdownMenuItem>
+                )}
+                {onLeave && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={onLeave} className="text-destructive">
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Leave {conversation.type === 'group' ? 'Group' : 'Channel'}
+                    </DropdownMenuItem>
+                  </>
+                )}
               </>
             )}
             {conversation.type === 'private' && onDelete && (
