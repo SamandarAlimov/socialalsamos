@@ -30,6 +30,8 @@ import { CreateChatDialog } from '@/components/messages/CreateChatDialog';
 import { CreateGroupChannelDialog } from '@/components/messages/CreateGroupChannelDialog';
 import { VideoCallOverlay } from '@/components/messages/VideoCallOverlay';
 import { ForwardMessageDialog } from '@/components/ForwardMessageDialog';
+import { TelegramForwardDialog } from '@/components/messages/TelegramForwardDialog';
+import { MessageSearch } from '@/components/messages/MessageSearch';
 import { IncomingCallDialog } from '@/components/messages/IncomingCallDialog';
 import { PinnedMessagesBar } from '@/components/messages/PinnedMessagesBar';
 import { EditMessageDialog } from '@/components/messages/EditMessageDialog';
@@ -58,6 +60,8 @@ export default function MessagesPage() {
   const [deletingMessage, setDeletingMessage] = useState<Message | null>(null);
   const [showGroupDialog, setShowGroupDialog] = useState(false);
   const [showMemberManagement, setShowMemberManagement] = useState(false);
+  const [showMessageSearch, setShowMessageSearch] = useState(false);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   // Call State
   const [isInCall, setIsInCall] = useState(false);
   const [callType, setCallType] = useState<'audio' | 'video'>('video');
@@ -827,10 +831,26 @@ export default function MessagesPage() {
                 onBack={() => setShowMobileChat(false)}
                 onAudioCall={() => startCall('audio')}
                 onVideoCall={() => startCall('video')}
-                onSearch={() => {}}
+                onSearch={() => setShowMessageSearch(true)}
                 onViewInfo={() => {}}
                 onManageMembers={selectedConversation.type === 'group' ? () => setShowMemberManagement(true) : undefined}
               />
+              
+              {/* Message Search Bar */}
+              {showMessageSearch && (
+                <MessageSearch
+                  messages={messages}
+                  onHighlightMessage={(id) => {
+                    setHighlightedMessageId(id);
+                    // Scroll to message
+                    const element = document.getElementById(`message-${id}`);
+                    element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // Clear highlight after animation
+                    setTimeout(() => setHighlightedMessageId(null), 2000);
+                  }}
+                  onClose={() => setShowMessageSearch(false)}
+                />
+              )}
             </div>
 
             {/* Messages Area - Scrollable - Takes remaining space between fixed header and input */}
@@ -869,6 +889,11 @@ export default function MessagesPage() {
                           const readByOther = isMine && message.sender_id ? isMessageRead(message.id, message.sender_id) : false;
                           
                           return (
+                            <div
+                              key={message.id}
+                              id={`message-${message.id}`}
+                              className={highlightedMessageId === message.id ? 'animate-pulse bg-primary/10 rounded-lg' : ''}
+                            >
                             <EnhancedMessageBubble
                               key={message.id}
                               message={{
@@ -886,6 +911,7 @@ export default function MessagesPage() {
                               showAvatar={showAvatar}
                               showSender={selectedConversation.type === 'group' && showAvatar}
                             />
+                            </div>
                           );
                         })}
                       </div>
@@ -950,7 +976,7 @@ export default function MessagesPage() {
         }}
       />
 
-      <ForwardMessageDialog
+      <TelegramForwardDialog
         message={forwardMessage}
         open={!!forwardMessage}
         onOpenChange={(open) => !open && setForwardMessage(null)}

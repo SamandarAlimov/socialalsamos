@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { EmojiPicker } from '@/components/EmojiPicker';
 import { FileUploadButton } from '@/components/FileUploadButton';
-import { ProfessionalMediaRecorder } from './ProfessionalMediaRecorder';
+import { TelegramMediaRecorder } from './TelegramMediaRecorder';
 import { LocationShareButton } from './LocationShareButton';
 import { cn } from '@/lib/utils';
 import {
@@ -258,7 +258,7 @@ export function MessageInput({
             <Send className="h-5 w-5" />
           </Button>
         ) : (
-          <ProfessionalMediaRecorder 
+          <TelegramMediaRecorder 
             onSend={(url, duration, type) => {
               const durationStr = `${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')}`;
               onSend(`${type === 'video' ? 'Video' : 'Voice'} message (${durationStr})`, url, type);
