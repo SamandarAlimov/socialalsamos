@@ -33,6 +33,7 @@ import { IncomingCallDialog } from '@/components/messages/IncomingCallDialog';
 import { PinnedMessagesBar } from '@/components/messages/PinnedMessagesBar';
 import { EditMessageDialog } from '@/components/messages/EditMessageDialog';
 import { DeleteMessageDialog } from '@/components/messages/DeleteMessageDialog';
+import { TypingIndicator } from '@/components/messages/TypingIndicator';
 
 type MessageTab = 'private' | 'groups' | 'channels' | 'requests';
 
@@ -223,8 +224,15 @@ export default function MessagesPage() {
     { id: 'requests', label: 'Requests' },
   ];
 
-  // Filter conversations
+  // Filter conversations - for requests tab, only show message requests (not yet accepted)
   const filteredConversations = conversations.filter(conv => {
+    // For requests tab, filter to only show incoming requests (placeholder logic - needs backend support)
+    if (activeTab === 'requests') {
+      // This would require a field like `is_request` in the database
+      // For now, return empty to show "No message requests"
+      return false;
+    }
+    
     const name = conv.type === 'private' 
       ? conv.other_participant?.display_name || conv.other_participant?.username 
       : conv.name;
@@ -494,7 +502,7 @@ export default function MessagesPage() {
   const messageGroups = groupMessagesByDate(messages);
 
   return (
-    <div className="h-[calc(100vh-4rem)] md:h-[calc(100vh-4rem)] flex flex-col md:flex-row bg-background overflow-hidden">
+    <div className="h-[calc(100dvh-4rem)] md:h-[calc(100vh-4rem)] flex flex-col md:flex-row bg-background overflow-hidden">
       {/* Video Call Overlay */}
       {isInCall && (
         <VideoCallOverlay
@@ -528,7 +536,7 @@ export default function MessagesPage() {
 
       {/* Left Panel - Conversation List */}
       <div className={cn(
-        "w-full md:w-80 lg:w-96 border-r border-border flex flex-col bg-card flex-shrink-0",
+        "w-full md:w-80 lg:w-96 border-r border-border flex flex-col bg-card flex-shrink-0 h-full",
         showMobileChat && "hidden md:flex"
       )}>
         {/* Search & Create */}
@@ -622,23 +630,25 @@ export default function MessagesPage() {
 
       {/* Right Panel - Chat */}
       <div className={cn(
-        "flex-1 flex flex-col bg-background min-h-0 min-w-0",
+        "flex-1 flex flex-col bg-background min-w-0 h-full",
         !showMobileChat && "hidden md:flex"
       )}>
         {selectedConversation ? (
           <>
-            {/* Chat Header */}
-            <ChatHeader
-              conversation={selectedConversation}
-              typingUsers={typingUsers}
-              onBack={() => setShowMobileChat(false)}
-              onAudioCall={() => startCall('audio')}
-              onVideoCall={() => startCall('video')}
-              onSearch={() => {}}
-              onViewInfo={() => {}}
-            />
+            {/* Chat Header - Fixed */}
+            <div className="flex-shrink-0">
+              <ChatHeader
+                conversation={selectedConversation}
+                typingUsers={typingUsers}
+                onBack={() => setShowMobileChat(false)}
+                onAudioCall={() => startCall('audio')}
+                onVideoCall={() => startCall('video')}
+                onSearch={() => {}}
+                onViewInfo={() => {}}
+              />
+            </div>
 
-            {/* Messages Area */}
+            {/* Messages Area - Scrollable */}
             <div className="flex-1 overflow-y-auto scrollbar-custom bg-muted/20 min-h-0">
               {messagesLoading ? (
                 <div className="flex items-center justify-center h-full">
@@ -699,15 +709,7 @@ export default function MessagesPage() {
                   
                   {/* Typing Indicator */}
                   {typingUsers.length > 0 && (
-                    <div className="flex justify-start">
-                      <div className="bg-card border border-border rounded-2xl rounded-bl-md px-4 py-3">
-                        <div className="flex gap-1">
-                          <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                          <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                          <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                        </div>
-                      </div>
-                    </div>
+                    <TypingIndicator userNames={typingUsers.map(u => typeof u === 'string' ? u : (u as any).display_name || (u as any).username || 'Someone')} />
                   )}
                   
                   <div ref={messagesEndRef} />
@@ -715,8 +717,8 @@ export default function MessagesPage() {
               )}
             </div>
 
-            {/* Message Input */}
-            <div className="flex-shrink-0 border-t border-border">
+            {/* Message Input - Fixed at bottom */}
+            <div className="flex-shrink-0 border-t border-border bg-background">
               <MessageInput
                 onSend={handleSendMessage}
                 onTyping={setTyping}

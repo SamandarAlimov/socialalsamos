@@ -1,12 +1,14 @@
+import { useEffect, useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Users, Megaphone, Pin, VolumeX, Reply } from 'lucide-react';
+import { Users, Megaphone, Pin, VolumeX, Reply, BadgeCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
 import { Conversation } from '@/hooks/useMessages';
 import { ChatListContextMenu } from './ChatListContextMenu';
 import { useSwipeToReply } from '@/hooks/useSwipeToReply';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ChatListItemProps {
   conversation: Conversation;
@@ -36,6 +38,8 @@ export function ChatListItem({
   onMarkUnread,
 }: ChatListItemProps) {
   const { lightTap } = useHapticFeedback();
+  const [isOnline, setIsOnline] = useState(false);
+  const [isVerified, setIsVerified] = useState(false);
   
   // Swipe to archive functionality
   const { offset, isReadyToReply, swipeHandlers } = useSwipeToReply({
@@ -45,6 +49,53 @@ export function ChatListItem({
       if (onArchive) onArchive();
     },
   });
+
+  const otherUserId = conversation.type === 'private' ? conversation.other_participant?.id : null;
+
+  // Real-time presence subscription for online status
+  useEffect(() => {
+    if (!otherUserId) return;
+
+    // Set initial values from conversation data
+    setIsOnline(conversation.other_participant?.is_online || false);
+    setIsVerified(conversation.other_participant?.is_verified || false);
+
+    // Subscribe to presence channel for real-time updates
+    const presenceChannel = supabase.channel(`presence-status-${otherUserId}`);
+    
+    presenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = presenceChannel.presenceState();
+        const isUserOnline = Object.keys(state).length > 0;
+        setIsOnline(isUserOnline);
+      })
+      .subscribe();
+
+    // Also subscribe to profile changes for verification status
+    const profileChannel = supabase
+      .channel(`profile-${otherUserId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${otherUserId}`,
+        },
+        (payload) => {
+          if (payload.new) {
+            setIsOnline(payload.new.is_online || false);
+            setIsVerified(payload.new.is_verified || false);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(presenceChannel);
+      supabase.removeChannel(profileChannel);
+    };
+  }, [otherUserId, conversation.other_participant]);
 
   const getName = () => {
     if (conversation.type === 'private') {
@@ -76,7 +127,6 @@ export function ChatListItem({
     return format(date, 'dd.MM.yyyy');
   };
 
-  const isOnline = conversation.type === 'private' && conversation.other_participant?.is_online;
   const isUnread = (conversation.unread_count ?? 0) > 0;
 
   const handleClick = () => {
@@ -140,7 +190,8 @@ export function ChatListItem({
                 )}
               </AvatarFallback>
             </Avatar>
-            {isOnline && (
+            {/* Online indicator */}
+            {conversation.type === 'private' && isOnline && (
               <span className="absolute bottom-0 right-0 h-4 w-4 md:h-3.5 md:w-3.5 bg-green-500 rounded-full border-2 border-card" />
             )}
           </div>
@@ -149,6 +200,10 @@ export function ChatListItem({
             <div className="flex items-center justify-between mb-0.5">
               <div className="flex items-center gap-1.5 min-w-0">
                 <span className="font-medium text-base md:text-sm truncate">{getName()}</span>
+                {/* Verification badge */}
+                {conversation.type === 'private' && isVerified && (
+                  <BadgeCheck className="h-4 w-4 md:h-3.5 md:w-3.5 text-[#0095F6] flex-shrink-0" />
+                )}
                 {conversation.type === 'channel' && (
                   <Megaphone className="h-4 w-4 md:h-3.5 md:w-3.5 text-muted-foreground flex-shrink-0" />
                 )}
