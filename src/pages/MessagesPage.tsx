@@ -502,7 +502,7 @@ export default function MessagesPage() {
   const messageGroups = groupMessagesByDate(messages);
 
   return (
-    <div className="h-[calc(100dvh-4rem)] md:h-[calc(100vh-4rem)] flex flex-col md:flex-row bg-background overflow-hidden">
+    <div className="h-[100dvh] md:h-screen flex flex-col md:flex-row bg-background overflow-hidden">
       {/* Video Call Overlay */}
       {isInCall && (
         <VideoCallOverlay
@@ -536,7 +536,8 @@ export default function MessagesPage() {
 
       {/* Left Panel - Conversation List */}
       <div className={cn(
-        "w-full md:w-80 lg:w-96 border-r border-border flex flex-col bg-card flex-shrink-0 h-full",
+        "w-full md:w-80 lg:w-96 border-r border-border flex flex-col bg-card flex-shrink-0",
+        "h-[calc(100dvh-4rem)] md:h-full pb-16 md:pb-0",
         showMobileChat && "hidden md:flex"
       )}>
         {/* Search & Create */}
@@ -630,13 +631,14 @@ export default function MessagesPage() {
 
       {/* Right Panel - Chat */}
       <div className={cn(
-        "flex-1 flex flex-col bg-background min-w-0 h-full",
+        "flex-1 flex flex-col bg-background min-w-0",
+        "h-[100dvh] md:h-full",
         !showMobileChat && "hidden md:flex"
       )}>
         {selectedConversation ? (
           <>
-            {/* Chat Header - Fixed */}
-            <div className="flex-shrink-0">
+            {/* Chat Header - Fixed at top */}
+            <div className="flex-shrink-0 sticky top-0 z-20 bg-card border-b border-border">
               <ChatHeader
                 conversation={selectedConversation}
                 typingUsers={typingUsers}
@@ -649,7 +651,7 @@ export default function MessagesPage() {
             </div>
 
             {/* Messages Area - Scrollable */}
-            <div className="flex-1 overflow-y-auto scrollbar-custom bg-muted/20 min-h-0">
+            <div className="flex-1 overflow-y-auto scrollbar-custom bg-muted/20 min-h-0 overscroll-contain">
               {messagesLoading ? (
                 <div className="flex items-center justify-center h-full">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -718,7 +720,7 @@ export default function MessagesPage() {
             </div>
 
             {/* Message Input - Fixed at bottom */}
-            <div className="flex-shrink-0 border-t border-border bg-background">
+            <div className="flex-shrink-0 sticky bottom-0 z-20 border-t border-border bg-card pb-safe">
               <MessageInput
                 onSend={handleSendMessage}
                 onTyping={setTyping}
