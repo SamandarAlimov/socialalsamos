@@ -19,7 +19,6 @@ import { toast } from 'sonner';
 
 type RecordMode = 'voice' | 'video';
 type RecordState = 'idle' | 'recording' | 'locked' | 'preview';
-
 type VideoQuality = '480p' | '720p' | '1080p';
 
 interface ProfessionalMediaRecorderProps {
@@ -28,6 +27,7 @@ interface ProfessionalMediaRecorderProps {
 }
 
 export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMediaRecorderProps) {
+  // Single mode that toggles between voice and video (Telegram-style)
   const [mode, setMode] = useState<RecordMode>('voice');
   const [state, setState] = useState<RecordState>('idle');
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
@@ -50,11 +50,10 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
   const startPosRef = useRef<{ x: number; y: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Which mode we *actually* recorded (fixes async setState race that can hide video preview/send UI)
+  // Which mode we *actually* recorded
   const recordingModeRef = useRef<RecordMode>('voice');
 
   const qualityVideoConstraints = (q: VideoQuality) => {
-    // Portrait-ish targets (9:16). Browser may clamp to device capabilities.
     if (q === '480p') return { width: { ideal: 480 }, height: { ideal: 854 } };
     if (q === '1080p') return { width: { ideal: 1080 }, height: { ideal: 1920 } };
     return { width: { ideal: 720 }, height: { ideal: 1280 } };
@@ -265,19 +264,18 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
   };
 
   const beginHoldToRecord = useCallback(
-    (e: React.PointerEvent, desiredMode: RecordMode) => {
+    (e: React.PointerEvent) => {
       if (state !== 'idle') return;
 
-      setMode(desiredMode);
-      recordingModeRef.current = desiredMode;
+      recordingModeRef.current = mode;
       startPosRef.current = { x: e.clientX, y: e.clientY };
       setSwipeOffset(0);
 
       holdTimeoutRef.current = setTimeout(() => {
-        startRecording(desiredMode);
+        startRecording(mode);
       }, 150);
     },
-    [state, startRecording]
+    [state, mode, startRecording]
   );
 
   const handlePointerMove = useCallback(
@@ -321,10 +319,16 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
     setVideoQuality((q) => (q === '480p' ? '720p' : q === '720p' ? '1080p' : '480p'));
   };
 
+  // Toggle between voice and video mode (Telegram-style single button)
+  const toggleMode = () => {
+    if (state !== 'idle') return;
+    setMode((m) => (m === 'voice' ? 'video' : 'voice'));
+  };
+
   // ===== Video preview (fullscreen) =====
   if (state === 'preview' && mediaUrl && recordingModeRef.current === 'video') {
     return (
-      <div className="fixed inset-0 z-50 bg-black flex flex-col">
+      <div className="fixed inset-0 z-50 bg-black flex flex-col safe-area-inset">
         <div className="flex items-center justify-between p-4 border-b border-white/10">
           <Button variant="ghost" size="icon" onClick={cancelRecording} className="text-white hover:bg-white/10">
             <X className="h-5 w-5" />
@@ -354,7 +358,8 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
           </div>
         </div>
 
-        <div className="flex items-center justify-center gap-6 p-6 border-t border-white/10 safe-area-bottom bg-black">
+        {/* Action buttons - properly positioned above safe area */}
+        <div className="flex items-center justify-center gap-6 p-6 pb-8 border-t border-white/10 bg-black safe-area-bottom">
           <Button
             variant="outline"
             size="lg"
@@ -388,7 +393,7 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
   // ===== Video recording (fullscreen) =====
   if ((state === 'recording' || state === 'locked') && recordingModeRef.current === 'video') {
     return (
-      <div className="fixed inset-0 z-50 bg-black flex flex-col">
+      <div className="fixed inset-0 z-50 bg-black flex flex-col safe-area-inset">
         <div className="flex items-center justify-between p-4 border-b border-white/10">
           <Button variant="ghost" size="icon" onClick={cancelRecording} className="text-white hover:bg-white/10">
             <X className="h-5 w-5" />
@@ -412,7 +417,8 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
           </div>
         </div>
 
-        <div className="flex items-center justify-center gap-8 p-6 border-t border-white/10 safe-area-bottom bg-black">
+        {/* Action buttons - properly positioned above safe area */}
+        <div className="flex items-center justify-center gap-8 p-6 pb-8 border-t border-white/10 bg-black safe-area-bottom">
           <Button variant="ghost" size="icon" className="h-14 w-14 text-white hover:bg-white/10" onClick={switchCamera}>
             <SwitchCamera className="h-7 w-7" />
           </Button>
@@ -530,73 +536,54 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
     );
   }
 
-  // ===== Idle =====
-  const handleClickToRecord = (desiredMode: RecordMode) => {
+  // ===== Idle - Single toggle button (Telegram-style) =====
+  const handleClickToRecord = () => {
     if (state !== 'idle') return;
-    setMode(desiredMode);
-    recordingModeRef.current = desiredMode;
-    startRecording(desiredMode);
+    recordingModeRef.current = mode;
+    startRecording(mode);
   };
 
   return (
     <div className="flex items-center gap-1">
-      {/* Video button with quality badge */}
+      {/* Single button that shows current mode - tap to toggle mode, hold to record */}
       <div className="relative">
         <Button
           variant="ghost"
           size="icon"
           className={cn(
             'h-10 w-10 rounded-full flex-shrink-0 transition-colors touch-none select-none',
-            mode === 'video' && 'text-primary bg-primary/10'
+            'hover:bg-accent active:bg-accent/80'
           )}
+          onClick={toggleMode}
           onPointerDown={(e) => {
             e.preventDefault();
-            beginHoldToRecord(e, 'video');
+            beginHoldToRecord(e);
           }}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
-          onDoubleClick={() => handleClickToRecord('video')}
-          title="Hold to record video, double-click for hands-free"
+          onDoubleClick={handleClickToRecord}
+          title={mode === 'voice' ? 'Hold to record voice, tap to switch to video' : 'Hold to record video, tap to switch to voice'}
         >
-          <Video className="h-5 w-5" />
+          {mode === 'voice' ? <Mic className="h-5 w-5" /> : <Video className="h-5 w-5" />}
         </Button>
 
-        {/* Quality badge - click to cycle */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            cycleQuality();
-          }}
-          className="absolute -top-1 -right-1 rounded-full bg-card border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground shadow-sm hover:bg-accent transition-colors"
-          aria-label="Change video quality"
-          title={`Video quality: ${videoQuality}`}
-        >
-          {videoQuality}
-        </button>
-      </div>
-
-      {/* Voice button */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className={cn(
-          'h-10 w-10 rounded-full flex-shrink-0 transition-colors touch-none select-none',
-          mode === 'voice' && 'text-primary bg-primary/10'
+        {/* Quality badge for video mode */}
+        {mode === 'video' && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              cycleQuality();
+            }}
+            className="absolute -top-1 -right-1 rounded-full bg-card border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground shadow-sm hover:bg-accent transition-colors"
+            aria-label="Change video quality"
+            title={`Video quality: ${videoQuality}`}
+          >
+            {videoQuality}
+          </button>
         )}
-        onPointerDown={(e) => {
-          e.preventDefault();
-          beginHoldToRecord(e, 'voice');
-        }}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        onDoubleClick={() => handleClickToRecord('voice')}
-        title="Hold to record voice, double-click for hands-free"
-      >
-        <Mic className="h-5 w-5" />
-      </Button>
+      </div>
     </div>
   );
 }
