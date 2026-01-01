@@ -129,6 +129,7 @@ export function useConversations(type?: 'private' | 'group' | 'channel') {
         (convos || []).map(async (conv) => {
           let otherParticipant = null;
           let lastMessage = null;
+          let unreadCount = 0;
 
           if (conv.type === 'private') {
             const { data: participants } = await supabase
@@ -161,11 +162,32 @@ export function useConversations(type?: 'private' | 'group' | 'channel') {
             lastMessage = messages[0].content;
           }
 
+          // Calculate unread count - messages not sent by current user that haven't been read
+          const { data: allMessages } = await supabase
+            .from('messages')
+            .select('id')
+            .eq('conversation_id', conv.id)
+            .neq('sender_id', user.id);
+
+          if (allMessages && allMessages.length > 0) {
+            const messageIds = allMessages.map(m => m.id);
+            
+            // Get read receipts for these messages by current user
+            const { data: readReceipts } = await supabase
+              .from('message_reads')
+              .select('message_id')
+              .eq('user_id', user.id)
+              .in('message_id', messageIds);
+
+            const readMessageIds = new Set(readReceipts?.map(r => r.message_id) || []);
+            unreadCount = messageIds.filter(id => !readMessageIds.has(id)).length;
+          }
+
           return {
             ...conv,
             other_participant: otherParticipant,
             last_message: lastMessage,
-            unread_count: 0,
+            unread_count: unreadCount,
           } as Conversation;
         })
       );
