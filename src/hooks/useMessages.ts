@@ -85,7 +85,7 @@ class RealtimeConnectionManager {
 
 const connectionManager = RealtimeConnectionManager.getInstance();
 
-export function useConversations(type?: 'private' | 'group' | 'channel') {
+export function useConversations(type?: 'private' | 'group' | 'channel', showArchived: boolean = false) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuth();
@@ -102,7 +102,7 @@ export function useConversations(type?: 'private' | 'group' | 'channel') {
         .from('conversation_participants')
         .select('conversation_id, is_pinned, is_muted, is_archived')
         .eq('user_id', user.id)
-        .eq('is_archived', false); // Don't show archived conversations
+        .eq('is_archived', showArchived); // Show archived or non-archived based on flag
 
       if (partError) throw partError;
 
@@ -228,7 +228,7 @@ export function useConversations(type?: 'private' | 'group' | 'channel') {
     } finally {
       setIsLoading(false);
     }
-  }, [user, type, toast]);
+  }, [user, type, showArchived, toast]);
 
   const createPrivateConversation = useCallback(async (otherUserId: string): Promise<Conversation | null> => {
     if (!user) return null;

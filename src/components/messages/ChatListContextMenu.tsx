@@ -7,14 +7,13 @@ import {
 } from '@/components/ui/context-menu';
 import {
   Archive,
+  ArchiveRestore,
   Pin,
   BellOff,
   Bell,
   Trash2,
   CheckCheck,
   Circle,
-  Volume2,
-  VolumeX,
 } from 'lucide-react';
 import { Conversation } from '@/hooks/useMessages';
 
@@ -23,8 +22,10 @@ interface ChatListContextMenuProps {
   children: React.ReactNode;
   isPinned?: boolean;
   isMuted?: boolean;
+  isArchived?: boolean;
   isUnread?: boolean;
   onArchive?: () => void;
+  onUnarchive?: () => void;
   onPin?: () => void;
   onMute?: () => void;
   onDelete?: () => void;
@@ -37,8 +38,10 @@ export function ChatListContextMenu({
   children,
   isPinned = false,
   isMuted = false,
+  isArchived = false,
   isUnread = false,
   onArchive,
+  onUnarchive,
   onPin,
   onMute,
   onDelete,
@@ -51,11 +54,22 @@ export function ChatListContextMenu({
         {children}
       </ContextMenuTrigger>
       <ContextMenuContent className="w-56">
-        {onArchive && (
-          <ContextMenuItem onClick={onArchive} className="gap-2">
-            <Archive className="h-4 w-4" />
-            Archive
-          </ContextMenuItem>
+        {isArchived ? (
+          // Show unarchive option for archived conversations
+          onUnarchive && (
+            <ContextMenuItem onClick={onUnarchive} className="gap-2">
+              <ArchiveRestore className="h-4 w-4" />
+              Unarchive
+            </ContextMenuItem>
+          )
+        ) : (
+          // Show archive option for non-archived conversations
+          onArchive && (
+            <ContextMenuItem onClick={onArchive} className="gap-2">
+              <Archive className="h-4 w-4" />
+              Archive
+            </ContextMenuItem>
+          )
         )}
         
         {isUnread && onMarkRead && (
@@ -72,14 +86,14 @@ export function ChatListContextMenu({
           </ContextMenuItem>
         )}
         
-        {onPin && (
+        {onPin && !isArchived && (
           <ContextMenuItem onClick={onPin} className="gap-2">
             <Pin className="h-4 w-4" />
             {isPinned ? 'Unpin' : 'Pin'}
           </ContextMenuItem>
         )}
         
-        {onMute && (
+        {onMute && !isArchived && (
           <ContextMenuItem onClick={onMute} className="gap-2">
             {isMuted ? (
               <>

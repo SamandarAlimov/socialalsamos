@@ -6,6 +6,7 @@ import {
   Plus, 
   MessageCircle,
   Inbox,
+  Archive,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -36,7 +37,7 @@ import { DeleteMessageDialog } from '@/components/messages/DeleteMessageDialog';
 import { TypingIndicator } from '@/components/messages/TypingIndicator';
 import { GroupMemberManagement } from '@/components/messages/GroupMemberManagement';
 
-type MessageTab = 'private' | 'groups' | 'channels' | 'requests';
+type MessageTab = 'private' | 'groups' | 'channels' | 'requests' | 'archived';
 
 export default function MessagesPage() {
   const { user } = useAuth();
@@ -65,7 +66,10 @@ export default function MessagesPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Hooks
+  // Determine if we're showing archived tab
+  const isArchivedTab = activeTab === 'archived';
+
+  // Hooks - main conversations (non-archived)
   const { 
     conversations, 
     isLoading: conversationsLoading, 
@@ -75,7 +79,9 @@ export default function MessagesPage() {
   } = useConversations(
     activeTab === 'private' ? 'private' : 
     activeTab === 'groups' ? 'group' : 
-    activeTab === 'channels' ? 'channel' : undefined
+    activeTab === 'channels' ? 'channel' : 
+    activeTab === 'archived' ? undefined : undefined,
+    isArchivedTab // showArchived flag
   );
 
   const { 
@@ -224,6 +230,7 @@ export default function MessagesPage() {
     { id: 'groups', label: 'Groups' },
     { id: 'channels', label: 'Channels' },
     { id: 'requests', label: 'Requests' },
+    { id: 'archived', label: 'Archived' },
   ];
 
   // Filter conversations - for requests tab, only show message requests (not yet accepted)
@@ -240,6 +247,22 @@ export default function MessagesPage() {
       : conv.name;
     return name?.toLowerCase().includes(searchQuery.toLowerCase());
   });
+
+  // Unarchive conversation handler
+  const handleUnarchiveConversation = async (conversationId: string) => {
+    try {
+      await supabase
+        .from('conversation_participants')
+        .update({ is_archived: false })
+        .eq('conversation_id', conversationId)
+        .eq('user_id', user?.id);
+      
+      refreshConversations();
+      toast({ title: 'Unarchived', description: 'Conversation restored' });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to unarchive conversation', variant: 'destructive' });
+    }
+  };
 
   // Handlers
   const handleSelectConversation = (conv: Conversation) => {
@@ -736,6 +759,11 @@ export default function MessagesPage() {
                   <Inbox className="h-10 w-10 mb-3 opacity-50" />
                   <p className="text-sm">No message requests</p>
                 </>
+              ) : activeTab === 'archived' ? (
+                <>
+                  <Archive className="h-10 w-10 mb-3 opacity-50" />
+                  <p className="text-sm">No archived chats</p>
+                </>
               ) : (
                 <>
                   <MessageCircle className="h-10 w-10 mb-3 opacity-50" />
@@ -758,8 +786,10 @@ export default function MessagesPage() {
                 isSelected={selectedConversation?.id === conv.id}
                 isPinned={conv.is_pinned}
                 isMuted={conv.is_muted}
+                isArchived={isArchivedTab}
                 onClick={() => handleSelectConversation(conv)}
                 onArchive={() => handleArchiveConversation(conv.id)}
+                onUnarchive={() => handleUnarchiveConversation(conv.id)}
                 onPin={() => handlePinConversation(conv.id)}
                 onMute={() => handleMuteConversation(conv.id)}
                 onDelete={() => handleDeleteConversation(conv.id)}
