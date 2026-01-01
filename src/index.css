@@ -376,10 +376,34 @@
   padding-right: env(safe-area-inset-right, 0px);
 }
 
+.safe-area-inset {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+.pb-safe {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+}
+
 /* Mobile touch feedback */
 @media (hover: none) and (pointer: coarse) {
   .touch-feedback:active {
     @apply opacity-70 scale-95;
     transition: all 0.1s ease;
+  }
+}
+
+/* Messages page specific - ensure proper height on mobile */
+@supports (height: 100dvh) {
+  .h-screen-safe {
+    height: 100dvh;
+  }
+}
+
+@supports not (height: 100dvh) {
+  .h-screen-safe {
+    height: 100vh;
   }
 }

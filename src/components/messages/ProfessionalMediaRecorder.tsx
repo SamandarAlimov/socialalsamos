@@ -544,46 +544,53 @@ export function ProfessionalMediaRecorder({ onSend, onCancel }: ProfessionalMedi
   };
 
   return (
-    <div className="flex items-center gap-1">
-      {/* Single button that shows current mode - tap to toggle mode, hold to record */}
-      <div className="relative">
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn(
-            'h-10 w-10 rounded-full flex-shrink-0 transition-colors touch-none select-none',
-            'hover:bg-accent active:bg-accent/80'
-          )}
-          onClick={toggleMode}
-          onPointerDown={(e) => {
-            e.preventDefault();
-            beginHoldToRecord(e);
-          }}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerUp}
-          onDoubleClick={handleClickToRecord}
-          title={mode === 'voice' ? 'Hold to record voice, tap to switch to video' : 'Hold to record video, tap to switch to voice'}
-        >
-          {mode === 'voice' ? <Mic className="h-5 w-5" /> : <Video className="h-5 w-5" />}
-        </Button>
-
-        {/* Quality badge for video mode */}
-        {mode === 'video' && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              cycleQuality();
-            }}
-            className="absolute -top-1 -right-1 rounded-full bg-card border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground shadow-sm hover:bg-accent transition-colors"
-            aria-label="Change video quality"
-            title={`Video quality: ${videoQuality}`}
-          >
-            {videoQuality}
-          </button>
+    <div className="relative flex items-center">
+      {/* Single toggle button - tap to switch mode, hold to record */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className={cn(
+          'h-10 w-10 rounded-full flex-shrink-0 transition-all touch-none select-none relative',
+          'hover:bg-accent active:bg-accent/80'
         )}
-      </div>
+        onClick={toggleMode}
+        onPointerDown={(e) => {
+          e.preventDefault();
+          beginHoldToRecord(e);
+        }}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onDoubleClick={handleClickToRecord}
+        title={mode === 'voice' ? 'Tap to switch to video • Hold to record voice' : 'Tap to switch to voice • Hold to record video'}
+      >
+        {mode === 'voice' ? <Mic className="h-5 w-5" /> : <Video className="h-5 w-5" />}
+        
+        {/* Mode indicator badge */}
+        <span className={cn(
+          "absolute -top-0.5 -right-0.5 h-3.5 min-w-[14px] px-0.5 rounded-full text-[9px] font-semibold flex items-center justify-center",
+          mode === 'voice' 
+            ? "bg-primary text-primary-foreground" 
+            : "bg-blue-500 text-white"
+        )}>
+          {mode === 'voice' ? 'A' : videoQuality.replace('p', '')}
+        </span>
+      </Button>
+
+      {/* Quality cycle button for video mode - positioned outside */}
+      {mode === 'video' && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            cycleQuality();
+          }}
+          className="ml-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+          aria-label="Change video quality"
+        >
+          {videoQuality}
+        </button>
+      )}
     </div>
   );
 }
