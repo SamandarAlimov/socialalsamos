@@ -11,6 +11,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { format } from 'date-fns';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface Message {
   id: string;
@@ -24,7 +29,10 @@ interface Message {
   reply_to_id: string | null;
   is_read?: boolean;
   created_at: string;
+  updated_at?: string;
   status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+  delivered_at?: string;
+  read_at?: string;
   tempId?: string;
   sender?: {
     id: string;
@@ -397,7 +405,7 @@ export function EnhancedMessageBubble({
                 </>
               )}
               
-              {/* Message meta */}
+              {/* Message meta with delivery status */}
               <div className={cn(
                 "flex items-center justify-end gap-1.5 mt-1",
                 isMine ? "text-primary-foreground/70" : "text-muted-foreground"
@@ -405,15 +413,45 @@ export function EnhancedMessageBubble({
                 <span className="text-[10px]">{formatTime(message.created_at)}</span>
                 {message.is_edited && <span className="text-[10px]">(edited)</span>}
                 {isMine && (
-                  message.status === 'sending' ? (
-                    <Clock className="h-3 w-3 animate-pulse" />
-                  ) : message.status === 'failed' ? (
-                    <AlertCircle className="h-3 w-3 text-destructive" />
-                  ) : message.status === 'read' || message.is_read ? (
-                    <CheckCheck className="h-3.5 w-3.5 text-[#0095F6]" />
-                  ) : (
-                    <Check className="h-3 w-3" />
-                  )
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex items-center">
+                        {message.status === 'sending' ? (
+                          <Clock className="h-3 w-3 animate-pulse" />
+                        ) : message.status === 'failed' ? (
+                          <AlertCircle className="h-3 w-3 text-destructive" />
+                        ) : message.status === 'read' || message.is_read ? (
+                          <CheckCheck className="h-3.5 w-3.5 text-[#0095F6]" />
+                        ) : message.status === 'delivered' ? (
+                          <CheckCheck className="h-3.5 w-3.5" />
+                        ) : (
+                          <Check className="h-3 w-3" />
+                        )}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="left" className="text-xs">
+                      {message.status === 'sending' && 'Sending...'}
+                      {message.status === 'failed' && 'Failed to send'}
+                      {message.status === 'sent' && `Sent ${formatTime(message.created_at)}`}
+                      {message.status === 'delivered' && (
+                        <div>
+                          <div>Delivered</div>
+                          {message.delivered_at && (
+                            <div className="text-muted-foreground">{format(new Date(message.delivered_at), 'HH:mm dd/MM/yyyy')}</div>
+                          )}
+                        </div>
+                      )}
+                      {(message.status === 'read' || message.is_read) && (
+                        <div>
+                          <div>Read</div>
+                          {message.read_at && (
+                            <div className="text-muted-foreground">{format(new Date(message.read_at), 'HH:mm dd/MM/yyyy')}</div>
+                          )}
+                        </div>
+                      )}
+                      {!message.status && !message.is_read && `Sent ${formatTime(message.created_at)}`}
+                    </TooltipContent>
+                  </Tooltip>
                 )}
               </div>
             </div>

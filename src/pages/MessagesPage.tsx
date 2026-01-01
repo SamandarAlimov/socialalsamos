@@ -34,6 +34,7 @@ import { PinnedMessagesBar } from '@/components/messages/PinnedMessagesBar';
 import { EditMessageDialog } from '@/components/messages/EditMessageDialog';
 import { DeleteMessageDialog } from '@/components/messages/DeleteMessageDialog';
 import { TypingIndicator } from '@/components/messages/TypingIndicator';
+import { GroupMemberManagement } from '@/components/messages/GroupMemberManagement';
 
 type MessageTab = 'private' | 'groups' | 'channels' | 'requests';
 
@@ -55,7 +56,7 @@ export default function MessagesPage() {
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [deletingMessage, setDeletingMessage] = useState<Message | null>(null);
   const [showGroupDialog, setShowGroupDialog] = useState(false);
-  
+  const [showMemberManagement, setShowMemberManagement] = useState(false);
   // Call State
   const [isInCall, setIsInCall] = useState(false);
   const [callType, setCallType] = useState<'audio' | 'video'>('video');
@@ -501,6 +502,34 @@ export default function MessagesPage() {
 
   const messageGroups = groupMessagesByDate(messages);
 
+  // Swipe to close state
+  const [chatSwipeOffset, setChatSwipeOffset] = useState(0);
+  const [isChatSwiping, setIsChatSwiping] = useState(false);
+  const chatSwipeStartX = useRef(0);
+  const chatSwipeThreshold = 100;
+
+  const handleChatSwipeStart = useCallback((e: React.TouchEvent) => {
+    chatSwipeStartX.current = e.touches[0].clientX;
+    setIsChatSwiping(true);
+  }, []);
+
+  const handleChatSwipeMove = useCallback((e: React.TouchEvent) => {
+    if (!isChatSwiping) return;
+    const diff = e.touches[0].clientX - chatSwipeStartX.current;
+    if (diff > 0) {
+      setChatSwipeOffset(Math.min(diff, 200));
+    }
+  }, [isChatSwiping]);
+
+  const handleChatSwipeEnd = useCallback(() => {
+    if (chatSwipeOffset >= chatSwipeThreshold) {
+      setShowMobileChat(false);
+      setSelectedConversation(null);
+    }
+    setChatSwipeOffset(0);
+    setIsChatSwiping(false);
+  }, [chatSwipeOffset]);
+
   return (
     <div className="h-[100dvh] md:h-screen flex flex-col md:flex-row bg-background overflow-hidden">
       {/* Video Call Overlay */}
@@ -537,7 +566,7 @@ export default function MessagesPage() {
       {/* Left Panel - Conversation List */}
       <div className={cn(
         "w-full md:w-80 lg:w-96 border-r border-border flex flex-col bg-card flex-shrink-0",
-        "h-[calc(100dvh-4rem)] md:h-full pb-16 md:pb-0",
+        "h-[calc(100dvh-4rem)] md:h-full",
         showMobileChat && "hidden md:flex"
       )}>
         {/* Search & Create */}
@@ -630,15 +659,25 @@ export default function MessagesPage() {
       </div>
 
       {/* Right Panel - Chat */}
-      <div className={cn(
-        "flex-1 flex flex-col bg-background min-w-0",
-        "h-[100dvh] md:h-full",
-        !showMobileChat && "hidden md:flex"
-      )}>
+      <div 
+        className={cn(
+          "flex-1 flex flex-col bg-background min-w-0",
+          "fixed inset-0 md:relative md:inset-auto",
+          "h-[100dvh] md:h-full",
+          !showMobileChat && "hidden md:flex"
+        )}
+        style={{
+          transform: `translateX(${chatSwipeOffset}px)`,
+          transition: isChatSwiping ? 'none' : 'transform 0.2s ease-out',
+        }}
+        onTouchStart={handleChatSwipeStart}
+        onTouchMove={handleChatSwipeMove}
+        onTouchEnd={handleChatSwipeEnd}
+      >
         {selectedConversation ? (
           <>
             {/* Chat Header - Fixed at top */}
-            <div className="flex-shrink-0 sticky top-0 z-20 bg-card border-b border-border">
+            <div className="flex-shrink-0 z-20 bg-card border-b border-border">
               <ChatHeader
                 conversation={selectedConversation}
                 typingUsers={typingUsers}
@@ -647,11 +686,12 @@ export default function MessagesPage() {
                 onVideoCall={() => startCall('video')}
                 onSearch={() => {}}
                 onViewInfo={() => {}}
+                onManageMembers={selectedConversation.type === 'group' ? () => setShowMemberManagement(true) : undefined}
               />
             </div>
 
-            {/* Messages Area - Scrollable */}
-            <div className="flex-1 overflow-y-auto scrollbar-custom bg-muted/20 min-h-0 overscroll-contain">
+            {/* Messages Area - Scrollable - Takes remaining space between fixed header and input */}
+            <div className="flex-1 overflow-y-auto scrollbar-custom bg-muted/20 overscroll-contain">
               {messagesLoading ? (
                 <div className="flex items-center justify-center h-full">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -719,8 +759,8 @@ export default function MessagesPage() {
               )}
             </div>
 
-            {/* Message Input - Fixed at bottom */}
-            <div className="flex-shrink-0 sticky bottom-0 z-20 border-t border-border bg-card pb-safe">
+            {/* Message Input - Fixed at bottom, above mobile navbar */}
+            <div className="flex-shrink-0 border-t border-border bg-card mb-16 md:mb-0">
               <MessageInput
                 onSend={handleSendMessage}
                 onTyping={setTyping}
@@ -786,6 +826,16 @@ export default function MessagesPage() {
         onConfirm={handleDeleteConfirm}
         messagePreview={deletingMessage?.content || undefined}
       />
+
+      {selectedConversation && selectedConversation.type === 'group' && (
+        <GroupMemberManagement
+          open={showMemberManagement}
+          onOpenChange={setShowMemberManagement}
+          conversationId={selectedConversation.id}
+          conversationName={selectedConversation.name || undefined}
+          isAdmin={selectedConversation.owner_id === user?.id}
+        />
+      )}
     </div>
   );
 }
