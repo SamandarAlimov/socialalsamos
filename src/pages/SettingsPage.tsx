@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserSettings } from '@/hooks/useUserSettings';
+import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   User, 
@@ -56,6 +57,84 @@ interface Profile {
   avatar_url: string | null;
   location: string | null;
   website: string | null;
+}
+
+// Push Notification Settings Component
+function PushNotificationSettings() {
+  const { permission, supported, requestPermission } = useNotificationPermission();
+  const { toast } = useToast();
+
+  const handleEnablePush = async () => {
+    const granted = await requestPermission();
+    if (granted) {
+      toast({
+        title: 'Push Notifications Enabled',
+        description: 'You will now receive notifications when the app is in background.',
+      });
+    } else {
+      toast({
+        title: 'Permission Denied',
+        description: 'Please enable notifications in your browser settings.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  if (!supported) {
+    return (
+      <div className="bg-card rounded-xl border border-border p-4">
+        <div className="flex items-center gap-4">
+          <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+            <Bell className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <div>
+            <p className="font-medium text-sm">Push Notifications</p>
+            <p className="text-xs text-muted-foreground">Not supported in this browser</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-card rounded-xl border border-border overflow-hidden">
+      <div className="p-4 border-b border-border">
+        <h2 className="font-semibold">Push Notifications</h2>
+      </div>
+      <div className="p-4 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+            <Bell className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <div>
+            <p className="font-medium text-sm">Browser Notifications</p>
+            <p className="text-xs text-muted-foreground">
+              {permission === 'granted'
+                ? 'Enabled - You will receive alerts when app is in background'
+                : permission === 'denied'
+                ? 'Blocked - Enable in browser settings'
+                : 'Enable to get notified of likes, comments, and follows'}
+            </p>
+          </div>
+        </div>
+        {permission === 'granted' ? (
+          <div className="flex items-center gap-2 text-green-500">
+            <CheckCircle2 className="h-5 w-5" />
+            <span className="text-sm font-medium">Enabled</span>
+          </div>
+        ) : permission === 'denied' ? (
+          <div className="flex items-center gap-2 text-destructive">
+            <XCircle className="h-5 w-5" />
+            <span className="text-sm font-medium">Blocked</span>
+          </div>
+        ) : (
+          <Button variant="outline" size="sm" onClick={handleEnablePush}>
+            Enable
+          </Button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function SettingsPage() {
@@ -554,6 +633,8 @@ export default function SettingsPage() {
 
         {/* Notifications Tab */}
         <TabsContent value="notifications" className="space-y-6">
+          <PushNotificationSettings />
+          
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <div className="p-4 border-b border-border">
               <h2 className="font-semibold">Notification Preferences</h2>
