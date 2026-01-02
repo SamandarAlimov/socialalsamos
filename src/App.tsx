@@ -12,6 +12,7 @@ import MessagesPage from "./pages/MessagesPage";
 import ProfilePage from "./pages/ProfilePage";
 import UserProfilePage from "./pages/UserProfilePage";
 import SettingsPage from "./pages/SettingsPage";
+import PaymentSettingsPage from "./pages/PaymentSettingsPage";
 import CreatePage from "./pages/CreatePage";
 import MapPage from "./pages/MapPage";
 import VideosPage from "./pages/VideosPage";
@@ -92,6 +93,7 @@ function AppRoutes() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/user/:userId" element={<UserProfilePage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/payment" element={<PaymentSettingsPage />} />
         <Route path="/admin" element={<AdminPage />} />
       </Route>
       

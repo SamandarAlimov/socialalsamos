@@ -807,11 +807,14 @@ export function useMessages(conversationId: string | null) {
           filter: `conversation_id=eq.${conversationId}`,
         },
         async () => {
+          // Filter out stale typing indicators (older than 5 seconds)
+          const fiveSecondsAgo = new Date(Date.now() - 5000).toISOString();
           const { data } = await supabase
             .from('typing_indicators')
-            .select('user_id')
+            .select('user_id, started_at')
             .eq('conversation_id', conversationId)
-            .neq('user_id', user.id);
+            .neq('user_id', user.id)
+            .gt('started_at', fiveSecondsAgo);
 
           setTypingUsers(data?.map(t => t.user_id) || []);
         }
