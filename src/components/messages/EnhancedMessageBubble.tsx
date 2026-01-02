@@ -8,6 +8,7 @@ import { EmojiPicker } from '@/components/EmojiPicker';
 import { MessageContextMenu } from './MessageContextMenu';
 import { LocationMessage } from './LocationMessage';
 import { GroupReadReceipts } from './GroupReadReceipts';
+import { MessageContent } from './MessageContent';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
@@ -279,6 +280,8 @@ export function EnhancedMessageBubble({
       onPin={() => onPin?.(message.id)}
       onCopy={message.content ? copyToClipboard : undefined}
       hasMedia={!!message.media_url}
+      sentAt={message.created_at}
+      readAt={message.read_at}
     >
       <div 
         className={cn("flex group relative", isMine ? "justify-end" : "justify-start")}
@@ -388,10 +391,7 @@ export function EnhancedMessageBubble({
                   ) : (
                     <>
                       {message.content && !message.content.startsWith('[') && (
-                        <p 
-                          className="text-sm leading-relaxed whitespace-pre-wrap break-words"
-                          dangerouslySetInnerHTML={{ __html: formatContent(message.content) }}
-                        />
+                        <MessageContent content={message.content} isMine={isMine} />
                       )}
                       {message.media_url && message.media_type && (
                         <div className={cn("mt-2", !message.content && "-m-1")}>

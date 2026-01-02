@@ -16,7 +16,10 @@ import {
   CheckSquare,
   Copy,
   Download,
+  Clock,
+  CheckCheck,
 } from 'lucide-react';
+import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
 interface MessageContextMenuProps {
@@ -32,6 +35,8 @@ interface MessageContextMenuProps {
   onViewInfo?: () => void;
   hasMedia?: boolean;
   onDownload?: () => void;
+  readAt?: string | null;
+  sentAt?: string;
 }
 
 export function MessageContextMenu({
@@ -47,11 +52,29 @@ export function MessageContextMenu({
   onViewInfo,
   hasMedia,
   onDownload,
+  readAt,
+  sentAt,
 }: MessageContextMenuProps) {
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-      <ContextMenuContent className="w-56 rounded-xl">
+      <ContextMenuContent className="w-64 rounded-xl">
+        {/* Read receipt timestamp at top for 1:1 chats */}
+        {isMine && sentAt && (
+          <div className="px-3 py-2 border-b border-border">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Clock className="h-3.5 w-3.5" />
+              <span>Sent: {format(new Date(sentAt), 'HH:mm dd/MM/yyyy')}</span>
+            </div>
+            {readAt && (
+              <div className="flex items-center gap-2 text-xs text-blue-500 mt-1">
+                <CheckCheck className="h-3.5 w-3.5" />
+                <span>Read: {format(new Date(readAt), 'HH:mm dd/MM/yyyy')}</span>
+              </div>
+            )}
+          </div>
+        )}
+        
         {onViewInfo && (
           <ContextMenuItem onClick={onViewInfo} className="gap-3">
             <Eye className="h-4 w-4" />
