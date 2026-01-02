@@ -44,12 +44,8 @@ export function FixedVideoRecorder({ onSend, onCancel }: FixedVideoRecorderProps
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const cleanup = useCallback(() => {
-    console.log('Cleanup called');
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => {
-        track.stop();
-        console.log('Track stopped:', track.kind);
-      });
+      streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
     if (timerRef.current) {
@@ -77,62 +73,76 @@ export function FixedVideoRecorder({ onSend, onCancel }: FixedVideoRecorderProps
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const startRecording = useCallback(async (mode: RecordMode) => {
-    console.log('Starting recording, mode:', mode);
-    currentModeRef.current = mode;
-    
-    try {
-      const constraints = mode === 'video'
-        ? { 
-            video: { 
-              facingMode, 
-              width: { ideal: 720 }, 
-              height: { ideal: 1280 } 
-            }, 
-            audio: true 
-          }
-        : { audio: true };
+  const getSupportedMimeType = (mode: RecordMode) => {
+    const candidates =
+      mode === 'video'
+        ? [
+            'video/webm;codecs=vp9',
+            'video/webm;codecs=vp8',
+            'video/webm',
+            'video/mp4',
+          ]
+        : ['audio/webm', 'audio/mp4'];
 
-      console.log('Getting user media with constraints:', constraints);
+    for (const t of candidates) {
+      if (MediaRecorder.isTypeSupported(t)) return t;
+    }
+    return null;
+  };
+
+  const mimeTypeRef = useRef<string | null>(null);
+
+  const startRecording = useCallback(async (mode: RecordMode) => {
+    currentModeRef.current = mode;
+
+    try {
+      const constraints =
+        mode === 'video'
+          ? {
+              video: {
+                facingMode,
+                width: { ideal: 720 },
+                height: { ideal: 1280 },
+              },
+              audio: true,
+            }
+          : { audio: true };
+
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
-      console.log('Got stream, tracks:', stream.getTracks().map(t => t.kind));
 
       if (mode === 'video' && videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.muted = true;
-        await videoRef.current.play().catch(e => console.log('Video play error:', e));
-        console.log('Video element playing');
+        // Best-effort: don't fail the entire flow if autoplay is blocked
+        videoRef.current.play().catch(() => {});
       }
 
-      const mimeType = mode === 'video'
-        ? (MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm')
-        : (MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4');
+      const mimeType = getSupportedMimeType(mode);
+      mimeTypeRef.current = mimeType;
 
-      console.log('Using mimeType:', mimeType);
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      const mediaRecorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+
       chunksRef.current = [];
 
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
           chunksRef.current.push(e.data);
-          console.log('Data chunk received, size:', e.data.size);
         }
       };
 
       mediaRecorder.onstop = () => {
-        console.log('MediaRecorder stopped, mode was:', currentModeRef.current);
         const recordedMode = currentModeRef.current;
-        const type = recordedMode === 'video' ? 'video/webm' : 'audio/webm';
+        const type = mimeTypeRef.current || (recordedMode === 'video' ? 'video/webm' : 'audio/webm');
         const blob = new Blob(chunksRef.current, { type });
         const url = URL.createObjectURL(blob);
-        console.log('Created blob URL:', url, 'size:', blob.size);
-        
+
         setMediaBlob(blob);
         setMediaUrl(url);
         setState('preview');
 
-        // Stop all tracks
         if (streamRef.current) {
           streamRef.current.getTracks().forEach((track) => track.stop());
           streamRef.current = null;
@@ -143,12 +153,10 @@ export function FixedVideoRecorder({ onSend, onCancel }: FixedVideoRecorderProps
       mediaRecorder.start(100);
       setState('recording');
       setDuration(0);
-      
+
       timerRef.current = setInterval(() => {
         setDuration((prev) => prev + 1);
       }, 1000);
-      
-      console.log('Recording started');
     } catch (error) {
       console.error('Error starting recording:', error);
       toast.error('Failed to access camera/microphone');

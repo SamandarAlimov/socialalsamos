@@ -71,6 +71,15 @@ export function useReadReceipts(conversationId: string | null) {
     return receipts.some(r => r.user_id !== senderId);
   }, [readReceipts]);
 
+  // For 1:1 chats: get the exact timestamp when the other user read this message
+  const getMessageReadAt = useCallback((messageId: string, senderId: string) => {
+    const receipts = (readReceipts.get(messageId) || []).filter(r => r.user_id !== senderId);
+    if (receipts.length === 0) return null;
+    // Use latest read_at (in case of duplicates)
+    receipts.sort((a, b) => new Date(b.read_at).getTime() - new Date(a.read_at).getTime());
+    return receipts[0].read_at;
+  }, [readReceipts]);
+
   // Subscribe to real-time read receipt updates
   useEffect(() => {
     if (!conversationId) return;
@@ -121,6 +130,7 @@ export function useReadReceipts(conversationId: string | null) {
     readReceipts,
     markAsRead,
     isMessageRead,
+    getMessageReadAt,
     fetchReadReceipts,
   };
 }

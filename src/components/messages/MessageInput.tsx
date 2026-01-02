@@ -59,7 +59,15 @@ export function MessageInput({
     if (replyTo) {
       inputRef.current?.focus();
     }
-  }, [replyTo]);
+
+    return () => {
+      // Prevent "stuck typing" when leaving the chat / unmounting
+      onTyping(false);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, [replyTo, onTyping]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
