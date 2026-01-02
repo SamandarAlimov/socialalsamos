@@ -1,9 +1,8 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { 
   Heart, 
   MessageCircle, 
@@ -11,12 +10,7 @@ import {
   Bookmark, 
   MoreHorizontal,
   Plus,
-  Loader2,
-  X,
-  ChevronLeft,
-  ChevronRight,
-  Send,
-  Smile
+  Loader2
 } from 'lucide-react';
 import { usePosts, Post } from '@/hooks/usePosts';
 import { useStories, StoryGroup } from '@/hooks/useStories';
@@ -34,17 +28,15 @@ import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { LiveStreamCard } from '@/components/live/LiveStreamCard';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
+import { StoryViewer } from '@/components/stories/StoryViewer';
 
 export default function HomePage() {
   const { user, profile } = useAuth();
   const isMobile = useIsMobile();
   const [activeStoryGroup, setActiveStoryGroup] = useState<StoryGroup | null>(null);
-  const [activeStoryIndex, setActiveStoryIndex] = useState(0);
   const [showCreateStory, setShowCreateStory] = useState(false);
-  const [storyReply, setStoryReply] = useState('');
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
-  const storyTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Swipe navigation
   const { swipeOffset, handleTouchStart, handleTouchMove, handleTouchEnd } = useSwipeNavigation();
@@ -99,21 +91,6 @@ export default function HomePage() {
     };
   }, [hasMore, isLoading, loadMore]);
 
-  // Auto-advance story timer
-  useEffect(() => {
-    if (activeStoryGroup && activeStoryGroup.stories[activeStoryIndex]?.media_type !== 'video') {
-      storyTimerRef.current = setTimeout(() => {
-        nextStory();
-      }, 5000);
-    }
-
-    return () => {
-      if (storyTimerRef.current) {
-        clearTimeout(storyTimerRef.current);
-      }
-    };
-  }, [activeStoryGroup, activeStoryIndex]);
-
   const formatPostTime = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -127,63 +104,18 @@ export default function HomePage() {
 
   const openStory = (group: StoryGroup) => {
     setActiveStoryGroup(group);
-    setActiveStoryIndex(0);
-    // Mark the first story as viewed
-    if (group.stories[0]) {
-      markAsViewed(group.stories[0].id);
-    }
+    markAsViewed(group.stories[0]?.id);
   };
 
   const closeStory = () => {
     setActiveStoryGroup(null);
-    setActiveStoryIndex(0);
-    setStoryReply('');
+    refreshStories();
   };
 
-  const nextStory = () => {
-    if (!activeStoryGroup) return;
-    
-    if (activeStoryIndex < activeStoryGroup.stories.length - 1) {
-      const nextIndex = activeStoryIndex + 1;
-      setActiveStoryIndex(nextIndex);
-      // Mark next story as viewed
-      markAsViewed(activeStoryGroup.stories[nextIndex].id);
-    } else {
-      // Move to next group
-      const currentGroupIndex = storyGroups.findIndex(g => g.user_id === activeStoryGroup.user_id);
-      if (currentGroupIndex < storyGroups.length - 1) {
-        const nextGroup = storyGroups[currentGroupIndex + 1];
-        setActiveStoryGroup(nextGroup);
-        setActiveStoryIndex(0);
-        if (nextGroup.stories[0]) markAsViewed(nextGroup.stories[0].id);
-      } else {
-        closeStory();
-      }
-    }
-  };
-
-  const prevStory = () => {
-    if (!activeStoryGroup) return;
-    
-    if (activeStoryIndex > 0) {
-      setActiveStoryIndex(prev => prev - 1);
-    } else {
-      // Move to previous group
-      const currentGroupIndex = storyGroups.findIndex(g => g.user_id === activeStoryGroup.user_id);
-      if (currentGroupIndex > 0) {
-        const prevGroup = storyGroups[currentGroupIndex - 1];
-        setActiveStoryGroup(prevGroup);
-        setActiveStoryIndex(prevGroup.stories.length - 1);
-      }
-    }
-  };
-
-  const handleStoryReply = () => {
-    if (!storyReply.trim() || !activeStoryGroup) return;
-    // TODO: Send story reply via messages
-    console.log('Reply to story:', storyReply);
-    setStoryReply('');
-  };
+  // Get current user's story group
+  const userStoryGroup = useMemo(() => {
+    return storyGroups.find(g => g.user_id === user?.id);
+  }, [storyGroups, user?.id]);
 
   const handleRefresh = async () => {
     await Promise.all([refreshPosts(), refreshStories()]);
@@ -202,118 +134,12 @@ export default function HomePage() {
     >
       {/* Story Viewer Modal */}
       {activeStoryGroup && (
-        <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
-          <button 
-            onClick={closeStory}
-            className="absolute top-4 right-4 z-10 text-white hover:text-muted-foreground safe-area-top"
-          >
-            <X className="h-8 w-8" />
-          </button>
-          
-          {/* Story Progress Bars */}
-          <div className="absolute top-4 left-4 right-16 flex gap-1 safe-area-top">
-            {activeStoryGroup.stories.map((_, idx) => (
-              <div key={idx} className="flex-1 h-1 bg-white/30 rounded-full overflow-hidden">
-                <div 
-                  className={cn(
-                    "h-full bg-white transition-all",
-                    idx < activeStoryIndex ? "w-full" : idx === activeStoryIndex ? "w-full animate-story-progress" : "w-0"
-                  )}
-                  style={idx === activeStoryIndex ? { animationDuration: '5s' } : undefined}
-                />
-              </div>
-            ))}
-          </div>
-
-          {/* Story Header */}
-          <div className="absolute top-10 left-4 flex items-center gap-3 safe-area-top z-10">
-            <Avatar className="h-10 w-10 border-2 border-white">
-              <AvatarImage src={activeStoryGroup.avatar_url || ''} />
-              <AvatarFallback>{activeStoryGroup.display_name?.[0] || activeStoryGroup.username?.[0] || 'U'}</AvatarFallback>
-            </Avatar>
-            <div>
-              <p className="text-white font-semibold text-sm">
-                {activeStoryGroup.display_name || activeStoryGroup.username}
-              </p>
-              <p className="text-white/60 text-xs">
-                {activeStoryGroup.stories[activeStoryIndex] && 
-                  formatDistanceToNow(new Date(activeStoryGroup.stories[activeStoryIndex].created_at), { addSuffix: true })}
-              </p>
-            </div>
-          </div>
-
-          {/* Story Content - Fixed sizing for mobile */}
-          <div className={cn(
-            "relative bg-black overflow-hidden flex items-center justify-center",
-            isMobile ? "w-full h-full" : "w-full max-w-md aspect-[9/16] rounded-xl"
-          )}>
-            {activeStoryGroup.stories[activeStoryIndex] && (
-              activeStoryGroup.stories[activeStoryIndex].media_type === 'video' ? (
-                <video 
-                  src={activeStoryGroup.stories[activeStoryIndex].media_url}
-                  className="max-w-full max-h-full object-contain"
-                  autoPlay
-                  playsInline
-                  onEnded={nextStory}
-                />
-              ) : (
-                <img 
-                  src={activeStoryGroup.stories[activeStoryIndex].media_url}
-                  alt="Story"
-                  className="max-w-full max-h-full object-contain"
-                />
-              )
-            )}
-            
-            {/* Caption */}
-            {activeStoryGroup.stories[activeStoryIndex]?.caption && (
-              <div className="absolute bottom-20 left-4 right-4 text-white text-center">
-                <p className="bg-black/50 rounded-lg px-4 py-2 text-sm">
-                  {activeStoryGroup.stories[activeStoryIndex].caption}
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Story Reply Input */}
-          <div className="absolute bottom-4 left-4 right-4 flex items-center gap-2 safe-area-bottom z-10">
-            <div className="flex-1 relative">
-              <Input
-                value={storyReply}
-                onChange={(e) => setStoryReply(e.target.value)}
-                placeholder="Send message..."
-                className="bg-white/10 border-white/20 text-white placeholder:text-white/50 pr-10"
-                onKeyDown={(e) => e.key === 'Enter' && handleStoryReply()}
-              />
-              <button className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white">
-                <Smile className="h-5 w-5" />
-              </button>
-            </div>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="text-white hover:bg-white/20"
-              onClick={handleStoryReply}
-              disabled={!storyReply.trim()}
-            >
-              <Send className="h-5 w-5" />
-            </Button>
-          </div>
-
-          {/* Navigation - Touch areas */}
-          <div 
-            onClick={prevStory}
-            className="absolute left-0 top-20 bottom-20 w-1/3 md:w-auto md:left-4 md:top-1/2 md:-translate-y-1/2 flex items-center justify-start md:justify-center cursor-pointer"
-          >
-            <ChevronLeft className="h-8 w-8 text-white hidden md:block" />
-          </div>
-          <div 
-            onClick={nextStory}
-            className="absolute right-0 top-20 bottom-20 w-1/3 md:w-auto md:right-4 md:top-1/2 md:-translate-y-1/2 flex items-center justify-end md:justify-center cursor-pointer"
-          >
-            <ChevronRight className="h-8 w-8 text-white hidden md:block" />
-          </div>
-        </div>
+        <StoryViewer
+          storyGroup={activeStoryGroup}
+          allGroups={storyGroups}
+          onClose={closeStory}
+          onMarkAsViewed={markAsViewed}
+        />
       )}
 
       {/* Story Creation Dialog */}
@@ -326,26 +152,33 @@ export default function HomePage() {
       {/* Stories Section - Mobile optimized */}
       <div className="mb-4 md:mb-6 -mx-3 md:mx-0 px-3 md:px-0">
         <div className="flex gap-3 md:gap-4 overflow-x-auto pb-3 md:pb-4 scrollbar-hidden">
-          {/* Add Story Button */}
+          {/* Your Story Button */}
           <button 
-            onClick={() => setShowCreateStory(true)}
+            onClick={() => userStoryGroup ? openStory(userStoryGroup) : setShowCreateStory(true)}
             className="flex flex-col items-center gap-1.5 md:gap-2 flex-shrink-0 touch-feedback"
           >
             <div className="relative">
-              <div className="bg-background p-0.5 rounded-full">
-                <Avatar className="h-14 w-14 md:h-16 md:w-16">
-                  <AvatarImage src={profile?.avatar_url || ''} />
-                  <AvatarFallback className="bg-muted text-sm">
-                    {profile?.display_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
-                  </AvatarFallback>
-                </Avatar>
+              <div className={cn(
+                "p-0.5 rounded-full",
+                userStoryGroup ? "bg-gradient-to-tr from-alsamos-orange-light to-alsamos-orange-dark" : "bg-background"
+              )}>
+                <div className="bg-background p-0.5 rounded-full">
+                  <Avatar className="h-14 w-14 md:h-16 md:w-16">
+                    <AvatarImage src={profile?.avatar_url || ''} />
+                    <AvatarFallback className="bg-muted text-sm">
+                      {profile?.display_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
+                    </AvatarFallback>
+                  </Avatar>
+                </div>
               </div>
-              <div className="absolute bottom-0 right-0 bg-primary rounded-full p-0.5 md:p-1 border-2 border-background">
-                <Plus className="h-2.5 w-2.5 md:h-3 md:w-3 text-primary-foreground" />
-              </div>
+              {!userStoryGroup && (
+                <div className="absolute bottom-0 right-0 bg-primary rounded-full p-0.5 md:p-1 border-2 border-background">
+                  <Plus className="h-2.5 w-2.5 md:h-3 md:w-3 text-primary-foreground" />
+                </div>
+              )}
             </div>
             <span className="text-[10px] md:text-xs text-muted-foreground truncate max-w-[56px] md:max-w-[64px]">
-              Your Story
+              {userStoryGroup ? 'Your Story' : 'Add Story'}
             </span>
           </button>
 
