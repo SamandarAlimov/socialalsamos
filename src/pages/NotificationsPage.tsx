@@ -1,22 +1,36 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { formatDistanceToNow, format, isToday, isYesterday, isThisWeek, isThisMonth } from 'date-fns';
-import { Heart, MessageCircle, UserPlus, AtSign, Check, Settings, Trash2 } from 'lucide-react';
+import { formatDistanceToNow, isToday, isYesterday, isThisWeek, isThisMonth, differenceInMinutes } from 'date-fns';
+import { Heart, MessageCircle, UserPlus, AtSign, Check, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useNotifications, Notification } from '@/hooks/useNotifications';
 import { cn } from '@/lib/utils';
 
 type NotificationFilter = 'all' | 'likes' | 'comments' | 'follows' | 'mentions';
 
-interface GroupedNotifications {
-  today: Notification[];
-  yesterday: Notification[];
-  thisWeek: Notification[];
-  thisMonth: Notification[];
-  older: Notification[];
+interface GroupedNotification {
+  id: string;
+  type: Notification['type'];
+  notifications: Notification[];
+  latestAt: string;
+  postId?: string;
+  postThumbnail?: string;
+  actors: Array<{
+    id: string;
+    username?: string;
+    displayName?: string;
+    avatar?: string;
+  }>;
+}
+
+interface TimeGroupedNotifications {
+  today: GroupedNotification[];
+  yesterday: GroupedNotification[];
+  thisWeek: GroupedNotification[];
+  thisMonth: GroupedNotification[];
+  older: GroupedNotification[];
 }
 
 const NotificationIcon = ({ type, className }: { type: Notification['type']; className?: string }) => {
@@ -35,53 +49,149 @@ const NotificationIcon = ({ type, className }: { type: Notification['type']; cla
   }
 };
 
-function NotificationItem({ 
-  notification, 
+// Group notifications by type and post within a timeframe (30 minutes)
+function consolidateNotifications(notifications: Notification[]): GroupedNotification[] {
+  const groups: Map<string, GroupedNotification> = new Map();
+  const CONSOLIDATION_WINDOW_MINUTES = 30;
+  
+  // Sort by date descending
+  const sorted = [...notifications].sort((a, b) => 
+    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+  
+  sorted.forEach((notification) => {
+    const data = notification.data as Record<string, unknown>;
+    const postId = data?.post_id as string | undefined;
+    const actorId = (data?.liker_id || data?.commenter_id || data?.follower_id || data?.mentioner_id || data?.actor_id) as string;
+    
+    // Create a key based on type and post (for likes/comments) or just type (for follows)
+    const groupKey = notification.type === 'follow' 
+      ? `follow-${notification.type}`
+      : `${notification.type}-${postId || 'no-post'}`;
+    
+    const existing = groups.get(groupKey);
+    
+    if (existing) {
+      // Check if within consolidation window
+      const timeDiff = differenceInMinutes(
+        new Date(existing.latestAt),
+        new Date(notification.created_at)
+      );
+      
+      if (timeDiff <= CONSOLIDATION_WINDOW_MINUTES) {
+        // Add to existing group if actor not already included
+        if (!existing.actors.find(a => a.id === actorId)) {
+          existing.actors.push({
+            id: actorId,
+            username: data?.actor_username as string,
+            displayName: data?.actor_display_name as string,
+            avatar: data?.actor_avatar as string,
+          });
+        }
+        existing.notifications.push(notification);
+        return;
+      }
+    }
+    
+    // Create new group
+    groups.set(`${groupKey}-${notification.id}`, {
+      id: notification.id,
+      type: notification.type,
+      notifications: [notification],
+      latestAt: notification.created_at,
+      postId,
+      postThumbnail: data?.post_thumbnail as string,
+      actors: [{
+        id: actorId,
+        username: data?.actor_username as string,
+        displayName: data?.actor_display_name as string,
+        avatar: data?.actor_avatar as string,
+      }],
+    });
+  });
+  
+  return Array.from(groups.values()).sort((a, b) => 
+    new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime()
+  );
+}
+
+function GroupedNotificationItem({ 
+  group, 
   onMarkAsRead, 
-  onDelete 
 }: { 
-  notification: Notification;
+  group: GroupedNotification;
   onMarkAsRead: (id: string) => void;
-  onDelete: (id: string) => void;
 }) {
   const navigate = useNavigate();
-  const data = notification.data as Record<string, unknown>;
-  
-  // Get actor info from notification data
-  const actorId = (data?.liker_id || data?.commenter_id || data?.follower_id || data?.actor_id) as string;
-  const actorUsername = data?.actor_username as string;
-  const actorDisplayName = data?.actor_display_name as string;
-  const actorAvatar = data?.actor_avatar as string;
-  const postId = data?.post_id as string;
-  const postThumbnail = data?.post_thumbnail as string;
-  const commentPreview = data?.comment_preview as string;
+  const hasUnread = group.notifications.some(n => !n.is_read);
+  const firstActor = group.actors[0];
+  const otherActorsCount = group.actors.length - 1;
   
   const handleItemClick = () => {
-    onMarkAsRead(notification.id);
+    group.notifications.forEach(n => {
+      if (!n.is_read) onMarkAsRead(n.id);
+    });
     
-    // Navigate based on notification type
-    if ((notification.type === 'like' || notification.type === 'comment') && postId) {
-      navigate(`/home?post=${postId}`);
-    } else if (notification.type === 'follow' && actorId) {
-      navigate(`/user/${actorId}`);
-    } else if (notification.type === 'mention' && postId) {
-      navigate(`/home?post=${postId}`);
+    if ((group.type === 'like' || group.type === 'comment' || group.type === 'mention') && group.postId) {
+      navigate(`/home?post=${group.postId}`);
+    } else if (group.type === 'follow' && firstActor?.id) {
+      navigate(`/user/${firstActor.id}`);
     }
   };
   
-  const handleActorClick = (e: React.MouseEvent) => {
+  const handleActorClick = (e: React.MouseEvent, actorId: string) => {
     e.stopPropagation();
     if (actorId) {
-      onMarkAsRead(notification.id);
+      group.notifications.forEach(n => {
+        if (!n.is_read) onMarkAsRead(n.id);
+      });
       navigate(`/user/${actorId}`);
     }
   };
   
   const handlePostClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (postId) {
-      onMarkAsRead(notification.id);
-      navigate(`/home?post=${postId}`);
+    if (group.postId) {
+      group.notifications.forEach(n => {
+        if (!n.is_read) onMarkAsRead(n.id);
+      });
+      navigate(`/home?post=${group.postId}`);
+    }
+  };
+  
+  const getNotificationText = () => {
+    const actorName = firstActor?.displayName || firstActor?.username || 'Someone';
+    
+    if (otherActorsCount > 0) {
+      const othersText = otherActorsCount === 1 
+        ? 'and 1 other' 
+        : `and ${otherActorsCount} others`;
+      
+      switch (group.type) {
+        case 'like':
+          return <><span className="font-semibold">{actorName}</span> {othersText} liked your post</>;
+        case 'comment':
+          return <><span className="font-semibold">{actorName}</span> {othersText} commented on your post</>;
+        case 'follow':
+          return <><span className="font-semibold">{actorName}</span> {othersText} started following you</>;
+        case 'mention':
+          return <><span className="font-semibold">{actorName}</span> {othersText} mentioned you</>;
+        default:
+          return <><span className="font-semibold">{actorName}</span> {othersText}</>;
+      }
+    }
+    
+    switch (group.type) {
+      case 'like':
+        return <><span className="font-semibold">{actorName}</span> liked your post</>;
+      case 'comment':
+        return <><span className="font-semibold">{actorName}</span> commented on your post</>;
+      case 'follow':
+        return <><span className="font-semibold">{actorName}</span> started following you</>;
+      case 'mention':
+        return <><span className="font-semibold">{actorName}</span> mentioned you</>;
+      default:
+        return <span className="font-semibold">{actorName}</span>;
     }
   };
   
@@ -90,67 +200,82 @@ function NotificationItem({
       className={cn(
         'flex items-start gap-3 p-4 cursor-pointer transition-colors',
         'hover:bg-accent/50',
-        !notification.is_read && 'bg-primary/5'
+        hasUnread && 'bg-primary/5'
       )}
       onClick={handleItemClick}
     >
-      {/* Avatar with notification icon overlay - clickable to user profile */}
-      <div 
-        className="relative flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-        onClick={handleActorClick}
-      >
-        <Avatar className="h-11 w-11">
-          <AvatarImage src={actorAvatar} />
-          <AvatarFallback className="bg-muted text-xs">
-            {(actorDisplayName || actorUsername || notification.title).charAt(0).toUpperCase()}
-          </AvatarFallback>
-        </Avatar>
-        <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-background flex items-center justify-center border-2 border-background">
-          <NotificationIcon type={notification.type} className="h-3 w-3" />
-        </div>
+      {/* Avatar stack for grouped notifications */}
+      <div className="relative flex-shrink-0">
+        {group.actors.length > 1 ? (
+          <div className="relative h-11 w-14">
+            {/* Show up to 3 stacked avatars */}
+            {group.actors.slice(0, 3).map((actor, i) => (
+              <Avatar 
+                key={actor.id} 
+                className={cn(
+                  'h-9 w-9 absolute border-2 border-background cursor-pointer hover:z-10',
+                  i === 0 && 'left-0 top-0 z-[3]',
+                  i === 1 && 'left-3 top-1 z-[2]',
+                  i === 2 && 'left-6 top-0 z-[1]'
+                )}
+                onClick={(e) => handleActorClick(e, actor.id)}
+              >
+                <AvatarImage src={actor.avatar} />
+                <AvatarFallback className="bg-muted text-xs">
+                  {(actor.displayName || actor.username || '?').charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+            ))}
+            {group.actors.length > 3 && (
+              <div className="absolute left-9 top-1 h-7 w-7 rounded-full bg-muted flex items-center justify-center text-xs font-medium border-2 border-background z-[4]">
+                +{group.actors.length - 3}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div 
+            className="relative cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={(e) => handleActorClick(e, firstActor?.id)}
+          >
+            <Avatar className="h-11 w-11">
+              <AvatarImage src={firstActor?.avatar} />
+              <AvatarFallback className="bg-muted text-xs">
+                {(firstActor?.displayName || firstActor?.username || '?').charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-background flex items-center justify-center border-2 border-background">
+              <NotificationIcon type={group.type} className="h-3 w-3" />
+            </div>
+          </div>
+        )}
       </div>
       
       {/* Content */}
       <div className="flex-1 min-w-0">
-        <p className="text-sm">
-          <span 
-            className="font-semibold hover:underline cursor-pointer"
-            onClick={handleActorClick}
-          >
-            {actorDisplayName || actorUsername || notification.title}
-          </span>
-          <span className="text-muted-foreground">
-            {notification.type === 'like' && ' liked your post'}
-            {notification.type === 'comment' && ' commented: '}
-            {notification.type === 'follow' && ' started following you'}
-            {notification.type === 'mention' && ' mentioned you'}
-            {notification.type === 'message' && ' sent you a message'}
-          </span>
-          {notification.type === 'comment' && commentPreview && (
-            <span className="text-foreground">"{commentPreview.substring(0, 50)}{commentPreview.length > 50 ? '...' : ''}"</span>
-          )}
+        <p className="text-sm text-muted-foreground">
+          {getNotificationText()}
         </p>
         <p className="text-xs text-muted-foreground mt-0.5">
-          {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
+          {formatDistanceToNow(new Date(group.latestAt), { addSuffix: true })}
         </p>
       </div>
       
-      {/* Post thumbnail (for likes/comments) - clickable to post */}
-      {postThumbnail && (
+      {/* Post thumbnail */}
+      {group.postThumbnail && (
         <div 
           className="flex-shrink-0 h-11 w-11 rounded-lg overflow-hidden bg-muted cursor-pointer hover:opacity-80 transition-opacity"
           onClick={handlePostClick}
         >
           <img 
-            src={postThumbnail} 
+            src={group.postThumbnail} 
             alt="Post" 
             className="h-full w-full object-cover"
           />
         </div>
       )}
       
-      {/* For posts without thumbnail, show a view button */}
-      {!postThumbnail && (notification.type === 'like' || notification.type === 'comment') && postId && (
+      {/* View button for posts without thumbnail */}
+      {!group.postThumbnail && (group.type === 'like' || group.type === 'comment' || group.type === 'mention') && group.postId && (
         <Button 
           variant="outline" 
           size="sm" 
@@ -161,25 +286,25 @@ function NotificationItem({
         </Button>
       )}
       
-      {/* Follow back button for follow notifications */}
-      {notification.type === 'follow' && (
+      {/* View profile for follow notifications */}
+      {group.type === 'follow' && (
         <Button 
           variant="default" 
           size="sm" 
           className="flex-shrink-0 text-xs"
           onClick={(e) => {
             e.stopPropagation();
-            if (actorId) {
-              navigate(`/user/${actorId}`);
+            if (firstActor?.id) {
+              navigate(`/user/${firstActor.id}`);
             }
           }}
         >
-          View Profile
+          {group.actors.length > 1 ? 'View All' : 'View Profile'}
         </Button>
       )}
       
       {/* Unread indicator */}
-      {!notification.is_read && (
+      {hasUnread && (
         <div className="flex-shrink-0 h-2 w-2 rounded-full bg-primary mt-2" />
       )}
     </div>
@@ -188,16 +313,14 @@ function NotificationItem({
 
 function NotificationGroup({ 
   title, 
-  notifications,
+  groups,
   onMarkAsRead,
-  onDelete
 }: { 
   title: string;
-  notifications: Notification[];
+  groups: GroupedNotification[];
   onMarkAsRead: (id: string) => void;
-  onDelete: (id: string) => void;
 }) {
-  if (notifications.length === 0) return null;
+  if (groups.length === 0) return null;
   
   return (
     <div>
@@ -205,12 +328,11 @@ function NotificationGroup({
         {title}
       </h3>
       <div className="divide-y divide-border">
-        {notifications.map((notification) => (
-          <NotificationItem
-            key={notification.id}
-            notification={notification}
+        {groups.map((group) => (
+          <GroupedNotificationItem
+            key={group.id}
+            group={group}
             onMarkAsRead={onMarkAsRead}
-            onDelete={onDelete}
           />
         ))}
       </div>
@@ -244,9 +366,9 @@ export default function NotificationsPage() {
     return notifications.filter((n) => typeMap[filter].includes(n.type));
   }, [notifications, filter]);
 
-  // Group notifications by time
-  const groupedNotifications = useMemo((): GroupedNotifications => {
-    const groups: GroupedNotifications = {
+  // Group and consolidate notifications by time
+  const groupedNotifications = useMemo((): TimeGroupedNotifications => {
+    const timeGroups: Record<string, Notification[]> = {
       today: [],
       yesterday: [],
       thisWeek: [],
@@ -258,19 +380,26 @@ export default function NotificationsPage() {
       const date = new Date(notification.created_at);
       
       if (isToday(date)) {
-        groups.today.push(notification);
+        timeGroups.today.push(notification);
       } else if (isYesterday(date)) {
-        groups.yesterday.push(notification);
+        timeGroups.yesterday.push(notification);
       } else if (isThisWeek(date)) {
-        groups.thisWeek.push(notification);
+        timeGroups.thisWeek.push(notification);
       } else if (isThisMonth(date)) {
-        groups.thisMonth.push(notification);
+        timeGroups.thisMonth.push(notification);
       } else {
-        groups.older.push(notification);
+        timeGroups.older.push(notification);
       }
     });
 
-    return groups;
+    // Consolidate each time group
+    return {
+      today: consolidateNotifications(timeGroups.today),
+      yesterday: consolidateNotifications(timeGroups.yesterday),
+      thisWeek: consolidateNotifications(timeGroups.thisWeek),
+      thisMonth: consolidateNotifications(timeGroups.thisMonth),
+      older: consolidateNotifications(timeGroups.older),
+    };
   }, [filteredNotifications]);
 
   const filterCounts = useMemo(() => ({
@@ -348,33 +477,28 @@ export default function NotificationsPage() {
           <div className="pb-20">
             <NotificationGroup 
               title="Today" 
-              notifications={groupedNotifications.today}
+              groups={groupedNotifications.today}
               onMarkAsRead={markAsRead}
-              onDelete={deleteNotification}
             />
             <NotificationGroup 
               title="Yesterday" 
-              notifications={groupedNotifications.yesterday}
+              groups={groupedNotifications.yesterday}
               onMarkAsRead={markAsRead}
-              onDelete={deleteNotification}
             />
             <NotificationGroup 
               title="This Week" 
-              notifications={groupedNotifications.thisWeek}
+              groups={groupedNotifications.thisWeek}
               onMarkAsRead={markAsRead}
-              onDelete={deleteNotification}
             />
             <NotificationGroup 
               title="This Month" 
-              notifications={groupedNotifications.thisMonth}
+              groups={groupedNotifications.thisMonth}
               onMarkAsRead={markAsRead}
-              onDelete={deleteNotification}
             />
             <NotificationGroup 
               title="Older" 
-              notifications={groupedNotifications.older}
+              groups={groupedNotifications.older}
               onMarkAsRead={markAsRead}
-              onDelete={deleteNotification}
             />
           </div>
         )}
