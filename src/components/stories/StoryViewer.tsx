@@ -251,27 +251,56 @@ export function StoryViewer({
   if (!currentStory) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+    <div className={cn(
+      "fixed inset-0 z-50 bg-black",
+      isMobile ? "overflow-y-auto" : "flex items-center justify-center overflow-hidden"
+    )}>
       {/* Close Button */}
       <button
         onClick={onClose}
-        className="absolute top-4 right-4 z-20 text-white hover:text-muted-foreground safe-area-top"
+        className={cn(
+          "z-20 text-white hover:text-muted-foreground",
+          isMobile ? "fixed top-4 right-4 safe-area-top" : "absolute top-4 right-4"
+        )}
       >
         <X className="h-8 w-8" />
       </button>
 
+      {/* Navigation Arrows (Desktop/Tablet - Outside Container) */}
+      {!isMobile && (
+        <>
+          <button
+            onClick={prevStory}
+            className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 rounded-full p-3 backdrop-blur-sm z-20"
+          >
+            <ChevronLeft className="h-8 w-8 text-white" />
+          </button>
+          <button
+            onClick={nextStory}
+            className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 rounded-full p-3 backdrop-blur-sm z-20"
+          >
+            <ChevronRight className="h-8 w-8 text-white" />
+          </button>
+        </>
+      )}
+
       {/* Main Container */}
       <div className={cn(
-        "relative flex items-center justify-center",
-        isMobile ? "w-full h-full" : "w-full max-w-lg h-full max-h-[85vh]"
+        "relative flex flex-col",
+        isMobile 
+          ? "min-h-screen w-full" 
+          : "h-[calc(100vh-80px)] max-h-[800px] w-full max-w-[450px] mx-auto"
       )}>
         {/* Story Content */}
         <div className={cn(
-          "relative bg-black overflow-hidden flex items-center justify-center",
-          isMobile ? "w-full h-full" : "w-full aspect-[9/16] rounded-xl"
+          "relative bg-black flex-1 flex flex-col",
+          isMobile ? "min-h-screen" : "rounded-xl overflow-hidden"
         )}>
           {/* Progress Bars */}
-          <div className="absolute top-4 left-4 right-4 flex gap-1 z-10 safe-area-top">
+          <div className={cn(
+            "absolute left-4 right-4 flex gap-1 z-10",
+            isMobile ? "top-4 safe-area-top" : "top-4"
+          )}>
             {activeGroup.stories.map((_, idx) => (
               <div key={idx} className="flex-1 h-0.5 bg-white/30 rounded-full overflow-hidden">
                 <div
@@ -290,7 +319,10 @@ export function StoryViewer({
           </div>
 
           {/* Header */}
-          <div className="absolute top-10 left-4 right-16 flex items-center justify-between z-10 safe-area-top">
+          <div className={cn(
+            "absolute left-4 right-16 flex items-center justify-between z-10",
+            isMobile ? "top-10 safe-area-top" : "top-10"
+          )}>
             <div 
               className="flex items-center gap-3 cursor-pointer"
               onClick={() => {
@@ -343,28 +375,38 @@ export function StoryViewer({
             </div>
           </div>
 
-          {/* Media */}
-          {currentStory.media_type === 'video' ? (
-            <video
-              ref={videoRef}
-              src={currentStory.media_url}
-              className="max-w-full max-h-full object-contain"
-              autoPlay
-              playsInline
-              muted={false}
-              onEnded={nextStory}
-            />
-          ) : (
-            <img
-              src={currentStory.media_url}
-              alt="Story"
-              className="max-w-full max-h-full object-contain"
-            />
-          )}
+          {/* Media Container - Fixed aspect ratio */}
+          <div className={cn(
+            "flex-1 flex items-center justify-center",
+            isMobile ? "pt-20 pb-32" : "py-16"
+          )}>
+            <div className="relative w-full h-full flex items-center justify-center">
+              {currentStory.media_type === 'video' ? (
+                <video
+                  ref={videoRef}
+                  src={currentStory.media_url}
+                  className="max-w-full max-h-full object-contain"
+                  autoPlay
+                  playsInline
+                  muted={false}
+                  onEnded={nextStory}
+                />
+              ) : (
+                <img
+                  src={currentStory.media_url}
+                  alt="Story"
+                  className="max-w-full max-h-full object-contain"
+                />
+              )}
+            </div>
+          </div>
 
           {/* Caption */}
           {currentStory.caption && (
-            <div className="absolute bottom-24 left-4 right-4 text-white text-center z-10">
+            <div className={cn(
+              "absolute left-4 right-4 text-white text-center z-10",
+              isMobile ? "bottom-40" : "bottom-28"
+            )}>
               <p className="bg-black/50 rounded-lg px-4 py-2 text-sm backdrop-blur-sm">
                 {currentStory.caption}
               </p>
@@ -373,84 +415,78 @@ export function StoryViewer({
 
           {/* Viewers Button (Own Story) */}
           {isOwnStory && (
-            <button
-              onClick={() => setShowViewers(true)}
-              className="absolute bottom-20 left-1/2 -translate-x-1/2 flex items-center gap-2 text-white bg-white/10 backdrop-blur-sm rounded-full px-4 py-2 z-10"
-            >
-              <Eye className="h-4 w-4" />
-              <span className="text-sm">{viewers.length || currentStory.views_count} viewers</span>
-            </button>
+            <div className={cn(
+              "absolute left-0 right-0 z-10",
+              isMobile ? "bottom-24 safe-area-bottom" : "bottom-6"
+            )}>
+              <button
+                onClick={() => setShowViewers(true)}
+                className="flex items-center gap-2 text-white bg-white/10 backdrop-blur-sm rounded-full px-4 py-2 mx-auto"
+              >
+                <Eye className="h-4 w-4" />
+                <span className="text-sm">{viewers.length || currentStory.views_count} viewers</span>
+              </button>
+            </div>
           )}
 
           {/* Bottom Actions */}
           {!isOwnStory && (
-            <div className="absolute bottom-4 left-4 right-4 flex items-center gap-2 safe-area-bottom z-10">
-              <div className="flex-1 relative">
-                <Input
-                  value={storyReply}
-                  onChange={(e) => setStoryReply(e.target.value)}
-                  placeholder="Send message..."
-                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50 pr-10 backdrop-blur-sm"
-                  onKeyDown={(e) => e.key === 'Enter' && handleStoryReply()}
-                />
-                <button className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white">
-                  <Smile className="h-5 w-5" />
+            <div className={cn(
+              "z-10 bg-gradient-to-t from-black/80 to-transparent",
+              isMobile 
+                ? "fixed bottom-0 left-0 right-0 p-4 pb-6 safe-area-bottom" 
+                : "absolute bottom-0 left-0 right-0 p-4 rounded-b-xl"
+            )}>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 relative">
+                  <Input
+                    value={storyReply}
+                    onChange={(e) => setStoryReply(e.target.value)}
+                    placeholder="Send message..."
+                    className="bg-white/10 border-white/20 text-white placeholder:text-white/50 pr-10 backdrop-blur-sm h-11"
+                    onKeyDown={(e) => e.key === 'Enter' && handleStoryReply()}
+                  />
+                  <button className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white">
+                    <Smile className="h-5 w-5" />
+                  </button>
+                </div>
+                <button
+                  onClick={handleLike}
+                  className={cn(
+                    "p-2.5 rounded-full transition-colors",
+                    isLiked ? "text-red-500" : "text-white hover:text-red-400"
+                  )}
+                >
+                  <Heart className={cn("h-6 w-6", isLiked && "fill-current")} />
                 </button>
+                <button
+                  onClick={handleShare}
+                  className="p-2.5 text-white hover:text-primary"
+                >
+                  <Share2 className="h-6 w-6" />
+                </button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="text-white hover:bg-white/20 h-11 w-11"
+                  onClick={handleStoryReply}
+                  disabled={!storyReply.trim()}
+                >
+                  <Send className="h-5 w-5" />
+                </Button>
               </div>
-              <button
-                onClick={handleLike}
-                className={cn(
-                  "p-2 rounded-full transition-colors",
-                  isLiked ? "text-red-500" : "text-white hover:text-red-400"
-                )}
-              >
-                <Heart className={cn("h-6 w-6", isLiked && "fill-current")} />
-              </button>
-              <button
-                onClick={handleShare}
-                className="p-2 text-white hover:text-primary"
-              >
-                <Share2 className="h-6 w-6" />
-              </button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="text-white hover:bg-white/20"
-                onClick={handleStoryReply}
-                disabled={!storyReply.trim()}
-              >
-                <Send className="h-5 w-5" />
-              </Button>
             </div>
           )}
 
           {/* Navigation Touch Areas */}
           <div
             onClick={prevStory}
-            className="absolute left-0 top-20 bottom-20 w-1/3 md:w-1/4 cursor-pointer"
+            className="absolute left-0 top-24 bottom-36 w-1/3 cursor-pointer z-5"
           />
           <div
             onClick={nextStory}
-            className="absolute right-0 top-20 bottom-20 w-1/3 md:w-1/4 cursor-pointer"
+            className="absolute right-0 top-24 bottom-36 w-1/3 cursor-pointer z-5"
           />
-
-          {/* Navigation Arrows (Desktop) */}
-          {!isMobile && (
-            <>
-              <button
-                onClick={prevStory}
-                className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 rounded-full p-2 backdrop-blur-sm"
-              >
-                <ChevronLeft className="h-6 w-6 text-white" />
-              </button>
-              <button
-                onClick={nextStory}
-                className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 rounded-full p-2 backdrop-blur-sm"
-              >
-                <ChevronRight className="h-6 w-6 text-white" />
-              </button>
-            </>
-          )}
         </div>
       </div>
 
