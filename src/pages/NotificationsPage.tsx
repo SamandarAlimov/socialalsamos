@@ -47,27 +47,43 @@ function NotificationItem({
   const navigate = useNavigate();
   const data = notification.data as Record<string, unknown>;
   
-  const handleClick = () => {
+  // Get actor info from notification data
+  const actorId = (data?.liker_id || data?.commenter_id || data?.follower_id || data?.actor_id) as string;
+  const actorUsername = data?.actor_username as string;
+  const actorDisplayName = data?.actor_display_name as string;
+  const actorAvatar = data?.actor_avatar as string;
+  const postId = data?.post_id as string;
+  const postThumbnail = data?.post_thumbnail as string;
+  const commentPreview = data?.comment_preview as string;
+  
+  const handleItemClick = () => {
     onMarkAsRead(notification.id);
     
     // Navigate based on notification type
-    if (notification.type === 'like' || notification.type === 'comment') {
-      const postId = data?.post_id as string;
-      if (postId) {
-        navigate(`/home?post=${postId}`);
-      }
-    } else if (notification.type === 'follow') {
-      const followerId = data?.follower_id as string;
-      if (followerId) {
-        navigate(`/user/${followerId}`);
-      }
+    if ((notification.type === 'like' || notification.type === 'comment') && postId) {
+      navigate(`/home?post=${postId}`);
+    } else if (notification.type === 'follow' && actorId) {
+      navigate(`/user/${actorId}`);
+    } else if (notification.type === 'mention' && postId) {
+      navigate(`/home?post=${postId}`);
     }
   };
-
-  // Get actor info from notification data
-  const actorId = (data?.liker_id || data?.commenter_id || data?.follower_id) as string;
-  const actorAvatar = data?.actor_avatar as string;
-  const postThumbnail = data?.post_thumbnail as string;
+  
+  const handleActorClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (actorId) {
+      onMarkAsRead(notification.id);
+      navigate(`/user/${actorId}`);
+    }
+  };
+  
+  const handlePostClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (postId) {
+      onMarkAsRead(notification.id);
+      navigate(`/home?post=${postId}`);
+    }
+  };
   
   return (
     <div
@@ -76,14 +92,17 @@ function NotificationItem({
         'hover:bg-accent/50',
         !notification.is_read && 'bg-primary/5'
       )}
-      onClick={handleClick}
+      onClick={handleItemClick}
     >
-      {/* Avatar with notification icon overlay */}
-      <div className="relative flex-shrink-0">
+      {/* Avatar with notification icon overlay - clickable to user profile */}
+      <div 
+        className="relative flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+        onClick={handleActorClick}
+      >
         <Avatar className="h-11 w-11">
           <AvatarImage src={actorAvatar} />
           <AvatarFallback className="bg-muted text-xs">
-            {notification.title.charAt(0).toUpperCase()}
+            {(actorDisplayName || actorUsername || notification.title).charAt(0).toUpperCase()}
           </AvatarFallback>
         </Avatar>
         <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-background flex items-center justify-center border-2 border-background">
@@ -94,9 +113,21 @@ function NotificationItem({
       {/* Content */}
       <div className="flex-1 min-w-0">
         <p className="text-sm">
-          <span className="font-semibold">{notification.title}</span>
-          {notification.body && (
-            <span className="text-muted-foreground"> {notification.body}</span>
+          <span 
+            className="font-semibold hover:underline cursor-pointer"
+            onClick={handleActorClick}
+          >
+            {actorDisplayName || actorUsername || notification.title}
+          </span>
+          <span className="text-muted-foreground">
+            {notification.type === 'like' && ' liked your post'}
+            {notification.type === 'comment' && ' commented: '}
+            {notification.type === 'follow' && ' started following you'}
+            {notification.type === 'mention' && ' mentioned you'}
+            {notification.type === 'message' && ' sent you a message'}
+          </span>
+          {notification.type === 'comment' && commentPreview && (
+            <span className="text-foreground">"{commentPreview.substring(0, 50)}{commentPreview.length > 50 ? '...' : ''}"</span>
           )}
         </p>
         <p className="text-xs text-muted-foreground mt-0.5">
@@ -104,15 +135,47 @@ function NotificationItem({
         </p>
       </div>
       
-      {/* Post thumbnail (for likes/comments) */}
+      {/* Post thumbnail (for likes/comments) - clickable to post */}
       {postThumbnail && (
-        <div className="flex-shrink-0 h-11 w-11 rounded-lg overflow-hidden bg-muted">
+        <div 
+          className="flex-shrink-0 h-11 w-11 rounded-lg overflow-hidden bg-muted cursor-pointer hover:opacity-80 transition-opacity"
+          onClick={handlePostClick}
+        >
           <img 
             src={postThumbnail} 
             alt="Post" 
             className="h-full w-full object-cover"
           />
         </div>
+      )}
+      
+      {/* For posts without thumbnail, show a view button */}
+      {!postThumbnail && (notification.type === 'like' || notification.type === 'comment') && postId && (
+        <Button 
+          variant="outline" 
+          size="sm" 
+          className="flex-shrink-0 text-xs"
+          onClick={handlePostClick}
+        >
+          View
+        </Button>
+      )}
+      
+      {/* Follow back button for follow notifications */}
+      {notification.type === 'follow' && (
+        <Button 
+          variant="default" 
+          size="sm" 
+          className="flex-shrink-0 text-xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (actorId) {
+              navigate(`/user/${actorId}`);
+            }
+          }}
+        >
+          View Profile
+        </Button>
       )}
       
       {/* Unread indicator */}

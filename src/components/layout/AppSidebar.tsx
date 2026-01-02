@@ -12,7 +12,8 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Compass
+  Compass,
+  Wallet
 } from 'lucide-react';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
@@ -43,6 +44,7 @@ const navItems: NavItem[] = [
 
 const bottomItems: NavItem[] = [
   { icon: User, label: 'Profile', path: '/profile' },
+  { icon: Wallet, label: 'Payment', path: '/payment' },
   { icon: Settings, label: 'Settings', path: '/settings' },
 ];
 
