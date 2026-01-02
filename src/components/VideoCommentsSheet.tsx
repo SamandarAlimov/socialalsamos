@@ -5,7 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MentionAutocomplete } from '@/components/MentionAutocomplete';
-import { useMentionInput } from '@/hooks/useMentionInput';
+import { HashtagAutocomplete } from '@/components/HashtagAutocomplete';
+import { RichTextContent } from '@/components/RichTextContent';
+import { useAutocompleteInput } from '@/hooks/useAutocompleteInput';
 import {
   Drawer,
   DrawerContent,
@@ -47,10 +49,10 @@ export function VideoCommentsSheet({ isOpen, onClose, postId, commentsCount }: V
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const commentInputRef = useRef<HTMLInputElement>(null);
-  const { mentionState, handleInputChange, insertMention, closeMention } = useMentionInput();
+  const { autocompleteState, handleInputChange, insertAutocomplete, closeAutocomplete } = useAutocompleteInput();
 
-  const handleMentionSelect = (username: string) => {
-    const newValue = insertMention(newComment, username, commentInputRef);
+  const handleAutocompleteSelect = (value: string) => {
+    const newValue = insertAutocomplete(newComment, value, commentInputRef);
     setNewComment(newValue);
   };
 
@@ -209,7 +211,7 @@ export function VideoCommentsSheet({ isOpen, onClose, postId, commentsCount }: V
                       {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
                     </span>
                   </div>
-                  <p className="text-sm mt-1">{comment.content}</p>
+                  <RichTextContent content={comment.content} className="text-sm mt-1" />
                   <div className="flex items-center gap-4 mt-2">
                     <button
                       className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
@@ -252,7 +254,7 @@ export function VideoCommentsSheet({ isOpen, onClose, postId, commentsCount }: V
                   e.target.selectionStart || 0,
                   setNewComment
                 )}
-                placeholder={user ? "Add a comment... Use @ to mention" : "Sign in to comment"}
+                placeholder={user ? "Add a comment... Use @ or #" : "Sign in to comment"}
                 className="w-full bg-muted/50 border-0"
                 disabled={!user}
                 onKeyDown={(e) => {
@@ -262,11 +264,19 @@ export function VideoCommentsSheet({ isOpen, onClose, postId, commentsCount }: V
                   }
                 }}
               />
-              {mentionState.isActive && (
+              {autocompleteState.isActive && autocompleteState.type === 'mention' && (
                 <MentionAutocomplete
-                  query={mentionState.query}
-                  onSelect={handleMentionSelect}
-                  onClose={closeMention}
+                  query={autocompleteState.query}
+                  onSelect={handleAutocompleteSelect}
+                  onClose={closeAutocomplete}
+                  className="bottom-full left-0 mb-1"
+                />
+              )}
+              {autocompleteState.isActive && autocompleteState.type === 'hashtag' && (
+                <HashtagAutocomplete
+                  query={autocompleteState.query}
+                  onSelect={handleAutocompleteSelect}
+                  onClose={closeAutocomplete}
                   className="bottom-full left-0 mb-1"
                 />
               )}
