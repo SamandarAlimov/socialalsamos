@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { LinkPreview } from './LinkPreview';
+import { OpenGraphPreview } from './OpenGraphPreview';
 
 interface MessageContentProps {
   content: string;
@@ -47,30 +47,20 @@ export function MessageContent({ content, isMine, className }: MessageContentPro
 
   // Check if content is only a link (for cleaner display)
   const isOnlyLink = links.length === 1 && content.trim() === links[0];
-  
-  // Filter for previewable links (YouTube, Instagram)
-  const previewableLinks = links.filter(url => {
-    try {
-      const domain = new URL(url).hostname.replace('www.', '');
-      return ['youtube.com', 'youtu.be', 'instagram.com'].includes(domain);
-    } catch {
-      return false;
-    }
-  });
 
   return (
     <div className={cn("space-y-2", className)}>
       {/* Text content - hide if it's only a link that will have a preview */}
-      {!(isOnlyLink && previewableLinks.length > 0) && (
+      {!(isOnlyLink && links.length > 0) && (
         <p 
           className="text-sm leading-relaxed whitespace-pre-wrap break-words"
           dangerouslySetInnerHTML={{ __html: formattedContent }}
         />
       )}
 
-      {/* Link previews */}
-      {previewableLinks.map((url, index) => (
-        <LinkPreview key={index} url={url} className="mt-2" />
+      {/* OpenGraph previews for all links */}
+      {links.map((url, index) => (
+        <OpenGraphPreview key={index} url={url} className="mt-2" />
       ))}
     </div>
   );

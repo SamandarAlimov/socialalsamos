@@ -20,6 +20,7 @@ import DiscoveryPage from "./pages/DiscoveryPage";
 import SearchPage from "./pages/SearchPage";
 import MarketplacePage from "./pages/MarketplacePage";
 import AdminPage from "./pages/AdminPage";
+import NotificationsPage from "./pages/NotificationsPage";
 import NotFound from "./pages/NotFound";
 
 // Layout
@@ -88,7 +89,7 @@ function AppRoutes() {
         <Route path="/messages" element={<MessagesPage />} />
         <Route path="/marketplace" element={<MarketplacePage />} />
         <Route path="/map" element={<MapPage />} />
-        <Route path="/notifications" element={<PlaceholderPage title="Notifications" />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/create" element={<CreatePage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/user/:userId" element={<UserProfilePage />} />
