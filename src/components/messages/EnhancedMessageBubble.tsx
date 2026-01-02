@@ -92,7 +92,13 @@ export function EnhancedMessageBubble({
   const swipeThreshold = 60;
   const maxSwipe = 80;
 
+  const isInteractiveTarget = (target: EventTarget | null) => {
+    const el = target as HTMLElement | null;
+    return !!el?.closest('a,button,iframe,[role="button"]');
+  };
+
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (isInteractiveTarget(e.target)) return;
     startX.current = e.touches[0].clientX;
     hasTriggeredHaptic.current = false;
     setIsDragging(true);
@@ -100,6 +106,7 @@ export function EnhancedMessageBubble({
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (!isDragging) return;
+    if (isInteractiveTarget(e.target)) return;
     
     const currentX = e.touches[0].clientX;
     const diff = isMine ? startX.current - currentX : currentX - startX.current;

@@ -659,19 +659,26 @@ export function useMessages(conversationId: string | null) {
     }
   }, [toast]);
 
-  // Set typing indicator with debounce
+  // Set typing indicator (reliable without requiring unique constraints)
   const setTyping = useCallback(async (isTyping: boolean) => {
     if (!conversationId || !user) return;
 
     try {
       if (isTyping) {
-        await supabase.from('typing_indicators').upsert({
+        // Ensure we have at most one row per user/conversation even if DB lacks a unique constraint
+        await supabase
+          .from('typing_indicators')
+          .delete()
+          .eq('conversation_id', conversationId)
+          .eq('user_id', user.id);
+
+        await supabase.from('typing_indicators').insert({
           conversation_id: conversationId,
           user_id: user.id,
           started_at: new Date().toISOString(),
-        }, { onConflict: 'conversation_id,user_id' });
+        });
 
-        // Auto-clear typing after 3 seconds
+        // Auto-clear typing after 3 seconds of no updates
         if (typingTimeoutRef.current) {
           clearTimeout(typingTimeoutRef.current);
         }
@@ -796,6 +803,26 @@ export function useMessages(conversationId: string | null) {
   useEffect(() => {
     if (!conversationId || !user) return;
 
+    const fetchTyping = async () => {
+      // Treat typing as "active" only if updated very recently
+      const thresholdAgo = new Date(Date.now() - 3500).toISOString();
+
+      const { data } = await supabase
+        .from('typing_indicators')
+        .select(
+          `user_id, started_at, profile:profiles!typing_indicators_user_id_fkey(display_name, username)`
+        )
+        .eq('conversation_id', conversationId)
+        .neq('user_id', user.id)
+        .gt('started_at', thresholdAgo);
+
+      const names = (data || []).map((t: any) => t.profile?.display_name || t.profile?.username || 'Someone');
+      setTypingUsers(names);
+    };
+
+    // Initial fetch
+    fetchTyping();
+
     typingChannelRef.current = supabase
       .channel(`typing-realtime-${conversationId}`)
       .on(
@@ -806,30 +833,30 @@ export function useMessages(conversationId: string | null) {
           table: 'typing_indicators',
           filter: `conversation_id=eq.${conversationId}`,
         },
-        async () => {
-          // Filter out stale typing indicators (older than 5 seconds)
-          const fiveSecondsAgo = new Date(Date.now() - 5000).toISOString();
-          const { data } = await supabase
-            .from('typing_indicators')
-            .select('user_id, started_at')
-            .eq('conversation_id', conversationId)
-            .neq('user_id', user.id)
-            .gt('started_at', fiveSecondsAgo);
-
-          setTypingUsers(data?.map(t => t.user_id) || []);
-        }
+        () => fetchTyping()
       )
       .subscribe((status) => {
         console.log('Typing channel status:', status);
       });
 
+    // Safety poll (covers missed realtime events)
+    const poll = setInterval(fetchTyping, 1500);
+
     return () => {
+      clearInterval(poll);
       if (typingChannelRef.current) {
         supabase.removeChannel(typingChannelRef.current);
       }
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
+      // Clear my typing indicator when leaving the conversation
+      supabase
+        .from('typing_indicators')
+        .delete()
+        .eq('conversation_id', conversationId)
+        .eq('user_id', user.id)
+        .then(() => {});
     };
   }, [conversationId, user]);
 

@@ -99,7 +99,7 @@ export default function MessagesPage() {
   } = useMessages(selectedConversation?.id || null);
 
   // Read receipts
-  const { markAsRead, isMessageRead } = useReadReceipts(selectedConversation?.id || null);
+  const { markAsRead, isMessageRead, getMessageReadAt } = useReadReceipts(selectedConversation?.id || null);
 
   // Video call management
   const {
@@ -854,7 +854,7 @@ export default function MessagesPage() {
             </div>
 
             {/* Messages Area - Scrollable - Takes remaining space between fixed header and input */}
-            <div className="flex-1 overflow-y-auto scrollbar-custom bg-muted/20 overscroll-contain">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-custom bg-muted/20 overscroll-contain">
               {messagesLoading ? (
                 <div className="flex items-center justify-center h-full">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -866,9 +866,9 @@ export default function MessagesPage() {
                   <p className="text-sm">Start the conversation!</p>
                 </div>
               ) : (
-                <div className="p-4 space-y-4">
+                <div className="p-4 space-y-4 min-w-0 max-w-full">
                   {messageGroups.map((group) => (
-                    <div key={group.date}>
+                    <div key={group.date} className="min-w-0">
                       {/* Date separator */}
                       <div className="flex items-center justify-center my-4">
                         <span className="px-3 py-1 bg-muted rounded-full text-xs text-muted-foreground">
@@ -881,36 +881,42 @@ export default function MessagesPage() {
                       </div>
                       
                       {/* Messages */}
-                      <div className="space-y-2">
+                      <div className="space-y-2 min-w-0">
                         {group.messages.map((message, idx) => {
                           const prevMessage = group.messages[idx - 1];
                           const showAvatar = !prevMessage || prevMessage.sender_id !== message.sender_id;
                           const isMine = message.sender_id === user?.id;
-                          const readByOther = isMine && message.sender_id ? isMessageRead(message.id, message.sender_id) : false;
+                          const senderId = message.sender_id || '';
+                          const readByOther = isMine && senderId ? isMessageRead(message.id, senderId) : false;
+                          const readAt = isMine && senderId ? getMessageReadAt(message.id, senderId) : null;
                           
                           return (
                             <div
                               key={message.id}
                               id={`message-${message.id}`}
-                              className={highlightedMessageId === message.id ? 'animate-pulse bg-primary/10 rounded-lg' : ''}
+                              className={cn(
+                                'min-w-0',
+                                highlightedMessageId === message.id && 'animate-pulse bg-primary/10 rounded-lg'
+                              )}
                             >
-                            <EnhancedMessageBubble
-                              key={message.id}
-                              message={{
-                                ...message,
-                                is_read: readByOther,
-                                status: readByOther ? 'read' : message.status,
-                              }}
-                              isMine={isMine}
-                              isGroup={selectedConversation.type === 'group'}
-                              onReply={handleReply}
-                              onForward={handleForward}
-                              onEdit={handleEdit}
-                              onDelete={handleDelete}
-                              onPin={handlePin}
-                              showAvatar={showAvatar}
-                              showSender={selectedConversation.type === 'group' && showAvatar}
-                            />
+                              <EnhancedMessageBubble
+                                key={message.id}
+                                message={{
+                                  ...message,
+                                  is_read: readByOther,
+                                  status: readByOther ? 'read' : message.status,
+                                  read_at: readAt || undefined,
+                                }}
+                                isMine={isMine}
+                                isGroup={selectedConversation.type === 'group'}
+                                onReply={handleReply}
+                                onForward={handleForward}
+                                onEdit={handleEdit}
+                                onDelete={handleDelete}
+                                onPin={handlePin}
+                                showAvatar={showAvatar}
+                                showSender={selectedConversation.type === 'group' && showAvatar}
+                              />
                             </div>
                           );
                         })}
@@ -920,7 +926,7 @@ export default function MessagesPage() {
                   
                   {/* Typing Indicator */}
                   {typingUsers.length > 0 && (
-                    <TypingIndicator userNames={typingUsers.map(u => typeof u === 'string' ? u : (u as any).display_name || (u as any).username || 'Someone')} />
+                    <TypingIndicator userNames={typingUsers} />
                   )}
                   
                   <div ref={messagesEndRef} />

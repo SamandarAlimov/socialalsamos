@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserSettings } from '@/hooks/useUserSettings';
 import { supabase } from '@/integrations/supabase/client';
@@ -22,7 +23,8 @@ import {
   XCircle,
   Loader2,
   Save,
-  BadgeCheck
+  BadgeCheck,
+  Wallet
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -57,6 +59,7 @@ interface Profile {
 }
 
 export default function SettingsPage() {
+  const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { settings, sessions, isLoading, updateSettings, logoutSession, logoutAllOtherSessions, refetch } = useUserSettings();
   const { toast } = useToast();
@@ -299,6 +302,22 @@ export default function SettingsPage() {
               {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
               Save Changes
             </Button>
+          </div>
+
+          {/* Payment */}
+          <div className="bg-card rounded-xl border border-border p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Wallet className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold">Payment</h3>
+                  <p className="text-sm text-muted-foreground">Wallet balance and transaction history</p>
+                </div>
+              </div>
+              <Button variant="outline" onClick={() => navigate('/payment')}>Open</Button>
+            </div>
           </div>
 
           {/* Verification Request */}
