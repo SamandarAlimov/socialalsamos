@@ -27,26 +27,42 @@ export function useNotificationPermission() {
     }
   }, [supported]);
 
-  const showNotification = useCallback((title: string, options?: NotificationOptions) => {
-    if (permission !== 'granted') return;
+  const showNotification = useCallback((title: string, options?: NotificationOptions & { onClick?: () => void }) => {
+    if (permission !== 'granted') return null;
 
     try {
-      new Notification(title, {
+      const notification = new Notification(title, {
         icon: '/favicon.ico',
         badge: '/favicon.ico',
+        requireInteraction: false,
+        silent: false,
         ...options,
       });
+
+      if (options?.onClick) {
+        notification.onclick = () => {
+          window.focus();
+          options.onClick?.();
+          notification.close();
+        };
+      }
+
+      // Auto-close after 5 seconds
+      setTimeout(() => notification.close(), 5000);
+
+      return notification;
     } catch (error) {
       console.error('Error showing notification:', error);
+      return null;
     }
   }, [permission]);
 
-  // Subscribe to real-time notifications
+  // Subscribe to real-time notifications for push alerts
   useEffect(() => {
     if (!user || permission !== 'granted') return;
 
     const channel = supabase
-      .channel(`notifications:${user.id}`)
+      .channel(`push-notifications:${user.id}`)
       .on(
         'postgres_changes',
         {
@@ -56,11 +72,33 @@ export function useNotificationPermission() {
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          const notification = payload.new as any;
-          showNotification(notification.title, {
-            body: notification.body,
-            tag: notification.id,
-          });
+          const notification = payload.new as {
+            id: string;
+            title: string;
+            body: string | null;
+            type: string;
+            data: { post_id?: string; follower_id?: string; liker_id?: string; commenter_id?: string };
+          };
+          
+          // Only show push notification if document is hidden (app in background)
+          if (document.hidden) {
+            showNotification(notification.title, {
+              body: notification.body || undefined,
+              tag: notification.id,
+              onClick: () => {
+                // Navigate based on notification type
+                if (notification.type === 'like' || notification.type === 'comment') {
+                  if (notification.data?.post_id) {
+                    window.location.href = `/home?post=${notification.data.post_id}`;
+                  }
+                } else if (notification.type === 'follow') {
+                  if (notification.data?.follower_id) {
+                    window.location.href = `/user/${notification.data.follower_id}`;
+                  }
+                }
+              },
+            });
+          }
         }
       )
       .subscribe();
