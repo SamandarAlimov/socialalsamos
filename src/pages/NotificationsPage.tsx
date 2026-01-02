@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow, isToday, isYesterday, isThisWeek, isThisMonth, differenceInMinutes } from 'date-fns';
-import { Heart, MessageCircle, UserPlus, AtSign, Check, Users } from 'lucide-react';
+import { Heart, MessageCircle, UserPlus, AtSign, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -19,9 +19,9 @@ interface GroupedNotification {
   postThumbnail?: string;
   actors: Array<{
     id: string;
-    username?: string;
-    displayName?: string;
-    avatar?: string;
+    username: string | null;
+    displayName: string | null;
+    avatar: string | null;
   }>;
 }
 
@@ -62,7 +62,11 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
   sorted.forEach((notification) => {
     const data = notification.data as Record<string, unknown>;
     const postId = data?.post_id as string | undefined;
-    const actorId = (data?.liker_id || data?.commenter_id || data?.follower_id || data?.mentioner_id || data?.actor_id) as string;
+    const actor = notification.actor;
+    const post = notification.post;
+    
+    // Get thumbnail from first media URL
+    const postThumbnail = post?.media_urls?.[0];
     
     // Create a key based on type and post (for likes/comments) or just type (for follows)
     const groupKey = notification.type === 'follow' 
@@ -78,14 +82,14 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
         new Date(notification.created_at)
       );
       
-      if (timeDiff <= CONSOLIDATION_WINDOW_MINUTES) {
+      if (timeDiff <= CONSOLIDATION_WINDOW_MINUTES && actor) {
         // Add to existing group if actor not already included
-        if (!existing.actors.find(a => a.id === actorId)) {
+        if (!existing.actors.find(a => a.id === actor.id)) {
           existing.actors.push({
-            id: actorId,
-            username: data?.actor_username as string,
-            displayName: data?.actor_display_name as string,
-            avatar: data?.actor_avatar as string,
+            id: actor.id,
+            username: actor.username,
+            displayName: actor.display_name,
+            avatar: actor.avatar_url,
           });
         }
         existing.notifications.push(notification);
@@ -100,13 +104,13 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
       notifications: [notification],
       latestAt: notification.created_at,
       postId,
-      postThumbnail: data?.post_thumbnail as string,
-      actors: [{
-        id: actorId,
-        username: data?.actor_username as string,
-        displayName: data?.actor_display_name as string,
-        avatar: data?.actor_avatar as string,
-      }],
+      postThumbnail,
+      actors: actor ? [{
+        id: actor.id,
+        username: actor.username,
+        displayName: actor.display_name,
+        avatar: actor.avatar_url,
+      }] : [],
     });
   });
   
@@ -160,7 +164,23 @@ function GroupedNotificationItem({
   };
   
   const getNotificationText = () => {
-    const actorName = firstActor?.displayName || firstActor?.username || 'Someone';
+    const actorName = firstActor?.displayName || firstActor?.username;
+    const actorUsername = firstActor?.username;
+    
+    // Clickable username
+    const usernameElement = actorName ? (
+      <span 
+        className="font-semibold hover:underline cursor-pointer"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (firstActor?.id) navigate(`/user/${firstActor.id}`);
+        }}
+      >
+        {actorName}
+      </span>
+    ) : (
+      <span className="font-semibold">Someone</span>
+    );
     
     if (otherActorsCount > 0) {
       const othersText = otherActorsCount === 1 
@@ -169,29 +189,29 @@ function GroupedNotificationItem({
       
       switch (group.type) {
         case 'like':
-          return <><span className="font-semibold">{actorName}</span> {othersText} liked your post</>;
+          return <>{usernameElement} {othersText} liked your post</>;
         case 'comment':
-          return <><span className="font-semibold">{actorName}</span> {othersText} commented on your post</>;
+          return <>{usernameElement} {othersText} commented on your post</>;
         case 'follow':
-          return <><span className="font-semibold">{actorName}</span> {othersText} started following you</>;
+          return <>{usernameElement} {othersText} started following you</>;
         case 'mention':
-          return <><span className="font-semibold">{actorName}</span> {othersText} mentioned you</>;
+          return <>{usernameElement} {othersText} mentioned you</>;
         default:
-          return <><span className="font-semibold">{actorName}</span> {othersText}</>;
+          return <>{usernameElement} {othersText}</>;
       }
     }
     
     switch (group.type) {
       case 'like':
-        return <><span className="font-semibold">{actorName}</span> liked your post</>;
+        return <>{usernameElement} liked your post</>;
       case 'comment':
-        return <><span className="font-semibold">{actorName}</span> commented on your post</>;
+        return <>{usernameElement} commented on your post</>;
       case 'follow':
-        return <><span className="font-semibold">{actorName}</span> started following you</>;
+        return <>{usernameElement} started following you</>;
       case 'mention':
-        return <><span className="font-semibold">{actorName}</span> mentioned you</>;
+        return <>{usernameElement} mentioned you</>;
       default:
-        return <span className="font-semibold">{actorName}</span>;
+        return usernameElement;
     }
   };
   
@@ -220,7 +240,7 @@ function GroupedNotificationItem({
                 )}
                 onClick={(e) => handleActorClick(e, actor.id)}
               >
-                <AvatarImage src={actor.avatar} />
+                <AvatarImage src={actor.avatar || undefined} />
                 <AvatarFallback className="bg-muted text-xs">
                   {(actor.displayName || actor.username || '?').charAt(0).toUpperCase()}
                 </AvatarFallback>
@@ -235,10 +255,10 @@ function GroupedNotificationItem({
         ) : (
           <div 
             className="relative cursor-pointer hover:opacity-80 transition-opacity"
-            onClick={(e) => handleActorClick(e, firstActor?.id)}
+            onClick={(e) => handleActorClick(e, firstActor?.id || '')}
           >
             <Avatar className="h-11 w-11">
-              <AvatarImage src={firstActor?.avatar} />
+              <AvatarImage src={firstActor?.avatar || undefined} />
               <AvatarFallback className="bg-muted text-xs">
                 {(firstActor?.displayName || firstActor?.username || '?').charAt(0).toUpperCase()}
               </AvatarFallback>

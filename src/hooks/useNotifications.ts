@@ -2,6 +2,18 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
+export interface NotificationActor {
+  id: string;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+}
+
+export interface NotificationPost {
+  id: string;
+  media_urls: string[] | null;
+}
+
 export interface Notification {
   id: string;
   user_id: string;
@@ -11,6 +23,8 @@ export interface Notification {
   data: Record<string, unknown>;
   is_read: boolean;
   created_at: string;
+  actor?: NotificationActor;
+  post?: NotificationPost;
 }
 
 export function useNotifications() {
@@ -30,8 +44,61 @@ export function useNotifications() {
       .limit(50);
 
     if (!error && data) {
-      setNotifications(data as Notification[]);
-      setUnreadCount(data.filter(n => !n.is_read).length);
+      // Extract unique actor IDs and post IDs
+      const actorIds = new Set<string>();
+      const postIds = new Set<string>();
+      
+      data.forEach(n => {
+        const d = n.data as Record<string, unknown>;
+        const actorId = (d?.liker_id || d?.commenter_id || d?.follower_id || d?.mentioner_id || d?.actor_id) as string;
+        if (actorId) actorIds.add(actorId);
+        const postId = d?.post_id as string;
+        if (postId) postIds.add(postId);
+      });
+
+      // Fetch profiles for actors
+      const profilesResult = actorIds.size > 0
+        ? await supabase
+            .from('profiles')
+            .select('id, username, display_name, avatar_url')
+            .in('id', Array.from(actorIds))
+        : { data: [] as { id: string; username: string | null; display_name: string | null; avatar_url: string | null }[] };
+
+      // Fetch posts for thumbnails
+      const postsResult = postIds.size > 0
+        ? await supabase
+            .from('posts')
+            .select('id, media_urls')
+            .in('id', Array.from(postIds))
+        : { data: [] as { id: string; media_urls: string[] | null }[] };
+
+      const profiles = profilesResult.data || [];
+      const posts = postsResult.data || [];
+
+      const profileMap = new Map<string, NotificationActor>(
+        profiles.map(p => [p.id, p as NotificationActor])
+      );
+      const postMap = new Map<string, NotificationPost>(
+        posts.map(p => [p.id, p as NotificationPost])
+      );
+
+      // Enrich notifications with actor and post data
+      const enrichedNotifications: Notification[] = data.map(n => {
+        const d = n.data as Record<string, unknown>;
+        const actorId = (d?.liker_id || d?.commenter_id || d?.follower_id || d?.mentioner_id || d?.actor_id) as string;
+        const postId = d?.post_id as string;
+        
+        return {
+          ...n,
+          data: d,
+          type: n.type as Notification['type'],
+          actor: actorId ? profileMap.get(actorId) : undefined,
+          post: postId ? postMap.get(postId) : undefined,
+        };
+      });
+
+      setNotifications(enrichedNotifications);
+      setUnreadCount(enrichedNotifications.filter(n => !n.is_read).length);
     }
     setLoading(false);
   }, [user]);
@@ -75,7 +142,7 @@ export function useNotifications() {
     fetchNotifications();
   }, [fetchNotifications]);
 
-  // Real-time subscription
+  // Real-time subscription - refetch to get actor/post data
   useEffect(() => {
     if (!user) return;
 
@@ -89,10 +156,9 @@ export function useNotifications() {
           table: 'notifications',
           filter: `user_id=eq.${user.id}`,
         },
-        (payload) => {
-          const newNotification = payload.new as Notification;
-          setNotifications(prev => [newNotification, ...prev]);
-          setUnreadCount(prev => prev + 1);
+        () => {
+          // Refetch to get enriched data
+          fetchNotifications();
         }
       )
       .subscribe();
@@ -100,7 +166,7 @@ export function useNotifications() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user, fetchNotifications]);
 
   return {
     notifications,
