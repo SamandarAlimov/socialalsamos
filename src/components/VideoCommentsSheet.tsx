@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, Heart, Send, MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
+import { MentionAutocomplete } from '@/components/MentionAutocomplete';
+import { useMentionInput } from '@/hooks/useMentionInput';
 import {
   Drawer,
   DrawerContent,
@@ -44,6 +46,13 @@ export function VideoCommentsSheet({ isOpen, onClose, postId, commentsCount }: V
   const [isLoading, setIsLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const commentInputRef = useRef<HTMLInputElement>(null);
+  const { mentionState, handleInputChange, insertMention, closeMention } = useMentionInput();
+
+  const handleMentionSelect = (username: string) => {
+    const newValue = insertMention(newComment, username, commentInputRef);
+    setNewComment(newValue);
+  };
 
   useEffect(() => {
     if (isOpen && postId) {
@@ -234,19 +243,34 @@ export function VideoCommentsSheet({ isOpen, onClose, postId, commentsCount }: V
             <Avatar className="w-8 h-8">
               <AvatarFallback>U</AvatarFallback>
             </Avatar>
-            <Input
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder={user ? "Add a comment..." : "Sign in to comment"}
-              className="flex-1 bg-muted/50 border-0"
-              disabled={!user}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSubmitComment();
-                }
-              }}
-            />
+            <div className="flex-1 relative">
+              <Input
+                ref={commentInputRef}
+                value={newComment}
+                onChange={(e) => handleInputChange(
+                  e.target.value,
+                  e.target.selectionStart || 0,
+                  setNewComment
+                )}
+                placeholder={user ? "Add a comment... Use @ to mention" : "Sign in to comment"}
+                className="w-full bg-muted/50 border-0"
+                disabled={!user}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmitComment();
+                  }
+                }}
+              />
+              {mentionState.isActive && (
+                <MentionAutocomplete
+                  query={mentionState.query}
+                  onSelect={handleMentionSelect}
+                  onClose={closeMention}
+                  className="bottom-full left-0 mb-1"
+                />
+              )}
+            </div>
             <Button
               size="icon"
               disabled={!user || !newComment.trim() || isSubmitting}

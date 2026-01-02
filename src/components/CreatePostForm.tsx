@@ -3,6 +3,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFileUpload } from '@/hooks/useFileUpload';
+import { useMentionInput } from '@/hooks/useMentionInput';
+import { MentionAutocomplete } from '@/components/MentionAutocomplete';
 import { 
   Image as ImageIcon, 
   Play, 
@@ -22,7 +24,14 @@ export function CreatePostForm({ onPost }: CreatePostFormProps) {
   const [mediaFiles, setMediaFiles] = useState<{ url: string; type: 'image' | 'video'; file?: File }[]>([]);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { uploadFile, uploading } = useFileUpload();
+  const { mentionState, handleInputChange, insertMention, closeMention } = useMentionInput();
+
+  const handleMentionSelect = (username: string) => {
+    const newValue = insertMention(postContent, username, textareaRef);
+    setPostContent(newValue);
+  };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') => {
     const files = e.target.files;
@@ -109,14 +118,27 @@ export function CreatePostForm({ onPost }: CreatePostFormProps) {
             {profile?.display_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
           </AvatarFallback>
         </Avatar>
-        <div className="flex-1">
+        <div className="flex-1 relative">
           <textarea
+            ref={textareaRef}
             value={postContent}
-            onChange={(e) => setPostContent(e.target.value)}
+            onChange={(e) => handleInputChange(
+              e.target.value, 
+              e.target.selectionStart || 0,
+              setPostContent
+            )}
             placeholder="What's on your mind?"
             className="w-full bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none resize-none min-h-[60px]"
             rows={2}
           />
+          {mentionState.isActive && (
+            <MentionAutocomplete
+              query={mentionState.query}
+              onSelect={handleMentionSelect}
+              onClose={closeMention}
+              className="top-full left-0 mt-1"
+            />
+          )}
         </div>
       </div>
 

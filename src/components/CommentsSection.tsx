@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useComments, Comment } from '@/hooks/useComments';
+import { useMentionInput } from '@/hooks/useMentionInput';
+import { MentionAutocomplete } from '@/components/MentionAutocomplete';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +27,25 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyContent, setReplyContent] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const commentInputRef = useRef<HTMLInputElement>(null);
+  const replyInputRef = useRef<HTMLInputElement>(null);
+  const { mentionState, handleInputChange, insertMention, closeMention } = useMentionInput();
+  const { 
+    mentionState: replyMentionState, 
+    handleInputChange: handleReplyInputChange, 
+    insertMention: insertReplyMention, 
+    closeMention: closeReplyMention 
+  } = useMentionInput();
+
+  const handleMentionSelect = (username: string) => {
+    const newValue = insertMention(newComment, username, commentInputRef);
+    setNewComment(newValue);
+  };
+
+  const handleReplyMentionSelect = (username: string) => {
+    const newValue = insertReplyMention(replyContent, username, replyInputRef);
+    setReplyContent(newValue);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,14 +137,29 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
           
           {/* Reply input */}
           {replyingTo === comment.id && (
-            <div className="flex gap-2 mt-3">
-              <Input
-                value={replyContent}
-                onChange={(e) => setReplyContent(e.target.value)}
-                placeholder="Write a reply..."
-                className="flex-1 h-9 text-sm"
-                onKeyPress={(e) => e.key === 'Enter' && handleReply(comment.id)}
-              />
+            <div className="flex gap-2 mt-3 relative">
+              <div className="flex-1 relative">
+                <Input
+                  ref={replyInputRef}
+                  value={replyContent}
+                  onChange={(e) => handleReplyInputChange(
+                    e.target.value,
+                    e.target.selectionStart || 0,
+                    setReplyContent
+                  )}
+                  placeholder="Write a reply... Use @ to mention"
+                  className="h-9 text-sm w-full"
+                  onKeyPress={(e) => e.key === 'Enter' && handleReply(comment.id)}
+                />
+                {replyMentionState.isActive && (
+                  <MentionAutocomplete
+                    query={replyMentionState.query}
+                    onSelect={handleReplyMentionSelect}
+                    onClose={closeReplyMention}
+                    className="bottom-full left-0 mb-1"
+                  />
+                )}
+              </div>
               <Button 
                 size="sm" 
                 onClick={() => handleReply(comment.id)}
@@ -151,13 +187,28 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
     <div className="border-t border-border">
       {/* Add comment form */}
       {user && (
-        <form onSubmit={handleSubmit} className="flex gap-2 p-4 border-b border-border">
-          <Input
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Write a comment..."
-            className="flex-1"
-          />
+        <form onSubmit={handleSubmit} className="flex gap-2 p-4 border-b border-border relative">
+          <div className="flex-1 relative">
+            <Input
+              ref={commentInputRef}
+              value={newComment}
+              onChange={(e) => handleInputChange(
+                e.target.value,
+                e.target.selectionStart || 0,
+                setNewComment
+              )}
+              placeholder="Write a comment... Use @ to mention"
+              className="w-full"
+            />
+            {mentionState.isActive && (
+              <MentionAutocomplete
+                query={mentionState.query}
+                onSelect={handleMentionSelect}
+                onClose={closeMention}
+                className="bottom-full left-0 mb-1"
+              />
+            )}
+          </div>
           <Button type="submit" disabled={!newComment.trim() || submitting}>
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
