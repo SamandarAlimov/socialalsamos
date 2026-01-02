@@ -25,7 +25,11 @@ import {
   Loader2,
   Save,
   BadgeCheck,
-  Wallet
+  Wallet,
+  Heart,
+  MessageCircle,
+  UserPlus,
+  AtSign
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -634,6 +638,79 @@ export default function SettingsPage() {
         {/* Notifications Tab */}
         <TabsContent value="notifications" className="space-y-6">
           <PushNotificationSettings />
+          
+          <div className="bg-card rounded-xl border border-border overflow-hidden">
+            <div className="p-4 border-b border-border">
+              <h2 className="font-semibold">Notification Types</h2>
+              <p className="text-xs text-muted-foreground mt-1">Choose which notifications you want to receive</p>
+            </div>
+
+            <div className="divide-y divide-border">
+              <div className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="h-10 w-10 rounded-full bg-red-500/10 flex items-center justify-center">
+                    <Heart className="h-5 w-5 text-red-500" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">Likes</p>
+                    <p className="text-xs text-muted-foreground">When someone likes your posts</p>
+                  </div>
+                </div>
+                <Switch
+                  checked={settings?.notify_likes ?? true}
+                  onCheckedChange={(checked) => updateSettings({ notify_likes: checked })}
+                />
+              </div>
+
+              <div className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="h-10 w-10 rounded-full bg-blue-500/10 flex items-center justify-center">
+                    <MessageCircle className="h-5 w-5 text-blue-500" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">Comments</p>
+                    <p className="text-xs text-muted-foreground">When someone comments on your posts</p>
+                  </div>
+                </div>
+                <Switch
+                  checked={settings?.notify_comments ?? true}
+                  onCheckedChange={(checked) => updateSettings({ notify_comments: checked })}
+                />
+              </div>
+
+              <div className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="h-10 w-10 rounded-full bg-green-500/10 flex items-center justify-center">
+                    <UserPlus className="h-5 w-5 text-green-500" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">New Followers</p>
+                    <p className="text-xs text-muted-foreground">When someone starts following you</p>
+                  </div>
+                </div>
+                <Switch
+                  checked={settings?.notify_follows ?? true}
+                  onCheckedChange={(checked) => updateSettings({ notify_follows: checked })}
+                />
+              </div>
+
+              <div className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="h-10 w-10 rounded-full bg-purple-500/10 flex items-center justify-center">
+                    <AtSign className="h-5 w-5 text-purple-500" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">Mentions</p>
+                    <p className="text-xs text-muted-foreground">When someone @mentions you</p>
+                  </div>
+                </div>
+                <Switch
+                  checked={settings?.notify_mentions ?? true}
+                  onCheckedChange={(checked) => updateSettings({ notify_mentions: checked })}
+                />
+              </div>
+            </div>
+          </div>
           
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <div className="p-4 border-b border-border">

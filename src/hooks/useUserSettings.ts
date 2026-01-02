@@ -15,6 +15,10 @@ export interface UserSettings {
   notification_preview: boolean;
   theme: 'system' | 'light' | 'dark';
   language: string;
+  notify_likes: boolean;
+  notify_comments: boolean;
+  notify_follows: boolean;
+  notify_mentions: boolean;
 }
 
 export interface UserSession {

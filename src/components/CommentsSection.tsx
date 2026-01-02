@@ -1,8 +1,10 @@
 import { useState, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useComments, Comment } from '@/hooks/useComments';
-import { useMentionInput } from '@/hooks/useMentionInput';
+import { useAutocompleteInput } from '@/hooks/useAutocompleteInput';
 import { MentionAutocomplete } from '@/components/MentionAutocomplete';
+import { HashtagAutocomplete } from '@/components/HashtagAutocomplete';
+import { RichTextContent } from '@/components/RichTextContent';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,21 +31,21 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
   const [submitting, setSubmitting] = useState(false);
   const commentInputRef = useRef<HTMLInputElement>(null);
   const replyInputRef = useRef<HTMLInputElement>(null);
-  const { mentionState, handleInputChange, insertMention, closeMention } = useMentionInput();
+  const { autocompleteState, handleInputChange, insertAutocomplete, closeAutocomplete } = useAutocompleteInput();
   const { 
-    mentionState: replyMentionState, 
+    autocompleteState: replyAutocompleteState, 
     handleInputChange: handleReplyInputChange, 
-    insertMention: insertReplyMention, 
-    closeMention: closeReplyMention 
-  } = useMentionInput();
+    insertAutocomplete: insertReplyAutocomplete, 
+    closeAutocomplete: closeReplyAutocomplete 
+  } = useAutocompleteInput();
 
-  const handleMentionSelect = (username: string) => {
-    const newValue = insertMention(newComment, username, commentInputRef);
+  const handleAutocompleteSelect = (value: string) => {
+    const newValue = insertAutocomplete(newComment, value, commentInputRef);
     setNewComment(newValue);
   };
 
-  const handleReplyMentionSelect = (username: string) => {
-    const newValue = insertReplyMention(replyContent, username, replyInputRef);
+  const handleReplyAutocompleteSelect = (value: string) => {
+    const newValue = insertReplyAutocomplete(replyContent, value, replyInputRef);
     setReplyContent(newValue);
   };
 
@@ -110,7 +112,7 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
             )}
           </div>
           
-          <p className="text-sm mt-1">{comment.content}</p>
+          <RichTextContent content={comment.content} className="text-sm mt-1" />
           
           <div className="flex items-center gap-4 mt-2">
             <button
@@ -147,15 +149,23 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
                     e.target.selectionStart || 0,
                     setReplyContent
                   )}
-                  placeholder="Write a reply... Use @ to mention"
+                  placeholder="Write a reply... Use @ or #"
                   className="h-9 text-sm w-full"
                   onKeyPress={(e) => e.key === 'Enter' && handleReply(comment.id)}
                 />
-                {replyMentionState.isActive && (
+                {replyAutocompleteState.isActive && replyAutocompleteState.type === 'mention' && (
                   <MentionAutocomplete
-                    query={replyMentionState.query}
-                    onSelect={handleReplyMentionSelect}
-                    onClose={closeReplyMention}
+                    query={replyAutocompleteState.query}
+                    onSelect={handleReplyAutocompleteSelect}
+                    onClose={closeReplyAutocomplete}
+                    className="bottom-full left-0 mb-1"
+                  />
+                )}
+                {replyAutocompleteState.isActive && replyAutocompleteState.type === 'hashtag' && (
+                  <HashtagAutocomplete
+                    query={replyAutocompleteState.query}
+                    onSelect={handleReplyAutocompleteSelect}
+                    onClose={closeReplyAutocomplete}
                     className="bottom-full left-0 mb-1"
                   />
                 )}
@@ -197,14 +207,22 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
                 e.target.selectionStart || 0,
                 setNewComment
               )}
-              placeholder="Write a comment... Use @ to mention"
+              placeholder="Write a comment... Use @ or #"
               className="w-full"
             />
-            {mentionState.isActive && (
+            {autocompleteState.isActive && autocompleteState.type === 'mention' && (
               <MentionAutocomplete
-                query={mentionState.query}
-                onSelect={handleMentionSelect}
-                onClose={closeMention}
+                query={autocompleteState.query}
+                onSelect={handleAutocompleteSelect}
+                onClose={closeAutocomplete}
+                className="bottom-full left-0 mb-1"
+              />
+            )}
+            {autocompleteState.isActive && autocompleteState.type === 'hashtag' && (
+              <HashtagAutocomplete
+                query={autocompleteState.query}
+                onSelect={handleAutocompleteSelect}
+                onClose={closeAutocomplete}
                 className="bottom-full left-0 mb-1"
               />
             )}

@@ -1124,6 +1124,10 @@ export type Database = {
           last_seen_visibility: string | null
           notification_preview: boolean | null
           notification_sounds: boolean | null
+          notify_comments: boolean | null
+          notify_follows: boolean | null
+          notify_likes: boolean | null
+          notify_mentions: boolean | null
           read_receipts_enabled: boolean | null
           theme: string | null
           two_factor_enabled: boolean | null
@@ -1139,6 +1143,10 @@ export type Database = {
           last_seen_visibility?: string | null
           notification_preview?: boolean | null
           notification_sounds?: boolean | null
+          notify_comments?: boolean | null
+          notify_follows?: boolean | null
+          notify_likes?: boolean | null
+          notify_mentions?: boolean | null
           read_receipts_enabled?: boolean | null
           theme?: string | null
           two_factor_enabled?: boolean | null
@@ -1154,6 +1162,10 @@ export type Database = {
           last_seen_visibility?: string | null
           notification_preview?: boolean | null
           notification_sounds?: boolean | null
+          notify_comments?: boolean | null
+          notify_follows?: boolean | null
+          notify_likes?: boolean | null
+          notify_mentions?: boolean | null
           read_receipts_enabled?: boolean | null
           theme?: string | null
           two_factor_enabled?: boolean | null
