@@ -21,6 +21,7 @@ import SearchPage from "./pages/SearchPage";
 import MarketplacePage from "./pages/MarketplacePage";
 import AdminPage from "./pages/AdminPage";
 import NotificationsPage from "./pages/NotificationsPage";
+import StoryArchivePage from "./pages/StoryArchivePage";
 import NotFound from "./pages/NotFound";
 
 // Layout
@@ -96,6 +97,7 @@ function AppRoutes() {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/payment" element={<PaymentSettingsPage />} />
         <Route path="/admin" element={<AdminPage />} />
+        <Route path="/story-archive" element={<StoryArchivePage />} />
       </Route>
       
       {/* 404 */}

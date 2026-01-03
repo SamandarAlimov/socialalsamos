@@ -17,7 +17,8 @@ import {
   MapPin,
   Link as LinkIcon,
   Calendar,
-  ImageIcon
+  ImageIcon,
+  Archive
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
@@ -139,6 +140,9 @@ export default function ProfilePage() {
                   <Button variant="default" onClick={() => navigate('/settings')}>
                     <Edit3 className="h-4 w-4 mr-2" />
                     Edit Profile
+                  </Button>
+                  <Button variant="outline" size="icon" onClick={() => navigate('/story-archive')}>
+                    <Archive className="h-5 w-5" />
                   </Button>
                   <Button variant="outline" size="icon" onClick={() => navigate('/settings')}>
                     <Settings className="h-5 w-5" />
