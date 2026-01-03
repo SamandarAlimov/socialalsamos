@@ -17,12 +17,15 @@ import {
   Trash2,
   MoreHorizontal,
   Pause,
-  Play
+  Play,
+  Bookmark,
+  Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
+import { toast } from 'sonner';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -92,6 +95,7 @@ export function StoryViewer({
   const [viewers, setViewers] = useState<StoryViewer[]>([]);
   const [loadingViewers, setLoadingViewers] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
+  const [isSendingReply, setIsSendingReply] = useState(false);
   
   const storyTimerRef = useRef<NodeJS.Timeout | null>(null);
   const progressRef = useRef<HTMLDivElement>(null);
@@ -208,10 +212,101 @@ export function StoryViewer({
   }, [activeGroup, activeIndex, allGroups]);
 
   const handleStoryReply = async () => {
-    if (!storyReply.trim() || !activeGroup) return;
-    // TODO: Implement story reply via DM
-    console.log('Reply to story:', storyReply);
-    setStoryReply('');
+    if (!storyReply.trim() || !activeGroup || !user || isSendingReply) return;
+    
+    setIsSendingReply(true);
+    
+    try {
+      // Find or create conversation with story owner
+      const storyOwnerId = activeGroup.user_id;
+      
+      // Check if conversation already exists
+      const { data: myParticipations } = await supabase
+        .from('conversation_participants')
+        .select('conversation_id')
+        .eq('user_id', user.id);
+
+      let existingConversationId: string | null = null;
+
+      if (myParticipations && myParticipations.length > 0) {
+        for (const p of myParticipations) {
+          const { data: otherParticipant } = await supabase
+            .from('conversation_participants')
+            .select('conversation_id')
+            .eq('conversation_id', p.conversation_id)
+            .eq('user_id', storyOwnerId)
+            .single();
+
+          if (otherParticipant) {
+            const { data: existingConv } = await supabase
+              .from('conversations')
+              .select('id')
+              .eq('id', p.conversation_id)
+              .eq('type', 'private')
+              .single();
+
+            if (existingConv) {
+              existingConversationId = existingConv.id;
+              break;
+            }
+          }
+        }
+      }
+
+      let conversationId = existingConversationId;
+
+      if (!conversationId) {
+        // Create new conversation
+        const { data: newConv, error: convError } = await supabase
+          .from('conversations')
+          .insert({
+            type: 'private',
+            owner_id: user.id,
+            last_message_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+
+        if (convError) throw convError;
+
+        // Add both participants
+        await supabase
+          .from('conversation_participants')
+          .insert([
+            { conversation_id: newConv.id, user_id: user.id, role: 'owner' },
+            { conversation_id: newConv.id, user_id: storyOwnerId, role: 'member' },
+          ]);
+
+        conversationId = newConv.id;
+      }
+
+      // Send the story reply as a message
+      const storyReplyContent = `📸 Replied to your story: "${storyReply.trim()}"`;
+      
+      const { error: msgError } = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: conversationId,
+          sender_id: user.id,
+          content: storyReplyContent,
+        });
+
+      if (msgError) throw msgError;
+
+      // Update conversation last_message_at
+      await supabase
+        .from('conversations')
+        .update({ last_message_at: new Date().toISOString() })
+        .eq('id', conversationId);
+
+      toast.success('Reply sent!');
+      setStoryReply('');
+    } catch (error) {
+      console.error('Error sending story reply:', error);
+      toast.error('Failed to send reply');
+    } finally {
+      setIsSendingReply(false);
+    }
   };
 
   const handleShare = () => {
@@ -468,9 +563,13 @@ export function StoryViewer({
                   variant="ghost"
                   className="text-white hover:bg-white/20 h-11 w-11"
                   onClick={handleStoryReply}
-                  disabled={!storyReply.trim()}
+                  disabled={!storyReply.trim() || isSendingReply}
                 >
-                  <Send className="h-5 w-5" />
+                  {isSendingReply ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <Send className="h-5 w-5" />
+                  )}
                 </Button>
               </div>
             </div>

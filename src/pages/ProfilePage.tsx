@@ -7,6 +7,7 @@ import { FollowersFollowingDialog } from '@/components/FollowersFollowingDialog'
 import { ProfilePostsGrid } from '@/components/profile/ProfilePostsGrid';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
+import { StoryHighlights } from '@/components/stories/StoryHighlights';
 import { 
   Settings, 
   Edit3, 
@@ -205,6 +206,11 @@ export default function ProfilePage() {
             <span className="text-xl font-bold">{formatCount(followingCount)}</span>
             <span className="text-muted-foreground text-sm ml-1">Following</span>
           </button>
+        </div>
+
+        {/* Story Highlights */}
+        <div className="mt-6">
+          <StoryHighlights userId={profile.id} />
         </div>
 
         {/* Tabs */}

@@ -953,6 +953,92 @@ export type Database = {
           },
         ]
       }
+      story_highlight_items: {
+        Row: {
+          caption: string | null
+          created_at: string
+          highlight_id: string
+          id: string
+          media_type: string | null
+          media_url: string
+          position: number
+          story_id: string
+        }
+        Insert: {
+          caption?: string | null
+          created_at?: string
+          highlight_id: string
+          id?: string
+          media_type?: string | null
+          media_url: string
+          position?: number
+          story_id: string
+        }
+        Update: {
+          caption?: string | null
+          created_at?: string
+          highlight_id?: string
+          id?: string
+          media_type?: string | null
+          media_url?: string
+          position?: number
+          story_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "story_highlight_items_highlight_id_fkey"
+            columns: ["highlight_id"]
+            isOneToOne: false
+            referencedRelation: "story_highlights"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "story_highlight_items_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      story_highlights: {
+        Row: {
+          cover_url: string | null
+          created_at: string
+          id: string
+          name: string
+          position: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cover_url?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          position?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cover_url?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          position?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "story_highlights_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       story_views: {
         Row: {
           id: string

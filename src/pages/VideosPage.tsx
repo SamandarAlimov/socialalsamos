@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Heart, MessageCircle, Share2, Bookmark, Music2, Volume2, VolumeX, Play, Pause, Repeat2, ArrowLeft } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
@@ -9,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { VideoCommentsSheet } from '@/components/VideoCommentsSheet';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useNavigate } from 'react-router-dom';
+import { StoryAvatar } from '@/components/stories/StoryAvatar';
 
 function formatNumber(num: number): string {
   if (num >= 1000000) {
@@ -237,12 +237,15 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobi
         )}>
           {/* User info with follow button */}
           <div className="flex items-center gap-3 mb-3">
-            <Avatar className="h-10 w-10 border-2 border-white">
-              <AvatarImage src={video.profile?.avatar_url || ''} />
-              <AvatarFallback className="bg-primary text-primary-foreground text-sm">
-                {video.profile?.display_name?.[0] || video.profile?.username?.[0] || 'U'}
-              </AvatarFallback>
-            </Avatar>
+            <StoryAvatar
+              userId={video.profile?.id || video.user_id}
+              username={video.profile?.username}
+              displayName={video.profile?.display_name}
+              avatarUrl={video.profile?.avatar_url}
+              isVerified={!!video.profile?.is_verified}
+              size="md"
+              showRing
+            />
             <div className="flex items-center gap-2">
               <span className="text-white font-bold text-sm">
                 @{video.profile?.username || 'user'}
