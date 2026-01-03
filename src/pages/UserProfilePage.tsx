@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { 
   MessageCircle, 
@@ -20,6 +19,7 @@ import { toast } from 'sonner';
 import { useConversations } from '@/hooks/useMessages';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FollowersFollowingDialog } from '@/components/FollowersFollowingDialog';
+import { StoryAvatar } from '@/components/stories/StoryAvatar';
 
 interface UserProfile {
   id: string;
@@ -205,12 +205,15 @@ export default function UserProfilePage() {
       {/* Profile Info */}
       <div className="relative -mt-24 px-4">
         <div className="flex flex-col md:flex-row md:items-end gap-4">
-          <Avatar className="h-32 w-32 border-4 border-background shadow-lg">
-            <AvatarImage src={profile.avatar_url || undefined} />
-            <AvatarFallback className="text-4xl bg-primary text-primary-foreground">
-              {(profile.display_name || profile.username || 'U')[0].toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
+          <StoryAvatar
+            userId={profile.id}
+            username={profile.username}
+            displayName={profile.display_name}
+            avatarUrl={profile.avatar_url}
+            isVerified={!!profile.is_verified}
+            size="xl"
+            showRing
+          />
 
           <div className="flex-1 pb-2">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">

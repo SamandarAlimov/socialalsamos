@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserProfile } from '@/hooks/useUserProfile';
-import { useStories } from '@/hooks/useStories';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FollowersFollowingDialog } from '@/components/FollowersFollowingDialog';
 import { ProfilePostsGrid } from '@/components/profile/ProfilePostsGrid';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
+import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { 
   Settings, 
   Edit3, 
@@ -36,7 +35,6 @@ export default function ProfilePage() {
     pinPost,
     isOwnProfile,
   } = useUserProfile();
-  const { storyGroups } = useStories();
   const navigate = useNavigate();
   
   const [activeTab, setActiveTab] = useState<'posts' | 'videos' | 'saved'>('posts');
@@ -63,9 +61,6 @@ export default function ProfilePage() {
     }
     return true;
   });
-
-  // Get user's stories
-  const userStories = storyGroups.find(g => g.user_id === user?.id);
 
   if (isLoading) {
     return (
@@ -110,13 +105,16 @@ export default function ProfilePage() {
       <div className="relative -mt-24 px-4">
         <div className="flex flex-col md:flex-row md:items-end gap-4">
           {/* Avatar with story ring */}
-          <div className={`relative ${userStories?.stories.length ? 'p-1 rounded-full bg-gradient-to-r from-primary to-orange-500' : ''}`}>
-            <Avatar className="h-32 w-32 border-4 border-background shadow-lg">
-              <AvatarImage src={profile.avatar_url || ''} />
-              <AvatarFallback className="text-4xl bg-primary text-primary-foreground">
-                {profile.display_name?.[0]?.toUpperCase() || profile.username?.[0]?.toUpperCase() || 'U'}
-              </AvatarFallback>
-            </Avatar>
+          <div className="relative">
+            <StoryAvatar
+              userId={profile.id}
+              username={profile.username}
+              displayName={profile.display_name}
+              avatarUrl={profile.avatar_url}
+              isVerified={!!profile.is_verified}
+              size="xl"
+              showRing
+            />
             {profile.is_online && (
               <span className="absolute bottom-2 right-2 h-5 w-5 bg-green-500 rounded-full border-4 border-background" />
             )}

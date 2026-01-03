@@ -29,6 +29,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { LiveStreamCard } from '@/components/live/LiveStreamCard';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { StoryViewer } from '@/components/stories/StoryViewer';
+import { StoryAvatar } from '@/components/stories/StoryAvatar';
 
 export default function HomePage() {
   const { user, profile } = useAuth();
@@ -312,15 +313,16 @@ function PostCard({
       {/* Post Header */}
       <div className="flex items-center justify-between p-3 md:p-4">
         <div className="flex items-center gap-2.5 md:gap-3">
-          <Avatar 
-            className="h-9 w-9 md:h-10 md:w-10 cursor-pointer hover:opacity-80 transition-opacity"
+          <StoryAvatar
+            userId={post.user_id}
+            username={post.profile?.username}
+            displayName={post.profile?.display_name}
+            avatarUrl={post.profile?.avatar_url}
+            isVerified={!!post.profile?.is_verified}
+            size="md"
+            showRing
             onClick={handleUserClick}
-          >
-            <AvatarImage src={post.profile?.avatar_url || ''} />
-            <AvatarFallback className="text-xs md:text-sm">
-              {post.profile?.display_name?.[0] || post.profile?.username?.[0] || 'U'}
-            </AvatarFallback>
-          </Avatar>
+          />
           <div>
             <div className="flex items-center gap-1">
               <span 
