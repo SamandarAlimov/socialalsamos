@@ -27,12 +27,13 @@ interface VideoCardProps {
   onBookmark: () => void;
   onCommentClick: () => void;
   isMobile: boolean;
+  globalMuted: boolean;
+  onMuteToggle: () => void;
 }
 
-function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobile }: VideoCardProps) {
+function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobile, globalMuted, onMuteToggle }: VideoCardProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
   const [showPlayButton, setShowPlayButton] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const { lightTap, successFeedback } = useHapticFeedback();
@@ -55,6 +56,13 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobi
     }
   }, [isActive]);
 
+  // Sync mute state with global
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = globalMuted;
+    }
+  }, [globalMuted]);
+
   const togglePlay = () => {
     lightTap();
     if (!videoRef.current) return;
@@ -73,10 +81,7 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobi
   const toggleMute = (e: React.MouseEvent) => {
     e.stopPropagation();
     lightTap();
-    if (!videoRef.current) return;
-    
-    videoRef.current.muted = !isMuted;
-    setIsMuted(!isMuted);
+    onMuteToggle();
   };
 
   const handleLike = () => {
@@ -115,7 +120,7 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobi
           src={videoUrl}
           className="absolute inset-0 h-full w-full object-cover"
           loop
-          muted={isMuted}
+          muted={globalMuted}
           playsInline
           onClick={togglePlay}
           poster={video.media_urls?.[1]}
@@ -148,7 +153,7 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobi
             isMobile ? "top-16" : "top-4"
           )}
         >
-          {isMuted ? (
+          {globalMuted ? (
             <VolumeX className="h-5 w-5 text-white" />
           ) : (
             <Volume2 className="h-5 w-5 text-white" />
@@ -332,6 +337,7 @@ export default function VideosPage() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
+  const [globalMuted, setGlobalMuted] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const { mediumTap } = useHapticFeedback();
   
@@ -339,6 +345,10 @@ export default function VideosPage() {
   const touchStartY = useRef<number>(0);
   const touchStartTime = useRef<number>(0);
   const [swipeProgress, setSwipeProgress] = useState(0);
+
+  const handleMuteToggle = useCallback(() => {
+    setGlobalMuted(prev => !prev);
+  }, []);
 
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
@@ -414,7 +424,7 @@ export default function VideosPage() {
     return (
       <div className={cn(
         "bg-black flex items-center justify-center",
-        isMobile ? "fixed inset-0 z-40" : "h-[calc(100vh-4rem)] w-full"
+        isMobile ? "fixed inset-0 z-40" : "h-screen w-full"
       )}>
         <VideoSkeleton isMobile={isMobile} />
       </div>
@@ -425,7 +435,7 @@ export default function VideosPage() {
     return (
       <div className={cn(
         "bg-black",
-        isMobile ? "fixed inset-0 z-40" : "h-[calc(100vh-4rem)] w-full flex items-center justify-center"
+        isMobile ? "fixed inset-0 z-40" : "h-screen w-full flex items-center justify-center"
       )}>
         <EmptyState />
       </div>
@@ -435,7 +445,7 @@ export default function VideosPage() {
   return (
     <div className={cn(
       "bg-black",
-      isMobile ? "fixed inset-0 z-40" : "h-[calc(100vh-4rem)] w-full flex items-center justify-center py-4"
+      isMobile ? "fixed inset-0 z-40" : "h-screen w-full flex items-center justify-center"
     )}>
       {/* Mobile back button */}
       {isMobile && (
@@ -447,18 +457,11 @@ export default function VideosPage() {
         </button>
       )}
 
-      {/* Desktop header */}
-      {!isMobile && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
-          <h1 className="text-white text-lg font-bold">Reels</h1>
-        </div>
-      )}
-
       <div 
         ref={containerRef}
         className={cn(
           "overflow-y-scroll snap-y snap-mandatory scrollbar-hide",
-          isMobile ? "h-full w-full" : "h-full max-h-[calc(100vh-6rem)] w-full max-w-[400px]"
+          isMobile ? "h-full w-full" : "h-full w-full max-w-[400px]"
         )}
         style={{ scrollSnapType: 'y mandatory' }}
         onTouchStart={isMobile ? handleTouchStart : undefined}
@@ -474,6 +477,8 @@ export default function VideosPage() {
               onBookmark={() => toggleBookmark(video.id)}
               onCommentClick={() => openComments(video.id)}
               isMobile={isMobile}
+              globalMuted={globalMuted}
+              onMuteToggle={handleMuteToggle}
             />
           </div>
         ))}
