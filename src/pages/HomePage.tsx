@@ -10,7 +10,9 @@ import {
   Bookmark, 
   MoreHorizontal,
   Plus,
-  Loader2
+  Loader2,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { usePosts, Post } from '@/hooks/usePosts';
 import { useStories, StoryGroup } from '@/hooks/useStories';
@@ -22,6 +24,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { CreatePostForm } from '@/components/CreatePostForm';
 import { CreateStoryDialog } from '@/components/CreateStoryDialog';
 import { CommentsSection } from '@/components/CommentsSection';
+import { PostMediaCarousel } from '@/components/PostMediaCarousel';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
@@ -358,25 +361,9 @@ function PostCard({
         </div>
       )}
 
-      {/* Post Media */}
+      {/* Post Media Carousel */}
       {post.media_urls && post.media_urls.length > 0 && (
-        <div className="relative">
-          {post.media_type === 'video' ? (
-            <video 
-              src={post.media_urls[0]} 
-              controls
-              playsInline
-              className="w-full aspect-video object-cover"
-            />
-          ) : (
-            <img 
-              src={post.media_urls[0]} 
-              alt="Post content" 
-              className="w-full aspect-[4/3] md:aspect-video object-cover"
-              loading="lazy"
-            />
-          )}
-        </div>
+        <PostMediaCarousel mediaUrls={post.media_urls} mediaType={post.media_type || 'image'} />
       )}
 
       {/* Post Actions - Mobile optimized */}

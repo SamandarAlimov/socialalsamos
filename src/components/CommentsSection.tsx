@@ -5,10 +5,11 @@ import { useAutocompleteInput } from '@/hooks/useAutocompleteInput';
 import { MentionAutocomplete } from '@/components/MentionAutocomplete';
 import { HashtagAutocomplete } from '@/components/HashtagAutocomplete';
 import { RichTextContent } from '@/components/RichTextContent';
+import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Heart, MessageCircle, MoreHorizontal, Send, Trash2, Loader2 } from 'lucide-react';
+import { Heart, MessageCircle, MoreHorizontal, Send, Trash2, Loader2, Image, Smile, Sticker } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import {
@@ -17,6 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { EmojiPicker } from '@/components/EmojiPicker';
 
 interface CommentsSectionProps {
   postId: string;
@@ -72,18 +74,21 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
   const CommentItem = ({ comment, depth = 0 }: { comment: Comment; depth?: number }) => (
     <div className={cn("group", depth > 0 && "ml-10 border-l-2 border-border pl-4")}>
       <div className="flex gap-3 py-3">
-        <Avatar className="h-8 w-8 flex-shrink-0">
+        <Avatar className="h-8 w-8 flex-shrink-0 ring-2 ring-border">
           <AvatarImage src={comment.profile?.avatar_url || ''} />
-          <AvatarFallback className="text-xs">
+          <AvatarFallback className="text-xs bg-muted">
             {(comment.profile?.display_name || comment.profile?.username || 'U')[0].toUpperCase()}
           </AvatarFallback>
         </Avatar>
         
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-sm">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="font-semibold text-sm">
               {comment.profile?.display_name || comment.profile?.username || 'User'}
             </span>
+            {comment.profile?.is_verified && (
+              <VerifiedBadge size="xs" />
+            )}
             <span className="text-xs text-muted-foreground">
               {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
             </span>
@@ -112,7 +117,7 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
             )}
           </div>
           
-          <RichTextContent content={comment.content} className="text-sm mt-1" />
+          <RichTextContent content={comment.content} className="text-sm mt-1 leading-relaxed" />
           
           <div className="flex items-center gap-4 mt-2">
             <button
@@ -197,55 +202,109 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
     <div className="border-t border-border">
       {/* Add comment form */}
       {user && (
-        <form onSubmit={handleSubmit} className="flex gap-2 p-4 border-b border-border relative">
-          <div className="flex-1 relative">
-            <Input
-              ref={commentInputRef}
-              value={newComment}
-              onChange={(e) => handleInputChange(
-                e.target.value,
-                e.target.selectionStart || 0,
-                setNewComment
+        <form onSubmit={handleSubmit} className="p-3 md:p-4 border-b border-border bg-muted/30">
+          <div className="flex gap-2 items-end">
+            <Avatar className="h-8 w-8 flex-shrink-0">
+              <AvatarImage src="" />
+              <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                {user.email?.[0]?.toUpperCase() || 'U'}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 relative">
+              <div className="flex items-center gap-1 bg-background rounded-full border border-border px-3 py-1">
+                <Input
+                  ref={commentInputRef}
+                  value={newComment}
+                  onChange={(e) => handleInputChange(
+                    e.target.value,
+                    e.target.selectionStart || 0,
+                    setNewComment
+                  )}
+                  placeholder="Add a comment..."
+                  className="border-0 bg-transparent focus-visible:ring-0 px-0 h-8 text-sm"
+                />
+                
+                {/* Media Attachment Buttons */}
+                <div className="flex items-center gap-0.5">
+                  <EmojiPicker 
+                    onSelect={(emoji) => setNewComment(prev => prev + emoji)}
+                    trigger={
+                      <Button 
+                        type="button" 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                      >
+                        <Smile className="h-4 w-4" />
+                      </Button>
+                    }
+                  />
+                  
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                    title="Add image/video"
+                  >
+                    <Image className="h-4 w-4" />
+                  </Button>
+                  
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                    title="Add sticker/GIF"
+                  >
+                    <Sticker className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              
+              {autocompleteState.isActive && autocompleteState.type === 'mention' && (
+                <MentionAutocomplete
+                  query={autocompleteState.query}
+                  onSelect={handleAutocompleteSelect}
+                  onClose={closeAutocomplete}
+                  className="bottom-full left-0 mb-1"
+                />
               )}
-              placeholder="Write a comment... Use @ or #"
-              className="w-full"
-            />
-            {autocompleteState.isActive && autocompleteState.type === 'mention' && (
-              <MentionAutocomplete
-                query={autocompleteState.query}
-                onSelect={handleAutocompleteSelect}
-                onClose={closeAutocomplete}
-                className="bottom-full left-0 mb-1"
-              />
-            )}
-            {autocompleteState.isActive && autocompleteState.type === 'hashtag' && (
-              <HashtagAutocomplete
-                query={autocompleteState.query}
-                onSelect={handleAutocompleteSelect}
-                onClose={closeAutocomplete}
-                className="bottom-full left-0 mb-1"
-              />
-            )}
+              {autocompleteState.isActive && autocompleteState.type === 'hashtag' && (
+                <HashtagAutocomplete
+                  query={autocompleteState.query}
+                  onSelect={handleAutocompleteSelect}
+                  onClose={closeAutocomplete}
+                  className="bottom-full left-0 mb-1"
+                />
+              )}
+            </div>
+            <Button 
+              type="submit" 
+              size="sm"
+              disabled={!newComment.trim() || submitting}
+              className="rounded-full h-8 px-4"
+            >
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Post'}
+            </Button>
           </div>
-          <Button type="submit" disabled={!newComment.trim() || submitting}>
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </Button>
         </form>
       )}
 
       {/* Comments list */}
-      <div className="px-4">
+      <div className="px-3 md:px-4 max-h-80 overflow-y-auto">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
           </div>
         ) : comments.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
-            <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">No comments yet. Be the first!</p>
+            <MessageCircle className="h-10 w-10 mx-auto mb-3 opacity-30" />
+            <p className="text-sm font-medium">No comments yet</p>
+            <p className="text-xs mt-1">Be the first to share your thoughts!</p>
           </div>
         ) : (
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-border/50">
             {comments.map((comment) => (
               <CommentItem key={comment.id} comment={comment} />
             ))}
