@@ -345,8 +345,8 @@ export function StoryViewer({
 
   return (
     <div className={cn(
-      "fixed inset-0 z-50 bg-black overflow-hidden",
-      isMobile ? "" : "flex items-center justify-center"
+      "fixed inset-0 z-[100] bg-black",
+      isMobile ? "overflow-hidden touch-none" : "flex items-center justify-center overflow-hidden"
     )}>
       {/* Close Button */}
       <button

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Menu, 
   Search, 
@@ -38,6 +38,7 @@ const menuItems: NavItem[] = [
 
 export function MobileHeader() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { logout } = useAuth();
   const [open, setOpen] = useState(false);
 
@@ -51,11 +52,14 @@ export function MobileHeader() {
         <div className="flex items-center gap-1">
           <NotificationsDropdown />
           
-          <UserSearchDialog>
-            <Button variant="ghost" size="icon" className="h-9 w-9">
-              <Search className="h-5 w-5" />
-            </Button>
-          </UserSearchDialog>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-9 w-9"
+            onClick={() => navigate('/search')}
+          >
+            <Search className="h-5 w-5" />
+          </Button>
           
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
