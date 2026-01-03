@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, CheckCircle2, UserPlus } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Users, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { StoryAvatar } from '@/components/stories/StoryAvatar';
 
 interface Creator {
   id: string;
@@ -147,17 +147,15 @@ export function PopularCreators() {
               navigate(`/user/${creator.id}`);
             }}
           >
-            <div className="relative">
-              <Avatar className="w-16 h-16 border-2 border-primary">
-                <AvatarImage src={creator.avatar_url || ''} />
-                <AvatarFallback className="bg-primary/10 text-primary">
-                  {creator.username?.[0]?.toUpperCase() || 'U'}
-                </AvatarFallback>
-              </Avatar>
-              {creator.is_verified && (
-                <CheckCircle2 className="absolute -bottom-1 -right-1 h-5 w-5 text-primary fill-primary bg-background rounded-full" />
-              )}
-            </div>
+            <StoryAvatar
+              userId={creator.id}
+              username={creator.username}
+              displayName={creator.display_name}
+              avatarUrl={creator.avatar_url}
+              isVerified={!!creator.is_verified}
+              size="lg"
+              showRing
+            />
             <div className="text-center">
               <p className="font-medium text-sm truncate max-w-[100px]">
                 {creator.display_name || creator.username || 'User'}

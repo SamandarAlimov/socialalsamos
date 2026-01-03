@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Heart, MessageCircle, Play, Image as ImageIcon } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Sparkles, Heart, MessageCircle, Play } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useAuth } from '@/contexts/AuthContext';
+import { StoryAvatar } from '@/components/stories/StoryAvatar';
 
 interface Post {
   id: string;
@@ -152,12 +152,14 @@ export function ForYouSection() {
             {/* User info */}
             <div className="absolute bottom-0 left-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
               <div className="flex items-center gap-2">
-                <Avatar className="w-6 h-6 border border-white/50">
-                  <AvatarImage src={post.profile?.avatar_url || ''} />
-                  <AvatarFallback className="text-xs">
-                    {post.profile?.username?.[0]?.toUpperCase() || 'U'}
-                  </AvatarFallback>
-                </Avatar>
+                <StoryAvatar
+                  userId={post.profile?.id || ''}
+                  username={post.profile?.username}
+                  displayName={post.profile?.display_name}
+                  avatarUrl={post.profile?.avatar_url}
+                  size="xs"
+                  showRing
+                />
                 <span className="text-white text-xs truncate">
                   @{post.profile?.username || 'user'}
                 </span>

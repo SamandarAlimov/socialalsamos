@@ -4,12 +4,12 @@ import { Search, ArrowLeft, X, User, Video, Hash } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useDebounce } from '@/hooks/useDebounce';
+import { StoryAvatar } from '@/components/stories/StoryAvatar';
 
 interface SearchUser {
   id: string;
@@ -250,10 +250,15 @@ function UserCard({ user, onClick }: { user: SearchUser; onClick: () => void }) 
         onClick();
       }}
     >
-      <Avatar className="w-12 h-12">
-        <AvatarImage src={user.avatar_url || ''} />
-        <AvatarFallback>{user.username?.[0]?.toUpperCase() || 'U'}</AvatarFallback>
-      </Avatar>
+      <StoryAvatar
+        userId={user.id}
+        username={user.username}
+        displayName={user.display_name}
+        avatarUrl={user.avatar_url}
+        isVerified={!!user.is_verified}
+        size="lg"
+        showRing
+      />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1">
           <span className="font-medium truncate">{user.display_name || user.username}</span>

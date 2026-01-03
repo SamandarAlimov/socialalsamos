@@ -20,6 +20,7 @@ import { useConversations } from '@/hooks/useMessages';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FollowersFollowingDialog } from '@/components/FollowersFollowingDialog';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
+import { StoryHighlights } from '@/components/stories/StoryHighlights';
 
 interface UserProfile {
   id: string;
@@ -332,6 +333,13 @@ export default function UserProfilePage() {
             open={followDialog.open}
             onOpenChange={(open) => setFollowDialog(prev => ({ ...prev, open }))}
           />
+        )}
+
+        {/* Story Highlights */}
+        {userId && (
+          <div className="mt-6">
+            <StoryHighlights userId={userId} />
+          </div>
         )}
 
         {/* Tabs */}
