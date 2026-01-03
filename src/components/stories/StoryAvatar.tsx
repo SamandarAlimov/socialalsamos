@@ -32,7 +32,7 @@ interface StoryAvatarProps {
   displayName?: string | null;
   avatarUrl?: string | null;
   isVerified?: boolean;
-  size?: 'xs' | 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   showRing?: boolean;
   className?: string;
   onClick?: (e: React.MouseEvent) => void;
@@ -43,6 +43,7 @@ const sizeClasses = {
   sm: 'h-8 w-8',
   md: 'h-10 w-10',
   lg: 'h-14 w-14',
+  xl: 'h-32 w-32',
 };
 
 const ringPadding = {
@@ -50,6 +51,7 @@ const ringPadding = {
   sm: 'p-[1.5px]',
   md: 'p-[2px]',
   lg: 'p-[2px]',
+  xl: 'p-[3px]',
 };
 
 export function StoryAvatar({

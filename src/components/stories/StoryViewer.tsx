@@ -5,14 +5,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   X,
   ChevronLeft,
   ChevronRight,
   Send,
   Heart,
-  MessageCircle,
   Share2,
   Smile,
   Eye,
@@ -252,8 +250,8 @@ export function StoryViewer({
 
   return (
     <div className={cn(
-      "fixed inset-0 z-50 bg-black",
-      isMobile ? "overflow-y-auto" : "flex items-center justify-center overflow-hidden"
+      "fixed inset-0 z-50 bg-black overflow-hidden",
+      isMobile ? "" : "flex items-center justify-center"
     )}>
       {/* Close Button */}
       <button
@@ -287,14 +285,14 @@ export function StoryViewer({
       {/* Main Container */}
       <div className={cn(
         "relative flex flex-col",
-        isMobile 
-          ? "min-h-screen w-full" 
+        isMobile
+          ? "h-[100dvh] w-full"
           : "h-[calc(100vh-80px)] max-h-[800px] w-full max-w-[450px] mx-auto"
       )}>
         {/* Story Content */}
         <div className={cn(
           "relative bg-black flex-1 flex flex-col",
-          isMobile ? "min-h-screen" : "rounded-xl overflow-hidden"
+          isMobile ? "h-full" : "rounded-xl overflow-hidden"
         )}>
           {/* Progress Bars */}
           <div className={cn(
@@ -307,11 +305,11 @@ export function StoryViewer({
                   ref={idx === activeIndex ? progressRef : null}
                   className={cn(
                     "h-full bg-white transition-all",
-                    idx < activeIndex ? "w-full" : 
+                    idx < activeIndex ? "w-full" :
                     idx === activeIndex && !isPaused ? "w-full animate-story-progress" : "w-0"
                   )}
-                  style={idx === activeIndex && !isPaused && currentStory.media_type !== 'video' 
-                    ? { animationDuration: '5s' } 
+                  style={idx === activeIndex && !isPaused && currentStory.media_type !== 'video'
+                    ? { animationDuration: '5s' }
                     : undefined}
                 />
               </div>
@@ -323,7 +321,7 @@ export function StoryViewer({
             "absolute left-4 right-16 flex items-center justify-between z-10",
             isMobile ? "top-10 safe-area-top" : "top-10"
           )}>
-            <div 
+            <div
               className="flex items-center gap-3 cursor-pointer"
               onClick={() => {
                 onClose();
@@ -356,7 +354,7 @@ export function StoryViewer({
               >
                 {isPaused ? <Play className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
               </button>
-              
+
               {isOwnStory && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -375,10 +373,10 @@ export function StoryViewer({
             </div>
           </div>
 
-          {/* Media Container - Fixed aspect ratio */}
+          {/* Media */}
           <div className={cn(
-            "flex-1 flex items-center justify-center",
-            isMobile ? "pt-20 pb-32" : "py-16"
+            "absolute inset-0 flex items-center justify-center",
+            isMobile ? "pt-24 pb-28 safe-area-top safe-area-bottom" : "pt-20 pb-24"
           )}>
             <div className="relative w-full h-full flex items-center justify-center">
               {currentStory.media_type === 'video' ? (
@@ -405,7 +403,7 @@ export function StoryViewer({
           {currentStory.caption && (
             <div className={cn(
               "absolute left-4 right-4 text-white text-center z-10",
-              isMobile ? "bottom-40" : "bottom-28"
+              isMobile ? "bottom-28" : "bottom-24"
             )}>
               <p className="bg-black/50 rounded-lg px-4 py-2 text-sm backdrop-blur-sm">
                 {currentStory.caption}
@@ -417,7 +415,7 @@ export function StoryViewer({
           {isOwnStory && (
             <div className={cn(
               "absolute left-0 right-0 z-10",
-              isMobile ? "bottom-24 safe-area-bottom" : "bottom-6"
+              isMobile ? "bottom-6 safe-area-bottom" : "bottom-6"
             )}>
               <button
                 onClick={() => setShowViewers(true)}
@@ -433,8 +431,8 @@ export function StoryViewer({
           {!isOwnStory && (
             <div className={cn(
               "z-10 bg-gradient-to-t from-black/80 to-transparent",
-              isMobile 
-                ? "fixed bottom-0 left-0 right-0 p-4 pb-6 safe-area-bottom" 
+              isMobile
+                ? "absolute bottom-0 left-0 right-0 p-4 pb-6 safe-area-bottom"
                 : "absolute bottom-0 left-0 right-0 p-4 rounded-b-xl"
             )}>
               <div className="flex items-center gap-2">
@@ -481,11 +479,17 @@ export function StoryViewer({
           {/* Navigation Touch Areas */}
           <div
             onClick={prevStory}
-            className="absolute left-0 top-24 bottom-36 w-1/3 cursor-pointer z-5"
+            className={cn(
+              "absolute left-0 top-24 w-1/3 cursor-pointer z-5",
+              isMobile ? "bottom-24" : "bottom-24"
+            )}
           />
           <div
             onClick={nextStory}
-            className="absolute right-0 top-24 bottom-36 w-1/3 cursor-pointer z-5"
+            className={cn(
+              "absolute right-0 top-24 w-1/3 cursor-pointer z-5",
+              isMobile ? "bottom-24" : "bottom-24"
+            )}
           />
         </div>
       </div>
@@ -510,7 +514,7 @@ export function StoryViewer({
                 <span className="text-muted-foreground text-sm">{viewers.length}</span>
               </div>
             </div>
-            <ScrollArea className="max-h-[45vh]">
+            <div className="max-h-[45vh] overflow-y-auto">
               {loadingViewers ? (
                 <div className="p-4 text-center text-muted-foreground">Loading...</div>
               ) : viewers.length === 0 ? (
@@ -541,7 +545,7 @@ export function StoryViewer({
                   ))}
                 </div>
               )}
-            </ScrollArea>
+            </div>
           </div>
         </div>
       )}
