@@ -9,6 +9,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 
 interface GifResult {
   id: string;
@@ -16,6 +17,7 @@ interface GifResult {
   preview: string;
   width: number;
   height: number;
+  title?: string;
 }
 
 interface GifPickerProps {
@@ -24,48 +26,48 @@ interface GifPickerProps {
   className?: string;
 }
 
-const TRENDING_GIFS: GifResult[] = [
-  { id: '1', url: 'https://media.giphy.com/media/JIX9t2j0ZTN9S/giphy.gif', preview: 'https://media.giphy.com/media/JIX9t2j0ZTN9S/200w.gif', width: 200, height: 200 },
-  { id: '2', url: 'https://media.giphy.com/media/3o7TKoWXm3okO1kgHC/giphy.gif', preview: 'https://media.giphy.com/media/3o7TKoWXm3okO1kgHC/200w.gif', width: 200, height: 150 },
-  { id: '3', url: 'https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif', preview: 'https://media.giphy.com/media/26ufdipQqU2lhNA4g/200w.gif', width: 200, height: 200 },
-  { id: '4', url: 'https://media.giphy.com/media/5VKbvrjxpVJCM/giphy.gif', preview: 'https://media.giphy.com/media/5VKbvrjxpVJCM/200w.gif', width: 200, height: 200 },
-  { id: '5', url: 'https://media.giphy.com/media/3oz8xLd9DJq2l2VFtu/giphy.gif', preview: 'https://media.giphy.com/media/3oz8xLd9DJq2l2VFtu/200w.gif', width: 200, height: 150 },
-  { id: '6', url: 'https://media.giphy.com/media/l0HlBO7eyXzSZkJri/giphy.gif', preview: 'https://media.giphy.com/media/l0HlBO7eyXzSZkJri/200w.gif', width: 200, height: 200 },
-  { id: '7', url: 'https://media.giphy.com/media/xT0xeJpnrWC4XWblEk/giphy.gif', preview: 'https://media.giphy.com/media/xT0xeJpnrWC4XWblEk/200w.gif', width: 200, height: 150 },
-  { id: '8', url: 'https://media.giphy.com/media/5GoVLqeAOo6PK/giphy.gif', preview: 'https://media.giphy.com/media/5GoVLqeAOo6PK/200w.gif', width: 200, height: 200 },
-];
-
 const CATEGORIES = ['Trending', 'Reactions', 'Love', 'Celebrate', 'Sad', 'Funny', 'Animals', 'Sports'];
 
 export function GifPicker({ onSelect, trigger, className }: GifPickerProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [gifs, setGifs] = useState<GifResult[]>(TRENDING_GIFS);
+  const [gifs, setGifs] = useState<GifResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('Trending');
 
-  const searchGifs = useCallback(async (query: string) => {
-    if (!query.trim()) {
-      setGifs(TRENDING_GIFS);
-      return;
-    }
-
+  const fetchGifs = useCallback(async (query: string = '') => {
     setIsLoading(true);
     
-    // Simulated search - in production, integrate with Tenor/GIPHY API
-    setTimeout(() => {
-      const filteredGifs = TRENDING_GIFS.filter((_, i) => i % 2 === 0);
-      setGifs(filteredGifs);
+    try {
+      const { data, error } = await supabase.functions.invoke('giphy-search', {
+        body: { query, type: 'gifs', limit: 24 }
+      });
+
+      if (error) throw error;
+      
+      setGifs(data.gifs || []);
+    } catch (error) {
+      console.error('Error fetching GIFs:', error);
+      setGifs([]);
+    } finally {
       setIsLoading(false);
-    }, 500);
+    }
   }, []);
 
   useEffect(() => {
+    if (open) {
+      fetchGifs('');
+    }
+  }, [open, fetchGifs]);
+
+  useEffect(() => {
+    if (!open) return;
+    
     const debounce = setTimeout(() => {
-      searchGifs(search);
+      fetchGifs(search);
     }, 300);
     return () => clearTimeout(debounce);
-  }, [search, searchGifs]);
+  }, [search, fetchGifs, open]);
 
   const handleSelect = (gif: GifResult) => {
     onSelect(gif.url);
@@ -76,7 +78,8 @@ export function GifPicker({ onSelect, trigger, className }: GifPickerProps) {
   const handleCategoryClick = (category: string) => {
     setSelectedCategory(category);
     if (category === 'Trending') {
-      setGifs(TRENDING_GIFS);
+      setSearch('');
+      fetchGifs('');
     } else {
       setSearch(category.toLowerCase());
     }
@@ -106,7 +109,10 @@ export function GifPicker({ onSelect, trigger, className }: GifPickerProps) {
                 variant="ghost"
                 size="icon"
                 className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
-                onClick={() => setSearch('')}
+                onClick={() => {
+                  setSearch('');
+                  fetchGifs('');
+                }}
               >
                 <X className="h-3 w-3" />
               </Button>
@@ -148,7 +154,7 @@ export function GifPicker({ onSelect, trigger, className }: GifPickerProps) {
                 >
                   <img
                     src={gif.preview}
-                    alt="GIF"
+                    alt={gif.title || 'GIF'}
                     className="w-full h-full object-cover"
                     loading="lazy"
                   />
