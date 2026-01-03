@@ -9,7 +9,7 @@ import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Heart, MessageCircle, MoreHorizontal, Send, Trash2, Loader2, Image, Smile, Sticker } from 'lucide-react';
+import { Heart, MessageCircle, MoreHorizontal, Send, Trash2, Loader2, Sticker } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import {
@@ -19,6 +19,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { EmojiPicker } from '@/components/EmojiPicker';
+import { GifPicker } from '@/components/GifPicker';
+import { CommentMediaUpload } from '@/components/CommentMediaUpload';
 
 interface CommentsSectionProps {
   postId: string;
@@ -31,6 +33,7 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyContent, setReplyContent] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState<{ url: string; type: 'image' | 'video' | 'gif' } | null>(null);
   const commentInputRef = useRef<HTMLInputElement>(null);
   const replyInputRef = useRef<HTMLInputElement>(null);
   const { autocompleteState, handleInputChange, insertAutocomplete, closeAutocomplete } = useAutocompleteInput();
@@ -40,6 +43,18 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
     insertAutocomplete: insertReplyAutocomplete, 
     closeAutocomplete: closeReplyAutocomplete 
   } = useAutocompleteInput();
+
+  const handleMediaSelect = (url: string, type: 'image' | 'video' | 'gif') => {
+    setSelectedMedia({ url, type });
+  };
+
+  const handleMediaClear = () => {
+    setSelectedMedia(null);
+  };
+
+  const handleGifSelect = (gifUrl: string) => {
+    setSelectedMedia({ url: gifUrl, type: 'gif' });
+  };
 
   const handleAutocompleteSelect = (value: string) => {
     const newValue = insertAutocomplete(newComment, value, commentInputRef);
@@ -53,11 +68,16 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newComment.trim()) return;
+    if (!newComment.trim() && !selectedMedia) return;
     
     setSubmitting(true);
-    await addComment(newComment);
+    // Include media in comment if selected
+    const commentContent = selectedMedia 
+      ? `${newComment}\n[media:${selectedMedia.type}:${selectedMedia.url}]`
+      : newComment;
+    await addComment(commentContent);
     setNewComment('');
+    setSelectedMedia(null);
     setSubmitting(false);
   };
 
@@ -228,37 +248,29 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
                 <div className="flex items-center gap-0.5">
                   <EmojiPicker 
                     onSelect={(emoji) => setNewComment(prev => prev + emoji)}
+                  />
+                  
+                  <CommentMediaUpload
+                    onMediaSelect={handleMediaSelect}
+                    onMediaClear={handleMediaClear}
+                    selectedMedia={selectedMedia}
+                  />
+                  
+                  <GifPicker
+                    onSelect={handleGifSelect}
                     trigger={
                       <Button 
                         type="button" 
                         variant="ghost" 
                         size="icon" 
                         className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                        disabled={!!selectedMedia}
+                        title="Add GIF/sticker"
                       >
-                        <Smile className="h-4 w-4" />
+                        <Sticker className="h-4 w-4" />
                       </Button>
                     }
                   />
-                  
-                  <Button 
-                    type="button" 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                    title="Add image/video"
-                  >
-                    <Image className="h-4 w-4" />
-                  </Button>
-                  
-                  <Button 
-                    type="button" 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                    title="Add sticker/GIF"
-                  >
-                    <Sticker className="h-4 w-4" />
-                  </Button>
                 </div>
               </div>
               
@@ -282,12 +294,33 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
             <Button 
               type="submit" 
               size="sm"
-              disabled={!newComment.trim() || submitting}
+              disabled={(!newComment.trim() && !selectedMedia) || submitting}
               className="rounded-full h-8 px-4"
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Post'}
             </Button>
           </div>
+          
+          {/* Selected Media Preview for comments */}
+          {selectedMedia && (
+            <div className="mt-2 ml-10">
+              <div className="relative inline-block">
+                {selectedMedia.type === 'video' ? (
+                  <video 
+                    src={selectedMedia.url} 
+                    className="w-24 h-24 rounded-lg object-cover border border-border"
+                    controls={false}
+                  />
+                ) : (
+                  <img 
+                    src={selectedMedia.url} 
+                    alt="Selected media" 
+                    className="w-24 h-24 rounded-lg object-cover border border-border"
+                  />
+                )}
+              </div>
+            </div>
+          )}
         </form>
       )}
 

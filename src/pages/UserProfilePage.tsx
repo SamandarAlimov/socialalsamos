@@ -12,7 +12,9 @@ import {
   MapPin,
   Link as LinkIcon,
   Calendar,
-  ArrowLeft
+  ArrowLeft,
+  Heart,
+  Play
 } from 'lucide-react';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { toast } from 'sonner';
@@ -21,6 +23,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { FollowersFollowingDialog } from '@/components/FollowersFollowingDialog';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { StoryHighlights } from '@/components/stories/StoryHighlights';
+import { useUserPosts, UserPost } from '@/hooks/useUserPosts';
+import { cn } from '@/lib/utils';
+import { PostViewModal } from '@/components/PostViewModal';
 
 interface UserProfile {
   id: string;
@@ -47,11 +52,14 @@ export default function UserProfilePage() {
   const [loading, setLoading] = useState(true);
   const [followLoading, setFollowLoading] = useState(false);
   const [messageLoading, setMessageLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'posts' | 'videos'>('posts');
+  const [selectedPost, setSelectedPost] = useState<UserPost | null>(null);
   const [followDialog, setFollowDialog] = useState<{ open: boolean; type: 'followers' | 'following' }>({ 
     open: false, 
     type: 'followers' 
   });
   const { createPrivateConversation } = useConversations();
+  const { posts, isLoading: postsLoading, likePost } = useUserPosts(userId);
 
   const isOwnProfile = user?.id === userId;
 
@@ -164,14 +172,17 @@ export default function UserProfilePage() {
   }
 
   const stats = [
-    { label: 'Posts', value: profile.posts_count || 0 },
+    { label: 'Posts', value: posts.length || profile.posts_count || 0 },
     { label: 'Followers', value: profile.followers_count || 0 },
     { label: 'Following', value: profile.following_count || 0 },
   ];
 
+  const videoPosts = posts.filter(p => p.media_type === 'video');
+  const regularPosts = activeTab === 'videos' ? videoPosts : posts;
+
   const tabs = [
-    { icon: Grid, label: 'Posts' },
-    { icon: Video, label: 'Videos' },
+    { id: 'posts' as const, icon: Grid, label: 'Posts', count: posts.length },
+    { id: 'videos' as const, icon: Video, label: 'Videos', count: videoPosts.length },
   ];
 
   const joinedDate = profile.created_at 
@@ -344,14 +355,16 @@ export default function UserProfilePage() {
 
         {/* Tabs */}
         <div className="flex mt-6 border-b border-border">
-          {tabs.map((tab, index) => (
+          {tabs.map((tab) => (
             <button
-              key={tab.label}
-              className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors ${
-                index === 0 
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors",
+                activeTab === tab.id 
                   ? 'text-primary border-b-2 border-primary' 
                   : 'text-muted-foreground hover:text-foreground'
-              }`}
+              )}
             >
               <tab.icon className="h-4 w-4" />
               {tab.label}
@@ -359,12 +372,112 @@ export default function UserProfilePage() {
           ))}
         </div>
 
-        {/* Posts Grid Placeholder */}
-        <div className="grid grid-cols-3 gap-1 mt-4">
-          <div className="aspect-square bg-muted/50 rounded-lg flex items-center justify-center">
-            <p className="text-muted-foreground text-sm">No posts yet</p>
-          </div>
+        {/* Posts Grid */}
+        <div className="mt-4">
+          {postsLoading ? (
+            <div className="grid grid-cols-3 gap-1">
+              {[...Array(6)].map((_, i) => (
+                <Skeleton key={i} className="aspect-square rounded-lg" />
+              ))}
+            </div>
+          ) : regularPosts.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="h-16 w-16 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
+                {activeTab === 'videos' ? (
+                  <Video className="h-8 w-8 text-muted-foreground" />
+                ) : (
+                  <Grid className="h-8 w-8 text-muted-foreground" />
+                )}
+              </div>
+              <p className="text-muted-foreground font-medium">
+                {activeTab === 'videos' ? 'No videos yet' : 'No posts yet'}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-1">
+              {regularPosts.map((post) => (
+                <button
+                  key={post.id}
+                  onClick={() => setSelectedPost(post)}
+                  className="relative aspect-square bg-muted rounded-lg overflow-hidden group"
+                >
+                  {post.media_urls && post.media_urls.length > 0 ? (
+                    <>
+                      {post.media_type === 'video' ? (
+                        <>
+                          <video
+                            src={post.media_urls[0]}
+                            className="w-full h-full object-cover"
+                            muted
+                          />
+                          <div className="absolute top-2 right-2">
+                            <Play className="h-4 w-4 text-white drop-shadow-lg" fill="white" />
+                          </div>
+                        </>
+                      ) : (
+                        <img
+                          src={post.media_urls[0]}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                      {post.media_urls.length > 1 && (
+                        <div className="absolute top-2 right-2">
+                          <div className="bg-black/50 rounded px-1.5 py-0.5 text-white text-xs">
+                            +{post.media_urls.length - 1}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center p-2">
+                      <p className="text-xs text-muted-foreground line-clamp-4 text-center">
+                        {post.content}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {/* Hover overlay */}
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
+                    <div className="flex items-center gap-1 text-white">
+                      <Heart className="h-5 w-5" fill="white" />
+                      <span className="font-semibold">{post.likes_count}</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-white">
+                      <MessageCircle className="h-5 w-5" fill="white" />
+                      <span className="font-semibold">{post.comments_count}</span>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
+
+        {/* Post View Modal */}
+        {selectedPost && profile && (
+          <PostViewModal
+            post={{
+              id: selectedPost.id,
+              content: selectedPost.content,
+              media_urls: selectedPost.media_urls,
+              media_type: selectedPost.media_type,
+              likes_count: selectedPost.likes_count,
+              comments_count: selectedPost.comments_count,
+              is_pinned: selectedPost.is_pinned,
+              is_liked: selectedPost.is_liked,
+              created_at: selectedPost.created_at,
+            }}
+            profile={{
+              username: profile.username,
+              display_name: profile.display_name,
+              avatar_url: profile.avatar_url,
+            }}
+            open={!!selectedPost}
+            onOpenChange={(open) => !open && setSelectedPost(null)}
+            onLike={() => likePost(selectedPost.id)}
+          />
+        )}
       </div>
     </div>
   );
