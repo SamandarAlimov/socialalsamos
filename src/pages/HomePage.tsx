@@ -8,11 +8,8 @@ import {
   MessageCircle, 
   Share2, 
   Bookmark, 
-  MoreHorizontal,
   Plus,
   Loader2,
-  ChevronLeft,
-  ChevronRight
 } from 'lucide-react';
 import { usePosts, Post } from '@/hooks/usePosts';
 import { useStories, StoryGroup } from '@/hooks/useStories';
@@ -25,6 +22,7 @@ import { CreatePostForm } from '@/components/CreatePostForm';
 import { CreateStoryDialog } from '@/components/CreateStoryDialog';
 import { CommentsSection } from '@/components/CommentsSection';
 import { PostMediaCarousel } from '@/components/PostMediaCarousel';
+import { PostActionsMenu } from '@/components/PostActionsMenu';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
@@ -243,6 +241,7 @@ export default function HomePage() {
             formatTime={formatPostTime}
             isMobile={isMobile}
             realtimeCounts={getPostCounts(post.id)}
+            onDelete={refreshPosts}
           />
         ))}
 
@@ -287,13 +286,15 @@ function PostCard({
   onLike, 
   formatTime,
   isMobile,
-  realtimeCounts
+  realtimeCounts,
+  onDelete
 }: { 
   post: Post; 
   onLike: () => void;
   formatTime: (date: string) => string;
   isMobile: boolean;
   realtimeCounts: RealtimePostCounts;
+  onDelete?: () => void;
 }) {
   const navigate = useNavigate();
   const [isBookmarked, setIsBookmarked] = useState(false);
@@ -349,9 +350,12 @@ function PostCard({
             </p>
           </div>
         </div>
-        <Button variant="ghost" size="icon" className="h-8 w-8 md:h-9 md:w-9 text-muted-foreground">
-          <MoreHorizontal className="h-4 w-4 md:h-5 md:w-5" />
-        </Button>
+        <PostActionsMenu
+          postId={post.id}
+          postUserId={post.user_id}
+          isPinned={post.is_pinned}
+          onDelete={onDelete}
+        />
       </div>
 
       {/* Post Content */}

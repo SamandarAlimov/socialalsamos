@@ -107,16 +107,13 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobi
       {/* Video Container */}
       <div className={cn(
         "relative h-full w-full",
-        !isMobile && "max-w-md aspect-[9/16] h-auto max-h-[calc(100vh-2rem)]"
+        !isMobile && "max-w-[400px] aspect-[9/16] rounded-2xl overflow-hidden shadow-2xl"
       )}>
         {/* Video */}
         <video
           ref={videoRef}
           src={videoUrl}
-          className={cn(
-            "absolute inset-0 h-full w-full object-cover",
-            !isMobile && "rounded-xl"
-          )}
+          className="absolute inset-0 h-full w-full object-cover"
           loop
           muted={isMuted}
           playsInline
@@ -131,7 +128,7 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobi
             showPlayButton ? "opacity-100" : "opacity-0"
           )}
         >
-          <div className="h-20 w-20 rounded-full bg-black/40 flex items-center justify-center">
+          <div className="h-20 w-20 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
             {isPlaying ? (
               <Pause className="h-10 w-10 text-white" />
             ) : (
@@ -141,16 +138,13 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobi
         </div>
 
         {/* Gradient overlay for text readability */}
-        <div className={cn(
-          "absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 pointer-events-none",
-          !isMobile && "rounded-xl"
-        )} />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/70 pointer-events-none" />
 
         {/* Mute button - positioned below mobile header safe area */}
         <button
           onClick={toggleMute}
           className={cn(
-            "absolute right-4 h-10 w-10 rounded-full bg-black/40 flex items-center justify-center active:scale-95 transition-transform z-10",
+            "absolute right-4 h-10 w-10 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center active:scale-95 transition-transform z-10",
             isMobile ? "top-16" : "top-4"
           )}
         >
@@ -163,7 +157,7 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobi
 
         {/* Right side actions */}
         <div className={cn(
-          "absolute right-3 flex flex-col items-center gap-4",
+          "absolute right-3 flex flex-col items-center gap-5",
           isMobile ? "bottom-24" : "bottom-20"
         )}>
           {/* Like */}
@@ -172,12 +166,12 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobi
             className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
           >
             <div className={cn(
-              "h-11 w-11 rounded-full bg-black/40 flex items-center justify-center",
+              "h-12 w-12 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center border border-white/10",
               video.is_liked && "text-red-500"
             )}>
               <Heart className={cn("h-6 w-6", video.is_liked && "fill-current")} />
             </div>
-            <span className="text-white text-xs font-medium">{formatNumber(video.likes_count || 0)}</span>
+            <span className="text-white text-xs font-medium drop-shadow-lg">{formatNumber(video.likes_count || 0)}</span>
           </button>
 
           {/* Comments */}
@@ -189,10 +183,10 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobi
             }}
             className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
           >
-            <div className="h-11 w-11 rounded-full bg-black/40 flex items-center justify-center text-white">
+            <div className="h-12 w-12 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white border border-white/10">
               <MessageCircle className="h-6 w-6" />
             </div>
-            <span className="text-white text-xs font-medium">{formatNumber(video.comments_count || 0)}</span>
+            <span className="text-white text-xs font-medium drop-shadow-lg">{formatNumber(video.comments_count || 0)}</span>
           </button>
 
           {/* Bookmark */}
@@ -201,7 +195,7 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobi
             className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
           >
             <div className={cn(
-              "h-11 w-11 rounded-full bg-black/40 flex items-center justify-center text-white",
+              "h-12 w-12 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white border border-white/10",
               video.is_bookmarked && "text-yellow-400"
             )}>
               <Bookmark className={cn("h-6 w-6", video.is_bookmarked && "fill-current")} />
@@ -213,10 +207,10 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobi
             onClick={handleShare}
             className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
           >
-            <div className="h-11 w-11 rounded-full bg-black/40 flex items-center justify-center text-white">
+            <div className="h-12 w-12 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white border border-white/10">
               <Share2 className="h-6 w-6" />
             </div>
-            <span className="text-white text-xs font-medium">{formatNumber(video.shares_count || 0)}</span>
+            <span className="text-white text-xs font-medium drop-shadow-lg">{formatNumber(video.shares_count || 0)}</span>
           </button>
 
           {/* Repost */}
@@ -224,7 +218,7 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobi
             onClick={handleRepost}
             className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
           >
-            <div className="h-11 w-11 rounded-full bg-black/40 flex items-center justify-center text-white">
+            <div className="h-12 w-12 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white border border-white/10">
               <Repeat2 className="h-6 w-6" />
             </div>
           </button>
@@ -233,7 +227,7 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobi
         {/* Bottom info - User info and description */}
         <div className={cn(
           "absolute left-4 right-20",
-          isMobile ? "bottom-20" : "bottom-4"
+          isMobile ? "bottom-20" : "bottom-6"
         )}>
           {/* User info with follow button */}
           <div className="flex items-center gap-3 mb-3">
@@ -247,7 +241,7 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobi
               showRing
             />
             <div className="flex items-center gap-2">
-              <span className="text-white font-bold text-sm">
+              <span className="text-white font-bold text-sm drop-shadow-lg">
                 @{video.profile?.username || 'user'}
               </span>
               {video.profile?.is_verified && (
@@ -261,7 +255,7 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobi
                 size="sm"
                 onClick={handleFollow}
                 className={cn(
-                  "h-7 px-3 text-xs font-semibold rounded-md border-white/30",
+                  "h-7 px-3 text-xs font-semibold rounded-full border-white/30",
                   isFollowing 
                     ? "bg-white/10 text-white hover:bg-white/20" 
                     : "bg-white text-black hover:bg-white/90"
@@ -274,13 +268,13 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobi
           
           {/* Description */}
           {video.content && (
-            <p className="text-white text-sm mb-2 line-clamp-2">{video.content}</p>
+            <p className="text-white text-sm mb-2 line-clamp-2 drop-shadow-lg">{video.content}</p>
           )}
           
           {/* Music/Sound */}
           <div className="flex items-center gap-2">
             <Music2 className="h-4 w-4 text-white animate-spin" style={{ animationDuration: '3s' }} />
-            <span className="text-white text-xs">Original Sound - {video.profile?.display_name || video.profile?.username}</span>
+            <span className="text-white text-xs drop-shadow-lg">Original Sound - {video.profile?.display_name || video.profile?.username}</span>
           </div>
         </div>
       </div>
@@ -293,22 +287,19 @@ function VideoSkeleton({ isMobile }: { isMobile: boolean }) {
     <div className="relative h-full w-full bg-black flex items-center justify-center">
       <div className={cn(
         "relative h-full w-full",
-        !isMobile && "max-w-md aspect-[9/16] h-auto max-h-[calc(100vh-2rem)]"
+        !isMobile && "max-w-[400px] aspect-[9/16] rounded-2xl overflow-hidden"
       )}>
-        <Skeleton className={cn(
-          "absolute inset-0 bg-muted/20",
-          !isMobile && "rounded-xl"
-        )} />
-        <div className="absolute right-3 bottom-28 flex flex-col items-center gap-4">
+        <Skeleton className="absolute inset-0 bg-muted/20" />
+        <div className="absolute right-3 bottom-28 flex flex-col items-center gap-5">
           {[...Array(5)].map((_, i) => (
-            <Skeleton key={i} className="h-11 w-11 rounded-full bg-muted/20" />
+            <Skeleton key={i} className="h-12 w-12 rounded-full bg-muted/20" />
           ))}
         </div>
         <div className="absolute left-4 right-20 bottom-6">
           <div className="flex items-center gap-3 mb-3">
             <Skeleton className="h-10 w-10 rounded-full bg-muted/20" />
             <Skeleton className="h-4 w-24 bg-muted/20" />
-            <Skeleton className="h-7 w-16 rounded-md bg-muted/20" />
+            <Skeleton className="h-7 w-16 rounded-full bg-muted/20" />
           </div>
           <Skeleton className="h-4 w-full bg-muted/20 mb-2" />
           <Skeleton className="h-3 w-32 bg-muted/20" />
@@ -423,7 +414,7 @@ export default function VideosPage() {
     return (
       <div className={cn(
         "bg-black flex items-center justify-center",
-        isMobile ? "fixed inset-0 z-40" : "h-[calc(100vh-4rem)] ml-64"
+        isMobile ? "fixed inset-0 z-40" : "h-[calc(100vh-4rem)] w-full"
       )}>
         <VideoSkeleton isMobile={isMobile} />
       </div>
@@ -434,7 +425,7 @@ export default function VideosPage() {
     return (
       <div className={cn(
         "bg-black",
-        isMobile ? "fixed inset-0 z-40" : "h-[calc(100vh-4rem)] ml-64"
+        isMobile ? "fixed inset-0 z-40" : "h-[calc(100vh-4rem)] w-full flex items-center justify-center"
       )}>
         <EmptyState />
       </div>
@@ -444,23 +435,30 @@ export default function VideosPage() {
   return (
     <div className={cn(
       "bg-black",
-      isMobile ? "fixed inset-0 z-40" : "h-[calc(100vh-4rem)] ml-64 flex items-center justify-center"
+      isMobile ? "fixed inset-0 z-40" : "h-[calc(100vh-4rem)] w-full flex items-center justify-center py-4"
     )}>
       {/* Mobile back button */}
       {isMobile && (
         <button
           onClick={() => navigate(-1)}
-          className="absolute top-4 left-4 z-50 h-10 w-10 rounded-full bg-black/40 flex items-center justify-center"
+          className="absolute top-4 left-4 z-50 h-10 w-10 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center"
         >
           <ArrowLeft className="h-5 w-5 text-white" />
         </button>
+      )}
+
+      {/* Desktop header */}
+      {!isMobile && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
+          <h1 className="text-white text-lg font-bold">Reels</h1>
+        </div>
       )}
 
       <div 
         ref={containerRef}
         className={cn(
           "overflow-y-scroll snap-y snap-mandatory scrollbar-hide",
-          isMobile ? "h-full w-full" : "h-[calc(100vh-4rem)] w-full max-w-md"
+          isMobile ? "h-full w-full" : "h-full max-h-[calc(100vh-6rem)] w-full max-w-[400px]"
         )}
         style={{ scrollSnapType: 'y mandatory' }}
         onTouchStart={isMobile ? handleTouchStart : undefined}
