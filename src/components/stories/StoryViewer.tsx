@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -32,6 +33,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { AddToHighlightDialog } from './AddToHighlightDialog';
 
 interface Story {
   id: string;
@@ -96,6 +98,7 @@ export function StoryViewer({
   const [loadingViewers, setLoadingViewers] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [isSendingReply, setIsSendingReply] = useState(false);
+  const [showAddToHighlight, setShowAddToHighlight] = useState(false);
   
   const storyTimerRef = useRef<NodeJS.Timeout | null>(null);
   const progressRef = useRef<HTMLDivElement>(null);
@@ -343,11 +346,13 @@ export function StoryViewer({
 
   if (!currentStory) return null;
 
-  return (
+  const storyViewerContent = (
     <div className={cn(
-      "fixed inset-0 z-[100] bg-black",
+      "fixed inset-0 bg-black",
       isMobile ? "overflow-hidden touch-none" : "flex items-center justify-center overflow-hidden"
-    )}>
+    )}
+    style={{ zIndex: 9999 }}
+    >
       {/* Close Button */}
       <button
         onClick={onClose}
@@ -457,7 +462,11 @@ export function StoryViewer({
                       <MoreHorizontal className="h-5 w-5" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
+                  <DropdownMenuContent align="end" className="z-[110]">
+                    <DropdownMenuItem onClick={() => setShowAddToHighlight(true)}>
+                      <Bookmark className="h-4 w-4 mr-2" />
+                      Add to Highlight
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={handleDelete} className="text-destructive">
                       <Trash2 className="h-4 w-4 mr-2" />
                       Delete Story
@@ -648,6 +657,21 @@ export function StoryViewer({
           </div>
         </div>
       )}
+
+      {/* Add to Highlight Dialog */}
+      <AddToHighlightDialog
+        open={showAddToHighlight}
+        onOpenChange={setShowAddToHighlight}
+        story={currentStory ? {
+          id: currentStory.id,
+          media_url: currentStory.media_url,
+          media_type: currentStory.media_type,
+          caption: currentStory.caption,
+        } : null}
+      />
     </div>
   );
+
+  // Use portal to render outside AppLayout
+  return createPortal(storyViewerContent, document.body);
 }
