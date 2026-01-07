@@ -225,6 +225,29 @@ export function useVideoPosts() {
           }));
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'posts',
+        },
+        (payload) => {
+          const newData = payload.new as { id?: string; likes_count?: number; comments_count?: number; shares_count?: number; bookmarks_count?: number } | null;
+          if (!newData?.id) return;
+
+          setVideos(prev => prev.map(v => {
+            if (v.id !== newData.id) return v;
+            return {
+              ...v,
+              likes_count: newData.likes_count ?? v.likes_count,
+              comments_count: newData.comments_count ?? v.comments_count,
+              shares_count: newData.shares_count ?? v.shares_count,
+              bookmarks_count: newData.bookmarks_count ?? v.bookmarks_count,
+            };
+          }));
+        }
+      )
       .subscribe();
 
     return () => {
