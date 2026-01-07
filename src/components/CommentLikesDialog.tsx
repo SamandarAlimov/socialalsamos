@@ -29,35 +29,35 @@ interface LikeUser {
   is_following?: boolean;
 }
 
-interface PostLikesDialogProps {
-  postId: string;
+interface CommentLikesDialogProps {
+  commentId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   likesCount: number;
 }
 
-export function PostLikesDialog({ postId, open, onOpenChange, likesCount }: PostLikesDialogProps) {
+export function CommentLikesDialog({ commentId, open, onOpenChange, likesCount }: CommentLikesDialogProps) {
   const { user } = useAuth();
   const [users, setUsers] = useState<LikeUser[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [followLoading, setFollowLoading] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open && postId) {
+    if (open && commentId) {
       fetchLikes();
     }
-  }, [open, postId]);
+  }, [open, commentId]);
 
   const fetchLikes = async () => {
     setIsLoading(true);
     try {
       const { data, error } = await supabase
-        .from('post_likes')
+        .from('comment_likes')
         .select(`
           id,
           user_id,
           created_at,
-          profile:profiles!post_likes_user_id_fkey (
+          profile:profiles!comment_likes_user_id_fkey (
             id,
             username,
             display_name,
@@ -65,7 +65,7 @@ export function PostLikesDialog({ postId, open, onOpenChange, likesCount }: Post
             is_verified
           )
         `)
-        .eq('post_id', postId)
+        .eq('comment_id', commentId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -89,7 +89,7 @@ export function PostLikesDialog({ postId, open, onOpenChange, likesCount }: Post
         setUsers((data as unknown as LikeUser[]) || []);
       }
     } catch (error) {
-      console.error('Error fetching likes:', error);
+      console.error('Error fetching comment likes:', error);
     } finally {
       setIsLoading(false);
     }

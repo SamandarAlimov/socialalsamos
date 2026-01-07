@@ -131,8 +131,11 @@ export function useVideoPosts() {
     fetchVideos();
   }, [fetchVideos]);
 
-  // Real-time subscription for new videos
+  // Real-time subscription for new videos, likes, and comments
   useEffect(() => {
+    const postIds = videos.map(v => v.id);
+    if (postIds.length === 0) return;
+
     const channel = supabase
       .channel('video-posts-realtime')
       .on(
@@ -164,12 +167,70 @@ export function useVideoPosts() {
           }
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'post_likes',
+        },
+        (payload) => {
+          const newData = payload.new as { post_id?: string; user_id?: string } | null;
+          const oldData = payload.old as { post_id?: string; user_id?: string } | null;
+          const postId = newData?.post_id || oldData?.post_id;
+          if (!postId) return;
+
+          setVideos(prev => prev.map(v => {
+            if (v.id !== postId) return v;
+            
+            if (payload.eventType === 'INSERT') {
+              return {
+                ...v,
+                likes_count: v.likes_count + 1,
+                is_liked: newData?.user_id === user?.id ? true : v.is_liked
+              };
+            } else if (payload.eventType === 'DELETE') {
+              return {
+                ...v,
+                likes_count: Math.max(0, v.likes_count - 1),
+                is_liked: oldData?.user_id === user?.id ? false : v.is_liked
+              };
+            }
+            return v;
+          }));
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'comments',
+        },
+        (payload) => {
+          const newData = payload.new as { post_id?: string } | null;
+          const oldData = payload.old as { post_id?: string } | null;
+          const postId = newData?.post_id || oldData?.post_id;
+          if (!postId) return;
+
+          setVideos(prev => prev.map(v => {
+            if (v.id !== postId) return v;
+            
+            if (payload.eventType === 'INSERT') {
+              return { ...v, comments_count: v.comments_count + 1 };
+            } else if (payload.eventType === 'DELETE') {
+              return { ...v, comments_count: Math.max(0, v.comments_count - 1) };
+            }
+            return v;
+          }));
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id]);
+  }, [user?.id, videos.length > 0]);
 
   return {
     videos,
