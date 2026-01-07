@@ -7,8 +7,9 @@ import { useVideoPosts, VideoPost } from '@/hooks/useVideoPosts';
 import { Skeleton } from '@/components/ui/skeleton';
 import { VideoCommentsSheet } from '@/components/VideoCommentsSheet';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
+import { VideoShareDialog } from '@/components/VideoShareDialog';
 
 function formatNumber(num: number): string {
   if (num >= 1000000) {
@@ -26,12 +27,13 @@ interface VideoCardProps {
   onLike: () => void;
   onBookmark: () => void;
   onCommentClick: () => void;
+  onShareClick: () => void;
   isMobile: boolean;
   globalMuted: boolean;
   onMuteToggle: () => void;
 }
 
-function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobile, globalMuted, onMuteToggle }: VideoCardProps) {
+function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShareClick, isMobile, globalMuted, onMuteToggle }: VideoCardProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showPlayButton, setShowPlayButton] = useState(false);
@@ -99,8 +101,10 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, isMobi
     setIsFollowing(!isFollowing);
   };
 
-  const handleShare = () => {
+  const handleShare = (e: React.MouseEvent) => {
+    e.stopPropagation();
     lightTap();
+    onShareClick();
   };
 
   const handleRepost = () => {
@@ -333,10 +337,13 @@ function EmptyState() {
 export default function VideosPage() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
+  const [searchParams] = useSearchParams();
   const { videos, isLoading, likeVideo, toggleBookmark } = useVideoPosts();
   const [activeIndex, setActiveIndex] = useState(0);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareVideoId, setShareVideoId] = useState<string | null>(null);
   const [globalMuted, setGlobalMuted] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const { mediumTap } = useHapticFeedback();
@@ -410,7 +417,13 @@ export default function VideosPage() {
     setCommentsOpen(true);
   };
 
+  const openShareDialog = (videoId: string) => {
+    setShareVideoId(videoId);
+    setShareDialogOpen(true);
+  };
+
   const selectedVideo = videos.find(v => v.id === selectedVideoId);
+  const shareVideo = videos.find(v => v.id === shareVideoId);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -476,6 +489,7 @@ export default function VideosPage() {
               onLike={() => likeVideo(video.id)}
               onBookmark={() => toggleBookmark(video.id)}
               onCommentClick={() => openComments(video.id)}
+              onShareClick={() => openShareDialog(video.id)}
               isMobile={isMobile}
               globalMuted={globalMuted}
               onMuteToggle={handleMuteToggle}
@@ -490,6 +504,14 @@ export default function VideosPage() {
         onClose={() => setCommentsOpen(false)}
         postId={selectedVideoId || ''}
         commentsCount={selectedVideo?.comments_count || 0}
+      />
+
+      {/* Share Dialog */}
+      <VideoShareDialog
+        open={shareDialogOpen}
+        onOpenChange={setShareDialogOpen}
+        videoId={shareVideoId || ''}
+        videoTitle={shareVideo?.content || undefined}
       />
     </div>
   );
