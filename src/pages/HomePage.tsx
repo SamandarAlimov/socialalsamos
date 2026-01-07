@@ -23,6 +23,7 @@ import { CreateStoryDialog } from '@/components/CreateStoryDialog';
 import { CommentsSection } from '@/components/CommentsSection';
 import { PostMediaCarousel } from '@/components/PostMediaCarousel';
 import { PostActionsMenu } from '@/components/PostActionsMenu';
+import { PostLikesDialog } from '@/components/PostLikesDialog';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
@@ -299,6 +300,7 @@ function PostCard({
   const navigate = useNavigate();
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [showLikesDialog, setShowLikesDialog] = useState(false);
 
   // Use real-time counts
   const likesCount = realtimeCounts.likes_count;
@@ -373,17 +375,27 @@ function PostCard({
       {/* Post Actions - Mobile optimized */}
       <div className="flex items-center justify-between p-3 md:p-4 border-t border-border">
         <div className="flex items-center gap-3 md:gap-4">
-          <button 
-            onClick={onLike}
-            className={cn(
-              "flex items-center gap-1.5 md:gap-2 transition-colors touch-feedback",
-              isLiked ? 'text-red-500' : 'text-muted-foreground hover:text-red-500'
-            )}
-          >
-            <Heart className={cn("h-5 w-5 md:h-5 md:w-5", isLiked && 'fill-current')} />
-            <span className="text-xs md:text-sm font-medium">{likesCount}</span>
-          </button>
-          <button 
+          <div className="flex items-center gap-1.5 md:gap-2">
+            <button 
+              onClick={onLike}
+              className={cn(
+                "transition-colors touch-feedback",
+                isLiked ? 'text-red-500' : 'text-muted-foreground hover:text-red-500'
+              )}
+            >
+              <Heart className={cn("h-5 w-5 md:h-5 md:w-5", isLiked && 'fill-current')} />
+            </button>
+            <button
+              onClick={() => setShowLikesDialog(true)}
+              className={cn(
+                "text-xs md:text-sm font-medium hover:underline",
+                isLiked ? 'text-red-500' : 'text-muted-foreground'
+              )}
+            >
+              {likesCount}
+            </button>
+          </div>
+          <button
             onClick={() => setShowComments(!showComments)}
             className={cn(
               "flex items-center gap-1.5 md:gap-2 transition-colors touch-feedback",
@@ -413,6 +425,14 @@ function PostCard({
       {showComments && (
         <CommentsSection postId={post.id} />
       )}
+
+      {/* Likes Dialog */}
+      <PostLikesDialog
+        postId={post.id}
+        open={showLikesDialog}
+        onOpenChange={setShowLikesDialog}
+        likesCount={likesCount}
+      />
     </article>
   );
 }
