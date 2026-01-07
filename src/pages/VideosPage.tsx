@@ -6,6 +6,7 @@ import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useVideoPosts, VideoPost } from '@/hooks/useVideoPosts';
 import { Skeleton } from '@/components/ui/skeleton';
 import { VideoCommentsSheet } from '@/components/VideoCommentsSheet';
+import { PostLikesDialog } from '@/components/PostLikesDialog';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
@@ -28,12 +29,13 @@ interface VideoCardProps {
   onBookmark: () => void;
   onCommentClick: () => void;
   onShareClick: () => void;
+  onLikesClick: () => void;
   isMobile: boolean;
   globalMuted: boolean;
   onMuteToggle: () => void;
 }
 
-function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShareClick, isMobile, globalMuted, onMuteToggle }: VideoCardProps) {
+function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShareClick, onLikesClick, isMobile, globalMuted, onMuteToggle }: VideoCardProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showPlayButton, setShowPlayButton] = useState(false);
@@ -180,7 +182,15 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
             )}>
               <Heart className={cn("h-6 w-6", video.is_liked && "fill-current")} />
             </div>
-            <span className="text-white text-xs font-medium drop-shadow-lg">{formatNumber(video.likes_count || 0)}</span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onLikesClick();
+              }}
+              className="text-white text-xs font-medium drop-shadow-lg hover:underline"
+            >
+              {formatNumber(video.likes_count || 0)}
+            </button>
           </button>
 
           {/* Comments */}
@@ -344,6 +354,8 @@ export default function VideosPage() {
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareVideoId, setShareVideoId] = useState<string | null>(null);
+  const [likesDialogOpen, setLikesDialogOpen] = useState(false);
+  const [likesVideoId, setLikesVideoId] = useState<string | null>(null);
   const [globalMuted, setGlobalMuted] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const { mediumTap } = useHapticFeedback();
@@ -422,8 +434,14 @@ export default function VideosPage() {
     setShareDialogOpen(true);
   };
 
+  const openLikesDialog = (videoId: string) => {
+    setLikesVideoId(videoId);
+    setLikesDialogOpen(true);
+  };
+
   const selectedVideo = videos.find(v => v.id === selectedVideoId);
   const shareVideo = videos.find(v => v.id === shareVideoId);
+  const likesVideo = videos.find(v => v.id === likesVideoId);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -490,6 +508,7 @@ export default function VideosPage() {
               onBookmark={() => toggleBookmark(video.id)}
               onCommentClick={() => openComments(video.id)}
               onShareClick={() => openShareDialog(video.id)}
+              onLikesClick={() => openLikesDialog(video.id)}
               isMobile={isMobile}
               globalMuted={globalMuted}
               onMuteToggle={handleMuteToggle}
@@ -512,6 +531,14 @@ export default function VideosPage() {
         onOpenChange={setShareDialogOpen}
         videoId={shareVideoId || ''}
         videoTitle={shareVideo?.content || undefined}
+      />
+
+      {/* Likes Dialog */}
+      <PostLikesDialog
+        postId={likesVideoId || ''}
+        open={likesDialogOpen}
+        onOpenChange={setLikesDialogOpen}
+        likesCount={likesVideo?.likes_count || 0}
       />
     </div>
   );
