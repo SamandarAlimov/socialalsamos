@@ -6,9 +6,26 @@ interface RichTextContentProps {
   className?: string;
 }
 
+// Media format: [media:type:url]
+const MEDIA_REGEX = /\[media:(image|video|gif):([^\]]+)\]/g;
+
 export function RichTextContent({ content, className }: RichTextContentProps) {
+  const { textContent, mediaItems } = useMemo(() => {
+    if (!content) return { textContent: '', mediaItems: [] };
+
+    const media: { type: 'image' | 'video' | 'gif'; url: string }[] = [];
+    
+    // Extract media items and remove them from text
+    const cleanedText = content.replace(MEDIA_REGEX, (_, type, url) => {
+      media.push({ type: type as 'image' | 'video' | 'gif', url });
+      return '';
+    }).trim();
+
+    return { textContent: cleanedText, mediaItems: media };
+  }, [content]);
+
   const parsedContent = useMemo(() => {
-    if (!content) return [];
+    if (!textContent) return [];
 
     const parts: { type: 'text' | 'mention' | 'hashtag' | 'link'; value: string; display?: string }[] = [];
     
@@ -18,12 +35,12 @@ export function RichTextContent({ content, className }: RichTextContentProps) {
     let lastIndex = 0;
     let match;
 
-    while ((match = pattern.exec(content)) !== null) {
+    while ((match = pattern.exec(textContent)) !== null) {
       // Add text before the match
       if (match.index > lastIndex) {
         parts.push({
           type: 'text',
-          value: content.slice(lastIndex, match.index),
+          value: textContent.slice(lastIndex, match.index),
         });
       }
 
@@ -54,59 +71,84 @@ export function RichTextContent({ content, className }: RichTextContentProps) {
     }
 
     // Add remaining text
-    if (lastIndex < content.length) {
+    if (lastIndex < textContent.length) {
       parts.push({
         type: 'text',
-        value: content.slice(lastIndex),
+        value: textContent.slice(lastIndex),
       });
     }
 
     return parts;
-  }, [content]);
+  }, [textContent]);
 
   return (
-    <span className={className}>
-      {parsedContent.map((part, index) => {
-        switch (part.type) {
-          case 'mention':
-            return (
-              <Link
-                key={index}
-                to={`/user/${part.value}`}
-                className="text-primary font-medium hover:underline"
-                onClick={(e) => e.stopPropagation()}
-              >
-                @{part.value}
-              </Link>
-            );
-          case 'hashtag':
-            return (
-              <Link
-                key={index}
-                to={`/search?q=%23${part.value}`}
-                className="text-primary font-medium hover:underline"
-                onClick={(e) => e.stopPropagation()}
-              >
-                #{part.value}
-              </Link>
-            );
-          case 'link':
-            return (
-              <a
-                key={index}
-                href={part.value}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary underline hover:opacity-80 break-all"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {part.display}
-              </a>
-            );
-          default:
-            return <span key={index}>{part.value}</span>;
-        }
-      })}
-    </span>
+    <div className={className}>
+      {/* Render text content */}
+      {parsedContent.length > 0 && (
+        <span>
+          {parsedContent.map((part, index) => {
+            switch (part.type) {
+              case 'mention':
+                return (
+                  <Link
+                    key={index}
+                    to={`/user/${part.value}`}
+                    className="text-primary font-medium hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    @{part.value}
+                  </Link>
+                );
+              case 'hashtag':
+                return (
+                  <Link
+                    key={index}
+                    to={`/search?q=%23${part.value}`}
+                    className="text-primary font-medium hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    #{part.value}
+                  </Link>
+                );
+              case 'link':
+                return (
+                  <a
+                    key={index}
+                    href={part.value}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline hover:opacity-80 break-all"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {part.display}
+                  </a>
+                );
+              default:
+                return <span key={index}>{part.value}</span>;
+            }
+          })}
+        </span>
+      )}
+
+      {/* Render media items */}
+      {mediaItems.map((media, index) => (
+        <div key={`media-${index}`} className="mt-2">
+          {media.type === 'video' ? (
+            <video
+              src={media.url}
+              controls
+              className="max-w-full rounded-lg max-h-48"
+            />
+          ) : (
+            <img
+              src={media.url}
+              alt={media.type === 'gif' ? 'GIF' : 'Image'}
+              className="max-w-full rounded-lg max-h-48 object-contain"
+              loading="lazy"
+            />
+          )}
+        </div>
+      ))}
+    </div>
   );
 }
