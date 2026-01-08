@@ -19,34 +19,23 @@ import {
   Music, 
   X, 
   Loader2,
-  Plus,
   ChevronLeft,
   ChevronRight,
   Play,
-  Pause,
   Volume2,
-  VolumeX,
-  Crop,
-  Type,
-  Sparkles,
   Globe,
   Users,
   Lock,
   MapPin,
   Hash,
-  AtSign,
   Smile,
   FileText,
-  Upload,
   Camera,
   Film,
-  Mic,
-  Palette,
   Filter,
-  RotateCcw,
-  ZoomIn,
   Trash2,
-  Radio
+  Radio,
+  BarChart3
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -64,7 +53,10 @@ import {
 } from '@/components/ui/dialog';
 import { EmojiPicker } from '@/components/EmojiPicker';
 import { LiveStreamBroadcast } from '@/components/live/LiveStreamBroadcast';
-// Predefined music tracks (in a real app, these would come from a backend)
+import { CameraVideoRecorder } from '@/components/create/CameraVideoRecorder';
+import { PollCreator, PollData, createDefaultPoll } from '@/components/create/PollCreator';
+import { MediaToolbar } from '@/components/create/MediaToolbar';
+
 const MUSIC_TRACKS = [
   { id: '1', name: 'Chill Vibes', artist: 'Alsamos Music', duration: 30, url: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3' },
   { id: '2', name: 'Summer Days', artist: 'Mood Beats', duration: 30, url: 'https://www.soundjay.com/misc/sounds/bell-ringing-04.mp3' },
@@ -73,7 +65,6 @@ const MUSIC_TRACKS = [
   { id: '5', name: 'City Lights', artist: 'Urban Mix', duration: 30, url: 'https://www.soundjay.com/misc/sounds/bell-ringing-01.mp3' },
 ];
 
-// Image filters
 const FILTERS = [
   { id: 'none', name: 'Normal', style: '' },
   { id: 'grayscale', name: 'B&W', style: 'grayscale(100%)' },
@@ -93,18 +84,18 @@ interface MediaFile {
   filter?: string;
   musicTrack?: typeof MUSIC_TRACKS[0];
   musicStartTime?: number;
-  thumbnail?: string;
 }
 
 export default function CreatePage() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
-  const { uploadFile, uploadMultiple, uploading, progress } = useFileUpload();
+  const { uploadFile, uploading, progress } = useFileUpload();
   const { createPost } = usePosts();
 
-  // State
   const [activeTab, setActiveTab] = useState<'post' | 'story' | 'reel' | 'live'>('post');
   const [showLiveBroadcast, setShowLiveBroadcast] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
+  const [cameraMode, setCameraMode] = useState<'photo' | 'video' | 'both'>('both');
   const [postContent, setPostContent] = useState('');
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
@@ -119,8 +110,8 @@ export default function CreatePage() {
   const [selectedFilter, setSelectedFilter] = useState('none');
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
   const [musicVolume, setMusicVolume] = useState(50);
+  const [poll, setPoll] = useState<PollData | null>(null);
 
-  // Refs
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -128,7 +119,6 @@ export default function CreatePage() {
 
   const currentMedia = mediaFiles[currentMediaIndex];
 
-  // Handle file selection
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') => {
     const files = e.target.files;
     if (!files) return;
@@ -148,7 +138,23 @@ export default function CreatePage() {
     e.target.value = '';
   }, [activeTab, mediaFiles.length]);
 
-  // Remove media
+  const handleCameraCapture = useCallback((file: File, type: 'image' | 'video', url: string) => {
+    const newMedia: MediaFile = {
+      id: `${Date.now()}-${Math.random().toString(36).substring(7)}`,
+      file,
+      url,
+      type,
+      filter: 'none',
+    };
+    
+    if (activeTab === 'post') {
+      setMediaFiles(prev => [...prev, newMedia]);
+    } else {
+      setMediaFiles([newMedia]);
+    }
+    setShowCamera(false);
+  }, [activeTab]);
+
   const removeMedia = useCallback((id: string) => {
     setMediaFiles(prev => {
       const fileToRemove = prev.find(f => f.id === id);
@@ -163,7 +169,6 @@ export default function CreatePage() {
     });
   }, [currentMediaIndex]);
 
-  // Apply filter to current media
   const applyFilter = useCallback((filterId: string) => {
     if (!currentMedia) return;
     setMediaFiles(prev => prev.map(f => 
@@ -172,7 +177,6 @@ export default function CreatePage() {
     setSelectedFilter(filterId);
   }, [currentMedia]);
 
-  // Add music to current media
   const addMusicToMedia = useCallback((track: typeof MUSIC_TRACKS[0]) => {
     if (!currentMedia || currentMedia.type !== 'image') return;
     setMediaFiles(prev => prev.map(f => 
@@ -182,7 +186,6 @@ export default function CreatePage() {
     toast.success(`Added "${track.name}" to your image`);
   }, [currentMedia]);
 
-  // Remove music from current media
   const removeMusicFromMedia = useCallback(() => {
     if (!currentMedia) return;
     setMediaFiles(prev => prev.map(f => 
@@ -190,7 +193,6 @@ export default function CreatePage() {
     ));
   }, [currentMedia]);
 
-  // Preview music
   const toggleMusicPreview = useCallback((trackUrl: string) => {
     if (audioRef.current) {
       if (playingAudio === trackUrl) {
@@ -205,7 +207,6 @@ export default function CreatePage() {
     }
   }, [playingAudio, musicVolume]);
 
-  // Add tag
   const addTag = useCallback(() => {
     const tag = tagInput.trim().replace(/^#/, '');
     if (tag && !tags.includes(tag) && tags.length < 30) {
@@ -214,29 +215,30 @@ export default function CreatePage() {
     }
   }, [tagInput, tags]);
 
-  // Remove tag
   const removeTag = useCallback((tag: string) => {
     setTags(prev => prev.filter(t => t !== tag));
   }, []);
 
-  // Add emoji to content
   const addEmoji = useCallback((emoji: string) => {
     setPostContent(prev => prev + emoji);
     setShowEmojiPicker(false);
     textareaRef.current?.focus();
   }, []);
 
-  // Handle post submission
   const handlePost = async () => {
-    if (!postContent.trim() && mediaFiles.length === 0) {
-      toast.error('Please add some content or media');
+    if (!postContent.trim() && mediaFiles.length === 0 && !poll) {
+      toast.error('Please add some content, media, or a poll');
+      return;
+    }
+
+    if (poll && (!poll.question.trim() || poll.options.filter(o => o.text.trim()).length < 2)) {
+      toast.error('Please complete your poll with a question and at least 2 options');
       return;
     }
 
     setIsPosting(true);
 
     try {
-      // Upload all media files
       const uploadedUrls: string[] = [];
       for (const media of mediaFiles) {
         if (media.file) {
@@ -249,9 +251,10 @@ export default function CreatePage() {
         }
       }
 
-      // Determine media type
       let mediaType = 'text';
-      if (mediaFiles.length > 0) {
+      if (poll) {
+        mediaType = 'poll';
+      } else if (mediaFiles.length > 0) {
         const firstMedia = mediaFiles[0];
         if (firstMedia.type === 'video') {
           mediaType = 'video';
@@ -260,7 +263,6 @@ export default function CreatePage() {
         }
       }
 
-      // Build content with tags and location
       let finalContent = postContent;
       if (tags.length > 0) {
         finalContent += '\n\n' + tags.map(t => `#${t}`).join(' ');
@@ -268,8 +270,21 @@ export default function CreatePage() {
       if (location) {
         finalContent += `\n📍 ${location}`;
       }
+      
+      // Add poll data to content if present
+      if (poll) {
+        const pollJson = JSON.stringify({
+          type: 'poll',
+          question: poll.question,
+          options: poll.options.filter(o => o.text.trim()).map(o => ({ id: o.id, text: o.text, votes: 0 })),
+          duration: poll.duration,
+          allowMultiple: poll.allowMultiple,
+          isAnonymous: poll.isAnonymous,
+          createdAt: new Date().toISOString()
+        });
+        finalContent = `[POLL]${pollJson}[/POLL]\n${finalContent}`;
+      }
 
-      // Create the post
       const result = await createPost(finalContent, uploadedUrls, mediaType);
 
       if (result) {
@@ -284,7 +299,6 @@ export default function CreatePage() {
     }
   };
 
-  // Create story
   const handleCreateStory = async () => {
     if (mediaFiles.length === 0) {
       toast.error('Please add an image or video');
@@ -323,7 +337,52 @@ export default function CreatePage() {
     }
   };
 
-  // Cleanup URLs on unmount
+  const handleCreateReel = async () => {
+    if (mediaFiles.length === 0) {
+      toast.error('Please add a video');
+      return;
+    }
+
+    setIsPosting(true);
+
+    try {
+      const media = mediaFiles[0];
+      let mediaUrl = media.url;
+
+      if (media.file) {
+        const result = await uploadFile(media.file);
+        if (result) {
+          mediaUrl = result.url;
+        }
+      }
+
+      let finalContent = postContent;
+      if (tags.length > 0) {
+        finalContent += '\n\n' + tags.map(t => `#${t}`).join(' ');
+      }
+      if (location) {
+        finalContent += `\n📍 ${location}`;
+      }
+
+      const result = await createPost(finalContent, [mediaUrl], 'video');
+
+      if (result) {
+        toast.success('Reel created!');
+        navigate('/videos');
+      }
+    } catch (error) {
+      console.error('Error creating reel:', error);
+      toast.error('Failed to create reel');
+    } finally {
+      setIsPosting(false);
+    }
+  };
+
+  const openCamera = useCallback((mode: 'photo' | 'video' | 'both') => {
+    setCameraMode(mode);
+    setShowCamera(true);
+  }, []);
+
   useEffect(() => {
     return () => {
       mediaFiles.forEach(f => {
@@ -332,9 +391,37 @@ export default function CreatePage() {
     };
   }, []);
 
+  // Camera view
+  if (showCamera) {
+    return (
+      <CameraVideoRecorder
+        mode={cameraMode}
+        aspectRatio={activeTab === 'post' ? '1:1' : '9:16'}
+        onCapture={handleCameraCapture}
+        onClose={() => setShowCamera(false)}
+      />
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-20">
       <audio ref={audioRef} onEnded={() => setPlayingAudio(null)} />
+      
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        multiple={activeTab === 'post'}
+        className="hidden"
+        onChange={(e) => handleFileSelect(e, 'image')}
+      />
+      <input
+        ref={videoInputRef}
+        type="file"
+        accept="video/*"
+        className="hidden"
+        onChange={(e) => handleFileSelect(e, 'video')}
+      />
 
       {/* Header */}
       <div className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border">
@@ -346,35 +433,43 @@ export default function CreatePage() {
           <Button 
             variant="hero" 
             size="sm"
-            onClick={activeTab === 'story' ? handleCreateStory : handlePost}
+            onClick={
+              activeTab === 'story' ? handleCreateStory : 
+              activeTab === 'reel' ? handleCreateReel : 
+              handlePost
+            }
             disabled={isPosting || uploading}
           >
             {isPosting || uploading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
-            ) : activeTab === 'story' ? 'Share Story' : 'Post'}
+            ) : activeTab === 'story' ? 'Share' : activeTab === 'reel' ? 'Post Reel' : 'Post'}
           </Button>
         </div>
       </div>
 
       {/* Tabs */}
       <div className="max-w-4xl mx-auto px-4 py-4">
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+        <Tabs value={activeTab} onValueChange={(v) => {
+          setActiveTab(v as any);
+          setMediaFiles([]);
+          setPoll(null);
+        }}>
           <TabsList className="grid grid-cols-4 mb-6">
             <TabsTrigger value="post" className="gap-2">
               <FileText className="h-4 w-4" />
-              Post
+              <span className="hidden sm:inline">Post</span>
             </TabsTrigger>
             <TabsTrigger value="story" className="gap-2">
               <Camera className="h-4 w-4" />
-              Story
+              <span className="hidden sm:inline">Story</span>
             </TabsTrigger>
             <TabsTrigger value="reel" className="gap-2">
               <Film className="h-4 w-4" />
-              Reel
+              <span className="hidden sm:inline">Reel</span>
             </TabsTrigger>
             <TabsTrigger value="live" className="gap-2">
               <Radio className="h-4 w-4" />
-              Live
+              <span className="hidden sm:inline">Live</span>
             </TabsTrigger>
           </TabsList>
 
@@ -421,8 +516,8 @@ export default function CreatePage() {
                 ref={textareaRef}
                 value={postContent}
                 onChange={(e) => setPostContent(e.target.value)}
-                placeholder="What's on your mind?"
-                className="min-h-[120px] text-lg bg-transparent border-none resize-none focus-visible:ring-0 p-0"
+                placeholder={poll ? "Add a description for your poll..." : "What's on your mind?"}
+                className="min-h-[100px] text-lg bg-transparent border-none resize-none focus-visible:ring-0 p-0"
               />
               <div className="absolute bottom-2 right-2">
                 <Button
@@ -433,17 +528,25 @@ export default function CreatePage() {
                   <Smile className="h-5 w-5 text-muted-foreground" />
                 </Button>
                 {showEmojiPicker && (
-                  <div className="absolute bottom-full right-0 mb-2">
+                  <div className="absolute bottom-full right-0 mb-2 z-50">
                     <EmojiPicker onSelect={addEmoji} />
                   </div>
                 )}
               </div>
             </div>
 
+            {/* Poll Creator */}
+            {poll && (
+              <PollCreator 
+                poll={poll} 
+                onChange={setPoll} 
+                onRemove={() => setPoll(null)} 
+              />
+            )}
+
             {/* Media Preview */}
             {mediaFiles.length > 0 && (
               <div className="space-y-4">
-                {/* Main Preview */}
                 <div className="relative aspect-square max-h-[500px] rounded-2xl overflow-hidden bg-muted">
                   {currentMedia?.type === 'video' ? (
                     <video
@@ -461,7 +564,6 @@ export default function CreatePage() {
                     />
                   )}
 
-                  {/* Music indicator */}
                   {currentMedia?.musicTrack && (
                     <div className="absolute bottom-4 left-4 right-4 bg-background/90 backdrop-blur-sm rounded-xl p-3 flex items-center gap-3">
                       <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
@@ -477,7 +579,6 @@ export default function CreatePage() {
                     </div>
                   )}
 
-                  {/* Remove button */}
                   <Button
                     variant="secondary"
                     size="icon"
@@ -487,7 +588,6 @@ export default function CreatePage() {
                     <Trash2 className="h-4 w-4" />
                   </Button>
 
-                  {/* Navigation arrows */}
                   {mediaFiles.length > 1 && (
                     <>
                       <Button
@@ -511,7 +611,6 @@ export default function CreatePage() {
                     </>
                   )}
 
-                  {/* Dots indicator */}
                   {mediaFiles.length > 1 && (
                     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
                       {mediaFiles.map((_, i) => (
@@ -528,7 +627,6 @@ export default function CreatePage() {
                   )}
                 </div>
 
-                {/* Thumbnails */}
                 {mediaFiles.length > 1 && (
                   <ScrollArea className="w-full">
                     <div className="flex gap-2 pb-2">
@@ -557,7 +655,6 @@ export default function CreatePage() {
                   </ScrollArea>
                 )}
 
-                {/* Edit Tools */}
                 <div className="flex gap-2 overflow-x-auto pb-2">
                   <Button
                     variant="outline"
@@ -583,44 +680,15 @@ export default function CreatePage() {
               </div>
             )}
 
-            {/* Media Upload Buttons */}
-            <div className="grid grid-cols-2 gap-3">
-              <input
-                ref={imageInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={(e) => handleFileSelect(e, 'image')}
-              />
-              <input
-                ref={videoInputRef}
-                type="file"
-                accept="video/*"
-                className="hidden"
-                onChange={(e) => handleFileSelect(e, 'video')}
-              />
-              <Button
-                variant="outline"
-                size="lg"
-                className="h-24 flex-col gap-2"
-                onClick={() => imageInputRef.current?.click()}
-                disabled={mediaFiles.length >= 10}
-              >
-                <ImageIcon className="h-8 w-8 text-primary" />
-                <span>Add Photos</span>
-              </Button>
-              <Button
-                variant="outline"
-                size="lg"
-                className="h-24 flex-col gap-2"
-                onClick={() => videoInputRef.current?.click()}
-                disabled={mediaFiles.length >= 10}
-              >
-                <Video className="h-8 w-8 text-primary" />
-                <span>Add Video</span>
-              </Button>
-            </div>
+            {/* Media Toolbar */}
+            <MediaToolbar
+              onImageClick={() => imageInputRef.current?.click()}
+              onVideoClick={() => videoInputRef.current?.click()}
+              onCameraClick={() => openCamera('both')}
+              onPollClick={() => setPoll(poll ? null : createDefaultPoll())}
+              hasPoll={!!poll}
+              disabled={mediaFiles.length >= 10}
+            />
 
             {/* Location */}
             <div className="flex items-center gap-2 p-3 rounded-xl bg-secondary/50">
@@ -664,7 +732,6 @@ export default function CreatePage() {
               )}
             </div>
 
-            {/* Upload Progress */}
             {uploading && (
               <div className="bg-secondary rounded-xl p-4">
                 <div className="flex items-center justify-between mb-2">
@@ -689,16 +756,24 @@ export default function CreatePage() {
                   <Camera className="h-10 w-10 text-primary" />
                 </div>
                 <p className="text-lg font-medium">Create Your Story</p>
-                <p className="text-sm text-muted-foreground">Add a photo or video</p>
-                <div className="flex gap-3">
-                  <Button onClick={() => imageInputRef.current?.click()}>
-                    <ImageIcon className="h-4 w-4 mr-2" />
-                    Photo
+                <p className="text-sm text-muted-foreground text-center px-4">
+                  Take a photo, record a video, or choose from gallery
+                </p>
+                <div className="flex flex-col gap-3 w-48">
+                  <Button onClick={() => openCamera('both')} className="w-full">
+                    <Camera className="h-4 w-4 mr-2" />
+                    Open Camera
                   </Button>
-                  <Button variant="outline" onClick={() => videoInputRef.current?.click()}>
-                    <Video className="h-4 w-4 mr-2" />
-                    Video
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => imageInputRef.current?.click()} className="flex-1">
+                      <ImageIcon className="h-4 w-4 mr-1" />
+                      Photo
+                    </Button>
+                    <Button variant="outline" onClick={() => videoInputRef.current?.click()} className="flex-1">
+                      <Video className="h-4 w-4 mr-1" />
+                      Video
+                    </Button>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -719,7 +794,6 @@ export default function CreatePage() {
                   />
                 )}
 
-                {/* Story caption */}
                 <div className="absolute bottom-20 left-4 right-4">
                   <Input
                     value={postContent}
@@ -729,7 +803,6 @@ export default function CreatePage() {
                   />
                 </div>
 
-                {/* Music indicator */}
                 {currentMedia?.musicTrack && (
                   <div className="absolute bottom-4 left-4 right-4 bg-background/90 backdrop-blur-sm rounded-xl p-2 flex items-center gap-2">
                     <Music className="h-4 w-4" />
@@ -740,7 +813,6 @@ export default function CreatePage() {
                   </div>
                 )}
 
-                {/* Tools */}
                 <div className="absolute top-4 right-4 flex flex-col gap-2">
                   <Button variant="secondary" size="icon" onClick={() => currentMedia && removeMedia(currentMedia.id)}>
                     <Trash2 className="h-4 w-4" />
@@ -756,21 +828,6 @@ export default function CreatePage() {
                 </div>
               </div>
             )}
-
-            <input
-              ref={imageInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => handleFileSelect(e, 'image')}
-            />
-            <input
-              ref={videoInputRef}
-              type="file"
-              accept="video/*"
-              className="hidden"
-              onChange={(e) => handleFileSelect(e, 'video')}
-            />
           </TabsContent>
 
           {/* Reel Tab */}
@@ -778,14 +835,22 @@ export default function CreatePage() {
             {mediaFiles.length === 0 ? (
               <div className="aspect-[9/16] max-h-[600px] rounded-2xl bg-gradient-to-br from-accent/20 to-primary/20 border-2 border-dashed border-accent/50 flex flex-col items-center justify-center gap-4">
                 <div className="w-20 h-20 rounded-full bg-accent/20 flex items-center justify-center">
-                  <Film className="h-10 w-10 text-accent" />
+                  <Film className="h-10 w-10 text-accent-foreground" />
                 </div>
                 <p className="text-lg font-medium">Create a Reel</p>
-                <p className="text-sm text-muted-foreground">Record or upload a video</p>
-                <Button onClick={() => videoInputRef.current?.click()}>
-                  <Video className="h-4 w-4 mr-2" />
-                  Select Video
-                </Button>
+                <p className="text-sm text-muted-foreground text-center px-4">
+                  Record a video or choose from your gallery
+                </p>
+                <div className="flex flex-col gap-3 w-48">
+                  <Button onClick={() => openCamera('video')} className="w-full bg-red-500 hover:bg-red-600">
+                    <Camera className="h-4 w-4 mr-2" />
+                    Record Video
+                  </Button>
+                  <Button variant="outline" onClick={() => videoInputRef.current?.click()} className="w-full">
+                    <Video className="h-4 w-4 mr-2" />
+                    Choose Video
+                  </Button>
+                </div>
               </div>
             ) : (
               <div className="relative aspect-[9/16] max-h-[600px] rounded-2xl overflow-hidden bg-muted">
@@ -795,8 +860,7 @@ export default function CreatePage() {
                   controls
                 />
                 
-                {/* Caption */}
-                <div className="absolute bottom-4 left-4 right-4">
+                <div className="absolute bottom-4 left-4 right-4 space-y-3">
                   <Textarea
                     value={postContent}
                     onChange={(e) => setPostContent(e.target.value)}
@@ -804,9 +868,37 @@ export default function CreatePage() {
                     className="bg-background/80 backdrop-blur-sm resize-none"
                     rows={2}
                   />
+                  
+                  <div className="flex items-center gap-2">
+                    <Hash className="h-4 w-4 text-muted-foreground" />
+                    <Input
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      placeholder="Add hashtags"
+                      className="bg-background/80 backdrop-blur-sm"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          addTag();
+                        }
+                      }}
+                    />
+                  </div>
+                  
+                  {tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {tags.map(tag => (
+                        <Badge key={tag} variant="secondary" className="text-xs gap-1">
+                          #{tag}
+                          <button onClick={() => removeTag(tag)}>
+                            <X className="h-2 w-2" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {/* Remove button */}
                 <Button
                   variant="secondary"
                   size="icon"
@@ -817,14 +909,6 @@ export default function CreatePage() {
                 </Button>
               </div>
             )}
-
-            <input
-              ref={videoInputRef}
-              type="file"
-              accept="video/*"
-              className="hidden"
-              onChange={(e) => handleFileSelect(e, 'video')}
-            />
           </TabsContent>
 
           {/* Live Tab */}
@@ -895,11 +979,10 @@ export default function CreatePage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Music className="h-5 w-5" />
-              Add Music to Photo
+              Add Music
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            {/* Volume slider */}
             <div className="flex items-center gap-3 p-3 bg-secondary/50 rounded-xl">
               <Volume2 className="h-4 w-4" />
               <Slider
@@ -915,37 +998,32 @@ export default function CreatePage() {
               <span className="text-sm w-10 text-right">{musicVolume}%</span>
             </div>
 
-            {/* Music tracks */}
             <ScrollArea className="h-[300px]">
               <div className="space-y-2">
                 {MUSIC_TRACKS.map(track => (
                   <div
                     key={track.id}
-                    className={cn(
-                      "flex items-center gap-3 p-3 rounded-xl transition-colors cursor-pointer hover:bg-secondary/50",
-                      currentMedia?.musicTrack?.id === track.id && "bg-primary/10"
-                    )}
-                    onClick={() => addMusicToMedia(track)}
+                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-secondary/50 transition-colors"
                   >
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleMusicPreview(track.url);
-                      }}
+                    <button
+                      onClick={() => toggleMusicPreview(track.url)}
+                      className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center"
                     >
-                      {playingAudio === track.url ? (
-                        <Pause className="h-4 w-4" />
-                      ) : (
-                        <Play className="h-4 w-4" />
-                      )}
-                    </Button>
+                      <Play className={cn(
+                        "h-5 w-5",
+                        playingAudio === track.url && "text-primary"
+                      )} />
+                    </button>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate">{track.name}</p>
                       <p className="text-sm text-muted-foreground truncate">{track.artist}</p>
                     </div>
-                    <span className="text-sm text-muted-foreground">{track.duration}s</span>
+                    <Button
+                      size="sm"
+                      onClick={() => addMusicToMedia(track)}
+                    >
+                      Use
+                    </Button>
                   </div>
                 ))}
               </div>
