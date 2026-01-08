@@ -35,7 +35,8 @@ import {
   Filter,
   Trash2,
   Radio,
-  BarChart3
+  BarChart3,
+  Scissors
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -56,6 +57,7 @@ import { LiveStreamBroadcast } from '@/components/live/LiveStreamBroadcast';
 import { CameraVideoRecorder } from '@/components/create/CameraVideoRecorder';
 import { PollCreator, PollData, createDefaultPoll } from '@/components/create/PollCreator';
 import { MediaToolbar } from '@/components/create/MediaToolbar';
+import { VideoEditor, VideoEditData } from '@/components/VideoEditor';
 
 const MUSIC_TRACKS = [
   { id: '1', name: 'Chill Vibes', artist: 'Alsamos Music', duration: 30, url: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3' },
@@ -111,6 +113,8 @@ export default function CreatePage() {
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
   const [musicVolume, setMusicVolume] = useState(50);
   const [poll, setPoll] = useState<PollData | null>(null);
+  const [showVideoEditor, setShowVideoEditor] = useState(false);
+  const [videoEditData, setVideoEditData] = useState<VideoEditData | null>(null);
 
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -853,60 +857,86 @@ export default function CreatePage() {
                 </div>
               </div>
             ) : (
-              <div className="relative aspect-[9/16] max-h-[600px] rounded-2xl overflow-hidden bg-muted">
-                <video
-                  src={currentMedia?.url}
-                  className="w-full h-full object-cover"
-                  controls
-                />
-                
-                <div className="absolute bottom-4 left-4 right-4 space-y-3">
-                  <Textarea
-                    value={postContent}
-                    onChange={(e) => setPostContent(e.target.value)}
-                    placeholder="Write a caption..."
-                    className="bg-background/80 backdrop-blur-sm resize-none"
-                    rows={2}
+              <div className="space-y-4">
+                <div className="relative aspect-[9/16] max-h-[600px] rounded-2xl overflow-hidden bg-muted">
+                  <video
+                    src={currentMedia?.url}
+                    className="w-full h-full object-cover"
+                    controls
                   />
                   
-                  <div className="flex items-center gap-2">
-                    <Hash className="h-4 w-4 text-muted-foreground" />
-                    <Input
-                      value={tagInput}
-                      onChange={(e) => setTagInput(e.target.value)}
-                      placeholder="Add hashtags"
-                      className="bg-background/80 backdrop-blur-sm"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          addTag();
-                        }
-                      }}
+                  <div className="absolute bottom-4 left-4 right-4 space-y-3">
+                    <Textarea
+                      value={postContent}
+                      onChange={(e) => setPostContent(e.target.value)}
+                      placeholder="Write a caption..."
+                      className="bg-background/80 backdrop-blur-sm resize-none"
+                      rows={2}
                     />
-                  </div>
-                  
-                  {tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {tags.map(tag => (
-                        <Badge key={tag} variant="secondary" className="text-xs gap-1">
-                          #{tag}
-                          <button onClick={() => removeTag(tag)}>
-                            <X className="h-2 w-2" />
-                          </button>
-                        </Badge>
-                      ))}
+                    
+                    <div className="flex items-center gap-2">
+                      <Hash className="h-4 w-4 text-muted-foreground" />
+                      <Input
+                        value={tagInput}
+                        onChange={(e) => setTagInput(e.target.value)}
+                        placeholder="Add hashtags"
+                        className="bg-background/80 backdrop-blur-sm"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            addTag();
+                          }
+                        }}
+                      />
                     </div>
-                  )}
+                    
+                    {tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {tags.map(tag => (
+                          <Badge key={tag} variant="secondary" className="text-xs gap-1">
+                            #{tag}
+                            <button onClick={() => removeTag(tag)}>
+                              <X className="h-2 w-2" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Editing tools */}
+                  <div className="absolute top-4 right-4 flex flex-col gap-2">
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      onClick={() => currentMedia && removeMedia(currentMedia.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      onClick={() => setShowVideoEditor(true)}
+                      title="Edit video"
+                    >
+                      <Scissors className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
 
-                <Button
-                  variant="secondary"
-                  size="icon"
-                  className="absolute top-4 right-4"
-                  onClick={() => currentMedia && removeMedia(currentMedia.id)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                {/* Video edit info */}
+                {videoEditData && (
+                  <div className="p-3 rounded-xl bg-secondary/50 text-sm">
+                    <div className="flex items-center gap-2 text-primary">
+                      <Scissors className="h-4 w-4" />
+                      <span className="font-medium">Video edited</span>
+                    </div>
+                    <p className="text-muted-foreground text-xs mt-1">
+                      Trimmed from {Math.floor(videoEditData.trimStart)}s to {Math.floor(videoEditData.trimEnd)}s
+                      {videoEditData.rotation > 0 && ` • Rotated ${videoEditData.rotation}°`}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </TabsContent>
@@ -1031,6 +1061,20 @@ export default function CreatePage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Video Editor Dialog */}
+      {currentMedia?.type === 'video' && (
+        <VideoEditor
+          videoUrl={currentMedia.url}
+          open={showVideoEditor}
+          onSave={(editData) => {
+            setVideoEditData(editData);
+            setShowVideoEditor(false);
+            toast.success('Video edits saved!');
+          }}
+          onCancel={() => setShowVideoEditor(false)}
+        />
+      )}
     </div>
   );
 }
