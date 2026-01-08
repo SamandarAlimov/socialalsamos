@@ -4,6 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 import { useLiveStreamViewer as useLiveStreamViewerDB, useLiveStreamComments, useLiveStreamReactions } from '@/hooks/useLiveStream';
 import { useLiveStreamViewer as useLiveStreamViewerWebRTC } from '@/hooks/useLiveStreamWebRTC';
 import { useAuth } from '@/contexts/AuthContext';
@@ -33,8 +34,48 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
   
   const [commentText, setCommentText] = useState('');
   const [showReactions, setShowReactions] = useState(false);
+  const [realtimeViewerCount, setRealtimeViewerCount] = useState(dbViewerCount);
   const videoRef = useRef<HTMLVideoElement>(null);
   const commentsRef = useRef<HTMLDivElement>(null);
+
+  // Subscribe to realtime viewer count updates
+  useEffect(() => {
+    if (!streamId) return;
+
+    const channel = supabase
+      .channel(`live-stream-viewers-${streamId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'live_stream_viewers',
+          filter: `stream_id=eq.${streamId}`,
+        },
+        async () => {
+          // Fetch current viewer count
+          const { count } = await supabase
+            .from('live_stream_viewers')
+            .select('*', { count: 'exact', head: true })
+            .eq('stream_id', streamId)
+            .is('left_at', null);
+          
+          if (count !== null) {
+            setRealtimeViewerCount(count);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [streamId]);
+
+  // Update realtime viewer count when db count changes
+  useEffect(() => {
+    setRealtimeViewerCount(dbViewerCount);
+  }, [dbViewerCount]);
 
   // Join stream on mount
   useEffect(() => {
@@ -44,38 +85,6 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
       disconnectWebRTC();
     };
   }, []);
-
-  // Connect to WebRTC when stream is loaded
-  useEffect(() => {
-    if (stream && stream.status === 'live' && !isConnected && !isConnecting) {
-      console.log('[Viewer] Connecting to WebRTC stream');
-      // Small delay to ensure broadcaster is ready
-      const timer = setTimeout(() => {
-        connectWebRTC();
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [stream, isConnected, isConnecting, connectWebRTC]);
-
-  // Connect remote stream to video element
-  useEffect(() => {
-    if (videoRef.current && remoteStream) {
-      console.log('[Viewer] Setting remote stream to video element, tracks:', remoteStream.getTracks().length);
-      videoRef.current.srcObject = remoteStream;
-      
-      // Force play
-      videoRef.current.play().catch(err => {
-        console.log('[Viewer] Auto-play failed, user interaction needed:', err);
-      });
-    }
-  }, [remoteStream]);
-
-  // Auto-scroll comments
-  useEffect(() => {
-    if (commentsRef.current) {
-      commentsRef.current.scrollTop = commentsRef.current.scrollHeight;
-    }
-  }, [comments]);
 
   const handleSendComment = () => {
     if (!commentText.trim()) return;
@@ -142,7 +151,7 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
               </div>
               <div className="flex items-center gap-1 text-white/70 text-xs">
                 <Users className="h-3 w-3" />
-                <span>{dbViewerCount.toLocaleString()}</span>
+              <span>{realtimeViewerCount.toLocaleString()}</span>
               </div>
             </div>
           </div>

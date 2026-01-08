@@ -26,6 +26,7 @@ import { PostActionsMenu } from '@/components/PostActionsMenu';
 import { PostLikesDialog } from '@/components/PostLikesDialog';
 import { SharePostDialog } from '@/components/SharePostDialog';
 import { PostViewModal } from '@/components/PostViewModal';
+import { PollDisplay, parsePollFromContent } from '@/components/PollDisplay';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
@@ -410,12 +411,24 @@ function PostCard({
         />
       </div>
 
-      {/* Post Content */}
-      {post.content && (
-        <div className="px-3 md:px-4 pb-2 md:pb-3">
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">{post.content}</p>
-        </div>
-      )}
+      {/* Post Content with Poll Support */}
+      {post.content && (() => {
+        const { pollData, cleanContent } = parsePollFromContent(post.content);
+        return (
+          <>
+            {cleanContent && (
+              <div className="px-3 md:px-4 pb-2 md:pb-3">
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">{cleanContent}</p>
+              </div>
+            )}
+            {pollData && (
+              <div className="px-3 md:px-4 pb-2 md:pb-3">
+                <PollDisplay postId={post.id} pollData={pollData} />
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* Post Media Carousel */}
       {post.media_urls && post.media_urls.length > 0 && (

@@ -115,12 +115,49 @@ export function StoryViewer({
     }
   }, [currentStory?.id, user, isOwnStory]);
 
-  // Fetch viewers for own story
+  // Fetch viewers for own story with realtime updates
   useEffect(() => {
-    if (isOwnStory && currentStory && showViewers) {
-      fetchViewers(currentStory.id);
-    }
-  }, [isOwnStory, currentStory?.id, showViewers]);
+    if (!isOwnStory || !currentStory) return;
+
+    // Initial fetch
+    fetchViewers(currentStory.id);
+
+    // Set up realtime subscription for story views
+    const channel = supabase
+      .channel(`story-views-${currentStory.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'story_views',
+          filter: `story_id=eq.${currentStory.id}`,
+        },
+        async (payload) => {
+          // Fetch the new viewer's profile
+          const { data: viewerProfile } = await supabase
+            .from('profiles')
+            .select('id, username, display_name, avatar_url')
+            .eq('id', payload.new.viewer_id)
+            .single();
+
+          if (viewerProfile) {
+            const newViewer: StoryViewer = {
+              id: payload.new.id,
+              viewer_id: payload.new.viewer_id,
+              viewed_at: payload.new.viewed_at,
+              profile: viewerProfile,
+            };
+            setViewers(prev => [newViewer, ...prev.filter(v => v.viewer_id !== newViewer.viewer_id)]);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isOwnStory, currentStory?.id]);
 
   // Auto-advance timer
   useEffect(() => {
