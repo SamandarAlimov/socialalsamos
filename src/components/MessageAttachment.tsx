@@ -1,48 +1,43 @@
 import { FileText, Download, Play, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { VideoMessagePlayer } from './messages/VideoMessagePlayer';
+import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 
 interface MessageAttachmentProps {
   url: string;
   type: 'image' | 'video' | 'audio' | 'document';
   name?: string;
+  isMine?: boolean;
 }
 
-export function MessageAttachment({ url, type, name }: MessageAttachmentProps) {
-  if (type === 'image') {
+export function MessageAttachment({ url, type, name, isMine }: MessageAttachmentProps) {
+  // Check if it's a GIF
+  const isGif = url.includes('giphy.com') || url.includes('.gif') || url.includes('[media:gif:');
+
+  if (type === 'image' || isGif) {
+    const actualUrl = url.startsWith('[media:gif:') 
+      ? url.replace('[media:gif:', '').replace(']', '') 
+      : url;
+    
     return (
       <div className="relative rounded-lg overflow-hidden max-w-xs">
         <img
-          src={url}
+          src={actualUrl}
           alt={name || 'Image'}
           className="w-full h-auto object-cover cursor-pointer hover:opacity-90 transition-opacity"
-          onClick={() => window.open(url, '_blank')}
+          onClick={() => window.open(actualUrl, '_blank')}
+          loading="lazy"
         />
       </div>
     );
   }
 
   if (type === 'video') {
-    return (
-      <div className="relative rounded-lg overflow-hidden max-w-xs">
-        <video
-          src={url}
-          controls
-          className="w-full h-auto"
-          preload="metadata"
-        >
-          Your browser does not support video playback.
-        </video>
-      </div>
-    );
+    return <VideoMessagePlayer url={url} isMine={isMine} />;
   }
 
   if (type === 'audio') {
-    return (
-      <div className="flex items-center gap-2 p-3 bg-accent rounded-lg">
-        <Play className="h-5 w-5" />
-        <audio src={url} controls className="h-8" />
-      </div>
-    );
+    return <VoiceMessagePlayer url={url} isMine={isMine} />;
   }
 
   // Document type
