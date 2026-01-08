@@ -7,10 +7,10 @@ import { useVideoPosts, VideoPost } from '@/hooks/useVideoPosts';
 import { Skeleton } from '@/components/ui/skeleton';
 import { VideoCommentsSheet } from '@/components/VideoCommentsSheet';
 import { PostLikesDialog } from '@/components/PostLikesDialog';
+import { SharePostDialog } from '@/components/SharePostDialog';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
-import { VideoShareDialog } from '@/components/VideoShareDialog';
 
 function formatNumber(num: number): string {
   if (num >= 1000000) {
@@ -526,11 +526,11 @@ export default function VideosPage() {
       />
 
       {/* Share Dialog */}
-      <VideoShareDialog
+      <SharePostDialog
         open={shareDialogOpen}
         onOpenChange={setShareDialogOpen}
-        videoId={shareVideoId || ''}
-        videoTitle={shareVideo?.content || undefined}
+        postId={shareVideoId || ''}
+        postContent={shareVideo?.content || undefined}
       />
 
       {/* Likes Dialog */}

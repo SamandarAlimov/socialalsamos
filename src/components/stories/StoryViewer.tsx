@@ -283,15 +283,14 @@ export function StoryViewer({
         conversationId = newConv.id;
       }
 
-      // Send the story reply as a message
-      const storyReplyContent = `📸 Replied to your story: "${storyReply.trim()}"`;
-      
+      // Send the story reply as a message with story_id reference
       const { error: msgError } = await supabase
         .from('messages')
         .insert({
           conversation_id: conversationId,
           sender_id: user.id,
-          content: storyReplyContent,
+          content: storyReply.trim(),
+          story_id: currentStory.id,
         });
 
       if (msgError) throw msgError;

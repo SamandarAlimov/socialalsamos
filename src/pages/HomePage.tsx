@@ -24,6 +24,7 @@ import { CommentsSection } from '@/components/CommentsSection';
 import { PostMediaCarousel } from '@/components/PostMediaCarousel';
 import { PostActionsMenu } from '@/components/PostActionsMenu';
 import { PostLikesDialog } from '@/components/PostLikesDialog';
+import { SharePostDialog } from '@/components/SharePostDialog';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
@@ -301,6 +302,7 @@ function PostCard({
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [showLikesDialog, setShowLikesDialog] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
 
   // Use real-time counts
   const likesCount = realtimeCounts.likes_count;
@@ -405,7 +407,10 @@ function PostCard({
             <MessageCircle className={cn("h-5 w-5 md:h-5 md:w-5", showComments && 'fill-current')} />
             <span className="text-xs md:text-sm font-medium">{commentsCount}</span>
           </button>
-          <button className="flex items-center gap-1.5 md:gap-2 text-muted-foreground hover:text-primary transition-colors touch-feedback">
+          <button 
+            onClick={() => setShowShareDialog(true)}
+            className="flex items-center gap-1.5 md:gap-2 text-muted-foreground hover:text-primary transition-colors touch-feedback"
+          >
             <Share2 className="h-5 w-5 md:h-5 md:w-5" />
             <span className="text-xs md:text-sm font-medium">{post.shares_count}</span>
           </button>
@@ -432,6 +437,14 @@ function PostCard({
         open={showLikesDialog}
         onOpenChange={setShowLikesDialog}
         likesCount={likesCount}
+      />
+
+      {/* Share Dialog */}
+      <SharePostDialog
+        open={showShareDialog}
+        onOpenChange={setShowShareDialog}
+        postId={post.id}
+        postContent={post.content || undefined}
       />
     </article>
   );

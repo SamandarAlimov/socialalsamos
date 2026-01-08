@@ -620,6 +620,8 @@ export type Database = {
           original_content: string | null
           reply_to_id: string | null
           sender_id: string | null
+          shared_post_id: string | null
+          story_id: string | null
           updated_at: string | null
         }
         Insert: {
@@ -635,6 +637,8 @@ export type Database = {
           original_content?: string | null
           reply_to_id?: string | null
           sender_id?: string | null
+          shared_post_id?: string | null
+          story_id?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -650,6 +654,8 @@ export type Database = {
           original_content?: string | null
           reply_to_id?: string | null
           sender_id?: string | null
+          shared_post_id?: string | null
+          story_id?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -672,6 +678,20 @@ export type Database = {
             columns: ["sender_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_shared_post_id_fkey"
+            columns: ["shared_post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
             referencedColumns: ["id"]
           },
         ]
