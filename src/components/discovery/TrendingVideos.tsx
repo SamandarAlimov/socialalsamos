@@ -50,6 +50,51 @@ export function TrendingVideos() {
     fetchVideos();
   }, []);
 
+  // Real-time subscription for video counts
+  useEffect(() => {
+    if (videos.length === 0) return;
+
+    const channel = supabase
+      .channel('trending-videos-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'post_likes',
+        },
+        (payload) => {
+          const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
+          setVideos(prev => prev.map(v => {
+            if (v.id !== postId) return v;
+            const delta = payload.eventType === 'INSERT' ? 1 : payload.eventType === 'DELETE' ? -1 : 0;
+            return { ...v, likes_count: Math.max(0, v.likes_count + delta) };
+          }));
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'comments',
+        },
+        (payload) => {
+          const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
+          setVideos(prev => prev.map(v => {
+            if (v.id !== postId) return v;
+            const delta = payload.eventType === 'INSERT' ? 1 : payload.eventType === 'DELETE' ? -1 : 0;
+            return { ...v, comments_count: Math.max(0, v.comments_count + delta) };
+          }));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [videos.length]);
+
   const handleMouseEnter = (videoId: string) => {
     setHoveredVideo(videoId);
     const video = videoRefs.current[videoId];
