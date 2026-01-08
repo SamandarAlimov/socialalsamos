@@ -41,6 +41,7 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
     setIsLoading(true);
 
     try {
+      // Fetch all post types including videos/reels
       let query = supabase
         .from('posts')
         .select(`
