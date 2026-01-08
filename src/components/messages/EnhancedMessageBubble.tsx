@@ -419,6 +419,7 @@ export function EnhancedMessageBubble({
                           <MessageAttachment 
                             url={message.media_url} 
                             type={message.media_type as 'image' | 'video' | 'audio' | 'document'}
+                            isMine={isMine}
                           />
                         </div>
                       )}
