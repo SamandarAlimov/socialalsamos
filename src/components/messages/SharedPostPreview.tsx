@@ -76,12 +76,18 @@ export function SharedPostPreview({ postId, isMine }: SharedPostPreviewProps) {
   const hasMedia = post.media_urls && post.media_urls.length > 0;
   const isVideo = post.media_type === 'video' || post.media_type === 'reel';
 
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isVideo) {
+      navigate(`/videos?v=${post.id}`);
+    } else {
+      navigate(`/home?post=${post.id}`);
+    }
+  };
+
   return (
     <div
-      onClick={(e) => {
-        e.stopPropagation();
-        navigate(`/user/${post.profile?.id}`);
-      }}
+      onClick={handleClick}
       className={cn(
         "rounded-xl overflow-hidden border cursor-pointer transition-transform hover:scale-[1.02]",
         isMine ? "bg-white/10 border-white/20" : "bg-muted/50 border-border"
