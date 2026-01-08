@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from 'next-themes';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserSettings } from '@/hooks/useUserSettings';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
@@ -14,6 +15,7 @@ import {
   Key,
   Eye,
   Moon,
+  Sun,
   LogOut,
   ChevronRight,
   Wifi,
@@ -143,6 +145,7 @@ function PushNotificationSettings() {
 
 export default function SettingsPage() {
   const navigate = useNavigate();
+  const { theme, setTheme } = useTheme();
   const { user, logout } = useAuth();
   const { settings, sessions, isLoading, updateSettings, logoutSession, logoutAllOtherSessions, refetch } = useUserSettings();
   const { toast } = useToast();
@@ -418,6 +421,55 @@ export default function SettingsPage() {
               <Button variant="outline" onClick={() => setVerificationDialogOpen(true)}>
                 Request
               </Button>
+            </div>
+          </div>
+
+          {/* Theme Settings */}
+          <div className="bg-card rounded-xl border border-border overflow-hidden">
+            <div className="p-4 border-b border-border">
+              <h2 className="font-semibold">Appearance</h2>
+            </div>
+            <div className="p-4 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                  {theme === 'dark' ? (
+                    <Moon className="h-5 w-5 text-muted-foreground" />
+                  ) : theme === 'light' ? (
+                    <Sun className="h-5 w-5 text-muted-foreground" />
+                  ) : (
+                    <Monitor className="h-5 w-5 text-muted-foreground" />
+                  )}
+                </div>
+                <div>
+                  <p className="font-medium text-sm">Theme</p>
+                  <p className="text-xs text-muted-foreground">Choose your preferred appearance</p>
+                </div>
+              </div>
+              <Select value={theme} onValueChange={setTheme}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="system">
+                    <div className="flex items-center gap-2">
+                      <Monitor className="h-4 w-4" />
+                      System
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="light">
+                    <div className="flex items-center gap-2">
+                      <Sun className="h-4 w-4" />
+                      Light
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="dark">
+                    <div className="flex items-center gap-2">
+                      <Moon className="h-4 w-4" />
+                      Dark
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
