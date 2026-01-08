@@ -57,6 +57,51 @@ export function ForYouSection() {
     fetchForYouPosts();
   }, [user]);
 
+  // Real-time subscription for counts
+  useEffect(() => {
+    if (posts.length === 0) return;
+
+    const channel = supabase
+      .channel('foryou-realtime-counts')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'post_likes',
+        },
+        (payload) => {
+          const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
+          setPosts(prev => prev.map(p => {
+            if (p.id !== postId) return p;
+            const delta = payload.eventType === 'INSERT' ? 1 : payload.eventType === 'DELETE' ? -1 : 0;
+            return { ...p, likes_count: Math.max(0, p.likes_count + delta) };
+          }));
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'comments',
+        },
+        (payload) => {
+          const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
+          setPosts(prev => prev.map(p => {
+            if (p.id !== postId) return p;
+            const delta = payload.eventType === 'INSERT' ? 1 : payload.eventType === 'DELETE' ? -1 : 0;
+            return { ...p, comments_count: Math.max(0, p.comments_count + delta) };
+          }));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [posts.length]);
+
   const formatCount = (count: number) => {
     if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
     if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;

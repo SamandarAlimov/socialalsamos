@@ -103,6 +103,78 @@ export function useUserPosts(userId: string | undefined) {
     fetchPosts();
   }, [fetchPosts]);
 
+  // Real-time subscription for post counts
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel(`user-posts-realtime-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'post_likes',
+        },
+        (payload) => {
+          const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
+          setPosts(prev => prev.map(p => {
+            if (p.id !== postId) return p;
+            const delta = payload.eventType === 'INSERT' ? 1 : payload.eventType === 'DELETE' ? -1 : 0;
+            const isLiked = payload.eventType === 'INSERT' && (payload.new as any)?.user_id === user?.id
+              ? true 
+              : payload.eventType === 'DELETE' && (payload.old as any)?.user_id === user?.id
+              ? false 
+              : p.is_liked;
+            return { ...p, likes_count: Math.max(0, p.likes_count + delta), is_liked: isLiked };
+          }));
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'comments',
+        },
+        (payload) => {
+          const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
+          setPosts(prev => prev.map(p => {
+            if (p.id !== postId) return p;
+            const delta = payload.eventType === 'INSERT' ? 1 : payload.eventType === 'DELETE' ? -1 : 0;
+            return { ...p, comments_count: Math.max(0, p.comments_count + delta) };
+          }));
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'posts',
+        },
+        (payload) => {
+          const newData = payload.new as any;
+          if (!newData?.id) return;
+          setPosts(prev => prev.map(p => {
+            if (p.id !== newData.id) return p;
+            return {
+              ...p,
+              likes_count: newData.likes_count ?? p.likes_count,
+              comments_count: newData.comments_count ?? p.comments_count,
+              shares_count: newData.shares_count ?? p.shares_count,
+              bookmarks_count: newData.bookmarks_count ?? p.bookmarks_count,
+            };
+          }));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, user?.id]);
+
   const likePost = useCallback(async (postId: string) => {
     if (!user) return;
 

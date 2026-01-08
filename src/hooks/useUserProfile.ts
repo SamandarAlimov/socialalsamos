@@ -291,7 +291,7 @@ export function useUserProfile(userId?: string) {
     fetchCounts();
   }, [fetchProfile, fetchPosts, fetchCounts]);
 
-  // Real-time subscription for posts
+  // Real-time subscription for posts and counts
   useEffect(() => {
     if (!targetUserId) return;
 
@@ -305,9 +305,63 @@ export function useUserProfile(userId?: string) {
           table: 'posts',
           filter: `user_id=eq.${targetUserId}`,
         },
-        () => {
-          fetchPosts();
-          fetchCounts();
+        (payload) => {
+          // Handle post count updates in real-time
+          if (payload.eventType === 'UPDATE') {
+            const newData = payload.new as any;
+            setPosts(prev => prev.map(p => 
+              p.id === newData.id 
+                ? { 
+                    ...p, 
+                    likes_count: newData.likes_count ?? p.likes_count,
+                    comments_count: newData.comments_count ?? p.comments_count,
+                    shares_count: newData.shares_count ?? p.shares_count,
+                    bookmarks_count: newData.bookmarks_count ?? p.bookmarks_count,
+                  }
+                : p
+            ));
+          } else {
+            fetchPosts();
+            fetchCounts();
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'post_likes',
+        },
+        (payload) => {
+          const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
+          // Update like count for specific post
+          setPosts(prev => prev.map(p => {
+            if (p.id !== postId) return p;
+            const delta = payload.eventType === 'INSERT' ? 1 : payload.eventType === 'DELETE' ? -1 : 0;
+            const isLiked = payload.eventType === 'INSERT' && (payload.new as any)?.user_id === user?.id
+              ? true 
+              : payload.eventType === 'DELETE' && (payload.old as any)?.user_id === user?.id
+              ? false 
+              : p.is_liked;
+            return { ...p, likes_count: Math.max(0, p.likes_count + delta), is_liked: isLiked };
+          }));
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'comments',
+        },
+        (payload) => {
+          const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
+          setPosts(prev => prev.map(p => {
+            if (p.id !== postId) return p;
+            const delta = payload.eventType === 'INSERT' ? 1 : payload.eventType === 'DELETE' ? -1 : 0;
+            return { ...p, comments_count: Math.max(0, p.comments_count + delta) };
+          }));
         }
       )
       .on(
@@ -327,7 +381,7 @@ export function useUserProfile(userId?: string) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [targetUserId, fetchPosts, fetchCounts]);
+  }, [targetUserId, fetchPosts, fetchCounts, user?.id]);
 
   // Real-time subscription for profile updates
   useEffect(() => {
