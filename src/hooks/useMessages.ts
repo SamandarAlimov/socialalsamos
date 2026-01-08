@@ -38,6 +38,8 @@ export interface Message {
   media_url: string | null;
   media_type: string | null;
   reply_to_id: string | null;
+  story_id: string | null;
+  shared_post_id: string | null;
   is_edited: boolean;
   is_deleted: boolean;
   created_at: string;
@@ -540,6 +542,8 @@ export function useMessages(conversationId: string | null) {
       media_url: mediaUrl || null,
       media_type: mediaType || null,
       reply_to_id: null,
+      story_id: null,
+      shared_post_id: null,
       is_edited: false,
       is_deleted: false,
       created_at: new Date().toISOString(),

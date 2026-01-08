@@ -9,6 +9,8 @@ import { MessageContextMenu } from './MessageContextMenu';
 import { LocationMessage } from './LocationMessage';
 import { GroupReadReceipts } from './GroupReadReceipts';
 import { MessageContent } from './MessageContent';
+import { SharedPostPreview } from './SharedPostPreview';
+import { StoryReplyPreview } from './StoryReplyPreview';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
@@ -29,6 +31,8 @@ interface Message {
   is_deleted: boolean | null;
   is_edited: boolean | null;
   reply_to_id: string | null;
+  story_id?: string | null;
+  shared_post_id?: string | null;
   is_read?: boolean;
   created_at: string;
   updated_at?: string;
@@ -393,11 +397,21 @@ export function EnhancedMessageBubble({
                 />
               ) : (
                 <>
+                  {/* Story Reply Preview */}
+                  {message.story_id && (
+                    <StoryReplyPreview storyId={message.story_id} isMine={isMine} />
+                  )}
+
+                  {/* Shared Post Preview */}
+                  {message.shared_post_id && (
+                    <SharedPostPreview postId={message.shared_post_id} isMine={isMine} />
+                  )}
+
                   {isVoiceMessage ? (
                     <VoiceMessagePlayer url={message.media_url!} isMine={isMine} />
                   ) : (
                     <>
-                      {message.content && !message.content.startsWith('[') && (
+                      {message.content && !message.content.startsWith('[') && !message.shared_post_id && (
                         <MessageContent content={message.content} isMine={isMine} />
                       )}
                       {message.media_url && message.media_type && (
