@@ -165,7 +165,7 @@ export function TrendingVideos() {
             className="relative aspect-[9/16] bg-muted rounded-xl overflow-hidden cursor-pointer group"
             onClick={() => {
               triggerHaptic('medium');
-              navigate('/videos');
+              navigate(`/videos?v=${video.id}`);
             }}
             onMouseEnter={() => handleMouseEnter(video.id)}
             onMouseLeave={() => handleMouseLeave(video.id)}

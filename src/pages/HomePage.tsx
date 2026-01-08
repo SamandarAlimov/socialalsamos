@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,7 @@ import { PostMediaCarousel } from '@/components/PostMediaCarousel';
 import { PostActionsMenu } from '@/components/PostActionsMenu';
 import { PostLikesDialog } from '@/components/PostLikesDialog';
 import { SharePostDialog } from '@/components/SharePostDialog';
+import { PostViewModal } from '@/components/PostViewModal';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
@@ -33,12 +34,16 @@ import { LiveStreamCard } from '@/components/live/LiveStreamCard';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { StoryViewer } from '@/components/stories/StoryViewer';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function HomePage() {
   const { user, profile } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isMobile = useIsMobile();
   const [activeStoryGroup, setActiveStoryGroup] = useState<StoryGroup | null>(null);
   const [showCreateStory, setShowCreateStory] = useState(false);
+  const [selectedPostForModal, setSelectedPostForModal] = useState<Post | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
@@ -72,6 +77,35 @@ export default function HomePage() {
       requestPermission();
     }
   }, [permission, requestPermission]);
+
+  // Handle ?post= query param to open post modal
+  useEffect(() => {
+    const postId = searchParams.get('post');
+    if (postId) {
+      async function fetchPost() {
+        const { data } = await supabase
+          .from('posts')
+          .select(`
+            id, content, media_urls, media_type, likes_count, comments_count, is_pinned, created_at, user_id,
+            profile:profiles!posts_user_id_fkey (id, username, display_name, avatar_url, is_verified)
+          `)
+          .eq('id', postId)
+          .single();
+
+        if (data) {
+          setSelectedPostForModal(data as Post);
+        }
+      }
+      fetchPost();
+    } else {
+      setSelectedPostForModal(null);
+    }
+  }, [searchParams]);
+
+  const closePostModal = () => {
+    setSelectedPostForModal(null);
+    setSearchParams({});
+  };
 
   // Infinite scroll
   useEffect(() => {
@@ -152,6 +186,20 @@ export default function HomePage() {
         onOpenChange={setShowCreateStory}
         onSuccess={refreshStories}
       />
+
+      {/* Post View Modal from URL */}
+      {selectedPostForModal && selectedPostForModal.profile && (
+        <PostViewModal
+          post={{
+            ...selectedPostForModal,
+            is_liked: selectedPostForModal.is_liked || false,
+          }}
+          profile={selectedPostForModal.profile}
+          open={!!selectedPostForModal}
+          onOpenChange={(open) => !open && closePostModal()}
+          onLike={() => likePost(selectedPostForModal.id)}
+        />
+      )}
 
       {/* Stories Section - Mobile optimized */}
       <div className="mb-4 md:mb-6 -mx-3 md:mx-0 px-3 md:px-0">

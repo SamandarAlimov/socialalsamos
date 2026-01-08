@@ -6,6 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useAuth } from '@/contexts/AuthContext';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
+import { PostViewModal } from '@/components/PostViewModal';
 
 interface Post {
   id: string;
@@ -15,6 +16,7 @@ interface Post {
   likes_count: number;
   comments_count: number;
   created_at: string;
+  is_liked?: boolean;
   profile?: {
     id: string;
     username: string | null;
@@ -29,6 +31,7 @@ export function ForYouSection() {
   const { user } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
   useEffect(() => {
     async function fetchForYouPosts() {
@@ -142,9 +145,9 @@ export function ForYouSection() {
             onClick={() => {
               triggerHaptic('light');
               if (post.media_type === 'video') {
-                navigate('/videos');
+                navigate(`/videos?v=${post.id}`);
               } else {
-                navigate(`/user/${post.profile?.id}`);
+                setSelectedPost(post);
               }
             }}
           >
@@ -213,6 +216,28 @@ export function ForYouSection() {
           </div>
         ))}
       </div>
+
+      {/* Post View Modal */}
+      {selectedPost && selectedPost.profile && (
+        <PostViewModal
+          post={{
+            ...selectedPost,
+            is_liked: selectedPost.is_liked || false,
+          }}
+          profile={selectedPost.profile}
+          open={!!selectedPost}
+          onOpenChange={(open) => !open && setSelectedPost(null)}
+          onLike={() => {
+            // Toggle like in local state
+            setPosts(prev => prev.map(p => 
+              p.id === selectedPost.id 
+                ? { ...p, is_liked: !p.is_liked, likes_count: p.is_liked ? p.likes_count - 1 : p.likes_count + 1 }
+                : p
+            ));
+            setSelectedPost(prev => prev ? { ...prev, is_liked: !prev.is_liked } : null);
+          }}
+        />
+      )}
     </section>
   );
 }
