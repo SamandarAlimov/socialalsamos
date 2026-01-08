@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Play, Pause, Volume2, VolumeX, Maximize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -17,7 +17,41 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
   const [duration, setDuration] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout>();
+
+  // Autoplay when video is visible on screen (Intersection Observer)
+  useEffect(() => {
+    const video = videoRef.current;
+    const container = containerRef.current;
+    if (!video || !container) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
+            // Video is at least 60% visible - autoplay
+            video.play().catch(() => {
+              // Autoplay blocked by browser, user needs to interact
+            });
+          } else {
+            // Video is not visible enough - pause
+            video.pause();
+          }
+        });
+      },
+      {
+        threshold: [0, 0.6, 1],
+        rootMargin: '-50px 0px',
+      }
+    );
+
+    observer.observe(container);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [currentIndex]);
 
   const goToPrevious = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -114,7 +148,7 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
   const isCurrentVideo = isVideo(currentMedia);
 
   return (
-    <div className="relative group">
+    <div ref={containerRef} className="relative group">
       {/* Main Media Display */}
       <div 
         className={cn(
