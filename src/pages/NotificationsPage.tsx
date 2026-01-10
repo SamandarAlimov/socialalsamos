@@ -1,12 +1,22 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { formatDistanceToNow, isToday, isYesterday, isThisWeek, isThisMonth, differenceInMinutes } from 'date-fns';
-import { Heart, MessageCircle, UserPlus, AtSign, Check } from 'lucide-react';
+import { formatDistanceToNow, isToday, isYesterday, isThisWeek, isThisMonth, differenceInMinutes, format } from 'date-fns';
+import { Heart, MessageCircle, UserPlus, AtSign, Check, Bell, BellOff, Settings, Trash2, MoreHorizontal, ChevronRight, Sparkles } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useNotifications, Notification } from '@/hooks/useNotifications';
+import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { cn } from '@/lib/utils';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type NotificationFilter = 'all' | 'likes' | 'comments' | 'follows' | 'mentions';
 
@@ -33,19 +43,41 @@ interface TimeGroupedNotifications {
   older: GroupedNotification[];
 }
 
-const NotificationIcon = ({ type, className }: { type: Notification['type']; className?: string }) => {
-  const iconClass = cn('h-4 w-4', className);
+const NotificationIcon = ({ type, className, size = 'default' }: { type: Notification['type']; className?: string; size?: 'default' | 'large' }) => {
+  const sizeClass = size === 'large' ? 'h-5 w-5' : 'h-4 w-4';
+  const iconClass = cn(sizeClass, className);
+  
   switch (type) {
     case 'like':
-      return <Heart className={cn(iconClass, 'text-red-500')} fill="currentColor" />;
+      return (
+        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-red-500 to-pink-500 flex items-center justify-center shadow-lg shadow-red-500/25">
+          <Heart className={cn(iconClass, 'text-white')} fill="currentColor" />
+        </div>
+      );
     case 'comment':
-      return <MessageCircle className={cn(iconClass, 'text-blue-500')} />;
+      return (
+        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/25">
+          <MessageCircle className={cn(iconClass, 'text-white')} fill="currentColor" />
+        </div>
+      );
     case 'follow':
-      return <UserPlus className={cn(iconClass, 'text-green-500')} />;
+      return (
+        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-green-500/25">
+          <UserPlus className={cn(iconClass, 'text-white')} />
+        </div>
+      );
     case 'mention':
-      return <AtSign className={cn(iconClass, 'text-purple-500')} />;
+      return (
+        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-purple-500 to-violet-500 flex items-center justify-center shadow-lg shadow-purple-500/25">
+          <AtSign className={cn(iconClass, 'text-white')} />
+        </div>
+      );
     default:
-      return <Heart className={iconClass} />;
+      return (
+        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center">
+          <Bell className={iconClass} />
+        </div>
+      );
   }
 };
 
@@ -54,7 +86,6 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
   const groups: Map<string, GroupedNotification> = new Map();
   const CONSOLIDATION_WINDOW_MINUTES = 30;
   
-  // Sort by date descending
   const sorted = [...notifications].sort((a, b) => 
     new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
@@ -65,10 +96,8 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
     const actor = notification.actor;
     const post = notification.post;
     
-    // Get thumbnail from first media URL
     const postThumbnail = post?.media_urls?.[0];
     
-    // Create a key based on type and post (for likes/comments) or just type (for follows)
     const groupKey = notification.type === 'follow' 
       ? `follow-${notification.type}`
       : `${notification.type}-${postId || 'no-post'}`;
@@ -76,14 +105,12 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
     const existing = groups.get(groupKey);
     
     if (existing) {
-      // Check if within consolidation window
       const timeDiff = differenceInMinutes(
         new Date(existing.latestAt),
         new Date(notification.created_at)
       );
       
       if (timeDiff <= CONSOLIDATION_WINDOW_MINUTES && actor) {
-        // Add to existing group if actor not already included
         if (!existing.actors.find(a => a.id === actor.id)) {
           existing.actors.push({
             id: actor.id,
@@ -97,7 +124,6 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
       }
     }
     
-    // Create new group
     groups.set(`${groupKey}-${notification.id}`, {
       id: notification.id,
       type: notification.type,
@@ -121,10 +147,14 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
 
 function GroupedNotificationItem({ 
   group, 
-  onMarkAsRead, 
+  onMarkAsRead,
+  onDelete,
+  index,
 }: { 
   group: GroupedNotification;
   onMarkAsRead: (id: string) => void;
+  onDelete: (id: string) => void;
+  index: number;
 }) {
   const navigate = useNavigate();
   const hasUnread = group.notifications.some(n => !n.is_read);
@@ -163,14 +193,25 @@ function GroupedNotificationItem({
     }
   };
   
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    group.notifications.forEach(n => onDelete(n.id));
+  };
+
+  const formatTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    if (isToday(date)) {
+      return format(date, 'HH:mm');
+    }
+    return formatDistanceToNow(date, { addSuffix: true });
+  };
+  
   const getNotificationText = () => {
     const actorName = firstActor?.displayName || firstActor?.username;
-    const actorUsername = firstActor?.username;
     
-    // Clickable username
     const usernameElement = actorName ? (
       <span 
-        className="font-semibold hover:underline cursor-pointer"
+        className="font-semibold text-foreground hover:underline cursor-pointer"
         onClick={(e) => {
           e.stopPropagation();
           if (firstActor?.id) navigate(`/user/${firstActor.id}`);
@@ -189,101 +230,106 @@ function GroupedNotificationItem({
       
       switch (group.type) {
         case 'like':
-          return <>{usernameElement} {othersText} liked your post</>;
+          return <>{usernameElement} <span className="text-muted-foreground">{othersText} liked your post</span></>;
         case 'comment':
-          return <>{usernameElement} {othersText} commented on your post</>;
+          return <>{usernameElement} <span className="text-muted-foreground">{othersText} commented on your post</span></>;
         case 'follow':
-          return <>{usernameElement} {othersText} started following you</>;
+          return <>{usernameElement} <span className="text-muted-foreground">{othersText} started following you</span></>;
         case 'mention':
-          return <>{usernameElement} {othersText} mentioned you</>;
+          return <>{usernameElement} <span className="text-muted-foreground">{othersText} mentioned you</span></>;
         default:
-          return <>{usernameElement} {othersText}</>;
+          return <>{usernameElement} <span className="text-muted-foreground">{othersText}</span></>;
       }
     }
     
     switch (group.type) {
       case 'like':
-        return <>{usernameElement} liked your post</>;
+        return <>{usernameElement} <span className="text-muted-foreground">liked your post</span></>;
       case 'comment':
-        return <>{usernameElement} commented on your post</>;
+        return <>{usernameElement} <span className="text-muted-foreground">commented on your post</span></>;
       case 'follow':
-        return <>{usernameElement} started following you</>;
+        return <>{usernameElement} <span className="text-muted-foreground">started following you</span></>;
       case 'mention':
-        return <>{usernameElement} mentioned you</>;
+        return <>{usernameElement} <span className="text-muted-foreground">mentioned you</span></>;
       default:
         return usernameElement;
     }
   };
   
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay: index * 0.05 }}
       className={cn(
-        'flex items-start gap-3 p-4 cursor-pointer transition-colors',
-        'hover:bg-accent/50',
-        hasUnread && 'bg-primary/5'
+        'group flex items-start gap-3 p-4 cursor-pointer transition-all duration-200',
+        'hover:bg-accent/50 active:scale-[0.99]',
+        hasUnread && 'bg-primary/5 dark:bg-primary/10'
       )}
       onClick={handleItemClick}
     >
-      {/* Avatar stack for grouped notifications */}
+      {/* Avatar section */}
       <div className="relative flex-shrink-0">
         {group.actors.length > 1 ? (
-          <div className="relative h-11 w-14">
-            {/* Show up to 3 stacked avatars */}
+          <div className="relative h-12 w-16">
             {group.actors.slice(0, 3).map((actor, i) => (
               <Avatar 
                 key={actor.id} 
                 className={cn(
-                  'h-9 w-9 absolute border-2 border-background cursor-pointer hover:z-10',
+                  'h-10 w-10 absolute border-2 border-background cursor-pointer hover:z-10 transition-transform hover:scale-110',
                   i === 0 && 'left-0 top-0 z-[3]',
-                  i === 1 && 'left-3 top-1 z-[2]',
-                  i === 2 && 'left-6 top-0 z-[1]'
+                  i === 1 && 'left-4 top-1 z-[2]',
+                  i === 2 && 'left-8 top-0 z-[1]'
                 )}
                 onClick={(e) => handleActorClick(e, actor.id)}
               >
-                <AvatarImage src={actor.avatar || undefined} />
-                <AvatarFallback className="bg-muted text-xs">
+                <AvatarImage src={actor.avatar || undefined} className="object-cover" />
+                <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-sm font-medium">
                   {(actor.displayName || actor.username || '?').charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
             ))}
             {group.actors.length > 3 && (
-              <div className="absolute left-9 top-1 h-7 w-7 rounded-full bg-muted flex items-center justify-center text-xs font-medium border-2 border-background z-[4]">
+              <div className="absolute left-12 top-1 h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-semibold border-2 border-background z-[4]">
                 +{group.actors.length - 3}
               </div>
             )}
           </div>
         ) : (
           <div 
-            className="relative cursor-pointer hover:opacity-80 transition-opacity"
+            className="relative cursor-pointer group/avatar"
             onClick={(e) => handleActorClick(e, firstActor?.id || '')}
           >
-            <Avatar className="h-11 w-11">
-              <AvatarImage src={firstActor?.avatar || undefined} />
-              <AvatarFallback className="bg-muted text-xs">
+            <Avatar className="h-12 w-12 ring-2 ring-transparent group-hover/avatar:ring-primary/20 transition-all">
+              <AvatarImage src={firstActor?.avatar || undefined} className="object-cover" />
+              <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-sm font-medium">
                 {(firstActor?.displayName || firstActor?.username || '?').charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-background flex items-center justify-center border-2 border-background">
-              <NotificationIcon type={group.type} className="h-3 w-3" />
+            <div className="absolute -bottom-1 -right-1">
+              <NotificationIcon type={group.type} size="default" />
             </div>
           </div>
         )}
       </div>
       
       {/* Content */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-muted-foreground">
+      <div className="flex-1 min-w-0 pt-0.5">
+        <p className="text-sm leading-snug">
           {getNotificationText()}
         </p>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          {formatDistanceToNow(new Date(group.latestAt), { addSuffix: true })}
+        <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
+          <span>{formatTime(group.latestAt)}</span>
+          {hasUnread && (
+            <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+          )}
         </p>
       </div>
       
       {/* Post thumbnail */}
       {group.postThumbnail && (
         <div 
-          className="flex-shrink-0 h-11 w-11 rounded-lg overflow-hidden bg-muted cursor-pointer hover:opacity-80 transition-opacity"
+          className="flex-shrink-0 h-14 w-14 rounded-xl overflow-hidden bg-muted cursor-pointer hover:opacity-90 transition-all hover:scale-105 shadow-md"
           onClick={handlePostClick}
         >
           <img 
@@ -294,24 +340,24 @@ function GroupedNotificationItem({
         </div>
       )}
       
-      {/* View button for posts without thumbnail */}
+      {/* Action button for posts without thumbnail */}
       {!group.postThumbnail && (group.type === 'like' || group.type === 'comment' || group.type === 'mention') && group.postId && (
         <Button 
-          variant="outline" 
-          size="sm" 
-          className="flex-shrink-0 text-xs"
+          variant="ghost" 
+          size="icon"
+          className="flex-shrink-0 h-10 w-10 rounded-full hover:bg-primary/10"
           onClick={handlePostClick}
         >
-          View
+          <ChevronRight className="h-5 w-5 text-muted-foreground" />
         </Button>
       )}
       
-      {/* View profile for follow notifications */}
+      {/* Follow button */}
       {group.type === 'follow' && (
         <Button 
           variant="default" 
           size="sm" 
-          className="flex-shrink-0 text-xs"
+          className="flex-shrink-0 rounded-full px-4 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/25"
           onClick={(e) => {
             e.stopPropagation();
             if (firstActor?.id) {
@@ -319,15 +365,42 @@ function GroupedNotificationItem({
             }
           }}
         >
-          {group.actors.length > 1 ? 'View All' : 'View Profile'}
+          View
         </Button>
       )}
       
-      {/* Unread indicator */}
-      {hasUnread && (
-        <div className="flex-shrink-0 h-2 w-2 rounded-full bg-primary mt-2" />
-      )}
-    </div>
+      {/* More options */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="flex-shrink-0 h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          {hasUnread && (
+            <DropdownMenuItem onClick={(e) => {
+              e.stopPropagation();
+              group.notifications.forEach(n => onMarkAsRead(n.id));
+            }}>
+              <Check className="h-4 w-4 mr-2" />
+              Mark as read
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem 
+            onClick={handleDelete}
+            className="text-destructive focus:text-destructive"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </motion.div>
   );
 }
 
@@ -335,28 +408,94 @@ function NotificationGroup({
   title, 
   groups,
   onMarkAsRead,
+  onDelete,
+  startIndex,
 }: { 
   title: string;
   groups: GroupedNotification[];
   onMarkAsRead: (id: string) => void;
+  onDelete: (id: string) => void;
+  startIndex: number;
 }) {
   if (groups.length === 0) return null;
   
   return (
     <div>
-      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2 bg-muted/30">
-        {title}
-      </h3>
-      <div className="divide-y divide-border">
-        {groups.map((group) => (
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3 flex items-center gap-2">
+          <Sparkles className="h-3 w-3" />
+          {title}
+        </h3>
+      </div>
+      <div className="divide-y divide-border/50">
+        {groups.map((group, i) => (
           <GroupedNotificationItem
             key={group.id}
             group={group}
             onMarkAsRead={onMarkAsRead}
+            onDelete={onDelete}
+            index={startIndex + i}
           />
         ))}
       </div>
     </div>
+  );
+}
+
+function NotificationSkeleton() {
+  return (
+    <div className="flex items-start gap-3 p-4">
+      <Skeleton className="h-12 w-12 rounded-full" />
+      <div className="flex-1 space-y-2">
+        <Skeleton className="h-4 w-3/4" />
+        <Skeleton className="h-3 w-1/4" />
+      </div>
+      <Skeleton className="h-14 w-14 rounded-xl" />
+    </div>
+  );
+}
+
+function PushNotificationBanner() {
+  const { permission, supported, requestPermission } = useNotificationPermission();
+  const navigate = useNavigate();
+  
+  if (!supported || permission === 'granted') return null;
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mx-4 mt-4 p-4 rounded-2xl bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/20"
+    >
+      <div className="flex items-start gap-3">
+        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-lg shadow-primary/25">
+          <Bell className="h-5 w-5 text-white" />
+        </div>
+        <div className="flex-1">
+          <h4 className="font-semibold text-sm">Enable Push Notifications</h4>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Stay updated when someone likes, comments, or follows you
+          </p>
+        </div>
+      </div>
+      <div className="flex gap-2 mt-3 pl-13">
+        <Button 
+          size="sm" 
+          className="rounded-full px-4 bg-gradient-to-r from-primary to-primary/80"
+          onClick={requestPermission}
+        >
+          Enable
+        </Button>
+        <Button 
+          size="sm" 
+          variant="ghost" 
+          className="rounded-full px-4"
+          onClick={() => navigate('/settings')}
+        >
+          Settings
+        </Button>
+      </div>
+    </motion.div>
   );
 }
 
@@ -370,8 +509,8 @@ export default function NotificationsPage() {
     deleteNotification 
   } = useNotifications();
   const [filter, setFilter] = useState<NotificationFilter>('all');
+  const navigate = useNavigate();
 
-  // Filter notifications
   const filteredNotifications = useMemo(() => {
     if (filter === 'all') return notifications;
     
@@ -386,7 +525,6 @@ export default function NotificationsPage() {
     return notifications.filter((n) => typeMap[filter].includes(n.type));
   }, [notifications, filter]);
 
-  // Group and consolidate notifications by time
   const groupedNotifications = useMemo((): TimeGroupedNotifications => {
     const timeGroups: Record<string, Notification[]> = {
       today: [],
@@ -412,7 +550,6 @@ export default function NotificationsPage() {
       }
     });
 
-    // Consolidate each time group
     return {
       today: consolidateNotifications(timeGroups.today),
       yesterday: consolidateNotifications(timeGroups.yesterday),
@@ -430,96 +567,151 @@ export default function NotificationsPage() {
     mentions: notifications.filter(n => n.type === 'mention').length,
   }), [notifications]);
 
+  // Calculate start indices for animation
+  let currentIndex = 0;
+  const getStartIndex = (groups: GroupedNotification[]) => {
+    const start = currentIndex;
+    currentIndex += groups.length;
+    return start;
+  };
+
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
-        <div className="flex items-center justify-between px-4 py-3">
-          <h1 className="text-xl font-bold">Notifications</h1>
-          <div className="flex items-center gap-2">
+      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80 border-b">
+        <div className="flex items-center justify-between px-4 py-4">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+              Notifications
+            </h1>
+            {unreadCount > 0 && (
+              <Badge variant="default" className="rounded-full px-2.5 py-0.5 text-xs bg-gradient-to-r from-primary to-primary/80 shadow-lg shadow-primary/25">
+                {unreadCount}
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
             {unreadCount > 0 && (
               <Button 
                 variant="ghost" 
                 size="sm" 
                 onClick={markAllAsRead}
-                className="text-primary"
+                className="text-primary hover:text-primary hover:bg-primary/10 rounded-full"
               >
-                <Check className="h-4 w-4 mr-1" />
-                Mark all read
+                <Check className="h-4 w-4 mr-1.5" />
+                Mark all
               </Button>
             )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full"
+              onClick={() => navigate('/settings')}
+            >
+              <Settings className="h-5 w-5" />
+            </Button>
           </div>
         </div>
         
         {/* Filter Tabs */}
-        <div className="px-4 pb-2">
+        <div className="px-4 pb-3">
           <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-            {(['all', 'likes', 'comments', 'follows', 'mentions'] as NotificationFilter[]).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={cn(
-                  'px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors',
-                  filter === f
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:bg-accent'
-                )}
-              >
-                {f.charAt(0).toUpperCase() + f.slice(1)}
-                {filterCounts[f] > 0 && (
-                  <span className="ml-1.5 text-xs opacity-70">
-                    {filterCounts[f]}
-                  </span>
-                )}
-              </button>
-            ))}
+            {(['all', 'likes', 'comments', 'follows', 'mentions'] as NotificationFilter[]).map((f) => {
+              const isActive = filter === f;
+              const count = filterCounts[f];
+              
+              return (
+                <motion.button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  whileTap={{ scale: 0.95 }}
+                  className={cn(
+                    'px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200',
+                    isActive
+                      ? 'bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-lg shadow-primary/25'
+                      : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  )}
+                >
+                  {f.charAt(0).toUpperCase() + f.slice(1)}
+                  {count > 0 && (
+                    <span className={cn(
+                      "ml-1.5 text-xs",
+                      isActive ? "opacity-80" : "opacity-60"
+                    )}>
+                      {count}
+                    </span>
+                  )}
+                </motion.button>
+              );
+            })}
           </div>
         </div>
       </div>
 
+      {/* Push Notification Banner */}
+      <PushNotificationBanner />
+
       {/* Notifications List */}
       <ScrollArea className="flex-1">
         {loading ? (
-          <div className="p-8 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+          <div className="divide-y divide-border/50">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <NotificationSkeleton key={i} />
+            ))}
           </div>
         ) : filteredNotifications.length === 0 ? (
-          <div className="p-8 text-center">
-            <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-              <Heart className="h-8 w-8 text-muted-foreground" />
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-8 text-center"
+          >
+            <div className="h-20 w-20 rounded-full bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center mx-auto mb-4 shadow-inner">
+              <BellOff className="h-10 w-10 text-muted-foreground/50" />
             </div>
             <h3 className="font-semibold text-lg">No notifications yet</h3>
-            <p className="text-muted-foreground text-sm mt-1">
-              When someone likes your posts, comments, or follows you, you'll see it here.
+            <p className="text-muted-foreground text-sm mt-2 max-w-xs mx-auto">
+              When someone interacts with your content, you'll see it here.
             </p>
-          </div>
+          </motion.div>
         ) : (
-          <div className="pb-20">
-            <NotificationGroup 
-              title="Today" 
-              groups={groupedNotifications.today}
-              onMarkAsRead={markAsRead}
-            />
-            <NotificationGroup 
-              title="Yesterday" 
-              groups={groupedNotifications.yesterday}
-              onMarkAsRead={markAsRead}
-            />
-            <NotificationGroup 
-              title="This Week" 
-              groups={groupedNotifications.thisWeek}
-              onMarkAsRead={markAsRead}
-            />
-            <NotificationGroup 
-              title="This Month" 
-              groups={groupedNotifications.thisMonth}
-              onMarkAsRead={markAsRead}
-            />
-            <NotificationGroup 
-              title="Older" 
-              groups={groupedNotifications.older}
-              onMarkAsRead={markAsRead}
-            />
+          <div className="pb-24">
+            <AnimatePresence>
+              <NotificationGroup 
+                title="Today" 
+                groups={groupedNotifications.today}
+                onMarkAsRead={markAsRead}
+                onDelete={deleteNotification}
+                startIndex={getStartIndex(groupedNotifications.today)}
+              />
+              <NotificationGroup 
+                title="Yesterday" 
+                groups={groupedNotifications.yesterday}
+                onMarkAsRead={markAsRead}
+                onDelete={deleteNotification}
+                startIndex={getStartIndex(groupedNotifications.yesterday)}
+              />
+              <NotificationGroup 
+                title="This Week" 
+                groups={groupedNotifications.thisWeek}
+                onMarkAsRead={markAsRead}
+                onDelete={deleteNotification}
+                startIndex={getStartIndex(groupedNotifications.thisWeek)}
+              />
+              <NotificationGroup 
+                title="This Month" 
+                groups={groupedNotifications.thisMonth}
+                onMarkAsRead={markAsRead}
+                onDelete={deleteNotification}
+                startIndex={getStartIndex(groupedNotifications.thisMonth)}
+              />
+              <NotificationGroup 
+                title="Older" 
+                groups={groupedNotifications.older}
+                onMarkAsRead={markAsRead}
+                onDelete={deleteNotification}
+                startIndex={getStartIndex(groupedNotifications.older)}
+              />
+            </AnimatePresence>
           </div>
         )}
       </ScrollArea>
