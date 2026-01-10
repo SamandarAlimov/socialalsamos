@@ -7,7 +7,7 @@ import {
   Send, 
   Play, 
   Pause,
-  Lock,
+  Square,
   Trash2,
   SwitchCamera
 } from 'lucide-react';
@@ -20,11 +20,10 @@ interface TelegramMediaRecorderProps {
   onCancel?: () => void;
 }
 
-type RecordingState = 'idle' | 'recording' | 'locked' | 'preview';
+type RecordingState = 'idle' | 'recording' | 'preview';
 type RecordingMode = 'voice' | 'video';
 
 export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorderProps) {
-  // Core state
   const [state, setState] = useState<RecordingState>('idle');
   const [mode, setMode] = useState<RecordingMode>('voice');
   const [duration, setDuration] = useState(0);
@@ -34,12 +33,6 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
   const [isPlaying, setIsPlaying] = useState(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   
-  // Gesture tracking
-  const [swipeOffset, setSwipeOffset] = useState({ x: 0, y: 0 });
-  const [showLockHint, setShowLockHint] = useState(false);
-  const [showCancelHint, setShowCancelHint] = useState(false);
-  
-  // Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
@@ -47,10 +40,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
   const audioPlaybackRef = useRef<HTMLAudioElement>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const startPosRef = useRef({ x: 0, y: 0 });
-  const isRecordingRef = useRef(false);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       cleanup();
@@ -100,7 +90,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         ? { 
             video: { 
               facingMode: facingMode, 
-              width: { ideal: 1280 }, 
+              width: { ideal: 720 }, 
               height: { ideal: 720 } 
             }, 
             audio: { echoCancellation: true, noiseSuppression: true } 
@@ -139,7 +129,6 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
       };
       
       recorder.start(100);
-      isRecordingRef.current = true;
       setState('recording');
       
       timerRef.current = setInterval(() => {
@@ -156,7 +145,6 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
   const stopRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
-      isRecordingRef.current = false;
     }
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -171,7 +159,6 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     setMediaUrl(null);
     setMediaBlob(null);
     setDuration(0);
-    setSwipeOffset({ x: 0, y: 0 });
     onCancel?.();
   };
 
@@ -180,7 +167,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     
     setIsUploading(true);
     try {
-      const ext = mode === 'video' ? 'webm' : 'webm';
+      const ext = 'webm';
       const fileName = `${mode}_${Date.now()}.${ext}`;
       
       const { data, error } = await supabase.storage
@@ -221,19 +208,18 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
   };
 
   const switchCamera = async () => {
-    if (state !== 'recording' && state !== 'locked') return;
+    if (state !== 'recording') return;
     
     const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
     setFacingMode(newFacingMode);
     
-    // Stop current stream
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
     }
     
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: newFacingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: { facingMode: newFacingMode, width: { ideal: 720 }, height: { ideal: 720 } },
         audio: { echoCancellation: true, noiseSuppression: true }
       });
       
@@ -242,97 +228,16 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
       if (videoPreviewRef.current) {
         videoPreviewRef.current.srcObject = stream;
       }
-      
-      // Update MediaRecorder with new stream
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
-        
-        const mimeType = getSupportedMimeType(true);
-        const newRecorder = new MediaRecorder(stream, { mimeType });
-        
-        newRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0) {
-            chunksRef.current.push(e.data);
-          }
-        };
-        
-        newRecorder.onstop = () => {
-          const blob = new Blob(chunksRef.current, { type: mimeType });
-          const url = URL.createObjectURL(blob);
-          setMediaBlob(blob);
-          setMediaUrl(url);
-          setState('preview');
-          
-          if (streamRef.current) {
-            streamRef.current.getTracks().forEach(track => track.stop());
-          }
-        };
-        
-        mediaRecorderRef.current = newRecorder;
-        newRecorder.start(100);
-      }
     } catch (error) {
       console.error('Failed to switch camera:', error);
     }
   };
 
-  // Telegram-style gesture handlers
-  const handlePointerDown = (e: React.PointerEvent, recordMode: RecordingMode) => {
-    if (state !== 'idle') return;
-    
-    e.preventDefault();
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    
-    startPosRef.current = { x: e.clientX, y: e.clientY };
-    setSwipeOffset({ x: 0, y: 0 });
-    setShowLockHint(false);
-    setShowCancelHint(false);
-    
-    startRecording(recordMode);
-  };
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (state !== 'recording') return;
-    
-    const deltaX = e.clientX - startPosRef.current.x;
-    const deltaY = e.clientY - startPosRef.current.y;
-    
-    setSwipeOffset({ x: Math.min(0, deltaX), y: Math.min(0, deltaY) });
-    
-    // Show hints based on swipe direction
-    setShowCancelHint(deltaX < -50);
-    setShowLockHint(deltaY < -50);
-    
-    // Cancel if swiped left enough
-    if (deltaX < -120) {
-      cancelRecording();
-    }
-    
-    // Lock if swiped up enough
-    if (deltaY < -80) {
-      setState('locked');
-      setSwipeOffset({ x: 0, y: 0 });
-    }
-  };
-
-  const handlePointerUp = (e: React.PointerEvent) => {
-    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-    
-    if (state === 'recording') {
-      // Normal release - stop and go to preview
-      stopRecording();
-    }
-    
-    setSwipeOffset({ x: 0, y: 0 });
-    setShowLockHint(false);
-    setShowCancelHint(false);
-  };
-
-  // Render video preview/playback
+  // Video Preview Screen
   if (state === 'preview' && mode === 'video' && mediaUrl) {
     return (
       <motion.div 
-        initial={{ opacity: 0, scale: 0.9 }}
+        initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         className="fixed inset-0 z-50 bg-black flex flex-col"
       >
@@ -346,7 +251,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         />
         
         <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 to-transparent safe-area-bottom">
-          <div className="flex items-center justify-center gap-8">
+          <div className="flex items-center justify-center gap-6">
             <Button
               variant="ghost"
               size="icon"
@@ -359,10 +264,10 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
             <Button
               variant="ghost"
               size="icon"
-              className="h-16 w-16 rounded-full bg-white/10 border-2 border-white/20"
+              className="h-16 w-16 rounded-full bg-white/10 border-2 border-white/30"
               onClick={togglePlayback}
             >
-              {isPlaying ? <Pause className="h-6 w-6 text-white" /> : <Play className="h-6 w-6 text-white" />}
+              {isPlaying ? <Pause className="h-7 w-7 text-white" /> : <Play className="h-7 w-7 text-white ml-1" />}
             </Button>
             
             <Button
@@ -386,11 +291,11 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     );
   }
 
-  // Render video recording
-  if ((state === 'recording' || state === 'locked') && mode === 'video') {
+  // Video Recording Screen
+  if (state === 'recording' && mode === 'video') {
     return (
       <motion.div 
-        initial={{ opacity: 0, scale: 0.9 }}
+        initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         className="fixed inset-0 z-50 bg-black flex flex-col"
       >
@@ -402,59 +307,52 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         />
         
         {/* Recording indicator */}
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/50 backdrop-blur-sm px-4 py-2 rounded-full safe-area-top">
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-4 py-2 rounded-full safe-area-top">
           <motion.div
-            animate={{ opacity: [1, 0.4, 1] }}
+            animate={{ opacity: [1, 0.3, 1] }}
             transition={{ duration: 1, repeat: Infinity }}
             className="h-3 w-3 rounded-full bg-destructive"
           />
           <span className="text-white font-medium tabular-nums">{formatDuration(duration)}</span>
-          {state === 'locked' && <Lock className="h-4 w-4 text-white ml-1" />}
         </div>
         
-        {/* Camera switch button */}
+        {/* Camera switch */}
         <Button
           variant="ghost"
           size="icon"
-          className="absolute top-4 right-4 h-10 w-10 rounded-full bg-black/50 text-white safe-area-top"
+          className="absolute top-4 right-4 h-11 w-11 rounded-full bg-black/60 text-white safe-area-top"
           onClick={switchCamera}
         >
           <SwitchCamera className="h-5 w-5" />
         </Button>
         
+        {/* Controls */}
         <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 to-transparent safe-area-bottom">
-          {state === 'locked' ? (
-            <div className="flex items-center justify-center gap-8">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-14 w-14 rounded-full bg-destructive/20 text-destructive"
-                onClick={cancelRecording}
-              >
-                <Trash2 className="h-6 w-6" />
-              </Button>
-              
-              <Button
-                variant="default"
-                size="icon"
-                className="h-14 w-14 rounded-full bg-primary"
-                onClick={stopRecording}
-              >
-                <Send className="h-6 w-6" />
-              </Button>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center gap-2">
-              <p className="text-white/60 text-sm">Release to send</p>
-              <p className="text-white/40 text-xs">↑ Swipe up to lock</p>
-            </div>
-          )}
+          <div className="flex items-center justify-center gap-6">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-14 w-14 rounded-full bg-white/10 text-white hover:bg-white/20"
+              onClick={cancelRecording}
+            >
+              <X className="h-6 w-6" />
+            </Button>
+            
+            <Button
+              variant="default"
+              size="icon"
+              className="h-16 w-16 rounded-full bg-destructive hover:bg-destructive/90"
+              onClick={stopRecording}
+            >
+              <Square className="h-6 w-6 fill-current" />
+            </Button>
+          </div>
         </div>
       </motion.div>
     );
   }
 
-  // Render voice preview
+  // Voice Preview
   if (state === 'preview' && mode === 'voice' && mediaUrl) {
     return (
       <motion.div 
@@ -484,29 +382,28 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
             className="h-8 w-8 rounded-full"
             onClick={togglePlayback}
           >
-            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
           </Button>
           
-          {/* Waveform visualization */}
-          <div className="flex items-center gap-0.5 h-6">
-            {Array.from({ length: 24 }).map((_, i) => (
+          {/* Waveform */}
+          <div className="flex items-center gap-0.5 h-6 w-24">
+            {Array.from({ length: 20 }).map((_, i) => (
               <motion.div
                 key={i}
                 className="w-1 bg-primary rounded-full"
                 animate={isPlaying ? {
-                  height: [4, 12 + Math.random() * 12, 4],
-                } : { height: 4 + Math.sin(i * 0.5) * 8 }}
+                  height: [4, 12 + Math.random() * 10, 4],
+                } : { height: 4 + Math.sin(i * 0.6) * 8 }}
                 transition={isPlaying ? {
                   duration: 0.3,
                   repeat: Infinity,
-                  delay: i * 0.02,
-                } : { duration: 0 }}
-                style={{ height: 4 + Math.sin(i * 0.5) * 8 }}
+                  delay: i * 0.03,
+                } : {}}
               />
             ))}
           </div>
           
-          <span className="text-xs text-muted-foreground min-w-[32px] tabular-nums">
+          <span className="text-xs text-muted-foreground tabular-nums w-10">
             {formatDuration(duration)}
           </span>
         </div>
@@ -514,113 +411,99 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         <Button
           variant="default"
           size="icon"
-          className="h-10 w-10 rounded-full"
+          className="h-10 w-10 rounded-full bg-primary"
           onClick={handleSend}
           disabled={isUploading}
         >
           {isUploading ? (
             <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
           ) : (
-            <Send className="h-5 w-5" />
+            <Send className="h-4 w-4" />
           )}
         </Button>
       </motion.div>
     );
   }
 
-  // Render voice recording (Telegram style)
-  if ((state === 'recording' || state === 'locked') && mode === 'voice') {
+  // Voice Recording
+  if (state === 'recording' && mode === 'voice') {
     return (
       <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="flex items-center gap-2 flex-1"
-        style={{ transform: `translateX(${swipeOffset.x}px)` }}
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="flex items-center gap-2"
       >
-        {/* Cancel hint overlay */}
-        <AnimatePresence>
-          {showCancelHint && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              className="absolute left-4 flex items-center gap-2 text-destructive"
-            >
-              <X className="h-5 w-5" />
-              <span className="text-sm font-medium">Release to cancel</span>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-10 w-10 rounded-full text-destructive hover:bg-destructive/10"
+          onClick={cancelRecording}
+        >
+          <X className="h-5 w-5" />
+        </Button>
         
-        <div className="flex-1 flex items-center justify-center gap-3">
-          {/* Recording pulse */}
+        <div className="flex items-center gap-2 bg-muted rounded-full px-3 py-1.5">
           <motion.div
-            animate={{ scale: [1, 1.3, 1], opacity: [1, 0.6, 1] }}
+            animate={{ opacity: [1, 0.3, 1] }}
             transition={{ duration: 1, repeat: Infinity }}
             className="h-3 w-3 rounded-full bg-destructive"
           />
           
-          <span className="font-medium text-destructive tabular-nums">{formatDuration(duration)}</span>
+          {/* Live waveform */}
+          <div className="flex items-center gap-0.5 h-6 w-24">
+            {Array.from({ length: 20 }).map((_, i) => (
+              <motion.div
+                key={i}
+                className="w-1 bg-primary rounded-full"
+                animate={{
+                  height: [4, 8 + Math.random() * 14, 4],
+                }}
+                transition={{
+                  duration: 0.2 + Math.random() * 0.2,
+                  repeat: Infinity,
+                  delay: i * 0.02,
+                }}
+              />
+            ))}
+          </div>
           
-          {state === 'locked' ? (
-            <div className="flex items-center gap-1 text-muted-foreground">
-              <Lock className="h-4 w-4" />
-              <span className="text-sm">Locked</span>
-            </div>
-          ) : (
-            <span className="text-sm text-muted-foreground">
-              ← Slide to cancel
-            </span>
-          )}
+          <span className="text-xs text-foreground tabular-nums w-10">
+            {formatDuration(duration)}
+          </span>
         </div>
         
-        {state === 'locked' ? (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10 rounded-full text-destructive hover:bg-destructive/10"
-              onClick={cancelRecording}
-            >
-              <Trash2 className="h-5 w-5" />
-            </Button>
-            <Button
-              variant="default"
-              size="icon"
-              className="h-10 w-10 rounded-full"
-              onClick={stopRecording}
-            >
-              <Send className="h-5 w-5" />
-            </Button>
-          </div>
-        ) : (
-          <motion.div
-            animate={showLockHint ? { y: -8, scale: 1.1 } : { y: 0, scale: 1 }}
-            className="flex flex-col items-center pr-2"
-          >
-            <Lock className={cn(
-              "h-4 w-4 transition-colors",
-              showLockHint ? "text-primary" : "text-muted-foreground/50"
-            )} />
-            <span className="text-[10px] text-muted-foreground/50">↑</span>
-          </motion.div>
-        )}
+        <Button
+          variant="default"
+          size="icon"
+          className="h-10 w-10 rounded-full bg-primary"
+          onClick={stopRecording}
+        >
+          <Square className="h-4 w-4 fill-current" />
+        </Button>
       </motion.div>
     );
   }
 
-  // Idle state - single mic button (hold to record, Telegram style)
+  // Idle State - Two Buttons
   return (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="h-10 w-10 rounded-full text-muted-foreground hover:text-foreground touch-none select-none"
-      onPointerDown={(e) => handlePointerDown(e, 'voice')}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onContextMenu={(e) => e.preventDefault()}
-    >
-      <Mic className="h-5 w-5" />
-    </Button>
+    <div className="flex items-center gap-1">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-10 w-10 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
+        onClick={() => startRecording('voice')}
+      >
+        <Mic className="h-5 w-5" />
+      </Button>
+      
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-10 w-10 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
+        onClick={() => startRecording('video')}
+      >
+        <Video className="h-5 w-5" />
+      </Button>
+    </div>
   );
 }
