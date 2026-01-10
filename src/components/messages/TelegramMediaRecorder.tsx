@@ -375,8 +375,10 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         <video
           ref={videoPreviewRef}
           className="flex-1 object-cover"
+          style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
           playsInline
           muted
+          autoPlay
         />
         
         {/* Recording indicator */}
