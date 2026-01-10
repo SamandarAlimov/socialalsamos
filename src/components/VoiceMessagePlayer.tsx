@@ -2,20 +2,24 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Play, Pause } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { motion } from 'framer-motion';
 
 interface VoiceMessagePlayerProps {
   url: string;
   duration?: number;
   isMine?: boolean;
+  autoPlay?: boolean;
 }
 
-export function VoiceMessagePlayer({ url, duration, isMine }: VoiceMessagePlayerProps) {
+export function VoiceMessagePlayer({ url, duration, isMine, autoPlay = false }: VoiceMessagePlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [totalDuration, setTotalDuration] = useState(duration || 0);
   const [isLoading, setIsLoading] = useState(true);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const [isVisible, setIsVisible] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const animationRef = useRef<number | null>(null);
 
   // Generate stable waveform bars based on URL
@@ -28,6 +32,33 @@ export function VoiceMessagePlayer({ url, duration, isMine }: VoiceMessagePlayer
       return Math.min(95, Math.max(15, baseHeight + variation));
     });
   }, [url]);
+
+  // Intersection Observer for autoplay
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        setIsVisible(entry.isIntersecting);
+        
+        if (autoPlay && audioRef.current) {
+          if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
+            audioRef.current.play().catch(() => {});
+            setIsPlaying(true);
+          } else {
+            audioRef.current.pause();
+            setIsPlaying(false);
+          }
+        }
+      },
+      { threshold: [0, 0.5, 1] }
+    );
+
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [autoPlay]);
 
   useEffect(() => {
     const audio = new Audio(url);
@@ -127,10 +158,13 @@ export function VoiceMessagePlayer({ url, duration, isMine }: VoiceMessagePlayer
   const progress = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
 
   return (
-    <div className={cn(
-      "flex items-center gap-3 min-w-[220px] max-w-[280px]",
-      isMine ? "text-primary-foreground" : "text-foreground"
-    )}>
+    <div 
+      ref={containerRef}
+      className={cn(
+        "flex items-center gap-3 min-w-[220px] max-w-[280px]",
+        isMine ? "text-primary-foreground" : "text-foreground"
+      )}
+    >
       <Button
         variant="ghost"
         size="icon"
@@ -165,16 +199,19 @@ export function VoiceMessagePlayer({ url, duration, isMine }: VoiceMessagePlayer
             const isActive = isPlaying && Math.abs(barProgress - progress) < 3;
             
             return (
-              <div
+              <motion.div
                 key={i}
                 className={cn(
-                  "w-[2px] rounded-full transition-all duration-75",
+                  "w-[2px] rounded-full transition-colors duration-75",
                   isFilled
                     ? isMine ? "bg-primary-foreground" : "bg-primary"
-                    : isMine ? "bg-primary-foreground/30" : "bg-muted-foreground/30",
-                  isActive && "scale-y-125"
+                    : isMine ? "bg-primary-foreground/30" : "bg-muted-foreground/30"
                 )}
-                style={{ height: `${height}%` }}
+                animate={{
+                  height: `${height}%`,
+                  scaleY: isActive ? 1.25 : 1,
+                }}
+                transition={{ duration: 0.1 }}
               />
             );
           })}

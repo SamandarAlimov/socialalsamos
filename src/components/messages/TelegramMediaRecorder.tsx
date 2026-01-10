@@ -32,6 +32,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
   const [isUploading, setIsUploading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+  const [audioLevels, setAudioLevels] = useState<number[]>(Array(32).fill(4));
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -40,6 +41,9 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
   const audioPlaybackRef = useRef<HTMLAudioElement>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     return () => {
@@ -56,11 +60,21 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
     if (mediaUrl) {
       URL.revokeObjectURL(mediaUrl);
     }
     mediaRecorderRef.current = null;
     chunksRef.current = [];
+    analyserRef.current = null;
+    setAudioLevels(Array(32).fill(4));
   }, [mediaUrl]);
 
   const formatDuration = (seconds: number): string => {
@@ -77,6 +91,54 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     const audioTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
     return audioTypes.find(type => MediaRecorder.isTypeSupported(type)) || 'audio/webm';
   };
+
+  // Real-time audio visualization
+  const startAudioVisualization = useCallback((stream: MediaStream) => {
+    try {
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+      
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 64;
+      analyser.smoothingTimeConstant = 0.5;
+      analyserRef.current = analyser;
+      
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+      
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      
+      const updateLevels = () => {
+        if (!analyserRef.current) return;
+        
+        analyserRef.current.getByteFrequencyData(dataArray);
+        
+        // Map frequency data to waveform bars
+        const bars = 32;
+        const newLevels: number[] = [];
+        const step = Math.floor(dataArray.length / bars);
+        
+        for (let i = 0; i < bars; i++) {
+          const startIdx = i * step;
+          let sum = 0;
+          for (let j = 0; j < step; j++) {
+            sum += dataArray[startIdx + j] || 0;
+          }
+          const avg = sum / step;
+          // Scale to 4-100% height
+          const height = Math.max(4, (avg / 255) * 100);
+          newLevels.push(height);
+        }
+        
+        setAudioLevels(newLevels);
+        animationFrameRef.current = requestAnimationFrame(updateLevels);
+      };
+      
+      updateLevels();
+    } catch (error) {
+      console.error('Failed to start audio visualization:', error);
+    }
+  }, []);
 
   const startRecording = async (recordMode: RecordingMode) => {
     try {
@@ -99,6 +161,11 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
       
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
+      
+      // Start audio visualization for voice recording
+      if (!isVideo) {
+        startAudioVisualization(stream);
+      }
       
       if (isVideo && videoPreviewRef.current) {
         videoPreviewRef.current.srcObject = stream;
@@ -125,6 +192,12 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         
         if (streamRef.current) {
           streamRef.current.getTracks().forEach(track => track.stop());
+        }
+        
+        // Stop audio visualization
+        if (animationFrameRef.current) {
+          cancelAnimationFrame(animationFrameRef.current);
+          animationFrameRef.current = null;
         }
       };
       
@@ -425,7 +498,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     );
   }
 
-  // Voice Recording
+  // Voice Recording with real-time waveform
   if (state === 'recording' && mode === 'voice') {
     return (
       <motion.div 
@@ -446,28 +519,22 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
           <motion.div
             animate={{ opacity: [1, 0.3, 1] }}
             transition={{ duration: 1, repeat: Infinity }}
-            className="h-3 w-3 rounded-full bg-destructive"
+            className="h-3 w-3 rounded-full bg-destructive flex-shrink-0"
           />
           
-          {/* Live waveform */}
-          <div className="flex items-center gap-0.5 h-6 w-24">
-            {Array.from({ length: 20 }).map((_, i) => (
+          {/* Real-time waveform visualization */}
+          <div className="flex items-center gap-[2px] h-8 w-32">
+            {audioLevels.map((level, i) => (
               <motion.div
                 key={i}
-                className="w-1 bg-primary rounded-full"
-                animate={{
-                  height: [4, 8 + Math.random() * 14, 4],
-                }}
-                transition={{
-                  duration: 0.2 + Math.random() * 0.2,
-                  repeat: Infinity,
-                  delay: i * 0.02,
-                }}
+                className="w-[3px] bg-primary rounded-full"
+                animate={{ height: `${level}%` }}
+                transition={{ duration: 0.05, ease: 'linear' }}
               />
             ))}
           </div>
           
-          <span className="text-xs text-foreground tabular-nums w-10">
+          <span className="text-xs text-foreground tabular-nums w-10 flex-shrink-0">
             {formatDuration(duration)}
           </span>
         </div>

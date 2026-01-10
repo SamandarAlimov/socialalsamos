@@ -1,16 +1,22 @@
-import { FileText, Download, Play, ExternalLink } from 'lucide-react';
+import { useState } from 'react';
+import { FileText, Download, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { VideoMessagePlayer } from './messages/VideoMessagePlayer';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
+import { cn } from '@/lib/utils';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 
 interface MessageAttachmentProps {
   url: string;
   type: 'image' | 'video' | 'audio' | 'document';
   name?: string;
   isMine?: boolean;
+  autoPlay?: boolean;
 }
 
-export function MessageAttachment({ url, type, name, isMine }: MessageAttachmentProps) {
+export function MessageAttachment({ url, type, name, isMine, autoPlay = false }: MessageAttachmentProps) {
+  const [showFullscreen, setShowFullscreen] = useState(false);
+  
   // Check if it's a GIF
   const isGif = url.includes('giphy.com') || url.includes('.gif') || url.includes('[media:gif:');
 
@@ -20,43 +26,83 @@ export function MessageAttachment({ url, type, name, isMine }: MessageAttachment
       : url;
     
     return (
-      <div className="relative rounded-lg overflow-hidden max-w-xs">
-        <img
-          src={actualUrl}
-          alt={name || 'Image'}
-          className="w-full h-auto object-cover cursor-pointer hover:opacity-90 transition-opacity"
-          onClick={() => window.open(actualUrl, '_blank')}
-          loading="lazy"
-        />
-      </div>
+      <>
+        <div 
+          className="relative rounded-xl overflow-hidden max-w-[280px] cursor-pointer"
+          onClick={() => setShowFullscreen(true)}
+        >
+          <img
+            src={actualUrl}
+            alt={name || 'Image'}
+            className="w-full h-auto object-cover hover:opacity-95 transition-opacity"
+            loading="lazy"
+          />
+        </div>
+
+        <Dialog open={showFullscreen} onOpenChange={setShowFullscreen}>
+          <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 bg-transparent border-none">
+            <img
+              src={actualUrl}
+              alt={name || 'Image'}
+              className="w-full h-full object-contain"
+            />
+          </DialogContent>
+        </Dialog>
+      </>
     );
   }
 
   if (type === 'video') {
-    return <VideoMessagePlayer url={url} isMine={isMine} />;
+    return <VideoMessagePlayer url={url} isMine={isMine} autoPlay={autoPlay} />;
   }
 
   if (type === 'audio') {
-    return <VoiceMessagePlayer url={url} isMine={isMine} />;
+    return <VoiceMessagePlayer url={url} isMine={isMine} autoPlay={autoPlay} />;
   }
 
   // Document type
+  const fileName = name || url.split('/').pop() || 'Document';
+  const fileExtension = fileName.split('.').pop()?.toUpperCase() || 'FILE';
+  
   return (
-    <div className="flex items-center gap-3 p-3 bg-accent rounded-lg max-w-xs">
-      <FileText className="h-8 w-8 text-muted-foreground shrink-0" />
-      <div className="flex-1 min-w-0">
-        <p className="font-medium text-sm truncate">{name || 'Document'}</p>
-        <p className="text-xs text-muted-foreground">Click to download</p>
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={cn(
+        "flex items-center gap-3 p-3 rounded-xl transition-colors min-w-[200px]",
+        isMine
+          ? "bg-primary-foreground/10 hover:bg-primary-foreground/20"
+          : "bg-muted hover:bg-muted/80"
+      )}
+    >
+      <div className={cn(
+        "h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0",
+        isMine ? "bg-primary-foreground/20" : "bg-primary/10"
+      )}>
+        <FileText className={cn(
+          "h-5 w-5",
+          isMine ? "text-primary-foreground" : "text-primary"
+        )} />
       </div>
-      <Button
-        variant="ghost"
-        size="icon"
-        asChild
-      >
-        <a href={url} target="_blank" rel="noopener noreferrer" download>
-          <Download className="h-4 w-4" />
-        </a>
-      </Button>
-    </div>
+      <div className="flex-1 min-w-0">
+        <p className={cn(
+          "text-sm font-medium truncate",
+          isMine ? "text-primary-foreground" : "text-foreground"
+        )}>
+          {fileName}
+        </p>
+        <p className={cn(
+          "text-xs",
+          isMine ? "text-primary-foreground/60" : "text-muted-foreground"
+        )}>
+          {fileExtension}
+        </p>
+      </div>
+      <Download className={cn(
+        "h-4 w-4 flex-shrink-0",
+        isMine ? "text-primary-foreground/60" : "text-muted-foreground"
+      )} />
+    </a>
   );
 }
