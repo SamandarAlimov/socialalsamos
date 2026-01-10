@@ -9,13 +9,14 @@ interface CustomNotificationOptions {
   onClick?: () => void;
   vibrate?: number[];
   imageUrl?: string;
+  icon?: string;
 }
 
 export function useNotificationPermission() {
   const { user } = useAuth();
   const [permission, setPermission] = useState<NotificationPermission>('default');
   const [supported, setSupported] = useState(false);
-  const { playNotificationSound } = useNotificationSound();
+  const { playNotificationSound, playMessageSound } = useNotificationSound();
   const lastNotificationRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -44,7 +45,7 @@ export function useNotificationPermission() {
     try {
       // Create enhanced notification with better styling
       const notification = new Notification(title, {
-        icon: '/favicon.ico',
+        icon: options?.icon || '/favicon.ico',
         badge: '/favicon.ico',
         requireInteraction: false,
         silent: false,
@@ -52,7 +53,7 @@ export function useNotificationPermission() {
         body: options?.body,
       });
 
-      // Vibrate on mobile if supported
+      // Vibrate on mobile if supported - professional pattern
       if ('vibrate' in navigator && options?.vibrate) {
         navigator.vibrate(options.vibrate);
       }
@@ -75,28 +76,34 @@ export function useNotificationPermission() {
     }
   }, [permission]);
 
-  // Helper to get notification icon based on type
-  const getNotificationIcon = (type: string): string => {
-    // Return appropriate icon URL based on type
-    // For now using favicon, but could be customized
-    return '/favicon.ico';
+  // Get notification icon emoji based on type
+  const getNotificationEmoji = (type: string): string => {
+    switch (type) {
+      case 'like': return '❤️';
+      case 'comment': return '💬';
+      case 'follow': return '👤';
+      case 'mention': return '📣';
+      case 'message': return '✉️';
+      default: return '🔔';
+    }
   };
 
   // Get notification title based on type
   const getNotificationTitle = (type: string, actorName?: string): string => {
+    const emoji = getNotificationEmoji(type);
     switch (type) {
       case 'like':
-        return `❤️ ${actorName || 'Someone'} liked your post`;
+        return `${emoji} ${actorName || 'Someone'} liked your post`;
       case 'comment':
-        return `💬 ${actorName || 'Someone'} commented`;
+        return `${emoji} ${actorName || 'Someone'} commented on your post`;
       case 'follow':
-        return `👤 New follower`;
+        return `${emoji} ${actorName || 'Someone'} started following you`;
       case 'mention':
-        return `@ ${actorName || 'Someone'} mentioned you`;
+        return `${emoji} ${actorName || 'Someone'} mentioned you`;
       case 'message':
-        return `✉️ New message from ${actorName || 'Someone'}`;
+        return `${emoji} New message from ${actorName || 'Someone'}`;
       default:
-        return 'New notification';
+        return '🔔 New notification';
     }
   };
 
@@ -127,59 +134,61 @@ export function useNotificationPermission() {
               commenter_id?: string;
               mentioner_id?: string;
               actor_id?: string;
+              conversation_id?: string;
             };
           };
           
+          // Prevent duplicate notifications
+          if (lastNotificationRef.current === notification.id) return;
+          lastNotificationRef.current = notification.id;
+          
+          // Get actor info for better notification
+          const actorId = notification.data?.liker_id || 
+                         notification.data?.commenter_id || 
+                         notification.data?.follower_id ||
+                         notification.data?.mentioner_id ||
+                         notification.data?.actor_id;
+          
+          let actorName: string | undefined;
+          if (actorId) {
+            const { data: actor } = await supabase
+              .from('profiles')
+              .select('display_name, username')
+              .eq('id', actorId)
+              .single();
+            
+            if (actor) {
+              actorName = actor.display_name || actor.username || undefined;
+            }
+          }
+
+          // Get post thumbnail if available
+          let postImage: string | undefined;
+          if (notification.data?.post_id) {
+            const { data: post } = await supabase
+              .from('posts')
+              .select('media_urls')
+              .eq('id', notification.data.post_id)
+              .single();
+            
+            if (post?.media_urls?.[0]) {
+              postImage = post.media_urls[0];
+            }
+          }
+
+          const title = getNotificationTitle(notification.type, actorName);
+          
+          // Play notification sound based on type
+          const soundType = notification.type as 'like' | 'comment' | 'follow' | 'mention' | 'message';
+          playNotificationSound(soundType);
+
           // Only show push notification if document is hidden (app in background)
           if (document.hidden) {
-            // Prevent duplicate notifications
-            if (lastNotificationRef.current === notification.id) return;
-            lastNotificationRef.current = notification.id;
-            // Get actor info for better notification
-            const actorId = notification.data?.liker_id || 
-                           notification.data?.commenter_id || 
-                           notification.data?.follower_id ||
-                           notification.data?.mentioner_id ||
-                           notification.data?.actor_id;
-            
-            let actorName: string | undefined;
-            if (actorId) {
-              const { data: actor } = await supabase
-                .from('profiles')
-                .select('display_name, username')
-                .eq('id', actorId)
-                .single();
-              
-              if (actor) {
-                actorName = actor.display_name || actor.username || undefined;
-              }
-            }
-
-            // Get post thumbnail if available
-            let postImage: string | undefined;
-            if (notification.data?.post_id) {
-              const { data: post } = await supabase
-                .from('posts')
-                .select('media_urls')
-                .eq('id', notification.data.post_id)
-                .single();
-              
-              if (post?.media_urls?.[0]) {
-                postImage = post.media_urls[0];
-              }
-            }
-
-            const title = getNotificationTitle(notification.type, actorName);
-            
-            // Play notification sound based on type
-            const soundType = notification.type as 'like' | 'comment' | 'follow' | 'mention' | 'message';
-            playNotificationSound(soundType);
-
             showNotification(title, {
               body: notification.body || getNotificationBody(notification.type, actorName),
               tag: notification.id,
               imageUrl: postImage,
-              vibrate: [100, 50, 100], // Vibration pattern
+              vibrate: [200, 100, 200], // Professional vibration pattern
               onClick: () => {
                 // Navigate based on notification type
                 if (notification.type === 'like' || notification.type === 'comment' || notification.type === 'mention') {
@@ -191,7 +200,11 @@ export function useNotificationPermission() {
                     window.location.href = `/user/${notification.data.follower_id}`;
                   }
                 } else if (notification.type === 'message') {
-                  window.location.href = '/messages';
+                  if (notification.data?.conversation_id) {
+                    window.location.href = `/messages?conversation=${notification.data.conversation_id}`;
+                  } else {
+                    window.location.href = '/messages';
+                  }
                 } else {
                   window.location.href = '/notifications';
                 }
@@ -206,6 +219,49 @@ export function useNotificationPermission() {
       supabase.removeChannel(channel);
     };
   }, [user, permission, showNotification, playNotificationSound]);
+
+  // Subscribe to new messages for real-time sound
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel(`message-sounds:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+        },
+        async (payload) => {
+          const message = payload.new as {
+            id: string;
+            sender_id: string | null;
+            conversation_id: string;
+          };
+          
+          // Skip if it's our own message
+          if (message.sender_id === user.id) return;
+          
+          // Check if we're in this conversation
+          const { data: participation } = await supabase
+            .from('conversation_participants')
+            .select('id')
+            .eq('conversation_id', message.conversation_id)
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          if (participation) {
+            playMessageSound();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, playMessageSound]);
 
   return {
     permission,

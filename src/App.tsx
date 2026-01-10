@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { GlobalCallProvider } from "@/contexts/GlobalCallContext";
 import { ThemeProvider } from "next-themes";
 
 // Pages
@@ -107,15 +108,32 @@ function AppRoutes() {
   );
 }
 
+// Wrapper component that provides GlobalCallProvider inside BrowserRouter
+function AppWithGlobalCall() {
+  const { isAuthenticated } = useAuth();
+  
+  return (
+    <>
+      <Toaster />
+      <Sonner />
+      {isAuthenticated ? (
+        <GlobalCallProvider>
+          <AppRoutes />
+        </GlobalCallProvider>
+      ) : (
+        <AppRoutes />
+      )}
+    </>
+  );
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <TooltipProvider>
         <AuthProvider>
-          <Toaster />
-          <Sonner />
           <BrowserRouter>
-            <AppRoutes />
+            <AppWithGlobalCall />
           </BrowserRouter>
         </AuthProvider>
       </TooltipProvider>

@@ -22,12 +22,14 @@ import { useState } from 'react';
 import { NotificationsDropdown } from '@/components/NotificationsDropdown';
 import { UserSearchDialog } from '@/components/UserSearchDialog';
 import { Button } from '@/components/ui/button';
+import { useUnreadMessages } from '@/hooks/useUnreadMessages';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface NavItem {
   icon: React.ElementType;
   label: string;
   path?: string;
-  badge?: number;
+  badgeKey?: 'messages';
   action?: 'notifications' | 'search';
 }
 
@@ -36,7 +38,7 @@ const navItems: NavItem[] = [
   { icon: Search, label: 'Search', path: '/search' },
   { icon: Compass, label: 'Discover', path: '/discover' },
   { icon: Video, label: 'Videos', path: '/videos' },
-  { icon: MessageCircle, label: 'Messages', path: '/messages' },
+  { icon: MessageCircle, label: 'Messages', path: '/messages', badgeKey: 'messages' },
   { icon: ShoppingBag, label: 'Marketplace', path: '/marketplace' },
   { icon: Map, label: 'Map', path: '/map' },
   { icon: PlusSquare, label: 'Create', path: '/create' },
@@ -52,6 +54,12 @@ export function AppSidebar() {
   const location = useLocation();
   const { user, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+  const { unreadCount: messagesUnreadCount } = useUnreadMessages();
+
+  const getBadgeCount = (badgeKey?: 'messages') => {
+    if (badgeKey === 'messages') return messagesUnreadCount;
+    return 0;
+  };
 
   return (
     <aside 
@@ -71,6 +79,7 @@ export function AppSidebar() {
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto scrollbar-hidden">
         {navItems.map((item) => {
           const isActive = item.path ? location.pathname === item.path : false;
+          const badgeCount = getBadgeCount(item.badgeKey);
           
           return (
             <NavLink
@@ -83,24 +92,46 @@ export function AppSidebar() {
                   : "text-sidebar-foreground hover:bg-sidebar-accent"
               )}
             >
-              <item.icon className={cn(
-                "h-5 w-5 flex-shrink-0 transition-transform duration-200",
-                !isActive && "group-hover:scale-110"
-              )} />
+              <div className="relative">
+                <item.icon className={cn(
+                  "h-5 w-5 flex-shrink-0 transition-transform duration-200",
+                  !isActive && "group-hover:scale-110"
+                )} />
+                {/* Badge on icon for collapsed mode */}
+                <AnimatePresence>
+                  {collapsed && badgeCount > 0 && (
+                    <motion.span
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      exit={{ scale: 0 }}
+                      className="absolute -top-2 -right-2 h-4 min-w-4 px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center shadow-md"
+                    >
+                      {badgeCount > 9 ? '9+' : badgeCount}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </div>
               {!collapsed && (
                 <span className="font-medium text-sm">{item.label}</span>
               )}
-              {item.badge && (
-                <span className={cn(
-                  "flex items-center justify-center min-w-[20px] h-5 text-xs font-semibold rounded-full px-1.5",
-                  collapsed ? "absolute -top-1 -right-1" : "ml-auto",
-                  isActive 
-                    ? "bg-primary-foreground text-primary" 
-                    : "bg-primary text-primary-foreground"
-                )}>
-                  {item.badge > 99 ? '99+' : item.badge}
-                </span>
-              )}
+              {/* Badge in expanded mode */}
+              <AnimatePresence>
+                {!collapsed && badgeCount > 0 && (
+                  <motion.span
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    exit={{ scale: 0 }}
+                    className={cn(
+                      "ml-auto flex items-center justify-center min-w-[20px] h-5 text-xs font-semibold rounded-full px-1.5 shadow-sm",
+                      isActive 
+                        ? "bg-primary-foreground text-primary" 
+                        : "bg-destructive text-destructive-foreground"
+                    )}
+                  >
+                    {badgeCount > 99 ? '99+' : badgeCount}
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </NavLink>
           );
         })}

@@ -1,14 +1,15 @@
 import { useCallback, useRef, useEffect } from 'react';
 import { useUserSettings } from './useUserSettings';
 
-// Notification sound frequencies and durations for different types
+// Enhanced notification sound frequencies and durations for different types
 const SOUND_CONFIGS = {
-  default: { frequencies: [800, 1000], duration: 100 },
-  message: { frequencies: [600, 800, 1000], duration: 80 },
-  like: { frequencies: [1200, 1400], duration: 60 },
-  comment: { frequencies: [700, 900, 1100], duration: 70 },
-  follow: { frequencies: [500, 700, 900, 1100], duration: 90 },
-  mention: { frequencies: [900, 1100, 1300], duration: 75 },
+  default: { frequencies: [800, 1000], duration: 100, volume: 0.15 },
+  message: { frequencies: [523, 659, 784], duration: 80, volume: 0.2 }, // C5, E5, G5 chord
+  like: { frequencies: [880, 1108], duration: 50, volume: 0.12 }, // A5, C#6 - bright pop
+  comment: { frequencies: [587, 740, 880], duration: 70, volume: 0.15 }, // D5, F#5, A5
+  follow: { frequencies: [440, 554, 659, 880], duration: 100, volume: 0.18 }, // A4, C#5, E5, A5 arpeggio
+  mention: { frequencies: [698, 880, 1047], duration: 80, volume: 0.15 }, // F5, A5, C6
+  call: { frequencies: [440, 554], duration: 200, volume: 0.25 }, // More prominent for calls
 } as const;
 
 type SoundType = keyof typeof SOUND_CONFIGS;
@@ -30,7 +31,7 @@ export function useNotificationSound() {
     return audioContextRef.current;
   }, []);
 
-  const playTone = useCallback((frequency: number, duration: number, startTime: number, ctx: AudioContext) => {
+  const playTone = useCallback((frequency: number, duration: number, startTime: number, ctx: AudioContext, volume: number = 0.15) => {
     const oscillator = ctx.createOscillator();
     const gainNode = ctx.createGain();
 
@@ -42,7 +43,7 @@ export function useNotificationSound() {
 
     // Smooth envelope for pleasant sound
     gainNode.gain.setValueAtTime(0, startTime);
-    gainNode.gain.linearRampToValueAtTime(0.15, startTime + 0.01);
+    gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.01);
     gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration / 1000);
 
     oscillator.start(startTime);
@@ -66,7 +67,7 @@ export function useNotificationSound() {
 
       // Play sequence of tones for a pleasant notification sound
       config.frequencies.forEach((freq, index) => {
-        playTone(freq, config.duration, startTime + (index * config.duration / 1000), ctx);
+        playTone(freq, config.duration, startTime + (index * config.duration / 1200), ctx, config.volume);
       });
     } catch (error) {
       console.warn('Could not play notification sound:', error);
@@ -78,6 +79,7 @@ export function useNotificationSound() {
   const playCommentSound = useCallback(() => playNotificationSound('comment'), [playNotificationSound]);
   const playFollowSound = useCallback(() => playNotificationSound('follow'), [playNotificationSound]);
   const playMentionSound = useCallback(() => playNotificationSound('mention'), [playNotificationSound]);
+  const playCallSound = useCallback(() => playNotificationSound('call'), [playNotificationSound]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -95,6 +97,7 @@ export function useNotificationSound() {
     playCommentSound,
     playFollowSound,
     playMentionSound,
+    playCallSound,
     isEnabled: settings?.notification_sounds !== false,
   };
 }
