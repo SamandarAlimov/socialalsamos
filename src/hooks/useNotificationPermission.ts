@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useNotificationSound } from './useNotificationSound';
 
 interface CustomNotificationOptions {
   body?: string;
@@ -14,6 +15,8 @@ export function useNotificationPermission() {
   const { user } = useAuth();
   const [permission, setPermission] = useState<NotificationPermission>('default');
   const [supported, setSupported] = useState(false);
+  const { playNotificationSound } = useNotificationSound();
+  const lastNotificationRef = useRef<string | null>(null);
 
   useEffect(() => {
     if ('Notification' in window) {
@@ -129,6 +132,9 @@ export function useNotificationPermission() {
           
           // Only show push notification if document is hidden (app in background)
           if (document.hidden) {
+            // Prevent duplicate notifications
+            if (lastNotificationRef.current === notification.id) return;
+            lastNotificationRef.current = notification.id;
             // Get actor info for better notification
             const actorId = notification.data?.liker_id || 
                            notification.data?.commenter_id || 
@@ -165,6 +171,10 @@ export function useNotificationPermission() {
 
             const title = getNotificationTitle(notification.type, actorName);
             
+            // Play notification sound based on type
+            const soundType = notification.type as 'like' | 'comment' | 'follow' | 'mention' | 'message';
+            playNotificationSound(soundType);
+
             showNotification(title, {
               body: notification.body || getNotificationBody(notification.type, actorName),
               tag: notification.id,
@@ -195,7 +205,7 @@ export function useNotificationPermission() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, permission, showNotification]);
+  }, [user, permission, showNotification, playNotificationSound]);
 
   return {
     permission,
