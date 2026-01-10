@@ -690,6 +690,50 @@ export default function SettingsPage() {
         {/* Notifications Tab */}
         <TabsContent value="notifications" className="space-y-6">
           <PushNotificationSettings />
+
+          {/* Autoplay Settings */}
+          <div className="bg-card rounded-xl border border-border overflow-hidden">
+            <div className="p-4 border-b border-border">
+              <h2 className="font-semibold">Media Autoplay</h2>
+              <p className="text-xs text-muted-foreground mt-1">Control auto-playing media in messages</p>
+            </div>
+
+            <div className="divide-y divide-border">
+              {/* Autoplay Voice Messages */}
+              <div className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                    <Bell className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">Voice Messages</p>
+                    <p className="text-xs text-muted-foreground">Auto-play voice messages when visible</p>
+                  </div>
+                </div>
+                <Switch
+                  checked={settings?.autoplay_voice_messages ?? true}
+                  onCheckedChange={(checked) => updateSettings({ autoplay_voice_messages: checked })}
+                />
+              </div>
+
+              {/* Autoplay Video Messages */}
+              <div className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                    <Bell className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">Video Messages</p>
+                    <p className="text-xs text-muted-foreground">Auto-play video messages when visible</p>
+                  </div>
+                </div>
+                <Switch
+                  checked={settings?.autoplay_video_messages ?? true}
+                  onCheckedChange={(checked) => updateSettings({ autoplay_video_messages: checked })}
+                />
+              </div>
+            </div>
+          </div>
           
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <div className="p-4 border-b border-border">

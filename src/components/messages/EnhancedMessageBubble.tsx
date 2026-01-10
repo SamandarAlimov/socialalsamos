@@ -14,6 +14,7 @@ import { StoryReplyPreview } from './StoryReplyPreview';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
+import { useUserSettings } from '@/hooks/useUserSettings';
 import { format } from 'date-fns';
 import {
   Tooltip,
@@ -85,6 +86,7 @@ export function EnhancedMessageBubble({
   showSender = false,
 }: EnhancedMessageBubbleProps) {
   const { user } = useAuth();
+  const { settings } = useUserSettings();
   const [reactions, setReactions] = useState<ReactionGroup[]>([]);
   const { lightTap, mediumTap, successFeedback } = useHapticFeedback();
   
@@ -408,7 +410,11 @@ export function EnhancedMessageBubble({
                   )}
 
                   {isVoiceMessage ? (
-                    <VoiceMessagePlayer url={message.media_url!} isMine={isMine} />
+                    <VoiceMessagePlayer 
+                      url={message.media_url!} 
+                      isMine={isMine} 
+                      autoPlay={settings?.autoplay_voice_messages ?? true}
+                    />
                   ) : (
                     <>
                       {message.content && !message.content.startsWith('[') && !message.shared_post_id && (
@@ -420,6 +426,13 @@ export function EnhancedMessageBubble({
                             url={message.media_url} 
                             type={message.media_type as 'image' | 'video' | 'audio' | 'document'}
                             isMine={isMine}
+                            autoPlay={
+                              message.media_type === 'video' 
+                                ? (settings?.autoplay_video_messages ?? true)
+                                : message.media_type === 'audio'
+                                ? (settings?.autoplay_voice_messages ?? true)
+                                : false
+                            }
                           />
                         </div>
                       )}
