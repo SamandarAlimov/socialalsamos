@@ -19,6 +19,8 @@ export interface UserSettings {
   notify_comments: boolean;
   notify_follows: boolean;
   notify_mentions: boolean;
+  autoplay_voice_messages: boolean;
+  autoplay_video_messages: boolean;
 }
 
 export interface UserSession {

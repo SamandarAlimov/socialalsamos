@@ -1251,6 +1251,8 @@ export type Database = {
       }
       user_settings: {
         Row: {
+          autoplay_video_messages: boolean | null
+          autoplay_voice_messages: boolean | null
           call_permissions: string | null
           created_at: string
           group_invite_permissions: string | null
@@ -1270,6 +1272,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          autoplay_video_messages?: boolean | null
+          autoplay_voice_messages?: boolean | null
           call_permissions?: string | null
           created_at?: string
           group_invite_permissions?: string | null
@@ -1289,6 +1293,8 @@ export type Database = {
           user_id: string
         }
         Update: {
+          autoplay_video_messages?: boolean | null
+          autoplay_voice_messages?: boolean | null
           call_permissions?: string | null
           created_at?: string
           group_invite_permissions?: string | null
