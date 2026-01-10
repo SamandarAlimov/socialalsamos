@@ -179,9 +179,10 @@ export function VideoMessagePlayer({ url, isMine, className, autoPlay = false }:
           ref={videoRef}
           src={url}
           className="w-full h-full object-cover"
+          style={{ transform: 'scaleX(-1)' }}
           playsInline
           muted={isMuted}
-          preload="metadata"
+          preload="auto"
           loop
         />
 
