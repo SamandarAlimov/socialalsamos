@@ -167,10 +167,21 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         startAudioVisualization(stream);
       }
       
-      if (isVideo && videoPreviewRef.current) {
-        videoPreviewRef.current.srcObject = stream;
-        videoPreviewRef.current.muted = true;
-        await videoPreviewRef.current.play();
+      // For video, set state first so the video element renders, then attach stream
+      if (isVideo) {
+        setState('recording');
+        // Wait for next frame to ensure video element is mounted
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        
+        if (videoPreviewRef.current) {
+          videoPreviewRef.current.srcObject = stream;
+          videoPreviewRef.current.muted = true;
+          try {
+            await videoPreviewRef.current.play();
+          } catch (playError) {
+            console.warn('Video preview autoplay failed:', playError);
+          }
+        }
       }
       
       const mimeType = getSupportedMimeType(isVideo);
@@ -202,7 +213,11 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
       };
       
       recorder.start(100);
-      setState('recording');
+      
+      // For voice, set state after recorder starts
+      if (!isVideo) {
+        setState('recording');
+      }
       
       timerRef.current = setInterval(() => {
         setDuration(d => d + 1);
