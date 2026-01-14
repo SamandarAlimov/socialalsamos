@@ -24,12 +24,12 @@ interface Conversation {
 }
 
 interface TelegramForwardDialogProps {
-  message: Message | null;
+  messages: Message[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function TelegramForwardDialog({ message, open, onOpenChange }: TelegramForwardDialogProps) {
+export function TelegramForwardDialog({ messages: forwardMessages, open, onOpenChange }: TelegramForwardDialogProps) {
   const { user } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -131,18 +131,21 @@ export function TelegramForwardDialog({ message, open, onOpenChange }: TelegramF
   };
 
   const handleForward = async () => {
-    if (!message || !user || selectedIds.length === 0) return;
+    if (forwardMessages.length === 0 || !user || selectedIds.length === 0) return;
     setForwarding(true);
 
     try {
       for (const conversationId of selectedIds) {
-        await supabase.from('messages').insert({
-          conversation_id: conversationId,
-          sender_id: user.id,
-          content: message.content,
-          media_url: message.media_url,
-          media_type: message.media_type,
-        });
+        // Forward all messages in order
+        for (const msg of forwardMessages) {
+          await supabase.from('messages').insert({
+            conversation_id: conversationId,
+            sender_id: user.id,
+            content: msg.content,
+            media_url: msg.media_url,
+            media_type: msg.media_type,
+          });
+        }
 
         await supabase
           .from('conversations')
@@ -150,12 +153,16 @@ export function TelegramForwardDialog({ message, open, onOpenChange }: TelegramF
           .eq('id', conversationId);
       }
 
-      toast.success(`Forwarded to ${selectedIds.length} chat${selectedIds.length > 1 ? 's' : ''}`);
+      const msgCount = forwardMessages.length;
+      const chatCount = selectedIds.length;
+      toast.success(
+        `${msgCount} message${msgCount > 1 ? 's' : ''} forwarded to ${chatCount} chat${chatCount > 1 ? 's' : ''}`
+      );
       setSelectedIds([]);
       onOpenChange(false);
     } catch (error) {
-      console.error('Error forwarding message:', error);
-      toast.error('Failed to forward message');
+      console.error('Error forwarding messages:', error);
+      toast.error('Failed to forward messages');
     } finally {
       setForwarding(false);
     }
@@ -241,10 +248,27 @@ export function TelegramForwardDialog({ message, open, onOpenChange }: TelegramF
         )}
 
         {/* Message preview */}
-        {message && (
+        {forwardMessages.length > 0 && (
           <div className="px-4 py-3 border-b border-border bg-muted/30 flex-shrink-0">
-            <p className="text-xs text-muted-foreground mb-1">Message:</p>
-            <p className="text-sm line-clamp-2">{message.content || '[Media]'}</p>
+            <p className="text-xs text-muted-foreground mb-1">
+              {forwardMessages.length === 1 ? 'Message:' : `${forwardMessages.length} messages:`}
+            </p>
+            {forwardMessages.length === 1 ? (
+              <p className="text-sm line-clamp-2">{forwardMessages[0].content || '[Media]'}</p>
+            ) : (
+              <div className="space-y-1">
+                {forwardMessages.slice(0, 3).map((msg, i) => (
+                  <p key={msg.id} className="text-sm truncate text-muted-foreground">
+                    {i + 1}. {msg.content || '[Media]'}
+                  </p>
+                ))}
+                {forwardMessages.length > 3 && (
+                  <p className="text-xs text-muted-foreground">
+                    ... and {forwardMessages.length - 3} more
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
 
