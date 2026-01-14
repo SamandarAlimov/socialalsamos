@@ -2,22 +2,27 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { 
-  Wallet, 
   ArrowUpRight, 
   ArrowDownLeft, 
-  Plus,
-  CreditCard,
   History,
   ChevronRight,
   Loader2,
   RefreshCw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+
+// Payment components
+import { WalletCard } from '@/components/payment/WalletCard';
+import { PaymentQuickActions } from '@/components/payment/PaymentQuickActions';
+import { PaymentServicesGrid } from '@/components/payment/PaymentServicesGrid';
+import { PaymentFinanceSection } from '@/components/payment/PaymentFinanceSection';
+import { CurrencyRatesCard } from '@/components/payment/CurrencyRatesCard';
+import { LinkedCardsSection } from '@/components/payment/LinkedCardsSection';
 
 interface WalletData {
   id: string;
@@ -40,12 +45,12 @@ export default function PaymentSettingsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState('main');
 
   const fetchWalletData = async () => {
     if (!user) return;
 
     try {
-      // Fetch or create wallet
       let { data: walletData, error } = await supabase
         .from('wallets')
         .select('*')
@@ -53,7 +58,6 @@ export default function PaymentSettingsPage() {
         .single();
 
       if (error && error.code === 'PGRST116') {
-        // No wallet exists, create one
         const { data: newWallet, error: createError } = await supabase
           .from('wallets')
           .insert({ user_id: user.id })
@@ -72,7 +76,6 @@ export default function PaymentSettingsPage() {
           currency: walletData.currency,
         });
 
-        // Fetch transactions
         const { data: txData } = await supabase
           .from('transactions')
           .select('*')
@@ -101,8 +104,16 @@ export default function PaymentSettingsPage() {
     fetchWalletData();
   };
 
+  const handleServiceClick = (serviceKey: string) => {
+    toast.info(`${serviceKey} xizmati tez orada ishga tushadi`);
+  };
+
+  const handleFinanceItemClick = (key: string) => {
+    toast.info(`${key} bo'limi tez orada ishga tushadi`);
+  };
+
   const formatCurrency = (amount: number, currency: string) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('uz-UZ', {
       style: 'currency',
       currency: currency,
     }).format(amount);
@@ -140,12 +151,12 @@ export default function PaymentSettingsPage() {
 
   const getTransactionLabel = (type: string) => {
     switch (type) {
-      case 'deposit': return 'Deposit';
-      case 'withdrawal': return 'Withdrawal';
-      case 'transfer_in': return 'Received';
-      case 'transfer_out': return 'Sent';
-      case 'purchase': return 'Purchase';
-      case 'refund': return 'Refund';
+      case 'deposit': return 'Kirim';
+      case 'withdrawal': return 'Chiqim';
+      case 'transfer_in': return 'Qabul qilindi';
+      case 'transfer_out': return "O'tkazildi";
+      case 'purchase': return 'Xarid';
+      case 'refund': return 'Qaytarildi';
       default: return type;
     }
   };
@@ -159,97 +170,102 @@ export default function PaymentSettingsPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto py-6 px-4 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Payment</h1>
-        <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={isRefreshing}>
-          <RefreshCw className={cn("h-5 w-5", isRefreshing && "animate-spin")} />
-        </Button>
+    <div className="max-w-2xl mx-auto pb-24 md:pb-6">
+      {/* Header */}
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-lg border-b border-border px-4 py-3">
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold">To'lov</h1>
+          <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={isRefreshing}>
+            <RefreshCw className={cn("h-5 w-5", isRefreshing && "animate-spin")} />
+          </Button>
+        </div>
       </div>
 
-      {/* Wallet Card */}
-      <Card className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground border-0 overflow-hidden">
-        <CardContent className="pt-6">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm opacity-80">Total Balance</p>
-              <p className="text-3xl font-bold mt-1">
-                {wallet ? formatCurrency(wallet.balance, wallet.currency) : '$0.00'}
-              </p>
-            </div>
-            <div className="h-12 w-12 rounded-full bg-primary-foreground/20 flex items-center justify-center">
-              <Wallet className="h-6 w-6" />
-            </div>
-          </div>
+      {/* Main Content */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <div className="sticky top-14 z-10 bg-background/95 backdrop-blur-lg px-4 py-2">
+          <TabsList className="w-full grid grid-cols-3 h-10">
+            <TabsTrigger value="main" className="text-xs">Asosiy</TabsTrigger>
+            <TabsTrigger value="services" className="text-xs">Xizmatlar</TabsTrigger>
+            <TabsTrigger value="history" className="text-xs">Tarix</TabsTrigger>
+          </TabsList>
+        </div>
 
-          <div className="flex gap-3 mt-6">
-            <Button variant="secondary" className="flex-1 bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground border-0">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Money
-            </Button>
-            <Button variant="secondary" className="flex-1 bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground border-0">
-              <ArrowUpRight className="h-4 w-4 mr-2" />
-              Send
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-3 gap-3">
-        <Button variant="outline" className="flex-col h-auto py-4 gap-2">
-          <CreditCard className="h-5 w-5 text-primary" />
-          <span className="text-xs">Cards</span>
-        </Button>
-        <Button variant="outline" className="flex-col h-auto py-4 gap-2">
-          <History className="h-5 w-5 text-primary" />
-          <span className="text-xs">History</span>
-        </Button>
-        <Button variant="outline" className="flex-col h-auto py-4 gap-2">
-          <ArrowDownLeft className="h-5 w-5 text-primary" />
-          <span className="text-xs">Request</span>
-        </Button>
-      </div>
-
-      {/* Transactions */}
-      <Tabs defaultValue="all" className="w-full">
-        <TabsList className="w-full grid grid-cols-3">
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="incoming">Incoming</TabsTrigger>
-          <TabsTrigger value="outgoing">Outgoing</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="all" className="mt-4">
-          <TransactionList 
-            transactions={transactions} 
-            formatCurrency={formatCurrency}
-            currency={wallet?.currency || 'USD'}
-            getTransactionIcon={getTransactionIcon}
-            getTransactionColor={getTransactionColor}
-            getTransactionLabel={getTransactionLabel}
+        <TabsContent value="main" className="mt-0 px-4 space-y-6 py-4">
+          {/* Wallet Card */}
+          <WalletCard
+            balance={wallet?.balance || 0}
+            currency={wallet?.currency || 'UZS'}
+            onAddMoney={() => toast.info("Pul qo'shish tez orada ishga tushadi")}
+            onSend={() => toast.info("O'tkazish tez orada ishga tushadi")}
           />
+
+          {/* Quick Actions */}
+          <PaymentQuickActions
+            onQrPayment={() => toast.info("QR to'lov tez orada ishga tushadi")}
+            onCashback={() => toast.info("Keshbek tez orada ishga tushadi")}
+            onReferral={() => toast.info("Taklif bonus tez orada ishga tushadi")}
+            onMyCards={() => toast.info("Kartalarim tez orada ishga tushadi")}
+          />
+
+          {/* Linked Cards */}
+          <LinkedCardsSection
+            cards={[]}
+            onAddCard={() => toast.info("Karta qo'shish tez orada ishga tushadi")}
+          />
+
+          {/* Currency Rates */}
+          <CurrencyRatesCard />
+
+          {/* Finance Section */}
+          <PaymentFinanceSection onItemClick={handleFinanceItemClick} />
         </TabsContent>
 
-        <TabsContent value="incoming" className="mt-4">
-          <TransactionList 
-            transactions={transactions.filter(t => ['deposit', 'transfer_in', 'refund'].includes(t.type))} 
-            formatCurrency={formatCurrency}
-            currency={wallet?.currency || 'USD'}
-            getTransactionIcon={getTransactionIcon}
-            getTransactionColor={getTransactionColor}
-            getTransactionLabel={getTransactionLabel}
-          />
+        <TabsContent value="services" className="mt-0 px-4 py-4">
+          <PaymentServicesGrid onServiceClick={handleServiceClick} />
         </TabsContent>
 
-        <TabsContent value="outgoing" className="mt-4">
-          <TransactionList 
-            transactions={transactions.filter(t => ['withdrawal', 'transfer_out', 'purchase'].includes(t.type))} 
-            formatCurrency={formatCurrency}
-            currency={wallet?.currency || 'USD'}
-            getTransactionIcon={getTransactionIcon}
-            getTransactionColor={getTransactionColor}
-            getTransactionLabel={getTransactionLabel}
-          />
+        <TabsContent value="history" className="mt-0 px-4 py-4">
+          <Tabs defaultValue="all" className="w-full">
+            <TabsList className="w-full grid grid-cols-3 mb-4">
+              <TabsTrigger value="all">Barchasi</TabsTrigger>
+              <TabsTrigger value="incoming">Kirimlar</TabsTrigger>
+              <TabsTrigger value="outgoing">Chiqimlar</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="all">
+              <TransactionList 
+                transactions={transactions} 
+                formatCurrency={formatCurrency}
+                currency={wallet?.currency || 'UZS'}
+                getTransactionIcon={getTransactionIcon}
+                getTransactionColor={getTransactionColor}
+                getTransactionLabel={getTransactionLabel}
+              />
+            </TabsContent>
+
+            <TabsContent value="incoming">
+              <TransactionList 
+                transactions={transactions.filter(t => ['deposit', 'transfer_in', 'refund'].includes(t.type))} 
+                formatCurrency={formatCurrency}
+                currency={wallet?.currency || 'UZS'}
+                getTransactionIcon={getTransactionIcon}
+                getTransactionColor={getTransactionColor}
+                getTransactionLabel={getTransactionLabel}
+              />
+            </TabsContent>
+
+            <TabsContent value="outgoing">
+              <TransactionList 
+                transactions={transactions.filter(t => ['withdrawal', 'transfer_out', 'purchase'].includes(t.type))} 
+                formatCurrency={formatCurrency}
+                currency={wallet?.currency || 'UZS'}
+                getTransactionIcon={getTransactionIcon}
+                getTransactionColor={getTransactionColor}
+                getTransactionLabel={getTransactionLabel}
+              />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
       </Tabs>
     </div>
@@ -277,7 +293,7 @@ function TransactionList({
     return (
       <div className="text-center py-12 text-muted-foreground">
         <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
-        <p>No transactions yet</p>
+        <p>Tranzaksiyalar yo'q</p>
       </div>
     );
   }
@@ -296,7 +312,7 @@ function TransactionList({
             <div className="flex-1 min-w-0">
               <p className="font-medium text-sm">{getTransactionLabel(tx.type)}</p>
               <p className="text-xs text-muted-foreground truncate">
-                {tx.description || format(new Date(tx.created_at), 'MMM dd, yyyy • HH:mm')}
+                {tx.description || format(new Date(tx.created_at), 'dd MMM, yyyy • HH:mm')}
               </p>
             </div>
             <div className="text-right">
@@ -310,7 +326,9 @@ function TransactionList({
                 tx.status === 'pending' ? 'text-yellow-500' :
                 tx.status === 'failed' ? 'text-red-500' : 'text-muted-foreground'
               )}>
-                {tx.status}
+                {tx.status === 'completed' ? 'Bajarildi' :
+                 tx.status === 'pending' ? 'Kutilmoqda' :
+                 tx.status === 'failed' ? 'Xatolik' : tx.status}
               </p>
             </div>
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
