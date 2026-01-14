@@ -99,12 +99,12 @@ export function useConversations(type?: 'private' | 'group' | 'channel', showArc
     setIsLoading(true);
 
     try {
-      // Get user's conversations with participation info (pinned, muted, archived)
+      // Get user's conversations with participation info (pinned, muted, archived, last_read_at)
       const { data: participations, error: partError } = await supabase
         .from('conversation_participants')
-        .select('conversation_id, is_pinned, is_muted, is_archived')
+        .select('conversation_id, is_pinned, is_muted, is_archived, last_read_at')
         .eq('user_id', user.id)
-        .eq('is_archived', showArchived); // Show archived or non-archived based on flag
+        .eq('is_archived', showArchived);
 
       if (partError) throw partError;
 
@@ -122,6 +122,7 @@ export function useConversations(type?: 'private' | 'group' | 'channel', showArc
           is_pinned: p.is_pinned ?? false, 
           is_muted: p.is_muted ?? false,
           is_archived: p.is_archived ?? false,
+          last_read_at: p.last_read_at,
         }])
       );
 
@@ -145,6 +146,8 @@ export function useConversations(type?: 'private' | 'group' | 'channel', showArc
           let otherParticipant = null;
           let lastMessage = null;
           let unreadCount = 0;
+
+          const participantSettings = participationMap.get(conv.id);
 
           if (conv.type === 'private') {
             const { data: participants } = await supabase
@@ -170,6 +173,7 @@ export function useConversations(type?: 'private' | 'group' | 'channel', showArc
             .from('messages')
             .select('content')
             .eq('conversation_id', conv.id)
+            .eq('is_deleted', false)
             .order('created_at', { ascending: false })
             .limit(1);
 
@@ -177,28 +181,21 @@ export function useConversations(type?: 'private' | 'group' | 'channel', showArc
             lastMessage = messages[0].content;
           }
 
-          // Calculate unread count - messages not sent by current user that haven't been read
-          const { data: allMessages } = await supabase
+          // Calculate unread count using last_read_at for efficiency
+          let unreadQuery = supabase
             .from('messages')
-            .select('id')
+            .select('id', { count: 'exact', head: true })
             .eq('conversation_id', conv.id)
-            .neq('sender_id', user.id);
+            .neq('sender_id', user.id)
+            .eq('is_deleted', false);
 
-          if (allMessages && allMessages.length > 0) {
-            const messageIds = allMessages.map(m => m.id);
-            
-            // Get read receipts for these messages by current user
-            const { data: readReceipts } = await supabase
-              .from('message_reads')
-              .select('message_id')
-              .eq('user_id', user.id)
-              .in('message_id', messageIds);
-
-            const readMessageIds = new Set(readReceipts?.map(r => r.message_id) || []);
-            unreadCount = messageIds.filter(id => !readMessageIds.has(id)).length;
+          // Only count messages after last_read_at if it exists
+          if (participantSettings?.last_read_at) {
+            unreadQuery = unreadQuery.gt('created_at', participantSettings.last_read_at);
           }
 
-          const participantSettings = participationMap.get(conv.id);
+          const { count } = await unreadQuery;
+          unreadCount = count || 0;
 
           return {
             ...conv,
@@ -212,10 +209,19 @@ export function useConversations(type?: 'private' | 'group' | 'channel', showArc
         })
       );
 
-      // Sort: pinned conversations first, then by last_message_at
+      // Sort: pinned first, then unread first, then by last_message_at
       conversationsWithDetails.sort((a, b) => {
+        // Pinned conversations always first
         if (a.is_pinned && !b.is_pinned) return -1;
         if (!a.is_pinned && b.is_pinned) return 1;
+        
+        // Within pinned/unpinned groups, unread conversations first
+        const aUnread = (a.unread_count ?? 0) > 0;
+        const bUnread = (b.unread_count ?? 0) > 0;
+        if (aUnread && !bUnread) return -1;
+        if (!aUnread && bUnread) return 1;
+        
+        // Finally sort by last message time
         return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime();
       });
 
@@ -414,7 +420,6 @@ export function useConversations(type?: 'private' | 'group' | 'channel', showArc
           table: 'conversations',
         },
         () => {
-          // Refresh conversations when any change happens
           fetchConversations();
         }
       )
@@ -426,7 +431,32 @@ export function useConversations(type?: 'private' | 'group' | 'channel', showArc
           table: 'messages',
         },
         () => {
-          // Refresh to get latest last_message
+          fetchConversations();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'conversation_participants',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          // Refresh when last_read_at, is_pinned, is_muted changes
+          fetchConversations();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'message_reads',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          // Refresh when we read messages to update unread counts
           fetchConversations();
         }
       )
