@@ -14,6 +14,7 @@ import {
   Trash2,
   LogOut,
   Users2,
+  Clock,
 } from 'lucide-react';
 import { Conversation } from '@/hooks/useMessages';
 import { cn } from '@/lib/utils';
@@ -40,6 +41,8 @@ interface ChatHeaderProps {
   onLeave?: () => void;
   onDelete?: () => void;
   onManageMembers?: () => void;
+  onViewScheduled?: () => void;
+  scheduledCount?: number;
   isMuted?: boolean;
   isAdmin?: boolean;
 }
@@ -56,6 +59,8 @@ export function ChatHeader({
   onLeave,
   onDelete,
   onManageMembers,
+  onViewScheduled,
+  scheduledCount,
   isMuted,
   isAdmin,
 }: ChatHeaderProps) {
@@ -187,6 +192,17 @@ export function ChatHeader({
               <DropdownMenuItem onClick={onSearch}>
                 <Search className="h-4 w-4 mr-2" />
                 Search
+              </DropdownMenuItem>
+            )}
+            {onViewScheduled && (
+              <DropdownMenuItem onClick={onViewScheduled}>
+                <Clock className="h-4 w-4 mr-2" />
+                Scheduled Messages
+                {scheduledCount && scheduledCount > 0 && (
+                  <span className="ml-auto text-xs bg-primary text-primary-foreground rounded-full px-1.5">
+                    {scheduledCount}
+                  </span>
+                )}
               </DropdownMenuItem>
             )}
             {onMute && (

@@ -14,11 +14,13 @@ import {
   Strikethrough,
   Code,
   Quote,
+  Clock,
 } from 'lucide-react';
 import { EmojiPicker } from '@/components/EmojiPicker';
 import { FileUploadButton } from '@/components/FileUploadButton';
 import { TelegramMediaRecorder } from './TelegramMediaRecorder';
 import { LocationShareButton } from './LocationShareButton';
+import { ScheduleMessageDialog } from './ScheduleMessageDialog';
 import { cn } from '@/lib/utils';
 import {
   Popover,
@@ -34,6 +36,7 @@ interface ReplyTo {
 
 interface MessageInputProps {
   onSend: (content: string, mediaUrl?: string, mediaType?: string) => Promise<any>;
+  onSchedule?: (scheduledFor: Date, content: string, mediaUrl?: string, mediaType?: string) => Promise<any>;
   onTyping: (isTyping: boolean) => void;
   replyTo?: ReplyTo | null;
   onCancelReply?: () => void;
@@ -43,6 +46,7 @@ interface MessageInputProps {
 
 export function MessageInput({ 
   onSend, 
+  onSchedule,
   onTyping, 
   replyTo, 
   onCancelReply,
@@ -52,8 +56,10 @@ export function MessageInput({
   const [message, setMessage] = useState('');
   const [pendingAttachment, setPendingAttachment] = useState<{ url: string; type: string; name: string } | null>(null);
   const [showFormatting, setShowFormatting] = useState(false);
+  const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (replyTo) {
@@ -261,6 +267,35 @@ export function MessageInput({
             size="icon" 
             className="h-10 w-10 rounded-full flex-shrink-0"
             onClick={handleSend}
+            onMouseDown={() => {
+              if (onSchedule) {
+                longPressTimeoutRef.current = setTimeout(() => {
+                  setShowScheduleDialog(true);
+                }, 500);
+              }
+            }}
+            onMouseUp={() => {
+              if (longPressTimeoutRef.current) {
+                clearTimeout(longPressTimeoutRef.current);
+              }
+            }}
+            onMouseLeave={() => {
+              if (longPressTimeoutRef.current) {
+                clearTimeout(longPressTimeoutRef.current);
+              }
+            }}
+            onTouchStart={() => {
+              if (onSchedule) {
+                longPressTimeoutRef.current = setTimeout(() => {
+                  setShowScheduleDialog(true);
+                }, 500);
+              }
+            }}
+            onTouchEnd={() => {
+              if (longPressTimeoutRef.current) {
+                clearTimeout(longPressTimeoutRef.current);
+              }
+            }}
             disabled={disabled}
           >
             <Send className="h-5 w-5" />
@@ -274,6 +309,25 @@ export function MessageInput({
           />
         )}
       </div>
+
+      {/* Schedule Message Dialog */}
+      {onSchedule && (
+        <ScheduleMessageDialog
+          open={showScheduleDialog}
+          onOpenChange={setShowScheduleDialog}
+          messagePreview={message || (pendingAttachment ? `[${pendingAttachment.name}]` : '')}
+          onSchedule={async (scheduledFor) => {
+            await onSchedule(
+              scheduledFor,
+              message || (pendingAttachment ? `[${pendingAttachment.name}]` : ''),
+              pendingAttachment?.url,
+              pendingAttachment?.type
+            );
+            setMessage('');
+            setPendingAttachment(null);
+          }}
+        />
+      )}
 
       {/* Formatting Toolbar */}
       {showFormatting && (

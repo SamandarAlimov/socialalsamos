@@ -932,6 +932,63 @@ export type Database = {
         }
         Relationships: []
       }
+      scheduled_messages: {
+        Row: {
+          content: string | null
+          conversation_id: string
+          created_at: string
+          error_message: string | null
+          id: string
+          media_type: string | null
+          media_url: string | null
+          scheduled_for: string
+          sender_id: string
+          sent_at: string | null
+          status: string
+        }
+        Insert: {
+          content?: string | null
+          conversation_id: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          media_type?: string | null
+          media_url?: string | null
+          scheduled_for: string
+          sender_id: string
+          sent_at?: string | null
+          status?: string
+        }
+        Update: {
+          content?: string | null
+          conversation_id?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          media_type?: string | null
+          media_url?: string | null
+          scheduled_for?: string
+          sender_id?: string
+          sent_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stories: {
         Row: {
           caption: string | null
