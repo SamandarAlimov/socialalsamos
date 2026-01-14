@@ -9,8 +9,8 @@ export function AppLayout() {
   const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
   
-  // Hide mobile header on messages page (it has its own header)
-  const hideHeaderOnMessages = location.pathname === '/messages';
+  // Hide mobile header on messages and map pages (they have their own headers)
+  const hideHeaderOnPages = location.pathname === '/messages' || location.pathname === '/map';
 
   if (isLoading) {
     return (
@@ -32,11 +32,11 @@ export function AppLayout() {
       {/* Desktop Sidebar */}
       <AppSidebar />
       
-      {/* Mobile Header - Hidden on messages page */}
-      {!hideHeaderOnMessages && <MobileHeader />}
+      {/* Mobile Header - Hidden on messages and map pages */}
+      {!hideHeaderOnPages && <MobileHeader />}
       
       {/* Main Content */}
-      <main className={`flex-1 overflow-auto md:ml-0 ${hideHeaderOnMessages ? 'pt-0' : 'pt-14'} pb-20 md:pt-0 md:pb-0`}>
+      <main className={`flex-1 overflow-auto md:ml-0 ${hideHeaderOnPages ? 'pt-0' : 'pt-14'} pb-20 md:pt-0 md:pb-0`}>
         <Outlet />
       </main>
       

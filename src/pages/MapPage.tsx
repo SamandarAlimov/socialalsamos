@@ -428,9 +428,9 @@ export default function MapPage() {
   const showPermissionPrompt = hasLocationPermission === false && !currentLocation && !isCheckingPermission;
 
   return (
-    <div className="fixed inset-0 flex flex-col md:flex-row bg-background">
-      {/* Mobile Header - Fixed at top */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-[1001] flex items-center justify-between px-3 py-2 border-b border-border bg-background/95 backdrop-blur-lg safe-area-top">
+    <div className="h-full min-h-[calc(100vh-3.5rem-5rem)] md:min-h-screen flex flex-col md:flex-row bg-background relative">
+      {/* Mobile Header - Fixed at top for mobile only */}
+      <div className="md:hidden sticky top-0 left-0 right-0 z-[100] flex items-center justify-between px-3 py-2 border-b border-border bg-background/95 backdrop-blur-lg safe-area-top">
         <div className="flex items-center gap-2">
           <MapPin className="h-5 w-5 text-primary" />
           <h1 className="text-lg font-semibold">Xarita</h1>
@@ -834,15 +834,15 @@ export default function MapPage() {
       <Button
         variant="secondary"
         size="icon"
-        className="hidden md:flex absolute top-1/2 -translate-y-1/2 z-[1000] rounded-l-none"
+        className="hidden md:flex absolute top-1/2 -translate-y-1/2 z-[50] rounded-l-none"
         onClick={() => setSidebarOpen(!sidebarOpen)}
         style={{ left: sidebarOpen ? '320px' : '0' }}
       >
         {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
       </Button>
       
-      {/* Map Container - Fixed between header and bottom navbar on mobile */}
-      <div className="flex-1 relative md:h-full h-[calc(100vh-56px-64px)] mt-14 md:mt-0 mb-16 md:mb-0">
+      {/* Map Container */}
+      <div className="flex-1 relative min-h-[400px] md:h-full">
         <MapContainer
           center={mapCenter}
           zoom={zoom}
@@ -947,7 +947,7 @@ export default function MapPage() {
         
         {/* Location permission prompt overlay */}
         {showPermissionPrompt && (
-          <div className="absolute inset-0 z-[1000] bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="absolute inset-0 z-[60] bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="text-center p-6 bg-card rounded-xl shadow-lg border max-w-sm w-full">
               <div className="p-4 rounded-full bg-primary/10 w-fit mx-auto mb-4">
                 <MapPin className="h-10 w-10 text-primary" />
@@ -966,7 +966,7 @@ export default function MapPage() {
         
         {/* Destination Bar */}
         {destination && (
-          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[1000] bg-background/95 backdrop-blur-lg rounded-xl shadow-lg border p-3 flex items-center gap-3 max-w-[90%]">
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[50] bg-background/95 backdrop-blur-lg rounded-xl shadow-lg border p-3 flex items-center gap-3 max-w-[90%]">
             <MapPin className="h-5 w-5 text-destructive shrink-0" />
             <div className="min-w-0">
               <p className="font-medium truncate">{destination.name}</p>
@@ -985,7 +985,7 @@ export default function MapPage() {
         )}
         
         {/* Map Controls */}
-        <div className="absolute bottom-4 right-4 z-[1000] flex flex-col gap-1">
+        <div className="absolute bottom-20 md:bottom-4 right-4 z-[50] flex flex-col gap-1">
           <Button variant="secondary" size="icon" className="shadow-lg" onClick={centerOnLocation}>
             <Locate className="h-4 w-4" />
           </Button>
@@ -998,7 +998,7 @@ export default function MapPage() {
         </div>
         
         {/* Layer switcher */}
-        <div className="absolute top-2 right-2 z-[1000]">
+        <div className="absolute top-2 right-2 z-[50]">
           <Button variant="secondary" size="icon" className="shadow-lg" onClick={() => {
             const layers: MapLayer[] = ['standard', 'satellite', 'terrain'];
             const currentIndex = layers.indexOf(mapLayer);
