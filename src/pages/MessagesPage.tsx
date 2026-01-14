@@ -11,6 +11,7 @@ import {
   Forward,
   Trash2,
   CheckSquare,
+  Bookmark,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -24,6 +25,7 @@ import { useIncomingCalls } from '@/hooks/useIncomingCalls';
 import { usePinnedMessages } from '@/hooks/usePinnedMessages';
 import { useReadReceipts } from '@/hooks/useReadReceipts';
 import { useScheduledMessages } from '@/hooks/useScheduledMessages';
+import { useSelfChat } from '@/hooks/useSelfChat';
 import { useToast } from '@/hooks/use-toast';
 
 // Components
@@ -115,6 +117,9 @@ export default function MessagesPage() {
   // Scheduled messages
   const { scheduleMessage, scheduledMessages } = useScheduledMessages(selectedConversation?.id || undefined);
   const [showScheduledMessages, setShowScheduledMessages] = useState(false);
+
+  // Self-chat (saved messages)
+  const { getOrCreateSelfChat, isCreating: isCreatingSelfChat } = useSelfChat();
 
   // Video call management
   const {
@@ -704,6 +709,16 @@ export default function MessagesPage() {
     return conv;
   };
 
+  // Handle opening self-chat (saved messages)
+  const handleOpenSelfChat = async () => {
+    const selfConv = await getOrCreateSelfChat();
+    if (selfConv) {
+      setSelectedConversation(selfConv);
+      setShowMobileChat(true);
+      setActiveTab('private');
+    }
+  };
+
   // Group messages by date
   const groupMessagesByDate = (msgs: Message[]) => {
     const groups: { date: string; messages: Message[] }[] = [];
@@ -792,7 +807,7 @@ export default function MessagesPage() {
         showMobileChat && "hidden md:flex"
       )}>
         {/* Search & Create */}
-        <div className="p-4 md:p-3 border-b border-border flex-shrink-0">
+        <div className="p-4 md:p-3 border-b border-border flex-shrink-0 space-y-3">
           <div className="flex gap-2">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 md:h-4 md:w-4 text-muted-foreground" />
@@ -803,6 +818,16 @@ export default function MessagesPage() {
                 className="pl-11 md:pl-10 h-12 md:h-10 text-base md:text-sm bg-muted/50"
               />
             </div>
+            <Button 
+              size="icon"
+              variant="outline"
+              className="h-12 w-12 md:h-10 md:w-10 bg-gradient-to-br from-amber-500/10 to-orange-500/10 border-amber-500/30 hover:bg-amber-500/20"
+              onClick={handleOpenSelfChat}
+              disabled={isCreatingSelfChat}
+              title="Saved Messages"
+            >
+              <Bookmark className="h-5 w-5 md:h-4 md:w-4 text-amber-600" />
+            </Button>
             <Button 
               size="icon"
               className="h-12 w-12 md:h-10 md:w-10"

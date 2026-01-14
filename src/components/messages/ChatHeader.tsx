@@ -15,12 +15,14 @@ import {
   LogOut,
   Users2,
   Clock,
+  Bookmark,
 } from 'lucide-react';
 import { Conversation } from '@/hooks/useMessages';
 import { cn } from '@/lib/utils';
 import { formatLastSeen } from '@/utils/formatLastSeen';
 import { useUserOnlineStatus } from '@/hooks/useRealtimeStatus';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,7 +32,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 interface ChatHeaderProps {
-  conversation: Conversation;
+  conversation: Conversation & { is_self_chat?: boolean };
   typingUsers: string[];
   onBack?: () => void;
   onAudioCall: () => void;
@@ -64,11 +66,22 @@ export function ChatHeader({
   isMuted,
   isAdmin,
 }: ChatHeaderProps) {
-  // Get real-time status for private chats
-  const otherUserId = conversation.type === 'private' ? conversation.other_participant?.id : null;
+  const { user } = useAuth();
+  
+  // Check if this is a self-chat (conversation with yourself)
+  const isSelfChat = conversation.is_self_chat || 
+    (conversation.type === 'private' && conversation.other_participant?.id === user?.id);
+
+  // Get real-time status for private chats (but not for self-chat)
+  const otherUserId = conversation.type === 'private' && !isSelfChat ? conversation.other_participant?.id : null;
   const { isOnline: realtimeIsOnline, lastSeen: realtimeLastSeen } = useUserOnlineStatus(otherUserId || null);
 
   const getName = () => {
+    if (isSelfChat) {
+      return conversation.other_participant?.display_name || 
+             conversation.other_participant?.username || 
+             'You';
+    }
     if (conversation.type === 'private') {
       return conversation.other_participant?.display_name || 
              conversation.other_participant?.username || 
@@ -87,6 +100,10 @@ export function ChatHeader({
   const getStatus = () => {
     if (typingUsers.length > 0) {
       return <span className="text-primary animate-pulse">typing...</span>;
+    }
+    
+    if (isSelfChat) {
+      return <span className="text-amber-500">save messages to yourself</span>;
     }
     
     if (conversation.type === 'private') {
@@ -111,8 +128,8 @@ export function ChatHeader({
     return null;
   };
 
-  // Use realtime status for online indicator
-  const isOnline = conversation.type === 'private' && realtimeIsOnline;
+  // Use realtime status for online indicator (but not for self-chat)
+  const isOnline = conversation.type === 'private' && !isSelfChat && realtimeIsOnline;
 
   return (
     <div className="h-16 px-4 flex items-center justify-between border-b border-border bg-card/95 backdrop-blur">
@@ -134,9 +151,12 @@ export function ChatHeader({
                 "text-primary-foreground",
                 conversation.type === 'group' && 'bg-blue-500',
                 conversation.type === 'channel' && 'bg-violet-500',
-                conversation.type === 'private' && 'bg-primary'
+                isSelfChat && 'bg-gradient-to-br from-amber-500 to-orange-500',
+                conversation.type === 'private' && !isSelfChat && 'bg-primary'
               )}>
-                {conversation.type === 'group' ? (
+                {isSelfChat ? (
+                  <Bookmark className="h-5 w-5" />
+                ) : conversation.type === 'group' ? (
                   <Users className="h-5 w-5" />
                 ) : conversation.type === 'channel' ? (
                   <Megaphone className="h-5 w-5" />
@@ -145,8 +165,13 @@ export function ChatHeader({
                 )}
               </AvatarFallback>
             </Avatar>
-            {isOnline && (
+            {isOnline && !isSelfChat && (
               <span className="absolute bottom-0 right-0 h-3 w-3 bg-green-500 rounded-full border-2 border-card" />
+            )}
+            {isSelfChat && (
+              <span className="absolute -bottom-0.5 -right-0.5 h-4 w-4 bg-card rounded-full flex items-center justify-center border-2 border-amber-500">
+                <Bookmark className="h-2 w-2 text-amber-500 fill-amber-500" />
+              </span>
             )}
           </div>
           
@@ -163,12 +188,17 @@ export function ChatHeader({
       </div>
       
       <div className="flex items-center gap-1">
-        <Button variant="ghost" size="icon" onClick={onAudioCall}>
-          <Phone className="h-5 w-5 text-muted-foreground" />
-        </Button>
-        <Button variant="ghost" size="icon" onClick={onVideoCall}>
-          <Video className="h-5 w-5 text-muted-foreground" />
-        </Button>
+        {/* Hide call buttons for self-chat */}
+        {!isSelfChat && (
+          <>
+            <Button variant="ghost" size="icon" onClick={onAudioCall}>
+              <Phone className="h-5 w-5 text-muted-foreground" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={onVideoCall}>
+              <Video className="h-5 w-5 text-muted-foreground" />
+            </Button>
+          </>
+        )}
         {onSearch && (
           <Button variant="ghost" size="icon" onClick={onSearch}>
             <Search className="h-5 w-5 text-muted-foreground" />

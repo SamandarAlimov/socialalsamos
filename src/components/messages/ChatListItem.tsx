@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Users, Megaphone, Pin, VolumeX, Reply } from 'lucide-react';
+import { Users, Megaphone, Pin, VolumeX, Reply, Bookmark } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
 import { Conversation } from '@/hooks/useMessages';
@@ -12,9 +12,10 @@ import { useUserOnlineStatus } from '@/hooks/useRealtimeStatus';
 import { supabase } from '@/integrations/supabase/client';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface ChatListItemProps {
-  conversation: Conversation;
+  conversation: Conversation & { is_self_chat?: boolean };
   isSelected: boolean;
   isPinned?: boolean;
   isMuted?: boolean;
@@ -44,10 +45,15 @@ export function ChatListItem({
   onMarkRead,
   onMarkUnread,
 }: ChatListItemProps) {
+  const { user } = useAuth();
   const { lightTap } = useHapticFeedback();
   const [isVerified, setIsVerified] = useState(false);
   const [isPulsing, setIsPulsing] = useState(false);
   const prevUnreadCount = useRef(conversation.unread_count ?? 0);
+  
+  // Check if this is a self-chat (conversation with yourself)
+  const isSelfChat = conversation.is_self_chat || 
+    (conversation.type === 'private' && conversation.other_participant?.id === user?.id);
   
   // Trigger pulse animation when unread count increases
   useEffect(() => {
@@ -106,6 +112,12 @@ export function ChatListItem({
   }, [otherUserId, conversation.other_participant]);
 
   const getName = () => {
+    if (isSelfChat) {
+      // Show user's own name for self-chat
+      return conversation.other_participant?.display_name || 
+             conversation.other_participant?.username || 
+             'You';
+    }
     if (conversation.type === 'private') {
       return conversation.other_participant?.display_name || 
              conversation.other_participant?.username || 
@@ -188,10 +200,13 @@ export function ChatListItem({
                   "text-primary-foreground font-medium text-lg md:text-base",
                   conversation.type === 'group' && 'bg-blue-500',
                   conversation.type === 'channel' && 'bg-violet-500',
-                  conversation.type === 'private' && 'bg-primary'
+                  isSelfChat && 'bg-gradient-to-br from-amber-500 to-orange-500',
+                  conversation.type === 'private' && !isSelfChat && 'bg-primary'
                 )}
               >
-                {conversation.type === 'group' ? (
+                {isSelfChat ? (
+                  <Bookmark className="h-6 w-6 md:h-5 md:w-5" />
+                ) : conversation.type === 'group' ? (
                   <Users className="h-6 w-6 md:h-5 md:w-5" />
                 ) : conversation.type === 'channel' ? (
                   <Megaphone className="h-6 w-6 md:h-5 md:w-5" />
@@ -200,9 +215,15 @@ export function ChatListItem({
                 )}
               </AvatarFallback>
             </Avatar>
-            {/* Online indicator */}
-            {conversation.type === 'private' && isOnline && (
+            {/* Online indicator - don't show for self-chat */}
+            {conversation.type === 'private' && isOnline && !isSelfChat && (
               <span className="absolute bottom-0 right-0 h-4 w-4 md:h-3.5 md:w-3.5 bg-green-500 rounded-full border-2 border-card" />
+            )}
+            {/* Self-chat indicator */}
+            {isSelfChat && (
+              <span className="absolute -bottom-0.5 -right-0.5 h-5 w-5 md:h-4 md:w-4 bg-card rounded-full flex items-center justify-center border-2 border-amber-500">
+                <Bookmark className="h-2.5 w-2.5 md:h-2 md:w-2 text-amber-500 fill-amber-500" />
+              </span>
             )}
           </div>
           

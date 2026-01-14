@@ -19,6 +19,7 @@ export interface Conversation {
   is_pinned?: boolean;
   is_muted?: boolean;
   is_archived?: boolean;
+  is_self_chat?: boolean;
   other_participant?: {
     id: string;
     username: string | null;
@@ -146,25 +147,45 @@ export function useConversations(type?: 'private' | 'group' | 'channel', showArc
           let otherParticipant = null;
           let lastMessage = null;
           let unreadCount = 0;
+          let isSelfChat = false;
 
           const participantSettings = participationMap.get(conv.id);
 
           if (conv.type === 'private') {
-            const { data: participants } = await supabase
+            // Check total participants to detect self-chat
+            const { count: participantCount } = await supabase
               .from('conversation_participants')
-              .select('user_id')
-              .eq('conversation_id', conv.id)
-              .neq('user_id', user.id)
-              .limit(1);
+              .select('*', { count: 'exact', head: true })
+              .eq('conversation_id', conv.id);
 
-            if (participants && participants.length > 0) {
+            // Self-chat has only 1 participant (the user themselves)
+            if (participantCount === 1) {
+              isSelfChat = true;
+              // For self-chat, use user's own profile
               const { data: profile } = await supabase
                 .from('profiles')
                 .select('id, username, display_name, avatar_url, is_online, last_seen, is_verified')
-                .eq('id', participants[0].user_id)
+                .eq('id', user.id)
                 .single();
-
               otherParticipant = profile;
+            } else {
+              // Regular private chat - get the other participant
+              const { data: participants } = await supabase
+                .from('conversation_participants')
+                .select('user_id')
+                .eq('conversation_id', conv.id)
+                .neq('user_id', user.id)
+                .limit(1);
+
+              if (participants && participants.length > 0) {
+                const { data: profile } = await supabase
+                  .from('profiles')
+                  .select('id, username, display_name, avatar_url, is_online, last_seen, is_verified')
+                  .eq('id', participants[0].user_id)
+                  .single();
+
+                otherParticipant = profile;
+              }
             }
           }
 
@@ -182,20 +203,23 @@ export function useConversations(type?: 'private' | 'group' | 'channel', showArc
           }
 
           // Calculate unread count using last_read_at for efficiency
-          let unreadQuery = supabase
-            .from('messages')
-            .select('id', { count: 'exact', head: true })
-            .eq('conversation_id', conv.id)
-            .neq('sender_id', user.id)
-            .eq('is_deleted', false);
+          // For self-chat, don't count unread (all messages are from self)
+          if (!isSelfChat) {
+            let unreadQuery = supabase
+              .from('messages')
+              .select('id', { count: 'exact', head: true })
+              .eq('conversation_id', conv.id)
+              .neq('sender_id', user.id)
+              .eq('is_deleted', false);
 
-          // Only count messages after last_read_at if it exists
-          if (participantSettings?.last_read_at) {
-            unreadQuery = unreadQuery.gt('created_at', participantSettings.last_read_at);
+            // Only count messages after last_read_at if it exists
+            if (participantSettings?.last_read_at) {
+              unreadQuery = unreadQuery.gt('created_at', participantSettings.last_read_at);
+            }
+
+            const { count } = await unreadQuery;
+            unreadCount = count || 0;
           }
-
-          const { count } = await unreadQuery;
-          unreadCount = count || 0;
 
           return {
             ...conv,
@@ -205,6 +229,7 @@ export function useConversations(type?: 'private' | 'group' | 'channel', showArc
             is_pinned: participantSettings?.is_pinned ?? false,
             is_muted: participantSettings?.is_muted ?? false,
             is_archived: participantSettings?.is_archived ?? false,
+            is_self_chat: isSelfChat,
           } as Conversation;
         })
       );
