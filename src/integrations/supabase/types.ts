@@ -14,6 +14,66 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_conversations: {
+        Row: {
+          context: string | null
+          created_at: string
+          id: string
+          messages: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          context?: string | null
+          created_at?: string
+          id?: string
+          messages?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          context?: string | null
+          created_at?: string
+          id?: string
+          messages?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ai_preferences: {
+        Row: {
+          alerts_enabled: boolean | null
+          content_filter: string[] | null
+          created_at: string
+          daily_time_limit_minutes: number | null
+          id: string
+          recommendation_topics: string[] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          alerts_enabled?: boolean | null
+          content_filter?: string[] | null
+          created_at?: string
+          daily_time_limit_minutes?: number | null
+          id?: string
+          recommendation_topics?: string[] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          alerts_enabled?: boolean | null
+          content_filter?: string[] | null
+          created_at?: string
+          daily_time_limit_minutes?: number | null
+          id?: string
+          recommendation_topics?: string[] | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       call_history: {
         Row: {
           call_id: string
@@ -1234,6 +1294,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_activity_logs: {
+        Row: {
+          activity_type: string
+          content_category: string | null
+          created_at: string
+          duration_seconds: number | null
+          id: string
+          page: string
+          user_id: string
+        }
+        Insert: {
+          activity_type: string
+          content_category?: string | null
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          page: string
+          user_id: string
+        }
+        Update: {
+          activity_type?: string
+          content_category?: string | null
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          page?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {
