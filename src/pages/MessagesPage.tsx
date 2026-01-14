@@ -7,6 +7,10 @@ import {
   MessageCircle,
   Inbox,
   Archive,
+  X,
+  Forward,
+  Trash2,
+  CheckSquare,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -56,12 +60,17 @@ export default function MessagesPage() {
   // Message State
   const [replyTo, setReplyTo] = useState<{ id: string; content: string; sender_name: string } | null>(null);
   const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
+  const [forwardMessages, setForwardMessages] = useState<Message[]>([]);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [deletingMessage, setDeletingMessage] = useState<Message | null>(null);
   const [showGroupDialog, setShowGroupDialog] = useState(false);
   const [showMemberManagement, setShowMemberManagement] = useState(false);
   const [showMessageSearch, setShowMessageSearch] = useState(false);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  
+  // Selection mode for multi-select
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
   // Call State
   const [isInCall, setIsInCall] = useState(false);
   const [callType, setCallType] = useState<'audio' | 'video'>('video');
@@ -289,7 +298,52 @@ export default function MessagesPage() {
   };
 
   const handleForward = (message: Message) => {
-    setForwardMessage(message);
+    // Single message forward
+    setForwardMessages([message]);
+  };
+
+  // Multi-select handlers
+  const handleSelectMessage = (messageId: string) => {
+    setSelectedMessages(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId);
+      } else {
+        newSet.add(messageId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleEnterSelectionMode = (messageId: string) => {
+    setIsSelectionMode(true);
+    setSelectedMessages(new Set([messageId]));
+  };
+
+  const handleExitSelectionMode = () => {
+    setIsSelectionMode(false);
+    setSelectedMessages(new Set());
+  };
+
+  const handleForwardSelected = () => {
+    const selectedMsgs = messages.filter(m => selectedMessages.has(m.id));
+    // Sort by created_at to maintain order
+    selectedMsgs.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    setForwardMessages(selectedMsgs);
+    handleExitSelectionMode();
+  };
+
+  const handleDeleteSelected = async () => {
+    // Only delete own messages
+    const mySelectedMessages = messages.filter(m => selectedMessages.has(m.id) && m.sender_id === user?.id);
+    for (const msg of mySelectedMessages) {
+      await deleteMessage(msg.id);
+    }
+    handleExitSelectionMode();
+    toast({
+      title: 'Deleted',
+      description: `${mySelectedMessages.length} message${mySelectedMessages.length > 1 ? 's' : ''} deleted`,
+    });
   };
 
   const handleEdit = (message: Message) => {
@@ -841,44 +895,83 @@ export default function MessagesPage() {
       >
         {selectedConversation ? (
           <>
-            {/* Chat Header - Fixed at top */}
-            <div className="flex-shrink-0 z-20 bg-card border-b border-border">
-              <ChatHeader
-                conversation={selectedConversation}
-                typingUsers={typingUsers}
-                onBack={() => setShowMobileChat(false)}
-                onAudioCall={() => startCall('audio')}
-                onVideoCall={() => startCall('video')}
-                onSearch={() => setShowMessageSearch(true)}
-                onViewInfo={() => {}}
-                onManageMembers={selectedConversation.type === 'group' ? () => setShowMemberManagement(true) : undefined}
+            {/* Selection Mode Header */}
+            {isSelectionMode ? (
+              <div className="flex-shrink-0 z-20 bg-card border-b border-border">
+                <div className="flex items-center justify-between p-3 md:p-4">
+                  <div className="flex items-center gap-3">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleExitSelectionMode}
+                    >
+                      <X className="h-5 w-5" />
+                    </Button>
+                    <span className="font-medium">
+                      {selectedMessages.size} selected
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleForwardSelected}
+                      disabled={selectedMessages.size === 0}
+                    >
+                      <Forward className="h-5 w-5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleDeleteSelected}
+                      disabled={selectedMessages.size === 0}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Chat Header - Fixed at top */
+              <div className="flex-shrink-0 z-20 bg-card border-b border-border">
+                <ChatHeader
+                  conversation={selectedConversation}
+                  typingUsers={typingUsers}
+                  onBack={() => setShowMobileChat(false)}
+                  onAudioCall={() => startCall('audio')}
+                  onVideoCall={() => startCall('video')}
+                  onSearch={() => setShowMessageSearch(true)}
+                  onViewInfo={() => {}}
+                  onManageMembers={selectedConversation.type === 'group' ? () => setShowMemberManagement(true) : undefined}
+                />
+              </div>
+            )}
+            
+            {/* Message Search Bar */}
+            {showMessageSearch && !isSelectionMode && (
+              <MessageSearch
+                messages={messages}
+                onHighlightMessage={(id) => {
+                  setHighlightedMessageId(id);
+                  // Scroll to message
+                  const element = document.getElementById(`message-${id}`);
+                  element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  // Clear highlight after animation
+                  setTimeout(() => setHighlightedMessageId(null), 2000);
+                }}
+                onClose={() => setShowMessageSearch(false)}
               />
-              
-              {/* Message Search Bar */}
-              {showMessageSearch && (
-                <MessageSearch
-                  messages={messages}
-                  onHighlightMessage={(id) => {
-                    setHighlightedMessageId(id);
-                    // Scroll to message
-                    const element = document.getElementById(`message-${id}`);
-                    element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    // Clear highlight after animation
-                    setTimeout(() => setHighlightedMessageId(null), 2000);
-                  }}
-                  onClose={() => setShowMessageSearch(false)}
-                />
-              )}
-              
-              {/* Pinned Messages Bar */}
-              {pinnedMessages.length > 0 && (
-                <PinnedMessagesBar
-                  pinnedMessages={pinnedMessages}
-                  onUnpin={unpinMessage}
-                  onScrollToMessage={handleScrollToPinnedMessage}
-                />
-              )}
-            </div>
+            )}
+            
+            {/* Pinned Messages Bar */}
+            {pinnedMessages.length > 0 && !isSelectionMode && (
+              <PinnedMessagesBar
+                pinnedMessages={pinnedMessages}
+                onUnpin={unpinMessage}
+                onScrollToMessage={handleScrollToPinnedMessage}
+              />
+            )}
             {/* Messages Area - Scrollable - Takes remaining space between fixed header and input */}
             <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-custom bg-muted/20 overscroll-contain">
               {messagesLoading ? (
@@ -940,7 +1033,11 @@ export default function MessagesPage() {
                                 onEdit={handleEdit}
                                 onDelete={handleDelete}
                                 onPin={handlePin}
+                                onSelect={handleSelectMessage}
+                                onLongPress={handleEnterSelectionMode}
                                 isPinned={isMessagePinned(message.id)}
+                                isSelected={selectedMessages.has(message.id)}
+                                isSelectionMode={isSelectionMode}
                                 showAvatar={showAvatar}
                                 showSender={selectedConversation.type === 'group' && showAvatar}
                               />
@@ -1010,9 +1107,9 @@ export default function MessagesPage() {
       />
 
       <TelegramForwardDialog
-        message={forwardMessage}
-        open={!!forwardMessage}
-        onOpenChange={(open) => !open && setForwardMessage(null)}
+        messages={forwardMessages}
+        open={forwardMessages.length > 0}
+        onOpenChange={(open) => !open && setForwardMessages([])}
       />
 
       <EditMessageDialog

@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Check, CheckCheck, Plus, Clock, AlertCircle, Reply as ReplyIcon, Forward, Pin } from 'lucide-react';
+import { Check, CheckCheck, Plus, Clock, AlertCircle, Reply as ReplyIcon, Forward, Pin, Square, CheckSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MessageAttachment } from '@/components/MessageAttachment';
 import { VoiceMessagePlayer } from '@/components/VoiceMessagePlayer';
@@ -69,7 +69,11 @@ interface EnhancedMessageBubbleProps {
   onEdit?: (message: Message) => void;
   onDelete?: (messageId: string) => void;
   onPin?: (messageId: string) => void;
+  onSelect?: (messageId: string) => void;
+  onLongPress?: (messageId: string) => void;
   isPinned?: boolean;
+  isSelected?: boolean;
+  isSelectionMode?: boolean;
   showAvatar?: boolean;
   showSender?: boolean;
 }
@@ -83,7 +87,11 @@ export function EnhancedMessageBubble({
   onEdit,
   onDelete,
   onPin,
+  onSelect,
+  onLongPress,
   isPinned = false,
+  isSelected = false,
+  isSelectionMode = false,
   showAvatar = true,
   showSender = false,
 }: EnhancedMessageBubbleProps) {
@@ -116,6 +124,35 @@ export function EnhancedMessageBubble({
       lastTapRef.current = now;
     }
   }, [user, successFeedback]);
+
+  // Long press for selection mode
+  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+  const longPressTriggered = useRef(false);
+  
+  const handleLongPressStart = useCallback(() => {
+    longPressTriggered.current = false;
+    longPressTimer.current = setTimeout(() => {
+      longPressTriggered.current = true;
+      mediumTap();
+      onLongPress?.(message.id);
+    }, 500);
+  }, [message.id, onLongPress, mediumTap]);
+
+  const handleLongPressEnd = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+
+  const handleClick = useCallback(() => {
+    if (isSelectionMode && onSelect) {
+      onSelect(message.id);
+      lightTap();
+    } else if (!longPressTriggered.current) {
+      handleDoubleTap();
+    }
+  }, [isSelectionMode, onSelect, message.id, handleDoubleTap, lightTap]);
 
   const isInteractiveTarget = (target: EventTarget | null) => {
     const el = target as HTMLElement | null;
@@ -310,6 +347,7 @@ export function EnhancedMessageBubble({
       onEdit={isMine ? () => onEdit?.(message) : undefined}
       onDelete={isMine ? () => onDelete?.(message.id) : undefined}
       onPin={() => onPin?.(message.id)}
+      onSelect={onLongPress ? () => onLongPress(message.id) : undefined}
       isPinned={isPinned}
       onCopy={message.content ? copyToClipboard : undefined}
       hasMedia={!!message.media_url}
@@ -317,12 +355,40 @@ export function EnhancedMessageBubble({
       readAt={message.read_at}
     >
       <div 
-        className={cn("flex group relative", isMine ? "justify-end" : "justify-start")}
-        onTouchStart={handleTouchStart}
+        className={cn(
+          "flex group relative transition-colors",
+          isMine ? "justify-end" : "justify-start",
+          isSelected && "bg-primary/10 -mx-2 px-2 rounded-lg"
+        )}
+        onTouchStart={(e) => {
+          if (!isSelectionMode) {
+            handleTouchStart(e);
+            handleLongPressStart();
+          }
+        }}
         onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onClick={handleDoubleTap}
+        onTouchEnd={(e) => {
+          handleTouchEnd();
+          handleLongPressEnd();
+        }}
+        onClick={handleClick}
+        onMouseDown={handleLongPressStart}
+        onMouseUp={handleLongPressEnd}
+        onMouseLeave={handleLongPressEnd}
       >
+        {/* Selection checkbox */}
+        {isSelectionMode && (
+          <div className={cn(
+            "absolute top-1/2 -translate-y-1/2 z-10",
+            isMine ? "right-full mr-2" : "left-0 -ml-6"
+          )}>
+            {isSelected ? (
+              <CheckSquare className="h-5 w-5 text-primary" />
+            ) : (
+              <Square className="h-5 w-5 text-muted-foreground" />
+            )}
+          </div>
+        )}
         {/* Pinned indicator */}
         {isPinned && (
           <div className={cn(
