@@ -18,11 +18,12 @@ import {
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { NotificationsDropdown } from '@/components/NotificationsDropdown';
 import { UserSearchDialog } from '@/components/UserSearchDialog';
 import { Button } from '@/components/ui/button';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
+import { useNotificationSound } from '@/hooks/useNotificationSound';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface NavItem {
@@ -54,7 +55,13 @@ export function AppSidebar() {
   const location = useLocation();
   const { user, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
-  const { unreadCount: messagesUnreadCount } = useUnreadMessages();
+  const { playMessageSound } = useNotificationSound();
+  
+  const handleNewMessage = useCallback(() => {
+    playMessageSound();
+  }, [playMessageSound]);
+  
+  const { unreadCount: messagesUnreadCount } = useUnreadMessages(handleNewMessage);
 
   const getBadgeCount = (badgeKey?: 'messages') => {
     if (badgeKey === 'messages') return messagesUnreadCount;

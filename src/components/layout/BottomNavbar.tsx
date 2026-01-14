@@ -2,7 +2,9 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { Home, MessageCircle, PlusSquare, Video, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
+import { useNotificationSound } from '@/hooks/useNotificationSound';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useCallback } from 'react';
 
 interface NavItem {
   icon: React.ElementType;
@@ -21,7 +23,13 @@ const bottomNavItems: NavItem[] = [
 
 export function BottomNavbar() {
   const location = useLocation();
-  const { unreadCount: messagesUnreadCount } = useUnreadMessages();
+  const { playMessageSound } = useNotificationSound();
+  
+  const handleNewMessage = useCallback(() => {
+    playMessageSound();
+  }, [playMessageSound]);
+  
+  const { unreadCount: messagesUnreadCount } = useUnreadMessages(handleNewMessage);
 
   const getBadgeCount = (badgeKey?: 'messages') => {
     if (badgeKey === 'messages') return messagesUnreadCount;

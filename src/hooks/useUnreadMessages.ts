@@ -1,13 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useNotificationSound } from './useNotificationSound';
 
-export function useUnreadMessages() {
+export function useUnreadMessages(onNewMessage?: () => void) {
   const { user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
-  const { playMessageSound } = useNotificationSound();
   const isInitialFetch = useRef(true);
+  const onNewMessageRef = useRef(onNewMessage);
+  
+  // Keep callback ref updated
+  useEffect(() => {
+    onNewMessageRef.current = onNewMessage;
+  }, [onNewMessage]);
 
   // Define fetchUnreadCount using useCallback at the top level
   const fetchUnreadCount = useCallback(async () => {
@@ -87,9 +91,9 @@ export function useUnreadMessages() {
 
           if (participation) {
             setUnreadCount(prev => prev + 1);
-            // Play notification sound for new message
-            if (!isInitialFetch.current) {
-              playMessageSound();
+            // Trigger callback for new message
+            if (!isInitialFetch.current && onNewMessageRef.current) {
+              onNewMessageRef.current();
             }
           }
         }
