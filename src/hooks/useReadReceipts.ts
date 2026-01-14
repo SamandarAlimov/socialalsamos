@@ -43,7 +43,7 @@ export function useReadReceipts(conversationId: string | null) {
 
   // Mark messages as read
   const markAsRead = useCallback(async (messageIds: string[]) => {
-    if (!user || !messageIds.length) return;
+    if (!user || !messageIds.length || !conversationId) return;
 
     // Filter out messages already read by this user
     const unreadIds = messageIds.filter(id => {
@@ -53,16 +53,26 @@ export function useReadReceipts(conversationId: string | null) {
 
     if (!unreadIds.length) return;
 
+    const now = new Date().toISOString();
+
     const inserts = unreadIds.map(messageId => ({
       message_id: messageId,
       user_id: user.id,
-      read_at: new Date().toISOString(),
+      read_at: now,
     }));
 
+    // Insert read receipts
     await supabase
       .from('message_reads')
       .upsert(inserts, { onConflict: 'message_id,user_id' });
-  }, [user, readReceipts]);
+
+    // Update last_read_at in conversation_participants for accurate unread count calculation
+    await supabase
+      .from('conversation_participants')
+      .update({ last_read_at: now })
+      .eq('conversation_id', conversationId)
+      .eq('user_id', user.id);
+  }, [user, readReceipts, conversationId]);
 
   // Check if message is read by recipient(s)
   const isMessageRead = useCallback((messageId: string, senderId: string) => {
