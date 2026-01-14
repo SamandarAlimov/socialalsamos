@@ -29,13 +29,20 @@ export function useUnreadMessages() {
 
         // For each conversation, count messages after last_read_at that aren't from user
         for (const participation of participations) {
-          const { count } = await supabase
+          // Skip if no last_read_at - means user hasn't opened the chat yet, count all messages not from them
+          let query = supabase
             .from('messages')
             .select('id', { count: 'exact', head: true })
             .eq('conversation_id', participation.conversation_id)
             .neq('sender_id', user.id)
-            .gt('created_at', participation.last_read_at || '1970-01-01');
+            .eq('is_deleted', false);
 
+          // Only count messages after last_read_at if it exists
+          if (participation.last_read_at) {
+            query = query.gt('created_at', participation.last_read_at);
+          }
+
+          const { count } = await query;
           totalUnread += count || 0;
         }
 
