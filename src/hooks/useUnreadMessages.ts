@@ -6,6 +6,7 @@ export function useUnreadMessages() {
   const { user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
 
+  // Define fetchUnreadCount using useCallback at the top level
   const fetchUnreadCount = useCallback(async () => {
     if (!user) {
       setUnreadCount(0);
@@ -13,7 +14,6 @@ export function useUnreadMessages() {
     }
 
     try {
-      // Get all conversation IDs user is part of
       const { data: participations } = await supabase
         .from('conversation_participants')
         .select('conversation_id, last_read_at')
@@ -26,7 +26,6 @@ export function useUnreadMessages() {
 
       let totalUnread = 0;
 
-      // For each conversation, count messages after last_read_at that aren't from user
       for (const participation of participations) {
         let query = supabase
           .from('messages')
@@ -35,7 +34,6 @@ export function useUnreadMessages() {
           .neq('sender_id', user.id)
           .eq('is_deleted', false);
 
-        // Only count messages after last_read_at if it exists
         if (participation.last_read_at) {
           query = query.gt('created_at', participation.last_read_at);
         }
@@ -50,6 +48,7 @@ export function useUnreadMessages() {
     }
   }, [user]);
 
+  // Main effect for fetching and subscribing
   useEffect(() => {
     if (!user) {
       setUnreadCount(0);
@@ -71,10 +70,8 @@ export function useUnreadMessages() {
         async (payload) => {
           const newMessage = payload.new as { sender_id: string; conversation_id: string };
           
-          // Skip if it's our own message
           if (newMessage.sender_id === user.id) return;
 
-          // Check if we're in this conversation
           const { data: participation } = await supabase
             .from('conversation_participants')
             .select('id')
@@ -89,7 +86,7 @@ export function useUnreadMessages() {
       )
       .subscribe();
 
-    // Subscribe to conversation_participants changes (last_read_at updates)
+    // Subscribe to conversation_participants updates (last_read_at changes)
     const participantsChannel = supabase
       .channel('unread-participants-updates')
       .on(
@@ -101,21 +98,17 @@ export function useUnreadMessages() {
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          // When last_read_at is updated, refresh the count
-          if (payload.new && payload.old) {
-            const newLastRead = (payload.new as { last_read_at: string | null }).last_read_at;
-            const oldLastRead = (payload.old as { last_read_at: string | null }).last_read_at;
-            
-            // Only refresh if last_read_at changed
-            if (newLastRead !== oldLastRead) {
-              fetchUnreadCount();
-            }
+          const newData = payload.new as { last_read_at: string | null };
+          const oldData = payload.old as { last_read_at: string | null };
+          
+          if (newData.last_read_at !== oldData.last_read_at) {
+            fetchUnreadCount();
           }
         }
       )
       .subscribe();
 
-    // Subscribe to message_reads table for real-time read updates
+    // Subscribe to message_reads for real-time updates
     const readsChannel = supabase
       .channel('unread-message-reads')
       .on(
@@ -127,7 +120,6 @@ export function useUnreadMessages() {
           filter: `user_id=eq.${user.id}`,
         },
         () => {
-          // When we read a message, decrement the count
           fetchUnreadCount();
         }
       )
