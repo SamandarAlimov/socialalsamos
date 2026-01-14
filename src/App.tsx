@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { GlobalCallProvider } from "@/contexts/GlobalCallContext";
+import { AIProvider } from "@/contexts/AIContext";
+import { AIFloatingButton, AIChatDialog, AITimeLimitAlert } from "@/components/ai";
 import { ThemeProvider } from "next-themes";
 
 // Pages
@@ -117,9 +119,14 @@ function AppWithGlobalCall() {
       <Toaster />
       <Sonner />
       {isAuthenticated ? (
-        <GlobalCallProvider>
-          <AppRoutes />
-        </GlobalCallProvider>
+        <AIProvider>
+          <GlobalCallProvider>
+            <AppRoutes />
+            <AIFloatingButton />
+            <AIChatDialog />
+            <AITimeLimitAlert />
+          </GlobalCallProvider>
+        </AIProvider>
       ) : (
         <AppRoutes />
       )}
