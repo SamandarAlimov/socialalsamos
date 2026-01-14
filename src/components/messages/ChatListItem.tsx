@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Users, Megaphone, Pin, VolumeX, Reply } from 'lucide-react';
@@ -11,6 +11,8 @@ import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useUserOnlineStatus } from '@/hooks/useRealtimeStatus';
 import { supabase } from '@/integrations/supabase/client';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
+import { motion, AnimatePresence } from 'framer-motion';
+
 interface ChatListItemProps {
   conversation: Conversation;
   isSelected: boolean;
@@ -44,6 +46,19 @@ export function ChatListItem({
 }: ChatListItemProps) {
   const { lightTap } = useHapticFeedback();
   const [isVerified, setIsVerified] = useState(false);
+  const [isPulsing, setIsPulsing] = useState(false);
+  const prevUnreadCount = useRef(conversation.unread_count ?? 0);
+  
+  // Trigger pulse animation when unread count increases
+  useEffect(() => {
+    const currentCount = conversation.unread_count ?? 0;
+    if (currentCount > prevUnreadCount.current) {
+      setIsPulsing(true);
+      const timer = setTimeout(() => setIsPulsing(false), 600);
+      return () => clearTimeout(timer);
+    }
+    prevUnreadCount.current = currentCount;
+  }, [conversation.unread_count]);
   
   const otherUserId = conversation.type === 'private' ? conversation.other_participant?.id : null;
   
@@ -227,11 +242,32 @@ export function ChatListItem({
               </p>
               
               <div className="flex items-center gap-1.5 flex-shrink-0">
-                {isUnread && (
-                  <Badge variant="default" className="h-6 min-w-[24px] md:h-5 md:min-w-[20px] rounded-full px-2 md:px-1.5 text-sm md:text-xs">
-                    {(conversation.unread_count ?? 0) > 99 ? '99+' : conversation.unread_count}
-                  </Badge>
-                )}
+                <AnimatePresence>
+                  {isUnread && (
+                    <motion.div
+                      initial={{ scale: 0, opacity: 0 }}
+                      animate={{ 
+                        scale: isPulsing ? [1, 1.3, 1] : 1, 
+                        opacity: 1 
+                      }}
+                      exit={{ scale: 0, opacity: 0 }}
+                      transition={{ 
+                        duration: isPulsing ? 0.4 : 0.2,
+                        ease: "easeOut"
+                      }}
+                    >
+                      <Badge 
+                        variant="default" 
+                        className={cn(
+                          "h-6 min-w-[24px] md:h-5 md:min-w-[20px] rounded-full px-2 md:px-1.5 text-sm md:text-xs",
+                          isPulsing && "shadow-lg shadow-primary/40"
+                        )}
+                      >
+                        {(conversation.unread_count ?? 0) > 99 ? '99+' : conversation.unread_count}
+                      </Badge>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
           </div>
