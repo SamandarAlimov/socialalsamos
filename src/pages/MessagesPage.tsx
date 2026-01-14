@@ -23,6 +23,7 @@ import { useVideoCall } from '@/hooks/useVideoCall';
 import { useIncomingCalls } from '@/hooks/useIncomingCalls';
 import { usePinnedMessages } from '@/hooks/usePinnedMessages';
 import { useReadReceipts } from '@/hooks/useReadReceipts';
+import { useScheduledMessages } from '@/hooks/useScheduledMessages';
 import { useToast } from '@/hooks/use-toast';
 
 // Components
@@ -42,6 +43,7 @@ import { EditMessageDialog } from '@/components/messages/EditMessageDialog';
 import { DeleteMessageDialog } from '@/components/messages/DeleteMessageDialog';
 import { TypingIndicator } from '@/components/messages/TypingIndicator';
 import { GroupMemberManagement } from '@/components/messages/GroupMemberManagement';
+import { ScheduledMessagesSheet } from '@/components/messages/ScheduledMessagesSheet';
 
 type MessageTab = 'private' | 'groups' | 'channels' | 'requests' | 'archived';
 
@@ -109,6 +111,10 @@ export default function MessagesPage() {
 
   // Read receipts
   const { markAsRead, isMessageRead, getMessageReadAt } = useReadReceipts(selectedConversation?.id || null);
+
+  // Scheduled messages
+  const { scheduleMessage, scheduledMessages } = useScheduledMessages(selectedConversation?.id || undefined);
+  const [showScheduledMessages, setShowScheduledMessages] = useState(false);
 
   // Video call management
   const {
@@ -287,6 +293,12 @@ export default function MessagesPage() {
   const handleSendMessage = async (content: string, mediaUrl?: string, mediaType?: string) => {
     await sendMessage(content, mediaUrl, mediaType);
     setReplyTo(null);
+  };
+
+  const handleScheduleMessage = async (scheduledFor: Date, content: string, mediaUrl?: string, mediaType?: string) => {
+    if (selectedConversation) {
+      await scheduleMessage(selectedConversation.id, scheduledFor, content, mediaUrl, mediaType);
+    }
   };
 
   const handleReply = (message: Message) => {
@@ -944,6 +956,8 @@ export default function MessagesPage() {
                   onSearch={() => setShowMessageSearch(true)}
                   onViewInfo={() => {}}
                   onManageMembers={selectedConversation.type === 'group' ? () => setShowMemberManagement(true) : undefined}
+                  onViewScheduled={() => setShowScheduledMessages(true)}
+                  scheduledCount={scheduledMessages.length}
                 />
               </div>
             )}
@@ -1062,6 +1076,7 @@ export default function MessagesPage() {
             <div className="flex-shrink-0 border-t border-border bg-card mb-16 md:mb-0">
               <MessageInput
                 onSend={handleSendMessage}
+                onSchedule={handleScheduleMessage}
                 onTyping={setTyping}
                 replyTo={replyTo}
                 onCancelReply={() => setReplyTo(null)}
@@ -1135,6 +1150,12 @@ export default function MessagesPage() {
           isAdmin={selectedConversation.owner_id === user?.id}
         />
       )}
+
+      <ScheduledMessagesSheet
+        open={showScheduledMessages}
+        onOpenChange={setShowScheduledMessages}
+        conversationId={selectedConversation?.id}
+      />
     </div>
   );
 }
