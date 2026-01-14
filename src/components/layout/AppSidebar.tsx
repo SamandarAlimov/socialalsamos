@@ -13,10 +13,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Compass,
-  Wallet
+  Wallet,
+  Sparkles
 } from 'lucide-react';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAI } from '@/contexts/AIContext';
 import { cn } from '@/lib/utils';
 import { useState, useCallback } from 'react';
 import { NotificationsDropdown } from '@/components/NotificationsDropdown';
@@ -31,11 +33,13 @@ interface NavItem {
   label: string;
   path?: string;
   badgeKey?: 'messages';
-  action?: 'notifications' | 'search';
+  action?: 'notifications' | 'search' | 'ai';
 }
 
 const navItems: NavItem[] = [
   { icon: Home, label: 'Home', path: '/home' },
+  { icon: Wallet, label: 'Payment', path: '/payment' },
+  { icon: Sparkles, label: 'AI Assistant', action: 'ai' },
   { icon: Search, label: 'Search', path: '/search' },
   { icon: Compass, label: 'Discover', path: '/discover' },
   { icon: Video, label: 'Videos', path: '/videos' },
@@ -47,13 +51,13 @@ const navItems: NavItem[] = [
 
 const bottomItems: NavItem[] = [
   { icon: User, label: 'Profile', path: '/profile' },
-  { icon: Wallet, label: 'Payment', path: '/payment' },
   { icon: Settings, label: 'Settings', path: '/settings' },
 ];
 
 export function AppSidebar() {
   const location = useLocation();
   const { user, logout } = useAuth();
+  const { setIsOpen: setAIOpen } = useAI();
   const [collapsed, setCollapsed] = useState(false);
   const { playMessageSound } = useNotificationSound();
   
@@ -66,6 +70,12 @@ export function AppSidebar() {
   const getBadgeCount = (badgeKey?: 'messages') => {
     if (badgeKey === 'messages') return messagesUnreadCount;
     return 0;
+  };
+
+  const handleNavClick = (item: NavItem) => {
+    if (item.action === 'ai') {
+      setAIOpen(true);
+    }
   };
 
   return (
@@ -87,6 +97,27 @@ export function AppSidebar() {
         {navItems.map((item) => {
           const isActive = item.path ? location.pathname === item.path : false;
           const badgeCount = getBadgeCount(item.badgeKey);
+          
+          // For action items (like AI), render a button instead of NavLink
+          if (item.action) {
+            return (
+              <button
+                key={item.label}
+                onClick={() => handleNavClick(item)}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative w-full",
+                  "text-sidebar-foreground hover:bg-sidebar-accent"
+                )}
+              >
+                <div className="relative">
+                  <item.icon className="h-5 w-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110" />
+                </div>
+                {!collapsed && (
+                  <span className="font-medium text-sm">{item.label}</span>
+                )}
+              </button>
+            );
+          }
           
           return (
             <NavLink
