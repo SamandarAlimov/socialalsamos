@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Check, CheckCheck, Plus, Clock, AlertCircle, Reply as ReplyIcon, Forward } from 'lucide-react';
+import { Check, CheckCheck, Plus, Clock, AlertCircle, Reply as ReplyIcon, Forward, Pin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MessageAttachment } from '@/components/MessageAttachment';
 import { VoiceMessagePlayer } from '@/components/VoiceMessagePlayer';
@@ -69,6 +69,7 @@ interface EnhancedMessageBubbleProps {
   onEdit?: (message: Message) => void;
   onDelete?: (messageId: string) => void;
   onPin?: (messageId: string) => void;
+  isPinned?: boolean;
   showAvatar?: boolean;
   showSender?: boolean;
 }
@@ -82,6 +83,7 @@ export function EnhancedMessageBubble({
   onEdit,
   onDelete,
   onPin,
+  isPinned = false,
   showAvatar = true,
   showSender = false,
 }: EnhancedMessageBubbleProps) {
@@ -97,6 +99,23 @@ export function EnhancedMessageBubble({
   const hasTriggeredHaptic = useRef(false);
   const swipeThreshold = 60;
   const maxSwipe = 80;
+  
+  // Double tap for quick reaction
+  const lastTapRef = useRef<number>(0);
+  const doubleTapTimeout = 300;
+
+  const handleDoubleTap = useCallback(() => {
+    if (!user) return;
+    const now = Date.now();
+    if (now - lastTapRef.current < doubleTapTimeout) {
+      // Double tap detected - add ❤️ reaction
+      addReaction('❤️');
+      successFeedback();
+      lastTapRef.current = 0;
+    } else {
+      lastTapRef.current = now;
+    }
+  }, [user, successFeedback]);
 
   const isInteractiveTarget = (target: EventTarget | null) => {
     const el = target as HTMLElement | null;
@@ -291,6 +310,7 @@ export function EnhancedMessageBubble({
       onEdit={isMine ? () => onEdit?.(message) : undefined}
       onDelete={isMine ? () => onDelete?.(message.id) : undefined}
       onPin={() => onPin?.(message.id)}
+      isPinned={isPinned}
       onCopy={message.content ? copyToClipboard : undefined}
       hasMedia={!!message.media_url}
       sentAt={message.created_at}
@@ -301,7 +321,19 @@ export function EnhancedMessageBubble({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onClick={handleDoubleTap}
       >
+        {/* Pinned indicator */}
+        {isPinned && (
+          <div className={cn(
+            "absolute -top-1 z-10",
+            isMine ? "right-0" : "left-8"
+          )}>
+            <div className="h-5 w-5 rounded-full bg-primary/90 flex items-center justify-center shadow-sm">
+              <Pin className="h-3 w-3 text-primary-foreground" />
+            </div>
+          </div>
+        )}
         {/* Reply indicator for non-mine messages */}
         {!isMine && (
           <div 

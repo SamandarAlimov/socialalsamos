@@ -315,12 +315,30 @@ export default function MessagesPage() {
     }
   };
 
-  const handlePin = (messageId: string) => {
-    // TODO: Implement pin functionality
-    toast({
-      title: 'Pinned',
-      description: 'Message pinned',
-    });
+  // Pinned Messages
+  const { 
+    pinnedMessages, 
+    pinMessage, 
+    unpinMessage, 
+    isMessagePinned 
+  } = usePinnedMessages(selectedConversation?.id || null);
+
+  const handlePin = async (messageId: string) => {
+    const isPinned = isMessagePinned(messageId);
+    if (isPinned) {
+      await unpinMessage(messageId);
+    } else {
+      await pinMessage(messageId);
+    }
+  };
+
+  const handleScrollToPinnedMessage = (messageId: string) => {
+    const element = document.getElementById(`message-${messageId}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedMessageId(messageId);
+      setTimeout(() => setHighlightedMessageId(null), 2000);
+    }
   };
 
   // Conversation context menu handlers
@@ -851,8 +869,16 @@ export default function MessagesPage() {
                   onClose={() => setShowMessageSearch(false)}
                 />
               )}
+              
+              {/* Pinned Messages Bar */}
+              {pinnedMessages.length > 0 && (
+                <PinnedMessagesBar
+                  pinnedMessages={pinnedMessages}
+                  onUnpin={unpinMessage}
+                  onScrollToMessage={handleScrollToPinnedMessage}
+                />
+              )}
             </div>
-
             {/* Messages Area - Scrollable - Takes remaining space between fixed header and input */}
             <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-custom bg-muted/20 overscroll-contain">
               {messagesLoading ? (
@@ -914,6 +940,7 @@ export default function MessagesPage() {
                                 onEdit={handleEdit}
                                 onDelete={handleDelete}
                                 onPin={handlePin}
+                                isPinned={isMessagePinned(message.id)}
                                 showAvatar={showAvatar}
                                 showSender={selectedConversation.type === 'group' && showAvatar}
                               />
