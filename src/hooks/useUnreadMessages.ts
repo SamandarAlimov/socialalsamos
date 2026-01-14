@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -6,56 +6,60 @@ export function useUnreadMessages() {
   const { user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
 
+  const fetchUnreadCount = useCallback(async () => {
+    if (!user) {
+      setUnreadCount(0);
+      return;
+    }
+
+    try {
+      // Get all conversation IDs user is part of
+      const { data: participations } = await supabase
+        .from('conversation_participants')
+        .select('conversation_id, last_read_at')
+        .eq('user_id', user.id);
+
+      if (!participations || participations.length === 0) {
+        setUnreadCount(0);
+        return;
+      }
+
+      let totalUnread = 0;
+
+      // For each conversation, count messages after last_read_at that aren't from user
+      for (const participation of participations) {
+        let query = supabase
+          .from('messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('conversation_id', participation.conversation_id)
+          .neq('sender_id', user.id)
+          .eq('is_deleted', false);
+
+        // Only count messages after last_read_at if it exists
+        if (participation.last_read_at) {
+          query = query.gt('created_at', participation.last_read_at);
+        }
+
+        const { count } = await query;
+        totalUnread += count || 0;
+      }
+
+      setUnreadCount(totalUnread);
+    } catch (error) {
+      console.error('Error fetching unread count:', error);
+    }
+  }, [user]);
+
   useEffect(() => {
     if (!user) {
       setUnreadCount(0);
       return;
     }
 
-    const fetchUnreadCount = async () => {
-      try {
-        // Get all conversation IDs user is part of
-        const { data: participations } = await supabase
-          .from('conversation_participants')
-          .select('conversation_id, last_read_at')
-          .eq('user_id', user.id);
-
-        if (!participations || participations.length === 0) {
-          setUnreadCount(0);
-          return;
-        }
-
-        let totalUnread = 0;
-
-        // For each conversation, count messages after last_read_at that aren't from user
-        for (const participation of participations) {
-          // Skip if no last_read_at - means user hasn't opened the chat yet, count all messages not from them
-          let query = supabase
-            .from('messages')
-            .select('id', { count: 'exact', head: true })
-            .eq('conversation_id', participation.conversation_id)
-            .neq('sender_id', user.id)
-            .eq('is_deleted', false);
-
-          // Only count messages after last_read_at if it exists
-          if (participation.last_read_at) {
-            query = query.gt('created_at', participation.last_read_at);
-          }
-
-          const { count } = await query;
-          totalUnread += count || 0;
-        }
-
-        setUnreadCount(totalUnread);
-      } catch (error) {
-        console.error('Error fetching unread count:', error);
-      }
-    };
-
     fetchUnreadCount();
 
     // Subscribe to new messages
-    const channel = supabase
+    const messagesChannel = supabase
       .channel('unread-messages-count')
       .on(
         'postgres_changes',
@@ -83,27 +87,58 @@ export function useUnreadMessages() {
           }
         }
       )
+      .subscribe();
+
+    // Subscribe to conversation_participants changes (last_read_at updates)
+    const participantsChannel = supabase
+      .channel('unread-participants-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'conversation_participants',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          // When last_read_at is updated, refresh the count
+          if (payload.new && payload.old) {
+            const newLastRead = (payload.new as { last_read_at: string | null }).last_read_at;
+            const oldLastRead = (payload.old as { last_read_at: string | null }).last_read_at;
+            
+            // Only refresh if last_read_at changed
+            if (newLastRead !== oldLastRead) {
+              fetchUnreadCount();
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    // Subscribe to message_reads table for real-time read updates
+    const readsChannel = supabase
+      .channel('unread-message-reads')
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'message_reads',
+          filter: `user_id=eq.${user.id}`,
         },
-        (payload) => {
-          const read = payload.new as { user_id: string };
-          if (read.user_id === user.id) {
-            // Refresh count when we read messages
-            fetchUnreadCount();
-          }
+        () => {
+          // When we read a message, decrement the count
+          fetchUnreadCount();
         }
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(messagesChannel);
+      supabase.removeChannel(participantsChannel);
+      supabase.removeChannel(readsChannel);
     };
-  }, [user]);
+  }, [user, fetchUnreadCount]);
 
-  return { unreadCount };
+  return { unreadCount, refetch: fetchUnreadCount };
 }
