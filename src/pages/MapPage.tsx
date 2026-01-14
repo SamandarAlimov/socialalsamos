@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline, Circle, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -23,36 +23,26 @@ import {
   Settings,
   Search,
   Locate,
-  Share2,
   Eye,
   EyeOff,
-  Footprints,
   Battery,
   Signal,
   SignalLow,
   SignalZero,
-  RefreshCw,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
   Compass,
   Target,
-  Layers,
-  ZoomIn,
-  ZoomOut,
-  MoreVertical,
-  Clock,
-  TrendingUp,
-  Activity,
   Globe,
   Lock,
   Unlock,
-  Route,
-  Car,
-  Bike,
-  PersonStanding,
+  ZoomIn,
+  ZoomOut,
   X,
-  Home
+  Layers,
+  Menu,
+  MoreHorizontal
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -62,13 +52,10 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Progress } from '@/components/ui/progress';
+import { StepTrackingCharts } from '@/components/map/StepTrackingCharts';
+import { TransportModePicker, TransportQuickBar, type TransportMode } from '@/components/map/TransportModePicker';
+import { MapQuickActions, MapQuickActionsGrid } from '@/components/map/MapQuickActions';
 
 // Fix default marker icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -127,17 +114,14 @@ const destinationIcon = L.divIcon({
 });
 
 type MapLayer = 'standard' | 'satellite' | 'terrain';
-type TransportMode = 'driving' | 'walking' | 'cycling';
 
-// Map event handler component - simplified to avoid context issues
+// Map event handler component
 function MapEventHandler({ 
   center, 
-  zoom,
-  onLocate 
+  zoom 
 }: { 
   center: [number, number]; 
   zoom: number;
-  onLocate: () => void;
 }) {
   const map = useMap();
   const hasSetInitialView = useRef(false);
@@ -149,7 +133,6 @@ function MapEventHandler({
     }
   }, [center, zoom, map]);
   
-  // Update view when center changes after initial load
   useEffect(() => {
     if (center && hasSetInitialView.current) {
       map.flyTo(center, zoom, { duration: 0.5 });
@@ -178,18 +161,15 @@ export default function MapPage() {
     toggleSharing,
     fetchNearbyUsers,
     fetchFollowingLocations,
-    getDirectionsUrl,
-    getGoogleMapsUrl,
     calculateDistance,
   } = useLocation();
   
-  // Map presence - show who's viewing the map
   const { usersOnMap } = useMapPresence(user?.id || null, profile);
   
-  // Default to Tashkent, Uzbekistan if no location available
   const DEFAULT_CENTER: [number, number] = [41.2995, 69.2401];
   const [mapCenter, setMapCenter] = useState<[number, number]>(DEFAULT_CENTER);
   const [hasLocationPermission, setHasLocationPermission] = useState<boolean | null>(null);
+  const [isCheckingPermission, setIsCheckingPermission] = useState(true);
   const [zoom, setZoom] = useState(15);
   const [mapLayer, setMapLayer] = useState<MapLayer>('standard');
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
@@ -205,8 +185,10 @@ export default function MapPage() {
   const [destination, setDestination] = useState<{ lat: number; lng: number; name: string } | null>(null);
   const [showDirections, setShowDirections] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
   
-  // Parse destination from URL params (from chat location share)
+  // Parse destination from URL params
   useEffect(() => {
     const destLat = searchParams.get('destLat');
     const destLng = searchParams.get('destLng');
@@ -222,9 +204,7 @@ export default function MapPage() {
     }
   }, [searchParams]);
   
-  // Daily step goal
   const DAILY_STEP_GOAL = 10000;
-  const stepProgress = Math.min((stepsToday / DAILY_STEP_GOAL) * 100, 100);
   
   // Battery API
   useEffect(() => {
@@ -242,44 +222,97 @@ export default function MapPage() {
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
-      toast.success('Back online!');
+      toast.success('Internetga ulandi!');
     };
-    
     const handleOffline = () => {
       setIsOnline(false);
-      toast.warning('You are offline. Location will be saved locally.');
+      toast.warning('Internet yo\'q. Joylashuv lokal saqlanadi.');
     };
-    
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-    
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
   
-  // Check for location permission and start tracking
+  // Enhanced permission check and location tracking
   useEffect(() => {
-    const checkPermissionAndTrack = async () => {
-      try {
-        // Try to get initial location
-        const loc = await getCurrentPosition();
-        setMapCenter([loc.latitude, loc.longitude]);
-        setHasLocationPermission(true);
-        startTracking();
-      } catch (err) {
-        console.warn('Location permission denied or unavailable:', err);
+    const checkAndStartTracking = async () => {
+      setIsCheckingPermission(true);
+      
+      // Check if geolocation is supported
+      if (!navigator.geolocation) {
         setHasLocationPermission(false);
-        // Still start tracking in case permission is granted later
-        startTracking();
+        setIsCheckingPermission(false);
+        return;
       }
+      
+      // First check the permission status via Permissions API
+      try {
+        if ('permissions' in navigator) {
+          const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
+          
+          if (permissionStatus.state === 'granted') {
+            setHasLocationPermission(true);
+            // Get location immediately
+            const loc = await getCurrentPosition();
+            setMapCenter([loc.latitude, loc.longitude]);
+            startTracking();
+          } else if (permissionStatus.state === 'prompt') {
+            // Will prompt - try to get position
+            try {
+              const loc = await getCurrentPosition();
+              setMapCenter([loc.latitude, loc.longitude]);
+              setHasLocationPermission(true);
+              startTracking();
+            } catch (err) {
+              setHasLocationPermission(false);
+            }
+          } else {
+            setHasLocationPermission(false);
+          }
+          
+          // Listen for permission changes
+          permissionStatus.addEventListener('change', () => {
+            if (permissionStatus.state === 'granted') {
+              setHasLocationPermission(true);
+              startTracking();
+            } else {
+              setHasLocationPermission(false);
+            }
+          });
+        } else {
+          // Fallback for browsers without Permissions API
+          try {
+            const loc = await getCurrentPosition();
+            setMapCenter([loc.latitude, loc.longitude]);
+            setHasLocationPermission(true);
+            startTracking();
+          } catch (err) {
+            setHasLocationPermission(false);
+          }
+        }
+      } catch (err) {
+        console.error('Permission check failed:', err);
+        // Fallback: try to get position directly
+        try {
+          const loc = await getCurrentPosition();
+          setMapCenter([loc.latitude, loc.longitude]);
+          setHasLocationPermission(true);
+          startTracking();
+        } catch (locErr) {
+          setHasLocationPermission(false);
+        }
+      }
+      
+      setIsCheckingPermission(false);
     };
     
-    checkPermissionAndTrack();
+    checkAndStartTracking();
     
     const interval = setInterval(() => {
-      if (isOnline) {
+      if (isOnline && currentLocation) {
         fetchNearbyUsers(nearbyRadius);
         fetchFollowingLocations();
       }
@@ -295,7 +328,9 @@ export default function MapPage() {
   useEffect(() => {
     if (currentLocation) {
       setMapCenter([currentLocation.latitude, currentLocation.longitude]);
-      setHasLocationPermission(true);
+      if (!hasLocationPermission) {
+        setHasLocationPermission(true);
+      }
     }
   }, [currentLocation]);
   
@@ -312,39 +347,51 @@ export default function MapPage() {
     try {
       const loc = await getCurrentPosition();
       setMapCenter([loc.latitude, loc.longitude]);
-      toast.success('Location updated');
-    } catch (err) {
-      toast.error('Failed to get location');
+      setHasLocationPermission(true);
+      toast.success('Joylashuv yangilandi');
+    } catch (err: any) {
+      if (err.code === 1) {
+        toast.error('Joylashuv ruxsati berilmagan');
+        setHasLocationPermission(false);
+      } else if (err.code === 2) {
+        toast.error('Joylashuvni aniqlab bo\'lmadi');
+      } else if (err.code === 3) {
+        toast.error('Vaqt tugadi, qayta urinib ko\'ring');
+      } else {
+        toast.error('Joylashuvni olishda xatolik');
+      }
     }
   }, [getCurrentPosition]);
   
-  // Open directions
+  // Request location permission
+  const requestLocationPermission = useCallback(async () => {
+    try {
+      const loc = await getCurrentPosition();
+      setMapCenter([loc.latitude, loc.longitude]);
+      setHasLocationPermission(true);
+      startTracking();
+      toast.success('Joylashuv yoqildi!');
+    } catch (err: any) {
+      toast.error('Joylashuv ruxsatini bering');
+    }
+  }, [getCurrentPosition, startTracking]);
+  
+  // Open directions in external app
   const openDirections = useCallback((destLat: number, destLng: number, userName: string, mode: TransportMode = 'driving') => {
     if (!currentLocation) {
-      toast.error('Current location not available');
+      toast.error('Joylashuv mavjud emas');
       return;
     }
     
-    // Build URL based on mode
-    let url = '';
-    if (mode === 'driving') {
-      url = `https://www.google.com/maps/dir/?api=1&origin=${currentLocation.latitude},${currentLocation.longitude}&destination=${destLat},${destLng}&travelmode=driving`;
-    } else if (mode === 'walking') {
-      url = `https://www.google.com/maps/dir/?api=1&origin=${currentLocation.latitude},${currentLocation.longitude}&destination=${destLat},${destLng}&travelmode=walking`;
-    } else {
-      url = `https://www.google.com/maps/dir/?api=1&origin=${currentLocation.latitude},${currentLocation.longitude}&destination=${destLat},${destLng}&travelmode=bicycling`;
-    }
+    let travelMode = 'driving';
+    if (mode === 'walking') travelMode = 'walking';
+    else if (mode === 'cycling') travelMode = 'bicycling';
+    else if (mode === 'transit' || mode === 'metro') travelMode = 'transit';
     
+    const url = `https://www.google.com/maps/dir/?api=1&origin=${currentLocation.latitude},${currentLocation.longitude}&destination=${destLat},${destLng}&travelmode=${travelMode}`;
     window.open(url, '_blank');
-    toast.success(`Opening directions to ${userName}`);
+    toast.success(`${userName} ga yo'nalish`);
   }, [currentLocation]);
-  
-  // Set destination for directions
-  const setDirectionTo = useCallback((lat: number, lng: number, name: string) => {
-    setDestination({ lat, lng, name });
-    setShowDirections(true);
-    toast.success(`Directions to ${name}`);
-  }, []);
   
   // Filter users by search
   const filteredNearby = nearbyUsers.filter((u) =>
@@ -359,14 +406,13 @@ export default function MapPage() {
   
   // Get connection quality indicator
   const getConnectionQuality = () => {
-    if (!isOnline) return { icon: SignalZero, color: 'text-destructive', label: 'Offline' };
-    if (batteryLevel < 20) return { icon: SignalLow, color: 'text-yellow-500', label: 'Low Battery' };
-    return { icon: Signal, color: 'text-green-500', label: 'Connected' };
+    if (!isOnline) return { icon: SignalZero, color: 'text-destructive', label: 'Oflayn' };
+    if (batteryLevel < 20) return { icon: SignalLow, color: 'text-yellow-500', label: 'Past batareya' };
+    return { icon: Signal, color: 'text-green-500', label: 'Ulangan' };
   };
   
   const connectionStatus = getConnectionQuality();
 
-  // Get tile layer URL based on layer type
   const getTileUrl = () => {
     switch (mapLayer) {
       case 'satellite':
@@ -378,86 +424,174 @@ export default function MapPage() {
     }
   };
 
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // Determine if we should show permission prompt
+  const showPermissionPrompt = hasLocationPermission === false && !currentLocation && !isCheckingPermission;
 
   return (
-    <div className="h-screen flex flex-col md:flex-row bg-background overflow-hidden">
-      {/* Mobile Header */}
-      <div className="md:hidden flex items-center justify-between p-3 border-b border-border bg-background z-10">
+    <div className="fixed inset-0 flex flex-col md:flex-row bg-background">
+      {/* Mobile Header - Fixed at top */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-[1001] flex items-center justify-between px-3 py-2 border-b border-border bg-background/95 backdrop-blur-lg safe-area-top">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/home')}>
-            <Home className="h-5 w-5" />
-          </Button>
-          <h1 className="text-lg font-semibold flex items-center gap-2">
-            <MapPin className="h-5 w-5 text-primary" />
-            Map
-          </h1>
+          <MapPin className="h-5 w-5 text-primary" />
+          <h1 className="text-lg font-semibold">Xarita</h1>
+          <Badge variant="secondary" className="text-[10px]">
+            <connectionStatus.icon className={cn("h-3 w-3 mr-1", connectionStatus.color)} />
+            {connectionStatus.label}
+          </Badge>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={centerOnLocation}>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={centerOnLocation}>
             <Locate className="h-5 w-5" />
           </Button>
-          <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+          <Sheet open={mobileSettingsOpen} onOpenChange={setMobileSettingsOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <Users className="h-5 w-5" />
+              <Button variant="ghost" size="icon" className="h-9 w-9">
+                <Settings className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="bottom" className="h-[70vh] rounded-t-xl">
+            <SheetContent side="right" className="w-[300px] z-[1002]">
               <SheetHeader>
+                <SheetTitle>Sozlamalar</SheetTitle>
+              </SheetHeader>
+              <div className="space-y-6 mt-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {isSharing ? <Eye className="h-5 w-5 text-primary" /> : <EyeOff className="h-5 w-5 text-muted-foreground" />}
+                    <div>
+                      <p className="font-medium">Joylashuvni ulashish</p>
+                      <p className="text-sm text-muted-foreground">Boshqalar sizni ko'radi</p>
+                    </div>
+                  </div>
+                  <Switch checked={isSharing} onCheckedChange={toggleSharing} />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {isLocationPrivate ? <Lock className="h-5 w-5 text-primary" /> : <Unlock className="h-5 w-5 text-muted-foreground" />}
+                    <div>
+                      <p className="font-medium">Maxfiy rejim</p>
+                      <p className="text-sm text-muted-foreground">Faqat do'stlar ko'radi</p>
+                    </div>
+                  </div>
+                  <Switch checked={isLocationPrivate} onCheckedChange={setIsLocationPrivate} />
+                </div>
+                <TransportModePicker selected={transportMode} onSelect={setTransportMode} />
+                <div className="space-y-2">
+                  <p className="font-medium">Xarita turi</p>
+                  <div className="flex gap-2">
+                    <Button variant={mapLayer === 'standard' ? 'default' : 'outline'} size="sm" onClick={() => setMapLayer('standard')}>
+                      <Globe className="h-4 w-4 mr-1" /> Oddiy
+                    </Button>
+                    <Button variant={mapLayer === 'satellite' ? 'default' : 'outline'} size="sm" onClick={() => setMapLayer('satellite')}>
+                      <Target className="h-4 w-4 mr-1" /> Sputnik
+                    </Button>
+                    <Button variant={mapLayer === 'terrain' ? 'default' : 'outline'} size="sm" onClick={() => setMapLayer('terrain')}>
+                      <Compass className="h-4 w-4 mr-1" /> Yer
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
+          <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-9 w-9">
+                <Menu className="h-5 w-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="bottom" className="h-[75vh] rounded-t-2xl z-[1002]">
+              <SheetHeader className="pb-2">
                 <SheetTitle className="flex items-center gap-2">
                   <Users className="h-5 w-5" />
-                  People Nearby
+                  Odamlar & Statistika
                 </SheetTitle>
               </SheetHeader>
-              <ScrollArea className="h-full mt-4 pb-8">
-                {/* Nearby Users */}
-                {filteredNearby.length === 0 ? (
-                  <div className="text-center text-muted-foreground py-8">
-                    <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                    <p>No nearby users found</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {filteredNearby.map((u) => (
-                      <div
-                        key={u.user_id}
-                        className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 cursor-pointer"
-                        onClick={() => {
-                          setMapCenter([u.latitude, u.longitude]);
-                          setMobileMenuOpen(false);
-                        }}
-                      >
-                        <Avatar className="h-10 w-10">
-                          <AvatarImage src={u.profile?.avatar_url || ''} />
-                          <AvatarFallback>{u.profile?.display_name?.[0] || '?'}</AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">{u.profile?.display_name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {currentLocation && calculateDistance(
-                              currentLocation.latitude,
-                              currentLocation.longitude,
-                              u.latitude,
-                              u.longitude
-                            ).toFixed(1)}km away
-                          </p>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openDirections(u.latitude, u.longitude, u.profile?.display_name || 'User', transportMode);
-                          }}
-                        >
-                          <Navigation className="h-4 w-4" />
-                        </Button>
+              
+              {/* Quick Actions */}
+              <MapQuickActionsGrid onSearch={() => {}} currentLocation={currentLocation} />
+              
+              <Tabs defaultValue="nearby" className="flex-1">
+                <TabsList className="w-full">
+                  <TabsTrigger value="nearby" className="flex-1">Yaqinda</TabsTrigger>
+                  <TabsTrigger value="following" className="flex-1">Kuzatuvlar</TabsTrigger>
+                  <TabsTrigger value="activity" className="flex-1">Statistika</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="nearby" className="mt-2">
+                  <ScrollArea className="h-[40vh]">
+                    {filteredNearby.length === 0 ? (
+                      <div className="text-center text-muted-foreground py-8">
+                        <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                        <p>Yaqinda hech kim yo'q</p>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </ScrollArea>
+                    ) : (
+                      <div className="space-y-2 pr-4">
+                        {filteredNearby.map((u) => (
+                          <div
+                            key={u.user_id}
+                            className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 cursor-pointer"
+                            onClick={() => { setMapCenter([u.latitude, u.longitude]); setMobileMenuOpen(false); }}
+                          >
+                            <Avatar className="h-10 w-10">
+                              <AvatarImage src={u.profile?.avatar_url || ''} />
+                              <AvatarFallback>{u.profile?.display_name?.[0] || '?'}</AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium truncate">{u.profile?.display_name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {currentLocation && calculateDistance(currentLocation.latitude, currentLocation.longitude, u.latitude, u.longitude).toFixed(1)}km
+                              </p>
+                            </div>
+                            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openDirections(u.latitude, u.longitude, u.profile?.display_name || 'Foydalanuvchi', transportMode); }}>
+                              <Navigation className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </TabsContent>
+                
+                <TabsContent value="following" className="mt-2">
+                  <ScrollArea className="h-[40vh]">
+                    {filteredFollowing.length === 0 ? (
+                      <div className="text-center text-muted-foreground py-8">
+                        <UserPlus className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                        <p>Kuzatuvlar joylashuvni ulashmayapti</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 pr-4">
+                        {filteredFollowing.map((u) => (
+                          <div
+                            key={u.user_id}
+                            className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 cursor-pointer"
+                            onClick={() => { setMapCenter([u.latitude, u.longitude]); setMobileMenuOpen(false); }}
+                          >
+                            <Avatar className="h-10 w-10">
+                              <AvatarImage src={u.profile?.avatar_url || ''} />
+                              <AvatarFallback>{u.profile?.display_name?.[0] || '?'}</AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium truncate">{u.profile?.display_name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {currentLocation && calculateDistance(currentLocation.latitude, currentLocation.longitude, u.latitude, u.longitude).toFixed(1)}km
+                              </p>
+                            </div>
+                            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openDirections(u.latitude, u.longitude, u.profile?.display_name || 'Foydalanuvchi', transportMode); }}>
+                              <Navigation className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </TabsContent>
+                
+                <TabsContent value="activity" className="mt-2">
+                  <ScrollArea className="h-[40vh]">
+                    <StepTrackingCharts stepsToday={stepsToday} stepHistory={stepHistory} dailyGoal={DAILY_STEP_GOAL} />
+                  </ScrollArea>
+                </TabsContent>
+              </Tabs>
             </SheetContent>
           </Sheet>
         </div>
@@ -468,22 +602,16 @@ export default function MapPage() {
         "hidden md:flex flex-col border-r border-border bg-background transition-all duration-300",
         sidebarOpen ? "w-80" : "w-0 overflow-hidden"
       )}>
-        {/* Sidebar Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/home')}>
-              <Home className="h-5 w-5" />
-            </Button>
-            <div>
-              <h1 className="text-lg font-semibold flex items-center gap-2">
-                <MapPin className="h-5 w-5 text-primary" />
-                Map
-              </h1>
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <connectionStatus.icon className={cn("h-3 w-3", connectionStatus.color)} />
-                {connectionStatus.label}
-              </p>
-            </div>
+          <div>
+            <h1 className="text-lg font-semibold flex items-center gap-2">
+              <MapPin className="h-5 w-5 text-primary" />
+              Xarita
+            </h1>
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <connectionStatus.icon className={cn("h-3 w-3", connectionStatus.color)} />
+              {connectionStatus.label}
+            </p>
           </div>
           <Sheet>
             <SheetTrigger asChild>
@@ -493,189 +621,101 @@ export default function MapPage() {
             </SheetTrigger>
             <SheetContent>
               <SheetHeader>
-                <SheetTitle>Map Settings</SheetTitle>
+                <SheetTitle>Xarita sozlamalari</SheetTitle>
               </SheetHeader>
               <div className="space-y-6 mt-6">
-                {/* Location Sharing */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    {isSharing ? (
-                      <Eye className="h-5 w-5 text-primary" />
-                    ) : (
-                      <EyeOff className="h-5 w-5 text-muted-foreground" />
-                    )}
+                    {isSharing ? <Eye className="h-5 w-5 text-primary" /> : <EyeOff className="h-5 w-5 text-muted-foreground" />}
                     <div>
-                      <p className="font-medium">Share Location</p>
-                      <p className="text-sm text-muted-foreground">
-                        Others can see where you are
-                      </p>
+                      <p className="font-medium">Joylashuvni ulashish</p>
+                      <p className="text-sm text-muted-foreground">Boshqalar sizni ko'radi</p>
                     </div>
                   </div>
                   <Switch checked={isSharing} onCheckedChange={toggleSharing} />
                 </div>
-                
-                {/* Private Mode */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    {isLocationPrivate ? (
-                      <Lock className="h-5 w-5 text-primary" />
-                    ) : (
-                      <Unlock className="h-5 w-5 text-muted-foreground" />
-                    )}
+                    {isLocationPrivate ? <Lock className="h-5 w-5 text-primary" /> : <Unlock className="h-5 w-5 text-muted-foreground" />}
                     <div>
-                      <p className="font-medium">Private Mode</p>
-                      <p className="text-sm text-muted-foreground">
-                        Only following can see you
-                      </p>
+                      <p className="font-medium">Maxfiy rejim</p>
+                      <p className="text-sm text-muted-foreground">Faqat kuzatuvlar ko'radi</p>
                     </div>
                   </div>
                   <Switch checked={isLocationPrivate} onCheckedChange={setIsLocationPrivate} />
                 </div>
-                
-                {/* Show Nearby */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <Users className="h-5 w-5" />
                     <div>
-                      <p className="font-medium">Show Nearby Users</p>
-                      <p className="text-sm text-muted-foreground">
-                        Within {nearbyRadius}km radius
-                      </p>
+                      <p className="font-medium">Yaqindagilarni ko'rsatish</p>
+                      <p className="text-sm text-muted-foreground">{nearbyRadius}km radiusda</p>
                     </div>
                   </div>
                   <Switch checked={showNearby} onCheckedChange={setShowNearby} />
                 </div>
-                
-                {/* Show Following */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <UserPlus className="h-5 w-5" />
                     <div>
-                      <p className="font-medium">Show Following</p>
-                      <p className="text-sm text-muted-foreground">
-                        People you follow
-                      </p>
+                      <p className="font-medium">Kuzatuvlarni ko'rsatish</p>
                     </div>
                   </div>
                   <Switch checked={showFollowing} onCheckedChange={setShowFollowing} />
                 </div>
-                
-                {/* Nearby Radius */}
                 <div className="space-y-2">
-                  <p className="font-medium">Nearby Radius</p>
+                  <p className="font-medium">Qidiruv radiusi</p>
                   <div className="flex gap-2">
                     {[1, 5, 10, 25, 50].map((r) => (
-                      <Button
-                        key={r}
-                        variant={nearbyRadius === r ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setNearbyRadius(r)}
-                      >
+                      <Button key={r} variant={nearbyRadius === r ? 'default' : 'outline'} size="sm" onClick={() => setNearbyRadius(r)}>
                         {r}km
                       </Button>
                     ))}
                   </div>
                 </div>
-                
-                {/* Map Layer */}
                 <div className="space-y-2">
-                  <p className="font-medium">Map Style</p>
+                  <p className="font-medium">Xarita turi</p>
                   <div className="flex gap-2">
-                    <Button
-                      variant={mapLayer === 'standard' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setMapLayer('standard')}
-                    >
-                      <Globe className="h-4 w-4 mr-1" />
-                      Standard
+                    <Button variant={mapLayer === 'standard' ? 'default' : 'outline'} size="sm" onClick={() => setMapLayer('standard')}>
+                      <Globe className="h-4 w-4 mr-1" /> Oddiy
                     </Button>
-                    <Button
-                      variant={mapLayer === 'satellite' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setMapLayer('satellite')}
-                    >
-                      <Target className="h-4 w-4 mr-1" />
-                      Satellite
+                    <Button variant={mapLayer === 'satellite' ? 'default' : 'outline'} size="sm" onClick={() => setMapLayer('satellite')}>
+                      <Target className="h-4 w-4 mr-1" /> Sputnik
                     </Button>
-                    <Button
-                      variant={mapLayer === 'terrain' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setMapLayer('terrain')}
-                    >
-                      <Compass className="h-4 w-4 mr-1" />
-                      Terrain
+                    <Button variant={mapLayer === 'terrain' ? 'default' : 'outline'} size="sm" onClick={() => setMapLayer('terrain')}>
+                      <Compass className="h-4 w-4 mr-1" /> Yer
                     </Button>
                   </div>
                 </div>
-                
-                {/* Transport Mode */}
-                <div className="space-y-2">
-                  <p className="font-medium">Default Transport</p>
-                  <div className="flex gap-2">
-                    <Button
-                      variant={transportMode === 'driving' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setTransportMode('driving')}
-                    >
-                      <Car className="h-4 w-4 mr-1" />
-                      Drive
-                    </Button>
-                    <Button
-                      variant={transportMode === 'walking' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setTransportMode('walking')}
-                    >
-                      <PersonStanding className="h-4 w-4 mr-1" />
-                      Walk
-                    </Button>
-                    <Button
-                      variant={transportMode === 'cycling' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setTransportMode('cycling')}
-                    >
-                      <Bike className="h-4 w-4 mr-1" />
-                      Bike
-                    </Button>
-                  </div>
-                </div>
+                <TransportModePicker selected={transportMode} onSelect={setTransportMode} />
               </div>
             </SheetContent>
           </Sheet>
         </div>
         
-        {/* Search */}
         <div className="p-3 border-b border-border">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search users..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
+            <Input placeholder="Qidirish..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
           </div>
         </div>
         
-        {/* Presence Indicator - Who's viewing the map */}
+        {/* Quick Actions */}
+        <MapQuickActions onSearch={() => {}} currentLocation={currentLocation} />
+        
         {usersOnMap.length > 0 && (
           <div className="p-3 border-b border-border">
             <div className="flex items-center gap-2 mb-2">
               <Eye className="h-4 w-4 text-primary" />
-              <span className="text-sm font-medium">Viewing Now</span>
+              <span className="text-sm font-medium">Hozir ko'rayotganlar</span>
               <Badge variant="secondary" className="ml-auto">{usersOnMap.length}</Badge>
             </div>
             <div className="flex items-center gap-1 overflow-x-auto pb-1">
               {usersOnMap.slice(0, 8).map((presenceUser) => (
-                <div 
-                  key={presenceUser.user_id} 
-                  className="relative group shrink-0"
-                  title={presenceUser.display_name || presenceUser.username || 'User'}
-                >
+                <div key={presenceUser.user_id} className="relative group shrink-0" title={presenceUser.display_name || presenceUser.username || 'Foydalanuvchi'}>
                   <Avatar className="h-8 w-8 border-2 border-primary ring-2 ring-primary/20">
                     <AvatarImage src={presenceUser.avatar_url || ''} />
-                    <AvatarFallback className="text-xs">
-                      {presenceUser.display_name?.[0] || presenceUser.username?.[0] || '?'}
-                    </AvatarFallback>
+                    <AvatarFallback className="text-xs">{presenceUser.display_name?.[0] || presenceUser.username?.[0] || '?'}</AvatarFallback>
                   </Avatar>
                   <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-background animate-pulse" />
                 </div>
@@ -689,40 +729,11 @@ export default function MapPage() {
           </div>
         )}
         
-        {/* Steps Card */}
-        <div className="p-3 border-b border-border">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Footprints className="h-5 w-5 text-primary" />
-                  <span className="font-medium">Today's Steps</span>
-                </div>
-                <Badge variant="secondary">{stepsToday.toLocaleString()}</Badge>
-              </div>
-              <Progress value={stepProgress} className="h-2" />
-              <p className="text-xs text-muted-foreground mt-1">
-                {stepsToday.toLocaleString()} / {DAILY_STEP_GOAL.toLocaleString()} goal
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-        
-        {/* Users Tabs */}
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="flex-1 flex flex-col overflow-hidden">
           <TabsList className="w-full justify-start px-3 pt-2">
-            <TabsTrigger value="nearby" className="flex-1">
-              <Users className="h-4 w-4 mr-1" />
-              Nearby
-            </TabsTrigger>
-            <TabsTrigger value="following" className="flex-1">
-              <UserPlus className="h-4 w-4 mr-1" />
-              Following
-            </TabsTrigger>
-            <TabsTrigger value="activity" className="flex-1">
-              <Activity className="h-4 w-4 mr-1" />
-              Activity
-            </TabsTrigger>
+            <TabsTrigger value="nearby" className="flex-1"><Users className="h-4 w-4 mr-1" />Yaqinda</TabsTrigger>
+            <TabsTrigger value="following" className="flex-1"><UserPlus className="h-4 w-4 mr-1" />Kuzatuvlar</TabsTrigger>
+            <TabsTrigger value="activity" className="flex-1">Statistika</TabsTrigger>
           </TabsList>
           
           <TabsContent value="nearby" className="flex-1 overflow-hidden m-0">
@@ -730,7 +741,7 @@ export default function MapPage() {
               {filteredNearby.length === 0 ? (
                 <div className="text-center text-muted-foreground py-8">
                   <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p>No nearby users found</p>
+                  <p>Yaqinda hech kim topilmadi</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -738,39 +749,22 @@ export default function MapPage() {
                     <div
                       key={u.user_id}
                       className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
-                      onClick={() => {
-                        setMapCenter([u.latitude, u.longitude]);
-                        setSelectedUser(u.user_id);
-                      }}
+                      onClick={() => { setMapCenter([u.latitude, u.longitude]); setSelectedUser(u.user_id); }}
                     >
                       <div className="relative">
                         <Avatar className="h-10 w-10">
                           <AvatarImage src={u.profile?.avatar_url || ''} />
                           <AvatarFallback>{u.profile?.display_name?.[0] || '?'}</AvatarFallback>
                         </Avatar>
-                        {u.profile?.is_online && (
-                          <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-background" />
-                        )}
+                        {u.profile?.is_online && <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-background" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate">{u.profile?.display_name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {currentLocation && calculateDistance(
-                            currentLocation.latitude,
-                            currentLocation.longitude,
-                            u.latitude,
-                            u.longitude
-                          ).toFixed(1)}km away
+                          {currentLocation && calculateDistance(currentLocation.latitude, currentLocation.longitude, u.latitude, u.longitude).toFixed(1)}km uzoqlikda
                         </p>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openDirections(u.latitude, u.longitude, u.profile?.display_name || 'User', transportMode);
-                        }}
-                      >
+                      <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); openDirections(u.latitude, u.longitude, u.profile?.display_name || 'Foydalanuvchi', transportMode); }}>
                         <Navigation className="h-4 w-4" />
                       </Button>
                     </div>
@@ -785,7 +779,7 @@ export default function MapPage() {
               {filteredFollowing.length === 0 ? (
                 <div className="text-center text-muted-foreground py-8">
                   <UserPlus className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p>No followed users sharing location</p>
+                  <p>Kuzatuvlar joylashuvni ulashmayapti</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -793,39 +787,22 @@ export default function MapPage() {
                     <div
                       key={u.user_id}
                       className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
-                      onClick={() => {
-                        setMapCenter([u.latitude, u.longitude]);
-                        setSelectedUser(u.user_id);
-                      }}
+                      onClick={() => { setMapCenter([u.latitude, u.longitude]); setSelectedUser(u.user_id); }}
                     >
                       <div className="relative">
                         <Avatar className="h-10 w-10">
                           <AvatarImage src={u.profile?.avatar_url || ''} />
                           <AvatarFallback>{u.profile?.display_name?.[0] || '?'}</AvatarFallback>
                         </Avatar>
-                        {u.profile?.is_online && (
-                          <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-background" />
-                        )}
+                        {u.profile?.is_online && <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-background" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate">{u.profile?.display_name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {currentLocation && calculateDistance(
-                            currentLocation.latitude,
-                            currentLocation.longitude,
-                            u.latitude,
-                            u.longitude
-                          ).toFixed(1)}km away
+                          {currentLocation && calculateDistance(currentLocation.latitude, currentLocation.longitude, u.latitude, u.longitude).toFixed(1)}km uzoqlikda
                         </p>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openDirections(u.latitude, u.longitude, u.profile?.display_name || 'User', transportMode);
-                        }}
-                      >
+                      <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); openDirections(u.latitude, u.longitude, u.profile?.display_name || 'Foydalanuvchi', transportMode); }}>
                         <Navigation className="h-4 w-4" />
                       </Button>
                     </div>
@@ -837,59 +814,35 @@ export default function MapPage() {
           
           <TabsContent value="activity" className="flex-1 overflow-hidden m-0">
             <ScrollArea className="h-full p-3">
-              <div className="space-y-4">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4" />
-                      Weekly Steps
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      {stepHistory.map((day) => (
-                        <div key={day.date} className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">{day.date}</span>
-                          <span className="font-medium">{day.steps.toLocaleString()}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <Battery className="h-4 w-4" />
-                      Battery
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center gap-2">
-                      <Progress value={batteryLevel} className="flex-1" />
-                      <span className="text-sm font-medium">{batteryLevel}%</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+              <StepTrackingCharts stepsToday={stepsToday} stepHistory={stepHistory} dailyGoal={DAILY_STEP_GOAL} />
+              <Card className="mt-4">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2"><Battery className="h-4 w-4" />Batareya</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-2">
+                    <Progress value={batteryLevel} className="flex-1" />
+                    <span className="text-sm font-medium">{batteryLevel}%</span>
+                  </div>
+                </CardContent>
+              </Card>
             </ScrollArea>
           </TabsContent>
         </Tabs>
       </div>
       
-      {/* Toggle Sidebar Button - Desktop only */}
       <Button
         variant="secondary"
         size="icon"
-        className="hidden md:flex absolute left-[320px] top-1/2 -translate-y-1/2 z-[1000] rounded-l-none"
+        className="hidden md:flex absolute top-1/2 -translate-y-1/2 z-[1000] rounded-l-none"
         onClick={() => setSidebarOpen(!sidebarOpen)}
         style={{ left: sidebarOpen ? '320px' : '0' }}
       >
         {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
       </Button>
       
-      {/* Map Container */}
-      <div className="flex-1 relative">
+      {/* Map Container - Fixed between header and bottom navbar on mobile */}
+      <div className="flex-1 relative md:h-full h-[calc(100vh-56px-64px)] mt-14 md:mt-0 mb-16 md:mb-0">
         <MapContainer
           center={mapCenter}
           zoom={zoom}
@@ -900,49 +853,33 @@ export default function MapPage() {
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url={getTileUrl()}
           />
-          <MapEventHandler center={mapCenter} zoom={zoom} onLocate={centerOnLocation} />
+          <MapEventHandler center={mapCenter} zoom={zoom} />
           
-          {/* Nearby radius circle */}
           {currentLocation && showNearby && (
             <Circle
               center={[currentLocation.latitude, currentLocation.longitude]}
               radius={nearbyRadius * 1000}
-              pathOptions={{ 
-                color: '#3b82f6', 
-                fillColor: '#3b82f6', 
-                fillOpacity: 0.1,
-                weight: 2,
-                dashArray: '5, 5'
-              }}
+              pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.1, weight: 2, dashArray: '5, 5' }}
             />
           )}
           
-          {/* Current user marker */}
           {currentLocation && (
-            <Marker
-              position={[currentLocation.latitude, currentLocation.longitude]}
-              icon={createUserIcon(profile?.avatar_url || undefined, true)}
-            >
+            <Marker position={[currentLocation.latitude, currentLocation.longitude]} icon={createUserIcon(profile?.avatar_url || undefined, true)}>
               <Popup>
                 <div className="text-center">
                   <Avatar className="h-12 w-12 mx-auto mb-2">
                     <AvatarImage src={profile?.avatar_url || ''} />
-                    <AvatarFallback>{profile?.display_name?.[0] || 'Me'}</AvatarFallback>
+                    <AvatarFallback>{profile?.display_name?.[0] || 'Men'}</AvatarFallback>
                   </Avatar>
-                  <p className="font-medium">{profile?.display_name || 'You'}</p>
-                  <p className="text-xs text-muted-foreground">Your location</p>
+                  <p className="font-medium">{profile?.display_name || 'Siz'}</p>
+                  <p className="text-xs text-muted-foreground">Sizning joylashuvingiz</p>
                 </div>
               </Popup>
             </Marker>
           )}
           
-          {/* Nearby users */}
           {showNearby && filteredNearby.map((u) => (
-            <Marker
-              key={u.user_id}
-              position={[u.latitude, u.longitude]}
-              icon={createUserIcon(u.profile?.avatar_url || undefined, false, u.profile?.is_online)}
-            >
+            <Marker key={u.user_id} position={[u.latitude, u.longitude]} icon={createUserIcon(u.profile?.avatar_url || undefined, false, u.profile?.is_online)}>
               <Popup>
                 <div className="text-center min-w-[150px]">
                   <Avatar className="h-12 w-12 mx-auto mb-2">
@@ -951,33 +888,18 @@ export default function MapPage() {
                   </Avatar>
                   <p className="font-medium">{u.profile?.display_name}</p>
                   <p className="text-xs text-muted-foreground mb-2">
-                    {currentLocation && calculateDistance(
-                      currentLocation.latitude,
-                      currentLocation.longitude,
-                      u.latitude,
-                      u.longitude
-                    ).toFixed(1)}km away
+                    {currentLocation && calculateDistance(currentLocation.latitude, currentLocation.longitude, u.latitude, u.longitude).toFixed(1)}km uzoqlikda
                   </p>
-                  <Button
-                    size="sm"
-                    className="w-full"
-                    onClick={() => openDirections(u.latitude, u.longitude, u.profile?.display_name || 'User', transportMode)}
-                  >
-                    <Navigation className="h-4 w-4 mr-1" />
-                    Directions
+                  <Button size="sm" className="w-full" onClick={() => openDirections(u.latitude, u.longitude, u.profile?.display_name || 'Foydalanuvchi', transportMode)}>
+                    <Navigation className="h-4 w-4 mr-1" /> Yo'nalish
                   </Button>
                 </div>
               </Popup>
             </Marker>
           ))}
           
-          {/* Following users */}
           {showFollowing && filteredFollowing.map((u) => (
-            <Marker
-              key={u.user_id}
-              position={[u.latitude, u.longitude]}
-              icon={createUserIcon(u.profile?.avatar_url || undefined, false, u.profile?.is_online)}
-            >
+            <Marker key={u.user_id} position={[u.latitude, u.longitude]} icon={createUserIcon(u.profile?.avatar_url || undefined, false, u.profile?.is_online)}>
               <Popup>
                 <div className="text-center min-w-[150px]">
                   <Avatar className="h-12 w-12 mx-auto mb-2">
@@ -986,63 +908,30 @@ export default function MapPage() {
                   </Avatar>
                   <p className="font-medium">{u.profile?.display_name}</p>
                   <p className="text-xs text-muted-foreground mb-2">
-                    {currentLocation && calculateDistance(
-                      currentLocation.latitude,
-                      currentLocation.longitude,
-                      u.latitude,
-                      u.longitude
-                    ).toFixed(1)}km away
+                    {currentLocation && calculateDistance(currentLocation.latitude, currentLocation.longitude, u.latitude, u.longitude).toFixed(1)}km uzoqlikda
                   </p>
-                  <Button
-                    size="sm"
-                    className="w-full"
-                    onClick={() => openDirections(u.latitude, u.longitude, u.profile?.display_name || 'User', transportMode)}
-                  >
-                    <Navigation className="h-4 w-4 mr-1" />
-                    Directions
+                  <Button size="sm" className="w-full" onClick={() => openDirections(u.latitude, u.longitude, u.profile?.display_name || 'Foydalanuvchi', transportMode)}>
+                    <Navigation className="h-4 w-4 mr-1" /> Yo'nalish
                   </Button>
                 </div>
               </Popup>
             </Marker>
           ))}
           
-          {/* Destination marker */}
           {destination && (
-            <Marker
-              position={[destination.lat, destination.lng]}
-              icon={destinationIcon}
-            >
+            <Marker position={[destination.lat, destination.lng]} icon={destinationIcon}>
               <Popup>
                 <div className="text-center min-w-[150px]">
                   <MapPin className="h-8 w-8 mx-auto mb-2 text-destructive" />
                   <p className="font-medium">{destination.name}</p>
                   {currentLocation && (
-                    <p className="text-xs text-muted-foreground mb-2">
-                      {calculateDistance(
-                        currentLocation.latitude,
-                        currentLocation.longitude,
-                        destination.lat,
-                        destination.lng
-                      ).toFixed(1)}km away
-                    </p>
+                    <p className="text-xs text-muted-foreground mb-2">{calculateDistance(currentLocation.latitude, currentLocation.longitude, destination.lat, destination.lng).toFixed(1)}km uzoqlikda</p>
                   )}
                   <div className="flex gap-1">
-                    <Button
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => openDirections(destination.lat, destination.lng, destination.name, transportMode)}
-                    >
-                      <Navigation className="h-4 w-4 mr-1" />
-                      Go
+                    <Button size="sm" className="flex-1" onClick={() => openDirections(destination.lat, destination.lng, destination.name, transportMode)}>
+                      <Navigation className="h-4 w-4 mr-1" /> Borish
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setDestination(null);
-                        setShowDirections(false);
-                      }}
-                    >
+                    <Button size="sm" variant="outline" onClick={() => { setDestination(null); setShowDirections(false); }}>
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
@@ -1051,34 +940,25 @@ export default function MapPage() {
             </Marker>
           )}
           
-          {/* Route line to destination */}
           {currentLocation && destination && showDirections && (
-            <Polyline
-              positions={[
-                [currentLocation.latitude, currentLocation.longitude],
-                [destination.lat, destination.lng]
-              ]}
-              pathOptions={{ 
-                color: '#3b82f6', 
-                weight: 4,
-                dashArray: '10, 10'
-              }}
-            />
+            <Polyline positions={[[currentLocation.latitude, currentLocation.longitude], [destination.lat, destination.lng]]} pathOptions={{ color: '#3b82f6', weight: 4, dashArray: '10, 10' }} />
           )}
         </MapContainer>
         
         {/* Location permission prompt overlay */}
-        {hasLocationPermission === false && !currentLocation && (
-          <div className="absolute inset-0 z-[1000] bg-background/80 backdrop-blur-sm flex items-center justify-center">
-            <div className="text-center p-6 bg-card rounded-lg shadow-lg border max-w-sm">
-              <MapPin className="h-12 w-12 text-primary mx-auto mb-4" />
-              <h3 className="font-semibold text-lg mb-2">Enable Location</h3>
+        {showPermissionPrompt && (
+          <div className="absolute inset-0 z-[1000] bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="text-center p-6 bg-card rounded-xl shadow-lg border max-w-sm w-full">
+              <div className="p-4 rounded-full bg-primary/10 w-fit mx-auto mb-4">
+                <MapPin className="h-10 w-10 text-primary" />
+              </div>
+              <h3 className="font-semibold text-lg mb-2">Joylashuvni yoqing</h3>
               <p className="text-muted-foreground text-sm mb-4">
-                Allow location access to see your position on the map and find nearby users.
+                Xaritada o'z joylashuvingizni ko'rish va yaqindagi odamlarni topish uchun joylashuv ruxsatini bering.
               </p>
-              <Button onClick={centerOnLocation} className="w-full">
-                <Locate className="h-4 w-4 mr-2" />
-                Enable Location
+              <Button onClick={requestLocationPermission} className="w-full" size="lg">
+                <Locate className="h-5 w-5 mr-2" />
+                Joylashuvni yoqish
               </Button>
             </div>
           </div>
@@ -1086,59 +966,19 @@ export default function MapPage() {
         
         {/* Destination Bar */}
         {destination && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] bg-background rounded-lg shadow-lg border p-3 flex items-center gap-3">
-            <MapPin className="h-5 w-5 text-destructive" />
-            <div>
-              <p className="font-medium">{destination.name}</p>
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[1000] bg-background/95 backdrop-blur-lg rounded-xl shadow-lg border p-3 flex items-center gap-3 max-w-[90%]">
+            <MapPin className="h-5 w-5 text-destructive shrink-0" />
+            <div className="min-w-0">
+              <p className="font-medium truncate">{destination.name}</p>
               {currentLocation && (
-                <p className="text-xs text-muted-foreground">
-                  {calculateDistance(
-                    currentLocation.latitude,
-                    currentLocation.longitude,
-                    destination.lat,
-                    destination.lng
-                  ).toFixed(1)}km away
-                </p>
+                <p className="text-xs text-muted-foreground">{calculateDistance(currentLocation.latitude, currentLocation.longitude, destination.lat, destination.lng).toFixed(1)}km uzoqlikda</p>
               )}
             </div>
-            <div className="flex gap-1">
-              <Button
-                size="sm"
-                variant={transportMode === 'driving' ? 'default' : 'ghost'}
-                onClick={() => setTransportMode('driving')}
-              >
-                <Car className="h-4 w-4" />
-              </Button>
-              <Button
-                size="sm"
-                variant={transportMode === 'walking' ? 'default' : 'ghost'}
-                onClick={() => setTransportMode('walking')}
-              >
-                <PersonStanding className="h-4 w-4" />
-              </Button>
-              <Button
-                size="sm"
-                variant={transportMode === 'cycling' ? 'default' : 'ghost'}
-                onClick={() => setTransportMode('cycling')}
-              >
-                <Bike className="h-4 w-4" />
-              </Button>
-            </div>
-            <Button
-              size="sm"
-              onClick={() => openDirections(destination.lat, destination.lng, destination.name, transportMode)}
-            >
-              <ExternalLink className="h-4 w-4 mr-1" />
-              Open in Maps
+            <TransportQuickBar selected={transportMode} onSelect={setTransportMode} />
+            <Button size="sm" onClick={() => openDirections(destination.lat, destination.lng, destination.name, transportMode)}>
+              <ExternalLink className="h-4 w-4 mr-1" /> Ochish
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                setDestination(null);
-                setShowDirections(false);
-              }}
-            >
+            <Button size="sm" variant="ghost" onClick={() => { setDestination(null); setShowDirections(false); }}>
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -1146,29 +986,25 @@ export default function MapPage() {
         
         {/* Map Controls */}
         <div className="absolute bottom-4 right-4 z-[1000] flex flex-col gap-1">
-          <Button
-            variant="secondary"
-            size="icon"
-            className="shadow-lg"
-            onClick={centerOnLocation}
-          >
+          <Button variant="secondary" size="icon" className="shadow-lg" onClick={centerOnLocation}>
             <Locate className="h-4 w-4" />
           </Button>
-          <Button
-            variant="secondary"
-            size="icon"
-            className="shadow-lg"
-            onClick={() => setZoom(Math.min(zoom + 1, 18))}
-          >
+          <Button variant="secondary" size="icon" className="shadow-lg" onClick={() => setZoom(Math.min(zoom + 1, 18))}>
             <ZoomIn className="h-4 w-4" />
           </Button>
-          <Button
-            variant="secondary"
-            size="icon"
-            className="shadow-lg"
-            onClick={() => setZoom(Math.max(zoom - 1, 3))}
-          >
+          <Button variant="secondary" size="icon" className="shadow-lg" onClick={() => setZoom(Math.max(zoom - 1, 3))}>
             <ZoomOut className="h-4 w-4" />
+          </Button>
+        </div>
+        
+        {/* Layer switcher */}
+        <div className="absolute top-2 right-2 z-[1000]">
+          <Button variant="secondary" size="icon" className="shadow-lg" onClick={() => {
+            const layers: MapLayer[] = ['standard', 'satellite', 'terrain'];
+            const currentIndex = layers.indexOf(mapLayer);
+            setMapLayer(layers[(currentIndex + 1) % layers.length]);
+          }}>
+            <Layers className="h-4 w-4" />
           </Button>
         </div>
       </div>
