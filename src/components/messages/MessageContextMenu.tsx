@@ -12,6 +12,7 @@ import {
   Forward,
   Edit,
   Pin,
+  PinOff,
   Trash2,
   CheckSquare,
   Copy,
@@ -37,6 +38,7 @@ interface MessageContextMenuProps {
   onDownload?: () => void;
   readAt?: string | null;
   sentAt?: string;
+  isPinned?: boolean;
 }
 
 export function MessageContextMenu({
@@ -54,6 +56,7 @@ export function MessageContextMenu({
   onDownload,
   readAt,
   sentAt,
+  isPinned = false,
 }: MessageContextMenuProps) {
   return (
     <ContextMenu>
@@ -107,8 +110,17 @@ export function MessageContextMenu({
         )}
         {onPin && (
           <ContextMenuItem onClick={onPin} className="gap-3">
-            <Pin className="h-4 w-4" />
-            <span>Pin</span>
+            {isPinned ? (
+              <>
+                <PinOff className="h-4 w-4" />
+                <span>Unpin</span>
+              </>
+            ) : (
+              <>
+                <Pin className="h-4 w-4" />
+                <span>Pin</span>
+              </>
+            )}
           </ContextMenuItem>
         )}
         {hasMedia && onDownload && (
