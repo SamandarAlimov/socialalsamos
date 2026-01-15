@@ -252,9 +252,9 @@ export function ChatListItem({
               </div>
             </div>
             
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center justify-between gap-2 min-w-0">
               <p className={cn(
-                "text-sm truncate",
+                "text-sm truncate flex-1 min-w-0",
                 isUnread
                   ? "text-foreground font-medium" 
                   : "text-muted-foreground"
