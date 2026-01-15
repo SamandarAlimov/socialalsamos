@@ -803,7 +803,7 @@ export default function MessagesPage() {
       {/* Left Panel - Conversation List */}
       <div className={cn(
         "w-full md:w-80 lg:w-96 border-r border-border flex flex-col bg-card flex-shrink-0",
-        "h-[calc(100dvh-4rem)] md:h-full",
+        "h-[calc(100dvh-3.5rem)] md:h-full pb-16 md:pb-0",
         showMobileChat && "hidden md:flex"
       )}>
         {/* Search & Create */}
@@ -1097,8 +1097,8 @@ export default function MessagesPage() {
               )}
             </div>
 
-            {/* Message Input - Fixed at bottom, above mobile navbar */}
-            <div className="flex-shrink-0 border-t border-border bg-card mb-16 md:mb-0">
+            {/* Message Input - Fixed at bottom, safe area on mobile */}
+            <div className="flex-shrink-0 border-t border-border bg-card pb-safe">
               <MessageInput
                 onSend={handleSendMessage}
                 onSchedule={handleScheduleMessage}

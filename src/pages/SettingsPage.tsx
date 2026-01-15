@@ -288,15 +288,15 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto py-8 px-4">
-      <h1 className="text-2xl font-bold mb-8">Settings</h1>
+    <div className="max-w-4xl mx-auto py-4 md:py-8 px-3 md:px-4 pb-24 md:pb-8">
+      <h1 className="text-xl md:text-2xl font-bold mb-4 md:mb-8">Settings</h1>
 
-      <Tabs defaultValue="account" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="account">Account</TabsTrigger>
-          <TabsTrigger value="privacy">Privacy</TabsTrigger>
-          <TabsTrigger value="devices">Devices</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
+      <Tabs defaultValue="account" className="space-y-4 md:space-y-6">
+        <TabsList className="grid w-full grid-cols-4 h-auto p-1">
+          <TabsTrigger value="account" className="text-xs md:text-sm py-2">Account</TabsTrigger>
+          <TabsTrigger value="privacy" className="text-xs md:text-sm py-2">Privacy</TabsTrigger>
+          <TabsTrigger value="devices" className="text-xs md:text-sm py-2">Devices</TabsTrigger>
+          <TabsTrigger value="notifications" className="text-xs md:text-sm py-2">Notif.</TabsTrigger>
         </TabsList>
 
         {/* Account Tab */}

@@ -576,7 +576,7 @@ export default function NotificationsPage() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="flex flex-col h-full bg-background pb-20 md:pb-4">
       {/* Header */}
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80 border-b">
         <div className="flex items-center justify-between px-4 py-4">
