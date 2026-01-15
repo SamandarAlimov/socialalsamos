@@ -196,7 +196,7 @@ export function MessageBubble({ message, isMine, formatTime, isGroup = false, on
                 ) : (
                   <>
                     {message.content && !message.content.startsWith('[') && (
-                      <p className="text-sm leading-relaxed">{message.content}</p>
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap break-words" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{message.content}</p>
                     )}
                     {message.media_url && message.media_type && (
                       <div className="mt-2">

@@ -254,12 +254,16 @@ export function ChatListItem({
             
             <div className="flex items-center justify-between gap-2 min-w-0">
               <p className={cn(
-                "text-sm truncate flex-1 min-w-0",
+                "text-sm flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap",
                 isUnread
                   ? "text-foreground font-medium" 
                   : "text-muted-foreground"
-              )}>
-                {conversation.last_message || 'No messages yet'}
+              )}
+              style={{ maxWidth: 'calc(100% - 40px)' }}
+              >
+                {conversation.last_message && conversation.last_message.length > 35 
+                  ? `${conversation.last_message.substring(0, 35)}...` 
+                  : conversation.last_message || 'No messages yet'}
               </p>
               
               <div className="flex items-center gap-1.5 flex-shrink-0">
