@@ -1097,8 +1097,8 @@ export default function MessagesPage() {
               )}
             </div>
 
-            {/* Message Input - Fixed at bottom, safe area on mobile */}
-            <div className="flex-shrink-0 border-t border-border bg-card pb-safe">
+            {/* Message Input - Fixed at bottom, above BottomNavbar on mobile */}
+            <div className="flex-shrink-0 border-t border-border bg-card pb-safe mb-16 md:mb-0">
               <MessageInput
                 onSend={handleSendMessage}
                 onSchedule={handleScheduleMessage}
