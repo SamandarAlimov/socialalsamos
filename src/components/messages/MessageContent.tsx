@@ -53,7 +53,8 @@ export function MessageContent({ content, isMine, className }: MessageContentPro
       {/* Text content - hide if it's only a link that will have a preview */}
       {!(isOnlyLink && links.length > 0) && (
         <p 
-          className="text-sm leading-relaxed whitespace-pre-wrap break-words"
+          className="text-sm leading-relaxed whitespace-pre-wrap break-words overflow-wrap-anywhere"
+          style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
           dangerouslySetInnerHTML={{ __html: formattedContent }}
         />
       )}
