@@ -3,6 +3,7 @@ import { FileText, Download, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { VideoMessagePlayer } from './messages/VideoMessagePlayer';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
+import { AudioFilePlayer } from './messages/AudioFilePlayer';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 
@@ -12,13 +13,18 @@ interface MessageAttachmentProps {
   name?: string;
   isMine?: boolean;
   autoPlay?: boolean;
+  senderName?: string;
 }
 
-export function MessageAttachment({ url, type, name, isMine, autoPlay = false }: MessageAttachmentProps) {
+export function MessageAttachment({ url, type, name, isMine, autoPlay = false, senderName }: MessageAttachmentProps) {
   const [showFullscreen, setShowFullscreen] = useState(false);
   
   // Check if it's a GIF
   const isGif = url.includes('giphy.com') || url.includes('.gif') || url.includes('[media:gif:');
+
+  // Check if it's a music/audio file (not voice message)
+  const isVoiceMessage = name?.toLowerCase().includes('voice') || url.includes('voice') || !name;
+  const isMusicFile = type === 'audio' && name && !isVoiceMessage;
 
   if (type === 'image' || isGif) {
     const actualUrl = url.startsWith('[media:gif:') 
@@ -57,6 +63,10 @@ export function MessageAttachment({ url, type, name, isMine, autoPlay = false }:
   }
 
   if (type === 'audio') {
+    // Use AudioFilePlayer for music files, VoiceMessagePlayer for voice messages
+    if (isMusicFile) {
+      return <AudioFilePlayer url={url} name={name} isMine={isMine} senderName={senderName} />;
+    }
     return <VoiceMessagePlayer url={url} isMine={isMine} autoPlay={autoPlay} />;
   }
 

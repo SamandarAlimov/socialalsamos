@@ -9,9 +9,20 @@ interface VoiceMessagePlayerProps {
   duration?: number;
   isMine?: boolean;
   autoPlay?: boolean;
+  senderName?: string;
+  messageId?: string;
+  onPlay?: () => void;
 }
 
-export function VoiceMessagePlayer({ url, duration, isMine, autoPlay = false }: VoiceMessagePlayerProps) {
+export function VoiceMessagePlayer({ 
+  url, 
+  duration, 
+  isMine, 
+  autoPlay = false, 
+  senderName, 
+  messageId,
+  onPlay 
+}: VoiceMessagePlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [totalDuration, setTotalDuration] = useState(duration || 0);
@@ -26,7 +37,6 @@ export function VoiceMessagePlayer({ url, duration, isMine, autoPlay = false }: 
   const waveformBars = useMemo(() => {
     const seed = url.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     return Array.from({ length: 40 }).map((_, i) => {
-      // Create a more natural waveform pattern
       const baseHeight = 25 + ((seed * (i + 1) * 7) % 60);
       const variation = Math.sin((i / 40) * Math.PI * 4) * 15;
       return Math.min(95, Math.max(15, baseHeight + variation));
@@ -124,6 +134,7 @@ export function VoiceMessagePlayer({ url, duration, isMine, autoPlay = false }: 
       audioRef.current.pause();
     } else {
       audioRef.current.play();
+      onPlay?.();
     }
     setIsPlaying(!isPlaying);
   };
