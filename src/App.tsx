@@ -5,8 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { GlobalCallProvider } from "@/contexts/GlobalCallContext";
-import { AIProvider } from "@/contexts/AIContext";
-import { AIFloatingButton, AIChatDialog, AITimeLimitAlert } from "@/components/ai";
+import { AITimeLimitAlert } from "@/components/ai";
 import { ThemeProvider } from "next-themes";
 
 // Pages
@@ -26,6 +25,7 @@ import MarketplacePage from "./pages/MarketplacePage";
 import AdminPage from "./pages/AdminPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import StoryArchivePage from "./pages/StoryArchivePage";
+import AIPage from "./pages/AIPage";
 import NotFound from "./pages/NotFound";
 
 // Layout
@@ -102,6 +102,7 @@ function AppRoutes() {
         <Route path="/payment" element={<PaymentSettingsPage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/story-archive" element={<StoryArchivePage />} />
+        <Route path="/ai" element={<AIPage />} />
       </Route>
       
       {/* 404 */}
@@ -119,14 +120,10 @@ function AppWithGlobalCall() {
       <Toaster />
       <Sonner />
       {isAuthenticated ? (
-        <AIProvider>
-          <GlobalCallProvider>
-            <AppRoutes />
-            <AIFloatingButton />
-            <AIChatDialog />
-            <AITimeLimitAlert />
-          </GlobalCallProvider>
-        </AIProvider>
+        <GlobalCallProvider>
+          <AppRoutes />
+          <AITimeLimitAlert />
+        </GlobalCallProvider>
       ) : (
         <AppRoutes />
       )}
