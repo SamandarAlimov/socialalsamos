@@ -44,11 +44,11 @@ const navItems: NavItem[] = [
   { icon: ShoppingBag, label: 'Marketplace', path: '/marketplace' },
   { icon: Map, label: 'Map', path: '/map' },
   { icon: Wallet, label: 'Payment', path: '/payment' },
+  { icon: Sparkles, label: 'AI Assistant', path: '/ai' },
+  { icon: PlusSquare, label: 'Create', path: '/create' },
 ];
 
 const bottomItems: NavItem[] = [
-  { icon: Sparkles, label: 'AI Assistant', path: '/ai' },
-  { icon: PlusSquare, label: 'Create', path: '/create' },
   { icon: User, label: 'Profile', path: '/profile' },
   { icon: Settings, label: 'Settings', path: '/settings' },
 ];
