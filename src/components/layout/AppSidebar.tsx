@@ -38,15 +38,15 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { icon: Home, label: 'Home', path: '/home' },
-  { icon: Wallet, label: 'Payment', path: '/payment' },
-  { icon: Sparkles, label: 'AI Assistant', action: 'ai' },
   { icon: Search, label: 'Search', path: '/search' },
   { icon: Compass, label: 'Discover', path: '/discover' },
   { icon: Video, label: 'Videos', path: '/videos' },
   { icon: MessageCircle, label: 'Messages', path: '/messages', badgeKey: 'messages' },
+  { icon: PlusSquare, label: 'Create', path: '/create' },
   { icon: ShoppingBag, label: 'Marketplace', path: '/marketplace' },
   { icon: Map, label: 'Map', path: '/map' },
-  { icon: PlusSquare, label: 'Create', path: '/create' },
+  { icon: Wallet, label: 'Payment', path: '/payment' },
+  { icon: Sparkles, label: 'AI Assistant', action: 'ai' },
 ];
 
 const bottomItems: NavItem[] = [
@@ -196,14 +196,6 @@ export function AppSidebar() {
           );
         })}
         
-        {/* Logout */}
-        <button
-          onClick={logout}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 w-full text-destructive hover:bg-destructive/10"
-        >
-          <LogOut className="h-5 w-5 flex-shrink-0" />
-          {!collapsed && <span className="font-medium text-sm">Logout</span>}
-        </button>
       </div>
 
       {/* Collapse Toggle */}
