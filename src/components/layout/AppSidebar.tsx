@@ -41,14 +41,14 @@ const navItems: NavItem[] = [
   { icon: Compass, label: 'Discover', path: '/discover' },
   { icon: Video, label: 'Videos', path: '/videos' },
   { icon: MessageCircle, label: 'Messages', path: '/messages', badgeKey: 'messages' },
-  { icon: PlusSquare, label: 'Create', path: '/create' },
   { icon: ShoppingBag, label: 'Marketplace', path: '/marketplace' },
   { icon: Map, label: 'Map', path: '/map' },
   { icon: Wallet, label: 'Payment', path: '/payment' },
-  { icon: Sparkles, label: 'AI Assistant', path: '/ai' },
 ];
 
 const bottomItems: NavItem[] = [
+  { icon: Sparkles, label: 'AI Assistant', path: '/ai' },
+  { icon: PlusSquare, label: 'Create', path: '/create' },
   { icon: User, label: 'Profile', path: '/profile' },
   { icon: Settings, label: 'Settings', path: '/settings' },
 ];
