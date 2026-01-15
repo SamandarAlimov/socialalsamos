@@ -5,8 +5,6 @@ import {
   Send, 
   Loader2, 
   Sparkles, 
-  Image as ImageIcon,
-  Trash2,
   Bot,
   User,
   MessageSquare,
@@ -16,20 +14,32 @@ import {
   Plus,
   Paperclip,
   Mic,
-  MoreHorizontal,
   ArrowUp,
   Clock,
-  Zap,
-  Wand2
+  Wand2,
+  ChevronLeft,
+  PanelLeftClose,
+  PanelLeft,
+  MoreHorizontal,
+  Trash2,
+  Search
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useIsMobile } from '@/hooks/use-mobile';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface Message {
   id: string;
@@ -65,6 +75,7 @@ interface Group {
 export default function AIPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState('chat');
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -72,6 +83,8 @@ export default function AIPage() {
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
+  const [searchQuery, setSearchQuery] = useState('');
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -85,6 +98,11 @@ export default function AIPage() {
     { id: '1', name: 'Developers UZ', members: 156 },
     { id: '2', name: 'AI Enthusiasts', members: 89 },
   ]);
+
+  // Update sidebar state when mobile changes
+  useEffect(() => {
+    setSidebarOpen(!isMobile);
+  }, [isMobile]);
 
   // Load conversations from database
   useEffect(() => {
@@ -142,6 +160,13 @@ export default function AIPage() {
           updated_at: new Date().toISOString()
         })
         .eq('id', currentConversationId);
+      
+      // Update local state
+      setConversations(prev => prev.map(c => 
+        c.id === currentConversationId 
+          ? { ...c, messages: newMessages, title: getConversationTitle(newMessages), updatedAt: new Date() }
+          : c
+      ));
     } else {
       const { data } = await supabase
         .from('ai_conversations')
@@ -155,6 +180,14 @@ export default function AIPage() {
       
       if (data) {
         setCurrentConversationId(data.id);
+        const newConv: Conversation = {
+          id: data.id,
+          title: getConversationTitle(newMessages),
+          messages: newMessages,
+          updatedAt: new Date(),
+          type: context === 'imagine' ? 'imagine' : 'chat'
+        };
+        setConversations(prev => [newConv, ...prev]);
       }
     }
   };
@@ -181,12 +214,14 @@ export default function AIPage() {
     setMessages([]);
     setCurrentConversationId(null);
     setInput('');
+    if (isMobile) setSidebarOpen(false);
   };
 
   const loadConversation = (conv: Conversation) => {
     setMessages(conv.messages);
     setCurrentConversationId(conv.id);
     setActiveTab(conv.type);
+    if (isMobile) setSidebarOpen(false);
   };
 
   const sendMessage = async () => {
@@ -384,6 +419,10 @@ export default function AIPage() {
     return date.toLocaleDateString('uz-UZ');
   };
 
+  const filteredConversations = conversations.filter(conv =>
+    conv.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   const quickPrompts = activeTab === 'imagine' 
     ? [
         { icon: '🎨', text: 'Fantastik manzara' },
@@ -398,431 +437,440 @@ export default function AIPage() {
         { icon: '🎯', text: 'Maslahat ber' },
       ];
 
-  return (
-    <div className="flex h-[calc(100vh-4rem)] md:h-[calc(100vh-2rem)] bg-background">
-      {/* Sidebar - History */}
-      <div className="hidden md:flex w-64 border-r border-border flex-col">
-        <div className="p-4 border-b border-border">
-          <Button 
-            className="w-full gap-2" 
-            onClick={startNewConversation}
-          >
-            <Plus className="h-4 w-4" />
-            Yangi suhbat
-          </Button>
-        </div>
-        
-        <ScrollArea className="flex-1">
-          <div className="p-2 space-y-1">
-            {conversations.map(conv => (
-              <motion.div
-                key={conv.id}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                className={cn(
-                  "group flex items-center gap-2 p-3 rounded-lg cursor-pointer hover:bg-muted/80 transition-colors",
-                  currentConversationId === conv.id && "bg-muted"
+  // Render chat/imagine content
+  const renderChatContent = (isImagine = false) => (
+    <>
+      <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
+        <AnimatePresence mode="wait">
+          {messages.length === 0 ? (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4"
+            >
+              <div className={cn(
+                "h-16 w-16 sm:h-20 sm:w-20 rounded-2xl flex items-center justify-center mb-4 sm:mb-6 shadow-lg",
+                isImagine 
+                  ? "bg-gradient-to-br from-pink-500 to-orange-500 shadow-pink-500/20"
+                  : "bg-gradient-to-br from-violet-500 to-purple-600 shadow-violet-500/20"
+              )}>
+                {isImagine ? (
+                  <Wand2 className="h-8 w-8 sm:h-10 sm:w-10 text-white" />
+                ) : (
+                  <Sparkles className="h-8 w-8 sm:h-10 sm:w-10 text-white" />
                 )}
-                onClick={() => loadConversation(conv)}
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{conv.title}</p>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {formatTime(conv.updatedAt)}
-                  </p>
-                </div>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteConversation(conv.id);
-                  }}
+              </div>
+              <h2 className="text-xl sm:text-2xl font-bold mb-2">
+                {isImagine ? 'Imagine - Rasm Yaratish' : 'Salom! Men AI yordamchingizman'}
+              </h2>
+              <p className="text-sm sm:text-base text-muted-foreground max-w-md mb-6 sm:mb-8">
+                {isImagine 
+                  ? 'Tavsif yozing va AI sizning xayolingizni rasmga aylantirsin.'
+                  : 'Savol bering, matn yozing, kod generatsiya qiling yoki har qanday vazifada yordam so\'rang.'}
+              </p>
+              <div className="grid grid-cols-2 gap-2 sm:gap-3 w-full max-w-md sm:max-w-2xl">
+                {quickPrompts.map((prompt, i) => (
+                  <Button 
+                    key={i}
+                    variant="outline" 
+                    className="h-auto py-3 sm:py-4 flex-col gap-1 sm:gap-2 hover:bg-muted/80 text-xs sm:text-sm"
+                    onClick={() => setInput(prompt.text)}
+                  >
+                    <span className="text-xl sm:text-2xl">{prompt.icon}</span>
+                    <span>{prompt.text}</span>
+                  </Button>
+                ))}
+              </div>
+            </motion.div>
+          ) : (
+            <div className="space-y-4 sm:space-y-6 max-w-3xl mx-auto pb-4">
+              {messages.map((message, idx) => (
+                <motion.div
+                  key={message.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.03 }}
+                  className={cn(
+                    "flex gap-2 sm:gap-4",
+                    message.role === 'user' ? 'flex-row-reverse' : 'flex-row'
+                  )}
                 >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </motion.div>
-            ))}
+                  <Avatar className="h-7 w-7 sm:h-8 sm:w-8 shrink-0 ring-2 ring-background shadow">
+                    {message.role === 'user' ? (
+                      <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                        <User className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      </AvatarFallback>
+                    ) : (
+                      <AvatarFallback className={cn(
+                        "text-white text-xs",
+                        isImagine 
+                          ? "bg-gradient-to-br from-pink-500 to-orange-500"
+                          : "bg-gradient-to-br from-violet-500 to-purple-600"
+                      )}>
+                        {isImagine ? <Wand2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Bot className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+                      </AvatarFallback>
+                    )}
+                  </Avatar>
+                  <div
+                    className={cn(
+                      "rounded-2xl px-3 py-2 sm:px-4 sm:py-3 max-w-[85%] shadow-sm",
+                      message.role === 'user'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted'
+                    )}
+                  >
+                    <p className="text-xs sm:text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                    {message.imageUrl && (
+                      <img 
+                        src={message.imageUrl} 
+                        alt="Generated" 
+                        className="mt-2 sm:mt-3 rounded-xl max-w-full shadow-md"
+                      />
+                    )}
+                  </div>
+                </motion.div>
+              ))}
+              {(isLoading || isGeneratingImage) && (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex gap-2 sm:gap-4"
+                >
+                  <Avatar className="h-7 w-7 sm:h-8 sm:w-8 shrink-0">
+                    <AvatarFallback className={cn(
+                      "text-white text-xs",
+                      isImagine 
+                        ? "bg-gradient-to-br from-pink-500 to-orange-500"
+                        : "bg-gradient-to-br from-violet-500 to-purple-600"
+                    )}>
+                      {isImagine ? <Wand2 className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="bg-muted rounded-2xl px-3 py-2 sm:px-4 sm:py-3">
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-1">
+                        <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-violet-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-violet-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-violet-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </div>
+                      <span className="text-xs sm:text-sm text-muted-foreground ml-1 sm:ml-2">
+                        {isGeneratingImage ? 'Rasm yaratilmoqda...' : 'Yozmoqda...'}
+                      </span>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </div>
+          )}
+        </AnimatePresence>
+      </ScrollArea>
+
+      {/* Input Section */}
+      <div className="p-3 sm:p-4 border-t border-border bg-background/95 backdrop-blur">
+        <div className="max-w-3xl mx-auto">
+          <div className={cn(
+            "relative bg-muted/50 rounded-xl sm:rounded-2xl border border-border transition-all",
+            isImagine 
+              ? "focus-within:border-pink-500/50 focus-within:ring-2 focus-within:ring-pink-500/20"
+              : "focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20"
+          )}>
+            <Textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={isImagine ? "Qanday rasm yaratmoqchisiz..." : "Xabar yozing..."}
+              className="min-h-[44px] sm:min-h-[52px] max-h-[150px] sm:max-h-[200px] resize-none border-0 bg-transparent focus-visible:ring-0 pr-24 sm:pr-32 py-3 sm:py-4 px-3 sm:px-4 text-sm"
+              disabled={isLoading || isGeneratingImage}
+              rows={1}
+            />
+            <div className="absolute right-2 bottom-1.5 sm:bottom-2 flex items-center gap-0.5 sm:gap-1">
+              {!isMobile && (
+                <>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 sm:h-8 sm:w-8 text-muted-foreground hover:text-foreground"
+                    disabled
+                  >
+                    <Paperclip className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 sm:h-8 sm:w-8 text-muted-foreground hover:text-foreground"
+                    disabled
+                  >
+                    <Mic className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  </Button>
+                </>
+              )}
+              <Button
+                size="icon"
+                className={cn(
+                  "h-7 w-7 sm:h-8 sm:w-8 rounded-lg transition-all",
+                  input.trim() 
+                    ? isImagine
+                      ? "bg-gradient-to-r from-pink-500 to-orange-500 text-white hover:opacity-90"
+                      : "bg-primary text-primary-foreground hover:bg-primary/90" 
+                    : "bg-muted text-muted-foreground"
+                )}
+                onClick={isImagine ? generateImage : sendMessage}
+                disabled={!input.trim() || isLoading || isGeneratingImage}
+              >
+                {isLoading || isGeneratingImage ? (
+                  <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" />
+                ) : isImagine ? (
+                  <Wand2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                ) : (
+                  <ArrowUp className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                )}
+              </Button>
+            </div>
           </div>
-        </ScrollArea>
+          <p className="text-[10px] sm:text-xs text-center text-muted-foreground mt-1.5 sm:mt-2">
+            AI xato qilishi mumkin. Muhim ma'lumotlarni tekshiring.
+          </p>
+        </div>
       </div>
+    </>
+  );
+
+  return (
+    <div className="flex h-[calc(100vh-4rem)] md:h-[calc(100vh-2rem)] bg-background overflow-hidden">
+      {/* Sidebar - History */}
+      <AnimatePresence>
+        {sidebarOpen && (
+          <>
+            {/* Mobile overlay */}
+            {isMobile && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/50 z-40 md:hidden"
+                onClick={() => setSidebarOpen(false)}
+              />
+            )}
+            
+            <motion.div
+              initial={{ x: isMobile ? -280 : 0, opacity: isMobile ? 0 : 1 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -280, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className={cn(
+                "flex flex-col bg-background border-r border-border z-50",
+                isMobile 
+                  ? "fixed left-0 top-0 bottom-0 w-[280px]" 
+                  : "relative w-64 lg:w-72"
+              )}
+            >
+              {/* Sidebar Header */}
+              <div className="p-3 sm:p-4 border-b border-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+                      <Sparkles className="h-4 w-4 text-white" />
+                    </div>
+                    <span className="font-semibold">AI Assistant</span>
+                  </div>
+                  <Button 
+                    size="icon" 
+                    variant="ghost" 
+                    className="h-8 w-8"
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    {isMobile ? <ChevronLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+                  </Button>
+                </div>
+                
+                <Button 
+                  className="w-full gap-2 h-9 sm:h-10" 
+                  onClick={startNewConversation}
+                >
+                  <Plus className="h-4 w-4" />
+                  Yangi suhbat
+                </Button>
+                
+                {/* Search */}
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Suhbatlarni qidirish..."
+                    className="pl-9 h-9 text-sm"
+                  />
+                </div>
+              </div>
+              
+              {/* Conversations List */}
+              <ScrollArea className="flex-1">
+                <div className="p-2 space-y-1">
+                  {filteredConversations.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <History className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">
+                        {searchQuery ? 'Natija topilmadi' : 'Hali suhbatlar yo\'q'}
+                      </p>
+                    </div>
+                  ) : (
+                    filteredConversations.map(conv => (
+                      <motion.div
+                        key={conv.id}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className={cn(
+                          "group flex items-center gap-2 p-2.5 sm:p-3 rounded-lg cursor-pointer hover:bg-muted/80 transition-colors",
+                          currentConversationId === conv.id && "bg-muted"
+                        )}
+                        onClick={() => loadConversation(conv)}
+                      >
+                        <div className={cn(
+                          "h-8 w-8 rounded-lg flex items-center justify-center shrink-0",
+                          conv.type === 'imagine' 
+                            ? "bg-gradient-to-br from-pink-500/20 to-orange-500/20" 
+                            : "bg-gradient-to-br from-violet-500/20 to-purple-500/20"
+                        )}>
+                          {conv.type === 'imagine' ? (
+                            <Wand2 className="h-4 w-4 text-pink-500" />
+                          ) : (
+                            <MessageSquare className="h-4 w-4 text-violet-500" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{conv.title}</p>
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {formatTime(conv.updatedAt)}
+                          </p>
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem 
+                              className="text-destructive"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteConversation(conv.id);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              O'chirish
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </motion.div>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Tabs Header */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-          <div className="border-b border-border px-4">
-            <TabsList className="h-14 bg-transparent p-0 gap-2">
+          <div className="border-b border-border px-2 sm:px-4 flex items-center gap-2">
+            {/* Toggle sidebar button */}
+            {!sidebarOpen && (
+              <Button 
+                size="icon" 
+                variant="ghost" 
+                className="h-8 w-8 shrink-0"
+                onClick={() => setSidebarOpen(true)}
+              >
+                <PanelLeft className="h-4 w-4" />
+              </Button>
+            )}
+            
+            <TabsList className="h-12 sm:h-14 bg-transparent p-0 gap-1 sm:gap-2 flex-1 justify-start">
               <TabsTrigger 
                 value="chat" 
-                className="gap-2 data-[state=active]:bg-muted rounded-lg px-4"
+                className="gap-1.5 sm:gap-2 data-[state=active]:bg-muted rounded-lg px-2.5 sm:px-4 text-xs sm:text-sm"
               >
                 <MessageSquare className="h-4 w-4" />
-                <span className="hidden sm:inline">Chat</span>
+                <span className="hidden xs:inline">Chat</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="imagine" 
-                className="gap-2 data-[state=active]:bg-muted rounded-lg px-4"
+                className="gap-1.5 sm:gap-2 data-[state=active]:bg-muted rounded-lg px-2.5 sm:px-4 text-xs sm:text-sm"
               >
                 <Wand2 className="h-4 w-4" />
-                <span className="hidden sm:inline">Imagine</span>
+                <span className="hidden xs:inline">Imagine</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="projects" 
-                className="gap-2 data-[state=active]:bg-muted rounded-lg px-4"
+                className="gap-1.5 sm:gap-2 data-[state=active]:bg-muted rounded-lg px-2.5 sm:px-4 text-xs sm:text-sm"
               >
                 <FolderKanban className="h-4 w-4" />
                 <span className="hidden sm:inline">Loyihalar</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="groups" 
-                className="gap-2 data-[state=active]:bg-muted rounded-lg px-4"
+                className="gap-1.5 sm:gap-2 data-[state=active]:bg-muted rounded-lg px-2.5 sm:px-4 text-xs sm:text-sm"
               >
                 <Users className="h-4 w-4" />
                 <span className="hidden sm:inline">Guruhlar</span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="history" 
-                className="gap-2 data-[state=active]:bg-muted rounded-lg px-4 md:hidden"
-              >
-                <History className="h-4 w-4" />
-                <span className="hidden sm:inline">Tarix</span>
               </TabsTrigger>
             </TabsList>
           </div>
 
           {/* Chat Tab */}
           <TabsContent value="chat" className="flex-1 flex flex-col m-0 data-[state=inactive]:hidden">
-            <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
-              <AnimatePresence mode="wait">
-                {messages.length === 0 ? (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex flex-col items-center justify-center h-full text-center px-4 py-12"
-                  >
-                    <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center mb-6 shadow-lg shadow-violet-500/20">
-                      <Sparkles className="h-10 w-10 text-white" />
-                    </div>
-                    <h2 className="text-2xl font-bold mb-2">Salom! Men AI yordamchingizman</h2>
-                    <p className="text-muted-foreground max-w-md mb-8">
-                      Savol bering, matn yozing, kod generatsiya qiling yoki har qanday vazifada yordam so'rang.
-                    </p>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full max-w-2xl">
-                      {quickPrompts.map((prompt, i) => (
-                        <Button 
-                          key={i}
-                          variant="outline" 
-                          className="h-auto py-4 flex-col gap-2 hover:bg-muted/80"
-                          onClick={() => setInput(prompt.text)}
-                        >
-                          <span className="text-2xl">{prompt.icon}</span>
-                          <span className="text-xs">{prompt.text}</span>
-                        </Button>
-                      ))}
-                    </div>
-                  </motion.div>
-                ) : (
-                  <div className="space-y-6 max-w-3xl mx-auto">
-                    {messages.map((message, idx) => (
-                      <motion.div
-                        key={message.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.05 }}
-                        className={cn(
-                          "flex gap-4",
-                          message.role === 'user' ? 'flex-row-reverse' : 'flex-row'
-                        )}
-                      >
-                        <Avatar className="h-8 w-8 shrink-0 ring-2 ring-background shadow">
-                          {message.role === 'user' ? (
-                            <AvatarFallback className="bg-primary text-primary-foreground">
-                              <User className="h-4 w-4" />
-                            </AvatarFallback>
-                          ) : (
-                            <AvatarFallback className="bg-gradient-to-br from-violet-500 to-purple-600 text-white">
-                              <Bot className="h-4 w-4" />
-                            </AvatarFallback>
-                          )}
-                        </Avatar>
-                        <div
-                          className={cn(
-                            "rounded-2xl px-4 py-3 max-w-[85%] shadow-sm",
-                            message.role === 'user'
-                              ? 'bg-primary text-primary-foreground'
-                              : 'bg-muted'
-                          )}
-                        >
-                          <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
-                          {message.imageUrl && (
-                            <img 
-                              src={message.imageUrl} 
-                              alt="Generated" 
-                              className="mt-3 rounded-xl max-w-full shadow-md"
-                            />
-                          )}
-                        </div>
-                      </motion.div>
-                    ))}
-                    {(isLoading || isGeneratingImage) && (
-                      <motion.div 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className="flex gap-4"
-                      >
-                        <Avatar className="h-8 w-8 shrink-0">
-                          <AvatarFallback className="bg-gradient-to-br from-violet-500 to-purple-600 text-white">
-                            <Bot className="h-4 w-4" />
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="bg-muted rounded-2xl px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="flex gap-1">
-                              <span className="w-2 h-2 bg-violet-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                              <span className="w-2 h-2 bg-violet-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                              <span className="w-2 h-2 bg-violet-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                            </div>
-                            <span className="text-sm text-muted-foreground ml-2">
-                              {isGeneratingImage ? 'Rasm yaratilmoqda...' : 'Yozmoqda...'}
-                            </span>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </div>
-                )}
-              </AnimatePresence>
-            </ScrollArea>
-
-            {/* Professional Input Section */}
-            <div className="p-4 border-t border-border bg-background/95 backdrop-blur">
-              <div className="max-w-3xl mx-auto">
-                <div className="relative bg-muted/50 rounded-2xl border border-border focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition-all">
-                  <Textarea
-                    ref={textareaRef}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder={activeTab === 'imagine' ? "Qanday rasm yaratmoqchisiz..." : "Xabar yozing..."}
-                    className="min-h-[52px] max-h-[200px] resize-none border-0 bg-transparent focus-visible:ring-0 pr-32 py-4 px-4"
-                    disabled={isLoading || isGeneratingImage}
-                    rows={1}
-                  />
-                  <div className="absolute right-2 bottom-2 flex items-center gap-1">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      disabled
-                    >
-                      <Paperclip className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      disabled
-                    >
-                      <Mic className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      className={cn(
-                        "h-8 w-8 rounded-lg transition-all",
-                        input.trim() 
-                          ? "bg-primary text-primary-foreground hover:bg-primary/90" 
-                          : "bg-muted text-muted-foreground"
-                      )}
-                      onClick={activeTab === 'imagine' ? generateImage : sendMessage}
-                      disabled={!input.trim() || isLoading || isGeneratingImage}
-                    >
-                      {isLoading || isGeneratingImage ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <ArrowUp className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-                <p className="text-xs text-center text-muted-foreground mt-2">
-                  AI xato qilishi mumkin. Muhim ma'lumotlarni tekshiring.
-                </p>
-              </div>
-            </div>
+            {renderChatContent(false)}
           </TabsContent>
 
           {/* Imagine Tab */}
           <TabsContent value="imagine" className="flex-1 flex flex-col m-0 data-[state=inactive]:hidden">
-            <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
-              <AnimatePresence mode="wait">
-                {messages.length === 0 ? (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex flex-col items-center justify-center h-full text-center px-4 py-12"
-                  >
-                    <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-pink-500 to-orange-500 flex items-center justify-center mb-6 shadow-lg shadow-pink-500/20">
-                      <Wand2 className="h-10 w-10 text-white" />
-                    </div>
-                    <h2 className="text-2xl font-bold mb-2">Imagine - Rasm Yaratish</h2>
-                    <p className="text-muted-foreground max-w-md mb-8">
-                      Tavsif yozing va AI sizning xayolingizni rasmga aylantirsin.
-                    </p>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full max-w-2xl">
-                      {quickPrompts.map((prompt, i) => (
-                        <Button 
-                          key={i}
-                          variant="outline" 
-                          className="h-auto py-4 flex-col gap-2 hover:bg-muted/80"
-                          onClick={() => setInput(prompt.text)}
-                        >
-                          <span className="text-2xl">{prompt.icon}</span>
-                          <span className="text-xs">{prompt.text}</span>
-                        </Button>
-                      ))}
-                    </div>
-                  </motion.div>
-                ) : (
-                  <div className="space-y-6 max-w-3xl mx-auto">
-                    {messages.map((message, idx) => (
-                      <motion.div
-                        key={message.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.05 }}
-                        className={cn(
-                          "flex gap-4",
-                          message.role === 'user' ? 'flex-row-reverse' : 'flex-row'
-                        )}
-                      >
-                        <Avatar className="h-8 w-8 shrink-0 ring-2 ring-background shadow">
-                          {message.role === 'user' ? (
-                            <AvatarFallback className="bg-primary text-primary-foreground">
-                              <User className="h-4 w-4" />
-                            </AvatarFallback>
-                          ) : (
-                            <AvatarFallback className="bg-gradient-to-br from-pink-500 to-orange-500 text-white">
-                              <Wand2 className="h-4 w-4" />
-                            </AvatarFallback>
-                          )}
-                        </Avatar>
-                        <div
-                          className={cn(
-                            "rounded-2xl px-4 py-3 max-w-[85%] shadow-sm",
-                            message.role === 'user'
-                              ? 'bg-primary text-primary-foreground'
-                              : 'bg-muted'
-                          )}
-                        >
-                          <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
-                          {message.imageUrl && (
-                            <img 
-                              src={message.imageUrl} 
-                              alt="Generated" 
-                              className="mt-3 rounded-xl max-w-full shadow-md"
-                            />
-                          )}
-                        </div>
-                      </motion.div>
-                    ))}
-                    {isGeneratingImage && (
-                      <motion.div 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className="flex gap-4"
-                      >
-                        <Avatar className="h-8 w-8 shrink-0">
-                          <AvatarFallback className="bg-gradient-to-br from-pink-500 to-orange-500 text-white">
-                            <Wand2 className="h-4 w-4" />
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="bg-muted rounded-2xl px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <Loader2 className="h-4 w-4 animate-spin text-pink-500" />
-                            <span className="text-sm text-muted-foreground">Rasm yaratilmoqda...</span>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </div>
-                )}
-              </AnimatePresence>
-            </ScrollArea>
-
-            {/* Same Input for Imagine */}
-            <div className="p-4 border-t border-border bg-background/95 backdrop-blur">
-              <div className="max-w-3xl mx-auto">
-                <div className="relative bg-muted/50 rounded-2xl border border-border focus-within:border-pink-500/50 focus-within:ring-2 focus-within:ring-pink-500/20 transition-all">
-                  <Textarea
-                    ref={textareaRef}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Qanday rasm yaratmoqchisiz..."
-                    className="min-h-[52px] max-h-[200px] resize-none border-0 bg-transparent focus-visible:ring-0 pr-32 py-4 px-4"
-                    disabled={isGeneratingImage}
-                    rows={1}
-                  />
-                  <div className="absolute right-2 bottom-2 flex items-center gap-1">
-                    <Button
-                      size="icon"
-                      className={cn(
-                        "h-8 w-8 rounded-lg transition-all",
-                        input.trim() 
-                          ? "bg-gradient-to-r from-pink-500 to-orange-500 text-white hover:opacity-90" 
-                          : "bg-muted text-muted-foreground"
-                      )}
-                      onClick={generateImage}
-                      disabled={!input.trim() || isGeneratingImage}
-                    >
-                      {isGeneratingImage ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Wand2 className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
+            {renderChatContent(true)}
           </TabsContent>
 
           {/* Projects Tab */}
-          <TabsContent value="projects" className="flex-1 m-0 p-4 data-[state=inactive]:hidden">
+          <TabsContent value="projects" className="flex-1 m-0 p-3 sm:p-4 overflow-auto data-[state=inactive]:hidden">
             <div className="max-w-4xl mx-auto">
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
                 <div>
-                  <h2 className="text-xl font-bold">Loyihalar</h2>
-                  <p className="text-sm text-muted-foreground">AI suhbatlarini loyihalar bo'yicha guruhlang</p>
+                  <h2 className="text-lg sm:text-xl font-bold">Loyihalar</h2>
+                  <p className="text-xs sm:text-sm text-muted-foreground">AI suhbatlarini loyihalar bo'yicha guruhlang</p>
                 </div>
-                <Button className="gap-2">
+                <Button className="gap-2 w-full sm:w-auto">
                   <Plus className="h-4 w-4" />
                   Yangi loyiha
                 </Button>
               </div>
               
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
                 {projects.map(project => (
                   <motion.div
                     key={project.id}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="p-4 rounded-xl border border-border bg-card hover:bg-muted/50 cursor-pointer transition-colors"
+                    className="p-3 sm:p-4 rounded-xl border border-border bg-card hover:bg-muted/50 cursor-pointer transition-colors"
                   >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
-                        <FolderKanban className="h-5 w-5 text-white" />
+                    <div className="flex items-start justify-between mb-2 sm:mb-3">
+                      <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+                        <FolderKanban className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
                       </div>
-                      <Button size="icon" variant="ghost" className="h-8 w-8">
+                      <Button size="icon" variant="ghost" className="h-7 w-7 sm:h-8 sm:w-8">
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </div>
-                    <h3 className="font-semibold mb-1">{project.name}</h3>
-                    <p className="text-sm text-muted-foreground mb-3">{project.description}</p>
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                    <h3 className="font-semibold text-sm sm:text-base mb-1">{project.name}</h3>
+                    <p className="text-xs sm:text-sm text-muted-foreground mb-2 sm:mb-3">{project.description}</p>
+                    <div className="flex items-center gap-3 sm:gap-4 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <MessageSquare className="h-3 w-3" />
                         {project.conversationCount} suhbat
@@ -839,47 +887,47 @@ export default function AIPage() {
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="p-4 rounded-xl border border-dashed border-border hover:border-primary/50 cursor-pointer transition-colors flex flex-col items-center justify-center min-h-[160px] text-muted-foreground hover:text-foreground"
+                  className="p-4 rounded-xl border border-dashed border-border hover:border-primary/50 cursor-pointer transition-colors flex flex-col items-center justify-center min-h-[140px] sm:min-h-[160px] text-muted-foreground hover:text-foreground"
                 >
-                  <Plus className="h-8 w-8 mb-2" />
-                  <span className="text-sm">Yangi loyiha yaratish</span>
+                  <Plus className="h-6 w-6 sm:h-8 sm:w-8 mb-2" />
+                  <span className="text-xs sm:text-sm">Yangi loyiha yaratish</span>
                 </motion.div>
               </div>
             </div>
           </TabsContent>
 
           {/* Groups Tab */}
-          <TabsContent value="groups" className="flex-1 m-0 p-4 data-[state=inactive]:hidden">
+          <TabsContent value="groups" className="flex-1 m-0 p-3 sm:p-4 overflow-auto data-[state=inactive]:hidden">
             <div className="max-w-4xl mx-auto">
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
                 <div>
-                  <h2 className="text-xl font-bold">Guruhlar</h2>
-                  <p className="text-sm text-muted-foreground">Jamoaviy AI suhbatlari</p>
+                  <h2 className="text-lg sm:text-xl font-bold">Guruhlar</h2>
+                  <p className="text-xs sm:text-sm text-muted-foreground">Jamoaviy AI suhbatlari</p>
                 </div>
-                <Button className="gap-2">
+                <Button className="gap-2 w-full sm:w-auto">
                   <Plus className="h-4 w-4" />
                   Guruh yaratish
                 </Button>
               </div>
               
-              <div className="space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 {groups.map(group => (
                   <motion.div
                     key={group.id}
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
-                    className="flex items-center gap-4 p-4 rounded-xl border border-border bg-card hover:bg-muted/50 cursor-pointer transition-colors"
+                    className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border border-border bg-card hover:bg-muted/50 cursor-pointer transition-colors"
                   >
-                    <Avatar className="h-12 w-12">
+                    <Avatar className="h-10 w-10 sm:h-12 sm:w-12">
                       <AvatarFallback className="bg-gradient-to-br from-green-500 to-emerald-500 text-white">
-                        <Users className="h-5 w-5" />
+                        <Users className="h-4 w-4 sm:h-5 sm:w-5" />
                       </AvatarFallback>
                     </Avatar>
-                    <div className="flex-1">
-                      <h3 className="font-semibold">{group.name}</h3>
-                      <p className="text-sm text-muted-foreground">{group.members} a'zo</p>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-sm sm:text-base truncate">{group.name}</h3>
+                      <p className="text-xs sm:text-sm text-muted-foreground">{group.members} a'zo</p>
                     </div>
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" className="shrink-0 text-xs sm:text-sm">
                       Kirish
                     </Button>
                   </motion.div>
@@ -889,83 +937,17 @@ export default function AIPage() {
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="flex items-center gap-4 p-4 rounded-xl border border-dashed border-border hover:border-primary/50 cursor-pointer transition-colors"
+                  className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border border-dashed border-border hover:border-primary/50 cursor-pointer transition-colors"
                 >
-                  <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
-                    <Plus className="h-5 w-5 text-muted-foreground" />
+                  <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-muted flex items-center justify-center">
+                    <Plus className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
                   </div>
                   <div>
-                    <h3 className="font-medium">Yangi guruh yaratish</h3>
-                    <p className="text-sm text-muted-foreground">Jamoa bilan AI dan foydalaning</p>
+                    <h3 className="font-medium text-sm sm:text-base">Yangi guruh yaratish</h3>
+                    <p className="text-xs sm:text-sm text-muted-foreground">Jamoa bilan AI dan foydalaning</p>
                   </div>
                 </motion.div>
               </div>
-            </div>
-          </TabsContent>
-
-          {/* History Tab (Mobile) */}
-          <TabsContent value="history" className="flex-1 m-0 p-4 data-[state=inactive]:hidden md:hidden">
-            <div className="mb-4">
-              <Button 
-                className="w-full gap-2" 
-                onClick={startNewConversation}
-              >
-                <Plus className="h-4 w-4" />
-                Yangi suhbat
-              </Button>
-            </div>
-            
-            <div className="space-y-2">
-              {conversations.map(conv => (
-                <motion.div
-                  key={conv.id}
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={cn(
-                    "group flex items-center gap-3 p-3 rounded-xl cursor-pointer hover:bg-muted/80 transition-colors",
-                    currentConversationId === conv.id && "bg-muted"
-                  )}
-                  onClick={() => {
-                    loadConversation(conv);
-                    setActiveTab(conv.type);
-                  }}
-                >
-                  <div className={cn(
-                    "h-10 w-10 rounded-lg flex items-center justify-center shrink-0",
-                    conv.type === 'imagine' 
-                      ? "bg-gradient-to-br from-pink-500/20 to-orange-500/20" 
-                      : "bg-gradient-to-br from-violet-500/20 to-purple-500/20"
-                  )}>
-                    {conv.type === 'imagine' ? (
-                      <Wand2 className="h-5 w-5 text-pink-500" />
-                    ) : (
-                      <MessageSquare className="h-5 w-5 text-violet-500" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{conv.title}</p>
-                    <p className="text-xs text-muted-foreground">{formatTime(conv.updatedAt)}</p>
-                  </div>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8 opacity-0 group-hover:opacity-100"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteConversation(conv.id);
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </motion.div>
-              ))}
-              
-              {conversations.length === 0 && (
-                <div className="text-center py-12 text-muted-foreground">
-                  <History className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                  <p>Hali suhbatlar yo'q</p>
-                </div>
-              )}
             </div>
           </TabsContent>
         </Tabs>
