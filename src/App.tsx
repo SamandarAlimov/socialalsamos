@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { GlobalCallProvider } from "@/contexts/GlobalCallContext";
-import { AITimeLimitAlert } from "@/components/ai";
 import { ThemeProvider } from "next-themes";
 
 // Pages
@@ -122,7 +121,6 @@ function AppWithGlobalCall() {
       {isAuthenticated ? (
         <GlobalCallProvider>
           <AppRoutes />
-          <AITimeLimitAlert />
         </GlobalCallProvider>
       ) : (
         <AppRoutes />
