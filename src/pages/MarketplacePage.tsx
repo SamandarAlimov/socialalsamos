@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Search, Filter, ShoppingBag, Heart, Star, MapPin } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
+import { PullToRefresh } from '@/components/PullToRefresh';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface Product {
   id: string;
@@ -100,10 +102,16 @@ const mockProducts: Product[] = [
 ];
 
 export default function MarketplacePage() {
+  const isMobile = useIsMobile();
   const { triggerHaptic } = useHapticFeedback();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [products, setProducts] = useState(mockProducts);
   const [searchQuery, setSearchQuery] = useState('');
+
+  const handleRefresh = useCallback(async () => {
+    // Simulate refresh - in real app would refetch products
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }, []);
 
   const filteredProducts = products.filter(p => {
     const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
@@ -118,7 +126,7 @@ export default function MarketplacePage() {
     ));
   };
 
-  return (
+  const pageContent = (
     <div className="min-h-screen bg-background pb-24 md:pb-4">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-md border-b border-border p-4 space-y-4">
@@ -221,6 +229,16 @@ export default function MarketplacePage() {
       </div>
     </div>
   );
+
+  if (isMobile) {
+    return (
+      <PullToRefresh onRefresh={handleRefresh} className="h-full">
+        {pageContent}
+      </PullToRefresh>
+    );
+  }
+
+  return pageContent;
 }
 
 function ProductCard({ product, onFavorite }: { product: Product; onFavorite: () => void }) {

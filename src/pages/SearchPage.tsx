@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, ArrowLeft, X, User, Video, Hash } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useDebounce } from '@/hooks/useDebounce';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
+import { PullToRefresh } from '@/components/PullToRefresh';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface SearchUser {
   id: string;
@@ -35,6 +37,7 @@ interface SearchVideo {
 const recentSearches = ['dance', 'cooking', 'travel vlog', 'music'];
 
 export default function SearchPage() {
+  const isMobile = useIsMobile();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { triggerHaptic } = useHapticFeedback();
@@ -45,6 +48,34 @@ export default function SearchPage() {
   const [users, setUsers] = useState<SearchUser[]>([]);
   const [videos, setVideos] = useState<SearchVideo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    // Trigger re-search
+    if (debouncedQuery.trim()) {
+      setIsLoading(true);
+      const searchTerm = debouncedQuery.replace('#', '');
+      const [usersRes, videosRes] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, username, display_name, avatar_url, bio, followers_count, is_verified')
+          .or(`username.ilike.%${searchTerm}%,display_name.ilike.%${searchTerm}%`)
+          .limit(20),
+        supabase
+          .from('posts')
+          .select(`
+            id, content, media_urls, likes_count,
+            profile:profiles!posts_user_id_fkey (username, avatar_url)
+          `)
+          .eq('media_type', 'video')
+          .eq('visibility', 'public')
+          .ilike('content', `%${searchTerm}%`)
+          .limit(20)
+      ]);
+      if (usersRes.data) setUsers(usersRes.data);
+      if (videosRes.data) setVideos(videosRes.data as SearchVideo[]);
+      setIsLoading(false);
+    }
+  }, [debouncedQuery]);
 
   useEffect(() => {
     if (!debouncedQuery.trim()) {
@@ -88,7 +119,7 @@ export default function SearchPage() {
     setQuery('');
   };
 
-  return (
+  const pageContent = (
     <div className="min-h-screen bg-background pb-24 md:pb-4">
       {/* Search Header */}
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-md border-b border-border p-4">
@@ -237,6 +268,16 @@ export default function SearchPage() {
       )}
     </div>
   );
+
+  if (isMobile) {
+    return (
+      <PullToRefresh onRefresh={handleRefresh} className="h-full">
+        {pageContent}
+      </PullToRefresh>
+    );
+  }
+
+  return pageContent;
 }
 
 function UserCard({ user, onClick }: { user: SearchUser; onClick: () => void }) {
