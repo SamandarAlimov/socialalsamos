@@ -6,8 +6,8 @@ import {
   X, 
   Image as ImageIcon, 
   FileText, 
-  User as UserIcon,
-  Sticker,
+  Film,
+  Loader2,
   Bold,
   Italic,
   Underline,
@@ -17,11 +17,12 @@ import {
   Clock,
 } from 'lucide-react';
 import { EmojiPicker } from '@/components/EmojiPicker';
-import { FileUploadButton } from '@/components/FileUploadButton';
 import { TelegramMediaRecorder } from './TelegramMediaRecorder';
 import { LocationShareButton } from './LocationShareButton';
 import { ScheduleMessageDialog } from './ScheduleMessageDialog';
+import { useFileUpload } from '@/hooks/useFileUpload';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import {
   Popover,
   PopoverContent,
@@ -53,11 +54,15 @@ export function MessageInput({
   disabled,
   onShareLocation
 }: MessageInputProps) {
+  const { uploadFile, uploading, getFileType } = useFileUpload();
   const [message, setMessage] = useState('');
   const [pendingAttachment, setPendingAttachment] = useState<{ url: string; type: string; name: string } | null>(null);
   const [showFormatting, setShowFormatting] = useState(false);
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
+  const [attachmentOpen, setAttachmentOpen] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const imageVideoInputRef = useRef<HTMLInputElement>(null);
+  const documentInputRef = useRef<HTMLInputElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -119,6 +124,29 @@ export function MessageInput({
     setPendingAttachment({ url, type, name });
   };
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check file size (20MB limit)
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error('File size must be less than 20MB');
+      return;
+    }
+
+    const result = await uploadFile(file);
+    if (result) {
+      handleFileUpload(result.url, getFileType(result.type), result.name);
+      toast.success('File uploaded successfully');
+      setAttachmentOpen(false);
+    } else {
+      toast.error('Failed to upload file');
+    }
+
+    // Reset input
+    e.target.value = '';
+  };
+
   const insertFormatting = (format: string) => {
     const textarea = inputRef.current;
     if (!textarea) return;
@@ -164,15 +192,24 @@ export function MessageInput({
     }, 0);
   };
 
-  const attachmentOptions = [
-    { icon: ImageIcon, label: 'Photo or Video', accept: 'image/*,video/*' },
-    { icon: FileText, label: 'Document', accept: '.pdf,.doc,.docx,.xls,.xlsx,.txt' },
-    { icon: UserIcon, label: 'Contact', onClick: () => {} },
-    { icon: Sticker, label: 'Sticker', onClick: () => {} },
-  ];
-
   return (
     <div className="bg-card p-3 relative z-10">
+      {/* Hidden file inputs */}
+      <input
+        ref={imageVideoInputRef}
+        type="file"
+        accept="image/*,video/*"
+        className="hidden"
+        onChange={handleFileSelect}
+      />
+      <input
+        ref={documentInputRef}
+        type="file"
+        accept=".pdf,.doc,.docx,.txt,.xlsx,.xls,.pptx,.ppt"
+        className="hidden"
+        onChange={handleFileSelect}
+      />
+
       {/* Reply Preview */}
       {replyTo && (
         <div className="flex items-center gap-2 mb-2 px-3 py-2 bg-muted/50 rounded-lg border-l-2 border-primary">
@@ -189,8 +226,12 @@ export function MessageInput({
       {/* Pending Attachment Preview */}
       {pendingAttachment && (
         <div className="flex items-center gap-2 mb-2 px-3 py-2 bg-muted/50 rounded-lg">
-          {pendingAttachment.type.startsWith('image') ? (
+          {pendingAttachment.type === 'image' ? (
             <img src={pendingAttachment.url} alt="Preview" className="h-12 w-12 object-cover rounded" />
+          ) : pendingAttachment.type === 'video' ? (
+            <div className="h-12 w-12 bg-accent rounded flex items-center justify-center">
+              <Film className="h-5 w-5 text-primary" />
+            </div>
           ) : (
             <div className="h-12 w-12 bg-accent rounded flex items-center justify-center">
               <FileText className="h-5 w-5" />
@@ -205,22 +246,31 @@ export function MessageInput({
 
       <div className="flex items-end gap-2">
         {/* Attachment Button */}
-        <Popover>
+        <Popover open={attachmentOpen} onOpenChange={setAttachmentOpen}>
           <PopoverTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-10 w-10 flex-shrink-0">
-              <Paperclip className="h-5 w-5" />
+            <Button variant="ghost" size="icon" className="h-10 w-10 flex-shrink-0" disabled={uploading}>
+              {uploading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Paperclip className="h-5 w-5" />
+              )}
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-56 p-2" align="start">
-            {attachmentOptions.map((option) => (
-              <button
-                key={option.label}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-accent transition-colors text-left"
-              >
-                <option.icon className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">{option.label}</span>
-              </button>
-            ))}
+            <button
+              onClick={() => imageVideoInputRef.current?.click()}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-accent transition-colors text-left"
+            >
+              <ImageIcon className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm">Photo or Video</span>
+            </button>
+            <button
+              onClick={() => documentInputRef.current?.click()}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-accent transition-colors text-left"
+            >
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm">Document</span>
+            </button>
             {onShareLocation && (
               <LocationShareButton onShareLocation={onShareLocation} />
             )}
