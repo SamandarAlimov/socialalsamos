@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow, isToday, isYesterday, isThisWeek, isThisMonth, differenceInMinutes, format } from 'date-fns';
 import { Heart, MessageCircle, UserPlus, AtSign, Check, Bell, BellOff, Settings, Trash2, MoreHorizontal, ChevronRight, Sparkles } from 'lucide-react';
@@ -8,6 +8,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useNotifications, Notification } from '@/hooks/useNotifications';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
+import { PullToRefresh } from '@/components/PullToRefresh';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
@@ -500,16 +502,24 @@ function PushNotificationBanner() {
 }
 
 export default function NotificationsPage() {
+  const isMobile = useIsMobile();
   const { 
     notifications, 
     unreadCount, 
     loading, 
     markAsRead, 
     markAllAsRead, 
-    deleteNotification 
+    deleteNotification,
+    refetch,
   } = useNotifications();
   const [filter, setFilter] = useState<NotificationFilter>('all');
   const navigate = useNavigate();
+
+  const handleRefresh = useCallback(async () => {
+    if (refetch) {
+      await refetch();
+    }
+  }, [refetch]);
 
   const filteredNotifications = useMemo(() => {
     if (filter === 'all') return notifications;
@@ -575,7 +585,7 @@ export default function NotificationsPage() {
     return start;
   };
 
-  return (
+  const pageContent = (
     <div className="flex flex-col h-full bg-background pb-20 md:pb-4">
       {/* Header */}
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80 border-b">
@@ -717,4 +727,14 @@ export default function NotificationsPage() {
       </ScrollArea>
     </div>
   );
+
+  if (isMobile) {
+    return (
+      <PullToRefresh onRefresh={handleRefresh} className="h-full">
+        {pageContent}
+      </PullToRefresh>
+    );
+  }
+
+  return pageContent;
 }

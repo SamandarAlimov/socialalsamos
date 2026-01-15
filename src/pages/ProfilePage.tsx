@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,8 @@ import { ProfilePostsGrid } from '@/components/profile/ProfilePostsGrid';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { StoryHighlights } from '@/components/stories/StoryHighlights';
+import { PullToRefresh } from '@/components/PullToRefresh';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { 
   Settings, 
   Edit3, 
@@ -24,6 +26,7 @@ import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 
 export default function ProfilePage() {
+  const isMobile = useIsMobile();
   const { user, profile: authProfile, updateProfile } = useAuth();
   const { 
     profile, 
@@ -36,6 +39,7 @@ export default function ProfilePage() {
     deletePost,
     pinPost,
     isOwnProfile,
+    refresh,
   } = useUserProfile();
   const navigate = useNavigate();
   
@@ -64,6 +68,13 @@ export default function ProfilePage() {
     return true;
   });
 
+  const handleRefresh = useCallback(async () => {
+    if (refresh) {
+      refresh();
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }, [refresh]);
+
   if (isLoading) {
     return (
       <div className="max-w-4xl mx-auto py-8 px-4">
@@ -87,7 +98,7 @@ export default function ProfilePage() {
     );
   }
 
-  return (
+  const pageContent = (
     <div className="max-w-4xl mx-auto py-4 md:py-8 px-3 md:px-4 pb-24 md:pb-8">
       {/* Cover Photo */}
       <div className="relative h-36 sm:h-48 md:h-64 rounded-xl md:rounded-2xl bg-gradient-to-r from-primary/20 to-primary/40 mb-12 md:mb-16 overflow-hidden">
@@ -275,4 +286,14 @@ export default function ProfilePage() {
       />
     </div>
   );
+
+  if (isMobile) {
+    return (
+      <PullToRefresh onRefresh={handleRefresh} className="h-full">
+        {pageContent}
+      </PullToRefresh>
+    );
+  }
+
+  return pageContent;
 }

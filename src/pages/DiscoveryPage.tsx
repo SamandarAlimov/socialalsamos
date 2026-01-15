@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Compass, Flame, Users, Video, Sparkles } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -8,9 +8,12 @@ import { TrendingHashtags } from '@/components/discovery/TrendingHashtags';
 import { PopularCreators } from '@/components/discovery/PopularCreators';
 import { TrendingVideos } from '@/components/discovery/TrendingVideos';
 import { ForYouSection } from '@/components/discovery/ForYouSection';
+import { PullToRefresh } from '@/components/PullToRefresh';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
 export default function DiscoveryPage() {
+  const isMobile = useIsMobile();
   const navigate = useNavigate();
   const { triggerHaptic } = useHapticFeedback();
   const [activeTab, setActiveTab] = useState('foryou');
@@ -25,7 +28,12 @@ export default function DiscoveryPage() {
     setActiveTab(value);
   };
 
-  return (
+  const handleRefresh = useCallback(async () => {
+    // Simulate refresh - in real app would refetch data
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }, []);
+
+  const pageContent = (
     <div className="min-h-screen bg-background pb-24 md:pb-4">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-md border-b border-border">
@@ -122,4 +130,14 @@ export default function DiscoveryPage() {
       </div>
     </div>
   );
+
+  if (isMobile) {
+    return (
+      <PullToRefresh onRefresh={handleRefresh} className="h-full">
+        {pageContent}
+      </PullToRefresh>
+    );
+  }
+
+  return pageContent;
 }
