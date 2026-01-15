@@ -1011,6 +1011,7 @@ export default function MessagesPage() {
                 onScrollToMessage={handleScrollToPinnedMessage}
               />
             )}
+            
             {/* Messages Area - Scrollable - Takes remaining space between fixed header and input */}
             <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-custom bg-muted/20 overscroll-contain">
               {messagesLoading ? (
