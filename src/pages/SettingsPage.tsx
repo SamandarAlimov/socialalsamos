@@ -163,6 +163,9 @@ export default function SettingsPage() {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [logoutAllDialogOpen, setLogoutAllDialogOpen] = useState(false);
   const [verificationDialogOpen, setVerificationDialogOpen] = useState(false);
+  const [deleteAccountDialogOpen, setDeleteAccountDialogOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -485,10 +488,102 @@ export default function SettingsPage() {
             </Button>
           </div>
 
+          {/* Delete Account */}
+          <div className="bg-card rounded-xl border border-destructive/30 p-6">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">
+                <Trash2 className="h-6 w-6 text-destructive" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-destructive">Delete Account</h3>
+                <p className="text-sm text-muted-foreground">Permanently delete your account and all data</p>
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Once you delete your account, there is no going back. All your posts, messages, and personal data will be permanently removed.
+            </p>
+            <Button 
+              variant="destructive" 
+              onClick={() => setDeleteAccountDialogOpen(true)}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete My Account
+            </Button>
+          </div>
+
           <VerificationRequestDialog 
             open={verificationDialogOpen} 
             onOpenChange={setVerificationDialogOpen} 
           />
+
+          {/* Delete Account Confirmation Dialog */}
+          <AlertDialog open={deleteAccountDialogOpen} onOpenChange={setDeleteAccountDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle className="text-destructive">Delete Account</AlertDialogTitle>
+                <AlertDialogDescription className="space-y-4">
+                  <p>
+                    This action cannot be undone. This will permanently delete your account and remove all your data from our servers.
+                  </p>
+                  <p>
+                    To confirm, please type <span className="font-semibold">DELETE</span> below:
+                  </p>
+                  <Input 
+                    value={deleteConfirmText}
+                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                    placeholder="Type DELETE to confirm"
+                    className="mt-2"
+                  />
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setDeleteConfirmText('')}>Cancel</AlertDialogCancel>
+                <Button
+                  variant="destructive"
+                  disabled={deleteConfirmText !== 'DELETE' || deletingAccount}
+                  onClick={async () => {
+                    setDeletingAccount(true);
+                    try {
+                      // Delete user profile and related data (cascades will handle related tables)
+                      const { error: profileError } = await supabase
+                        .from('profiles')
+                        .delete()
+                        .eq('id', user?.id);
+                      
+                      if (profileError) throw profileError;
+
+                      // Sign out the user
+                      await supabase.auth.signOut();
+                      
+                      toast({
+                        title: 'Account Deleted',
+                        description: 'Your account has been permanently deleted.',
+                      });
+                      
+                      navigate('/');
+                    } catch (error: any) {
+                      toast({
+                        title: 'Error',
+                        description: error.message || 'Failed to delete account',
+                        variant: 'destructive',
+                      });
+                    } finally {
+                      setDeletingAccount(false);
+                      setDeleteAccountDialogOpen(false);
+                      setDeleteConfirmText('');
+                    }
+                  }}
+                >
+                  {deletingAccount ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-2" />
+                  )}
+                  Delete Account
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </TabsContent>
 
         {/* Privacy Tab */}
