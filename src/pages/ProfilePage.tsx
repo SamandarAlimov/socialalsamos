@@ -88,9 +88,9 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto py-8 px-4">
+    <div className="max-w-4xl mx-auto py-4 md:py-8 px-3 md:px-4 pb-24 md:pb-8">
       {/* Cover Photo */}
-      <div className="relative h-48 md:h-64 rounded-2xl bg-gradient-to-r from-primary/20 to-primary/40 mb-16 overflow-hidden">
+      <div className="relative h-36 sm:h-48 md:h-64 rounded-xl md:rounded-2xl bg-gradient-to-r from-primary/20 to-primary/40 mb-12 md:mb-16 overflow-hidden">
         {profile.cover_url ? (
           <img 
             src={profile.cover_url} 
@@ -104,10 +104,10 @@ export default function ProfilePage() {
       </div>
 
       {/* Profile Info */}
-      <div className="relative -mt-24 px-4">
-        <div className="flex flex-col md:flex-row md:items-end gap-4">
+      <div className="relative -mt-16 md:-mt-24 px-2 md:px-4">
+        <div className="flex flex-col sm:flex-row sm:items-end gap-3 md:gap-4">
           {/* Avatar with story ring */}
-          <div className="relative">
+          <div className="relative self-start sm:self-auto">
             <StoryAvatar
               userId={profile.id}
               username={profile.username}
@@ -116,36 +116,40 @@ export default function ProfilePage() {
               isVerified={!!profile.is_verified}
               size="xl"
               showRing
+              className="h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28"
             />
             {profile.is_online && (
-              <span className="absolute bottom-2 right-2 h-5 w-5 bg-green-500 rounded-full border-4 border-background" />
+              <span className="absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2 h-4 w-4 sm:h-5 sm:w-5 bg-green-500 rounded-full border-3 sm:border-4 border-background" />
             )}
           </div>
 
-          <div className="flex-1 pb-2">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex-1 pb-1 md:pb-2 pt-2 sm:pt-0">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 md:gap-4">
               <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-2xl font-bold">
+                <div className="flex items-center gap-1.5 md:gap-2">
+                  <h1 className="text-xl md:text-2xl font-bold">
                     {profile.display_name || profile.username || 'User'}
                   </h1>
                   {profile.is_verified && (
-                    <VerifiedBadge size="md" />
+                    <VerifiedBadge size="sm" className="md:hidden" />
+                  )}
+                  {profile.is_verified && (
+                    <VerifiedBadge size="md" className="hidden md:block" />
                   )}
                 </div>
-                <p className="text-muted-foreground">@{profile.username || 'username'}</p>
+                <p className="text-sm md:text-base text-muted-foreground">@{profile.username || 'username'}</p>
               </div>
               {isOwnProfile && (
                 <div className="flex gap-2">
-                  <Button variant="default" onClick={() => navigate('/settings')}>
-                    <Edit3 className="h-4 w-4 mr-2" />
-                    Edit Profile
+                  <Button variant="default" size="sm" className="md:h-10 md:px-4" onClick={() => navigate('/settings')}>
+                    <Edit3 className="h-4 w-4 mr-1.5 md:mr-2" />
+                    <span className="text-sm">Edit Profile</span>
                   </Button>
-                  <Button variant="outline" size="icon" onClick={() => navigate('/story-archive')}>
-                    <Archive className="h-5 w-5" />
+                  <Button variant="outline" size="icon" className="h-9 w-9 md:h-10 md:w-10" onClick={() => navigate('/story-archive')}>
+                    <Archive className="h-4 w-4 md:h-5 md:w-5" />
                   </Button>
-                  <Button variant="outline" size="icon" onClick={() => navigate('/settings')}>
-                    <Settings className="h-5 w-5" />
+                  <Button variant="outline" size="icon" className="h-9 w-9 md:h-10 md:w-10" onClick={() => navigate('/settings')}>
+                    <Settings className="h-4 w-4 md:h-5 md:w-5" />
                   </Button>
                 </div>
               )}
@@ -154,11 +158,11 @@ export default function ProfilePage() {
         </div>
 
         {/* Bio */}
-        <div className="mt-6 max-w-2xl">
-          <p className="text-foreground leading-relaxed">
+        <div className="mt-4 md:mt-6 max-w-2xl">
+          <p className="text-sm md:text-base text-foreground leading-relaxed">
             {profile.bio || 'No bio yet.'}
           </p>
-          <div className="flex flex-wrap gap-4 mt-4 text-sm text-muted-foreground">
+          <div className="flex flex-wrap gap-3 md:gap-4 mt-3 md:mt-4 text-xs md:text-sm text-muted-foreground">
             {profile.location && (
               <span className="flex items-center gap-1">
                 <MapPin className="h-4 w-4" />
@@ -188,27 +192,27 @@ export default function ProfilePage() {
         </div>
 
         {/* Stats */}
-        <div className="flex gap-8 mt-6 py-4 border-y border-border">
+        <div className="flex justify-around sm:justify-start sm:gap-6 md:gap-8 mt-4 md:mt-6 py-3 md:py-4 border-y border-border">
           <button 
-            className="text-center hover:opacity-80 transition-opacity"
+            className="text-center hover:opacity-80 transition-opacity flex flex-col sm:flex-row sm:items-baseline"
             onClick={() => {}}
           >
-            <span className="text-xl font-bold">{formatCount(postsCount)}</span>
-            <span className="text-muted-foreground text-sm ml-1">Posts</span>
+            <span className="text-lg md:text-xl font-bold">{formatCount(postsCount)}</span>
+            <span className="text-muted-foreground text-xs md:text-sm sm:ml-1">Posts</span>
           </button>
           <button 
-            className="text-center hover:opacity-80 transition-opacity"
+            className="text-center hover:opacity-80 transition-opacity flex flex-col sm:flex-row sm:items-baseline"
             onClick={() => setFollowDialog({ open: true, type: 'followers' })}
           >
-            <span className="text-xl font-bold">{formatCount(followersCount)}</span>
-            <span className="text-muted-foreground text-sm ml-1">Followers</span>
+            <span className="text-lg md:text-xl font-bold">{formatCount(followersCount)}</span>
+            <span className="text-muted-foreground text-xs md:text-sm sm:ml-1">Followers</span>
           </button>
           <button 
-            className="text-center hover:opacity-80 transition-opacity"
+            className="text-center hover:opacity-80 transition-opacity flex flex-col sm:flex-row sm:items-baseline"
             onClick={() => setFollowDialog({ open: true, type: 'following' })}
           >
-            <span className="text-xl font-bold">{formatCount(followingCount)}</span>
-            <span className="text-muted-foreground text-sm ml-1">Following</span>
+            <span className="text-lg md:text-xl font-bold">{formatCount(followingCount)}</span>
+            <span className="text-muted-foreground text-xs md:text-sm sm:ml-1">Following</span>
           </button>
         </div>
 
@@ -218,19 +222,19 @@ export default function ProfilePage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex mt-6 border-b border-border">
+        <div className="flex mt-4 md:mt-6 border-b border-border -mx-2 md:mx-0">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as typeof activeTab)}
-              className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors ${
+              className={`flex-1 sm:flex-none flex items-center justify-center sm:justify-start gap-1.5 md:gap-2 px-3 md:px-6 py-2.5 md:py-3 text-xs md:text-sm font-medium transition-colors ${
                 activeTab === tab.id
                   ? 'text-primary border-b-2 border-primary' 
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               <tab.icon className="h-4 w-4" />
-              {tab.label}
+              <span className="hidden sm:inline">{tab.label}</span>
             </button>
           ))}
         </div>

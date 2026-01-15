@@ -408,7 +408,7 @@ export default function CreatePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-24 md:pb-4">
       <audio ref={audioRef} onEnded={() => setPlayingAudio(null)} />
       
       <input
