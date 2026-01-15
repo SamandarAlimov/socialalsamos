@@ -131,9 +131,16 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
         (payload) => {
           const updatedCall = payload.new as { id: string; status: string };
           
-          // If call ended, dismiss the notification
-          if (updatedCall.status === 'ended' && incomingCall?.id === updatedCall.id) {
-            setIncomingCall(null);
+          console.log('[GlobalCall] Call updated:', updatedCall.id, 'status:', updatedCall.status);
+          
+          // If call ended, dismiss the notification immediately
+          if (updatedCall.status === 'ended') {
+            if (incomingCall?.id === updatedCall.id) {
+              console.log('[GlobalCall] Incoming call ended, dismissing');
+              setIncomingCall(null);
+            }
+            // Also mark as handled to prevent any stale state
+            setHandledCallIds(prev => new Set([...prev, updatedCall.id]));
           }
         }
       )

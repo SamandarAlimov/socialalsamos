@@ -220,44 +220,42 @@ export function useVideoCall() {
     }
   }, [user?.id, toast]);
 
+  // Reset call state (called after cleanup is complete)
+  const resetCallState = useCallback(() => {
+    setCurrentCall(null);
+    setCallParticipants([]);
+    setCallEnded(false);
+  }, []);
+
   // Leave call - updates database and ends call if last participant
   const leaveCall = useCallback(async () => {
     if (!currentCall || !user?.id) return;
 
-    console.log('[VideoCall] Leaving call:', currentCall.id);
+    const callId = currentCall.id;
+    console.log('[VideoCall] Leaving call:', callId);
 
     try {
       // Update participant record
       await supabase
         .from('call_participants')
         .update({ left_at: new Date().toISOString() })
-        .eq('call_id', currentCall.id)
+        .eq('call_id', callId)
         .eq('user_id', user.id);
 
-      // Check if any participants remain
-      const { count } = await supabase
-        .from('call_participants')
-        .select('id', { count: 'exact' })
-        .eq('call_id', currentCall.id)
-        .is('left_at', null);
-
-      console.log('[VideoCall] Remaining participants:', count);
-
       // Always end the call when someone leaves in 1:1 calls
-      // This ensures both users are notified
+      // This ensures both users are notified via realtime
       await supabase
         .from('video_calls')
         .update({ 
           status: 'ended',
           ended_at: new Date().toISOString() 
         })
-        .eq('id', currentCall.id);
+        .eq('id', callId);
 
       console.log('[VideoCall] Call marked as ended');
 
-      setCurrentCall(null);
-      setCallParticipants([]);
-      setCallEnded(false);
+      // Don't reset state here - let the caller handle cleanup
+      // This prevents race conditions with the realtime subscription
     } catch (error) {
       console.error('Error leaving call:', error);
     }
@@ -349,6 +347,7 @@ export function useVideoCall() {
     createCall,
     joinCall,
     leaveCall,
+    resetCallState,
     updateMediaState,
     fetchParticipants,
     subscribeToParticipants,

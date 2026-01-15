@@ -130,6 +130,7 @@ export default function MessagesPage() {
     createCall,
     joinCall,
     leaveCall: leaveVideoCall,
+    resetCallState,
     updateMediaState,
     fetchParticipants,
     subscribeToParticipants,
@@ -609,7 +610,7 @@ export default function MessagesPage() {
     }
   };
 
-  const endCall = async () => {
+  const endCall = useCallback(async () => {
     // Calculate call duration
     const duration = currentCall?.started_at 
       ? Math.floor((Date.now() - new Date(currentCall.started_at).getTime()) / 1000)
@@ -631,10 +632,13 @@ export default function MessagesPage() {
     
     leaveRoom();
     await leaveVideoCall();
+    
+    // Reset UI state after backend update
     setIsInCall(false);
     setActiveCallId(null);
     hasJoinedRoomRef.current = false;
-  };
+    resetCallState();
+  }, [currentCall, selectedConversation, callType, user?.id, leaveRoom, leaveVideoCall, resetCallState]);
 
   const formatCallDuration = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
@@ -678,19 +682,23 @@ export default function MessagesPage() {
     joinRoom();
   }, [activeCallId, isInCall, joinRoom]);
 
-  // Auto-end call when other participant ends it
+  // Auto-end call when other participant ends it (via realtime database update)
   useEffect(() => {
     if (callEnded && isInCall) {
       console.log('[MessagesPage] Call ended by other participant, cleaning up');
-      (async () => {
-        leaveRoom();
-        await leaveVideoCall();
-        setIsInCall(false);
-        setActiveCallId(null);
-        hasJoinedRoomRef.current = false;
-      })();
+      
+      // Clean up WebRTC first
+      leaveRoom();
+      
+      // Reset all call UI state
+      setIsInCall(false);
+      setActiveCallId(null);
+      hasJoinedRoomRef.current = false;
+      
+      // Reset video call hook state
+      resetCallState();
     }
-  }, [callEnded, isInCall, leaveRoom, leaveVideoCall]);
+  }, [callEnded, isInCall, leaveRoom, resetCallState]);
 
   const handleCreatePrivate = async (userId: string) => {
     const conv = await createPrivateConversation(userId);
