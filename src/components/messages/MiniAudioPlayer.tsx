@@ -2,7 +2,7 @@ import { useAudioPlayer } from '@/contexts/AudioPlayerContext';
 import { Button } from '@/components/ui/button';
 import { Play, Pause, X, Music2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 export function MiniAudioPlayer() {
   const { 
@@ -30,29 +30,31 @@ export function MiniAudioPlayer() {
     seek(newTime);
   };
 
+  // Don't render if no track
+  if (!currentTrack) {
+    return null;
+  }
+
   return (
-    <AnimatePresence>
-      {currentTrack && (
-        <motion.div
-          initial={{ height: 0, opacity: 0 }}
-          animate={{ height: 'auto', opacity: 1 }}
-          exit={{ height: 0, opacity: 0 }}
-          transition={{ duration: 0.2, ease: 'easeInOut' }}
-          className="overflow-hidden"
+    <motion.div
+      initial={{ height: 0, opacity: 0 }}
+      animate={{ height: 'auto', opacity: 1 }}
+      exit={{ height: 0, opacity: 0 }}
+      transition={{ duration: 0.2, ease: 'easeInOut' }}
+      className="flex-shrink-0 z-20 overflow-hidden"
+    >
+      <div className="bg-primary/5 border-b border-primary/20">
+        {/* Progress bar at top */}
+        <div 
+          className="h-0.5 bg-primary/10 cursor-pointer relative group"
+          onClick={handleProgressClick}
         >
-          <div className="bg-card/95 backdrop-blur border-b border-border">
-            {/* Progress bar at top */}
-            <div 
-              className="h-1 bg-muted cursor-pointer relative group"
-              onClick={handleProgressClick}
-            >
-              <motion.div 
-                className="absolute inset-y-0 left-0 bg-primary"
-                style={{ width: `${progress}%` }}
-                layoutId="progress"
-              />
-              <div className="absolute inset-0 bg-primary/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
+          <div 
+            className="absolute inset-y-0 left-0 bg-primary transition-all"
+            style={{ width: `${progress}%` }}
+          />
+          <div className="absolute inset-0 bg-primary/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </div>
             
             <div className="px-4 py-2 flex items-center gap-3">
               {/* Album art / Music icon */}
@@ -128,7 +130,5 @@ export function MiniAudioPlayer() {
             </div>
           </div>
         </motion.div>
-      )}
-    </AnimatePresence>
   );
 }

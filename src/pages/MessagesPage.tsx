@@ -980,23 +980,25 @@ export default function MessagesPage() {
               </div>
             ) : (
               /* Chat Header - Fixed at top */
-              <div className="flex-shrink-0 z-20 bg-card border-b border-border">
-                <ChatHeader
-                  conversation={selectedConversation}
-                  typingUsers={typingUsers}
-                  onBack={() => setShowMobileChat(false)}
-                  onAudioCall={() => startCall('audio')}
-                  onVideoCall={() => startCall('video')}
-                  onSearch={() => setShowMessageSearch(true)}
-                  onViewInfo={() => {}}
-                  onManageMembers={selectedConversation.type === 'group' ? () => setShowMemberManagement(true) : undefined}
-                  onViewScheduled={() => setShowScheduledMessages(true)}
-                  scheduledCount={scheduledMessages.length}
-                />
+              <>
+                <div className="flex-shrink-0 z-20 bg-card">
+                  <ChatHeader
+                    conversation={selectedConversation}
+                    typingUsers={typingUsers}
+                    onBack={() => setShowMobileChat(false)}
+                    onAudioCall={() => startCall('audio')}
+                    onVideoCall={() => startCall('video')}
+                    onSearch={() => setShowMessageSearch(true)}
+                    onViewInfo={() => {}}
+                    onManageMembers={selectedConversation.type === 'group' ? () => setShowMemberManagement(true) : undefined}
+                    onViewScheduled={() => setShowScheduledMessages(true)}
+                    scheduledCount={scheduledMessages.length}
+                  />
+                </div>
                 
                 {/* Mini Audio Player - Telegram style */}
                 <MiniAudioPlayer />
-              </div>
+              </>
             )}
             
             {/* Message Search Bar */}
