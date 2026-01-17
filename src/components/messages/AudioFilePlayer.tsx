@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Play, Pause, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAudioPlayer } from '@/contexts/AudioPlayerContext';
 
 interface AudioFilePlayerProps {
   url: string;
@@ -55,91 +56,83 @@ const Waveform = ({ progress, isPlaying, isMine }: { progress: number; isPlaying
 };
 
 export function AudioFilePlayer({ url, name, isMine, senderName }: AudioFilePlayerProps) {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const { currentTrack, isPlaying: globalIsPlaying, currentTime: globalCurrentTime, duration: globalDuration, progress: globalProgress, play, pause, resume, seek } = useAudioPlayer();
+  
+  // Check if this is the currently playing track
+  const isThisTrack = currentTrack?.url === url;
+  const isPlaying = isThisTrack && globalIsPlaying;
+  const currentTime = isThisTrack ? globalCurrentTime : 0;
+  const duration = isThisTrack ? globalDuration : 0;
+  const progress = isThisTrack ? globalProgress : 0;
+  
+  const [localDuration, setLocalDuration] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const animationRef = useRef<number | null>(null);
   const waveformRef = useRef<HTMLDivElement>(null);
 
+  // Load metadata for duration display when not playing
   useEffect(() => {
-    const audio = new Audio(url);
-    audioRef.current = audio;
-
-    const handleLoadedMetadata = () => {
-      setDuration(audio.duration);
+    if (!isThisTrack) {
+      const audio = new Audio(url);
+      audio.addEventListener('loadedmetadata', () => {
+        setLocalDuration(audio.duration);
+        setIsLoading(false);
+      });
+      audio.addEventListener('canplay', () => {
+        setIsLoading(false);
+      });
+      
+      return () => {
+        audio.pause();
+      };
+    } else {
       setIsLoading(false);
-    };
-
-    const handleEnded = () => {
-      setIsPlaying(false);
-      setCurrentTime(0);
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-
-    const handleCanPlay = () => {
-      setIsLoading(false);
-    };
-
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('canplay', handleCanPlay);
-
-    return () => {
-      audio.pause();
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('ended', handleEnded);
-      audio.removeEventListener('canplay', handleCanPlay);
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, [url]);
-
-  const updateProgress = useCallback(() => {
-    if (audioRef.current && isPlaying) {
-      setCurrentTime(audioRef.current.currentTime);
-      animationRef.current = requestAnimationFrame(updateProgress);
     }
-  }, [isPlaying]);
+  }, [url, isThisTrack]);
 
-  useEffect(() => {
-    if (isPlaying) {
-      animationRef.current = requestAnimationFrame(updateProgress);
-    } else if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
+  // Parse filename to get title and artist
+  const parseFileName = (fileName: string) => {
+    const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
+    const dashMatch = nameWithoutExt.match(/^(.+?)\s*[-–—]\s*(.+)$/);
+    if (dashMatch) {
+      return { artist: dashMatch[1].trim(), title: dashMatch[2].trim() };
     }
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, [isPlaying, updateProgress]);
+    return { artist: senderName || 'Unknown Artist', title: nameWithoutExt };
+  };
+
+  const rawFileName = name || url.split('/').pop() || 'Audio file';
+  const { artist, title } = parseFileName(rawFileName);
 
   const togglePlayback = () => {
-    if (!audioRef.current || isLoading) return;
+    if (isLoading) return;
 
-    if (isPlaying) {
-      audioRef.current.pause();
+    if (isThisTrack) {
+      if (globalIsPlaying) {
+        pause();
+      } else {
+        resume();
+      }
     } else {
-      audioRef.current.play();
+      // Play this track using global player
+      play({ url, name: rawFileName, artist, title, senderName });
     }
-    setIsPlaying(!isPlaying);
   };
 
   const handleWaveformClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!audioRef.current || duration === 0 || !waveformRef.current) return;
+    if (!waveformRef.current) return;
     
     const rect = waveformRef.current.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const percentage = clickX / rect.width;
-    const newTime = percentage * duration;
+    const targetDuration = isThisTrack ? globalDuration : localDuration;
+    const newTime = percentage * targetDuration;
     
-    audioRef.current.currentTime = newTime;
-    setCurrentTime(newTime);
+    if (isThisTrack) {
+      seek(newTime);
+    } else {
+      // Start playing from this position
+      play({ url, name: rawFileName, artist, title, senderName });
+      setTimeout(() => seek(newTime), 100);
+    }
   };
 
   const formatTime = (seconds: number): string => {
@@ -148,23 +141,9 @@ export function AudioFilePlayer({ url, name, isMine, senderName }: AudioFilePlay
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Parse filename to get title and artist
-  const parseFileName = (fileName: string) => {
-    // Remove extension
-    const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
-    
-    // Try to parse "Artist - Title" format
-    const dashMatch = nameWithoutExt.match(/^(.+?)\s*[-–—]\s*(.+)$/);
-    if (dashMatch) {
-      return { artist: dashMatch[1].trim(), title: dashMatch[2].trim() };
-    }
-    
-    return { artist: senderName || 'Unknown Artist', title: nameWithoutExt };
-  };
-
-  const rawFileName = name || url.split('/').pop() || 'Audio file';
-  const { artist, title } = parseFileName(rawFileName);
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const displayDuration = isThisTrack ? duration : localDuration;
+  const displayCurrentTime = isThisTrack ? currentTime : 0;
+  const displayProgress = isThisTrack ? progress : 0;
 
   return (
     <div
@@ -240,7 +219,7 @@ export function AudioFilePlayer({ url, name, isMine, senderName }: AudioFilePlay
           className="cursor-pointer py-1"
           onClick={handleWaveformClick}
         >
-          <Waveform progress={progress} isPlaying={isPlaying} isMine={isMine} />
+          <Waveform progress={displayProgress} isPlaying={isPlaying} isMine={isMine} />
         </div>
 
         {/* Time display */}
@@ -249,13 +228,13 @@ export function AudioFilePlayer({ url, name, isMine, senderName }: AudioFilePlay
             "text-[10px] font-medium tabular-nums",
             isMine ? "text-primary-foreground/60" : "text-muted-foreground"
           )}>
-            {formatTime(currentTime)}
+            {formatTime(displayCurrentTime)}
           </span>
           <span className={cn(
             "text-[10px] font-medium tabular-nums",
             isMine ? "text-primary-foreground/60" : "text-muted-foreground"
           )}>
-            {formatTime(duration)}
+            {formatTime(displayDuration)}
           </span>
         </div>
       </div>
