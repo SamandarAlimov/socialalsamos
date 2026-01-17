@@ -197,14 +197,26 @@ export function VideoCallOverlay({
     };
   }, [isDragging]);
 
+  // Check if this is a 1:1 call (not a group call)
+  const isOneToOneCall = participants.length <= 1;
+
   return (
     <div 
-      className="fixed inset-0 bg-black z-50 flex flex-col"
+      className="fixed inset-0 bg-black z-[9999] flex flex-col"
       onMouseMove={handleMouseMove}
+      style={{ 
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: '100dvh',
+        width: '100vw',
+      }}
     >
       {/* Status Bar */}
       <div className={cn(
-        "absolute top-0 left-0 right-0 z-20 px-4 py-3 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent transition-opacity duration-300",
+        "absolute top-0 left-0 right-0 z-20 px-4 py-3 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent transition-opacity duration-300 safe-area-inset-top",
         showControls ? "opacity-100" : "opacity-0"
       )}>
         <div className="flex items-center gap-3">
@@ -291,16 +303,24 @@ export function VideoCallOverlay({
             </div>
           </div>
         ) : participants.length === 0 ? (
-          /* Waiting for participants */
+          /* Waiting for connection - show connecting message for 1:1 calls */
           <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
             <div className="text-center">
               <div className="animate-pulse mb-4">
                 <div className="h-24 w-24 rounded-full bg-primary/20 flex items-center justify-center mx-auto">
-                  <Video className="h-12 w-12 text-primary" />
+                  {callType === 'video' ? (
+                    <Video className="h-12 w-12 text-primary" />
+                  ) : (
+                    <Mic className="h-12 w-12 text-primary" />
+                  )}
                 </div>
               </div>
-              <h3 className="text-xl font-semibold text-white mb-2">Waiting for others to join...</h3>
-              <p className="text-white/60">Share the call link to invite participants</p>
+              <h3 className="text-xl font-semibold text-white mb-2">
+                {isOneToOneCall ? 'Connecting...' : 'Waiting for others to join...'}
+              </h3>
+              <p className="text-white/60">
+                {isOneToOneCall ? 'Please wait while the call connects' : 'Share the call link to invite participants'}
+              </p>
             </div>
           </div>
         ) : (
@@ -404,9 +424,9 @@ export function VideoCallOverlay({
         </div>
       </div>
 
-      {/* Call Controls */}
+      {/* Call Controls - Fixed above everything including BottomNavbar */}
       <div className={cn(
-        "h-20 md:h-24 flex items-center justify-center gap-2 md:gap-4 px-4 bg-gradient-to-t from-black/90 to-black/60 backdrop-blur transition-opacity duration-300",
+        "h-24 md:h-24 flex items-center justify-center gap-3 md:gap-4 px-4 pb-6 md:pb-4 bg-gradient-to-t from-black via-black/90 to-black/60 backdrop-blur transition-opacity duration-300 safe-area-inset-bottom",
         showControls ? "opacity-100" : "opacity-0"
       )}>
         <Tooltip>
