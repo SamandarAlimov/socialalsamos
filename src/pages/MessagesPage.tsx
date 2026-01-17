@@ -46,6 +46,7 @@ import { DeleteMessageDialog } from '@/components/messages/DeleteMessageDialog';
 import { TypingIndicator } from '@/components/messages/TypingIndicator';
 import { GroupMemberManagement } from '@/components/messages/GroupMemberManagement';
 import { ScheduledMessagesSheet } from '@/components/messages/ScheduledMessagesSheet';
+import { MiniAudioPlayer } from '@/components/messages/MiniAudioPlayer';
 
 type MessageTab = 'private' | 'groups' | 'channels' | 'requests' | 'archived';
 
@@ -992,6 +993,9 @@ export default function MessagesPage() {
                   onViewScheduled={() => setShowScheduledMessages(true)}
                   scheduledCount={scheduledMessages.length}
                 />
+                
+                {/* Mini Audio Player - Telegram style */}
+                <MiniAudioPlayer />
               </div>
             )}
             

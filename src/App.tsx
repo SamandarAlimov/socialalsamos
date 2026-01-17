@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { GlobalCallProvider } from "@/contexts/GlobalCallContext";
+import { AudioPlayerProvider } from "@/contexts/AudioPlayerContext";
 import { ThemeProvider } from "next-themes";
 
 // Pages
@@ -133,11 +134,13 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <TooltipProvider>
-        <AuthProvider>
-          <BrowserRouter>
-            <AppWithGlobalCall />
-          </BrowserRouter>
-        </AuthProvider>
+        <AudioPlayerProvider>
+          <AuthProvider>
+            <BrowserRouter>
+              <AppWithGlobalCall />
+            </BrowserRouter>
+          </AuthProvider>
+        </AudioPlayerProvider>
       </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>
