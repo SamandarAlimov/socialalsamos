@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Search, Filter, ShoppingBag, Plus, Store, Package, Heart, TrendingUp, Sparkles } from 'lucide-react';
+import { Search, Filter, ShoppingBag, Plus, Store, Package, Heart, TrendingUp, Sparkles, LayoutDashboard } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +22,7 @@ import { ProductDetail } from '@/components/marketplace/ProductDetail';
 import { BecomeSeller } from '@/components/marketplace/BecomeSeller';
 import { CreateProductDialog } from '@/components/marketplace/CreateProductDialog';
 import { CartSheet } from '@/components/marketplace/CartSheet';
+import { SellerDashboard } from '@/components/marketplace/SellerDashboard';
 import { cn } from '@/lib/utils';
 
 export default function MarketplacePage() {
@@ -36,6 +37,7 @@ export default function MarketplacePage() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showCreateProduct, setShowCreateProduct] = useState(false);
   const [showCart, setShowCart] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(false);
   
   // Data hooks
   const { categories } = useCategories();
@@ -205,6 +207,17 @@ export default function MarketplacePage() {
               </div>
             ) : !seller ? (
               <BecomeSeller onSuccess={refreshSeller} />
+            ) : showDashboard ? (
+              <div className="space-y-4">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowDashboard(false)}
+                  className="mb-4"
+                >
+                  ← Back to Products
+                </Button>
+                <SellerDashboard />
+              </div>
             ) : (
               <div className="space-y-4">
                 {/* Seller stats */}
@@ -222,6 +235,16 @@ export default function MarketplacePage() {
                     <p className="text-xs text-muted-foreground">Rating</p>
                   </div>
                 </div>
+
+                {/* Dashboard button */}
+                <Button 
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setShowDashboard(true)}
+                >
+                  <LayoutDashboard className="h-4 w-4 mr-2" />
+                  Seller Dashboard
+                </Button>
 
                 {/* Add product button */}
                 <Button 
