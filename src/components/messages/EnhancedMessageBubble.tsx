@@ -351,6 +351,16 @@ export function EnhancedMessageBubble({
       isPinned={isPinned}
       onCopy={message.content ? copyToClipboard : undefined}
       hasMedia={!!message.media_url}
+      onDownload={message.media_url ? () => {
+        const link = document.createElement('a');
+        link.href = message.media_url!;
+        link.download = message.media_url!.split('/').pop() || 'download';
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        successFeedback();
+      } : undefined}
       sentAt={message.created_at}
       readAt={message.read_at}
     >
