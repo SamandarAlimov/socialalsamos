@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, ArrowLeft, X, User, Video, Hash } from 'lucide-react';
+import { Search, X, User, Video, Hash } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -124,16 +124,6 @@ export default function SearchPage() {
       {/* Search Header */}
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-md border-b border-border p-4">
         <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              triggerHaptic('light');
-              navigate(-1);
-            }}
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
