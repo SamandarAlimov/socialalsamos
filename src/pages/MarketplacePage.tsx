@@ -1,232 +1,317 @@
 import { useState, useCallback } from 'react';
-import { Search, Filter, ShoppingBag, Heart, Star, MapPin } from 'lucide-react';
+import { Search, Filter, ShoppingBag, Plus, Store, Package, Heart, TrendingUp, Sparkles } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useIsMobile } from '@/hooks/use-mobile';
-
-interface Product {
-  id: string;
-  title: string;
-  price: number;
-  image: string;
-  seller: string;
-  location: string;
-  rating: number;
-  isFavorite: boolean;
-  category: string;
-}
-
-const categories = [
-  'All',
-  'Electronics',
-  'Fashion',
-  'Home',
-  'Sports',
-  'Books',
-  'Auto',
-  'Services'
-];
-
-const mockProducts: Product[] = [
-  {
-    id: '1',
-    title: 'iPhone 14 Pro Max',
-    price: 899,
-    image: 'https://images.unsplash.com/photo-1678685888221-cda773a3dcdb?w=400',
-    seller: 'TechStore',
-    location: 'New York',
-    rating: 4.8,
-    isFavorite: false,
-    category: 'Electronics'
-  },
-  {
-    id: '2',
-    title: 'Nike Air Max 270',
-    price: 150,
-    image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400',
-    seller: 'SneakerWorld',
-    location: 'Los Angeles',
-    rating: 4.5,
-    isFavorite: true,
-    category: 'Fashion'
-  },
-  {
-    id: '3',
-    title: 'MacBook Pro M3',
-    price: 1999,
-    image: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=400',
-    seller: 'AppleReseller',
-    location: 'San Francisco',
-    rating: 4.9,
-    isFavorite: false,
-    category: 'Electronics'
-  },
-  {
-    id: '4',
-    title: 'Vintage Leather Jacket',
-    price: 250,
-    image: 'https://images.unsplash.com/photo-1551028719-00167b16eac5?w=400',
-    seller: 'VintageStyle',
-    location: 'Chicago',
-    rating: 4.3,
-    isFavorite: false,
-    category: 'Fashion'
-  },
-  {
-    id: '5',
-    title: 'Modern Desk Lamp',
-    price: 75,
-    image: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=400',
-    seller: 'HomeDecor',
-    location: 'Miami',
-    rating: 4.6,
-    isFavorite: true,
-    category: 'Home'
-  },
-  {
-    id: '6',
-    title: 'Sony WH-1000XM5',
-    price: 350,
-    image: 'https://images.unsplash.com/photo-1618366712010-f4ae9c647dcb?w=400',
-    seller: 'AudioHub',
-    location: 'Seattle',
-    rating: 4.7,
-    isFavorite: false,
-    category: 'Electronics'
-  },
-];
+import { useAuth } from '@/contexts/AuthContext';
+import { 
+  useCategories, 
+  useProducts, 
+  useSellerProducts, 
+  useSavedProducts,
+  useCart,
+  Product 
+} from '@/hooks/useMarketplace';
+import { ProductCard } from '@/components/marketplace/ProductCard';
+import { ProductDetail } from '@/components/marketplace/ProductDetail';
+import { BecomeSeller } from '@/components/marketplace/BecomeSeller';
+import { CreateProductDialog } from '@/components/marketplace/CreateProductDialog';
+import { CartSheet } from '@/components/marketplace/CartSheet';
+import { cn } from '@/lib/utils';
 
 export default function MarketplacePage() {
   const isMobile = useIsMobile();
+  const { user } = useAuth();
   const { triggerHaptic } = useHapticFeedback();
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [products, setProducts] = useState(mockProducts);
+  
+  // State
+  const [activeTab, setActiveTab] = useState('browse');
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [showCreateProduct, setShowCreateProduct] = useState(false);
+  const [showCart, setShowCart] = useState(false);
+  
+  // Data hooks
+  const { categories } = useCategories();
+  const { products, isLoading: productsLoading, refresh: refreshProducts } = useProducts(
+    selectedCategory,
+    searchQuery
+  );
+  const { products: sellerProducts, seller, isLoading: sellerLoading, refresh: refreshSeller } = useSellerProducts();
+  const { products: savedProducts, isLoading: savedLoading, refresh: refreshSaved } = useSavedProducts();
+  const { items: cartItems } = useCart();
 
   const handleRefresh = useCallback(async () => {
-    // Simulate refresh - in real app would refetch products
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  }, []);
+    if (activeTab === 'browse') {
+      await refreshProducts();
+    } else if (activeTab === 'selling') {
+      await refreshSeller();
+    } else if (activeTab === 'saved') {
+      await refreshSaved();
+    }
+  }, [activeTab, refreshProducts, refreshSeller, refreshSaved]);
 
-  const filteredProducts = products.filter(p => {
-    const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
-    const matchesSearch = p.title.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  const handleCategorySelect = (slug: string) => {
+    triggerHaptic('light');
+    setSelectedCategory(slug);
+  };
 
-  const toggleFavorite = (id: string) => {
-    triggerHaptic('medium');
-    setProducts(prev => prev.map(p => 
-      p.id === id ? { ...p, isFavorite: !p.isFavorite } : p
-    ));
+  const handleProductSelect = (product: Product) => {
+    triggerHaptic('light');
+    setSelectedProduct(product);
   };
 
   const pageContent = (
     <div className="min-h-screen bg-background pb-24 md:pb-4">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-md border-b border-border p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold">Marketplace</h1>
-          <Button variant="ghost" size="icon">
-            <ShoppingBag className="h-5 w-5" />
-          </Button>
-        </div>
-        
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search products..."
-              className="pl-10 bg-muted/50 border-0"
-            />
-          </div>
-          <Button variant="outline" size="icon">
-            <Filter className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {/* Categories */}
-        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4">
-          {categories.map((cat) => (
-            <Badge
-              key={cat}
-              variant={selectedCategory === cat ? 'default' : 'secondary'}
-              className="cursor-pointer whitespace-nowrap py-2 px-4"
-              onClick={() => {
-                triggerHaptic('light');
-                setSelectedCategory(cat);
-              }}
+      <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border">
+        <div className="p-4 space-y-4">
+          {/* Title & Cart */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <Store className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold">Marketplace</h1>
+                <p className="text-xs text-muted-foreground">B2B · B2C · C2C</p>
+              </div>
+            </div>
+            <Button 
+              variant="outline" 
+              size="icon" 
+              className="relative"
+              onClick={() => setShowCart(true)}
             >
-              {cat}
-            </Badge>
-          ))}
+              <ShoppingBag className="h-5 w-5" />
+              {cartItems.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-medium">
+                  {cartItems.length}
+                </span>
+              )}
+            </Button>
+          </div>
+          
+          {/* Search */}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search products, sellers..."
+                className="pl-10 bg-muted/50 border-0"
+              />
+            </div>
+            <Button variant="outline" size="icon">
+              <Filter className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Categories - only show in browse tab */}
+          {activeTab === 'browse' && (
+            <ScrollArea className="w-full">
+              <div className="flex gap-2 pb-2">
+                <Badge
+                  variant={selectedCategory === 'all' ? 'default' : 'secondary'}
+                  className="cursor-pointer whitespace-nowrap py-2 px-4 transition-all"
+                  onClick={() => handleCategorySelect('all')}
+                >
+                  <Sparkles className="h-3 w-3 mr-1.5" />
+                  All
+                </Badge>
+                {categories.map((cat) => (
+                  <Badge
+                    key={cat.id}
+                    variant={selectedCategory === cat.slug ? 'default' : 'secondary'}
+                    className="cursor-pointer whitespace-nowrap py-2 px-4 transition-all"
+                    onClick={() => handleCategorySelect(cat.slug)}
+                  >
+                    <span className="mr-1.5">{cat.icon}</span>
+                    {cat.name}
+                  </Badge>
+                ))}
+              </div>
+            </ScrollArea>
+          )}
         </div>
       </div>
 
-      {/* Products Grid */}
+      {/* Content */}
       <div className="p-4">
-        <Tabs defaultValue="browse">
-          <TabsList className="w-full mb-4">
-            <TabsTrigger value="browse" className="flex-1">Browse</TabsTrigger>
-            <TabsTrigger value="selling" className="flex-1">Selling</TabsTrigger>
-            <TabsTrigger value="saved" className="flex-1">Saved</TabsTrigger>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="w-full mb-4 grid grid-cols-3">
+            <TabsTrigger value="browse" className="gap-2">
+              <TrendingUp className="h-4 w-4" />
+              <span className="hidden sm:inline">Browse</span>
+            </TabsTrigger>
+            <TabsTrigger value="selling" className="gap-2">
+              <Package className="h-4 w-4" />
+              <span className="hidden sm:inline">Selling</span>
+            </TabsTrigger>
+            <TabsTrigger value="saved" className="gap-2">
+              <Heart className="h-4 w-4" />
+              <span className="hidden sm:inline">Saved</span>
+            </TabsTrigger>
           </TabsList>
 
+          {/* Browse Tab */}
           <TabsContent value="browse" className="mt-0">
-            <div className="grid grid-cols-2 gap-3">
-              {filteredProducts.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  onFavorite={() => toggleFavorite(product.id)}
-                />
-              ))}
-            </div>
-            {filteredProducts.length === 0 && (
-              <div className="text-center py-12 text-muted-foreground">
-                No products found
+            {productsLoading ? (
+              <div className="grid grid-cols-2 gap-3">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="aspect-[3/4] rounded-xl bg-muted animate-pulse" />
+                ))}
+              </div>
+            ) : products.length > 0 ? (
+              <div className="grid grid-cols-2 gap-3">
+                {products.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    onSelect={handleProductSelect}
+                    onLikeChange={refreshProducts}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <Package className="h-16 w-16 mx-auto text-muted-foreground/30 mb-4" />
+                <h3 className="font-semibold mb-2">No products found</h3>
+                <p className="text-sm text-muted-foreground">
+                  {searchQuery 
+                    ? 'Try a different search term' 
+                    : 'Be the first to list a product!'}
+                </p>
               </div>
             )}
           </TabsContent>
 
+          {/* Selling Tab */}
           <TabsContent value="selling" className="mt-0">
-            <div className="text-center py-12">
-              <ShoppingBag className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="font-medium mb-2">Start Selling</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                List your first item and reach thousands of buyers
-              </p>
-              <Button>
-                List an Item
-              </Button>
-            </div>
+            {!user ? (
+              <div className="text-center py-12">
+                <Store className="h-16 w-16 mx-auto text-muted-foreground/30 mb-4" />
+                <h3 className="font-semibold mb-2">Login to start selling</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Create an account to list your products
+                </p>
+              </div>
+            ) : !seller ? (
+              <BecomeSeller onSuccess={refreshSeller} />
+            ) : (
+              <div className="space-y-4">
+                {/* Seller stats */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-muted/50 rounded-xl p-4 text-center">
+                    <p className="text-2xl font-bold">{sellerProducts.length}</p>
+                    <p className="text-xs text-muted-foreground">Listings</p>
+                  </div>
+                  <div className="bg-muted/50 rounded-xl p-4 text-center">
+                    <p className="text-2xl font-bold">{seller.total_sales}</p>
+                    <p className="text-xs text-muted-foreground">Sales</p>
+                  </div>
+                  <div className="bg-muted/50 rounded-xl p-4 text-center">
+                    <p className="text-2xl font-bold">{seller.rating > 0 ? seller.rating.toFixed(1) : '-'}</p>
+                    <p className="text-xs text-muted-foreground">Rating</p>
+                  </div>
+                </div>
+
+                {/* Add product button */}
+                <Button 
+                  className="w-full" 
+                  size="lg"
+                  onClick={() => setShowCreateProduct(true)}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  List New Product
+                </Button>
+
+                {/* Seller's products */}
+                {sellerLoading ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    {[...Array(4)].map((_, i) => (
+                      <div key={i} className="aspect-[3/4] rounded-xl bg-muted animate-pulse" />
+                    ))}
+                  </div>
+                ) : sellerProducts.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    {sellerProducts.map((product) => (
+                      <ProductCard
+                        key={product.id}
+                        product={product}
+                        onSelect={handleProductSelect}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Package className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
+                    <p className="text-sm text-muted-foreground">
+                      No products yet. List your first item!
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </TabsContent>
 
+          {/* Saved Tab */}
           <TabsContent value="saved" className="mt-0">
-            <div className="grid grid-cols-2 gap-3">
-              {products.filter(p => p.isFavorite).map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  onFavorite={() => toggleFavorite(product.id)}
-                />
-              ))}
-            </div>
-            {products.filter(p => p.isFavorite).length === 0 && (
-              <div className="text-center py-12 text-muted-foreground">
-                No saved items yet
+            {savedLoading ? (
+              <div className="grid grid-cols-2 gap-3">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="aspect-[3/4] rounded-xl bg-muted animate-pulse" />
+                ))}
+              </div>
+            ) : savedProducts.length > 0 ? (
+              <div className="grid grid-cols-2 gap-3">
+                {savedProducts.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    onSelect={handleProductSelect}
+                    onLikeChange={refreshSaved}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <Heart className="h-16 w-16 mx-auto text-muted-foreground/30 mb-4" />
+                <h3 className="font-semibold mb-2">No saved items</h3>
+                <p className="text-sm text-muted-foreground">
+                  Tap the heart icon to save products
+                </p>
               </div>
             )}
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Product Detail Sheet */}
+      <ProductDetail 
+        product={selectedProduct} 
+        onClose={() => setSelectedProduct(null)} 
+      />
+
+      {/* Create Product Dialog */}
+      <CreateProductDialog
+        open={showCreateProduct}
+        onOpenChange={setShowCreateProduct}
+        onSuccess={() => {
+          refreshSeller();
+          refreshProducts();
+        }}
+      />
+
+      {/* Cart Sheet */}
+      <CartSheet open={showCart} onOpenChange={setShowCart} />
     </div>
   );
 
@@ -239,48 +324,4 @@ export default function MarketplacePage() {
   }
 
   return pageContent;
-}
-
-function ProductCard({ product, onFavorite }: { product: Product; onFavorite: () => void }) {
-  const { triggerHaptic } = useHapticFeedback();
-  
-  return (
-    <Card className="overflow-hidden group cursor-pointer">
-      <div className="relative aspect-square">
-        <img
-          src={product.image}
-          alt={product.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-        />
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute top-2 right-2 bg-background/80 backdrop-blur-sm h-8 w-8"
-          onClick={(e) => {
-            e.stopPropagation();
-            onFavorite();
-          }}
-        >
-          <Heart
-            className={`h-4 w-4 ${product.isFavorite ? 'fill-red-500 text-red-500' : ''}`}
-          />
-        </Button>
-      </div>
-      <div className="p-3">
-        <h3 className="font-medium text-sm truncate">{product.title}</h3>
-        <p className="text-lg font-bold text-primary">${product.price}</p>
-        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-          <div className="flex items-center gap-1">
-            <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-            {product.rating}
-          </div>
-          <span>•</span>
-          <div className="flex items-center gap-1">
-            <MapPin className="h-3 w-3" />
-            {product.location}
-          </div>
-        </div>
-      </div>
-    </Card>
-  );
 }
