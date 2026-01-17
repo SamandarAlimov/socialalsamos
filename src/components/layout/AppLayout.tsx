@@ -9,8 +9,8 @@ export function AppLayout() {
   const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
   
-  // Hide mobile header on messages and map pages (they have their own headers)
-  const hideHeaderOnPages = location.pathname === '/messages' || location.pathname === '/map';
+  // Hide mobile header on messages, map, and videos pages (they have their own headers/full-screen mode)
+  const hideHeaderOnPages = location.pathname === '/messages' || location.pathname === '/map' || location.pathname === '/videos';
 
   if (isLoading) {
     return (
