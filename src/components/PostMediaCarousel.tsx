@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Play, Pause, Volume2, VolumeX, Maximize2 } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { ChevronLeft, ChevronRight, Play, Pause, Volume2, VolumeX, Maximize2, ZoomIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Slider } from '@/components/ui/slider';
+import { usePinchZoom } from '@/hooks/usePinchZoom';
 
 interface PostMediaCarouselProps {
   mediaUrls: string[];
@@ -21,9 +22,25 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
   const containerRef = useRef<HTMLDivElement>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout>();
 
+  // Pinch-to-zoom hook
+  const {
+    scale,
+    translateX,
+    translateY,
+    isZoomed,
+    handlers: zoomHandlers,
+    resetZoom,
+    containerRef: zoomContainerRef,
+  } = usePinchZoom(3, 1);
+
   // Determine if media is a reel/short (9:16 vertical) or regular video
   const isReel = mediaType === 'reel' || mediaType === 'short';
   const isVideoType = mediaType === 'video' || isReel;
+
+  // Reset zoom when changing media
+  useEffect(() => {
+    resetZoom();
+  }, [currentIndex, resetZoom]);
 
   // Autoplay when video is visible on screen (Intersection Observer)
   useEffect(() => {
@@ -56,6 +73,7 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
 
   const goToPrevious = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isZoomed) return; // Don't navigate when zoomed
     setCurrentIndex((prev) => (prev > 0 ? prev - 1 : prev));
     setIsPlaying(false);
     setProgress(0);
@@ -63,6 +81,7 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
 
   const goToNext = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isZoomed) return; // Don't navigate when zoomed
     setCurrentIndex((prev) => (prev < mediaUrls.length - 1 ? prev + 1 : prev));
     setIsPlaying(false);
     setProgress(0);
@@ -72,8 +91,9 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
     return isVideoType || url.match(/\.(mp4|webm|mov)$/i);
   };
 
-  const togglePlayPause = (e: React.MouseEvent) => {
+  const togglePlayPause = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isZoomed) return; // Don't toggle when zoomed, allow double-tap zoom
     if (!videoRef.current) return;
 
     if (isPlaying) {
@@ -82,7 +102,7 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
       videoRef.current.play();
     }
     setIsPlaying(!isPlaying);
-  };
+  }, [isPlaying, isZoomed]);
 
   const toggleMute = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -106,11 +126,11 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
     if (videoWidth && videoHeight) {
       const ratio = videoWidth / videoHeight;
       if (ratio < 0.8) {
-        setVideoAspect('portrait'); // Vertical video (9:16 or similar)
+        setVideoAspect('portrait');
       } else if (ratio > 1.2) {
-        setVideoAspect('landscape'); // Horizontal video (16:9 or similar)
+        setVideoAspect('landscape');
       } else {
-        setVideoAspect('square'); // Square video (1:1 or similar)
+        setVideoAspect('square');
       }
     }
   };
@@ -162,31 +182,39 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
   // Determine container aspect ratio based on content type
   const getContainerClasses = () => {
     if (isCurrentVideo) {
-      // For reels/shorts - Instagram style (9:16)
       if (isReel || videoAspect === 'portrait') {
         return "aspect-[9/16] max-h-[600px] mx-auto max-w-[340px] rounded-xl";
       }
-      // For landscape videos - YouTube style (16:9)
       if (videoAspect === 'landscape') {
         return "aspect-video w-full";
       }
-      // Square videos
       return "aspect-square max-w-[500px] mx-auto";
     }
-    // For images - fill the card width with proper aspect ratio
     return "aspect-square md:aspect-[4/3]";
+  };
+
+  // Transform style for zoomed content
+  const zoomTransformStyle = {
+    transform: `scale(${scale}) translate(${translateX / scale}px, ${translateY / scale}px)`,
+    transition: isZoomed ? 'none' : 'transform 0.3s ease-out',
   };
 
   return (
     <div ref={containerRef} className="relative group w-full">
       {/* Main Media Display */}
       <div 
+        ref={zoomContainerRef}
         className={cn(
-          "relative overflow-hidden bg-black",
+          "relative overflow-hidden bg-black touch-none",
           getContainerClasses()
         )}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => isPlaying && setShowControls(false)}
+        onTouchStart={zoomHandlers.onTouchStart}
+        onTouchMove={zoomHandlers.onTouchMove}
+        onTouchEnd={zoomHandlers.onTouchEnd}
+        onDoubleClick={zoomHandlers.onDoubleClick}
+        onWheel={zoomHandlers.onWheel}
       >
         {isCurrentVideo ? (
           <>
@@ -198,9 +226,10 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
               muted={isMuted}
               loop={false}
               className={cn(
-                "w-full h-full",
+                "w-full h-full will-change-transform",
                 isReel || videoAspect === 'portrait' ? "object-cover" : "object-contain"
               )}
+              style={zoomTransformStyle}
               onTimeUpdate={handleTimeUpdate}
               onLoadedMetadata={handleLoadedMetadata}
               onEnded={handleVideoEnd}
@@ -209,11 +238,19 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
               onClick={togglePlayPause}
             />
 
+            {/* Zoom indicator */}
+            {isZoomed && (
+              <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-md text-white text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1.5 z-20">
+                <ZoomIn className="h-3 w-3" />
+                {Math.round(scale * 100)}%
+              </div>
+            )}
+
             {/* Reel/Short Style Overlay - Instagram Style */}
-            {(isReel || videoAspect === 'portrait') && (
+            {(isReel || videoAspect === 'portrait') && !isZoomed && (
               <div 
                 className={cn(
-                  "absolute inset-0 flex flex-col justify-between transition-opacity duration-300",
+                  "absolute inset-0 flex flex-col justify-between transition-opacity duration-300 pointer-events-none",
                   showControls ? "opacity-100" : "opacity-0"
                 )}
               >
@@ -230,7 +267,7 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
                   {!isPlaying && (
                     <button
                       onClick={togglePlayPause}
-                      className="h-16 w-16 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center border border-white/20 hover:bg-black/60 transition-all hover:scale-110"
+                      className="h-16 w-16 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center border border-white/20 hover:bg-black/60 transition-all hover:scale-110 pointer-events-auto"
                     >
                       <Play className="h-8 w-8 text-white fill-white ml-1" />
                     </button>
@@ -238,7 +275,7 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
                 </div>
 
                 {/* Bottom Controls - Minimal */}
-                <div className="p-3 bg-gradient-to-t from-black/80 to-transparent">
+                <div className="p-3 bg-gradient-to-t from-black/80 to-transparent pointer-events-auto">
                   <div className="flex items-center justify-between">
                     <button
                       onClick={toggleMute}
@@ -268,10 +305,10 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
             )}
 
             {/* YouTube Style Controls - For Landscape Videos */}
-            {videoAspect === 'landscape' && !isReel && (
+            {videoAspect === 'landscape' && !isReel && !isZoomed && (
               <div 
                 className={cn(
-                  "absolute inset-0 flex flex-col justify-between transition-opacity duration-300",
+                  "absolute inset-0 flex flex-col justify-between transition-opacity duration-300 pointer-events-none",
                   showControls ? "opacity-100" : "opacity-0"
                 )}
               >
@@ -279,7 +316,7 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
                 <div className="flex-1 flex items-center justify-center">
                   <button
                     onClick={togglePlayPause}
-                    className="h-16 w-16 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center hover:bg-black/70 transition-all hover:scale-105"
+                    className="h-16 w-16 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center hover:bg-black/70 transition-all hover:scale-105 pointer-events-auto"
                   >
                     {isPlaying ? (
                       <Pause className="h-7 w-7 text-white fill-white" />
@@ -290,7 +327,7 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
                 </div>
 
                 {/* Bottom Controls Bar - YouTube Style */}
-                <div className="bg-gradient-to-t from-black/90 via-black/60 to-transparent p-3 space-y-2">
+                <div className="bg-gradient-to-t from-black/90 via-black/60 to-transparent p-3 space-y-2 pointer-events-auto">
                   {/* Progress Bar */}
                   <Slider
                     value={[progress]}
@@ -342,14 +379,14 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
             )}
 
             {/* Square Video Controls */}
-            {videoAspect === 'square' && !isReel && (
+            {videoAspect === 'square' && !isReel && !isZoomed && (
               <div 
                 className={cn(
-                  "absolute inset-0 flex flex-col justify-end transition-opacity duration-300",
+                  "absolute inset-0 flex flex-col justify-end transition-opacity duration-300 pointer-events-none",
                   showControls ? "opacity-100" : "opacity-0"
                 )}
               >
-                <div className="bg-gradient-to-t from-black/80 to-transparent p-3">
+                <div className="bg-gradient-to-t from-black/80 to-transparent p-3 pointer-events-auto">
                   <div className="flex items-center gap-3">
                     <button onClick={togglePlayPause} className="text-white">
                       {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
@@ -371,23 +408,42 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
             )}
           </>
         ) : (
-          <img
-            key={currentMedia}
-            src={currentMedia}
-            alt={`Post media ${currentIndex + 1}`}
-            className="w-full h-full object-cover"
-            loading="lazy"
-          />
+          <>
+            <img
+              key={currentMedia}
+              src={currentMedia}
+              alt={`Post media ${currentIndex + 1}`}
+              className="w-full h-full object-cover will-change-transform"
+              style={zoomTransformStyle}
+              loading="lazy"
+              draggable={false}
+            />
+
+            {/* Zoom indicator for images */}
+            {isZoomed && (
+              <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-md text-white text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1.5 z-20">
+                <ZoomIn className="h-3 w-3" />
+                {Math.round(scale * 100)}%
+              </div>
+            )}
+
+            {/* Double-tap hint for images (shows briefly) */}
+            {!isZoomed && (
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur-sm text-white/70 text-[10px] px-2 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                Ikki marta bosib kattalashtiring
+              </div>
+            )}
+          </>
         )}
 
-        {/* Navigation Arrows - Only show if multiple media */}
-        {mediaUrls.length > 1 && (
+        {/* Navigation Arrows - Only show if multiple media and not zoomed */}
+        {mediaUrls.length > 1 && !isZoomed && (
           <>
             {currentIndex > 0 && (
               <Button
                 variant="secondary"
                 size="icon"
-                className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 backdrop-blur-sm border-0 hover:bg-black/70 shadow-lg"
+                className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 backdrop-blur-sm border-0 hover:bg-black/70 shadow-lg z-10"
                 onClick={goToPrevious}
               >
                 <ChevronLeft className="h-5 w-5 text-white" />
@@ -397,7 +453,7 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
               <Button
                 variant="secondary"
                 size="icon"
-                className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 backdrop-blur-sm border-0 hover:bg-black/70 shadow-lg"
+                className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 backdrop-blur-sm border-0 hover:bg-black/70 shadow-lg z-10"
                 onClick={goToNext}
               >
                 <ChevronRight className="h-5 w-5 text-white" />
@@ -407,10 +463,23 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
         )}
 
         {/* Media Counter */}
-        {mediaUrls.length > 1 && (
-          <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md text-white text-xs px-2.5 py-1 rounded-full font-medium">
+        {mediaUrls.length > 1 && !isZoomed && (
+          <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md text-white text-xs px-2.5 py-1 rounded-full font-medium z-10">
             {currentIndex + 1}/{mediaUrls.length}
           </div>
+        )}
+
+        {/* Zoom reset button when zoomed */}
+        {isZoomed && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              resetZoom();
+            }}
+            className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-xs px-3 py-1.5 rounded-full font-medium flex items-center gap-1.5 z-20 hover:bg-black/80 transition-colors"
+          >
+            Yopish
+          </button>
         )}
       </div>
 
@@ -422,6 +491,7 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
               key={index}
               onClick={(e) => {
                 e.stopPropagation();
+                if (isZoomed) return;
                 setCurrentIndex(index);
                 setIsPlaying(false);
                 setProgress(0);
