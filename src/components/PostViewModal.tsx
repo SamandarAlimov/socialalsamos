@@ -21,6 +21,7 @@ import { useRealtimeCounts } from '@/hooks/useRealtimeCounts';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { PollDisplay, parsePollFromContent } from '@/components/PollDisplay';
+import { RichTextContent } from '@/components/RichTextContent';
 
 interface PostViewModalProps {
   post: {
@@ -174,7 +175,7 @@ export function PostViewModal({
                 <>
                   {cleanContent && (
                     <div className="p-4 border-b border-border">
-                      <p className="text-sm whitespace-pre-wrap">{cleanContent}</p>
+                      <RichTextContent content={cleanContent} className="text-sm" />
                     </div>
                   )}
                   {pollData && (

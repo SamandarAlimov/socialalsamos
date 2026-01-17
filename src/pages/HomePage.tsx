@@ -27,6 +27,7 @@ import { PostLikesDialog } from '@/components/PostLikesDialog';
 import { SharePostDialog } from '@/components/SharePostDialog';
 import { PostViewModal } from '@/components/PostViewModal';
 import { PollDisplay, parsePollFromContent } from '@/components/PollDisplay';
+import { RichTextContent } from '@/components/RichTextContent';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
@@ -418,7 +419,7 @@ function PostCard({
           <>
             {cleanContent && (
               <div className="px-3 md:px-4 pb-2 md:pb-3">
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">{cleanContent}</p>
+                <RichTextContent content={cleanContent} className="text-sm leading-relaxed" />
               </div>
             )}
             {pollData && (

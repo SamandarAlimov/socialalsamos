@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
+import { RichTextContent } from '@/components/RichTextContent';
 
 interface SharedPost {
   id: string;
@@ -141,12 +142,12 @@ export function SharedPostPreview({ postId, isMine }: SharedPostPreviewProps) {
 
         {/* Content */}
         {post.content && (
-          <p className={cn(
+          <div className={cn(
             "text-sm line-clamp-2",
             isMine ? "text-white/80" : "text-muted-foreground"
           )}>
-            {post.content}
-          </p>
+            <RichTextContent content={post.content} />
+          </div>
         )}
 
         {/* Stats */}

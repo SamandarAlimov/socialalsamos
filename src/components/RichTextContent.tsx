@@ -9,6 +9,28 @@ interface RichTextContentProps {
 // Media format: [media:type:url]
 const MEDIA_REGEX = /\[media:(image|video|gif):([^\]]+)\]/g;
 
+// Format link display - show domain only for cleaner look
+function formatLinkDisplay(url: string): string {
+  try {
+    const urlObj = new URL(url);
+    const domain = urlObj.hostname.replace('www.', '');
+    const path = urlObj.pathname;
+    
+    // For short paths, show domain + path
+    if (path.length <= 20 && path !== '/') {
+      return domain + path;
+    }
+    // For long paths, just show domain
+    return domain + (path !== '/' ? '/...' : '');
+  } catch {
+    // If URL parsing fails, truncate manually
+    if (url.length > 35) {
+      return url.substring(0, 32) + '...';
+    }
+    return url;
+  }
+}
+
 export function RichTextContent({ content, className }: RichTextContentProps) {
   const { textContent, mediaItems } = useMemo(() => {
     if (!content) return { textContent: '', mediaItems: [] };
@@ -85,7 +107,7 @@ export function RichTextContent({ content, className }: RichTextContentProps) {
     <div className={className}>
       {/* Render text content */}
       {parsedContent.length > 0 && (
-        <span>
+        <span className="whitespace-pre-wrap">
           {parsedContent.map((part, index) => {
             switch (part.type) {
               case 'mention':
@@ -93,7 +115,7 @@ export function RichTextContent({ content, className }: RichTextContentProps) {
                   <Link
                     key={index}
                     to={`/user/${part.value}`}
-                    className="text-primary font-medium hover:underline"
+                    className="text-alsamos-orange-light font-semibold hover:text-alsamos-orange-dark hover:underline transition-colors"
                     onClick={(e) => e.stopPropagation()}
                   >
                     @{part.value}
@@ -104,7 +126,7 @@ export function RichTextContent({ content, className }: RichTextContentProps) {
                   <Link
                     key={index}
                     to={`/search?q=%23${part.value}`}
-                    className="text-primary font-medium hover:underline"
+                    className="text-blue-400 font-medium hover:text-blue-300 hover:underline transition-colors"
                     onClick={(e) => e.stopPropagation()}
                   >
                     #{part.value}
@@ -117,10 +139,10 @@ export function RichTextContent({ content, className }: RichTextContentProps) {
                     href={part.value}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-primary underline hover:opacity-80 break-all"
+                    className="text-sky-400 hover:text-sky-300 underline underline-offset-2 break-all transition-colors"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    {part.display}
+                    {formatLinkDisplay(part.value)}
                   </a>
                 );
               default:
