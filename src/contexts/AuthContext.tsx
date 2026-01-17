@@ -25,7 +25,6 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<{ error: Error | null }>;
   signup: (email: string, password: string, displayName?: string) => Promise<{ error: Error | null }>;
   logout: () => Promise<void>;
-  loginWithProvider: (provider: 'google' | 'apple') => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
 }
 
@@ -180,22 +179,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
   };
 
-  const loginWithProvider = async (provider: 'google' | 'apple') => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: {
-        redirectTo: `${window.location.origin}/home`,
-      },
-    });
-
-    if (error) {
-      toast({
-        title: 'Login Failed',
-        description: error.message,
-        variant: 'destructive',
-      });
-    }
-  };
 
   const updateProfile = async (updates: Partial<Profile>) => {
     if (!user) return;
@@ -232,7 +215,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         signup,
         logout,
-        loginWithProvider,
         updateProfile,
       }}
     >
