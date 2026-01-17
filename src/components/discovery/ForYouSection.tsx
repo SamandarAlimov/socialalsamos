@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Heart, MessageCircle, Play } from 'lucide-react';
+import { Sparkles, Heart, MessageCircle, Play, BarChart3 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useAuth } from '@/contexts/AuthContext';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { PostViewModal } from '@/components/PostViewModal';
+import { parsePollFromContent } from '@/components/PollDisplay';
 
 interface Post {
   id: string;
@@ -168,11 +169,25 @@ export function ForYouSection() {
                 />
               )
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5 p-4">
-                <p className="text-sm text-foreground line-clamp-4 text-center">
-                  {post.content}
-                </p>
-              </div>
+              (() => {
+                const { pollData, cleanContent } = parsePollFromContent(post.content || '');
+                return pollData ? (
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5 p-4">
+                    <div className="flex flex-col items-center gap-2">
+                      <BarChart3 className="h-8 w-8 text-primary" />
+                      <p className="text-sm text-foreground line-clamp-2 text-center font-medium">
+                        {pollData.question}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5 p-4">
+                    <p className="text-sm text-foreground line-clamp-4 text-center">
+                      {cleanContent || post.content}
+                    </p>
+                  </div>
+                );
+              })()
             )}
             
             {/* Media type indicator */}
