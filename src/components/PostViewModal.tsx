@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Dialog, 
@@ -20,6 +20,7 @@ import { CommentsSection } from '@/components/CommentsSection';
 import { useRealtimeCounts } from '@/hooks/useRealtimeCounts';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { PollDisplay, parsePollFromContent } from '@/components/PollDisplay';
 
 interface PostViewModalProps {
   post: {
@@ -166,12 +167,24 @@ export function PostViewModal({
               </Button>
             </div>
 
-            {/* Content */}
-            {post.content && (
-              <div className="p-4 border-b border-border">
-                <p className="text-sm whitespace-pre-wrap">{post.content}</p>
-              </div>
-            )}
+            {/* Content with Poll Support */}
+            {post.content && (() => {
+              const { pollData, cleanContent } = parsePollFromContent(post.content);
+              return (
+                <>
+                  {cleanContent && (
+                    <div className="p-4 border-b border-border">
+                      <p className="text-sm whitespace-pre-wrap">{cleanContent}</p>
+                    </div>
+                  )}
+                  {pollData && (
+                    <div className="p-4 border-b border-border">
+                      <PollDisplay postId={post.id} pollData={pollData} />
+                    </div>
+                  )}
+                </>
+              );
+            })()}
 
             {/* Comments */}
             <div className="flex-1 overflow-y-auto p-4 max-h-[300px] md:max-h-none">

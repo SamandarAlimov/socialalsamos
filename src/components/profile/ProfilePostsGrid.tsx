@@ -9,7 +9,8 @@ import {
   Grid,
   LayoutList,
   Share2,
-  Bookmark
+  Bookmark,
+  BarChart3
 } from 'lucide-react';
 import { PostViewModal } from '@/components/PostViewModal';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { PollDisplay, parsePollFromContent } from '@/components/PollDisplay';
 
 interface Post {
   id: string;
@@ -139,9 +141,21 @@ export function ProfilePostsGrid({
                   />
                 )
               ) : (
-                <div className="w-full h-full flex items-center justify-center p-4 bg-gradient-to-br from-primary/10 to-primary/5">
-                  <p className="text-sm text-foreground line-clamp-4 text-center">{post.content}</p>
-                </div>
+                (() => {
+                  const { pollData, cleanContent } = parsePollFromContent(post.content || '');
+                  return pollData ? (
+                    <div className="w-full h-full flex items-center justify-center p-2 bg-gradient-to-br from-primary/10 to-primary/5">
+                      <div className="flex flex-col items-center gap-1">
+                        <BarChart3 className="h-6 w-6 text-primary" />
+                        <p className="text-xs text-muted-foreground text-center line-clamp-2">{pollData.question}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center p-4 bg-gradient-to-br from-primary/10 to-primary/5">
+                      <p className="text-sm text-foreground line-clamp-4 text-center">{cleanContent || post.content}</p>
+                    </div>
+                  );
+                })()
               )}
 
               {/* Pinned indicator */}
@@ -262,12 +276,24 @@ export function ProfilePostsGrid({
                 </div>
               )}
 
-              {/* Post content */}
-              {post.content && (
-                <div className="px-4 pb-3">
-                  <p className="text-foreground whitespace-pre-wrap">{post.content}</p>
-                </div>
-              )}
+              {/* Post content with Poll Support */}
+              {post.content && (() => {
+                const { pollData, cleanContent } = parsePollFromContent(post.content);
+                return (
+                  <>
+                    {cleanContent && (
+                      <div className="px-4 pb-3">
+                        <p className="text-foreground whitespace-pre-wrap">{cleanContent}</p>
+                      </div>
+                    )}
+                    {pollData && (
+                      <div className="px-4 pb-3">
+                        <PollDisplay postId={post.id} pollData={pollData} />
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
 
               {/* Media */}
               {post.media_urls && post.media_urls.length > 0 && (
