@@ -16,9 +16,14 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [showControls, setShowControls] = useState(true);
+  const [videoAspect, setVideoAspect] = useState<'portrait' | 'landscape' | 'square'>('landscape');
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout>();
+
+  // Determine if media is a reel/short (9:16 vertical) or regular video
+  const isReel = mediaType === 'reel' || mediaType === 'short';
+  const isVideoType = mediaType === 'video' || isReel;
 
   // Autoplay when video is visible on screen (Intersection Observer)
   useEffect(() => {
@@ -30,12 +35,8 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
-            // Video is at least 60% visible - autoplay
-            video.play().catch(() => {
-              // Autoplay blocked by browser, user needs to interact
-            });
+            video.play().catch(() => {});
           } else {
-            // Video is not visible enough - pause
             video.pause();
           }
         });
@@ -68,10 +69,8 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
   };
 
   const isVideo = (url: string) => {
-    return mediaType === 'video' || url.match(/\.(mp4|webm|mov)$/i);
+    return isVideoType || url.match(/\.(mp4|webm|mov)$/i);
   };
-
-  const isShortVideo = mediaType === 'video' || mediaType === 'reel' || mediaType === 'short';
 
   const togglePlayPause = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -101,6 +100,19 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
   const handleLoadedMetadata = () => {
     if (!videoRef.current) return;
     setDuration(videoRef.current.duration);
+    
+    // Determine video aspect ratio
+    const { videoWidth, videoHeight } = videoRef.current;
+    if (videoWidth && videoHeight) {
+      const ratio = videoWidth / videoHeight;
+      if (ratio < 0.8) {
+        setVideoAspect('portrait'); // Vertical video (9:16 or similar)
+      } else if (ratio > 1.2) {
+        setVideoAspect('landscape'); // Horizontal video (16:9 or similar)
+      } else {
+        setVideoAspect('square'); // Square video (1:1 or similar)
+      }
+    }
   };
 
   const handleSeek = (value: number[]) => {
@@ -147,13 +159,31 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
   const currentMedia = mediaUrls[currentIndex];
   const isCurrentVideo = isVideo(currentMedia);
 
+  // Determine container aspect ratio based on content type
+  const getContainerClasses = () => {
+    if (isCurrentVideo) {
+      // For reels/shorts - Instagram style (9:16)
+      if (isReel || videoAspect === 'portrait') {
+        return "aspect-[9/16] max-h-[600px] mx-auto max-w-[340px] rounded-xl";
+      }
+      // For landscape videos - YouTube style (16:9)
+      if (videoAspect === 'landscape') {
+        return "aspect-video w-full";
+      }
+      // Square videos
+      return "aspect-square max-w-[500px] mx-auto";
+    }
+    // For images - fill the card width with proper aspect ratio
+    return "aspect-square md:aspect-[4/3]";
+  };
+
   return (
-    <div ref={containerRef} className="relative group">
+    <div ref={containerRef} className="relative group w-full">
       {/* Main Media Display */}
       <div 
         className={cn(
-          "relative overflow-hidden bg-black/5",
-          isShortVideo ? "aspect-[9/16] max-h-[70vh]" : "aspect-[4/3] md:aspect-video"
+          "relative overflow-hidden bg-black",
+          getContainerClasses()
         )}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => isPlaying && setShowControls(false)}
@@ -167,7 +197,10 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
               playsInline
               muted={isMuted}
               loop={false}
-              className="w-full h-full object-contain"
+              className={cn(
+                "w-full h-full",
+                isReel || videoAspect === 'portrait' ? "object-cover" : "object-contain"
+              )}
               onTimeUpdate={handleTimeUpdate}
               onLoadedMetadata={handleLoadedMetadata}
               onEnded={handleVideoEnd}
@@ -176,62 +209,40 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
               onClick={togglePlayPause}
             />
 
-            {/* Alsamos Video Controls Overlay */}
-            <div 
-              className={cn(
-                "absolute inset-0 flex flex-col justify-between transition-opacity duration-300",
-                showControls ? "opacity-100" : "opacity-0"
-              )}
-            >
-              {/* Top gradient */}
-              <div className="h-20 bg-gradient-to-b from-black/60 to-transparent" />
-
-              {/* Center Play/Pause Button */}
-              <div className="flex-1 flex items-center justify-center">
-                <button
-                  onClick={togglePlayPause}
-                  className="h-16 w-16 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center border border-white/20 hover:bg-black/60 transition-all hover:scale-110"
-                >
-                  {isPlaying ? (
-                    <Pause className="h-7 w-7 text-white fill-white" />
-                  ) : (
-                    <Play className="h-7 w-7 text-white fill-white ml-1" />
-                  )}
-                </button>
-              </div>
-
-              {/* Bottom Controls */}
-              <div className="bg-gradient-to-t from-black/80 to-transparent p-4 space-y-3">
-                {/* Progress Bar */}
-                <div className="px-1">
-                  <Slider
-                    value={[progress]}
-                    onValueChange={handleSeek}
-                    max={100}
-                    step={0.1}
-                    className="cursor-pointer [&_[role=slider]]:h-3 [&_[role=slider]]:w-3 [&_[role=slider]]:bg-primary [&_[role=slider]]:border-0 [&_[role=slider]]:shadow-lg [&_.bg-primary]:bg-gradient-to-r [&_.bg-primary]:from-alsamos-orange-light [&_.bg-primary]:to-alsamos-orange-dark"
-                  />
+            {/* Reel/Short Style Overlay - Instagram Style */}
+            {(isReel || videoAspect === 'portrait') && (
+              <div 
+                className={cn(
+                  "absolute inset-0 flex flex-col justify-between transition-opacity duration-300",
+                  showControls ? "opacity-100" : "opacity-0"
+                )}
+              >
+                {/* Top gradient with badge */}
+                <div className="p-3 bg-gradient-to-b from-black/60 to-transparent">
+                  <div className="inline-flex items-center gap-1.5 bg-gradient-to-r from-alsamos-orange-light to-alsamos-orange-dark text-white text-xs px-3 py-1.5 rounded-full font-semibold">
+                    <Play className="h-3 w-3 fill-white" />
+                    Reel
+                  </div>
                 </div>
 
-                {/* Control Buttons Row */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    {/* Play/Pause */}
+                {/* Center Play Button */}
+                <div className="flex-1 flex items-center justify-center">
+                  {!isPlaying && (
                     <button
                       onClick={togglePlayPause}
-                      className="h-9 w-9 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center hover:bg-white/20 transition-colors"
+                      className="h-16 w-16 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center border border-white/20 hover:bg-black/60 transition-all hover:scale-110"
                     >
-                      {isPlaying ? (
-                        <Pause className="h-4 w-4 text-white" />
-                      ) : (
-                        <Play className="h-4 w-4 text-white ml-0.5" />
-                      )}
+                      <Play className="h-8 w-8 text-white fill-white ml-1" />
                     </button>
+                  )}
+                </div>
 
-                    {/* Mute/Unmute */}
+                {/* Bottom Controls - Minimal */}
+                <div className="p-3 bg-gradient-to-t from-black/80 to-transparent">
+                  <div className="flex items-center justify-between">
                     <button
                       onClick={toggleMute}
-                      className="h-9 w-9 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center hover:bg-white/20 transition-colors"
+                      className="h-8 w-8 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center hover:bg-white/20 transition-colors"
                     >
                       {isMuted ? (
                         <VolumeX className="h-4 w-4 text-white" />
@@ -239,30 +250,132 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
                         <Volume2 className="h-4 w-4 text-white" />
                       )}
                     </button>
-
-                    {/* Time Display */}
-                    <span className="text-white text-xs font-medium tabular-nums">
-                      {formatTime(videoRef.current?.currentTime || 0)} / {formatTime(duration)}
+                    <span className="text-white text-xs font-medium">
+                      {formatTime(videoRef.current?.currentTime || 0)}
                     </span>
                   </div>
-
-                  {/* Fullscreen */}
-                  <button
-                    onClick={handleFullscreen}
-                    className="h-9 w-9 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center hover:bg-white/20 transition-colors"
-                  >
-                    <Maximize2 className="h-4 w-4 text-white" />
-                  </button>
+                  {/* Progress Bar */}
+                  <div className="mt-2">
+                    <div className="h-1 bg-white/20 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-alsamos-orange-light to-alsamos-orange-dark transition-all duration-150"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
+
+            {/* YouTube Style Controls - For Landscape Videos */}
+            {videoAspect === 'landscape' && !isReel && (
+              <div 
+                className={cn(
+                  "absolute inset-0 flex flex-col justify-between transition-opacity duration-300",
+                  showControls ? "opacity-100" : "opacity-0"
+                )}
+              >
+                {/* Center Play/Pause Button */}
+                <div className="flex-1 flex items-center justify-center">
+                  <button
+                    onClick={togglePlayPause}
+                    className="h-16 w-16 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center hover:bg-black/70 transition-all hover:scale-105"
+                  >
+                    {isPlaying ? (
+                      <Pause className="h-7 w-7 text-white fill-white" />
+                    ) : (
+                      <Play className="h-7 w-7 text-white fill-white ml-1" />
+                    )}
+                  </button>
+                </div>
+
+                {/* Bottom Controls Bar - YouTube Style */}
+                <div className="bg-gradient-to-t from-black/90 via-black/60 to-transparent p-3 space-y-2">
+                  {/* Progress Bar */}
+                  <Slider
+                    value={[progress]}
+                    onValueChange={handleSeek}
+                    max={100}
+                    step={0.1}
+                    className="cursor-pointer [&_[role=slider]]:h-3 [&_[role=slider]]:w-3 [&_[role=slider]]:bg-primary [&_[role=slider]]:border-0 [&_.bg-primary]:bg-red-600"
+                  />
+
+                  {/* Control Buttons Row */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={togglePlayPause}
+                        className="h-8 w-8 flex items-center justify-center hover:bg-white/10 rounded transition-colors"
+                      >
+                        {isPlaying ? (
+                          <Pause className="h-5 w-5 text-white" />
+                        ) : (
+                          <Play className="h-5 w-5 text-white ml-0.5" />
+                        )}
+                      </button>
+
+                      <button
+                        onClick={toggleMute}
+                        className="h-8 w-8 flex items-center justify-center hover:bg-white/10 rounded transition-colors"
+                      >
+                        {isMuted ? (
+                          <VolumeX className="h-5 w-5 text-white" />
+                        ) : (
+                          <Volume2 className="h-5 w-5 text-white" />
+                        )}
+                      </button>
+
+                      <span className="text-white text-xs font-medium tabular-nums ml-1">
+                        {formatTime(videoRef.current?.currentTime || 0)} / {formatTime(duration)}
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={handleFullscreen}
+                      className="h-8 w-8 flex items-center justify-center hover:bg-white/10 rounded transition-colors"
+                    >
+                      <Maximize2 className="h-5 w-5 text-white" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Square Video Controls */}
+            {videoAspect === 'square' && !isReel && (
+              <div 
+                className={cn(
+                  "absolute inset-0 flex flex-col justify-end transition-opacity duration-300",
+                  showControls ? "opacity-100" : "opacity-0"
+                )}
+              >
+                <div className="bg-gradient-to-t from-black/80 to-transparent p-3">
+                  <div className="flex items-center gap-3">
+                    <button onClick={togglePlayPause} className="text-white">
+                      {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+                    </button>
+                    <div className="flex-1">
+                      <div className="h-1 bg-white/30 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-white transition-all"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                    </div>
+                    <button onClick={toggleMute} className="text-white">
+                      {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <img
             key={currentMedia}
             src={currentMedia}
             alt={`Post media ${currentIndex + 1}`}
-            className="w-full h-full object-contain"
+            className="w-full h-full object-cover"
             loading="lazy"
           />
         )}
@@ -274,7 +387,7 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
               <Button
                 variant="secondary"
                 size="icon"
-                className="absolute left-2 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-md border border-white/10 hover:bg-black/60 shadow-lg"
+                className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 backdrop-blur-sm border-0 hover:bg-black/70 shadow-lg"
                 onClick={goToPrevious}
               >
                 <ChevronLeft className="h-5 w-5 text-white" />
@@ -284,7 +397,7 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
               <Button
                 variant="secondary"
                 size="icon"
-                className="absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-md border border-white/10 hover:bg-black/60 shadow-lg"
+                className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 backdrop-blur-sm border-0 hover:bg-black/70 shadow-lg"
                 onClick={goToNext}
               >
                 <ChevronRight className="h-5 w-5 text-white" />
@@ -295,15 +408,8 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
 
         {/* Media Counter */}
         {mediaUrls.length > 1 && (
-          <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md text-white text-xs px-3 py-1.5 rounded-full font-medium border border-white/10">
+          <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md text-white text-xs px-2.5 py-1 rounded-full font-medium">
             {currentIndex + 1}/{mediaUrls.length}
-          </div>
-        )}
-
-        {/* Video Badge for Reels/Shorts */}
-        {isCurrentVideo && isShortVideo && (
-          <div className="absolute top-3 left-3 bg-gradient-to-r from-alsamos-orange-light to-alsamos-orange-dark text-white text-xs px-3 py-1.5 rounded-full font-semibold">
-            Reel
           </div>
         )}
       </div>
@@ -321,10 +427,10 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
                 setProgress(0);
               }}
               className={cn(
-                "h-2 rounded-full transition-all duration-300",
+                "h-1.5 rounded-full transition-all duration-300",
                 index === currentIndex 
-                  ? "w-6 bg-gradient-to-r from-alsamos-orange-light to-alsamos-orange-dark" 
-                  : "w-2 bg-muted-foreground/30 hover:bg-muted-foreground/50"
+                  ? "w-5 bg-gradient-to-r from-alsamos-orange-light to-alsamos-orange-dark" 
+                  : "w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/50"
               )}
             />
           ))}
