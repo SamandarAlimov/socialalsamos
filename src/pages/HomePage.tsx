@@ -361,7 +361,9 @@ function PostCard({
 
   const handleUserClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (post.user_id) {
+    if (post.profile?.username) {
+      navigate(`/user/${post.profile.username}`);
+    } else if (post.user_id) {
       navigate(`/user/${post.user_id}`);
     }
   };

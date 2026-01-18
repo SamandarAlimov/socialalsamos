@@ -14,7 +14,7 @@ interface UserCardProps {
   user: UserProfile;
   onFollow: (userId: string) => Promise<boolean>;
   onUnfollow: (userId: string) => Promise<boolean>;
-  onNavigate: (userId: string) => void;
+  onNavigate: (user: UserProfile) => void;
 }
 
 function UserCard({ user, onFollow, onUnfollow, onNavigate }: UserCardProps) {
@@ -36,7 +36,7 @@ function UserCard({ user, onFollow, onUnfollow, onNavigate }: UserCardProps) {
   return (
     <div 
       className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
-      onClick={() => onNavigate(user.id)}
+      onClick={() => onNavigate(user)}
     >
       <Avatar className="h-12 w-12">
         <AvatarImage src={user.avatar_url || undefined} />
@@ -113,9 +113,9 @@ export function UserSearchDialog({ children, open: controlledOpen, onOpenChange 
 
   const displayUsers = query.trim() ? results : suggestedUsers;
 
-  const handleNavigateToProfile = (userId: string) => {
+  const handleNavigateToProfile = (user: UserProfile) => {
     setOpen(false);
-    navigate(`/user/${userId}`);
+    navigate(`/user/${user.username || user.id}`);
   };
 
   return (

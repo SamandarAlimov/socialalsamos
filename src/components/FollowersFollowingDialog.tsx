@@ -157,9 +157,9 @@ export function FollowersFollowingDialog({
     }
   };
 
-  const handleUserClick = (userId: string) => {
+  const handleUserClick = (user: FollowUser) => {
     onOpenChange(false);
-    navigate(`/user/${userId}`);
+    navigate(`/user/${user.username || user.id}`);
   };
 
   return (
@@ -198,7 +198,7 @@ export function FollowersFollowingDialog({
                 >
                   <Avatar 
                     className="h-10 w-10 cursor-pointer"
-                    onClick={() => handleUserClick(u.id)}
+                    onClick={() => handleUserClick(u)}
                   >
                     <AvatarImage src={u.avatar_url || undefined} />
                     <AvatarFallback>
@@ -208,7 +208,7 @@ export function FollowersFollowingDialog({
                   
                   <div 
                     className="flex-1 min-w-0 cursor-pointer"
-                    onClick={() => handleUserClick(u.id)}
+                    onClick={() => handleUserClick(u)}
                   >
                     <div className="flex items-center gap-1">
                       <span className="font-medium text-sm truncate">

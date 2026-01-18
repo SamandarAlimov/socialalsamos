@@ -97,7 +97,7 @@ function AppRoutes() {
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/create" element={<CreatePage />} />
         <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/user/:userId" element={<UserProfilePage />} />
+        <Route path="/user/:username" element={<UserProfilePage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/payment" element={<PaymentSettingsPage />} />
         <Route path="/admin" element={<AdminPage />} />

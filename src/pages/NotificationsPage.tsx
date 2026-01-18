@@ -170,18 +170,18 @@ function GroupedNotificationItem({
     
     if ((group.type === 'like' || group.type === 'comment' || group.type === 'mention') && group.postId) {
       navigate(`/home?post=${group.postId}`);
-    } else if (group.type === 'follow' && firstActor?.id) {
-      navigate(`/user/${firstActor.id}`);
+    } else if (group.type === 'follow' && firstActor) {
+      navigate(`/user/${firstActor.username || firstActor.id}`);
     }
   };
   
-  const handleActorClick = (e: React.MouseEvent, actorId: string) => {
+  const handleActorClick = (e: React.MouseEvent, actor: typeof firstActor) => {
     e.stopPropagation();
-    if (actorId) {
+    if (actor) {
       group.notifications.forEach(n => {
         if (!n.is_read) onMarkAsRead(n.id);
       });
-      navigate(`/user/${actorId}`);
+      navigate(`/user/${actor.username || actor.id}`);
     }
   };
   
@@ -211,12 +211,12 @@ function GroupedNotificationItem({
   const getNotificationText = () => {
     const actorName = firstActor?.displayName || firstActor?.username;
     
-    const usernameElement = actorName ? (
+  const usernameElement = actorName ? (
       <span 
         className="font-semibold text-foreground hover:underline cursor-pointer"
         onClick={(e) => {
           e.stopPropagation();
-          if (firstActor?.id) navigate(`/user/${firstActor.id}`);
+          if (firstActor) navigate(`/user/${firstActor.username || firstActor.id}`);
         }}
       >
         {actorName}
@@ -283,7 +283,7 @@ function GroupedNotificationItem({
                   i === 1 && 'left-4 top-1 z-[2]',
                   i === 2 && 'left-8 top-0 z-[1]'
                 )}
-                onClick={(e) => handleActorClick(e, actor.id)}
+                onClick={(e) => handleActorClick(e, actor)}
               >
                 <AvatarImage src={actor.avatar || undefined} className="object-cover" />
                 <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-sm font-medium">
@@ -300,7 +300,7 @@ function GroupedNotificationItem({
         ) : (
           <div 
             className="relative cursor-pointer group/avatar"
-            onClick={(e) => handleActorClick(e, firstActor?.id || '')}
+            onClick={(e) => handleActorClick(e, firstActor)}
           >
             <Avatar className="h-12 w-12 ring-2 ring-transparent group-hover/avatar:ring-primary/20 transition-all">
               <AvatarImage src={firstActor?.avatar || undefined} className="object-cover" />
@@ -362,8 +362,8 @@ function GroupedNotificationItem({
           className="flex-shrink-0 rounded-full px-4 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/25"
           onClick={(e) => {
             e.stopPropagation();
-            if (firstActor?.id) {
-              navigate(`/user/${firstActor.id}`);
+            if (firstActor) {
+              navigate(`/user/${firstActor.username || firstActor.id}`);
             }
           }}
         >

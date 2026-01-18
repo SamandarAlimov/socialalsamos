@@ -44,7 +44,7 @@ interface UserProfile {
 }
 
 export default function UserProfilePage() {
-  const { userId } = useParams<{ userId: string }>();
+  const { username: usernameParam } = useParams<{ username: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -59,31 +59,48 @@ export default function UserProfilePage() {
     type: 'followers' 
   });
   const { createPrivateConversation } = useConversations();
+  
+  // Get userId from profile after fetching by username
+  const userId = profile?.id;
   const { posts, isLoading: postsLoading, likePost } = useUserPosts(userId);
 
   const isOwnProfile = user?.id === userId;
 
   const fetchProfile = useCallback(async () => {
-    if (!userId) return;
+    if (!usernameParam) return;
     setLoading(true);
 
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      // Check if it's a UUID (for backwards compatibility) or username
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(usernameParam);
+      
+      let query = supabase.from('profiles').select('*');
+      
+      if (isUUID) {
+        query = query.eq('id', usernameParam);
+      } else {
+        query = query.eq('username', usernameParam);
+      }
+      
+      const { data, error } = await query.single();
 
       if (error) throw error;
+      
+      // If accessed by UUID, redirect to username URL
+      if (isUUID && data?.username) {
+        navigate(`/user/${data.username}`, { replace: true });
+        return;
+      }
+      
       setProfile(data);
 
       // Check if following
-      if (user && !isOwnProfile) {
+      if (user && data && user.id !== data.id) {
         const { data: followData } = await supabase
           .from('follows')
           .select('id')
           .eq('follower_id', user.id)
-          .eq('following_id', userId)
+          .eq('following_id', data.id)
           .single();
         
         setIsFollowing(!!followData);
@@ -95,7 +112,7 @@ export default function UserProfilePage() {
     } finally {
       setLoading(false);
     }
-  }, [userId, user, isOwnProfile, navigate]);
+  }, [usernameParam, user, navigate]);
 
   useEffect(() => {
     fetchProfile();

@@ -115,7 +115,7 @@ export function RichTextContent({ content, className }: RichTextContentProps) {
                   <Link
                     key={index}
                     to={`/user/${part.value}`}
-                    className="text-alsamos-orange-light font-semibold hover:text-alsamos-orange-dark hover:underline transition-colors"
+                    className="text-alsamos-orange-light font-semibold hover:text-alsamos-orange-dark hover:underline transition-colors cursor-pointer"
                     onClick={(e) => e.stopPropagation()}
                   >
                     @{part.value}

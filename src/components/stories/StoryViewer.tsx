@@ -364,9 +364,9 @@ export function StoryViewer({
     }
   };
 
-  const handleViewerClick = (viewerId: string) => {
+  const handleViewerClick = (viewer: { id: string; username?: string }) => {
     onClose();
-    navigate(`/user/${viewerId}`);
+    navigate(`/user/${viewer.username || viewer.id}`);
   };
 
   const togglePause = () => {
@@ -461,7 +461,7 @@ export function StoryViewer({
               className="flex items-center gap-3 cursor-pointer"
               onClick={() => {
                 onClose();
-                navigate(`/user/${activeGroup.user_id}`);
+                navigate(`/user/${activeGroup.username || activeGroup.user_id}`);
               }}
             >
               <Avatar className="h-10 w-10 border-2 border-white">
@@ -668,7 +668,7 @@ export function StoryViewer({
                   {viewers.map((viewer) => (
                     <button
                       key={viewer.id}
-                      onClick={() => handleViewerClick(viewer.viewer_id)}
+                      onClick={() => handleViewerClick({ id: viewer.viewer_id, username: viewer.profile?.username || undefined })}
                       className="flex items-center gap-3 w-full p-3 rounded-xl hover:bg-accent transition-colors"
                     >
                       <Avatar className="h-10 w-10">
