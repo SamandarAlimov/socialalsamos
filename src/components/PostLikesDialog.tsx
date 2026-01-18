@@ -158,7 +158,7 @@ export function PostLikesDialog({ postId, open, onOpenChange, likesCount }: Post
                   className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
                 >
                   <Link
-                    to={`/user/${like.user_id}`}
+                    to={`/user/${like.profile?.username || like.user_id}`}
                     onClick={() => onOpenChange(false)}
                     className="flex items-center gap-3 flex-1 min-w-0"
                   >

@@ -197,7 +197,7 @@ export default function SearchPage() {
                     <h3 className="text-sm font-medium text-muted-foreground mb-3">Users</h3>
                     <div className="space-y-3">
                       {users.slice(0, 3).map((user) => (
-                        <UserCard key={user.id} user={user} onClick={() => navigate(`/user/${user.id}`)} />
+                        <UserCard key={user.id} user={user} onClick={() => navigate(`/user/${user.username || user.id}`)} />
                       ))}
                     </div>
                   </section>
@@ -227,7 +227,7 @@ export default function SearchPage() {
             ) : users.length > 0 ? (
               <div className="space-y-3">
                 {users.map((user) => (
-                  <UserCard key={user.id} user={user} onClick={() => navigate(`/user/${user.id}`)} />
+                  <UserCard key={user.id} user={user} onClick={() => navigate(`/user/${user.username || user.id}`)} />
                 ))}
               </div>
             ) : (

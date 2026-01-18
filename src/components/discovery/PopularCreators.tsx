@@ -144,7 +144,7 @@ export function PopularCreators() {
             className="flex flex-col items-center gap-3 p-4 rounded-xl bg-card border border-border hover:border-primary/50 hover:shadow-lg transition-all cursor-pointer"
             onClick={() => {
               triggerHaptic('light');
-              navigate(`/user/${creator.id}`);
+              navigate(`/user/${creator.username || creator.id}`);
             }}
           >
             <StoryAvatar
