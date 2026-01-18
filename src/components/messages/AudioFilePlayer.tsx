@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Play, Pause, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAudioPlayer } from '@/contexts/AudioPlayerContext';
+import { useAudioPlayer, MediaTrack } from '@/contexts/AudioPlayerContext';
 
 interface AudioFilePlayerProps {
   url: string;
@@ -113,7 +113,16 @@ export function AudioFilePlayer({ url, name, isMine, senderName }: AudioFilePlay
       }
     } else {
       // Play this track using global player
-      play({ url, name: rawFileName, artist, title, senderName });
+      const track: MediaTrack = { 
+        id: url, 
+        url, 
+        name: rawFileName, 
+        artist, 
+        title, 
+        senderName,
+        type: 'audio'
+      };
+      play(track);
     }
   };
 
@@ -130,7 +139,16 @@ export function AudioFilePlayer({ url, name, isMine, senderName }: AudioFilePlay
       seek(newTime);
     } else {
       // Start playing from this position
-      play({ url, name: rawFileName, artist, title, senderName });
+      const track: MediaTrack = { 
+        id: url, 
+        url, 
+        name: rawFileName, 
+        artist, 
+        title, 
+        senderName,
+        type: 'audio'
+      };
+      play(track);
       setTimeout(() => seek(newTime), 100);
     }
   };
