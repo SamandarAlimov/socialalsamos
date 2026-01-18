@@ -20,7 +20,9 @@ import { EmojiPicker } from '@/components/EmojiPicker';
 import { TelegramMediaRecorder } from './TelegramMediaRecorder';
 import { LocationShareButton } from './LocationShareButton';
 import { ScheduleMessageDialog } from './ScheduleMessageDialog';
+import { MentionAutocomplete } from '@/components/MentionAutocomplete';
 import { useFileUpload } from '@/hooks/useFileUpload';
+import { useMentionInput } from '@/hooks/useMentionInput';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
@@ -65,6 +67,7 @@ export function MessageInput({
   const documentInputRef = useRef<HTMLInputElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const { mentionState, handleInputChange: handleMentionChange, insertMention, closeMention } = useMentionInput();
 
   useEffect(() => {
     if (replyTo) {
@@ -82,7 +85,9 @@ export function MessageInput({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
-    setMessage(value);
+    const cursorPosition = e.target.selectionStart || 0;
+    
+    handleMentionChange(value, cursorPosition, setMessage);
     
     onTyping(true);
     
@@ -93,6 +98,11 @@ export function MessageInput({
     typingTimeoutRef.current = setTimeout(() => {
       onTyping(false);
     }, 2000);
+  };
+
+  const handleMentionSelect = (username: string) => {
+    const newValue = insertMention(message, username, inputRef);
+    setMessage(newValue);
   };
 
   const handleSend = async () => {
@@ -283,8 +293,14 @@ export function MessageInput({
             ref={inputRef}
             value={message}
             onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder="Write a message..."
+            onKeyDown={(e) => {
+              // Prevent sending when mention autocomplete is open and using navigation keys
+              if (mentionState.isActive && ['ArrowDown', 'ArrowUp', 'Enter', 'Tab'].includes(e.key)) {
+                return; // Let MentionAutocomplete handle these
+              }
+              handleKeyDown(e);
+            }}
+            placeholder="Write a message... Use @ to mention"
             disabled={disabled}
             rows={1}
             className={cn(
@@ -300,6 +316,16 @@ export function MessageInput({
               target.style.height = Math.min(target.scrollHeight, 120) + 'px';
             }}
           />
+          
+          {/* Mention Autocomplete */}
+          {mentionState.isActive && (
+            <MentionAutocomplete
+              query={mentionState.query}
+              onSelect={handleMentionSelect}
+              onClose={closeMention}
+              className="bottom-full left-0 mb-1"
+            />
+          )}
           
           {/* Emoji Picker */}
           <div className="absolute right-3 top-1/2 -translate-y-1/2">
