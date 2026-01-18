@@ -147,7 +147,7 @@ export function useNotifications() {
     if (!user) return;
 
     const channel = supabase
-      .channel('notifications-realtime')
+      .channel(`notifications-realtime-${user.id}`)
       .on(
         'postgres_changes',
         {
@@ -161,12 +161,48 @@ export function useNotifications() {
           fetchNotifications();
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const updated = payload.new as { id: string; is_read: boolean };
+          // Update local state for is_read changes
+          setNotifications(prev =>
+            prev.map(n => (n.id === updated.id ? { ...n, is_read: updated.is_read } : n))
+          );
+          setUnreadCount(prev => {
+            const notification = notifications.find(n => n.id === updated.id);
+            if (notification && !notification.is_read && updated.is_read) {
+              return Math.max(0, prev - 1);
+            }
+            return prev;
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const deleted = payload.old as { id: string };
+          setNotifications(prev => prev.filter(n => n.id !== deleted.id));
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, fetchNotifications]);
+  }, [user, fetchNotifications, notifications]);
 
   return {
     notifications,

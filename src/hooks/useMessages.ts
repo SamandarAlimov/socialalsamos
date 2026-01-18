@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import { unreadMessagesEmitter } from './useUnreadMessages';
 
 export interface Conversation {
   id: string;
@@ -435,6 +436,11 @@ export function useConversations(type?: 'private' | 'group' | 'channel', showArc
   useEffect(() => {
     if (!user) return;
 
+    // Subscribe to global unread messages events
+    const unsubscribeEmitter = unreadMessagesEmitter.subscribe(() => {
+      fetchConversations();
+    });
+
     channelRef.current = supabase
       .channel(`conversations-list-${user.id}`)
       .on(
@@ -451,7 +457,7 @@ export function useConversations(type?: 'private' | 'group' | 'channel', showArc
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'INSERT',
           schema: 'public',
           table: 'messages',
         },
@@ -465,11 +471,13 @@ export function useConversations(type?: 'private' | 'group' | 'channel', showArc
           event: 'UPDATE',
           schema: 'public',
           table: 'conversation_participants',
-          filter: `user_id=eq.${user.id}`,
         },
-        () => {
-          // Refresh when last_read_at, is_pinned, is_muted changes
-          fetchConversations();
+        (payload) => {
+          const updated = payload.new as { user_id: string };
+          // Refresh when any participant's last_read_at, is_pinned, is_muted changes
+          if (updated.user_id === user.id) {
+            fetchConversations();
+          }
         }
       )
       .on(
@@ -478,11 +486,13 @@ export function useConversations(type?: 'private' | 'group' | 'channel', showArc
           event: 'INSERT',
           schema: 'public',
           table: 'message_reads',
-          filter: `user_id=eq.${user.id}`,
         },
-        () => {
+        (payload) => {
+          const newRead = payload.new as { user_id: string };
           // Refresh when we read messages to update unread counts
-          fetchConversations();
+          if (newRead.user_id === user.id) {
+            fetchConversations();
+          }
         }
       )
       .subscribe((status) => {
@@ -490,6 +500,7 @@ export function useConversations(type?: 'private' | 'group' | 'channel', showArc
       });
 
     return () => {
+      unsubscribeEmitter();
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
       }

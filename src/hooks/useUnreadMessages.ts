@@ -2,11 +2,36 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
+// Global event emitter for cross-component communication
+class UnreadMessagesEventEmitter {
+  private static instance: UnreadMessagesEventEmitter;
+  private listeners: Set<() => void> = new Set();
+
+  static getInstance() {
+    if (!this.instance) {
+      this.instance = new UnreadMessagesEventEmitter();
+    }
+    return this.instance;
+  }
+
+  subscribe(callback: () => void) {
+    this.listeners.add(callback);
+    return () => this.listeners.delete(callback);
+  }
+
+  emit() {
+    this.listeners.forEach(cb => cb());
+  }
+}
+
+export const unreadMessagesEmitter = UnreadMessagesEventEmitter.getInstance();
+
 export function useUnreadMessages(onNewMessage?: () => void) {
   const { user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
   const isInitialFetch = useRef(true);
   const onNewMessageRef = useRef(onNewMessage);
+  const lastCountRef = useRef(0);
   
   // Keep callback ref updated
   useEffect(() => {
@@ -28,6 +53,7 @@ export function useUnreadMessages(onNewMessage?: () => void) {
 
       if (!participations || participations.length === 0) {
         setUnreadCount(0);
+        lastCountRef.current = 0;
         return;
       }
 
@@ -49,7 +75,14 @@ export function useUnreadMessages(onNewMessage?: () => void) {
         totalUnread += count || 0;
       }
 
+      const previousCount = lastCountRef.current;
+      lastCountRef.current = totalUnread;
       setUnreadCount(totalUnread);
+
+      // Only trigger sound if count increased and not initial fetch
+      if (!isInitialFetch.current && totalUnread > previousCount && onNewMessageRef.current) {
+        onNewMessageRef.current();
+      }
     } catch (error) {
       console.error('Error fetching unread count:', error);
     }
@@ -67,9 +100,14 @@ export function useUnreadMessages(onNewMessage?: () => void) {
       isInitialFetch.current = false;
     });
 
-    // Subscribe to new messages
+    // Subscribe to global refresh events (when messages are read elsewhere)
+    const unsubscribeEmitter = unreadMessagesEmitter.subscribe(() => {
+      fetchUnreadCount();
+    });
+
+    // Subscribe to new messages - use a unique channel name with user id
     const messagesChannel = supabase
-      .channel('unread-messages-count')
+      .channel(`unread-messages-${user.id}`)
       .on(
         'postgres_changes',
         {
@@ -90,32 +128,30 @@ export function useUnreadMessages(onNewMessage?: () => void) {
             .maybeSingle();
 
           if (participation) {
-            setUnreadCount(prev => prev + 1);
-            // Trigger callback for new message
-            if (!isInitialFetch.current && onNewMessageRef.current) {
-              onNewMessageRef.current();
-            }
+            // Refetch the actual count to ensure accuracy
+            fetchUnreadCount();
           }
         }
       )
       .subscribe();
 
     // Subscribe to conversation_participants updates (last_read_at changes)
+    // This triggers when the user reads messages
     const participantsChannel = supabase
-      .channel('unread-participants-updates')
+      .channel(`unread-participants-${user.id}`)
       .on(
         'postgres_changes',
         {
           event: 'UPDATE',
           schema: 'public',
           table: 'conversation_participants',
-          filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          const newData = payload.new as { last_read_at: string | null };
-          const oldData = payload.old as { last_read_at: string | null };
+          const newData = payload.new as { user_id: string; last_read_at: string | null };
+          const oldData = payload.old as { user_id: string; last_read_at: string | null };
           
-          if (newData.last_read_at !== oldData.last_read_at) {
+          // Only refetch if this is our user's participation and last_read_at changed
+          if (newData.user_id === user.id && newData.last_read_at !== oldData.last_read_at) {
             fetchUnreadCount();
           }
         }
@@ -124,22 +160,26 @@ export function useUnreadMessages(onNewMessage?: () => void) {
 
     // Subscribe to message_reads for real-time updates
     const readsChannel = supabase
-      .channel('unread-message-reads')
+      .channel(`unread-reads-${user.id}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'message_reads',
-          filter: `user_id=eq.${user.id}`,
         },
-        () => {
-          fetchUnreadCount();
+        (payload) => {
+          const newRead = payload.new as { user_id: string };
+          // Only refetch if this is our user marking messages as read
+          if (newRead.user_id === user.id) {
+            fetchUnreadCount();
+          }
         }
       )
       .subscribe();
 
     return () => {
+      unsubscribeEmitter();
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(participantsChannel);
       supabase.removeChannel(readsChannel);

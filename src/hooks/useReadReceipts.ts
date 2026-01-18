@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { unreadMessagesEmitter } from './useUnreadMessages';
 
 interface ReadReceipt {
   message_id: string;
@@ -67,11 +68,16 @@ export function useReadReceipts(conversationId: string | null) {
       .upsert(inserts, { onConflict: 'message_id,user_id' });
 
     // Update last_read_at in conversation_participants for accurate unread count calculation
-    await supabase
+    const { error } = await supabase
       .from('conversation_participants')
       .update({ last_read_at: now })
       .eq('conversation_id', conversationId)
       .eq('user_id', user.id);
+
+    // Emit event to refresh unread counts across all components
+    if (!error) {
+      unreadMessagesEmitter.emit();
+    }
   }, [user, readReceipts, conversationId]);
 
   // Check if message is read by recipient(s)
