@@ -11,6 +11,7 @@ import { GroupReadReceipts } from './GroupReadReceipts';
 import { MessageContent } from './MessageContent';
 import { SharedPostPreview } from './SharedPostPreview';
 import { StoryReplyPreview } from './StoryReplyPreview';
+import { CallHistoryMessage, CallHistoryData } from './CallHistoryMessage';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
@@ -292,6 +293,52 @@ export function EnhancedMessageBubble({
 
   const isVoiceMessage = message.media_type === 'audio' && message.media_url;
   
+  // Check for call history message
+  const isCallHistoryMessage = message.media_type === 'call_history';
+  const parseCallHistory = (): CallHistoryData | null => {
+    if (!isCallHistoryMessage || !message.content) return null;
+    
+    // Try to parse as JSON first (new format)
+    try {
+      const parsed = JSON.parse(message.content);
+      if (parsed.type && parsed.status) {
+        return parsed as CallHistoryData;
+      }
+    } catch {
+      // Not JSON, try to parse legacy emoji format
+    }
+    
+    // Parse legacy emoji format: "📞 Video call — 0:18" or "📞 Voice call ended"
+    const content = message.content;
+    if (content.startsWith('📞')) {
+      const isVideo = content.toLowerCase().includes('video');
+      const durationMatch = content.match(/(\d+):(\d+)(?::(\d+))?/);
+      let duration: number | undefined;
+      
+      if (durationMatch) {
+        if (durationMatch[3]) {
+          // Format: H:MM:SS
+          duration = parseInt(durationMatch[1]) * 3600 + parseInt(durationMatch[2]) * 60 + parseInt(durationMatch[3]);
+        } else {
+          // Format: M:SS
+          duration = parseInt(durationMatch[1]) * 60 + parseInt(durationMatch[2]);
+        }
+      }
+      
+      return {
+        type: isVideo ? 'video' : 'audio',
+        status: 'ended',
+        duration,
+        timestamp: message.created_at,
+        caller_id: message.sender_id || '',
+        callee_id: '',
+      };
+    }
+    
+    return null;
+  };
+  const callHistoryData = parseCallHistory();
+  
   // Check for location message - either via media_type or text format
   const isLocationFromMediaType = message.media_type === 'location' && message.media_url;
   const isLocationFromText = message.content?.startsWith('📍 LOCATION:');
@@ -338,6 +385,16 @@ export function EnhancedMessageBubble({
   };
 
   const isReadyToReply = swipeOffset >= swipeThreshold;
+
+  // Render call history message as a centered system message
+  if (isCallHistoryMessage && callHistoryData) {
+    return (
+      <CallHistoryMessage 
+        callData={callHistoryData} 
+        isMine={callHistoryData.caller_id === user?.id} 
+      />
+    );
+  }
 
   return (
     <MessageContextMenu
