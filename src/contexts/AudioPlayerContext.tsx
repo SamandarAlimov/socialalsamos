@@ -1,25 +1,33 @@
 import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react';
 
-interface AudioTrack {
+export interface MediaTrack {
+  id: string;
   url: string;
   name: string;
   artist: string;
   title: string;
   senderName?: string;
+  type: 'audio' | 'video';
+  thumbnailUrl?: string;
 }
 
 interface AudioPlayerContextType {
-  currentTrack: AudioTrack | null;
+  currentTrack: MediaTrack | null;
   isPlaying: boolean;
+  isBuffering: boolean;
   currentTime: number;
   duration: number;
   progress: number;
-  play: (track: AudioTrack) => void;
+  playbackSpeed: number;
+  play: (track: MediaTrack) => void;
   pause: () => void;
   resume: () => void;
   stop: () => void;
   seek: (time: number) => void;
+  seekByDelta: (delta: number) => void;
   togglePlayback: () => void;
+  setPlaybackSpeed: (speed: number) => void;
+  getAudioElement: () => HTMLAudioElement | null;
 }
 
 const AudioPlayerContext = createContext<AudioPlayerContextType | null>(null);
@@ -33,10 +41,12 @@ export function useAudioPlayer() {
 }
 
 export function AudioPlayerProvider({ children }: { children: React.ReactNode }) {
-  const [currentTrack, setCurrentTrack] = useState<AudioTrack | null>(null);
+  const [currentTrack, setCurrentTrack] = useState<MediaTrack | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [playbackSpeed, setPlaybackSpeedState] = useState(1);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const animationRef = useRef<number | null>(null);
 
@@ -60,29 +70,62 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
     };
   }, [isPlaying, updateProgress]);
 
-  const play = useCallback((track: AudioTrack) => {
+  const play = useCallback((track: MediaTrack) => {
     // Stop current audio if playing
     if (audioRef.current) {
       audioRef.current.pause();
+      audioRef.current.removeEventListener('loadedmetadata', () => {});
+      audioRef.current.removeEventListener('ended', () => {});
+      audioRef.current.removeEventListener('waiting', () => {});
+      audioRef.current.removeEventListener('canplay', () => {});
     }
 
     const audio = new Audio(track.url);
+    audio.playbackRate = playbackSpeed;
     audioRef.current = audio;
 
-    audio.addEventListener('loadedmetadata', () => {
+    const handleLoadedMetadata = () => {
       setDuration(audio.duration);
-    });
+      setIsBuffering(false);
+    };
 
-    audio.addEventListener('ended', () => {
+    const handleEnded = () => {
       setIsPlaying(false);
       setCurrentTime(0);
-    });
+    };
+
+    const handleWaiting = () => {
+      setIsBuffering(true);
+    };
+
+    const handleCanPlay = () => {
+      setIsBuffering(false);
+    };
+
+    const handleError = () => {
+      setIsBuffering(false);
+      setIsPlaying(false);
+      console.error('Audio playback error');
+    };
+
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('waiting', handleWaiting);
+    audio.addEventListener('canplay', handleCanPlay);
+    audio.addEventListener('error', handleError);
 
     setCurrentTrack(track);
     setCurrentTime(0);
-    audio.play();
-    setIsPlaying(true);
-  }, []);
+    setIsBuffering(true);
+    
+    audio.play().then(() => {
+      setIsPlaying(true);
+      setIsBuffering(false);
+    }).catch((err) => {
+      console.error('Failed to play audio:', err);
+      setIsBuffering(false);
+    });
+  }, [playbackSpeed]);
 
   const pause = useCallback(() => {
     if (audioRef.current) {
@@ -93,8 +136,9 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
 
   const resume = useCallback(() => {
     if (audioRef.current && currentTrack) {
-      audioRef.current.play();
-      setIsPlaying(true);
+      audioRef.current.play().then(() => {
+        setIsPlaying(true);
+      }).catch(console.error);
     }
   }, [currentTrack]);
 
@@ -110,10 +154,19 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
 
   const seek = useCallback((time: number) => {
     if (audioRef.current) {
-      audioRef.current.currentTime = time;
-      setCurrentTime(time);
+      const clampedTime = Math.max(0, Math.min(time, duration));
+      audioRef.current.currentTime = clampedTime;
+      setCurrentTime(clampedTime);
     }
-  }, []);
+  }, [duration]);
+
+  const seekByDelta = useCallback((delta: number) => {
+    if (audioRef.current) {
+      const newTime = Math.max(0, Math.min(audioRef.current.currentTime + delta, duration));
+      audioRef.current.currentTime = newTime;
+      setCurrentTime(newTime);
+    }
+  }, [duration]);
 
   const togglePlayback = useCallback(() => {
     if (isPlaying) {
@@ -122,6 +175,17 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
       resume();
     }
   }, [isPlaying, pause, resume]);
+
+  const setPlaybackSpeed = useCallback((speed: number) => {
+    setPlaybackSpeedState(speed);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = speed;
+    }
+  }, []);
+
+  const getAudioElement = useCallback(() => {
+    return audioRef.current;
+  }, []);
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
@@ -142,15 +206,20 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
       value={{
         currentTrack,
         isPlaying,
+        isBuffering,
         currentTime,
         duration,
         progress,
+        playbackSpeed,
         play,
         pause,
         resume,
         stop,
         seek,
+        seekByDelta,
         togglePlayback,
+        setPlaybackSpeed,
+        getAudioElement,
       }}
     >
       {children}

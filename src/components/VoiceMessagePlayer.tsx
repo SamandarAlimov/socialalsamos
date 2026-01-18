@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Play, Pause } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
+import { useAudioPlayer, MediaTrack } from '@/contexts/AudioPlayerContext';
 
 interface VoiceMessagePlayerProps {
   url: string;
@@ -23,15 +24,28 @@ export function VoiceMessagePlayer({
   messageId,
   onPlay 
 }: VoiceMessagePlayerProps) {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [totalDuration, setTotalDuration] = useState(duration || 0);
-  const [isLoading, setIsLoading] = useState(true);
+  const { 
+    currentTrack, 
+    isPlaying: globalIsPlaying, 
+    currentTime: globalCurrentTime, 
+    duration: globalDuration,
+    play, 
+    pause, 
+    resume, 
+    seek 
+  } = useAudioPlayer();
+  
+  // Check if this is the currently playing track
+  const isThisTrack = currentTrack?.url === url;
+  const isPlaying = isThisTrack && globalIsPlaying;
+  const currentTime = isThisTrack ? globalCurrentTime : 0;
+  const playingDuration = isThisTrack ? globalDuration : 0;
+
+  const [localDuration, setLocalDuration] = useState(duration || 0);
+  const [isLoading, setIsLoading] = useState(!duration);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isVisible, setIsVisible] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const animationRef = useRef<number | null>(null);
 
   // Generate stable waveform bars based on URL
   const waveformBars = useMemo(() => {
@@ -53,14 +67,18 @@ export function VoiceMessagePlayer({
         const [entry] = entries;
         setIsVisible(entry.isIntersecting);
         
-        if (autoPlay && audioRef.current) {
-          if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
-            audioRef.current.play().catch(() => {});
-            setIsPlaying(true);
-          } else {
-            audioRef.current.pause();
-            setIsPlaying(false);
-          }
+        if (autoPlay && entry.isIntersecting && entry.intersectionRatio > 0.5 && !isThisTrack) {
+          // Auto-play via global player
+          const track: MediaTrack = {
+            id: messageId || url,
+            url,
+            name: 'Voice message',
+            artist: senderName || 'Unknown',
+            title: 'Voice message',
+            senderName,
+            type: 'audio'
+          };
+          play(track);
         }
       },
       { threshold: [0, 0.5, 1] }
@@ -68,105 +86,106 @@ export function VoiceMessagePlayer({
 
     observer.observe(container);
     return () => observer.disconnect();
-  }, [autoPlay]);
+  }, [autoPlay, isThisTrack, messageId, url, senderName, play]);
 
+  // Load metadata for duration display when not playing
   useEffect(() => {
-    const audio = new Audio(url);
-    audioRef.current = audio;
+    if (!isThisTrack && !duration) {
+      const audio = new Audio(url);
+      
+      const handleLoadedMetadata = () => {
+        setLocalDuration(audio.duration);
+        setIsLoading(false);
+      };
+      
+      const handleCanPlay = () => {
+        setIsLoading(false);
+      };
 
-    const handleLoadedMetadata = () => {
-      setTotalDuration(audio.duration || duration || 0);
-      setIsLoading(false);
-    };
+      audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.addEventListener('canplay', handleCanPlay);
 
-    const handleEnded = () => {
-      setIsPlaying(false);
-      setCurrentTime(0);
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-
-    const handleCanPlay = () => {
-      setIsLoading(false);
-    };
-
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('canplay', handleCanPlay);
-
-    return () => {
-      audio.pause();
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('ended', handleEnded);
-      audio.removeEventListener('canplay', handleCanPlay);
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, [url, duration]);
-
-  // Smooth animation for progress
-  const updateProgress = useCallback(() => {
-    if (audioRef.current && isPlaying) {
-      setCurrentTime(audioRef.current.currentTime);
-      animationRef.current = requestAnimationFrame(updateProgress);
-    }
-  }, [isPlaying]);
-
-  useEffect(() => {
-    if (isPlaying) {
-      animationRef.current = requestAnimationFrame(updateProgress);
-    } else if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
-    }
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, [isPlaying, updateProgress]);
-
-  const togglePlayback = () => {
-    if (!audioRef.current || isLoading) return;
-
-    if (isPlaying) {
-      audioRef.current.pause();
+      return () => {
+        audio.pause();
+        audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        audio.removeEventListener('canplay', handleCanPlay);
+      };
     } else {
-      audioRef.current.play();
+      setIsLoading(false);
+    }
+  }, [url, duration, isThisTrack]);
+
+  const togglePlayback = useCallback(() => {
+    if (isLoading) return;
+
+    if (isThisTrack) {
+      if (globalIsPlaying) {
+        pause();
+      } else {
+        resume();
+      }
+    } else {
+      // Play via global player
+      const track: MediaTrack = {
+        id: messageId || url,
+        url,
+        name: 'Voice message',
+        artist: senderName || 'Unknown',
+        title: 'Voice message',
+        senderName,
+        type: 'audio'
+      };
+      play(track);
       onPlay?.();
     }
-    setIsPlaying(!isPlaying);
-  };
+  }, [isLoading, isThisTrack, globalIsPlaying, pause, resume, play, messageId, url, senderName, onPlay]);
 
-  const handleWaveformClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!audioRef.current || totalDuration === 0) return;
+  const handleWaveformClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const totalDuration = isThisTrack ? playingDuration : localDuration;
+    if (totalDuration === 0) return;
     
     const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const percentage = clickX / rect.width;
     const newTime = percentage * totalDuration;
     
-    audioRef.current.currentTime = newTime;
-    setCurrentTime(newTime);
-  };
+    if (isThisTrack) {
+      seek(newTime);
+    } else {
+      // Start playing from this position
+      const track: MediaTrack = {
+        id: messageId || url,
+        url,
+        name: 'Voice message',
+        artist: senderName || 'Unknown',
+        title: 'Voice message',
+        senderName,
+        type: 'audio'
+      };
+      play(track);
+      setTimeout(() => seek(newTime), 100);
+    }
+  }, [isThisTrack, playingDuration, localDuration, seek, play, messageId, url, senderName]);
 
-  const cyclePlaybackRate = () => {
-    if (!audioRef.current) return;
+  const cyclePlaybackRate = useCallback(() => {
     const rates = [1, 1.5, 2];
     const currentIndex = rates.indexOf(playbackRate);
     const nextRate = rates[(currentIndex + 1) % rates.length];
-    audioRef.current.playbackRate = nextRate;
     setPlaybackRate(nextRate);
-  };
+    
+    // TODO: Update playback rate in global player if this is current track
+  }, [playbackRate]);
 
   const formatTime = (seconds: number): string => {
+    if (!isFinite(seconds) || isNaN(seconds)) return '0:00';
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const progress = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
+  const totalDuration = isThisTrack ? playingDuration : localDuration;
+  const displayTime = isThisTrack ? currentTime : 0;
+  const progress = totalDuration > 0 ? (displayTime / totalDuration) * 100 : 0;
 
   return (
     <div 
@@ -234,7 +253,7 @@ export function VoiceMessagePlayer({
             "text-[11px] tabular-nums",
             isMine ? "text-primary-foreground/70" : "text-muted-foreground"
           )}>
-            {isPlaying ? formatTime(currentTime) : formatTime(totalDuration)}
+            {isPlaying ? formatTime(displayTime) : formatTime(totalDuration)}
           </span>
           
           <button
