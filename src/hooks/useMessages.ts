@@ -554,6 +554,7 @@ export function useMessages(conversationId: string | null) {
           )
         `)
         .eq('conversation_id', conversationId)
+        .eq('is_deleted', false)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
@@ -716,9 +717,8 @@ export function useMessages(conversationId: string | null) {
 
       if (error) throw error;
 
-      setMessages(prev => prev.map(m =>
-        m.id === messageId ? { ...m, is_deleted: true, content: null } : m
-      ));
+      // Remove the message completely from state (not just mark as deleted)
+      setMessages(prev => prev.filter(m => m.id !== messageId));
     } catch (error: any) {
       console.error('Error deleting message:', error);
       toast({
@@ -850,11 +850,18 @@ export function useMessages(conversationId: string | null) {
         },
         (payload) => {
           console.log('Realtime UPDATE received:', payload.new.id);
-          setMessages(prev => prev.map(m =>
-            m.id === payload.new.id
-              ? { ...m, ...payload.new }
-              : m
-          ));
+          const updatedMessage = payload.new as any;
+          
+          // If message was deleted, remove it from state completely
+          if (updatedMessage.is_deleted) {
+            setMessages(prev => prev.filter(m => m.id !== updatedMessage.id));
+          } else {
+            setMessages(prev => prev.map(m =>
+              m.id === updatedMessage.id
+                ? { ...m, ...updatedMessage }
+                : m
+            ));
+          }
         }
       )
       .subscribe((status) => {
