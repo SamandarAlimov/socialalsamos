@@ -733,12 +733,15 @@ export default function MessagesPage() {
     }
   };
 
-  // Group messages by date
+  // Group messages by date (filter out deleted messages completely)
   const groupMessagesByDate = (msgs: Message[]) => {
     const groups: { date: string; messages: Message[] }[] = [];
     let currentDate = '';
     
-    msgs.forEach(msg => {
+    // Filter out deleted messages - they should not appear at all
+    const activeMessages = msgs.filter(msg => !msg.is_deleted);
+    
+    activeMessages.forEach(msg => {
       const msgDate = new Date(msg.created_at).toDateString();
       if (msgDate !== currentDate) {
         currentDate = msgDate;
