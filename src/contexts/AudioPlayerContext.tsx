@@ -19,6 +19,8 @@ interface AudioPlayerContextType {
   duration: number;
   progress: number;
   playbackSpeed: number;
+  playlist: MediaTrack[];
+  currentIndex: number;
   play: (track: MediaTrack) => void;
   pause: () => void;
   resume: () => void;
@@ -28,6 +30,11 @@ interface AudioPlayerContextType {
   togglePlayback: () => void;
   setPlaybackSpeed: (speed: number) => void;
   getAudioElement: () => HTMLAudioElement | null;
+  setPlaylist: (tracks: MediaTrack[], startIndex?: number) => void;
+  playNext: () => void;
+  playPrevious: () => void;
+  hasNext: boolean;
+  hasPrevious: boolean;
 }
 
 const AudioPlayerContext = createContext<AudioPlayerContextType | null>(null);
@@ -47,8 +54,14 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playbackSpeed, setPlaybackSpeedState] = useState(1);
+  const [playlist, setPlaylistState] = useState<MediaTrack[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(-1);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const animationRef = useRef<number | null>(null);
+  const playNextRef = useRef<() => void>(() => {});
+
+  const hasNext = currentIndex >= 0 && currentIndex < playlist.length - 1;
+  const hasPrevious = currentIndex > 0;
 
   const updateProgress = useCallback(() => {
     if (audioRef.current) {
@@ -70,7 +83,7 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
     };
   }, [isPlaying, updateProgress]);
 
-  const play = useCallback((track: MediaTrack) => {
+  const playTrackInternal = useCallback((track: MediaTrack, index: number) => {
     // Stop current audio if playing
     if (audioRef.current) {
       audioRef.current.pause();
@@ -92,6 +105,8 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
     const handleEnded = () => {
       setIsPlaying(false);
       setCurrentTime(0);
+      // Auto-play next track if available
+      playNextRef.current();
     };
 
     const handleWaiting = () => {
@@ -115,6 +130,7 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
     audio.addEventListener('error', handleError);
 
     setCurrentTrack(track);
+    setCurrentIndex(index);
     setCurrentTime(0);
     setIsBuffering(true);
     
@@ -126,6 +142,44 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
       setIsBuffering(false);
     });
   }, [playbackSpeed]);
+
+  const play = useCallback((track: MediaTrack) => {
+    // Find track in playlist or add it
+    const existingIndex = playlist.findIndex(t => t.id === track.id);
+    if (existingIndex >= 0) {
+      playTrackInternal(track, existingIndex);
+    } else {
+      // Single track play, reset playlist
+      setPlaylistState([track]);
+      playTrackInternal(track, 0);
+    }
+  }, [playlist, playTrackInternal]);
+
+  const setPlaylist = useCallback((tracks: MediaTrack[], startIndex: number = 0) => {
+    setPlaylistState(tracks);
+    if (tracks.length > 0 && startIndex >= 0 && startIndex < tracks.length) {
+      playTrackInternal(tracks[startIndex], startIndex);
+    }
+  }, [playTrackInternal]);
+
+  const playNext = useCallback(() => {
+    if (hasNext) {
+      const nextTrack = playlist[currentIndex + 1];
+      playTrackInternal(nextTrack, currentIndex + 1);
+    }
+  }, [hasNext, playlist, currentIndex, playTrackInternal]);
+
+  // Keep ref updated for the ended callback
+  useEffect(() => {
+    playNextRef.current = playNext;
+  }, [playNext]);
+
+  const playPrevious = useCallback(() => {
+    if (hasPrevious) {
+      const prevTrack = playlist[currentIndex - 1];
+      playTrackInternal(prevTrack, currentIndex - 1);
+    }
+  }, [hasPrevious, playlist, currentIndex, playTrackInternal]);
 
   const pause = useCallback(() => {
     if (audioRef.current) {
@@ -150,6 +204,7 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
     setIsPlaying(false);
     setCurrentTime(0);
     setCurrentTrack(null);
+    setCurrentIndex(-1);
   }, []);
 
   const seek = useCallback((time: number) => {
@@ -211,6 +266,8 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
         duration,
         progress,
         playbackSpeed,
+        playlist,
+        currentIndex,
         play,
         pause,
         resume,
@@ -220,6 +277,11 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
         togglePlayback,
         setPlaybackSpeed,
         getAudioElement,
+        setPlaylist,
+        playNext,
+        playPrevious,
+        hasNext,
+        hasPrevious,
       }}
     >
       {children}

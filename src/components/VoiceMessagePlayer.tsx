@@ -13,6 +13,8 @@ interface VoiceMessagePlayerProps {
   senderName?: string;
   messageId?: string;
   onPlay?: () => void;
+  /** All media messages in the conversation for sequential playback */
+  allMediaTracks?: MediaTrack[];
 }
 
 export function VoiceMessagePlayer({ 
@@ -22,7 +24,8 @@ export function VoiceMessagePlayer({
   autoPlay = false, 
   senderName, 
   messageId,
-  onPlay 
+  onPlay,
+  allMediaTracks = []
 }: VoiceMessagePlayerProps) {
   const { 
     currentTrack, 
@@ -32,7 +35,8 @@ export function VoiceMessagePlayer({
     play, 
     pause, 
     resume, 
-    seek 
+    seek,
+    setPlaylist
   } = useAudioPlayer();
   
   // Check if this is the currently playing track
@@ -112,7 +116,7 @@ export function VoiceMessagePlayer({
         resume();
       }
     } else {
-      // Play via global player
+      // Create track for this message
       const track: MediaTrack = {
         id: messageId || url,
         url,
@@ -122,10 +126,21 @@ export function VoiceMessagePlayer({
         senderName,
         type: 'audio'
       };
-      play(track);
+      
+      // If we have a playlist, use it for sequential playback
+      if (allMediaTracks.length > 0) {
+        const startIndex = allMediaTracks.findIndex(t => t.url === url);
+        if (startIndex >= 0) {
+          setPlaylist(allMediaTracks, startIndex);
+        } else {
+          play(track);
+        }
+      } else {
+        play(track);
+      }
       onPlay?.();
     }
-  }, [isLoading, isThisTrack, globalIsPlaying, pause, resume, play, messageId, url, senderName, onPlay]);
+  }, [isLoading, isThisTrack, globalIsPlaying, pause, resume, play, setPlaylist, messageId, url, senderName, onPlay, allMediaTracks]);
 
   const handleWaveformClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const totalDuration = isThisTrack ? playingDuration : localDuration;

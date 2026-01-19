@@ -61,6 +61,8 @@ interface ReactionGroup {
   hasReacted: boolean;
 }
 
+import { MediaTrack } from '@/contexts/AudioPlayerContext';
+
 interface EnhancedMessageBubbleProps {
   message: Message;
   isMine: boolean;
@@ -77,6 +79,8 @@ interface EnhancedMessageBubbleProps {
   isSelectionMode?: boolean;
   showAvatar?: boolean;
   showSender?: boolean;
+  /** All media tracks in conversation for sequential playback */
+  allMediaTracks?: MediaTrack[];
 }
 
 export function EnhancedMessageBubble({
@@ -95,6 +99,7 @@ export function EnhancedMessageBubble({
   isSelectionMode = false,
   showAvatar = true,
   showSender = false,
+  allMediaTracks = [],
 }: EnhancedMessageBubbleProps) {
   const { user } = useAuth();
   const { settings } = useUserSettings();
@@ -620,6 +625,7 @@ export function EnhancedMessageBubble({
                       autoPlay={false}
                       messageId={message.id}
                       senderName={message.sender?.display_name || message.sender?.username || undefined}
+                      allMediaTracks={allMediaTracks}
                     />
                   ) : (
                     <>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -761,6 +761,24 @@ export default function MessagesPage() {
 
   const messageGroups = groupMessagesByDate(messages);
 
+  // Build media tracks playlist for sequential playback (Telegram-style)
+  const mediaTracksForPlaylist = useMemo(() => {
+    return messages
+      .filter(msg => 
+        !msg.is_deleted && 
+        msg.media_url && 
+        (msg.media_type === 'audio' || msg.media_type === 'video')
+      )
+      .map(msg => ({
+        id: msg.id,
+        url: msg.media_url!,
+        name: msg.media_type === 'audio' ? 'Voice message' : 'Video message',
+        artist: msg.sender?.display_name || msg.sender?.username || 'Unknown',
+        title: msg.media_type === 'audio' ? 'Voice message' : 'Video message',
+        senderName: msg.sender?.display_name || msg.sender?.username,
+        type: msg.media_type as 'audio' | 'video',
+      }));
+  }, [messages]);
   // Swipe to close state
   const [chatSwipeOffset, setChatSwipeOffset] = useState(0);
   const [isChatSwiping, setIsChatSwiping] = useState(false);
@@ -1107,6 +1125,7 @@ export default function MessagesPage() {
                                 isSelectionMode={isSelectionMode}
                                 showAvatar={showAvatar}
                                 showSender={selectedConversation.type === 'group' && showAvatar}
+                                allMediaTracks={mediaTracksForPlaylist}
                               />
                             </div>
                           );
