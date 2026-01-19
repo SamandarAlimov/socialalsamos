@@ -42,7 +42,8 @@ import {
   X,
   Layers,
   Menu,
-  MoreHorizontal
+  MoreHorizontal,
+  Route,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -56,6 +57,9 @@ import { Progress } from '@/components/ui/progress';
 import { StepTrackingCharts } from '@/components/map/StepTrackingCharts';
 import { TransportModePicker, TransportQuickBar, type TransportMode } from '@/components/map/TransportModePicker';
 import { MapQuickActions, MapQuickActionsGrid } from '@/components/map/MapQuickActions';
+import { DirectionsPanel } from '@/components/map/DirectionsPanel';
+import { DirectionsMobileSheet } from '@/components/map/DirectionsMobileSheet';
+import { type RouteAlternative, formatDistance, formatDuration } from '@/hooks/useDirections';
 
 // Fix default marker icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -184,6 +188,8 @@ export default function MapPage() {
   const [activeTab, setActiveTab] = useState<'nearby' | 'following' | 'activity'>('nearby');
   const [destination, setDestination] = useState<{ lat: number; lng: number; name: string } | null>(null);
   const [showDirections, setShowDirections] = useState(false);
+  const [showDirectionsPanel, setShowDirectionsPanel] = useState(false);
+  const [activeRoute, setActiveRoute] = useState<RouteAlternative | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
@@ -195,12 +201,14 @@ export default function MapPage() {
     const destName = searchParams.get('destName');
     
     if (destLat && destLng) {
-      setDestination({
+      const dest = {
         lat: parseFloat(destLat),
         lng: parseFloat(destLng),
         name: destName || 'Shared Location'
-      });
+      };
+      setDestination(dest);
       setShowDirections(true);
+      setShowDirectionsPanel(true);
     }
   }, [searchParams]);
   
@@ -376,22 +384,27 @@ export default function MapPage() {
     }
   }, [getCurrentPosition, startTracking]);
   
-  // Open directions in external app
-  const openDirections = useCallback((destLat: number, destLng: number, userName: string, mode: TransportMode = 'driving') => {
-    if (!currentLocation) {
-      toast.error('Joylashuv mavjud emas');
-      return;
+  // Open built-in directions
+  const openBuiltInDirections = useCallback((destLat: number, destLng: number, userName: string) => {
+    setDestination({ lat: destLat, lng: destLng, name: userName });
+    setShowDirectionsPanel(true);
+  }, []);
+
+  // Handle route calculated from directions panel
+  const handleRouteCalculated = useCallback((route: RouteAlternative | null) => {
+    setActiveRoute(route);
+    if (route && route.geometry.length > 0) {
+      // Center map on route
+      const midIndex = Math.floor(route.geometry.length / 2);
+      setMapCenter(route.geometry[midIndex]);
     }
-    
-    let travelMode = 'driving';
-    if (mode === 'walking') travelMode = 'walking';
-    else if (mode === 'cycling') travelMode = 'bicycling';
-    else if (mode === 'transit' || mode === 'metro') travelMode = 'transit';
-    
-    const url = `https://www.google.com/maps/dir/?api=1&origin=${currentLocation.latitude},${currentLocation.longitude}&destination=${destLat},${destLng}&travelmode=${travelMode}`;
-    window.open(url, '_blank');
-    toast.success(`${userName} ga yo'nalish`);
-  }, [currentLocation]);
+  }, []);
+
+  // Handle step selected in directions
+  const handleStepSelected = useCallback((location: [number, number]) => {
+    setMapCenter(location);
+    setZoom(17);
+  }, []);
   
   // Filter users by search
   const filteredNearby = nearbyUsers.filter((u) =>
@@ -541,7 +554,7 @@ export default function MapPage() {
                                 {currentLocation && calculateDistance(currentLocation.latitude, currentLocation.longitude, u.latitude, u.longitude).toFixed(1)}km
                               </p>
                             </div>
-                            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openDirections(u.latitude, u.longitude, u.profile?.display_name || 'Foydalanuvchi', transportMode); }}>
+                            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openBuiltInDirections(u.latitude, u.longitude, u.profile?.display_name || 'Foydalanuvchi'); }}>
                               <Navigation className="h-4 w-4" />
                             </Button>
                           </div>
@@ -576,7 +589,7 @@ export default function MapPage() {
                                 {currentLocation && calculateDistance(currentLocation.latitude, currentLocation.longitude, u.latitude, u.longitude).toFixed(1)}km
                               </p>
                             </div>
-                            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openDirections(u.latitude, u.longitude, u.profile?.display_name || 'Foydalanuvchi', transportMode); }}>
+                            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openBuiltInDirections(u.latitude, u.longitude, u.profile?.display_name || 'Foydalanuvchi'); }}>
                               <Navigation className="h-4 w-4" />
                             </Button>
                           </div>
@@ -764,7 +777,7 @@ export default function MapPage() {
                           {currentLocation && calculateDistance(currentLocation.latitude, currentLocation.longitude, u.latitude, u.longitude).toFixed(1)}km uzoqlikda
                         </p>
                       </div>
-                      <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); openDirections(u.latitude, u.longitude, u.profile?.display_name || 'Foydalanuvchi', transportMode); }}>
+                      <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); openBuiltInDirections(u.latitude, u.longitude, u.profile?.display_name || 'Foydalanuvchi'); }}>
                         <Navigation className="h-4 w-4" />
                       </Button>
                     </div>
@@ -802,7 +815,7 @@ export default function MapPage() {
                           {currentLocation && calculateDistance(currentLocation.latitude, currentLocation.longitude, u.latitude, u.longitude).toFixed(1)}km uzoqlikda
                         </p>
                       </div>
-                      <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); openDirections(u.latitude, u.longitude, u.profile?.display_name || 'Foydalanuvchi', transportMode); }}>
+                      <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); openBuiltInDirections(u.latitude, u.longitude, u.profile?.display_name || 'Foydalanuvchi'); }}>
                         <Navigation className="h-4 w-4" />
                       </Button>
                     </div>
@@ -890,7 +903,7 @@ export default function MapPage() {
                   <p className="text-xs text-muted-foreground mb-2">
                     {currentLocation && calculateDistance(currentLocation.latitude, currentLocation.longitude, u.latitude, u.longitude).toFixed(1)}km uzoqlikda
                   </p>
-                  <Button size="sm" className="w-full" onClick={() => openDirections(u.latitude, u.longitude, u.profile?.display_name || 'Foydalanuvchi', transportMode)}>
+                  <Button size="sm" className="w-full" onClick={() => openBuiltInDirections(u.latitude, u.longitude, u.profile?.display_name || 'Foydalanuvchi')}>
                     <Navigation className="h-4 w-4 mr-1" /> Yo'nalish
                   </Button>
                 </div>
@@ -910,7 +923,7 @@ export default function MapPage() {
                   <p className="text-xs text-muted-foreground mb-2">
                     {currentLocation && calculateDistance(currentLocation.latitude, currentLocation.longitude, u.latitude, u.longitude).toFixed(1)}km uzoqlikda
                   </p>
-                  <Button size="sm" className="w-full" onClick={() => openDirections(u.latitude, u.longitude, u.profile?.display_name || 'Foydalanuvchi', transportMode)}>
+                  <Button size="sm" className="w-full" onClick={() => openBuiltInDirections(u.latitude, u.longitude, u.profile?.display_name || 'Foydalanuvchi')}>
                     <Navigation className="h-4 w-4 mr-1" /> Yo'nalish
                   </Button>
                 </div>
@@ -928,7 +941,7 @@ export default function MapPage() {
                     <p className="text-xs text-muted-foreground mb-2">{calculateDistance(currentLocation.latitude, currentLocation.longitude, destination.lat, destination.lng).toFixed(1)}km uzoqlikda</p>
                   )}
                   <div className="flex gap-1">
-                    <Button size="sm" className="flex-1" onClick={() => openDirections(destination.lat, destination.lng, destination.name, transportMode)}>
+                    <Button size="sm" className="flex-1" onClick={() => setShowDirectionsPanel(true)}>
                       <Navigation className="h-4 w-4 mr-1" /> Borish
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => { setDestination(null); setShowDirections(false); }}>
@@ -975,8 +988,8 @@ export default function MapPage() {
               )}
             </div>
             <TransportQuickBar selected={transportMode} onSelect={setTransportMode} />
-            <Button size="sm" onClick={() => openDirections(destination.lat, destination.lng, destination.name, transportMode)}>
-              <ExternalLink className="h-4 w-4 mr-1" /> Ochish
+            <Button size="sm" onClick={() => setShowDirectionsPanel(true)}>
+              <Route className="h-4 w-4 mr-1" /> Yo'nalish
             </Button>
             <Button size="sm" variant="ghost" onClick={() => { setDestination(null); setShowDirections(false); }}>
               <X className="h-4 w-4" />
