@@ -26,7 +26,11 @@ export function MiniAudioPlayer() {
     stop,
     seek,
     seekByDelta,
-    setPlaybackSpeed
+    setPlaybackSpeed,
+    playNext,
+    playPrevious,
+    hasNext,
+    hasPrevious
   } = useAudioPlayer();
 
   const [isDragging, setIsDragging] = useState(false);
@@ -211,12 +215,16 @@ export function MiniAudioPlayer() {
 
             {/* Controls */}
             <div className="flex items-center gap-0.5">
-              {/* Skip backward */}
+              {/* Previous track */}
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-full hover:bg-primary/10 hidden sm:flex"
-                onClick={() => seekByDelta(-10)}
+                className={cn(
+                  "h-8 w-8 rounded-full hover:bg-primary/10 hidden sm:flex",
+                  !hasPrevious && "opacity-40 cursor-not-allowed"
+                )}
+                onClick={playPrevious}
+                disabled={!hasPrevious}
               >
                 <SkipBack className="h-3.5 w-3.5" />
               </Button>
@@ -242,12 +250,16 @@ export function MiniAudioPlayer() {
                 )}
               </Button>
 
-              {/* Skip forward */}
+              {/* Next track */}
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-full hover:bg-primary/10 hidden sm:flex"
-                onClick={() => seekByDelta(10)}
+                className={cn(
+                  "h-8 w-8 rounded-full hover:bg-primary/10 hidden sm:flex",
+                  !hasNext && "opacity-40 cursor-not-allowed"
+                )}
+                onClick={playNext}
+                disabled={!hasNext}
               >
                 <SkipForward className="h-3.5 w-3.5" />
               </Button>
