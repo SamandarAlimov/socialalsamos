@@ -23,33 +23,23 @@ export function VideoMessagePlayer({ url, isMine, className, autoPlay = false }:
   const [isVisible, setIsVisible] = useState(false);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Intersection Observer for autoplay
+  // Visibility tracking (no autoplay - Telegram behavior)
   useEffect(() => {
-    const video = videoRef.current;
     const container = containerRef.current;
-    if (!video || !container) return;
+    if (!container) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         const [entry] = entries;
         setIsVisible(entry.isIntersecting);
-        
-        if (autoPlay) {
-          if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
-            video.play().catch(() => {});
-            setIsPlaying(true);
-          } else {
-            video.pause();
-            setIsPlaying(false);
-          }
-        }
+        // No autoplay on scroll - user must explicitly click to play
       },
       { threshold: [0, 0.5, 1] }
     );
 
     observer.observe(container);
     return () => observer.disconnect();
-  }, [autoPlay]);
+  }, []);
 
   useEffect(() => {
     const video = videoRef.current;

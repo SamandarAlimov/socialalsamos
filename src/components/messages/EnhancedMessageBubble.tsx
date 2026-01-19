@@ -578,7 +578,9 @@ export function EnhancedMessageBubble({
                     <VoiceMessagePlayer 
                       url={message.media_url!} 
                       isMine={isMine} 
-                      autoPlay={settings?.autoplay_voice_messages ?? true}
+                      autoPlay={false}
+                      messageId={message.id}
+                      senderName={message.sender?.display_name || message.sender?.username || undefined}
                     />
                   ) : (
                     <>
@@ -591,13 +593,7 @@ export function EnhancedMessageBubble({
                             url={message.media_url} 
                             type={message.media_type as 'image' | 'video' | 'audio' | 'document'}
                             isMine={isMine}
-                            autoPlay={
-                              message.media_type === 'video' 
-                                ? (settings?.autoplay_video_messages ?? true)
-                                : message.media_type === 'audio'
-                                ? (settings?.autoplay_voice_messages ?? true)
-                                : false
-                            }
+                            autoPlay={false}
                           />
                         </div>
                       )}

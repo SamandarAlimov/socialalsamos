@@ -57,7 +57,7 @@ export function VoiceMessagePlayer({
     });
   }, [url]);
 
-  // Intersection Observer for autoplay
+  // Visibility tracking (no autoplay - Telegram behavior)
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -66,27 +66,14 @@ export function VoiceMessagePlayer({
       (entries) => {
         const [entry] = entries;
         setIsVisible(entry.isIntersecting);
-        
-        if (autoPlay && entry.isIntersecting && entry.intersectionRatio > 0.5 && !isThisTrack) {
-          // Auto-play via global player
-          const track: MediaTrack = {
-            id: messageId || url,
-            url,
-            name: 'Voice message',
-            artist: senderName || 'Unknown',
-            title: 'Voice message',
-            senderName,
-            type: 'audio'
-          };
-          play(track);
-        }
+        // No autoplay on scroll - user must explicitly click to play
       },
       { threshold: [0, 0.5, 1] }
     );
 
     observer.observe(container);
     return () => observer.disconnect();
-  }, [autoPlay, isThisTrack, messageId, url, senderName, play]);
+  }, []);
 
   // Load metadata for duration display when not playing
   useEffect(() => {
