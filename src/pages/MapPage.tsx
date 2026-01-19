@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -147,7 +147,6 @@ function MapEventHandler({
 }
 
 export default function MapPage() {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user, profile } = useAuth();
   const {
@@ -953,7 +952,20 @@ export default function MapPage() {
             </Marker>
           )}
           
-          {currentLocation && destination && showDirections && (
+          {/* Active Route Polyline */}
+          {activeRoute && activeRoute.geometry.length > 0 && (
+            <Polyline 
+              positions={activeRoute.geometry} 
+              pathOptions={{ 
+                color: '#3b82f6', 
+                weight: 5, 
+                opacity: 0.8,
+              }} 
+            />
+          )}
+          
+          {/* Fallback straight line if no route but destination exists */}
+          {currentLocation && destination && showDirections && !activeRoute && (
             <Polyline positions={[[currentLocation.latitude, currentLocation.longitude], [destination.lat, destination.lng]]} pathOptions={{ color: '#3b82f6', weight: 4, dashArray: '10, 10' }} />
           )}
         </MapContainer>
@@ -999,13 +1011,22 @@ export default function MapPage() {
         
         {/* Map Controls */}
         <div className="absolute bottom-20 md:bottom-4 right-4 z-[500] flex flex-col gap-1">
-          <Button variant="secondary" size="icon" className="shadow-lg" onClick={centerOnLocation}>
+          <Button 
+            variant={showDirectionsPanel ? "default" : "secondary"} 
+            size="icon" 
+            className="shadow-lg"
+            onClick={() => setShowDirectionsPanel(!showDirectionsPanel)}
+            title="Yo'nalishlar"
+          >
+            <Route className="h-4 w-4" />
+          </Button>
+          <Button variant="secondary" size="icon" className="shadow-lg" onClick={centerOnLocation} title="Joriy joylashuv">
             <Locate className="h-4 w-4" />
           </Button>
-          <Button variant="secondary" size="icon" className="shadow-lg" onClick={() => setZoom(Math.min(zoom + 1, 18))}>
+          <Button variant="secondary" size="icon" className="shadow-lg" onClick={() => setZoom(Math.min(zoom + 1, 18))} title="Kattalashtirish">
             <ZoomIn className="h-4 w-4" />
           </Button>
-          <Button variant="secondary" size="icon" className="shadow-lg" onClick={() => setZoom(Math.max(zoom - 1, 3))}>
+          <Button variant="secondary" size="icon" className="shadow-lg" onClick={() => setZoom(Math.max(zoom - 1, 3))} title="Kichiklashtirish">
             <ZoomOut className="h-4 w-4" />
           </Button>
         </div>
@@ -1021,6 +1042,40 @@ export default function MapPage() {
           </Button>
         </div>
       </div>
+
+      {/* Desktop Directions Panel */}
+      {showDirectionsPanel && (
+        <div className="hidden md:block fixed top-0 left-0 h-full z-[600]">
+          <DirectionsPanel
+            currentLocation={currentLocation}
+            initialDestination={destination}
+            transportMode={transportMode}
+            onTransportModeChange={setTransportMode}
+            onRouteCalculated={handleRouteCalculated}
+            onStepSelected={handleStepSelected}
+            onClose={() => {
+              setShowDirectionsPanel(false);
+              setActiveRoute(null);
+            }}
+            className="h-full w-80"
+          />
+        </div>
+      )}
+
+      {/* Mobile Directions Sheet */}
+      <DirectionsMobileSheet
+        open={showDirectionsPanel}
+        onOpenChange={(open) => {
+          setShowDirectionsPanel(open);
+          if (!open) setActiveRoute(null);
+        }}
+        currentLocation={currentLocation}
+        initialDestination={destination}
+        transportMode={transportMode}
+        onTransportModeChange={setTransportMode}
+        onRouteCalculated={handleRouteCalculated}
+        onStepSelected={handleStepSelected}
+      />
 
       {/* Global styles for marker animation */}
       <style>{`
