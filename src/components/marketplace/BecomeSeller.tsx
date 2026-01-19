@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Store, Building2, User, Briefcase, ArrowRight, Check } from 'lucide-react';
+import { Store, Building2, User, Briefcase, ArrowRight, Check, Landmark } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -30,6 +30,12 @@ const businessTypes = [
     title: 'Enterprise',
     description: 'Wholesale & B2B',
     icon: Building2,
+  },
+  {
+    id: 'government',
+    title: 'Government',
+    description: 'Government supplier (B2G)',
+    icon: Landmark,
   },
 ];
 
