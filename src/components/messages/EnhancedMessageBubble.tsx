@@ -386,13 +386,52 @@ export function EnhancedMessageBubble({
 
   const isReadyToReply = swipeOffset >= swipeThreshold;
 
-  // Render call history message as a centered system message
+  // Render call history message as a centered system message with context menu
   if (isCallHistoryMessage && callHistoryData) {
+    const callIsMine = callHistoryData.caller_id === user?.id;
     return (
-      <CallHistoryMessage 
-        callData={callHistoryData} 
-        isMine={callHistoryData.caller_id === user?.id} 
-      />
+      <MessageContextMenu
+        isMine={callIsMine}
+        onReply={() => onReply?.(message)}
+        onForward={() => onForward?.(message)}
+        onDelete={callIsMine ? () => onDelete?.(message.id) : undefined}
+        onSelect={onLongPress ? () => onLongPress(message.id) : undefined}
+        isPinned={isPinned}
+        onPin={() => onPin?.(message.id)}
+        sentAt={message.created_at}
+      >
+        <div 
+          className={cn(
+            "relative",
+            isSelected && "bg-primary/10 rounded-lg"
+          )}
+          onClick={() => {
+            if (isSelectionMode && onSelect) {
+              onSelect(message.id);
+              lightTap();
+            }
+          }}
+          onTouchStart={handleLongPressStart}
+          onTouchEnd={handleLongPressEnd}
+          onMouseDown={handleLongPressStart}
+          onMouseUp={handleLongPressEnd}
+          onMouseLeave={handleLongPressEnd}
+        >
+          {isSelectionMode && (
+            <div className="absolute left-2 top-1/2 -translate-y-1/2 z-10">
+              {isSelected ? (
+                <CheckSquare className="h-5 w-5 text-primary" />
+              ) : (
+                <Square className="h-5 w-5 text-muted-foreground" />
+              )}
+            </div>
+          )}
+          <CallHistoryMessage 
+            callData={callHistoryData} 
+            isMine={callIsMine} 
+          />
+        </div>
+      </MessageContextMenu>
     );
   }
 
