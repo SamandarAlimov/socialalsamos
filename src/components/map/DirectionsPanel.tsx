@@ -6,7 +6,6 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import {
-  Search,
   X,
   Navigation,
   MapPin,
@@ -17,8 +16,9 @@ import {
   ArrowUpDown,
   Loader2,
   Locate,
-  CornerDownLeft,
   AlertCircle,
+  Play,
+  Square,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { 
@@ -100,7 +100,6 @@ export function DirectionsPanel({
   useEffect(() => {
     if (currentLocation && !origin) {
       const setupOrigin = async () => {
-        const name = await reverseGeocode(currentLocation.latitude, currentLocation.longitude);
         setOrigin({
           lat: currentLocation.latitude,
           lng: currentLocation.longitude,
@@ -110,7 +109,7 @@ export function DirectionsPanel({
       };
       setupOrigin();
     }
-  }, [currentLocation, origin, reverseGeocode, setOrigin]);
+  }, [currentLocation, origin, setOrigin]);
 
   // Auto-calculate route when both points are set
   useEffect(() => {
@@ -203,16 +202,24 @@ export function DirectionsPanel({
   }, [clearRoute, onRouteCalculated, onClose]);
 
   return (
-    <div className={cn("flex flex-col bg-background border-r border-border", className)}>
+    <div className={cn(
+      "flex flex-col bg-background/95 backdrop-blur-xl border-r border-border/50",
+      className
+    )}>
       {/* Header */}
-      <div className="p-3 border-b border-border">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Navigation className="h-5 w-5 text-primary" />
-            <h2 className="font-semibold">Yo'nalishlar</h2>
+      <div className="p-4 border-b border-border/50 bg-gradient-to-r from-primary/5 to-transparent">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-primary/10">
+              <Navigation className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-lg">Yo'nalishlar</h2>
+              <p className="text-xs text-muted-foreground">Qayerdan qayerga</p>
+            </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={handleClose}>
-            <X className="h-4 w-4" />
+          <Button variant="ghost" size="icon" onClick={handleClose} className="rounded-full hover:bg-destructive/10 hover:text-destructive">
+            <X className="h-5 w-5" />
           </Button>
         </div>
 
@@ -232,15 +239,18 @@ export function DirectionsPanel({
       </div>
 
       {/* Search Inputs */}
-      <div className="p-3 space-y-2">
+      <div className="p-4 space-y-3">
         {/* Origin Input */}
         <div className="relative">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-primary shrink-0" />
+          <div className="flex items-center gap-3">
+            <div className="flex flex-col items-center">
+              <div className="w-3 h-3 rounded-full bg-primary ring-4 ring-primary/20" />
+              <div className="w-0.5 h-8 bg-gradient-to-b from-primary/50 to-destructive/50 my-1" />
+            </div>
             <div className="relative flex-1">
               <Input
                 ref={originInputRef}
-                placeholder="Qayerdan..."
+                placeholder="Boshlang'ich nuqta..."
                 value={originInput}
                 onChange={(e) => {
                   setOriginInput(e.target.value);
@@ -248,14 +258,14 @@ export function DirectionsPanel({
                 }}
                 onFocus={() => setShowOriginResults(originResults.length > 0)}
                 onBlur={() => setTimeout(() => setShowOriginResults(false), 200)}
-                className="pr-20"
+                className="pr-20 h-11 bg-muted/50 border-border/50 focus:border-primary/50 rounded-xl"
               />
-              <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-1">
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
                 {currentLocation && (
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7"
+                    className="h-7 w-7 rounded-lg hover:bg-primary/10 hover:text-primary"
                     onClick={useCurrentLocation}
                     title="Joriy joylashuv"
                   >
@@ -266,7 +276,7 @@ export function DirectionsPanel({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7"
+                    className="h-7 w-7 rounded-lg"
                     onClick={() => {
                       setOriginInput('');
                       setOrigin(null);
@@ -278,22 +288,36 @@ export function DirectionsPanel({
                 )}
               </div>
             </div>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-11 w-11 rounded-xl shrink-0 hover:bg-primary/10 hover:border-primary/50"
+              onClick={swapLocations}
+              disabled={!origin && !destination}
+            >
+              <ArrowUpDown className="h-4 w-4" />
+            </Button>
           </div>
           
           {/* Origin Search Results */}
           {showOriginResults && originResults.length > 0 && (
-            <Card className="absolute left-5 right-0 top-full mt-1 z-50 max-h-48 overflow-auto">
-              <CardContent className="p-1">
+            <Card className="absolute left-6 right-12 top-full mt-2 z-50 border-border/50 shadow-xl bg-background/95 backdrop-blur-lg rounded-xl overflow-hidden">
+              <CardContent className="p-1.5 max-h-52 overflow-auto">
                 {originResults.map((result) => (
                   <button
                     key={result.place_id}
-                    className="w-full text-left p-2 hover:bg-muted rounded-md text-sm"
+                    className="w-full text-left p-3 hover:bg-primary/5 rounded-lg text-sm transition-colors group"
                     onClick={() => selectResult(result, 'origin')}
                   >
-                    <p className="font-medium truncate">{result.display_name.split(',')[0]}</p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {result.display_name.split(',').slice(1, 3).join(',')}
-                    </p>
+                    <div className="flex items-start gap-3">
+                      <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground group-hover:text-primary shrink-0" />
+                      <div className="min-w-0">
+                        <p className="font-medium truncate group-hover:text-primary">{result.display_name.split(',')[0]}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {result.display_name.split(',').slice(1, 3).join(',')}
+                        </p>
+                      </div>
+                    </div>
                   </button>
                 ))}
               </CardContent>
@@ -301,30 +325,16 @@ export function DirectionsPanel({
           )}
         </div>
 
-        {/* Swap Button */}
-        <div className="flex items-center gap-2">
-          <div className="w-3 flex justify-center">
-            <div className="w-0.5 h-4 bg-muted-foreground/30" />
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={swapLocations}
-            disabled={!origin && !destination}
-          >
-            <ArrowUpDown className="h-4 w-4" />
-          </Button>
-        </div>
-
         {/* Destination Input */}
         <div className="relative">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-destructive shrink-0" />
+          <div className="flex items-center gap-3">
+            <div className="flex flex-col items-center">
+              <div className="w-3 h-3 rounded-full bg-destructive ring-4 ring-destructive/20" />
+            </div>
             <div className="relative flex-1">
               <Input
                 ref={destInputRef}
-                placeholder="Qayerga..."
+                placeholder="Boradigan manzil..."
                 value={destInput}
                 onChange={(e) => {
                   setDestInput(e.target.value);
@@ -332,13 +342,13 @@ export function DirectionsPanel({
                 }}
                 onFocus={() => setShowDestResults(destResults.length > 0)}
                 onBlur={() => setTimeout(() => setShowDestResults(false), 200)}
-                className="pr-10"
+                className="pr-10 h-11 bg-muted/50 border-border/50 focus:border-destructive/50 rounded-xl"
               />
               {destInput && (
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 rounded-lg"
                   onClick={() => {
                     setDestInput('');
                     setDestination(null);
@@ -351,22 +361,28 @@ export function DirectionsPanel({
                 </Button>
               )}
             </div>
+            <div className="w-11" /> {/* Spacer for alignment */}
           </div>
           
           {/* Destination Search Results */}
           {showDestResults && destResults.length > 0 && (
-            <Card className="absolute left-5 right-0 top-full mt-1 z-50 max-h-48 overflow-auto">
-              <CardContent className="p-1">
+            <Card className="absolute left-6 right-12 top-full mt-2 z-50 border-border/50 shadow-xl bg-background/95 backdrop-blur-lg rounded-xl overflow-hidden">
+              <CardContent className="p-1.5 max-h-52 overflow-auto">
                 {destResults.map((result) => (
                   <button
                     key={result.place_id}
-                    className="w-full text-left p-2 hover:bg-muted rounded-md text-sm"
+                    className="w-full text-left p-3 hover:bg-destructive/5 rounded-lg text-sm transition-colors group"
                     onClick={() => selectResult(result, 'destination')}
                   >
-                    <p className="font-medium truncate">{result.display_name.split(',')[0]}</p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {result.display_name.split(',').slice(1, 3).join(',')}
-                    </p>
+                    <div className="flex items-start gap-3">
+                      <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground group-hover:text-destructive shrink-0" />
+                      <div className="min-w-0">
+                        <p className="font-medium truncate group-hover:text-destructive">{result.display_name.split(',')[0]}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {result.display_name.split(',').slice(1, 3).join(',')}
+                        </p>
+                      </div>
+                    </div>
                   </button>
                 ))}
               </CardContent>
@@ -378,62 +394,72 @@ export function DirectionsPanel({
       {/* Loading State */}
       {isLoading && (
         <div className="flex items-center justify-center p-8">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <span className="ml-2 text-muted-foreground">Yo'l hisoblanmoqda...</span>
+          <div className="flex flex-col items-center gap-3">
+            <div className="relative">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <div className="absolute inset-0 animate-ping">
+                <Loader2 className="h-8 w-8 text-primary/30" />
+              </div>
+            </div>
+            <span className="text-muted-foreground text-sm">Yo'l hisoblanmoqda...</span>
+          </div>
         </div>
       )}
 
       {/* Error State */}
       {error && (
-        <div className="p-4 mx-3 mb-3 bg-destructive/10 rounded-lg flex items-center gap-2 text-destructive">
-          <AlertCircle className="h-4 w-4" />
+        <div className="mx-4 mb-4 p-4 bg-destructive/10 rounded-xl border border-destructive/20 flex items-center gap-3 text-destructive">
+          <AlertCircle className="h-5 w-5 shrink-0" />
           <span className="text-sm">{error}</span>
         </div>
       )}
 
       {/* Route Summary & Alternatives */}
       {selectedRoute && !isNavigating && (
-        <div className="p-3 border-t border-border">
+        <div className="p-4 border-t border-border/50 bg-gradient-to-b from-primary/5 to-transparent">
           {/* Main Route Info */}
-          <div className="flex items-center gap-4 mb-3">
+          <div className="flex items-center gap-4 mb-4">
             <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <span className="text-lg font-semibold">{formatDuration(selectedRoute.duration)}</span>
+              <div className="flex items-center gap-2 mb-1">
+                <Clock className="h-5 w-5 text-primary" />
+                <span className="text-2xl font-bold">{formatDuration(selectedRoute.duration)}</span>
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Route className="h-3.5 w-3.5" />
+                <Route className="h-4 w-4" />
                 <span>{formatDistance(selectedRoute.distance)}</span>
                 {selectedRoute.summary && (
                   <>
-                    <span>•</span>
+                    <span className="text-muted-foreground/50">•</span>
                     <span className="truncate">{selectedRoute.summary}</span>
                   </>
                 )}
               </div>
             </div>
-            <Button onClick={startNavigation}>
-              <Navigation className="h-4 w-4 mr-2" />
+            <Button onClick={startNavigation} size="lg" className="rounded-xl gap-2 shadow-lg shadow-primary/20">
+              <Play className="h-4 w-4 fill-current" />
               Boshlash
             </Button>
           </div>
 
           {/* Alternative Routes */}
           {routes.length > 1 && (
-            <div className="flex gap-2 overflow-x-auto pb-2">
+            <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
               {routes.map((route, index) => (
                 <Button
                   key={route.id}
                   variant={selectedRouteIndex === index ? 'default' : 'outline'}
                   size="sm"
-                  className="shrink-0"
+                  className={cn(
+                    "shrink-0 rounded-xl",
+                    selectedRouteIndex === index && "shadow-md"
+                  )}
                   onClick={() => {
                     selectRoute(index);
                     onRouteCalculated(route);
                   }}
                 >
-                  <span className="font-medium">{formatDuration(route.duration)}</span>
-                  <Badge variant="secondary" className="ml-2">
+                  <span className="font-semibold">{formatDuration(route.duration)}</span>
+                  <Badge variant="secondary" className="ml-2 text-[10px]">
                     {formatDistance(route.distance)}
                   </Badge>
                 </Button>
@@ -446,26 +472,29 @@ export function DirectionsPanel({
       {/* Turn-by-Turn Instructions */}
       {selectedRoute && !isNavigating && (
         <ScrollArea className="flex-1">
-          <div className="p-3 space-y-1">
-            <h3 className="text-sm font-medium text-muted-foreground mb-2">Yo'l ko'rsatmalari</h3>
+          <div className="p-4 space-y-1">
+            <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+              <Route className="h-4 w-4" />
+              Yo'l ko'rsatmalari
+            </h3>
             {selectedRoute.steps.map((step, index) => (
               <button
                 key={index}
-                className="w-full flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50 text-left transition-colors"
+                className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-muted/50 text-left transition-all group"
                 onClick={() => {
                   onStepSelected?.([step.maneuver.location[1], step.maneuver.location[0]]);
                 }}
               >
-                <div className="text-xl shrink-0 w-8 text-center">
+                <div className="text-2xl shrink-0 w-10 h-10 flex items-center justify-center bg-muted/50 rounded-xl group-hover:bg-primary/10">
                   {getManeuverIcon(step.maneuver.type, step.maneuver.modifier)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm">{step.instruction}</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="font-medium text-sm group-hover:text-primary transition-colors">{step.instruction}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     {formatDistance(step.distance)} • {formatDuration(step.duration)}
                   </p>
                 </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
               </button>
             ))}
           </div>
@@ -476,37 +505,40 @@ export function DirectionsPanel({
       {isNavigating && selectedRoute && currentStep && (
         <div className="flex-1 flex flex-col">
           {/* Current Step - Large Display */}
-          <div className="p-4 bg-primary text-primary-foreground">
-            <div className="text-4xl mb-2 text-center">
+          <div className="p-6 bg-gradient-to-br from-primary to-primary/80 text-primary-foreground">
+            <div className="text-5xl mb-3 text-center drop-shadow-lg">
               {getManeuverIcon(currentStep.maneuver.type, currentStep.maneuver.modifier)}
             </div>
-            <p className="text-xl font-semibold text-center mb-1">
+            <p className="text-xl font-bold text-center mb-2">
               {currentStep.instruction}
             </p>
-            <p className="text-center text-primary-foreground/80">
-              {formatDistance(currentStep.distance)} • {formatDuration(currentStep.duration)}
-            </p>
+            <div className="flex items-center justify-center gap-4 text-primary-foreground/90">
+              <span className="text-lg font-semibold">{formatDistance(currentStep.distance)}</span>
+              <span className="text-primary-foreground/50">•</span>
+              <span>{formatDuration(currentStep.duration)}</span>
+            </div>
           </div>
 
           {/* Progress */}
-          <div className="p-3 border-b border-border">
+          <div className="p-4 border-b border-border/50 bg-muted/30">
             <div className="flex items-center justify-between text-sm text-muted-foreground mb-2">
-              <span>Qadam {currentStepIndex + 1} / {selectedRoute.steps.length}</span>
+              <span className="font-medium">Qadam {currentStepIndex + 1} / {selectedRoute.steps.length}</span>
               <span>{formatDistance(selectedRoute.distance)} qoldi</span>
             </div>
-            <div className="h-1 bg-muted rounded-full overflow-hidden">
+            <div className="h-2 bg-muted rounded-full overflow-hidden">
               <div
-                className="h-full bg-primary transition-all"
+                className="h-full bg-gradient-to-r from-primary to-primary/70 transition-all duration-300"
                 style={{ width: `${((currentStepIndex + 1) / selectedRoute.steps.length) * 100}%` }}
               />
             </div>
           </div>
 
           {/* Next Steps Preview */}
-          <ScrollArea className="flex-1 p-3">
+          <ScrollArea className="flex-1 p-4">
+            <h4 className="text-xs font-medium text-muted-foreground mb-2">Keyingi qadamlar</h4>
             {selectedRoute.steps.slice(currentStepIndex + 1, currentStepIndex + 4).map((step, idx) => (
-              <div key={idx} className="flex items-start gap-3 p-2 opacity-70">
-                <span className="text-lg">{getManeuverIcon(step.maneuver.type, step.maneuver.modifier)}</span>
+              <div key={idx} className="flex items-start gap-3 p-3 opacity-70 hover:opacity-100 transition-opacity">
+                <span className="text-xl">{getManeuverIcon(step.maneuver.type, step.maneuver.modifier)}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm truncate">{step.instruction}</p>
                   <p className="text-xs text-muted-foreground">{formatDistance(step.distance)}</p>
@@ -516,30 +548,33 @@ export function DirectionsPanel({
           </ScrollArea>
 
           {/* Navigation Controls */}
-          <div className="p-3 border-t border-border flex items-center gap-2">
+          <div className="p-4 border-t border-border/50 flex items-center gap-3 bg-background/50">
             <Button
               variant="outline"
-              size="icon"
+              size="lg"
               onClick={prevStep}
               disabled={currentStepIndex === 0}
+              className="flex-1 rounded-xl"
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-5 w-5" />
             </Button>
             <Button
               variant="destructive"
-              className="flex-1"
+              size="lg"
+              className="flex-[2] rounded-xl gap-2 shadow-lg shadow-destructive/20"
               onClick={stopNavigation}
             >
-              <X className="h-4 w-4 mr-2" />
+              <Square className="h-4 w-4 fill-current" />
               To'xtatish
             </Button>
             <Button
               variant="outline"
-              size="icon"
+              size="lg"
               onClick={nextStep}
               disabled={currentStepIndex >= selectedRoute.steps.length - 1}
+              className="flex-1 rounded-xl"
             >
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-5 w-5" />
             </Button>
           </div>
         </div>

@@ -1043,39 +1043,52 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* Desktop Directions Panel */}
+      {/* Desktop/Tablet Directions Panel - Positioned above sidebar */}
       {showDirectionsPanel && (
-        <div className="hidden md:block fixed top-0 left-0 h-full z-[600]">
-          <DirectionsPanel
-            currentLocation={currentLocation}
-            initialDestination={destination}
-            transportMode={transportMode}
-            onTransportModeChange={setTransportMode}
-            onRouteCalculated={handleRouteCalculated}
-            onStepSelected={handleStepSelected}
-            onClose={() => {
+        <div className="hidden md:flex fixed inset-0 z-[1100] pointer-events-none">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-black/20 pointer-events-auto"
+            onClick={() => {
               setShowDirectionsPanel(false);
               setActiveRoute(null);
             }}
-            className="h-full w-80"
           />
+          {/* Panel */}
+          <div className="relative h-full pointer-events-auto">
+            <DirectionsPanel
+              currentLocation={currentLocation}
+              initialDestination={destination}
+              transportMode={transportMode}
+              onTransportModeChange={setTransportMode}
+              onRouteCalculated={handleRouteCalculated}
+              onStepSelected={handleStepSelected}
+              onClose={() => {
+                setShowDirectionsPanel(false);
+                setActiveRoute(null);
+              }}
+              className="h-full w-[380px] shadow-2xl"
+            />
+          </div>
         </div>
       )}
 
       {/* Mobile Directions Sheet */}
-      <DirectionsMobileSheet
-        open={showDirectionsPanel}
-        onOpenChange={(open) => {
-          setShowDirectionsPanel(open);
-          if (!open) setActiveRoute(null);
-        }}
-        currentLocation={currentLocation}
-        initialDestination={destination}
-        transportMode={transportMode}
-        onTransportModeChange={setTransportMode}
-        onRouteCalculated={handleRouteCalculated}
-        onStepSelected={handleStepSelected}
-      />
+      <div className="md:hidden">
+        <DirectionsMobileSheet
+          open={showDirectionsPanel}
+          onOpenChange={(open) => {
+            setShowDirectionsPanel(open);
+            if (!open) setActiveRoute(null);
+          }}
+          currentLocation={currentLocation}
+          initialDestination={destination}
+          transportMode={transportMode}
+          onTransportModeChange={setTransportMode}
+          onRouteCalculated={handleRouteCalculated}
+          onStepSelected={handleStepSelected}
+        />
+      </div>
 
       {/* Global styles for marker animation */}
       <style>{`
