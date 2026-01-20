@@ -853,8 +853,8 @@ export default function MapPage() {
         {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
       </Button>
       
-      {/* Map Container */}
-      <div className="flex-1 relative min-h-[400px] md:h-full">
+      {/* Map Container - Contains both map and directions panel */}
+      <div className="flex-1 relative min-h-[400px] md:h-full overflow-hidden">
         <MapContainer
           center={mapCenter}
           zoom={zoom}
@@ -1043,44 +1043,39 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* Desktop/Tablet Directions Panel - Overlays map area only, not sidebar (Yandex Maps style) */}
+      {/* Desktop/Tablet Directions Panel - Inside map container, overlays map only */}
       {showDirectionsPanel && (
-        <div className="hidden md:block absolute inset-0 z-[600] pointer-events-none">
-          {/* Panel positioned at the left edge of the map area */}
-          <div className="absolute top-0 left-0 h-full pointer-events-auto">
-            <DirectionsPanel
-              currentLocation={currentLocation}
-              initialDestination={destination}
-              transportMode={transportMode}
-              onTransportModeChange={setTransportMode}
-              onRouteCalculated={handleRouteCalculated}
-              onStepSelected={handleStepSelected}
-              onClose={() => {
-                setShowDirectionsPanel(false);
-                setActiveRoute(null);
-              }}
-              className="h-full w-[380px] border-r border-border/50 shadow-2xl"
-            />
-          </div>
+        <div className="hidden md:flex absolute top-0 left-0 bottom-0 z-[600]">
+          <DirectionsPanel
+            currentLocation={currentLocation}
+            initialDestination={destination}
+            transportMode={transportMode}
+            onTransportModeChange={setTransportMode}
+            onRouteCalculated={handleRouteCalculated}
+            onStepSelected={handleStepSelected}
+            onClose={() => {
+              setShowDirectionsPanel(false);
+              setActiveRoute(null);
+            }}
+            className="h-full w-[380px]"
+          />
         </div>
       )}
 
-      {/* Mobile Directions Sheet */}
-      <div className="md:hidden">
-        <DirectionsMobileSheet
-          open={showDirectionsPanel}
-          onOpenChange={(open) => {
-            setShowDirectionsPanel(open);
-            if (!open) setActiveRoute(null);
-          }}
-          currentLocation={currentLocation}
-          initialDestination={destination}
-          transportMode={transportMode}
-          onTransportModeChange={setTransportMode}
-          onRouteCalculated={handleRouteCalculated}
-          onStepSelected={handleStepSelected}
-        />
-      </div>
+      {/* Mobile Directions Sheet - Positioned above bottom navbar */}
+      <DirectionsMobileSheet
+        open={showDirectionsPanel}
+        onOpenChange={(open) => {
+          setShowDirectionsPanel(open);
+          if (!open) setActiveRoute(null);
+        }}
+        currentLocation={currentLocation}
+        initialDestination={destination}
+        transportMode={transportMode}
+        onTransportModeChange={setTransportMode}
+        onRouteCalculated={handleRouteCalculated}
+        onStepSelected={handleStepSelected}
+      />
 
       {/* Global styles for marker animation */}
       <style>{`
