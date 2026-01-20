@@ -427,6 +427,45 @@ export type Database = {
           },
         ]
       }
+      daily_routes: {
+        Row: {
+          created_at: string
+          id: string
+          places_visited: number | null
+          route_date: string
+          route_geometry: Json | null
+          total_distance_km: number | null
+          total_duration_minutes: number | null
+          updated_at: string
+          user_id: string
+          visits_summary: Json | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          places_visited?: number | null
+          route_date: string
+          route_geometry?: Json | null
+          total_distance_km?: number | null
+          total_duration_minutes?: number | null
+          updated_at?: string
+          user_id: string
+          visits_summary?: Json | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          places_visited?: number | null
+          route_date?: string
+          route_geometry?: Json | null
+          total_distance_km?: number | null
+          total_duration_minutes?: number | null
+          updated_at?: string
+          user_id?: string
+          visits_summary?: Json | null
+        }
+        Relationships: []
+      }
       follows: {
         Row: {
           created_at: string | null
@@ -462,6 +501,57 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      frequent_places: {
+        Row: {
+          address: string | null
+          average_stay_minutes: number | null
+          confidence_score: number | null
+          created_at: string
+          id: string
+          is_auto_detected: boolean | null
+          last_visited_at: string | null
+          latitude: number
+          longitude: number
+          name: string
+          place_type: string
+          updated_at: string
+          user_id: string
+          visit_count: number | null
+        }
+        Insert: {
+          address?: string | null
+          average_stay_minutes?: number | null
+          confidence_score?: number | null
+          created_at?: string
+          id?: string
+          is_auto_detected?: boolean | null
+          last_visited_at?: string | null
+          latitude: number
+          longitude: number
+          name: string
+          place_type?: string
+          updated_at?: string
+          user_id: string
+          visit_count?: number | null
+        }
+        Update: {
+          address?: string | null
+          average_stay_minutes?: number | null
+          confidence_score?: number | null
+          created_at?: string
+          id?: string
+          is_auto_detected?: boolean | null
+          last_visited_at?: string | null
+          latitude?: number
+          longitude?: number
+          name?: string
+          place_type?: string
+          updated_at?: string
+          user_id?: string
+          visit_count?: number | null
+        }
+        Relationships: []
       }
       live_stream_comments: {
         Row: {
@@ -632,6 +722,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      location_history: {
+        Row: {
+          accuracy: number | null
+          created_at: string
+          id: string
+          latitude: number
+          longitude: number
+          recorded_at: string
+          user_id: string
+        }
+        Insert: {
+          accuracy?: number | null
+          created_at?: string
+          id?: string
+          latitude: number
+          longitude: number
+          recorded_at?: string
+          user_id: string
+        }
+        Update: {
+          accuracy?: number | null
+          created_at?: string
+          id?: string
+          latitude?: number
+          longitude?: number
+          recorded_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       message_deletions: {
         Row: {
