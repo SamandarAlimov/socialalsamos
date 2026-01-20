@@ -200,6 +200,22 @@ export function usePinchZoom(maxScale = 3, minScale = 1): UsePinchZoomReturn {
   }, [isZoomed, resetZoom, clampTranslation]);
 
   const onWheel = useCallback((e: React.WheelEvent) => {
+    // Detect if this is a touchpad scroll (two-finger scroll) vs intentional pinch-to-zoom
+    // Touchpad scrolls typically have small deltaY values and no ctrlKey (unless pinch gesture)
+    // Real pinch-to-zoom on touchpads sets e.ctrlKey = true
+    // Normal two-finger scrolling should NOT trigger zoom - let the page scroll naturally
+    
+    // Only zoom if:
+    // 1. ctrlKey is pressed (intentional pinch gesture on touchpad, or Ctrl+scroll)
+    // 2. Already zoomed in and user is scrolling to zoom out
+    const isIntentionalZoom = e.ctrlKey;
+    const isZoomingOut = isZoomed && e.deltaY > 0;
+    
+    if (!isIntentionalZoom && !isZoomingOut) {
+      // Allow normal page scrolling - don't prevent default and don't zoom
+      return;
+    }
+    
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
     const newScale = Math.max(minScale, Math.min(maxScale, state.scale + delta));
@@ -224,7 +240,7 @@ export function usePinchZoom(maxScale = 3, minScale = 1): UsePinchZoomReturn {
         });
       }
     }
-  }, [state.scale, state.translateX, state.translateY, resetZoom, clampTranslation, maxScale, minScale]);
+  }, [state.scale, state.translateX, state.translateY, resetZoom, clampTranslation, maxScale, minScale, isZoomed]);
 
   // Reset zoom when component unmounts or media changes
   useEffect(() => {
