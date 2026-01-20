@@ -232,7 +232,7 @@ export function DirectionsMobileSheet({
       <SheetContent 
         side="bottom" 
         className={cn(
-          "rounded-t-3xl px-0 pb-20 flex flex-col z-[9999]",
+          "rounded-t-3xl px-0 pb-20 flex flex-col z-[9999] md:hidden",
           getSheetHeight()
         )}
       >
