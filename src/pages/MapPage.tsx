@@ -1043,19 +1043,11 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* Desktop/Tablet Directions Panel - Positioned above sidebar */}
+      {/* Desktop/Tablet Directions Panel - Overlays map area only, not sidebar (Yandex Maps style) */}
       {showDirectionsPanel && (
-        <div className="hidden md:flex fixed inset-0 z-[1100] pointer-events-none">
-          {/* Backdrop */}
-          <div 
-            className="absolute inset-0 bg-black/20 pointer-events-auto"
-            onClick={() => {
-              setShowDirectionsPanel(false);
-              setActiveRoute(null);
-            }}
-          />
-          {/* Panel */}
-          <div className="relative h-full pointer-events-auto">
+        <div className="hidden md:block absolute inset-0 z-[600] pointer-events-none">
+          {/* Panel positioned at the left edge of the map area */}
+          <div className="absolute top-0 left-0 h-full pointer-events-auto">
             <DirectionsPanel
               currentLocation={currentLocation}
               initialDestination={destination}
@@ -1067,7 +1059,7 @@ export default function MapPage() {
                 setShowDirectionsPanel(false);
                 setActiveRoute(null);
               }}
-              className="h-full w-[380px] shadow-2xl"
+              className="h-full w-[380px] border-r border-border/50 shadow-2xl"
             />
           </div>
         </div>
