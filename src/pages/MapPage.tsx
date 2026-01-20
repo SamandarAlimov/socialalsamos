@@ -1064,25 +1064,26 @@ export default function MapPage() {
             <Layers className="h-4 w-4" />
           </Button>
         </div>
-        {/* Desktop/Tablet Directions Panel - Inside map container, overlays map only */}
-        {showDirectionsPanel && (
-          <div className="hidden md:block absolute top-0 left-0 bottom-0 z-[9999]">
-            <DirectionsPanel
-              currentLocation={currentLocation}
-              initialDestination={destination}
-              transportMode={transportMode}
-              onTransportModeChange={setTransportMode}
-              onRouteCalculated={handleRouteCalculated}
-              onStepSelected={handleStepSelected}
-              onClose={() => {
-                setShowDirectionsPanel(false);
-                setActiveRoute(null);
-              }}
-              className="h-full w-[380px]"
-            />
-          </div>
-        )}
       </div>
+
+      {/* Desktop/Tablet Directions Panel - Rendered as sibling, not inside map */}
+      {showDirectionsPanel && (
+        <div className="hidden md:flex absolute top-0 bottom-0 z-[600]" style={{ left: sidebarOpen ? '320px' : '0' }}>
+          <DirectionsPanel
+            currentLocation={currentLocation}
+            initialDestination={destination}
+            transportMode={transportMode}
+            onTransportModeChange={setTransportMode}
+            onRouteCalculated={handleRouteCalculated}
+            onStepSelected={handleStepSelected}
+            onClose={() => {
+              setShowDirectionsPanel(false);
+              setActiveRoute(null);
+            }}
+            className="h-full w-[380px]"
+          />
+        </div>
+      )}
 
       {/* Mobile Location History Sheet */}
       <LocationHistoryMobileSheet
@@ -1094,22 +1095,20 @@ export default function MapPage() {
         }}
       />
 
-      {/* Mobile Directions Sheet - Only on mobile */}
-      <div className="md:hidden">
-        <DirectionsMobileSheet
-          open={showDirectionsPanel}
-          onOpenChange={(open) => {
-            setShowDirectionsPanel(open);
-            if (!open) setActiveRoute(null);
-          }}
-          currentLocation={currentLocation}
-          initialDestination={destination}
-          transportMode={transportMode}
-          onTransportModeChange={setTransportMode}
-          onRouteCalculated={handleRouteCalculated}
-          onStepSelected={handleStepSelected}
-        />
-      </div>
+      {/* Mobile Directions Sheet - Only renders on mobile via internal class */}
+      <DirectionsMobileSheet
+        open={showDirectionsPanel}
+        onOpenChange={(open) => {
+          setShowDirectionsPanel(open);
+          if (!open) setActiveRoute(null);
+        }}
+        currentLocation={currentLocation}
+        initialDestination={destination}
+        transportMode={transportMode}
+        onTransportModeChange={setTransportMode}
+        onRouteCalculated={handleRouteCalculated}
+        onStepSelected={handleStepSelected}
+      />
 
       {/* Global styles for marker animation */}
       <style>{`
