@@ -1028,7 +1028,7 @@ export default function MapPage() {
           <Button 
             variant={showLocationHistory ? "default" : "secondary"} 
             size="icon" 
-            className="shadow-lg md:hidden"
+            className="shadow-lg"
             onClick={() => setShowLocationHistory(!showLocationHistory)}
             title="Joylashuv tarixi"
           >
@@ -1068,7 +1068,12 @@ export default function MapPage() {
 
       {/* Desktop/Tablet Directions Panel - Rendered as sibling, not inside map */}
       {showDirectionsPanel && (
-        <div className="hidden md:flex absolute top-0 bottom-0 z-[600]" style={{ left: sidebarOpen ? '320px' : '0' }}>
+        <div 
+          className="hidden md:flex absolute top-0 bottom-0 z-[9999]" 
+          style={{ left: sidebarOpen ? '320px' : '0' }}
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
           <DirectionsPanel
             currentLocation={currentLocation}
             initialDestination={destination}

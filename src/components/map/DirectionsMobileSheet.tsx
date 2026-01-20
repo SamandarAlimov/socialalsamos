@@ -220,11 +220,11 @@ export function DirectionsMobileSheet({
 
   // Calculate sheet height based on content
   const getSheetHeight = () => {
-    if (isNavigating) return 'h-[60vh]';
-    if (expandedView && selectedRoute) return 'h-[85vh]';
-    if (selectedRoute) return 'h-auto max-h-[70vh]';
-    if (currentResults.length > 0) return 'h-auto max-h-[70vh]';
-    return 'h-auto';
+    if (isNavigating) return 'h-[85vh]';
+    if (expandedView && selectedRoute) return 'h-[90vh]';
+    if (selectedRoute) return 'h-[75vh]';
+    if (currentResults.length > 0) return 'h-[70vh]';
+    return 'h-[50vh]';
   };
 
   return (
@@ -232,13 +232,13 @@ export function DirectionsMobileSheet({
       <SheetContent 
         side="bottom" 
         className={cn(
-          "rounded-t-3xl px-0 pb-20 flex flex-col z-[9999] md:hidden",
+          "rounded-t-3xl px-0 pb-20 flex flex-col z-[9999] md:hidden overflow-hidden",
           getSheetHeight()
         )}
       >
-        {/* Handle bar */}
-        <div className="flex justify-center pt-3 pb-2">
-          <div className="w-10 h-1 bg-muted-foreground/30 rounded-full" />
+        {/* Handle bar - for visual drag indicator */}
+        <div className="flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing">
+          <div className="w-12 h-1.5 bg-muted-foreground/40 rounded-full" />
         </div>
 
         <SheetHeader className="px-4 pb-3 border-b border-border">
@@ -263,7 +263,7 @@ export function DirectionsMobileSheet({
           </div>
         </SheetHeader>
 
-        <div className="flex-1 overflow-hidden flex flex-col">
+        <div className="flex-1 overflow-y-auto flex flex-col">
           {/* Transport Mode Selector */}
           <div className="px-4 py-3 bg-muted/30">
             <TransportQuickBar
@@ -413,7 +413,7 @@ export function DirectionsMobileSheet({
 
           {/* Route Summary */}
           {selectedRoute && !isNavigating && (
-            <div className="flex-1 overflow-auto">
+            <ScrollArea className="flex-1">
               <div className="p-4 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent">
                 <div className="flex items-center gap-4">
                   <div className="flex-1">
@@ -506,7 +506,7 @@ export function DirectionsMobileSheet({
                   ))}
                 </div>
               )}
-            </div>
+            </ScrollArea>
           )}
 
           {/* Navigation Mode */}

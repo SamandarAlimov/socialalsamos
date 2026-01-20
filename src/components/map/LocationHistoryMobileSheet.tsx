@@ -96,7 +96,7 @@ export function LocationHistoryMobileSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="h-[85vh] rounded-t-2xl px-0">
+      <SheetContent side="bottom" className="h-[85vh] rounded-t-2xl px-0 z-[9999]">
         <SheetHeader className="px-4 pb-2 border-b">
           <div className="flex items-center justify-between">
             <SheetTitle className="flex items-center gap-2">
