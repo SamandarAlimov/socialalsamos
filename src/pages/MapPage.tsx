@@ -470,7 +470,7 @@ export default function MapPage() {
                 <Settings className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-[300px] z-[1002]">
+            <SheetContent side="right" className="w-[300px] z-[9999]">
               <SheetHeader>
                 <SheetTitle>Sozlamalar</SheetTitle>
               </SheetHeader>
@@ -519,7 +519,7 @@ export default function MapPage() {
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="bottom" className="h-[75vh] rounded-t-2xl z-[1002]">
+            <SheetContent side="bottom" className="h-[75vh] rounded-t-2xl z-[9999]">
               <SheetHeader className="pb-2">
                 <SheetTitle className="flex items-center gap-2">
                   <Users className="h-5 w-5" />
@@ -640,7 +640,7 @@ export default function MapPage() {
                 <Settings className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent>
+            <SheetContent className="z-[9999]">
               <SheetHeader>
                 <SheetTitle>Xarita sozlamalari</SheetTitle>
               </SheetHeader>
