@@ -44,6 +44,8 @@ import {
   Menu,
   MoreHorizontal,
   Route,
+  Footprints,
+  History,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -59,6 +61,9 @@ import { TransportModePicker, TransportQuickBar, type TransportMode } from '@/co
 import { MapQuickActions, MapQuickActionsGrid } from '@/components/map/MapQuickActions';
 import { DirectionsPanel } from '@/components/map/DirectionsPanel';
 import { DirectionsMobileSheet } from '@/components/map/DirectionsMobileSheet';
+import { LocationHistoryPanel } from '@/components/map/LocationHistoryPanel';
+import { LocationHistoryMobileSheet } from '@/components/map/LocationHistoryMobileSheet';
+import { useLocationTracking, DailyRoute } from '@/hooks/useLocationTracking';
 import { type RouteAlternative, formatDistance, formatDuration } from '@/hooks/useDirections';
 
 // Fix default marker icon
@@ -192,6 +197,10 @@ export default function MapPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
+  const [showLocationHistory, setShowLocationHistory] = useState(false);
+  
+  // Location tracking hook
+  const { startTracking: startLocationTracking } = useLocationTracking();
   
   // Parse destination from URL params
   useEffect(() => {
@@ -826,7 +835,12 @@ export default function MapPage() {
           
           <TabsContent value="activity" className="flex-1 overflow-hidden m-0">
             <ScrollArea className="h-full p-3">
-              <StepTrackingCharts stepsToday={stepsToday} stepHistory={stepHistory} dailyGoal={DAILY_STEP_GOAL} />
+              <LocationHistoryPanel
+                onNavigateToPlace={(lat, lng, name) => openBuiltInDirections(lat, lng, name)}
+              />
+              <div className="mt-4">
+                <StepTrackingCharts stepsToday={stepsToday} stepHistory={stepHistory} dailyGoal={DAILY_STEP_GOAL} />
+              </div>
               <Card className="mt-4">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm flex items-center gap-2"><Battery className="h-4 w-4" />Batareya</CardTitle>
@@ -1012,6 +1026,15 @@ export default function MapPage() {
         {/* Map Controls */}
         <div className="absolute bottom-20 md:bottom-4 right-4 z-[500] flex flex-col gap-1">
           <Button 
+            variant={showLocationHistory ? "default" : "secondary"} 
+            size="icon" 
+            className="shadow-lg md:hidden"
+            onClick={() => setShowLocationHistory(!showLocationHistory)}
+            title="Joylashuv tarixi"
+          >
+            <History className="h-4 w-4" />
+          </Button>
+          <Button 
             variant={showDirectionsPanel ? "default" : "secondary"} 
             size="icon" 
             className="shadow-lg"
@@ -1061,6 +1084,16 @@ export default function MapPage() {
           />
         </div>
       )}
+
+      {/* Mobile Location History Sheet */}
+      <LocationHistoryMobileSheet
+        open={showLocationHistory}
+        onOpenChange={setShowLocationHistory}
+        onNavigateToPlace={(lat, lng, name) => {
+          openBuiltInDirections(lat, lng, name);
+          setShowLocationHistory(false);
+        }}
+      />
 
       {/* Mobile Directions Sheet - Positioned above bottom navbar */}
       <DirectionsMobileSheet
