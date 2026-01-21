@@ -40,6 +40,7 @@ import {
   CheckCircle2,
   Volume2,
   VolumeX,
+  Crosshair,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { 
@@ -55,6 +56,8 @@ import { useVoiceSearch } from '@/hooks/useVoiceSearch';
 import { TransportQuickBar, type TransportMode } from './TransportModePicker';
 import { toast } from 'sonner';
 
+type MapSelectionMode = 'origin' | 'destination' | null;
+
 interface DirectionsMobileSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -64,6 +67,11 @@ interface DirectionsMobileSheetProps {
   onTransportModeChange: (mode: TransportMode) => void;
   onRouteCalculated: (route: RouteAlternative | null) => void;
   onStepSelected?: (stepLocation: [number, number]) => void;
+  // Map selection props
+  mapSelectionMode?: MapSelectionMode;
+  onMapSelectionModeChange?: (mode: MapSelectionMode) => void;
+  selectedMapLocation?: { lat: number; lng: number; name: string } | null;
+  onClearSelectedMapLocation?: () => void;
 }
 
 // Get arrival time estimation
@@ -93,6 +101,10 @@ export function DirectionsMobileSheet({
   onTransportModeChange,
   onRouteCalculated,
   onStepSelected,
+  mapSelectionMode,
+  onMapSelectionModeChange,
+  selectedMapLocation,
+  onClearSelectedMapLocation,
 }: DirectionsMobileSheetProps) {
   const {
     origin,
@@ -165,6 +177,21 @@ export function DirectionsMobileSheet({
       setDestInput(initialDestination.name);
     }
   }, [initialDestination, open, setDestination]);
+
+  // Handle map selection
+  useEffect(() => {
+    if (selectedMapLocation && mapSelectionMode) {
+      if (mapSelectionMode === 'origin') {
+        setOrigin(selectedMapLocation);
+        setOriginInput(selectedMapLocation.name);
+      } else if (mapSelectionMode === 'destination') {
+        setDestination(selectedMapLocation);
+        setDestInput(selectedMapLocation.name);
+      }
+      onMapSelectionModeChange?.(null);
+      onClearSelectedMapLocation?.();
+    }
+  }, [selectedMapLocation, mapSelectionMode, setOrigin, setDestination, onMapSelectionModeChange, onClearSelectedMapLocation]);
 
   // Auto-set origin to current location
   useEffect(() => {

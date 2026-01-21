@@ -36,6 +36,7 @@ import {
   CheckCircle2,
   Volume2,
   VolumeX,
+  Crosshair,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { 
@@ -51,6 +52,8 @@ import { useVoiceSearch } from '@/hooks/useVoiceSearch';
 import { TransportQuickBar, type TransportMode } from './TransportModePicker';
 import { toast } from 'sonner';
 
+type MapSelectionMode = 'origin' | 'destination' | null;
+
 interface DirectionsPanelProps {
   currentLocation: { latitude: number; longitude: number } | null;
   initialDestination?: { lat: number; lng: number; name: string } | null;
@@ -60,7 +63,15 @@ interface DirectionsPanelProps {
   onStepSelected?: (stepLocation: [number, number]) => void;
   onClose: () => void;
   className?: string;
+  // Map selection mode
+  mapSelectionMode?: MapSelectionMode;
+  onMapSelectionModeChange?: (mode: MapSelectionMode) => void;
+  // When a location is selected from map
+  selectedMapLocation?: { lat: number; lng: number; name: string } | null;
+  onClearSelectedMapLocation?: () => void;
 }
+
+export type { MapSelectionMode };
 
 // Get arrival time estimation
 const getArrivalTime = (durationSeconds: number): string => {
@@ -89,6 +100,10 @@ export function DirectionsPanel({
   onStepSelected,
   onClose,
   className,
+  mapSelectionMode,
+  onMapSelectionModeChange,
+  selectedMapLocation,
+  onClearSelectedMapLocation,
 }: DirectionsPanelProps) {
   const {
     origin,
@@ -189,6 +204,21 @@ export function DirectionsPanel({
       setDestInput(initialDestination.name);
     }
   }, [initialDestination, setDestination]);
+
+  // Handle map selection
+  useEffect(() => {
+    if (selectedMapLocation && mapSelectionMode) {
+      if (mapSelectionMode === 'origin') {
+        setOrigin(selectedMapLocation);
+        setOriginInput(selectedMapLocation.name);
+      } else if (mapSelectionMode === 'destination') {
+        setDestination(selectedMapLocation);
+        setDestInput(selectedMapLocation.name);
+      }
+      onMapSelectionModeChange?.(null);
+      onClearSelectedMapLocation?.();
+    }
+  }, [selectedMapLocation, mapSelectionMode, setOrigin, setDestination, onMapSelectionModeChange, onClearSelectedMapLocation]);
 
   // Auto-set origin to current location
   useEffect(() => {
@@ -483,6 +513,22 @@ export function DirectionsPanel({
                     )}
                   </Button>
                 )}
+                {onMapSelectionModeChange && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      "h-7 w-7 rounded-lg",
+                      mapSelectionMode === 'origin'
+                        ? "bg-primary text-primary-foreground"
+                        : "hover:bg-primary/10 hover:text-primary"
+                    )}
+                    onClick={() => onMapSelectionModeChange(mapSelectionMode === 'origin' ? null : 'origin')}
+                    title="Xaritadan tanlash"
+                  >
+                    <Crosshair className="h-3.5 w-3.5" />
+                  </Button>
+                )}
                 {currentLocation && (
                   <Button
                     variant="ghost"
@@ -516,6 +562,7 @@ export function DirectionsPanel({
               className="h-11 w-11 rounded-xl shrink-0 hover:bg-primary/10 hover:border-primary/50 shadow-sm"
               onClick={swapLocations}
               disabled={!origin && !destination}
+              title="Joylarni almashtirish"
             >
               <ArrowUpDown className="h-4 w-4" />
             </Button>
@@ -596,6 +643,22 @@ export function DirectionsPanel({
                     )}
                   </Button>
                 )}
+                {onMapSelectionModeChange && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      "h-7 w-7 rounded-lg",
+                      mapSelectionMode === 'destination'
+                        ? "bg-destructive text-destructive-foreground"
+                        : "hover:bg-destructive/10 hover:text-destructive"
+                    )}
+                    onClick={() => onMapSelectionModeChange(mapSelectionMode === 'destination' ? null : 'destination')}
+                    title="Xaritadan tanlash"
+                  >
+                    <Crosshair className="h-3.5 w-3.5" />
+                  </Button>
+                )}
                 {destInput && (
                   <Button
                     variant="ghost"
@@ -614,7 +677,21 @@ export function DirectionsPanel({
                 )}
               </div>
             </div>
-            <div className="w-11 shrink-0" /> {/* Spacer for alignment */}
+            {/* Map selection button for destination */}
+            <Button
+              variant="outline"
+              size="icon"
+              className={cn(
+                "h-11 w-11 rounded-xl shrink-0 shadow-sm",
+                mapSelectionMode === 'destination'
+                  ? "bg-destructive text-destructive-foreground border-destructive"
+                  : "hover:bg-destructive/10 hover:border-destructive/50"
+              )}
+              onClick={() => onMapSelectionModeChange?.(mapSelectionMode === 'destination' ? null : 'destination')}
+              title="Xaritadan manzilni tanlash"
+            >
+              <MapPin className="h-4 w-4" />
+            </Button>
           </div>
           
           {/* Destination Search Results */}
