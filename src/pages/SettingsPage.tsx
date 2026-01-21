@@ -31,7 +31,9 @@ import {
   Heart,
   MessageCircle,
   UserPlus,
-  AtSign
+  AtSign,
+  Clock,
+  BarChart3
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -423,6 +425,25 @@ export default function SettingsPage() {
               </div>
               <Button variant="outline" onClick={() => setVerificationDialogOpen(true)}>
                 Request
+              </Button>
+            </div>
+          </div>
+
+          {/* Activity / Your Time */}
+          <div className="bg-card rounded-xl border border-border p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <BarChart3 className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold">Sizning faolligingiz</h3>
+                  <p className="text-sm text-muted-foreground">Platformada sarflagan vaqtingiz va statistikalar</p>
+                </div>
+              </div>
+              <Button variant="outline" onClick={() => navigate('/activity')}>
+                <Clock className="h-4 w-4 mr-2" />
+                Ko'rish
               </Button>
             </div>
           </div>
