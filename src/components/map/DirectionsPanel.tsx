@@ -199,9 +199,10 @@ export function DirectionsPanel({
     onClose();
   }, [clearRoute, onRouteCalculated, onClose]);
 
-  // Prevent all pointer events from propagating to avoid accidental closes
-  const handlePanelInteraction = useCallback((e: React.MouseEvent | React.PointerEvent) => {
+  // Prevent all events from propagating to underlying map
+  const stopAllEvents = useCallback((e: React.SyntheticEvent) => {
     e.stopPropagation();
+    e.nativeEvent.stopImmediatePropagation();
   }, []);
 
   return (
@@ -211,10 +212,16 @@ export function DirectionsPanel({
         "flex flex-col bg-background border-r border-border shadow-2xl",
         className
       )}
-      onClick={handlePanelInteraction}
-      onMouseDown={handlePanelInteraction}
-      onPointerDown={handlePanelInteraction}
-      onTouchStart={(e) => e.stopPropagation()}
+      onClick={stopAllEvents}
+      onMouseDown={stopAllEvents}
+      onMouseUp={stopAllEvents}
+      onPointerDown={stopAllEvents}
+      onPointerUp={stopAllEvents}
+      onTouchStart={stopAllEvents}
+      onTouchEnd={stopAllEvents}
+      onDoubleClick={stopAllEvents}
+      onContextMenu={stopAllEvents}
+      onWheel={stopAllEvents}
     >
       {/* Header */}
       <div className="p-4 border-b border-border bg-gradient-to-r from-primary/10 via-primary/5 to-transparent">
