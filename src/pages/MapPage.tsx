@@ -46,6 +46,7 @@ import {
   Route,
   Footprints,
   History,
+  Crosshair,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -177,10 +178,14 @@ type MapLayer = 'standard' | 'satellite' | 'terrain';
 // Map event handler component
 function MapEventHandler({ 
   center, 
-  zoom 
+  zoom,
+  onMapClick,
+  isSelecting,
 }: { 
   center: [number, number]; 
   zoom: number;
+  onMapClick?: (lat: number, lng: number) => void;
+  isSelecting?: boolean;
 }) {
   const map = useMap();
   const hasSetInitialView = useRef(false);
@@ -197,6 +202,35 @@ function MapEventHandler({
       map.flyTo(center, zoom, { duration: 0.5 });
     }
   }, [center, map, zoom]);
+
+  // Map click handler for selecting locations
+  useEffect(() => {
+    if (!onMapClick) return;
+
+    const handleClick = (e: L.LeafletMouseEvent) => {
+      if (isSelecting) {
+        onMapClick(e.latlng.lat, e.latlng.lng);
+      }
+    };
+
+    map.on('click', handleClick);
+    return () => {
+      map.off('click', handleClick);
+    };
+  }, [map, onMapClick, isSelecting]);
+
+  // Change cursor when selecting
+  useEffect(() => {
+    const container = map.getContainer();
+    if (isSelecting) {
+      container.style.cursor = 'crosshair';
+    } else {
+      container.style.cursor = '';
+    }
+    return () => {
+      container.style.cursor = '';
+    };
+  }, [map, isSelecting]);
   
   return null;
 }
@@ -249,6 +283,10 @@ export default function MapPage() {
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
   const [showLocationHistory, setShowLocationHistory] = useState(false);
   const [viewingRoute, setViewingRoute] = useState<DailyRoute | null>(null);
+  
+  // Map selection mode for directions
+  const [mapSelectionMode, setMapSelectionMode] = useState<'origin' | 'destination' | null>(null);
+  const [selectedMapLocation, setSelectedMapLocation] = useState<{ lat: number; lng: number; name: string } | null>(null);
   
   // Location tracking hook
   const { dailyRoutes, todayRoute, frequentPlaces } = useLocationTracking();
@@ -464,6 +502,38 @@ export default function MapPage() {
     setMapCenter(location);
     setZoom(17);
   }, []);
+
+  // Handle map click for location selection
+  const handleMapClick = useCallback(async (lat: number, lng: number) => {
+    if (!mapSelectionMode) return;
+    
+    // Reverse geocode to get location name
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+        { headers: { 'Accept-Language': 'uz,ru,en' } }
+      );
+      
+      let name = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      
+      if (response.ok) {
+        const data = await response.json();
+        const parts = [];
+        if (data.address?.road) parts.push(data.address.road);
+        if (data.address?.house_number) parts.push(data.address.house_number);
+        if (parts.length === 0 && data.display_name) {
+          name = data.display_name.split(',')[0];
+        } else if (parts.length > 0) {
+          name = parts.join(' ');
+        }
+      }
+      
+      setSelectedMapLocation({ lat, lng, name });
+      toast.success(`${mapSelectionMode === 'origin' ? 'Boshlang\'ich nuqta' : 'Manzil'} tanlandi: ${name}`);
+    } catch (error) {
+      setSelectedMapLocation({ lat, lng, name: `${lat.toFixed(5)}, ${lng.toFixed(5)}` });
+    }
+  }, [mapSelectionMode]);
   
   // Filter users by search
   const filteredNearby = nearbyUsers.filter((u) =>
@@ -937,7 +1007,12 @@ export default function MapPage() {
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url={getTileUrl()}
           />
-          <MapEventHandler center={mapCenter} zoom={zoom} />
+          <MapEventHandler 
+            center={mapCenter} 
+            zoom={zoom} 
+            onMapClick={handleMapClick}
+            isSelecting={!!mapSelectionMode}
+          />
           
           {currentLocation && showNearby && (
             <Circle
@@ -1153,6 +1228,32 @@ export default function MapPage() {
           </div>
         )}
         
+        {/* Map Selection Mode Indicator */}
+        {mapSelectionMode && (
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[600] animate-pulse">
+            <div className={cn(
+              "px-4 py-2 rounded-full shadow-lg border-2 flex items-center gap-2 font-medium text-sm",
+              mapSelectionMode === 'origin' 
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-destructive text-destructive-foreground border-destructive"
+            )}>
+              <Crosshair className="h-4 w-4" />
+              {mapSelectionMode === 'origin' 
+                ? "Boshlang'ich nuqtani xaritadan tanlang"
+                : "Manzilni xaritadan tanlang"
+              }
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 ml-1 hover:bg-white/20"
+                onClick={() => setMapSelectionMode(null)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+        
         {/* Map Controls */}
         <div className="absolute bottom-20 md:bottom-4 right-4 z-[500] flex flex-col gap-1">
           <Button 
@@ -1216,8 +1317,13 @@ export default function MapPage() {
             onClose={() => {
               setShowDirectionsPanel(false);
               setActiveRoute(null);
+              setMapSelectionMode(null);
             }}
             className="h-full w-[380px]"
+            mapSelectionMode={mapSelectionMode}
+            onMapSelectionModeChange={setMapSelectionMode}
+            selectedMapLocation={selectedMapLocation}
+            onClearSelectedMapLocation={() => setSelectedMapLocation(null)}
           />
         </div>
       )}
@@ -1245,7 +1351,10 @@ export default function MapPage() {
         open={showDirectionsPanel}
         onOpenChange={(open) => {
           setShowDirectionsPanel(open);
-          if (!open) setActiveRoute(null);
+          if (!open) {
+            setActiveRoute(null);
+            setMapSelectionMode(null);
+          }
         }}
         currentLocation={currentLocation}
         initialDestination={destination}
@@ -1253,6 +1362,10 @@ export default function MapPage() {
         onTransportModeChange={setTransportMode}
         onRouteCalculated={handleRouteCalculated}
         onStepSelected={handleStepSelected}
+        mapSelectionMode={mapSelectionMode}
+        onMapSelectionModeChange={setMapSelectionMode}
+        selectedMapLocation={selectedMapLocation}
+        onClearSelectedMapLocation={() => setSelectedMapLocation(null)}
       />
 
       {/* Global styles for marker animation */}
