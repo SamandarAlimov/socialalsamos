@@ -385,7 +385,8 @@ export function DirectionsPanel({
   // Prevent all events from propagating to underlying map
   const stopAllEvents = useCallback((e: React.SyntheticEvent) => {
     e.stopPropagation();
-    e.nativeEvent.stopImmediatePropagation();
+    // Some event types/browsers may not expose stopImmediatePropagation
+    (e.nativeEvent as any)?.stopImmediatePropagation?.();
   }, []);
 
   const hasSuggestions = favoritePlaces.length > 0 || recentPlaces.length > 0;
