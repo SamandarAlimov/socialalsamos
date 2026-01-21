@@ -1,13 +1,30 @@
+import { useEffect } from 'react';
 import { Outlet, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppSidebar } from './AppSidebar';
 import { BottomNavbar } from './BottomNavbar';
 import { MobileHeader } from './MobileHeader';
 import { Loader2 } from 'lucide-react';
+import { useActivityTracking } from '@/hooks/useActivityTracking';
 
 export function AppLayout() {
   const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
+  const { startSession, trackPageChange } = useActivityTracking();
+  
+  // Track page changes for activity
+  useEffect(() => {
+    if (isAuthenticated) {
+      trackPageChange(location.pathname);
+    }
+  }, [location.pathname, isAuthenticated, trackPageChange]);
+
+  // Start session on mount
+  useEffect(() => {
+    if (isAuthenticated) {
+      startSession(location.pathname);
+    }
+  }, [isAuthenticated]);
   
   // Hide mobile header on messages, map, and videos pages (they have their own headers/full-screen mode)
   const hideHeaderOnPages = location.pathname === '/messages' || location.pathname === '/map' || location.pathname === '/videos';

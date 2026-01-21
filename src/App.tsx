@@ -26,6 +26,7 @@ import AdminPage from "./pages/AdminPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import StoryArchivePage from "./pages/StoryArchivePage";
 import AIPage from "./pages/AIPage";
+import ActivityPage from "./pages/ActivityPage";
 import NotFound from "./pages/NotFound";
 
 // Layout
@@ -103,6 +104,7 @@ function AppRoutes() {
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/story-archive" element={<StoryArchivePage />} />
         <Route path="/ai" element={<AIPage />} />
+        <Route path="/activity" element={<ActivityPage />} />
       </Route>
       
       {/* 404 */}
