@@ -100,12 +100,6 @@ export function LocationHistoryMobileSheet({
               <Footprints className="h-5 w-5 text-primary" />
               Joylashuv tarixi
             </SheetTitle>
-            {isTracking && (
-              <Badge variant="secondary" className="gap-1 text-xs">
-                <span className="h-2 w-2 bg-success rounded-full animate-pulse" />
-                Kuzatilmoqda
-              </Badge>
-            )}
           </div>
         </SheetHeader>
 

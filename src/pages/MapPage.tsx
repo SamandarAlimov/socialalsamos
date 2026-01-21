@@ -198,9 +198,10 @@ export default function MapPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
   const [showLocationHistory, setShowLocationHistory] = useState(false);
+  const [viewingRoute, setViewingRoute] = useState<DailyRoute | null>(null);
   
   // Location tracking hook
-  const { startTracking: startLocationTracking } = useLocationTracking();
+  const { dailyRoutes, todayRoute } = useLocationTracking();
   
   // Parse destination from URL params
   useEffect(() => {
@@ -837,6 +838,13 @@ export default function MapPage() {
             <ScrollArea className="h-full p-3">
               <LocationHistoryPanel
                 onNavigateToPlace={(lat, lng, name) => openBuiltInDirections(lat, lng, name)}
+                onViewRoute={(route) => {
+                  setViewingRoute(route);
+                  if (route.route_geometry && route.route_geometry.length > 0) {
+                    const midIndex = Math.floor(route.route_geometry.length / 2);
+                    setMapCenter(route.route_geometry[midIndex]);
+                  }
+                }}
               />
               <div className="mt-4">
                 <StepTrackingCharts stepsToday={stepsToday} stepHistory={stepHistory} dailyGoal={DAILY_STEP_GOAL} />
@@ -978,6 +986,31 @@ export default function MapPage() {
             />
           )}
           
+          {/* Today's Route Polyline - Show user's path today */}
+          {todayRoute && todayRoute.route_geometry && todayRoute.route_geometry.length > 1 && !viewingRoute && (
+            <Polyline 
+              positions={todayRoute.route_geometry} 
+              pathOptions={{ 
+                color: 'hsl(var(--primary))', 
+                weight: 3, 
+                opacity: 0.6,
+                dashArray: '8, 4',
+              }} 
+            />
+          )}
+          
+          {/* Viewing Historical Route Polyline */}
+          {viewingRoute && viewingRoute.route_geometry && viewingRoute.route_geometry.length > 1 && (
+            <Polyline 
+              positions={viewingRoute.route_geometry} 
+              pathOptions={{ 
+                color: 'hsl(142, 76%, 36%)', 
+                weight: 4, 
+                opacity: 0.8,
+              }} 
+            />
+          )}
+          
           {/* Fallback straight line if no route but destination exists */}
           {currentLocation && destination && showDirections && !activeRoute && (
             <Polyline positions={[[currentLocation.latitude, currentLocation.longitude], [destination.lat, destination.lng]]} pathOptions={{ color: '#3b82f6', weight: 4, dashArray: '10, 10' }} />
@@ -1018,6 +1051,20 @@ export default function MapPage() {
               <Route className="h-4 w-4 mr-1" /> Yo'nalish
             </Button>
             <Button size="sm" variant="ghost" onClick={() => { setDestination(null); setShowDirections(false); }}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+        
+        {/* Viewing Route Banner */}
+        {viewingRoute && (
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[500] bg-background/95 backdrop-blur-lg rounded-xl shadow-lg border p-3 flex items-center gap-3 max-w-[90%]">
+            <Footprints className="h-5 w-5 text-success shrink-0" />
+            <div className="min-w-0">
+              <p className="font-medium truncate">{viewingRoute.route_date} yo'li</p>
+              <p className="text-xs text-muted-foreground">{viewingRoute.total_distance_km?.toFixed(1) || 0} km bosib o'tilgan</p>
+            </div>
+            <Button size="sm" variant="ghost" onClick={() => setViewingRoute(null)}>
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -1097,6 +1144,14 @@ export default function MapPage() {
         onNavigateToPlace={(lat, lng, name) => {
           openBuiltInDirections(lat, lng, name);
           setShowLocationHistory(false);
+        }}
+        onViewRoute={(route) => {
+          setViewingRoute(route);
+          setShowLocationHistory(false);
+          if (route.route_geometry && route.route_geometry.length > 0) {
+            const midIndex = Math.floor(route.route_geometry.length / 2);
+            setMapCenter(route.route_geometry[midIndex]);
+          }
         }}
       />
 
