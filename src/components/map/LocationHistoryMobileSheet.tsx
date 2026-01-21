@@ -15,12 +15,9 @@ import {
   TrendingUp,
   Edit2,
   Trash2,
-  Play,
-  Pause,
   Eye,
   Navigation,
   Footprints,
-  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useLocationTracking, FrequentPlace, DailyRoute } from '@/hooks/useLocationTracking';
@@ -103,26 +100,12 @@ export function LocationHistoryMobileSheet({
               <Footprints className="h-5 w-5 text-primary" />
               Joylashuv tarixi
             </SheetTitle>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant={isTracking ? 'destructive' : 'default'}
-                onClick={isTracking ? stopTracking : startTracking}
-                className="gap-1 h-8"
-              >
-                {isTracking ? (
-                  <>
-                    <Pause className="h-3 w-3" />
-                    To'xtatish
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-3 w-3" />
-                    Kuzatish
-                  </>
-                )}
-              </Button>
-            </div>
+            {isTracking && (
+              <Badge variant="secondary" className="gap-1 text-xs">
+                <span className="h-2 w-2 bg-success rounded-full animate-pulse" />
+                Kuzatilmoqda
+              </Badge>
+            )}
           </div>
         </SheetHeader>
 

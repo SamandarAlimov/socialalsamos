@@ -489,12 +489,17 @@ export function useLocationTracking() {
       .reduce((sum, r) => sum + (r.total_distance_km || 0), 0);
   }, [dailyRoutes]);
 
-  // Initial fetch
+  // Initial fetch and auto-start tracking
   useEffect(() => {
     if (user) {
       setIsLoading(true);
       Promise.all([fetchFrequentPlaces(), fetchDailyRoutes(30)])
         .finally(() => setIsLoading(false));
+      
+      // Auto-start tracking when user is available
+      if (!isTracking && navigator.geolocation) {
+        startTracking();
+      }
     }
   }, [user, fetchFrequentPlaces, fetchDailyRoutes]);
 

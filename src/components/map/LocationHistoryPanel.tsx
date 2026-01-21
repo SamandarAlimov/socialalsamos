@@ -16,10 +16,7 @@ import {
   TrendingUp,
   Edit2,
   Trash2,
-  Play,
-  Pause,
   Eye,
-  ChevronRight,
   Navigation,
   Footprints,
 } from 'lucide-react';
@@ -105,24 +102,12 @@ export function LocationHistoryPanel({
             <Footprints className="h-5 w-5 text-primary" />
             Joylashuv tarixi
           </CardTitle>
-          <Button
-            size="sm"
-            variant={isTracking ? 'destructive' : 'default'}
-            onClick={isTracking ? stopTracking : startTracking}
-            className="gap-1"
-          >
-            {isTracking ? (
-              <>
-                <Pause className="h-3 w-3" />
-                To'xtatish
-              </>
-            ) : (
-              <>
-                <Play className="h-3 w-3" />
-                Kuzatish
-              </>
-            )}
-          </Button>
+          {isTracking && (
+            <Badge variant="secondary" className="gap-1 text-xs">
+              <span className="h-2 w-2 bg-success rounded-full animate-pulse" />
+              Kuzatilmoqda
+            </Badge>
+          )}
         </div>
       </CardHeader>
 
