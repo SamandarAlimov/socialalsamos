@@ -1196,13 +1196,15 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* Desktop/Tablet Directions Panel - Rendered as sibling, not inside map */}
+      {/* Desktop/Tablet Directions Panel - Isolated from map events */}
       {showDirectionsPanel && (
         <div 
-          className="hidden md:flex absolute top-0 bottom-0 z-[9999]" 
+          className="hidden md:block fixed top-0 bottom-0 z-[9999] pointer-events-auto"
           style={{ left: sidebarOpen ? '320px' : '0' }}
-          onClick={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
+          onClickCapture={(e) => e.stopPropagation()}
+          onMouseDownCapture={(e) => e.stopPropagation()}
+          onPointerDownCapture={(e) => e.stopPropagation()}
+          onTouchStartCapture={(e) => e.stopPropagation()}
         >
           <DirectionsPanel
             currentLocation={currentLocation}
