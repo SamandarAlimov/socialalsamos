@@ -122,6 +122,56 @@ const destinationIcon = L.divIcon({
   iconAnchor: [16, 32],
 });
 
+// Frequent place markers
+const createPlaceIcon = (placeType: 'home' | 'work' | 'study' | 'other', name: string) => {
+  const config = {
+    home: { icon: '🏠', color: '#22c55e', bgColor: '#dcfce7' },
+    work: { icon: '💼', color: '#3b82f6', bgColor: '#dbeafe' },
+    study: { icon: '📚', color: '#f59e0b', bgColor: '#fef3c7' },
+    other: { icon: '📍', color: '#8b5cf6', bgColor: '#ede9fe' },
+  };
+  
+  const { icon, color, bgColor } = config[placeType] || config.other;
+  
+  return L.divIcon({
+    className: 'place-marker',
+    html: `
+      <div style="
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        transform: translateY(-50%);
+      ">
+        <div style="
+          width: 40px;
+          height: 40px;
+          background: ${bgColor};
+          border: 3px solid ${color};
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 20px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+        ">${icon}</div>
+        <div style="
+          margin-top: 4px;
+          background: ${color};
+          color: white;
+          padding: 2px 8px;
+          border-radius: 10px;
+          font-size: 11px;
+          font-weight: 600;
+          white-space: nowrap;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        ">${name}</div>
+      </div>
+    `,
+    iconSize: [40, 60],
+    iconAnchor: [20, 30],
+  });
+};
+
 type MapLayer = 'standard' | 'satellite' | 'terrain';
 
 // Map event handler component
@@ -201,7 +251,7 @@ export default function MapPage() {
   const [viewingRoute, setViewingRoute] = useState<DailyRoute | null>(null);
   
   // Location tracking hook
-  const { dailyRoutes, todayRoute } = useLocationTracking();
+  const { dailyRoutes, todayRoute, frequentPlaces } = useLocationTracking();
   
   // Parse destination from URL params
   useEffect(() => {
@@ -973,6 +1023,39 @@ export default function MapPage() {
               </Popup>
             </Marker>
           )}
+          
+          {/* Frequent Places Markers */}
+          {frequentPlaces.map((place) => (
+            <Marker 
+              key={place.id} 
+              position={[place.latitude, place.longitude]} 
+              icon={createPlaceIcon(place.place_type, place.name)}
+            >
+              <Popup>
+                <div className="text-center min-w-[150px]">
+                  <div className="text-3xl mb-2">
+                    {place.place_type === 'home' ? '🏠' : place.place_type === 'work' ? '💼' : place.place_type === 'study' ? '📚' : '📍'}
+                  </div>
+                  <p className="font-medium">{place.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {place.visit_count} marta tashrif • O'rtacha {place.average_stay_minutes} daqiqa
+                  </p>
+                  {currentLocation && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {(calculateDistance(currentLocation.latitude, currentLocation.longitude, place.latitude, place.longitude) / 1000).toFixed(1)} km uzoqlikda
+                    </p>
+                  )}
+                  <Button 
+                    size="sm" 
+                    className="w-full mt-2" 
+                    onClick={() => openBuiltInDirections(place.latitude, place.longitude, place.name)}
+                  >
+                    <Navigation className="h-4 w-4 mr-1" /> Borish
+                  </Button>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
           
           {/* Active Route Polyline */}
           {activeRoute && activeRoute.geometry.length > 0 && (
