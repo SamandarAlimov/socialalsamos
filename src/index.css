@@ -422,3 +422,8 @@
     height: 100vh;
   }
 }
+
+/* Hide Leaflet attribution */
+.leaflet-control-attribution {
+  display: none !important;
+}
