@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Users, Megaphone, Pin, VolumeX, Reply, Bookmark } from 'lucide-react';
+import { Users, Megaphone, Pin, VolumeX, Reply, Bookmark, Phone, Video, PhoneMissed, PhoneOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
 import { Conversation } from '@/hooks/useMessages';
@@ -147,6 +147,61 @@ export function ChatListItem({
     return format(date, 'dd.MM.yyyy');
   };
 
+  // Format last message for display (handle call history JSON)
+  const formatLastMessage = (message: string | null): { text: string; icon?: React.ReactNode } => {
+    if (!message) return { text: 'No messages yet' };
+    
+    // Check if it's a call history JSON
+    if (message.startsWith('{') && message.includes('"type"')) {
+      try {
+        const callData = JSON.parse(message);
+        if (callData.type === 'video' || callData.type === 'audio') {
+          const isVideo = callData.type === 'video';
+          const status = callData.status;
+          
+          let statusText = '';
+          let icon: React.ReactNode = null;
+          
+          switch (status) {
+            case 'missed':
+              statusText = isVideo ? "O'tkazib yuborilgan video qo'ng'iroq" : "O'tkazib yuborilgan qo'ng'iroq";
+              icon = <PhoneMissed className="h-3.5 w-3.5 text-red-500 inline mr-1" />;
+              break;
+            case 'declined':
+              statusText = isVideo ? "Rad etilgan video qo'ng'iroq" : "Rad etilgan qo'ng'iroq";
+              icon = <PhoneOff className="h-3.5 w-3.5 text-orange-500 inline mr-1" />;
+              break;
+            case 'ended':
+              statusText = isVideo ? "Video qo'ng'iroq" : "Qo'ng'iroq";
+              if (callData.duration) {
+                const mins = Math.floor(callData.duration / 60);
+                const secs = callData.duration % 60;
+                statusText += ` (${mins}:${secs.toString().padStart(2, '0')})`;
+              }
+              icon = isVideo 
+                ? <Video className="h-3.5 w-3.5 text-green-500 inline mr-1" />
+                : <Phone className="h-3.5 w-3.5 text-green-500 inline mr-1" />;
+              break;
+            default:
+              statusText = isVideo ? "Video qo'ng'iroq" : "Qo'ng'iroq";
+              icon = isVideo 
+                ? <Video className="h-3.5 w-3.5 text-primary inline mr-1" />
+                : <Phone className="h-3.5 w-3.5 text-primary inline mr-1" />;
+          }
+          
+          return { text: statusText, icon };
+        }
+      } catch {
+        // Not valid JSON, treat as regular message
+      }
+    }
+    
+    // Regular message - truncate if needed
+    return { 
+      text: message.length > 35 ? `${message.substring(0, 35)}...` : message 
+    };
+  };
+
   const isUnread = (conversation.unread_count ?? 0) > 0;
 
   const handleClick = () => {
@@ -254,16 +309,22 @@ export function ChatListItem({
             
             <div className="flex items-center justify-between gap-2 min-w-0">
               <p className={cn(
-                "text-sm flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap",
+                "text-sm flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap flex items-center",
                 isUnread
                   ? "text-foreground font-medium" 
                   : "text-muted-foreground"
               )}
               style={{ maxWidth: 'calc(100% - 40px)' }}
               >
-                {conversation.last_message && conversation.last_message.length > 35 
-                  ? `${conversation.last_message.substring(0, 35)}...` 
-                  : conversation.last_message || 'No messages yet'}
+                {(() => {
+                  const formatted = formatLastMessage(conversation.last_message);
+                  return (
+                    <>
+                      {formatted.icon}
+                      <span>{formatted.text}</span>
+                    </>
+                  );
+                })()}
               </p>
               
               <div className="flex items-center gap-1.5 flex-shrink-0">
