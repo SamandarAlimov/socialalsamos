@@ -65,6 +65,8 @@ interface Profile {
   avatar_url: string | null;
   location: string | null;
   website: string | null;
+  country: string | null;
+  birth_date: string | null;
 }
 
 // Push Notification Settings Component
@@ -159,6 +161,8 @@ export default function SettingsPage() {
     avatar_url: null,
     location: '',
     website: '',
+    country: null,
+    birth_date: null,
   });
   const [saving, setSaving] = useState(false);
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
@@ -187,6 +191,8 @@ export default function SettingsPage() {
           avatar_url: data.avatar_url,
           location: data.location || '',
           website: data.website || '',
+          country: data.country || null,
+          birth_date: data.birth_date || null,
         });
       }
     };
@@ -207,6 +213,8 @@ export default function SettingsPage() {
           bio: profile.bio,
           location: profile.location,
           website: profile.website,
+          country: profile.country,
+          birth_date: profile.birth_date,
         })
         .eq('id', user.id);
 
@@ -384,6 +392,53 @@ export default function SettingsPage() {
                     onChange={(e) => setProfile(prev => ({ ...prev, website: e.target.value }))}
                     className="mt-1.5"
                     placeholder="https://..."
+                  />
+                </div>
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="country">Davlat</Label>
+                  <Select 
+                    value={profile.country || ''} 
+                    onValueChange={(value) => setProfile(prev => ({ ...prev, country: value }))}
+                  >
+                    <SelectTrigger className="mt-1.5">
+                      <SelectValue placeholder="Davlatingizni tanlang" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Uzbekistan">🇺🇿 O'zbekiston</SelectItem>
+                      <SelectItem value="Russia">🇷🇺 Rossiya</SelectItem>
+                      <SelectItem value="Kazakhstan">🇰🇿 Qozog'iston</SelectItem>
+                      <SelectItem value="Kyrgyzstan">🇰🇬 Qirg'iziston</SelectItem>
+                      <SelectItem value="Tajikistan">🇹🇯 Tojikiston</SelectItem>
+                      <SelectItem value="Turkmenistan">🇹🇲 Turkmaniston</SelectItem>
+                      <SelectItem value="Turkey">🇹🇷 Turkiya</SelectItem>
+                      <SelectItem value="United States">🇺🇸 AQSh</SelectItem>
+                      <SelectItem value="United Kingdom">🇬🇧 Buyuk Britaniya</SelectItem>
+                      <SelectItem value="Germany">🇩🇪 Germaniya</SelectItem>
+                      <SelectItem value="France">🇫🇷 Fransiya</SelectItem>
+                      <SelectItem value="Italy">🇮🇹 Italiya</SelectItem>
+                      <SelectItem value="Spain">🇪🇸 Ispaniya</SelectItem>
+                      <SelectItem value="South Korea">🇰🇷 Janubiy Koreya</SelectItem>
+                      <SelectItem value="Japan">🇯🇵 Yaponiya</SelectItem>
+                      <SelectItem value="China">🇨🇳 Xitoy</SelectItem>
+                      <SelectItem value="India">🇮🇳 Hindiston</SelectItem>
+                      <SelectItem value="UAE">🇦🇪 BAA</SelectItem>
+                      <SelectItem value="Saudi Arabia">🇸🇦 Saudiya Arabistoni</SelectItem>
+                      <SelectItem value="Other">🌍 Boshqa</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="birth_date">Tug'ilgan sana</Label>
+                  <Input
+                    id="birth_date"
+                    type="date"
+                    value={profile.birth_date || ''}
+                    onChange={(e) => setProfile(prev => ({ ...prev, birth_date: e.target.value }))}
+                    className="mt-1.5"
+                    max={new Date().toISOString().split('T')[0]}
                   />
                 </div>
               </div>
