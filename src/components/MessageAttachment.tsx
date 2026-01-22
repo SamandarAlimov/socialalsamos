@@ -59,7 +59,9 @@ export function MessageAttachment({ url, type, name, isMine, autoPlay = false, s
   }
 
   if (type === 'video') {
-    return <VideoMessagePlayer url={url} isMine={isMine} autoPlay={autoPlay} />;
+    // Check if video was recorded from webcam (TelegramMediaRecorder uses 'video_' prefix)
+    const isWebcamRecording = url.includes('/video_') || url.includes('video_');
+    return <VideoMessagePlayer url={url} isMine={isMine} autoPlay={autoPlay} isWebcamRecording={isWebcamRecording} />;
   }
 
   if (type === 'audio') {
