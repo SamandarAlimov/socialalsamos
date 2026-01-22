@@ -2316,16 +2316,7 @@ export type Database = {
       }
     }
     Views: {
-      admin_user_stats: {
-        Row: {
-          new_users_24h: number | null
-          new_users_7d: number | null
-          online_users: number | null
-          total_users: number | null
-          verified_users: number | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       get_admin_age_stats: { Args: never; Returns: Json }
