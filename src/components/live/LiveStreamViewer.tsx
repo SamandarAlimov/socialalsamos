@@ -38,6 +38,19 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const commentsRef = useRef<HTMLDivElement>(null);
 
+  // Connect video stream to video element
+  useEffect(() => {
+    if (videoRef.current && remoteStream) {
+      console.log('[Viewer] Setting remote stream to video element', remoteStream.getTracks());
+      videoRef.current.srcObject = remoteStream;
+      
+      // Force play
+      videoRef.current.play().catch(err => {
+        console.log('[Viewer] Autoplay failed, waiting for user interaction:', err);
+      });
+    }
+  }, [remoteStream]);
+
   // Subscribe to realtime viewer count updates
   useEffect(() => {
     if (!streamId) return;
@@ -77,10 +90,18 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
     setRealtimeViewerCount(dbViewerCount);
   }, [dbViewerCount]);
 
-  // Join stream on mount
+  // Join stream and connect WebRTC on mount
   useEffect(() => {
     joinStream();
+    
+    // Connect to WebRTC after a short delay to ensure stream data is loaded
+    const timer = setTimeout(() => {
+      console.log('[Viewer] Initiating WebRTC connection');
+      connectWebRTC();
+    }, 500);
+    
     return () => {
+      clearTimeout(timer);
       leaveStream();
       disconnectWebRTC();
     };
@@ -99,7 +120,7 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
 
   if (!stream) {
     return (
-      <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+      <div className="fixed inset-0 z-[9999] bg-black flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin text-white mx-auto mb-4" />
           <p className="text-white">Loading stream...</p>
@@ -110,7 +131,7 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
 
   if (stream.status === 'ended') {
     return (
-      <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+      <div className="fixed inset-0 z-[9999] bg-black flex items-center justify-center">
         <div className="text-center">
           <Radio className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
           <h2 className="text-white text-xl font-bold mb-2">Live has ended</h2>
@@ -124,7 +145,7 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+    <div className="fixed inset-0 z-[9999] bg-black flex flex-col h-screen-safe">
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-10 p-4 bg-gradient-to-b from-black/80 to-transparent safe-area-top">
         <div className="flex items-center justify-between">
@@ -168,13 +189,14 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
         )}
       </div>
 
-      {/* Video Stream */}
-      <div className="flex-1 relative bg-black">
+      {/* Video Stream - Full screen */}
+      <div className="flex-1 relative bg-black w-full h-full">
         {isConnected && remoteStream ? (
           <video
             ref={videoRef}
             autoPlay
             playsInline
+            muted={false}
             className="absolute inset-0 w-full h-full object-contain"
           />
         ) : isConnecting ? (
@@ -204,7 +226,14 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
           <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-purple-900 to-pink-900">
             <div className="text-center">
               <Radio className="h-20 w-20 text-white/50 mx-auto mb-4 animate-pulse" />
-              <p className="text-white/50">Waiting for video...</p>
+              <p className="text-white/50 mb-4">Waiting for video...</p>
+              <Button 
+                variant="secondary" 
+                size="sm"
+                onClick={() => connectWebRTC()}
+              >
+                Connect
+              </Button>
             </div>
           </div>
         )}
@@ -227,7 +256,7 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
       </div>
 
       {/* Comments overlay */}
-      <div className="absolute left-0 right-0 bottom-20 h-60 pointer-events-none">
+      <div className="absolute left-0 right-0 bottom-20 h-48 pointer-events-none safe-area-bottom">
         <div className="h-full bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
         <div
           ref={commentsRef}

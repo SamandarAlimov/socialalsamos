@@ -236,9 +236,19 @@ export function useLiveStreamViewer(streamId: string | null) {
   const wsRef = useRef<WebSocket | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const userIdRef = useRef<string | null>(null);
+  const reconnectAttemptRef = useRef(0);
 
   const connect = useCallback(async () => {
-    if (!streamId) return;
+    if (!streamId) {
+      console.log('[Viewer] No streamId provided');
+      return;
+    }
+
+    // Prevent multiple connections
+    if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) {
+      console.log('[Viewer] Already connected or connecting');
+      return;
+    }
 
     setIsConnecting(true);
     setError(null);
@@ -255,11 +265,12 @@ export function useLiveStreamViewer(streamId: string | null) {
 
       // Connect to signaling server
       const wsUrl = `wss://mbhjganbihamoiqmankv.supabase.co/functions/v1/live-stream-signaling`;
+      console.log('[Viewer] Connecting to:', wsUrl);
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('[Viewer] WebSocket connected');
+        console.log('[Viewer] WebSocket connected, joining stream:', streamId);
         ws.send(JSON.stringify({
           type: 'viewer-join',
           streamId,
@@ -269,7 +280,7 @@ export function useLiveStreamViewer(streamId: string | null) {
 
       ws.onmessage = async (event) => {
         const data = JSON.parse(event.data);
-        console.log('[Viewer] Received:', data.type);
+        console.log('[Viewer] Received:', data.type, data);
 
         switch (data.type) {
           case 'request-offer':
@@ -278,34 +289,45 @@ export function useLiveStreamViewer(streamId: string | null) {
             break;
 
           case 'waiting-for-broadcaster':
-            console.log('[Viewer] Broadcaster not connected yet');
+            console.log('[Viewer] Broadcaster not connected yet, will wait for offer');
             break;
 
           case 'offer':
+            console.log('[Viewer] Got offer from broadcaster, handling...');
             await handleOffer(data.sdp, data.broadcasterId);
             break;
 
           case 'ice-candidate':
+            console.log('[Viewer] Got ICE candidate');
             await handleIceCandidate(data.candidate);
             break;
 
           case 'stream-ended':
+            console.log('[Viewer] Stream ended');
             setRemoteStream(null);
             setIsConnected(false);
             setError('Stream ended');
             break;
 
           case 'error':
+            console.error('[Viewer] Server error:', data.message);
             setError(data.message);
             setIsConnecting(false);
             break;
         }
       };
 
-      ws.onclose = () => {
-        console.log('[Viewer] WebSocket closed');
+      ws.onclose = (event) => {
+        console.log('[Viewer] WebSocket closed:', event.code, event.reason);
         setIsConnected(false);
         setIsConnecting(false);
+        
+        // Auto-reconnect if not intentionally closed
+        if (reconnectAttemptRef.current < 3 && streamId) {
+          reconnectAttemptRef.current++;
+          console.log('[Viewer] Attempting reconnect #', reconnectAttemptRef.current);
+          setTimeout(() => connect(), 2000);
+        }
       };
 
       ws.onerror = (e) => {
@@ -322,23 +344,39 @@ export function useLiveStreamViewer(streamId: string | null) {
   }, [streamId]);
 
   const handleOffer = async (sdp: RTCSessionDescriptionInit, broadcasterId: string) => {
+    console.log('[Viewer] Creating peer connection and handling offer');
+    
     try {
+      // Clean up any existing connection
+      if (pcRef.current) {
+        pcRef.current.close();
+      }
+      
       const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
       pcRef.current = pc;
 
+      // Create a new MediaStream for receiving tracks
+      const newStream = new MediaStream();
+
       // Handle incoming tracks
       pc.ontrack = (event) => {
-        console.log('[Viewer] Received track:', event.track.kind);
-        if (event.streams && event.streams[0]) {
-          setRemoteStream(event.streams[0]);
-          setIsConnected(true);
-          setIsConnecting(false);
-        }
+        console.log('[Viewer] Received track:', event.track.kind, event.track.id);
+        
+        // Add track to our stream
+        newStream.addTrack(event.track);
+        
+        // Update state with the stream
+        setRemoteStream(newStream);
+        setIsConnected(true);
+        setIsConnecting(false);
+        
+        console.log('[Viewer] Remote stream has tracks:', newStream.getTracks().length);
       };
 
       // Handle ICE candidates
       pc.onicecandidate = (event) => {
         if (event.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
+          console.log('[Viewer] Sending ICE candidate');
           wsRef.current.send(JSON.stringify({
             type: 'ice-candidate',
             candidate: event.candidate,
@@ -348,17 +386,34 @@ export function useLiveStreamViewer(streamId: string | null) {
 
       pc.oniceconnectionstatechange = () => {
         console.log('[Viewer] ICE state:', pc.iceConnectionState);
-        if (pc.iceConnectionState === 'connected') {
+        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
           setIsConnected(true);
           setIsConnecting(false);
-        } else if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+          reconnectAttemptRef.current = 0; // Reset reconnect counter on successful connection
+        } else if (pc.iceConnectionState === 'failed') {
           setIsConnected(false);
+          setError('Connection failed');
+        } else if (pc.iceConnectionState === 'disconnected') {
+          console.log('[Viewer] ICE disconnected, may recover...');
         }
       };
 
+      pc.onconnectionstatechange = () => {
+        console.log('[Viewer] Connection state:', pc.connectionState);
+      };
+
+      // Add transceivers to ensure we can receive audio and video
+      pc.addTransceiver('video', { direction: 'recvonly' });
+      pc.addTransceiver('audio', { direction: 'recvonly' });
+
       // Set remote description and create answer
+      console.log('[Viewer] Setting remote description (offer)');
       await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+      
+      console.log('[Viewer] Creating answer');
       const answer = await pc.createAnswer();
+      
+      console.log('[Viewer] Setting local description (answer)');
       await pc.setLocalDescription(answer);
 
       // Send answer to broadcaster
@@ -367,9 +422,9 @@ export function useLiveStreamViewer(streamId: string | null) {
           type: 'answer',
           sdp: answer,
         }));
+        console.log('[Viewer] Sent answer to broadcaster');
       }
 
-      console.log('[Viewer] Sent answer to broadcaster');
     } catch (err) {
       console.error('[Viewer] Error handling offer:', err);
       setError('Failed to connect to stream');
@@ -378,16 +433,23 @@ export function useLiveStreamViewer(streamId: string | null) {
   };
 
   const handleIceCandidate = async (candidate: RTCIceCandidateInit) => {
-    if (!pcRef.current) return;
+    if (!pcRef.current) {
+      console.log('[Viewer] No peer connection for ICE candidate');
+      return;
+    }
 
     try {
       await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+      console.log('[Viewer] Added ICE candidate');
     } catch (err) {
       console.error('[Viewer] Error adding ICE candidate:', err);
     }
   };
 
   const disconnect = useCallback(() => {
+    console.log('[Viewer] Disconnecting');
+    reconnectAttemptRef.current = 999; // Prevent auto-reconnect
+    
     if (pcRef.current) {
       pcRef.current.close();
       pcRef.current = null;
