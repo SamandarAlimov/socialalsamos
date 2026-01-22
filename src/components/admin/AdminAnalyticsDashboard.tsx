@@ -34,6 +34,7 @@ import {
 } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
+import { AdminOnlineUsersMap } from './AdminOnlineUsersMap';
 
 const COLORS = ['hsl(var(--primary))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))', 'hsl(var(--muted))'];
 
@@ -233,6 +234,9 @@ export function AdminAnalyticsDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Real-time Online Users Map */}
+      <AdminOnlineUsersMap />
 
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
