@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { GlobalCallProvider } from "@/contexts/GlobalCallContext";
 import { AudioPlayerProvider } from "@/contexts/AudioPlayerContext";
 import { ThemeProvider } from "next-themes";
+import { PushNotificationProvider } from "@/components/PushNotificationProvider";
 
 // Pages
 import AuthPage from "./pages/AuthPage";
@@ -122,9 +123,11 @@ function AppWithGlobalCall() {
       <Toaster />
       <Sonner />
       {isAuthenticated ? (
-        <GlobalCallProvider>
-          <AppRoutes />
-        </GlobalCallProvider>
+        <PushNotificationProvider>
+          <GlobalCallProvider>
+            <AppRoutes />
+          </GlobalCallProvider>
+        </PushNotificationProvider>
       ) : (
         <AppRoutes />
       )}
