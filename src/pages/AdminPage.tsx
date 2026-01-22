@@ -13,7 +13,8 @@ import {
   UserMinus,
   Search,
   ExternalLink,
-  FileText
+  FileText,
+  BarChart3
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +26,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
+import { AdminAnalyticsDashboard } from '@/components/admin/AdminAnalyticsDashboard';
 import {
   Dialog,
   DialogContent,
@@ -276,8 +278,12 @@ export default function AdminPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="pending" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
+      <Tabs defaultValue="analytics" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="analytics" className="flex items-center gap-1">
+            <BarChart3 className="h-4 w-4" />
+            Analitika
+          </TabsTrigger>
           <TabsTrigger value="pending" className="relative">
             Pending
             {pendingRequests.length > 0 && (
@@ -289,6 +295,11 @@ export default function AdminPage() {
           <TabsTrigger value="history">History</TabsTrigger>
           <TabsTrigger value="admins">Admins</TabsTrigger>
         </TabsList>
+
+        {/* Analytics Dashboard */}
+        <TabsContent value="analytics" className="space-y-4">
+          <AdminAnalyticsDashboard />
+        </TabsContent>
 
         {/* Pending Requests */}
         <TabsContent value="pending" className="space-y-4">
