@@ -398,7 +398,7 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
   // Pre-live screen
   if (!isLive) {
     return (
-      <div className="fixed inset-0 z-50 bg-black flex flex-col">
+      <div className="fixed inset-0 z-[9999] bg-black flex flex-col h-screen-safe">
         {/* Header */}
         <div className="flex items-center justify-between p-4 safe-area-top">
           <button onClick={handleClose} className="text-white">
@@ -420,8 +420,7 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
               autoPlay
               playsInline
               muted
-              className="absolute inset-0 w-full h-full object-cover"
-              style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
+              className="absolute inset-0 w-full h-full object-cover mirror"
             />
           )}
           
@@ -448,7 +447,7 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
             <Button
               onClick={handleStartLive}
               disabled={isStarting || isInitializing}
-              className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-6"
+              className="w-full bg-destructive hover:bg-destructive/90 text-white font-bold py-6"
             >
               {isStarting ? (
                 <Loader2 className="h-5 w-5 animate-spin mr-2" />
@@ -465,15 +464,17 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
 
   // Live broadcast screen
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col">
-      {/* Video */}
+    <div className="fixed inset-0 z-[9999] bg-black flex flex-col h-screen-safe">
+      {/* Video - mirrored for front camera */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
-        className="absolute inset-0 w-full h-full object-cover"
-        style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
+        className={cn(
+          "absolute inset-0 w-full h-full object-cover",
+          facingMode === 'user' && !isScreenSharing && "mirror"
+        )}
       />
 
       {/* Gradient overlays */}
@@ -483,7 +484,7 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
       <div className="relative z-10 p-4 safe-area-top">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Avatar className="h-10 w-10 border-2 border-red-500">
+            <Avatar className="h-10 w-10 border-2 border-destructive">
               <AvatarImage src={profile?.avatar_url || ''} />
               <AvatarFallback>
                 {profile?.display_name?.[0] || 'U'}
@@ -494,9 +495,15 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
                 <span className="text-white font-semibold text-sm">
                   {profile?.display_name || profile?.username}
                 </span>
-                <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded animate-pulse">
+                <span className="bg-destructive text-white text-[10px] font-bold px-1.5 py-0.5 rounded animate-pulse">
                   LIVE
                 </span>
+                {isWebRTCConnected && (
+                  <span className="bg-success/20 text-success text-[10px] font-medium px-1.5 py-0.5 rounded flex items-center gap-1">
+                    <Wifi className="h-3 w-3" />
+                    Connected
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-3 text-white/70 text-xs">
                 <div className="flex items-center gap-1">
@@ -517,7 +524,6 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
             onClick={handleEndLive}
             variant="destructive"
             size="sm"
-            className="bg-red-500 hover:bg-red-600"
           >
             End
           </Button>
@@ -545,7 +551,7 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
 
       {/* Comments */}
       {showComments && (
-        <div className="absolute left-0 right-20 bottom-24 h-60 pointer-events-none">
+        <div className="absolute left-0 right-20 bottom-24 h-48 pointer-events-none">
           <div
             ref={commentsRef}
             className="h-full overflow-y-auto px-4 scrollbar-hide"
@@ -578,7 +584,7 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
           onClick={toggleMute}
           className={cn(
             "h-12 w-12 rounded-full flex items-center justify-center",
-            isMuted ? "bg-red-500" : "bg-white/20"
+            isMuted ? "bg-destructive" : "bg-white/20"
           )}
         >
           {isMuted ? (
@@ -592,7 +598,7 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
           onClick={toggleCamera}
           className={cn(
             "h-12 w-12 rounded-full flex items-center justify-center",
-            !isCameraOn ? "bg-red-500" : "bg-white/20"
+            !isCameraOn ? "bg-destructive" : "bg-white/20"
           )}
         >
           {isCameraOn ? (
