@@ -16,6 +16,8 @@ interface VideoMessagePlayerProps {
   allMediaTracks?: MediaTrack[];
   /** Callback when video ends to trigger next playback */
   onEnded?: () => void;
+  /** Whether the video was recorded from webcam (should be mirrored) */
+  isWebcamRecording?: boolean;
 }
 
 export function VideoMessagePlayer({ 
@@ -26,7 +28,8 @@ export function VideoMessagePlayer({
   messageId,
   senderName,
   allMediaTracks = [],
-  onEnded
+  onEnded,
+  isWebcamRecording = false
 }: VideoMessagePlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -187,7 +190,7 @@ export function VideoMessagePlayer({
           ref={videoRef}
           src={url}
           className="w-full h-full object-cover"
-          style={{ transform: 'scaleX(-1)' }}
+          style={isWebcamRecording ? { transform: 'scaleX(-1)' } : undefined}
           playsInline
           muted={isMuted}
           preload="auto"
