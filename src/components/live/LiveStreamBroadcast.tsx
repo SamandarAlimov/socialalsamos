@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Camera, CameraOff, Mic, MicOff, SwitchCamera, Users, Clock, Radio, MessageCircle, Loader2, Wifi, Monitor, MonitorOff } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -395,76 +396,74 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
     }
   };
 
-  // Pre-live screen
-  if (!isLive) {
-    return (
-      <div className="fixed inset-0 z-[9999] bg-black flex flex-col h-screen-safe">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 safe-area-top">
-          <button onClick={handleClose} className="text-white">
-            <X className="h-6 w-6" />
-          </button>
-          <span className="text-white font-semibold">New Live Video</span>
-          <div className="w-6" />
-        </div>
+  // Pre-live screen content
+  const preLiveContent = (
+    <div className="fixed inset-0 z-[9999] bg-black flex flex-col" style={{ height: '100dvh' }}>
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 safe-area-top">
+        <button onClick={handleClose} className="text-white">
+          <X className="h-6 w-6" />
+        </button>
+        <span className="text-white font-semibold">New Live Video</span>
+        <div className="w-6" />
+      </div>
 
-        {/* Preview */}
-        <div className="flex-1 relative">
-          {isInitializing ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-black">
-              <Loader2 className="h-8 w-8 animate-spin text-white" />
-            </div>
-          ) : (
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="absolute inset-0 w-full h-full object-cover mirror"
-            />
-          )}
-          
-          {/* Overlay */}
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/80" />
-          
-          {/* Camera switch button */}
-          <button
-            onClick={switchCamera}
-            className="absolute top-4 right-4 h-10 w-10 rounded-full bg-white/20 flex items-center justify-center"
-          >
-            <SwitchCamera className="h-5 w-5 text-white" />
-          </button>
-          
-          {/* Title input */}
-          <div className="absolute bottom-0 left-0 right-0 p-4 safe-area-bottom">
-            <Input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Add a title for your live video..."
-              className="bg-white/10 border-white/20 text-white placeholder:text-white/50 mb-4"
-            />
-            
-            <Button
-              onClick={handleStartLive}
-              disabled={isStarting || isInitializing}
-              className="w-full bg-destructive hover:bg-destructive/90 text-white font-bold py-6"
-            >
-              {isStarting ? (
-                <Loader2 className="h-5 w-5 animate-spin mr-2" />
-              ) : (
-                <Radio className="h-5 w-5 mr-2" />
-              )}
-              Go Live
-            </Button>
+      {/* Preview */}
+      <div className="flex-1 relative">
+        {isInitializing ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-black">
+            <Loader2 className="h-8 w-8 animate-spin text-white" />
           </div>
+        ) : (
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="absolute inset-0 w-full h-full object-cover mirror"
+          />
+        )}
+        
+        {/* Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/80" />
+        
+        {/* Camera switch button */}
+        <button
+          onClick={switchCamera}
+          className="absolute top-4 right-4 h-10 w-10 rounded-full bg-white/20 flex items-center justify-center"
+        >
+          <SwitchCamera className="h-5 w-5 text-white" />
+        </button>
+        
+        {/* Title input */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 safe-area-bottom">
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Add a title for your live video..."
+            className="bg-white/10 border-white/20 text-white placeholder:text-white/50 mb-4"
+          />
+          
+          <Button
+            onClick={handleStartLive}
+            disabled={isStarting || isInitializing}
+            className="w-full bg-destructive hover:bg-destructive/90 text-white font-bold py-6"
+          >
+            {isStarting ? (
+              <Loader2 className="h-5 w-5 animate-spin mr-2" />
+            ) : (
+              <Radio className="h-5 w-5 mr-2" />
+            )}
+            Go Live
+          </Button>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
 
-  // Live broadcast screen
-  return (
-    <div className="fixed inset-0 z-[9999] bg-black flex flex-col h-screen-safe">
+  // Live broadcast screen content
+  const liveContent = (
+    <div className="fixed inset-0 z-[9999] bg-black flex flex-col" style={{ height: '100dvh' }}>
       {/* Video - mirrored for front camera */}
       <video
         ref={videoRef}
@@ -659,5 +658,11 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
         }
       `}</style>
     </div>
+  );
+
+  // Use portal for true fullscreen overlay - renders outside normal DOM hierarchy
+  return createPortal(
+    isLive ? liveContent : preLiveContent,
+    document.body
   );
 }

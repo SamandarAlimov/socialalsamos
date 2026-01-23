@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Heart, Send, Users, Radio, Loader2, WifiOff } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -8,7 +9,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useLiveStreamViewer as useLiveStreamViewerDB, useLiveStreamComments, useLiveStreamReactions } from '@/hooks/useLiveStream';
 import { useLiveStreamViewer as useLiveStreamViewerWebRTC } from '@/hooks/useLiveStreamWebRTC';
 import { useAuth } from '@/contexts/AuthContext';
-
 interface LiveStreamViewerProps {
   streamId: string;
   onClose: () => void;
@@ -118,34 +118,29 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
     setShowReactions(false);
   };
 
-  if (!stream) {
-    return (
-      <div className="fixed inset-0 z-[9999] bg-black flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-white mx-auto mb-4" />
-          <p className="text-white">Loading stream...</p>
+  // Portal content for true fullscreen overlay
+  const overlayContent = (
+    <>
+      {!stream ? (
+        <div className="fixed inset-0 z-[9999] bg-black flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-white mx-auto mb-4" />
+            <p className="text-white">Loading stream...</p>
+          </div>
         </div>
-      </div>
-    );
-  }
-
-  if (stream.status === 'ended') {
-    return (
-      <div className="fixed inset-0 z-[9999] bg-black flex items-center justify-center">
-        <div className="text-center">
-          <Radio className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-          <h2 className="text-white text-xl font-bold mb-2">Live has ended</h2>
-          <p className="text-muted-foreground mb-4">This broadcast has ended</p>
-          <Button onClick={onClose} variant="secondary">
-            Close
-          </Button>
+      ) : stream.status === 'ended' ? (
+        <div className="fixed inset-0 z-[9999] bg-black flex items-center justify-center">
+          <div className="text-center">
+            <Radio className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+            <h2 className="text-white text-xl font-bold mb-2">Live has ended</h2>
+            <p className="text-muted-foreground mb-4">This broadcast has ended</p>
+            <Button onClick={onClose} variant="secondary">
+              Close
+            </Button>
+          </div>
         </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="fixed inset-0 z-[9999] bg-black flex flex-col h-screen-safe">
+      ) : (
+    <div className="fixed inset-0 z-[9999] bg-black flex flex-col" style={{ height: '100dvh' }}>
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-10 p-4 bg-gradient-to-b from-black/80 to-transparent safe-area-top">
         <div className="flex items-center justify-between">
@@ -348,5 +343,10 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
         }
       `}</style>
     </div>
+      )}
+    </>
   );
+
+  // Use portal to render outside normal DOM hierarchy - ensures true fullscreen
+  return createPortal(overlayContent, document.body);
 }
