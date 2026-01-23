@@ -9,10 +9,22 @@ import {
   Hash,
   Smile,
   Mic,
-  FileText,
-  Calendar
+  Calendar,
+  Music,
+  Users,
+  Type,
+  Sparkles,
+  Sticker,
+  Link2,
+  FileText
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface MediaToolbarProps {
   onImageClick: () => void;
@@ -23,11 +35,19 @@ interface MediaToolbarProps {
   onMentionClick?: () => void;
   onHashtagClick?: () => void;
   onEmojiClick?: () => void;
-  onAudioClick?: () => void;
+  onMusicClick?: () => void;
+  onCollaborateClick?: () => void;
+  onTextBackgroundClick?: () => void;
+  onFilterClick?: () => void;
   onScheduleClick?: () => void;
+  onLinkClick?: () => void;
   hasPoll?: boolean;
+  hasMusic?: boolean;
+  hasTextBackground?: boolean;
   disabled?: boolean;
   compact?: boolean;
+  showAll?: boolean;
+  variant?: 'post' | 'story' | 'reel';
 }
 
 export function MediaToolbar({
@@ -39,50 +59,160 @@ export function MediaToolbar({
   onMentionClick,
   onHashtagClick,
   onEmojiClick,
-  onAudioClick,
+  onMusicClick,
+  onCollaborateClick,
+  onTextBackgroundClick,
+  onFilterClick,
   onScheduleClick,
+  onLinkClick,
   hasPoll,
+  hasMusic,
+  hasTextBackground,
   disabled,
-  compact
+  compact,
+  showAll = false,
+  variant = 'post'
 }: MediaToolbarProps) {
-  const tools = [
-    { icon: ImageIcon, label: 'Photo', onClick: onImageClick, color: 'text-green-500' },
-    { icon: Video, label: 'Video', onClick: onVideoClick, color: 'text-blue-500' },
-    { icon: Camera, label: 'Camera', onClick: onCameraClick, color: 'text-purple-500' },
-    { icon: BarChart3, label: 'Poll', onClick: onPollClick, color: 'text-orange-500', active: hasPoll },
-    { icon: Smile, label: 'Emoji', onClick: onEmojiClick, color: 'text-yellow-500', hide: !onEmojiClick },
-    { icon: MapPin, label: 'Location', onClick: onLocationClick, color: 'text-red-500', hide: !onLocationClick },
-    { icon: AtSign, label: 'Mention', onClick: onMentionClick, color: 'text-cyan-500', hide: !onMentionClick },
-    { icon: Hash, label: 'Tag', onClick: onHashtagClick, color: 'text-indigo-500', hide: !onHashtagClick },
-    { icon: Mic, label: 'Audio', onClick: onAudioClick, color: 'text-pink-500', hide: !onAudioClick },
-    { icon: Calendar, label: 'Schedule', onClick: onScheduleClick, color: 'text-teal-500', hide: !onScheduleClick },
-  ].filter(tool => !tool.hide);
+  const allTools = [
+    { 
+      icon: ImageIcon, 
+      label: 'Photo', 
+      onClick: onImageClick, 
+      color: 'text-green-500',
+      show: true
+    },
+    { 
+      icon: Video, 
+      label: 'Video', 
+      onClick: onVideoClick, 
+      color: 'text-blue-500',
+      show: true
+    },
+    { 
+      icon: Camera, 
+      label: 'Camera', 
+      onClick: onCameraClick, 
+      color: 'text-purple-500',
+      show: true
+    },
+    { 
+      icon: BarChart3, 
+      label: 'Poll', 
+      onClick: onPollClick, 
+      color: 'text-orange-500', 
+      active: hasPoll,
+      show: variant === 'post'
+    },
+    { 
+      icon: Sparkles, 
+      label: 'Filter', 
+      onClick: onFilterClick, 
+      color: 'text-pink-500',
+      show: !!onFilterClick
+    },
+    { 
+      icon: Music, 
+      label: 'Music', 
+      onClick: onMusicClick, 
+      color: 'text-rose-500', 
+      active: hasMusic,
+      show: !!onMusicClick
+    },
+    { 
+      icon: Type, 
+      label: 'Text BG', 
+      onClick: onTextBackgroundClick, 
+      color: 'text-amber-500', 
+      active: hasTextBackground,
+      show: !!onTextBackgroundClick && (variant === 'story' || variant === 'post')
+    },
+    { 
+      icon: Users, 
+      label: 'Collab', 
+      onClick: onCollaborateClick, 
+      color: 'text-cyan-500',
+      show: !!onCollaborateClick
+    },
+    { 
+      icon: AtSign, 
+      label: 'Mention', 
+      onClick: onMentionClick, 
+      color: 'text-indigo-500',
+      show: !!onMentionClick
+    },
+    { 
+      icon: Smile, 
+      label: 'Emoji', 
+      onClick: onEmojiClick, 
+      color: 'text-yellow-500',
+      show: !!onEmojiClick
+    },
+    { 
+      icon: Hash, 
+      label: 'Tag', 
+      onClick: onHashtagClick, 
+      color: 'text-teal-500',
+      show: !!onHashtagClick
+    },
+    { 
+      icon: MapPin, 
+      label: 'Location', 
+      onClick: onLocationClick, 
+      color: 'text-red-500',
+      show: !!onLocationClick
+    },
+    { 
+      icon: Link2, 
+      label: 'Link', 
+      onClick: onLinkClick, 
+      color: 'text-slate-500',
+      show: !!onLinkClick && variant === 'post'
+    },
+    { 
+      icon: Calendar, 
+      label: 'Schedule', 
+      onClick: onScheduleClick, 
+      color: 'text-emerald-500',
+      show: !!onScheduleClick && variant === 'post'
+    },
+  ];
+
+  const tools = allTools.filter(tool => tool.show);
+  const displayTools = showAll ? tools : tools.slice(0, compact ? 8 : 4);
 
   if (compact) {
     return (
-      <div className="flex gap-1 overflow-x-auto pb-2">
-        {tools.map((tool) => (
-          <Button
-            key={tool.label}
-            variant={tool.active ? "default" : "ghost"}
-            size="icon"
-            onClick={tool.onClick}
-            disabled={disabled}
-            className={cn(
-              "flex-shrink-0",
-              !tool.active && tool.color
-            )}
-          >
-            <tool.icon className="h-5 w-5" />
-          </Button>
-        ))}
-      </div>
+      <TooltipProvider>
+        <div className="flex gap-1 overflow-x-auto pb-2 scrollbar-hide">
+          {displayTools.map((tool) => (
+            <Tooltip key={tool.label}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={tool.active ? "default" : "ghost"}
+                  size="icon"
+                  onClick={tool.onClick}
+                  disabled={disabled}
+                  className={cn(
+                    "flex-shrink-0 h-9 w-9",
+                    !tool.active && tool.color
+                  )}
+                >
+                  <tool.icon className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{tool.label}</p>
+              </TooltipContent>
+            </Tooltip>
+          ))}
+        </div>
+      </TooltipProvider>
     );
   }
 
   return (
     <div className="grid grid-cols-4 gap-2">
-      {tools.slice(0, 4).map((tool) => (
+      {displayTools.map((tool) => (
         <Button
           key={tool.label}
           variant={tool.active ? "default" : "outline"}

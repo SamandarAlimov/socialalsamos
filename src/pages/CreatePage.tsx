@@ -14,15 +14,11 @@ import { usePosts } from '@/hooks/usePosts';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { 
-  Image as ImageIcon, 
-  Video, 
-  Music, 
   X, 
   Loader2,
   ChevronLeft,
   ChevronRight,
   Play,
-  Volume2,
   Globe,
   Users,
   Lock,
@@ -35,8 +31,10 @@ import {
   Filter,
   Trash2,
   Radio,
-  BarChart3,
-  Scissors
+  Music,
+  Scissors,
+  Type,
+  Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -46,37 +44,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { EmojiPicker } from '@/components/EmojiPicker';
 import { LiveStreamBroadcast } from '@/components/live/LiveStreamBroadcast';
 import { CameraVideoRecorder } from '@/components/create/CameraVideoRecorder';
-import { PollCreator, PollData, createDefaultPoll } from '@/components/create/PollCreator';
 import { MediaToolbar } from '@/components/create/MediaToolbar';
 import { VideoEditor, VideoEditData } from '@/components/VideoEditor';
-
-const MUSIC_TRACKS = [
-  { id: '1', name: 'Chill Vibes', artist: 'Alsamos Music', duration: 30, url: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3' },
-  { id: '2', name: 'Summer Days', artist: 'Mood Beats', duration: 30, url: 'https://www.soundjay.com/misc/sounds/bell-ringing-04.mp3' },
-  { id: '3', name: 'Night Drive', artist: 'Lo-Fi House', duration: 30, url: 'https://www.soundjay.com/misc/sounds/bell-ringing-03.mp3' },
-  { id: '4', name: 'Golden Hour', artist: 'Sunset Sound', duration: 30, url: 'https://www.soundjay.com/misc/sounds/bell-ringing-02.mp3' },
-  { id: '5', name: 'City Lights', artist: 'Urban Mix', duration: 30, url: 'https://www.soundjay.com/misc/sounds/bell-ringing-01.mp3' },
-];
-
-const FILTERS = [
-  { id: 'none', name: 'Normal', style: '' },
-  { id: 'grayscale', name: 'B&W', style: 'grayscale(100%)' },
-  { id: 'sepia', name: 'Sepia', style: 'sepia(100%)' },
-  { id: 'warm', name: 'Warm', style: 'sepia(30%) saturate(140%)' },
-  { id: 'cool', name: 'Cool', style: 'saturate(80%) hue-rotate(20deg)' },
-  { id: 'vivid', name: 'Vivid', style: 'saturate(150%) contrast(110%)' },
-  { id: 'fade', name: 'Fade', style: 'contrast(90%) brightness(110%)' },
-  { id: 'vintage', name: 'Vintage', style: 'sepia(40%) contrast(90%)' },
-];
+import { FilterPicker } from '@/components/create/filters/FilterPicker';
+import { MusicPicker } from '@/components/create/MusicPicker';
+import { TextBackgroundPicker } from '@/components/create/TextBackgroundPicker';
+import { MentionCollaborator } from '@/components/create/MentionCollaborator';
+import { EnhancedPollCreator, EnhancedPollData, createDefaultEnhancedPoll } from '@/components/create/EnhancedPollCreator';
+import { FILTERS, TEXT_BACKGROUNDS, MUSIC_TRACKS } from '@/components/create/filters/FilterData';
 
 interface MediaFile {
   id: string;
@@ -88,12 +66,21 @@ interface MediaFile {
   musicStartTime?: number;
 }
 
+interface Profile {
+  id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  is_verified?: boolean;
+}
+
 export default function CreatePage() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
   const { uploadFile, uploading, progress } = useFileUpload();
   const { createPost } = usePosts();
 
+  // Core states
   const [activeTab, setActiveTab] = useState<'post' | 'story' | 'reel' | 'live'>('post');
   const [showLiveBroadcast, setShowLiveBroadcast] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
@@ -106,13 +93,20 @@ export default function CreatePage() {
   const [location, setLocation] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
-  const [showMusicPicker, setShowMusicPicker] = useState(false);
+
+  // Enhanced features
+  const [poll, setPoll] = useState<EnhancedPollData | null>(null);
+  const [textBackground, setTextBackground] = useState('none');
+  const [mentionedUsers, setMentionedUsers] = useState<Profile[]>([]);
+  const [collaborators, setCollaborators] = useState<Profile[]>([]);
+  
+  // Dialogs
   const [showFilterPicker, setShowFilterPicker] = useState(false);
+  const [showMusicPicker, setShowMusicPicker] = useState(false);
+  const [showTextBackgroundPicker, setShowTextBackgroundPicker] = useState(false);
+  const [showMentionPicker, setShowMentionPicker] = useState(false);
+  const [showCollaboratorPicker, setShowCollaboratorPicker] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState('none');
-  const [playingAudio, setPlayingAudio] = useState<string | null>(null);
-  const [musicVolume, setMusicVolume] = useState(50);
-  const [poll, setPoll] = useState<PollData | null>(null);
   const [showVideoEditor, setShowVideoEditor] = useState(false);
   const [videoEditData, setVideoEditData] = useState<VideoEditData | null>(null);
 
@@ -122,6 +116,7 @@ export default function CreatePage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const currentMedia = mediaFiles[currentMediaIndex];
+  const currentBg = TEXT_BACKGROUNDS.find(b => b.id === textBackground) || TEXT_BACKGROUNDS[0];
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') => {
     const files = e.target.files;
@@ -178,16 +173,14 @@ export default function CreatePage() {
     setMediaFiles(prev => prev.map(f => 
       f.id === currentMedia.id ? { ...f, filter: filterId } : f
     ));
-    setSelectedFilter(filterId);
   }, [currentMedia]);
 
   const addMusicToMedia = useCallback((track: typeof MUSIC_TRACKS[0]) => {
-    if (!currentMedia || currentMedia.type !== 'image') return;
+    if (!currentMedia) return;
     setMediaFiles(prev => prev.map(f => 
       f.id === currentMedia.id ? { ...f, musicTrack: track, musicStartTime: 0 } : f
     ));
-    setShowMusicPicker(false);
-    toast.success(`Added "${track.name}" to your image`);
+    toast.success(`Added "${track.name}" to your media`);
   }, [currentMedia]);
 
   const removeMusicFromMedia = useCallback(() => {
@@ -196,20 +189,6 @@ export default function CreatePage() {
       f.id === currentMedia.id ? { ...f, musicTrack: undefined, musicStartTime: undefined } : f
     ));
   }, [currentMedia]);
-
-  const toggleMusicPreview = useCallback((trackUrl: string) => {
-    if (audioRef.current) {
-      if (playingAudio === trackUrl) {
-        audioRef.current.pause();
-        setPlayingAudio(null);
-      } else {
-        audioRef.current.src = trackUrl;
-        audioRef.current.volume = musicVolume / 100;
-        audioRef.current.play();
-        setPlayingAudio(trackUrl);
-      }
-    }
-  }, [playingAudio, musicVolume]);
 
   const addTag = useCallback(() => {
     const tag = tagInput.trim().replace(/^#/, '');
@@ -228,6 +207,36 @@ export default function CreatePage() {
     setShowEmojiPicker(false);
     textareaRef.current?.focus();
   }, []);
+
+  const openCamera = useCallback((mode: 'photo' | 'video' | 'both') => {
+    setCameraMode(mode);
+    setShowCamera(true);
+  }, []);
+
+  // Calculate poll duration in milliseconds
+  const getPollDuration = (poll: EnhancedPollData): number | null => {
+    if (poll.durationType === 'unlimited') return null;
+    
+    if (poll.durationType === 'custom') {
+      const days = poll.customDays || 0;
+      const hours = poll.customHours || 0;
+      const minutes = poll.customMinutes || 0;
+      return (days * 24 * 60 + hours * 60 + minutes) * 60 * 1000;
+    }
+    
+    // Preset durations
+    const presetMs: Record<string, number> = {
+      '1h': 60 * 60 * 1000,
+      '6h': 6 * 60 * 60 * 1000,
+      '12h': 12 * 60 * 60 * 1000,
+      '1d': 24 * 60 * 60 * 1000,
+      '3d': 3 * 24 * 60 * 60 * 1000,
+      '7d': 7 * 24 * 60 * 60 * 1000,
+      '30d': 30 * 24 * 60 * 60 * 1000,
+      '1y': 365 * 24 * 60 * 60 * 1000,
+    };
+    return presetMs[poll.duration] || 24 * 60 * 60 * 1000;
+  };
 
   const handlePost = async () => {
     if (!postContent.trim() && mediaFiles.length === 0 && !poll) {
@@ -268,22 +277,52 @@ export default function CreatePage() {
       }
 
       let finalContent = postContent;
+      
+      // Add mentions
+      if (mentionedUsers.length > 0) {
+        finalContent += '\n\n' + mentionedUsers.map(u => `@${u.username}`).join(' ');
+      }
+      
+      // Add tags
       if (tags.length > 0) {
         finalContent += '\n\n' + tags.map(t => `#${t}`).join(' ');
       }
+      
+      // Add location
       if (location) {
         finalContent += `\n📍 ${location}`;
       }
       
+      // Add collaborators
+      if (collaborators.length > 0) {
+        finalContent += `\n👥 with ${collaborators.map(c => c.display_name).join(', ')}`;
+      }
+
+      // Add text background info
+      if (textBackground !== 'none' && !mediaFiles.length) {
+        finalContent = `[TEXT_BG:${textBackground}]${finalContent}[/TEXT_BG]`;
+      }
+      
       // Add poll data to content if present
       if (poll) {
+        const durationMs = getPollDuration(poll);
         const pollJson = JSON.stringify({
           type: 'poll',
           question: poll.question,
-          options: poll.options.filter(o => o.text.trim()).map(o => ({ id: o.id, text: o.text, votes: 0 })),
-          duration: poll.duration,
+          options: poll.options.filter(o => o.text.trim()).map(o => ({ 
+            id: o.id, 
+            text: o.text, 
+            emoji: o.emoji,
+            votes: 0 
+          })),
+          duration: poll.durationType === 'unlimited' ? 'unlimited' : poll.duration,
+          durationType: poll.durationType,
+          expiresAt: durationMs ? new Date(Date.now() + durationMs).toISOString() : null,
           allowMultiple: poll.allowMultiple,
           isAnonymous: poll.isAnonymous,
+          showResultsBeforeVote: poll.showResultsBeforeVote,
+          quizMode: poll.quizMode,
+          correctOptionId: poll.correctOptionId,
           createdAt: new Date().toISOString()
         });
         finalContent = `[POLL]${pollJson}[/POLL]\n${finalContent}`;
@@ -304,29 +343,49 @@ export default function CreatePage() {
   };
 
   const handleCreateStory = async () => {
-    if (mediaFiles.length === 0) {
-      toast.error('Please add an image or video');
+    if (mediaFiles.length === 0 && !postContent.trim()) {
+      toast.error('Please add content or media');
       return;
     }
 
     setIsPosting(true);
 
     try {
-      const media = mediaFiles[0];
-      let mediaUrl = media.url;
-
-      if (media.file) {
-        const result = await uploadFile(media.file);
-        if (result) {
-          mediaUrl = result.url;
+      let mediaUrl = '';
+      let mediaType: 'image' | 'video' = 'image';
+      
+      if (mediaFiles.length > 0) {
+        const media = mediaFiles[0];
+        mediaType = media.type === 'video' ? 'video' : 'image';
+        
+        if (media.file) {
+          const result = await uploadFile(media.file);
+          if (result) {
+            mediaUrl = result.url;
+          }
+        } else {
+          mediaUrl = media.url;
         }
+      }
+
+      let caption = postContent || null;
+
+      // Store filter and music info in caption metadata
+      if (currentMedia?.filter && currentMedia.filter !== 'none') {
+        caption = `[FILTER:${currentMedia.filter}]${caption || ''}`;
+      }
+      if (currentMedia?.musicTrack) {
+        caption = `[MUSIC:${currentMedia.musicTrack.id}]${caption || ''}`;
+      }
+      if (textBackground !== 'none') {
+        caption = `[TEXT_BG:${textBackground}]${caption || ''}`;
       }
 
       const { error } = await supabase.from('stories').insert({
         user_id: user?.id,
-        media_url: mediaUrl,
-        media_type: media.type,
-        caption: postContent || null,
+        media_url: mediaUrl || null,
+        media_type: mediaType,
+        caption,
       });
 
       if (error) throw error;
@@ -382,11 +441,6 @@ export default function CreatePage() {
     }
   };
 
-  const openCamera = useCallback((mode: 'photo' | 'video' | 'both') => {
-    setCameraMode(mode);
-    setShowCamera(true);
-  }, []);
-
   useEffect(() => {
     return () => {
       mediaFiles.forEach(f => {
@@ -409,7 +463,7 @@ export default function CreatePage() {
 
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-4">
-      <audio ref={audioRef} onEnded={() => setPlayingAudio(null)} />
+      <audio ref={audioRef} />
       
       <input
         ref={imageInputRef}
@@ -457,6 +511,7 @@ export default function CreatePage() {
           setActiveTab(v as any);
           setMediaFiles([]);
           setPoll(null);
+          setTextBackground('none');
         }}>
           <TabsList className="grid grid-cols-4 mb-6">
             <TabsTrigger value="post" className="gap-2">
@@ -514,22 +569,46 @@ export default function CreatePage() {
               </div>
             </div>
 
-            {/* Text Input */}
-            <div className="relative">
+            {/* Text Input with Optional Background */}
+            <div 
+              className={cn(
+                "relative rounded-xl overflow-hidden transition-all",
+                textBackground !== 'none' && !mediaFiles.length && "p-6 min-h-[200px] flex items-center justify-center"
+              )}
+              style={textBackground !== 'none' && !mediaFiles.length ? {
+                background: currentBg.color,
+              } : undefined}
+            >
               <Textarea
                 ref={textareaRef}
                 value={postContent}
                 onChange={(e) => setPostContent(e.target.value)}
                 placeholder={poll ? "Add a description for your poll..." : "What's on your mind?"}
-                className="min-h-[100px] text-lg bg-transparent border-none resize-none focus-visible:ring-0 p-0"
+                className={cn(
+                  "min-h-[100px] text-lg border-none resize-none focus-visible:ring-0",
+                  textBackground !== 'none' && !mediaFiles.length 
+                    ? `bg-transparent text-center text-xl font-semibold ${currentBg.textColor}` 
+                    : "bg-transparent p-0"
+                )}
               />
-              <div className="absolute bottom-2 right-2">
+              <div className="absolute bottom-2 right-2 flex gap-1">
+                {!mediaFiles.length && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowTextBackgroundPicker(true)}
+                    className={cn(textBackground !== 'none' && currentBg.textColor)}
+                  >
+                    <Type className="h-5 w-5" />
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                  className={cn(textBackground !== 'none' && !mediaFiles.length && currentBg.textColor)}
                 >
-                  <Smile className="h-5 w-5 text-muted-foreground" />
+                  <Smile className="h-5 w-5" />
                 </Button>
                 {showEmojiPicker && (
                   <div className="absolute bottom-full right-0 mb-2 z-50">
@@ -539,9 +618,31 @@ export default function CreatePage() {
               </div>
             </div>
 
+            {/* Collaborators & Mentions Display */}
+            {(collaborators.length > 0 || mentionedUsers.length > 0) && (
+              <div className="flex flex-wrap gap-2">
+                {collaborators.map(user => (
+                  <Badge key={user.id} variant="secondary" className="gap-1">
+                    👥 {user.display_name}
+                    <button onClick={() => setCollaborators(prev => prev.filter(u => u.id !== user.id))}>
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                {mentionedUsers.map(user => (
+                  <Badge key={user.id} variant="outline" className="gap-1">
+                    @{user.username}
+                    <button onClick={() => setMentionedUsers(prev => prev.filter(u => u.id !== user.id))}>
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
+
             {/* Poll Creator */}
             {poll && (
-              <PollCreator 
+              <EnhancedPollCreator 
                 poll={poll} 
                 onChange={setPoll} 
                 onRemove={() => setPoll(null)} 
@@ -659,25 +760,35 @@ export default function CreatePage() {
                   </ScrollArea>
                 )}
 
+                {/* Media Tools */}
                 <div className="flex gap-2 overflow-x-auto pb-2">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setShowFilterPicker(true)}
-                    className="flex-shrink-0"
+                    className="flex-shrink-0 gap-2"
                   >
-                    <Filter className="h-4 w-4 mr-2" />
+                    <Sparkles className="h-4 w-4" />
                     Filters
                   </Button>
-                  {currentMedia?.type === 'image' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowMusicPicker(true)}
+                    className="flex-shrink-0 gap-2"
+                  >
+                    <Music className="h-4 w-4" />
+                    Music
+                  </Button>
+                  {currentMedia?.type === 'video' && (
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setShowMusicPicker(true)}
-                      className="flex-shrink-0"
+                      onClick={() => setShowVideoEditor(true)}
+                      className="flex-shrink-0 gap-2"
                     >
-                      <Music className="h-4 w-4 mr-2" />
-                      Add Music
+                      <Scissors className="h-4 w-4" />
+                      Edit
                     </Button>
                   )}
                 </div>
@@ -689,9 +800,20 @@ export default function CreatePage() {
               onImageClick={() => imageInputRef.current?.click()}
               onVideoClick={() => videoInputRef.current?.click()}
               onCameraClick={() => openCamera('both')}
-              onPollClick={() => setPoll(poll ? null : createDefaultPoll())}
+              onPollClick={() => setPoll(poll ? null : createDefaultEnhancedPoll())}
+              onMentionClick={() => setShowMentionPicker(true)}
+              onCollaborateClick={() => setShowCollaboratorPicker(true)}
+              onEmojiClick={() => setShowEmojiPicker(true)}
+              onMusicClick={() => setShowMusicPicker(true)}
+              onFilterClick={mediaFiles.length > 0 ? () => setShowFilterPicker(true) : undefined}
+              onTextBackgroundClick={!mediaFiles.length ? () => setShowTextBackgroundPicker(true) : undefined}
               hasPoll={!!poll}
+              hasMusic={!!currentMedia?.musicTrack}
+              hasTextBackground={textBackground !== 'none'}
               disabled={mediaFiles.length >= 10}
+              variant="post"
+              showAll
+              compact
             />
 
             {/* Location */}
@@ -754,15 +876,38 @@ export default function CreatePage() {
 
           {/* Story Tab */}
           <TabsContent value="story" className="space-y-6">
-            {mediaFiles.length === 0 ? (
-              <div className="aspect-[9/16] max-h-[600px] rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 border-2 border-dashed border-primary/50 flex flex-col items-center justify-center gap-4">
-                <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center">
-                  <Camera className="h-10 w-10 text-primary" />
-                </div>
-                <p className="text-lg font-medium">Create Your Story</p>
-                <p className="text-sm text-muted-foreground text-center px-4">
-                  Take a photo, record a video, or choose from gallery
-                </p>
+            {mediaFiles.length === 0 && !postContent.trim() ? (
+              <div 
+                className="aspect-[9/16] max-h-[600px] rounded-2xl border-2 border-dashed border-primary/50 flex flex-col items-center justify-center gap-4"
+                style={{
+                  background: textBackground !== 'none' ? currentBg.color : 'linear-gradient(135deg, hsl(var(--primary) / 0.2), hsl(var(--accent) / 0.2))'
+                }}
+              >
+                {textBackground !== 'none' ? (
+                  <div className="w-full px-8">
+                    <Textarea
+                      ref={textareaRef}
+                      value={postContent}
+                      onChange={(e) => setPostContent(e.target.value)}
+                      placeholder="Type your story..."
+                      className={cn(
+                        "bg-transparent border-none text-center text-2xl font-bold resize-none focus-visible:ring-0",
+                        currentBg.textColor
+                      )}
+                      rows={4}
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center">
+                      <Camera className="h-10 w-10 text-primary" />
+                    </div>
+                    <p className="text-lg font-medium">Create Your Story</p>
+                    <p className="text-sm text-muted-foreground text-center px-4">
+                      Take a photo, record a video, or create a text story
+                    </p>
+                  </>
+                )}
                 <div className="flex flex-col gap-3 w-48">
                   <Button onClick={() => openCamera('both')} className="w-full">
                     <Camera className="h-4 w-4 mr-2" />
@@ -770,32 +915,49 @@ export default function CreatePage() {
                   </Button>
                   <div className="flex gap-2">
                     <Button variant="outline" onClick={() => imageInputRef.current?.click()} className="flex-1">
-                      <ImageIcon className="h-4 w-4 mr-1" />
                       Photo
                     </Button>
                     <Button variant="outline" onClick={() => videoInputRef.current?.click()} className="flex-1">
-                      <Video className="h-4 w-4 mr-1" />
                       Video
                     </Button>
                   </div>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setShowTextBackgroundPicker(true)}
+                    className="w-full gap-2"
+                  >
+                    <Type className="h-4 w-4" />
+                    Text Story
+                  </Button>
                 </div>
               </div>
             ) : (
               <div className="relative aspect-[9/16] max-h-[600px] rounded-2xl overflow-hidden bg-muted">
-                {currentMedia?.type === 'video' ? (
-                  <video
-                    src={currentMedia.url}
-                    className="w-full h-full object-cover"
-                    controls
-                    style={{ filter: FILTERS.find(f => f.id === currentMedia.filter)?.style }}
-                  />
+                {mediaFiles.length > 0 ? (
+                  currentMedia?.type === 'video' ? (
+                    <video
+                      src={currentMedia.url}
+                      className="w-full h-full object-cover"
+                      controls
+                      style={{ filter: FILTERS.find(f => f.id === currentMedia.filter)?.style }}
+                    />
+                  ) : (
+                    <img
+                      src={currentMedia?.url}
+                      alt="Story preview"
+                      className="w-full h-full object-cover"
+                      style={{ filter: FILTERS.find(f => f.id === currentMedia?.filter)?.style }}
+                    />
+                  )
                 ) : (
-                  <img
-                    src={currentMedia?.url}
-                    alt="Story preview"
-                    className="w-full h-full object-cover"
-                    style={{ filter: FILTERS.find(f => f.id === currentMedia?.filter)?.style }}
-                  />
+                  <div 
+                    className="w-full h-full flex items-center justify-center p-8"
+                    style={{ background: currentBg.color }}
+                  >
+                    <p className={cn("text-2xl font-bold text-center", currentBg.textColor)}>
+                      {postContent}
+                    </p>
+                  </div>
                 )}
 
                 <div className="absolute bottom-20 left-4 right-4">
@@ -818,17 +980,27 @@ export default function CreatePage() {
                 )}
 
                 <div className="absolute top-4 right-4 flex flex-col gap-2">
-                  <Button variant="secondary" size="icon" onClick={() => currentMedia && removeMedia(currentMedia.id)}>
+                  <Button variant="secondary" size="icon" onClick={() => {
+                    if (mediaFiles.length > 0 && currentMedia) {
+                      removeMedia(currentMedia.id);
+                    } else {
+                      setPostContent('');
+                      setTextBackground('none');
+                    }
+                  }}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
-                  <Button variant="secondary" size="icon" onClick={() => setShowFilterPicker(true)}>
-                    <Filter className="h-4 w-4" />
-                  </Button>
-                  {currentMedia?.type === 'image' && (
-                    <Button variant="secondary" size="icon" onClick={() => setShowMusicPicker(true)}>
-                      <Music className="h-4 w-4" />
+                  {mediaFiles.length > 0 && (
+                    <Button variant="secondary" size="icon" onClick={() => setShowFilterPicker(true)}>
+                      <Sparkles className="h-4 w-4" />
                     </Button>
                   )}
+                  <Button variant="secondary" size="icon" onClick={() => setShowMusicPicker(true)}>
+                    <Music className="h-4 w-4" />
+                  </Button>
+                  <Button variant="secondary" size="icon" onClick={() => setShowTextBackgroundPicker(true)}>
+                    <Type className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
             )}
@@ -851,7 +1023,6 @@ export default function CreatePage() {
                     Record Video
                   </Button>
                   <Button variant="outline" onClick={() => videoInputRef.current?.click()} className="w-full">
-                    <Video className="h-4 w-4 mr-2" />
                     Choose Video
                   </Button>
                 </div>
@@ -863,6 +1034,7 @@ export default function CreatePage() {
                     src={currentMedia?.url}
                     className="w-full h-full object-cover"
                     controls
+                    style={{ filter: FILTERS.find(f => f.id === currentMedia?.filter)?.style }}
                   />
                   
                   <div className="absolute bottom-4 left-4 right-4 space-y-3">
@@ -904,7 +1076,6 @@ export default function CreatePage() {
                     )}
                   </div>
 
-                  {/* Editing tools */}
                   <div className="absolute top-4 right-4 flex flex-col gap-2">
                     <Button
                       variant="secondary"
@@ -916,15 +1087,27 @@ export default function CreatePage() {
                     <Button
                       variant="secondary"
                       size="icon"
+                      onClick={() => setShowFilterPicker(true)}
+                    >
+                      <Sparkles className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      onClick={() => setShowMusicPicker(true)}
+                    >
+                      <Music className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="icon"
                       onClick={() => setShowVideoEditor(true)}
-                      title="Edit video"
                     >
                       <Scissors className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
 
-                {/* Video edit info */}
                 {videoEditData && (
                   <div className="p-3 rounded-xl bg-secondary/50 text-sm">
                     <div className="flex items-center gap-2 text-primary">
@@ -972,95 +1155,53 @@ export default function CreatePage() {
       )}
 
       {/* Filter Picker Dialog */}
-      <Dialog open={showFilterPicker} onOpenChange={setShowFilterPicker}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Choose Filter</DialogTitle>
-          </DialogHeader>
-          <ScrollArea className="h-[300px]">
-            <div className="grid grid-cols-4 gap-3">
-              {FILTERS.map(filter => (
-                <button
-                  key={filter.id}
-                  onClick={() => {
-                    applyFilter(filter.id);
-                    setShowFilterPicker(false);
-                  }}
-                  className={cn(
-                    "rounded-xl overflow-hidden border-2 transition-colors",
-                    currentMedia?.filter === filter.id ? "border-primary" : "border-transparent"
-                  )}
-                >
-                  <div 
-                    className="aspect-square bg-gradient-to-br from-primary/50 to-accent/50"
-                    style={{ filter: filter.style }}
-                  />
-                  <p className="text-xs py-1 text-center">{filter.name}</p>
-                </button>
-              ))}
-            </div>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
+      <FilterPicker
+        open={showFilterPicker}
+        onOpenChange={setShowFilterPicker}
+        currentFilter={currentMedia?.filter || 'none'}
+        onSelectFilter={applyFilter}
+        previewUrl={currentMedia?.url}
+        mediaType={currentMedia?.type === 'video' ? 'video' : 'image'}
+      />
 
       {/* Music Picker Dialog */}
-      <Dialog open={showMusicPicker} onOpenChange={setShowMusicPicker}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Music className="h-5 w-5" />
-              Add Music
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 p-3 bg-secondary/50 rounded-xl">
-              <Volume2 className="h-4 w-4" />
-              <Slider
-                value={[musicVolume]}
-                onValueChange={([v]) => {
-                  setMusicVolume(v);
-                  if (audioRef.current) audioRef.current.volume = v / 100;
-                }}
-                max={100}
-                step={1}
-                className="flex-1"
-              />
-              <span className="text-sm w-10 text-right">{musicVolume}%</span>
-            </div>
+      <MusicPicker
+        open={showMusicPicker}
+        onOpenChange={setShowMusicPicker}
+        currentTrack={currentMedia?.musicTrack}
+        onSelectTrack={addMusicToMedia}
+      />
 
-            <ScrollArea className="h-[300px]">
-              <div className="space-y-2">
-                {MUSIC_TRACKS.map(track => (
-                  <div
-                    key={track.id}
-                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-secondary/50 transition-colors"
-                  >
-                    <button
-                      onClick={() => toggleMusicPreview(track.url)}
-                      className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center"
-                    >
-                      <Play className={cn(
-                        "h-5 w-5",
-                        playingAudio === track.url && "text-primary"
-                      )} />
-                    </button>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{track.name}</p>
-                      <p className="text-sm text-muted-foreground truncate">{track.artist}</p>
-                    </div>
-                    <Button
-                      size="sm"
-                      onClick={() => addMusicToMedia(track)}
-                    >
-                      Use
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Text Background Picker */}
+      <TextBackgroundPicker
+        open={showTextBackgroundPicker}
+        onOpenChange={setShowTextBackgroundPicker}
+        currentBackground={textBackground}
+        onSelectBackground={setTextBackground}
+        previewText={postContent || 'Your text here'}
+      />
+
+      {/* Mention Picker */}
+      <MentionCollaborator
+        open={showMentionPicker}
+        onOpenChange={setShowMentionPicker}
+        selectedUsers={mentionedUsers}
+        onSelectUser={(user) => setMentionedUsers(prev => [...prev, user])}
+        onRemoveUser={(id) => setMentionedUsers(prev => prev.filter(u => u.id !== id))}
+        mode="mention"
+        maxUsers={10}
+      />
+
+      {/* Collaborator Picker */}
+      <MentionCollaborator
+        open={showCollaboratorPicker}
+        onOpenChange={setShowCollaboratorPicker}
+        selectedUsers={collaborators}
+        onSelectUser={(user) => setCollaborators(prev => [...prev, user])}
+        onRemoveUser={(id) => setCollaborators(prev => prev.filter(u => u.id !== id))}
+        mode="collaborate"
+        maxUsers={5}
+      />
 
       {/* Video Editor Dialog */}
       {currentMedia?.type === 'video' && (
