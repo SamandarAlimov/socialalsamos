@@ -286,7 +286,12 @@ export function useLiveStreamViewer(streamId: string | null) {
       // Create a new MediaStream for receiving tracks
       remoteStreamRef.current = new MediaStream();
 
-      // Handle incoming tracks
+      // IMPORTANT: Add transceivers as receive-only
+      // This ensures viewers DON'T send any audio/video - only receive from broadcaster
+      pc.addTransceiver('video', { direction: 'recvonly' });
+      pc.addTransceiver('audio', { direction: 'recvonly' });
+
+      // Handle incoming tracks - ONLY receive broadcaster's audio/video
       pc.ontrack = (event) => {
         console.log('[Viewer] Received track:', event.track.kind, event.track.id, event.track.readyState);
         
