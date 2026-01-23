@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFileUpload } from '@/hooks/useFileUpload';
 import { usePosts } from '@/hooks/usePosts';
+import { useScheduledMessages } from '@/hooks/useScheduledMessages';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { 
@@ -34,7 +35,11 @@ import {
   Music,
   Scissors,
   Type,
-  Sparkles
+  Sparkles,
+  Sticker,
+  Pencil,
+  Image as ImageIcon,
+  CalendarClock
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -55,6 +60,11 @@ import { TextBackgroundPicker } from '@/components/create/TextBackgroundPicker';
 import { MentionCollaborator } from '@/components/create/MentionCollaborator';
 import { EnhancedPollCreator, EnhancedPollData, createDefaultEnhancedPoll } from '@/components/create/EnhancedPollCreator';
 import { FILTERS, TEXT_BACKGROUNDS, MUSIC_TRACKS } from '@/components/create/filters/FilterData';
+import { StickerPicker, StickerData } from '@/components/create/StickerPicker';
+import { DrawingCanvas } from '@/components/create/DrawingCanvas';
+import { ARFaceFilters } from '@/components/create/ARFaceFilters';
+import { SchedulePostDialog } from '@/components/create/SchedulePostDialog';
+import { GifStickerPicker } from '@/components/create/GifStickerPicker';
 
 interface MediaFile {
   id: string;
@@ -64,6 +74,16 @@ interface MediaFile {
   filter?: string;
   musicTrack?: typeof MUSIC_TRACKS[0];
   musicStartTime?: number;
+}
+
+interface OverlayItem {
+  id: string;
+  type: 'sticker' | 'gif' | 'text' | 'drawing';
+  content: string;
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
 }
 
 interface Profile {
@@ -99,6 +119,8 @@ export default function CreatePage() {
   const [textBackground, setTextBackground] = useState('none');
   const [mentionedUsers, setMentionedUsers] = useState<Profile[]>([]);
   const [collaborators, setCollaborators] = useState<Profile[]>([]);
+  const [overlays, setOverlays] = useState<OverlayItem[]>([]);
+  const [scheduledDate, setScheduledDate] = useState<Date | null>(null);
   
   // Dialogs
   const [showFilterPicker, setShowFilterPicker] = useState(false);
@@ -109,6 +131,11 @@ export default function CreatePage() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showVideoEditor, setShowVideoEditor] = useState(false);
   const [videoEditData, setVideoEditData] = useState<VideoEditData | null>(null);
+  const [showStickerPicker, setShowStickerPicker] = useState(false);
+  const [showDrawingCanvas, setShowDrawingCanvas] = useState(false);
+  const [showARFilters, setShowARFilters] = useState(false);
+  const [showScheduleDialog, setShowScheduleDialog] = useState(false);
+  const [showGifStickerPicker, setShowGifStickerPicker] = useState(false);
 
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -211,6 +238,79 @@ export default function CreatePage() {
   const openCamera = useCallback((mode: 'photo' | 'video' | 'both') => {
     setCameraMode(mode);
     setShowCamera(true);
+  }, []);
+
+  // Overlay management
+  const addSticker = useCallback((sticker: StickerData) => {
+    const overlay: OverlayItem = {
+      id: `sticker-${Date.now()}`,
+      type: 'sticker',
+      content: sticker.url,
+      x: 50,
+      y: 50,
+      scale: 1,
+      rotation: 0
+    };
+    setOverlays(prev => [...prev, overlay]);
+  }, []);
+
+  const addGifOverlay = useCallback((gifUrl: string) => {
+    const overlay: OverlayItem = {
+      id: `gif-${Date.now()}`,
+      type: 'gif',
+      content: gifUrl,
+      x: 50,
+      y: 50,
+      scale: 1,
+      rotation: 0
+    };
+    setOverlays(prev => [...prev, overlay]);
+  }, []);
+
+  const removeOverlay = useCallback((id: string) => {
+    setOverlays(prev => prev.filter(o => o.id !== id));
+  }, []);
+
+  const handleDrawingSave = useCallback((imageDataUrl: string) => {
+    // Convert data URL to file and add as media
+    fetch(imageDataUrl)
+      .then(res => res.blob())
+      .then(blob => {
+        const file = new File([blob], `drawing-${Date.now()}.png`, { type: 'image/png' });
+        const url = URL.createObjectURL(blob);
+        const newMedia: MediaFile = {
+          id: `${Date.now()}-drawing`,
+          file,
+          url,
+          type: 'image',
+          filter: 'none'
+        };
+        if (activeTab === 'post') {
+          setMediaFiles(prev => [...prev, newMedia]);
+        } else {
+          setMediaFiles([newMedia]);
+        }
+      });
+  }, [activeTab]);
+
+  const handleARCapture = useCallback((file: File, url: string) => {
+    const newMedia: MediaFile = {
+      id: `${Date.now()}-ar`,
+      file,
+      url,
+      type: 'image',
+      filter: 'none'
+    };
+    if (activeTab === 'post') {
+      setMediaFiles(prev => [...prev, newMedia]);
+    } else {
+      setMediaFiles([newMedia]);
+    }
+  }, [activeTab]);
+
+  const handleSchedulePost = useCallback((date: Date) => {
+    setScheduledDate(date);
+    toast.success(`Post scheduled for ${date.toLocaleString()}`);
   }, []);
 
   // Calculate poll duration in milliseconds
@@ -875,7 +975,7 @@ export default function CreatePage() {
           </TabsContent>
 
           {/* Story Tab */}
-          <TabsContent value="story" className="space-y-6">
+          <TabsContent value="story" className="space-y-6 flex flex-col items-center">
             {mediaFiles.length === 0 && !postContent.trim() ? (
               <div 
                 className="aspect-[9/16] max-h-[600px] rounded-2xl border-2 border-dashed border-primary/50 flex flex-col items-center justify-center gap-4"
@@ -1007,7 +1107,7 @@ export default function CreatePage() {
           </TabsContent>
 
           {/* Reel Tab */}
-          <TabsContent value="reel" className="space-y-6">
+          <TabsContent value="reel" className="space-y-6 flex flex-col items-center">
             {mediaFiles.length === 0 ? (
               <div className="aspect-[9/16] max-h-[600px] rounded-2xl bg-gradient-to-br from-accent/20 to-primary/20 border-2 border-dashed border-accent/50 flex flex-col items-center justify-center gap-4">
                 <div className="w-20 h-20 rounded-full bg-accent/20 flex items-center justify-center">
@@ -1216,6 +1316,51 @@ export default function CreatePage() {
           onCancel={() => setShowVideoEditor(false)}
         />
       )}
+
+      {/* Sticker Picker */}
+      <StickerPicker
+        open={showStickerPicker}
+        onOpenChange={setShowStickerPicker}
+        onSelect={addSticker}
+      />
+
+      {/* Drawing Canvas */}
+      <DrawingCanvas
+        open={showDrawingCanvas}
+        onOpenChange={setShowDrawingCanvas}
+        backgroundImage={currentMedia?.url}
+        onSave={handleDrawingSave}
+      />
+
+      {/* AR Face Filters */}
+      <ARFaceFilters
+        open={showARFilters}
+        onOpenChange={setShowARFilters}
+        onCapture={handleARCapture}
+      />
+
+      {/* Schedule Post Dialog */}
+      <SchedulePostDialog
+        open={showScheduleDialog}
+        onOpenChange={setShowScheduleDialog}
+        onSchedule={handleSchedulePost}
+      />
+
+      {/* GIF & Sticker Picker */}
+      <GifStickerPicker
+        open={showGifStickerPicker}
+        onOpenChange={setShowGifStickerPicker}
+        onSelectGif={addGifOverlay}
+        onSelectSticker={(url) => {
+          const overlay: OverlayItem = {
+            id: `sticker-${Date.now()}`,
+            type: 'sticker',
+            content: url,
+            x: 50, y: 50, scale: 1, rotation: 0
+          };
+          setOverlays(prev => [...prev, overlay]);
+        }}
+      />
     </div>
   );
 }
