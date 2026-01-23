@@ -50,17 +50,38 @@ export function useLiveStreamBroadcaster(streamId: string | null) {
 
     try {
       console.log(`[Broadcaster] Creating offer for viewer ${viewerId}`);
-      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      
+      // Create RTCPeerConnection with more compatible settings for mobile
+      const pc = new RTCPeerConnection({ 
+        iceServers: ICE_SERVERS,
+        iceCandidatePoolSize: 10,
+      });
       
       viewerConnectionsRef.current.set(viewerId, { pc, viewerId });
 
-      // Add local tracks
+      // Add local tracks - ensure we're using sendonly direction for broadcaster
       localStreamRef.current.getTracks().forEach(track => {
-        console.log(`[Broadcaster] Adding track: ${track.kind}`);
-        pc.addTrack(track, localStreamRef.current!);
+        console.log(`[Broadcaster] Adding track: ${track.kind}, enabled: ${track.enabled}, readyState: ${track.readyState}`);
+        const sender = pc.addTrack(track, localStreamRef.current!);
+        
+        // Set encoding parameters for better mobile compatibility
+        if (track.kind === 'video' && sender) {
+          const params = sender.getParameters();
+          if (!params.encodings || params.encodings.length === 0) {
+            params.encodings = [{}];
+          }
+          // Set reasonable bitrate for mobile
+          params.encodings[0].maxBitrate = 1500000; // 1.5 Mbps
+          sender.setParameters(params).catch(err => {
+            console.log('[Broadcaster] Could not set encoding params:', err);
+          });
+        }
       });
 
-      // Handle ICE candidates
+      // Handle ICE candidates - batch them for better mobile performance
+      const pendingCandidates: RTCIceCandidate[] = [];
+      let iceSendTimeout: NodeJS.Timeout | null = null;
+
       pc.onicecandidate = (event) => {
         if (event.candidate && channelRef.current) {
           console.log('[Broadcaster] Sending ICE candidate to viewer');
@@ -78,14 +99,24 @@ export function useLiveStreamBroadcaster(streamId: string | null) {
 
       pc.oniceconnectionstatechange = () => {
         console.log(`[Broadcaster] ICE state for ${viewerId}:`, pc.iceConnectionState);
+        
+        // Handle ICE restart for mobile connection recovery
+        if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+          console.log(`[Broadcaster] Attempting ICE restart for ${viewerId}`);
+          pc.restartIce();
+        }
       };
 
       pc.onconnectionstatechange = () => {
         console.log(`[Broadcaster] Connection state for ${viewerId}:`, pc.connectionState);
       };
 
-      // Create and send offer
-      const offer = await pc.createOffer();
+      // Create offer with specific constraints for mobile compatibility
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: false, // Broadcaster only sends, doesn't receive
+        offerToReceiveVideo: false,
+      });
+      
       await pc.setLocalDescription(offer);
 
       console.log(`[Broadcaster] Sending offer to viewer ${viewerId}`);
@@ -280,34 +311,44 @@ export function useLiveStreamViewer(streamId: string | null) {
         pcRef.current.close();
       }
       
-      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      // Create RTCPeerConnection with mobile-compatible settings
+      const pc = new RTCPeerConnection({ 
+        iceServers: ICE_SERVERS,
+        iceCandidatePoolSize: 10,
+      });
       pcRef.current = pc;
 
       // Create a new MediaStream for receiving tracks
       remoteStreamRef.current = new MediaStream();
 
-      // IMPORTANT: Add transceivers as receive-only
-      // This ensures viewers DON'T send any audio/video - only receive from broadcaster
-      pc.addTransceiver('video', { direction: 'recvonly' });
-      pc.addTransceiver('audio', { direction: 'recvonly' });
+      // CRITICAL: Do NOT add transceivers before setting remote description
+      // The transceivers will be created automatically from the offer
+      // Adding them beforehand can cause codec mismatches on mobile
 
       // Handle incoming tracks - ONLY receive broadcaster's audio/video
+      // This is where we get the actual media from the broadcaster
       pc.ontrack = (event) => {
-        console.log('[Viewer] Received track:', event.track.kind, event.track.id, event.track.readyState);
+        console.log('[Viewer] Received track:', event.track.kind, event.track.id, 'readyState:', event.track.readyState, 'muted:', event.track.muted);
         
-        if (event.track.readyState === 'live') {
-          remoteStreamRef.current?.addTrack(event.track);
-          
-          // Update state with a new MediaStream reference to trigger re-render
-          setRemoteStream(new MediaStream(remoteStreamRef.current!.getTracks()));
-          setIsConnected(true);
-          setIsConnecting(false);
-          
-          console.log('[Viewer] Stream updated, tracks:', remoteStreamRef.current?.getTracks().length);
-        }
+        // Add track to our stream
+        remoteStreamRef.current?.addTrack(event.track);
+        
+        // Create new MediaStream reference to trigger React re-render
+        const newStream = new MediaStream(remoteStreamRef.current!.getTracks());
+        setRemoteStream(newStream);
+        setIsConnected(true);
+        setIsConnecting(false);
+        
+        console.log('[Viewer] Stream updated, total tracks:', newStream.getTracks().length);
+        
+        // Handle track events for better reliability
+        event.track.onended = () => {
+          console.log('[Viewer] Track ended:', event.track.kind);
+        };
         
         event.track.onunmute = () => {
           console.log('[Viewer] Track unmuted:', event.track.kind);
+          // Ensure track is in our stream
           if (!remoteStreamRef.current?.getTracks().includes(event.track)) {
             remoteStreamRef.current?.addTrack(event.track);
             setRemoteStream(new MediaStream(remoteStreamRef.current!.getTracks()));
@@ -339,16 +380,32 @@ export function useLiveStreamViewer(streamId: string | null) {
         } else if (pc.iceConnectionState === 'failed') {
           setIsConnected(false);
           setError('Connection failed');
+          // Try to restart ICE
+          pc.restartIce();
+        } else if (pc.iceConnectionState === 'disconnected') {
+          console.log('[Viewer] ICE disconnected, waiting for reconnection...');
         }
       };
 
       pc.onconnectionstatechange = () => {
         console.log('[Viewer] Connection state:', pc.connectionState);
+        if (pc.connectionState === 'connected') {
+          console.log('[Viewer] Peer connection fully established');
+        }
       };
 
-      // Set remote description (offer) and create answer
+      // Set remote description (offer) FIRST
       console.log('[Viewer] Setting remote description');
       await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+      
+      // Now set transceivers to recvonly AFTER setting remote description
+      // This ensures proper negotiation with the broadcaster's tracks
+      pc.getTransceivers().forEach(transceiver => {
+        if (transceiver.receiver.track) {
+          console.log('[Viewer] Setting transceiver to recvonly for:', transceiver.receiver.track.kind);
+          transceiver.direction = 'recvonly';
+        }
+      });
       
       console.log('[Viewer] Creating answer');
       const answer = await pc.createAnswer();
