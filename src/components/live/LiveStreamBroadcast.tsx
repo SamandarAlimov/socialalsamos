@@ -63,7 +63,7 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
   // Use WebRTC viewer count if connected, otherwise DB count
   const viewerCount = isWebRTCConnected ? webrtcViewerCount : dbViewerCount;
 
-  // Initialize camera on mount
+  // Initialize camera on mount with mobile-compatible constraints
   const initializeCamera = useCallback(async () => {
     try {
       setIsInitializing(true);
@@ -73,13 +73,35 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
         localStreamRef.current.getTracks().forEach(track => track.stop());
       }
 
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
+      // Mobile-compatible video constraints
+      // Avoid using 'ideal' constraints which can fail on some mobile devices
+      const constraints: MediaStreamConstraints = {
         video: { 
-          facingMode: facingMode, 
-          width: { ideal: 1280 }, 
-          height: { ideal: 720 } 
+          facingMode: facingMode,
+          // Use 'max' instead of 'ideal' for better mobile compatibility
+          width: { max: 1280, min: 320 }, 
+          height: { max: 720, min: 240 },
+          // Request reasonable frame rate
+          frameRate: { max: 30, ideal: 24 },
         },
-        audio: true,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      };
+
+      console.log('[Broadcast] Requesting media with constraints:', JSON.stringify(constraints));
+      
+      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+      
+      // Log track info for debugging
+      mediaStream.getTracks().forEach(track => {
+        console.log(`[Broadcast] Got ${track.kind} track:`, track.label, 'enabled:', track.enabled, 'readyState:', track.readyState);
+        if (track.kind === 'video') {
+          const settings = track.getSettings();
+          console.log('[Broadcast] Video settings:', settings.width, 'x', settings.height, '@', settings.frameRate, 'fps');
+        }
       });
 
       localStreamRef.current = mediaStream;
@@ -92,8 +114,25 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
       setIsInitializing(false);
     } catch (error: any) {
       console.error('Error initializing camera:', error);
-      toast.error('Failed to access camera: ' + error.message);
-      setIsInitializing(false);
+      
+      // Try fallback with minimal constraints for older mobile devices
+      try {
+        console.log('[Broadcast] Trying fallback constraints');
+        const fallbackStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: facingMode },
+          audio: true,
+        });
+        
+        localStreamRef.current = fallbackStream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = fallbackStream;
+        }
+        setIsInitializing(false);
+      } catch (fallbackError: any) {
+        console.error('Fallback also failed:', fallbackError);
+        toast.error('Failed to access camera: ' + fallbackError.message);
+        setIsInitializing(false);
+      }
     }
   }, [facingMode]);
 
@@ -295,13 +334,19 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
         localStreamRef.current.getTracks().forEach(track => track.stop());
       }
 
+      // Mobile-compatible constraints
       const newStream = await navigator.mediaDevices.getUserMedia({
         video: { 
           facingMode: newFacingMode, 
-          width: { ideal: 1280 }, 
-          height: { ideal: 720 } 
+          width: { max: 1280, min: 320 }, 
+          height: { max: 720, min: 240 },
+          frameRate: { max: 30, ideal: 24 },
         },
-        audio: true,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
       });
       
       localStreamRef.current = newStream;
