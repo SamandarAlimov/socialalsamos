@@ -66,6 +66,7 @@ import { DrawingCanvas } from '@/components/create/DrawingCanvas';
 import { ARFaceFilters } from '@/components/create/ARFaceFilters';
 import { SchedulePostDialog } from '@/components/create/SchedulePostDialog';
 import { GifStickerPicker } from '@/components/create/GifStickerPicker';
+import { MediaPreviewContainer } from '@/components/create/MediaPreviewContainer';
 
 interface MediaFile {
   id: string;
@@ -75,6 +76,7 @@ interface MediaFile {
   filter?: string;
   musicTrack?: typeof MUSIC_TRACKS[0];
   musicStartTime?: number;
+  aspectRatio?: number; // width / height - detected from media
 }
 
 interface OverlayItem {
@@ -754,56 +756,30 @@ export default function CreatePage() {
               />
             )}
 
-            {/* Media Preview */}
+            {/* Media Preview - Preserves original aspect ratio */}
             {mediaFiles.length > 0 && (
               <div className="space-y-4">
-                <div className="relative aspect-square max-h-[500px] rounded-2xl overflow-hidden bg-muted">
-                  {currentMedia?.type === 'video' ? (
-                    <video
-                      src={currentMedia.url}
-                      className="w-full h-full object-contain"
-                      controls
-                      style={{ filter: FILTERS.find(f => f.id === currentMedia.filter)?.style }}
-                    />
-                  ) : (
-                    <img
-                      src={currentMedia?.url}
-                      alt="Preview"
-                      className="w-full h-full object-contain"
-                      style={{ filter: FILTERS.find(f => f.id === currentMedia?.filter)?.style }}
-                    />
-                  )}
-
-                  {currentMedia?.musicTrack && (
-                    <div className="absolute bottom-4 left-4 right-4 bg-background/90 backdrop-blur-sm rounded-xl p-3 flex items-center gap-3">
-                      <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-                        <Music className="h-5 w-5 text-primary-foreground" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">{currentMedia.musicTrack.name}</p>
-                        <p className="text-sm text-muted-foreground truncate">{currentMedia.musicTrack.artist}</p>
-                      </div>
-                      <Button variant="ghost" size="icon" onClick={removeMusicFromMedia}>
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  )}
-
-                  <Button
-                    variant="secondary"
-                    size="icon"
-                    className="absolute top-2 right-2"
-                    onClick={() => currentMedia && removeMedia(currentMedia.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                <div className="relative">
+                  <MediaPreviewContainer
+                    media={currentMedia}
+                    isMobile={isMobile}
+                    onAspectRatioDetected={(ratio) => {
+                      if (currentMedia) {
+                        setMediaFiles(prev => prev.map(f => 
+                          f.id === currentMedia.id ? { ...f, aspectRatio: ratio } : f
+                        ));
+                      }
+                    }}
+                    onRemove={() => currentMedia && removeMedia(currentMedia.id)}
+                    onRemoveMusic={removeMusicFromMedia}
+                  />
 
                   {mediaFiles.length > 1 && (
                     <>
                       <Button
                         variant="secondary"
                         size="icon"
-                        className="absolute left-2 top-1/2 -translate-y-1/2"
+                        className="absolute left-2 top-1/2 -translate-y-1/2 z-10"
                         onClick={() => setCurrentMediaIndex(i => Math.max(0, i - 1))}
                         disabled={currentMediaIndex === 0}
                       >
@@ -812,7 +788,7 @@ export default function CreatePage() {
                       <Button
                         variant="secondary"
                         size="icon"
-                        className="absolute right-2 top-1/2 -translate-y-1/2"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 z-10"
                         onClick={() => setCurrentMediaIndex(i => Math.min(mediaFiles.length - 1, i + 1))}
                         disabled={currentMediaIndex === mediaFiles.length - 1}
                       >
@@ -822,7 +798,7 @@ export default function CreatePage() {
                   )}
 
                   {mediaFiles.length > 1 && (
-                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
                       {mediaFiles.map((_, i) => (
                         <button
                           key={i}
@@ -1054,31 +1030,27 @@ export default function CreatePage() {
               </div>
             ) : (
               <div className={cn(
-                "relative rounded-2xl overflow-hidden bg-muted",
-                isMobile 
-                  ? "aspect-[9/16] w-full max-w-sm mx-auto" 
-                  : "aspect-[9/16] w-[320px]"
+                "relative rounded-2xl overflow-hidden bg-muted mx-auto",
+                isMobile ? "w-full max-w-sm" : "max-w-[340px]"
               )}>
                 {mediaFiles.length > 0 ? (
-                  currentMedia?.type === 'video' ? (
-                    <video
-                      src={currentMedia.url}
-                      className="w-full h-full object-cover"
-                      controls
-                      playsInline
-                      style={{ filter: FILTERS.find(f => f.id === currentMedia.filter)?.style }}
-                    />
-                  ) : (
-                    <img
-                      src={currentMedia?.url}
-                      alt="Story preview"
-                      className="w-full h-full object-cover"
-                      style={{ filter: FILTERS.find(f => f.id === currentMedia?.filter)?.style }}
-                    />
-                  )
+                  <MediaPreviewContainer
+                    media={currentMedia}
+                    isMobile={isMobile}
+                    variant="story"
+                    onAspectRatioDetected={(ratio) => {
+                      if (currentMedia) {
+                        setMediaFiles(prev => prev.map(f => 
+                          f.id === currentMedia.id ? { ...f, aspectRatio: ratio } : f
+                        ));
+                      }
+                    }}
+                    onRemove={() => currentMedia && removeMedia(currentMedia.id)}
+                    onRemoveMusic={removeMusicFromMedia}
+                  />
                 ) : (
                   <div 
-                    className="w-full h-full flex items-center justify-center p-6"
+                    className="w-full aspect-[9/16] flex items-center justify-center p-6"
                     style={{ background: currentBg.color }}
                   >
                     <p className={cn(
@@ -1114,7 +1086,7 @@ export default function CreatePage() {
                 )}
 
                 <div className={cn(
-                  "absolute right-2 flex flex-col gap-2",
+                  "absolute right-2 flex flex-col gap-2 z-10",
                   isMobile ? "top-2" : "top-4"
                 )}>
                   <Button variant="secondary" size="icon" className={cn(isMobile && "h-9 w-9")} onClick={() => {
@@ -1181,21 +1153,26 @@ export default function CreatePage() {
             ) : (
               <div className="space-y-4 w-full flex flex-col items-center">
                 <div className={cn(
-                  "relative rounded-2xl overflow-hidden bg-muted",
-                  isMobile 
-                    ? "aspect-[9/16] w-full max-w-sm mx-auto" 
-                    : "aspect-[9/16] w-[320px]"
+                  "relative rounded-2xl overflow-hidden bg-muted mx-auto",
+                  isMobile ? "w-full max-w-sm" : "max-w-[340px]"
                 )}>
-                  <video
-                    src={currentMedia?.url}
-                    className="w-full h-full object-cover"
-                    controls
-                    playsInline
-                    style={{ filter: FILTERS.find(f => f.id === currentMedia?.filter)?.style }}
+                  <MediaPreviewContainer
+                    media={currentMedia}
+                    isMobile={isMobile}
+                    variant="reel"
+                    onAspectRatioDetected={(ratio) => {
+                      if (currentMedia) {
+                        setMediaFiles(prev => prev.map(f => 
+                          f.id === currentMedia.id ? { ...f, aspectRatio: ratio } : f
+                        ));
+                      }
+                    }}
+                    onRemove={() => currentMedia && removeMedia(currentMedia.id)}
+                    onRemoveMusic={removeMusicFromMedia}
                   />
                   
                   <div className={cn(
-                    "absolute left-3 right-3 space-y-2",
+                    "absolute left-3 right-3 space-y-2 z-10",
                     isMobile ? "bottom-3" : "bottom-4"
                   )}>
                     <Textarea
@@ -1243,17 +1220,9 @@ export default function CreatePage() {
                   </div>
 
                   <div className={cn(
-                    "absolute right-2 flex flex-col gap-2",
+                    "absolute right-2 flex flex-col gap-2 z-10",
                     isMobile ? "top-2" : "top-4"
                   )}>
-                    <Button
-                      variant="secondary"
-                      size="icon"
-                      className={cn(isMobile && "h-9 w-9")}
-                      onClick={() => currentMedia && removeMedia(currentMedia.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
                     <Button
                       variant="secondary"
                       size="icon"
