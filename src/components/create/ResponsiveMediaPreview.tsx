@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
@@ -11,7 +11,8 @@ import {
   Scissors,
   X,
   Sticker,
-  Pencil
+  Pencil,
+  Maximize2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { FILTERS, MUSIC_TRACKS } from './filters/FilterData';
@@ -25,6 +26,7 @@ interface MediaFile {
   filter?: string;
   musicTrack?: typeof MUSIC_TRACKS[0];
   musicStartTime?: number;
+  aspectRatio?: number; // width / height
 }
 
 interface ResponsiveMediaPreviewProps {
@@ -39,6 +41,49 @@ interface ResponsiveMediaPreviewProps {
   onOpenStickers?: () => void;
   onOpenDrawing?: () => void;
   variant?: 'post' | 'story' | 'reel';
+  onMediaAspectRatioDetected?: (id: string, ratio: number) => void;
+}
+
+// Detect aspect ratio from media element
+function getMediaAspectRatio(naturalWidth: number, naturalHeight: number): number {
+  return naturalWidth / naturalHeight;
+}
+
+// Get container style based on detected or preferred aspect ratio
+function getContainerStyle(
+  aspectRatio: number | undefined,
+  variant: 'post' | 'story' | 'reel',
+  isMobile: boolean
+): { aspectRatio?: string; maxHeight: string; maxWidth?: string } {
+  // Use original aspect ratio if detected
+  if (aspectRatio) {
+    const isPortrait = aspectRatio < 1;
+    const isLandscape = aspectRatio > 1;
+    const isSquare = Math.abs(aspectRatio - 1) < 0.1;
+
+    if (isSquare) {
+      return { aspectRatio: '1', maxHeight: isMobile ? '400px' : '500px' };
+    } else if (isPortrait) {
+      // Portrait: limit height, allow natural width
+      return { 
+        aspectRatio: `${aspectRatio}`, 
+        maxHeight: isMobile ? '500px' : '600px',
+        maxWidth: isMobile ? '100%' : '400px'
+      };
+    } else {
+      // Landscape: limit width, allow natural height
+      return { 
+        aspectRatio: `${aspectRatio}`, 
+        maxHeight: isMobile ? '300px' : '450px' 
+      };
+    }
+  }
+
+  // Default fallback based on variant
+  if (variant === 'story' || variant === 'reel') {
+    return { aspectRatio: '9/16', maxHeight: isMobile ? '500px' : '600px', maxWidth: '340px' };
+  }
+  return { aspectRatio: '1', maxHeight: isMobile ? '400px' : '500px' };
 }
 
 export function ResponsiveMediaPreview({
@@ -52,42 +97,70 @@ export function ResponsiveMediaPreview({
   onOpenEditor,
   onOpenStickers,
   onOpenDrawing,
-  variant = 'post'
+  variant = 'post',
+  onMediaAspectRatioDetected
 }: ResponsiveMediaPreviewProps) {
   const isMobile = useIsMobile();
   const currentMedia = mediaFiles[currentMediaIndex];
-  
-  const aspectRatioClass = {
-    'post': isMobile ? 'aspect-square' : 'aspect-square max-h-[500px]',
-    'story': 'aspect-[9/16] max-h-[600px]',
-    'reel': 'aspect-[9/16] max-h-[600px]'
-  }[variant];
+  const [mediaAspectRatios, setMediaAspectRatios] = useState<Record<string, number>>({});
+
+  const handleImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>, mediaId: string) => {
+    const img = e.currentTarget;
+    const ratio = getMediaAspectRatio(img.naturalWidth, img.naturalHeight);
+    setMediaAspectRatios(prev => ({ ...prev, [mediaId]: ratio }));
+    onMediaAspectRatioDetected?.(mediaId, ratio);
+  }, [onMediaAspectRatioDetected]);
+
+  const handleVideoLoad = useCallback((e: React.SyntheticEvent<HTMLVideoElement>, mediaId: string) => {
+    const video = e.currentTarget;
+    const ratio = getMediaAspectRatio(video.videoWidth, video.videoHeight);
+    setMediaAspectRatios(prev => ({ ...prev, [mediaId]: ratio }));
+    onMediaAspectRatioDetected?.(mediaId, ratio);
+  }, [onMediaAspectRatioDetected]);
 
   if (!currentMedia) return null;
+
+  const detectedRatio = currentMedia.aspectRatio || mediaAspectRatios[currentMedia.id];
+  const containerStyle = getContainerStyle(detectedRatio, variant, isMobile);
 
   return (
     <div className="space-y-4">
       {/* Main Preview */}
-      <div className={cn(
-        "relative rounded-2xl overflow-hidden bg-muted mx-auto w-full",
-        aspectRatioClass,
-        variant !== 'post' && 'max-w-[340px]'
-      )}>
+      <div 
+        className={cn(
+          "relative rounded-2xl overflow-hidden bg-muted mx-auto w-full"
+        )}
+        style={{
+          aspectRatio: containerStyle.aspectRatio,
+          maxHeight: containerStyle.maxHeight,
+          maxWidth: containerStyle.maxWidth
+        }}
+      >
         {currentMedia.type === 'video' ? (
           <video
             src={currentMedia.url}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain"
             controls
             playsInline
+            onLoadedMetadata={(e) => handleVideoLoad(e, currentMedia.id)}
             style={{ filter: FILTERS.find(f => f.id === currentMedia.filter)?.style }}
           />
         ) : (
           <img
             src={currentMedia.url}
             alt="Preview"
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain"
+            onLoad={(e) => handleImageLoad(e, currentMedia.id)}
             style={{ filter: FILTERS.find(f => f.id === currentMedia.filter)?.style }}
           />
+        )}
+
+        {/* Aspect Ratio Badge */}
+        {detectedRatio && (
+          <div className="absolute top-2 left-2 bg-background/80 backdrop-blur-sm rounded-md px-2 py-1 text-xs flex items-center gap-1">
+            <Maximize2 className="h-3 w-3" />
+            {detectedRatio > 1.5 ? '16:9' : detectedRatio < 0.7 ? '9:16' : Math.abs(detectedRatio - 1) < 0.1 ? '1:1' : detectedRatio.toFixed(2)}
+          </div>
         )}
 
         {/* Music Overlay */}
