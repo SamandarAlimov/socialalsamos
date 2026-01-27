@@ -432,7 +432,8 @@ export default function CreatePage() {
         finalContent = `[POLL]${pollJson}[/POLL]\n${finalContent}`;
       }
 
-      const result = await createPost(finalContent, uploadedUrls, mediaType);
+      const collaboratorIds = collaborators.map(c => c.id);
+      const result = await createPost(finalContent, uploadedUrls, mediaType, collaboratorIds);
 
       if (result) {
         toast.success('Post created successfully!');

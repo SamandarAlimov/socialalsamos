@@ -17,7 +17,7 @@ export interface NotificationPost {
 export interface Notification {
   id: string;
   user_id: string;
-  type: 'message' | 'like' | 'comment' | 'follow' | 'mention';
+  type: 'message' | 'like' | 'comment' | 'follow' | 'mention' | 'collaboration_invite' | 'collaboration_accepted';
   title: string;
   body: string | null;
   data: Record<string, unknown>;
@@ -50,7 +50,7 @@ export function useNotifications() {
       
       data.forEach(n => {
         const d = n.data as Record<string, unknown>;
-        const actorId = (d?.liker_id || d?.commenter_id || d?.follower_id || d?.mentioner_id || d?.actor_id) as string;
+        const actorId = (d?.liker_id || d?.commenter_id || d?.follower_id || d?.mentioner_id || d?.actor_id || d?.inviter_id || d?.collaborator_id) as string;
         if (actorId) actorIds.add(actorId);
         const postId = d?.post_id as string;
         if (postId) postIds.add(postId);
@@ -85,7 +85,7 @@ export function useNotifications() {
       // Enrich notifications with actor and post data
       const enrichedNotifications: Notification[] = data.map(n => {
         const d = n.data as Record<string, unknown>;
-        const actorId = (d?.liker_id || d?.commenter_id || d?.follower_id || d?.mentioner_id || d?.actor_id) as string;
+        const actorId = (d?.liker_id || d?.commenter_id || d?.follower_id || d?.mentioner_id || d?.actor_id || d?.inviter_id || d?.collaborator_id) as string;
         const postId = d?.post_id as string;
         
         return {

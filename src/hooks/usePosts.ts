@@ -136,7 +136,12 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
     fetchPosts(0, true);
   }, [fetchPosts]);
 
-  const createPost = useCallback(async (content: string, mediaUrls: string[] = [], mediaType = 'text') => {
+  const createPost = useCallback(async (
+    content: string, 
+    mediaUrls: string[] = [], 
+    mediaType = 'text',
+    collaboratorIds: string[] = []
+  ) => {
     if (!user) {
       toast({
         title: 'Error',
@@ -169,10 +174,31 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
 
       if (error) throw error;
 
+      // Send collaboration requests if collaborators are specified
+      if (collaboratorIds.length > 0 && data) {
+        const collaborationInserts = collaboratorIds.map(collaboratorId => ({
+          post_id: data.id,
+          user_id: collaboratorId,
+          invited_by: user.id,
+          status: 'pending'
+        }));
+
+        const { error: collabError } = await supabase
+          .from('post_collaborators')
+          .insert(collaborationInserts);
+
+        if (collabError) {
+          console.error('Error sending collaboration requests:', collabError);
+          // Don't fail the post creation, just log the error
+        }
+      }
+
       setPosts(prev => [data as Post, ...prev]);
       toast({
         title: 'Posted!',
-        description: 'Your post has been published.',
+        description: collaboratorIds.length > 0 
+          ? 'Your post has been published and collaboration requests sent.'
+          : 'Your post has been published.',
       });
 
       return data;
