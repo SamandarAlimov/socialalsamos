@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow, isToday, isYesterday, isThisWeek, isThisMonth, differenceInMinutes, format } from 'date-fns';
-import { Heart, MessageCircle, UserPlus, AtSign, Check, Bell, BellOff, Settings, Trash2, MoreHorizontal, ChevronRight, Sparkles } from 'lucide-react';
+import { Heart, MessageCircle, UserPlus, AtSign, Check, Bell, BellOff, Settings, Trash2, MoreHorizontal, ChevronRight, Sparkles, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -20,7 +20,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 
-type NotificationFilter = 'all' | 'likes' | 'comments' | 'follows' | 'mentions';
+type NotificationFilter = 'all' | 'likes' | 'comments' | 'follows' | 'mentions' | 'collaborations';
 
 interface GroupedNotification {
   id: string;
@@ -72,6 +72,13 @@ const NotificationIcon = ({ type, className, size = 'default' }: { type: Notific
       return (
         <div className="h-8 w-8 rounded-full bg-gradient-to-br from-purple-500 to-violet-500 flex items-center justify-center shadow-lg shadow-purple-500/25">
           <AtSign className={cn(iconClass, 'text-white')} />
+        </div>
+      );
+    case 'collaboration_invite':
+    case 'collaboration_accepted':
+      return (
+        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center shadow-lg shadow-orange-500/25">
+          <Users className={cn(iconClass, 'text-white')} />
         </div>
       );
     default:
@@ -253,6 +260,10 @@ function GroupedNotificationItem({
         return <>{usernameElement} <span className="text-muted-foreground">started following you</span></>;
       case 'mention':
         return <>{usernameElement} <span className="text-muted-foreground">mentioned you</span></>;
+      case 'collaboration_invite':
+        return <>{usernameElement} <span className="text-muted-foreground">wants to collaborate with you</span></>;
+      case 'collaboration_accepted':
+        return <>{usernameElement} <span className="text-muted-foreground">accepted your collaboration request</span></>;
       default:
         return usernameElement;
     }
@@ -530,6 +541,7 @@ export default function NotificationsPage() {
       comments: ['comment'],
       follows: ['follow'],
       mentions: ['mention'],
+      collaborations: ['collaboration_invite', 'collaboration_accepted'],
     };
     
     return notifications.filter((n) => typeMap[filter].includes(n.type));
@@ -575,6 +587,7 @@ export default function NotificationsPage() {
     comments: notifications.filter(n => n.type === 'comment').length,
     follows: notifications.filter(n => n.type === 'follow').length,
     mentions: notifications.filter(n => n.type === 'mention').length,
+    collaborations: notifications.filter(n => n.type === 'collaboration_invite' || n.type === 'collaboration_accepted').length,
   }), [notifications]);
 
   // Calculate start indices for animation
@@ -626,7 +639,7 @@ export default function NotificationsPage() {
         {/* Filter Tabs */}
         <div className="px-4 pb-3">
           <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-            {(['all', 'likes', 'comments', 'follows', 'mentions'] as NotificationFilter[]).map((f) => {
+            {(['all', 'likes', 'comments', 'follows', 'mentions', 'collaborations'] as NotificationFilter[]).map((f) => {
               const isActive = filter === f;
               const count = filterCounts[f];
               
