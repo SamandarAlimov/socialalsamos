@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Slider } from '@/components/ui/slider';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFileUpload } from '@/hooks/useFileUpload';
 import { usePosts } from '@/hooks/usePosts';
@@ -99,6 +100,7 @@ export default function CreatePage() {
   const { user, profile } = useAuth();
   const { uploadFile, uploading, progress } = useFileUpload();
   const { createPost } = usePosts();
+  const isMobile = useIsMobile();
 
   // Core states
   const [activeTab, setActiveTab] = useState<'post' | 'story' | 'reel' | 'live'>('post');
@@ -554,7 +556,7 @@ export default function CreatePage() {
     return (
       <CameraVideoRecorder
         mode={cameraMode}
-        aspectRatio={activeTab === 'post' ? '1:1' : '9:16'}
+        aspectRatio={activeTab === 'post' ? '1:1' : isMobile ? 'auto' : '9:16'}
         onCapture={handleCameraCapture}
         onClose={() => setShowCamera(false)}
       />
@@ -562,7 +564,7 @@ export default function CreatePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-24 md:pb-4">
+    <div className={cn("min-h-screen bg-background", isMobile ? "pb-20" : "pb-4")}>
       <audio ref={audioRef} />
       
       <input
@@ -606,29 +608,32 @@ export default function CreatePage() {
       </div>
 
       {/* Tabs */}
-      <div className="max-w-4xl mx-auto px-4 py-4">
+      <div className={cn("max-w-4xl mx-auto px-4 py-4", isMobile && "px-3 py-3")}>
         <Tabs value={activeTab} onValueChange={(v) => {
           setActiveTab(v as any);
           setMediaFiles([]);
           setPoll(null);
           setTextBackground('none');
         }}>
-          <TabsList className="grid grid-cols-4 mb-6">
-            <TabsTrigger value="post" className="gap-2">
-              <FileText className="h-4 w-4" />
-              <span className="hidden sm:inline">Post</span>
+          <TabsList className={cn(
+            "grid grid-cols-4 mb-6",
+            isMobile && "mb-4"
+          )}>
+            <TabsTrigger value="post" className="gap-1.5">
+              <FileText className={cn(isMobile ? "h-4 w-4" : "h-4 w-4")} />
+              <span className={cn(isMobile && "text-xs")}>Post</span>
             </TabsTrigger>
-            <TabsTrigger value="story" className="gap-2">
-              <Camera className="h-4 w-4" />
-              <span className="hidden sm:inline">Story</span>
+            <TabsTrigger value="story" className="gap-1.5">
+              <Camera className={cn(isMobile ? "h-4 w-4" : "h-4 w-4")} />
+              <span className={cn(isMobile && "text-xs")}>Story</span>
             </TabsTrigger>
-            <TabsTrigger value="reel" className="gap-2">
-              <Film className="h-4 w-4" />
-              <span className="hidden sm:inline">Reel</span>
+            <TabsTrigger value="reel" className="gap-1.5">
+              <Film className={cn(isMobile ? "h-4 w-4" : "h-4 w-4")} />
+              <span className={cn(isMobile && "text-xs")}>Reel</span>
             </TabsTrigger>
-            <TabsTrigger value="live" className="gap-2">
-              <Radio className="h-4 w-4" />
-              <span className="hidden sm:inline">Live</span>
+            <TabsTrigger value="live" className="gap-1.5">
+              <Radio className={cn(isMobile ? "h-4 w-4" : "h-4 w-4")} />
+              <span className={cn(isMobile && "text-xs")}>Live</span>
             </TabsTrigger>
           </TabsList>
 
@@ -975,23 +980,32 @@ export default function CreatePage() {
           </TabsContent>
 
           {/* Story Tab */}
-          <TabsContent value="story" className="space-y-6 flex flex-col items-center">
+          <TabsContent value="story" className={cn(
+            "space-y-4 flex flex-col",
+            !isMobile && "items-center"
+          )}>
             {mediaFiles.length === 0 && !postContent.trim() ? (
               <div 
-                className="aspect-[9/16] max-h-[600px] rounded-2xl border-2 border-dashed border-primary/50 flex flex-col items-center justify-center gap-4"
+                className={cn(
+                  "rounded-2xl border-2 border-dashed border-primary/50 flex flex-col items-center justify-center gap-4",
+                  isMobile 
+                    ? "aspect-[9/16] w-full max-w-sm mx-auto" 
+                    : "aspect-[9/16] w-[320px]"
+                )}
                 style={{
                   background: textBackground !== 'none' ? currentBg.color : 'linear-gradient(135deg, hsl(var(--primary) / 0.2), hsl(var(--accent) / 0.2))'
                 }}
               >
                 {textBackground !== 'none' ? (
-                  <div className="w-full px-8">
+                  <div className="w-full px-6">
                     <Textarea
                       ref={textareaRef}
                       value={postContent}
                       onChange={(e) => setPostContent(e.target.value)}
                       placeholder="Type your story..."
                       className={cn(
-                        "bg-transparent border-none text-center text-2xl font-bold resize-none focus-visible:ring-0",
+                        "bg-transparent border-none text-center font-bold resize-none focus-visible:ring-0",
+                        isMobile ? "text-xl" : "text-2xl",
                         currentBg.textColor
                       )}
                       rows={4}
@@ -999,25 +1013,31 @@ export default function CreatePage() {
                   </div>
                 ) : (
                   <>
-                    <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center">
-                      <Camera className="h-10 w-10 text-primary" />
+                    <div className={cn(
+                      "rounded-full bg-primary/20 flex items-center justify-center",
+                      isMobile ? "w-16 h-16" : "w-20 h-20"
+                    )}>
+                      <Camera className={cn(isMobile ? "h-8 w-8" : "h-10 w-10", "text-primary")} />
                     </div>
-                    <p className="text-lg font-medium">Create Your Story</p>
-                    <p className="text-sm text-muted-foreground text-center px-4">
+                    <p className={cn("font-medium", isMobile ? "text-base" : "text-lg")}>Create Your Story</p>
+                    <p className={cn(
+                      "text-muted-foreground text-center px-4",
+                      isMobile ? "text-xs" : "text-sm"
+                    )}>
                       Take a photo, record a video, or create a text story
                     </p>
                   </>
                 )}
-                <div className="flex flex-col gap-3 w-48">
-                  <Button onClick={() => openCamera('both')} className="w-full">
+                <div className={cn("flex flex-col gap-2", isMobile ? "w-40" : "w-48")}>
+                  <Button onClick={() => openCamera('both')} className="w-full" size={isMobile ? "sm" : "default"}>
                     <Camera className="h-4 w-4 mr-2" />
                     Open Camera
                   </Button>
                   <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => imageInputRef.current?.click()} className="flex-1">
+                    <Button variant="outline" onClick={() => imageInputRef.current?.click()} className="flex-1" size={isMobile ? "sm" : "default"}>
                       Photo
                     </Button>
-                    <Button variant="outline" onClick={() => videoInputRef.current?.click()} className="flex-1">
+                    <Button variant="outline" onClick={() => videoInputRef.current?.click()} className="flex-1" size={isMobile ? "sm" : "default"}>
                       Video
                     </Button>
                   </div>
@@ -1025,6 +1045,7 @@ export default function CreatePage() {
                     variant="outline" 
                     onClick={() => setShowTextBackgroundPicker(true)}
                     className="w-full gap-2"
+                    size={isMobile ? "sm" : "default"}
                   >
                     <Type className="h-4 w-4" />
                     Text Story
@@ -1032,13 +1053,19 @@ export default function CreatePage() {
                 </div>
               </div>
             ) : (
-              <div className="relative aspect-[9/16] max-h-[600px] rounded-2xl overflow-hidden bg-muted">
+              <div className={cn(
+                "relative rounded-2xl overflow-hidden bg-muted",
+                isMobile 
+                  ? "aspect-[9/16] w-full max-w-sm mx-auto" 
+                  : "aspect-[9/16] w-[320px]"
+              )}>
                 {mediaFiles.length > 0 ? (
                   currentMedia?.type === 'video' ? (
                     <video
                       src={currentMedia.url}
                       className="w-full h-full object-cover"
                       controls
+                      playsInline
                       style={{ filter: FILTERS.find(f => f.id === currentMedia.filter)?.style }}
                     />
                   ) : (
@@ -1051,16 +1078,23 @@ export default function CreatePage() {
                   )
                 ) : (
                   <div 
-                    className="w-full h-full flex items-center justify-center p-8"
+                    className="w-full h-full flex items-center justify-center p-6"
                     style={{ background: currentBg.color }}
                   >
-                    <p className={cn("text-2xl font-bold text-center", currentBg.textColor)}>
+                    <p className={cn(
+                      "font-bold text-center",
+                      isMobile ? "text-xl" : "text-2xl",
+                      currentBg.textColor
+                    )}>
                       {postContent}
                     </p>
                   </div>
                 )}
 
-                <div className="absolute bottom-20 left-4 right-4">
+                <div className={cn(
+                  "absolute left-3 right-3",
+                  isMobile ? "bottom-16" : "bottom-20"
+                )}>
                   <Input
                     value={postContent}
                     onChange={(e) => setPostContent(e.target.value)}
@@ -1070,7 +1104,7 @@ export default function CreatePage() {
                 </div>
 
                 {currentMedia?.musicTrack && (
-                  <div className="absolute bottom-4 left-4 right-4 bg-background/90 backdrop-blur-sm rounded-xl p-2 flex items-center gap-2">
+                  <div className="absolute bottom-3 left-3 right-3 bg-background/90 backdrop-blur-sm rounded-xl p-2 flex items-center gap-2">
                     <Music className="h-4 w-4" />
                     <span className="text-sm truncate">{currentMedia.musicTrack.name}</span>
                     <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto" onClick={removeMusicFromMedia}>
@@ -1079,8 +1113,11 @@ export default function CreatePage() {
                   </div>
                 )}
 
-                <div className="absolute top-4 right-4 flex flex-col gap-2">
-                  <Button variant="secondary" size="icon" onClick={() => {
+                <div className={cn(
+                  "absolute right-2 flex flex-col gap-2",
+                  isMobile ? "top-2" : "top-4"
+                )}>
+                  <Button variant="secondary" size="icon" className={cn(isMobile && "h-9 w-9")} onClick={() => {
                     if (mediaFiles.length > 0 && currentMedia) {
                       removeMedia(currentMedia.id);
                     } else {
@@ -1091,14 +1128,14 @@ export default function CreatePage() {
                     <Trash2 className="h-4 w-4" />
                   </Button>
                   {mediaFiles.length > 0 && (
-                    <Button variant="secondary" size="icon" onClick={() => setShowFilterPicker(true)}>
+                    <Button variant="secondary" size="icon" className={cn(isMobile && "h-9 w-9")} onClick={() => setShowFilterPicker(true)}>
                       <Sparkles className="h-4 w-4" />
                     </Button>
                   )}
-                  <Button variant="secondary" size="icon" onClick={() => setShowMusicPicker(true)}>
+                  <Button variant="secondary" size="icon" className={cn(isMobile && "h-9 w-9")} onClick={() => setShowMusicPicker(true)}>
                     <Music className="h-4 w-4" />
                   </Button>
-                  <Button variant="secondary" size="icon" onClick={() => setShowTextBackgroundPicker(true)}>
+                  <Button variant="secondary" size="icon" className={cn(isMobile && "h-9 w-9")} onClick={() => setShowTextBackgroundPicker(true)}>
                     <Type className="h-4 w-4" />
                   </Button>
                 </div>
@@ -1107,42 +1144,68 @@ export default function CreatePage() {
           </TabsContent>
 
           {/* Reel Tab */}
-          <TabsContent value="reel" className="space-y-6 flex flex-col items-center">
+          <TabsContent value="reel" className={cn(
+            "space-y-4 flex flex-col",
+            !isMobile && "items-center"
+          )}>
             {mediaFiles.length === 0 ? (
-              <div className="aspect-[9/16] max-h-[600px] rounded-2xl bg-gradient-to-br from-accent/20 to-primary/20 border-2 border-dashed border-accent/50 flex flex-col items-center justify-center gap-4">
-                <div className="w-20 h-20 rounded-full bg-accent/20 flex items-center justify-center">
-                  <Film className="h-10 w-10 text-accent-foreground" />
+              <div className={cn(
+                "rounded-2xl bg-gradient-to-br from-accent/20 to-primary/20 border-2 border-dashed border-accent/50 flex flex-col items-center justify-center gap-4",
+                isMobile 
+                  ? "aspect-[9/16] w-full max-w-sm mx-auto" 
+                  : "aspect-[9/16] w-[320px]"
+              )}>
+                <div className={cn(
+                  "rounded-full bg-accent/20 flex items-center justify-center",
+                  isMobile ? "w-16 h-16" : "w-20 h-20"
+                )}>
+                  <Film className={cn(isMobile ? "h-8 w-8" : "h-10 w-10", "text-accent-foreground")} />
                 </div>
-                <p className="text-lg font-medium">Create a Reel</p>
-                <p className="text-sm text-muted-foreground text-center px-4">
+                <p className={cn("font-medium", isMobile ? "text-base" : "text-lg")}>Create a Reel</p>
+                <p className={cn(
+                  "text-muted-foreground text-center px-4",
+                  isMobile ? "text-xs" : "text-sm"
+                )}>
                   Record a video or choose from your gallery
                 </p>
-                <div className="flex flex-col gap-3 w-48">
-                  <Button onClick={() => openCamera('video')} className="w-full bg-red-500 hover:bg-red-600">
+                <div className={cn("flex flex-col gap-2", isMobile ? "w-40" : "w-48")}>
+                  <Button onClick={() => openCamera('video')} className="w-full bg-destructive hover:bg-destructive/90" size={isMobile ? "sm" : "default"}>
                     <Camera className="h-4 w-4 mr-2" />
                     Record Video
                   </Button>
-                  <Button variant="outline" onClick={() => videoInputRef.current?.click()} className="w-full">
+                  <Button variant="outline" onClick={() => videoInputRef.current?.click()} className="w-full" size={isMobile ? "sm" : "default"}>
                     Choose Video
                   </Button>
                 </div>
               </div>
             ) : (
-              <div className="space-y-4">
-                <div className="relative aspect-[9/16] max-h-[600px] rounded-2xl overflow-hidden bg-muted">
+              <div className="space-y-4 w-full flex flex-col items-center">
+                <div className={cn(
+                  "relative rounded-2xl overflow-hidden bg-muted",
+                  isMobile 
+                    ? "aspect-[9/16] w-full max-w-sm mx-auto" 
+                    : "aspect-[9/16] w-[320px]"
+                )}>
                   <video
                     src={currentMedia?.url}
                     className="w-full h-full object-cover"
                     controls
+                    playsInline
                     style={{ filter: FILTERS.find(f => f.id === currentMedia?.filter)?.style }}
                   />
                   
-                  <div className="absolute bottom-4 left-4 right-4 space-y-3">
+                  <div className={cn(
+                    "absolute left-3 right-3 space-y-2",
+                    isMobile ? "bottom-3" : "bottom-4"
+                  )}>
                     <Textarea
                       value={postContent}
                       onChange={(e) => setPostContent(e.target.value)}
                       placeholder="Write a caption..."
-                      className="bg-background/80 backdrop-blur-sm resize-none"
+                      className={cn(
+                        "bg-background/80 backdrop-blur-sm resize-none",
+                        isMobile && "text-sm"
+                      )}
                       rows={2}
                     />
                     
@@ -1152,7 +1215,10 @@ export default function CreatePage() {
                         value={tagInput}
                         onChange={(e) => setTagInput(e.target.value)}
                         placeholder="Add hashtags"
-                        className="bg-background/80 backdrop-blur-sm"
+                        className={cn(
+                          "bg-background/80 backdrop-blur-sm",
+                          isMobile && "text-sm h-9"
+                        )}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
@@ -1176,10 +1242,14 @@ export default function CreatePage() {
                     )}
                   </div>
 
-                  <div className="absolute top-4 right-4 flex flex-col gap-2">
+                  <div className={cn(
+                    "absolute right-2 flex flex-col gap-2",
+                    isMobile ? "top-2" : "top-4"
+                  )}>
                     <Button
                       variant="secondary"
                       size="icon"
+                      className={cn(isMobile && "h-9 w-9")}
                       onClick={() => currentMedia && removeMedia(currentMedia.id)}
                     >
                       <Trash2 className="h-4 w-4" />
@@ -1187,6 +1257,7 @@ export default function CreatePage() {
                     <Button
                       variant="secondary"
                       size="icon"
+                      className={cn(isMobile && "h-9 w-9")}
                       onClick={() => setShowFilterPicker(true)}
                     >
                       <Sparkles className="h-4 w-4" />
@@ -1194,6 +1265,7 @@ export default function CreatePage() {
                     <Button
                       variant="secondary"
                       size="icon"
+                      className={cn(isMobile && "h-9 w-9")}
                       onClick={() => setShowMusicPicker(true)}
                     >
                       <Music className="h-4 w-4" />
@@ -1201,6 +1273,7 @@ export default function CreatePage() {
                     <Button
                       variant="secondary"
                       size="icon"
+                      className={cn(isMobile && "h-9 w-9")}
                       onClick={() => setShowVideoEditor(true)}
                     >
                       <Scissors className="h-4 w-4" />
@@ -1225,18 +1298,30 @@ export default function CreatePage() {
           </TabsContent>
 
           {/* Live Tab */}
-          <TabsContent value="live" className="space-y-6">
-            <div className="text-center py-8">
-              <div className="w-20 h-20 mx-auto bg-red-500/10 rounded-full flex items-center justify-center mb-4">
-                <Radio className="h-10 w-10 text-red-500" />
+          <TabsContent value="live" className={cn("space-y-4", isMobile && "px-2")}>
+            <div className="text-center py-6">
+              <div className={cn(
+                "mx-auto bg-destructive/10 rounded-full flex items-center justify-center mb-4",
+                isMobile ? "w-16 h-16" : "w-20 h-20"
+              )}>
+                <Radio className={cn(
+                  "text-destructive",
+                  isMobile ? "h-8 w-8" : "h-10 w-10"
+                )} />
               </div>
-              <h3 className="text-xl font-semibold mb-2">Go Live</h3>
-              <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
+              <h3 className={cn(
+                "font-semibold mb-2",
+                isMobile ? "text-lg" : "text-xl"
+              )}>Go Live</h3>
+              <p className={cn(
+                "text-muted-foreground mb-6 max-w-sm mx-auto",
+                isMobile && "text-sm"
+              )}>
                 Broadcast live video to your followers in real-time. They can comment and react to your stream.
               </p>
               <Button 
-                size="lg" 
-                className="bg-red-500 hover:bg-red-600 text-white"
+                size={isMobile ? "default" : "lg"} 
+                className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                 onClick={() => setShowLiveBroadcast(true)}
               >
                 <Radio className="h-5 w-5 mr-2" />
