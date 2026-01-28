@@ -16,7 +16,8 @@ import {
   Sparkles,
   Sticker,
   Link2,
-  FileText
+  FileText,
+  Wand2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -39,6 +40,7 @@ interface MediaToolbarProps {
   onCollaborateClick?: () => void;
   onTextBackgroundClick?: () => void;
   onFilterClick?: () => void;
+  onEffectsClick?: () => void;
   onScheduleClick?: () => void;
   onLinkClick?: () => void;
   hasPoll?: boolean;
@@ -63,6 +65,7 @@ export function MediaToolbar({
   onCollaborateClick,
   onTextBackgroundClick,
   onFilterClick,
+  onEffectsClick,
   onScheduleClick,
   onLinkClick,
   hasPoll,
@@ -109,6 +112,13 @@ export function MediaToolbar({
       onClick: onFilterClick, 
       color: 'text-pink-500',
       show: !!onFilterClick
+    },
+    { 
+      icon: Wand2, 
+      label: 'Effects', 
+      onClick: onEffectsClick, 
+      color: 'text-violet-500',
+      show: !!onEffectsClick
     },
     { 
       icon: Music, 

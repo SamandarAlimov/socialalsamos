@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
@@ -128,15 +128,13 @@ export function FilterPicker({
                 </TabsTrigger>
               ))}
             </TabsList>
+            <ScrollBar orientation="horizontal" />
           </ScrollArea>
         </Tabs>
       </div>
 
-      {/* Filter Grid */}
-      <ScrollArea className={cn(
-        "flex-1 px-4",
-        isMobile ? "h-[35vh]" : "h-[300px]"
-      )}>
+      {/* Filter Grid - FIXED: proper scroll container */}
+      <ScrollArea className="flex-1 min-h-0 px-4">
         <div className={cn(
           "grid gap-2 py-2",
           isMobile ? "grid-cols-4" : "grid-cols-5 md:grid-cols-6 lg:grid-cols-7"
