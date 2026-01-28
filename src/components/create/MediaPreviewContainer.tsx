@@ -1,8 +1,9 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Trash2, Music, X, Maximize2 } from 'lucide-react';
+import { Trash2, Music, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { FILTERS, MUSIC_TRACKS } from './filters/FilterData';
+import { AspectRatioPicker, getAspectRatioLabel } from './AspectRatioPicker';
 
 interface MediaFile {
   id: string;
@@ -22,6 +23,8 @@ interface MediaPreviewContainerProps {
   onRemove: () => void;
   onRemoveMusic: () => void;
   variant?: 'post' | 'story' | 'reel';
+  selectedAspectRatio?: string;
+  onAspectRatioChange?: (ratioId: string, ratioValue: number) => void;
 }
 
 // Detect aspect ratio from media element
@@ -29,50 +32,40 @@ function getMediaAspectRatio(naturalWidth: number, naturalHeight: number): numbe
   return naturalWidth / naturalHeight;
 }
 
-// Get aspect ratio label
-function getAspectRatioLabel(ratio: number): string {
-  if (ratio > 1.7) return '16:9';
-  if (ratio > 1.2) return '4:3';
-  if (Math.abs(ratio - 1) < 0.1) return '1:1';
-  if (ratio < 0.6) return '9:16';
-  if (ratio < 0.8) return '3:4';
-  return ratio.toFixed(2);
-}
-
-// Get container style based on detected aspect ratio - preserves original dimensions
+// Get container style based on selected or detected aspect ratio
 function getContainerStyle(
-  aspectRatio: number | undefined,
+  selectedRatio: string,
+  selectedRatioValue: number,
+  detectedRatio: number | undefined,
   isMobile: boolean,
   variant: 'post' | 'story' | 'reel'
 ): React.CSSProperties {
-  // For stories and reels, if no aspect ratio detected, use 9:16 default
-  if (!aspectRatio) {
-    if (variant === 'story' || variant === 'reel') {
-      return { aspectRatio: '9/16', maxHeight: isMobile ? '450px' : '550px' };
-    }
-    return { aspectRatio: '1', maxHeight: isMobile ? '350px' : '450px' };
+  // Use selected ratio if not 'original', otherwise use detected
+  const effectiveRatio = selectedRatio === 'original' 
+    ? (detectedRatio || 1) 
+    : selectedRatioValue;
+
+  const isPortrait = effectiveRatio < 0.9;
+  const isLandscape = effectiveRatio > 1.1;
+
+  // For stories and reels, use 9:16 default if no ratio
+  if (!effectiveRatio && (variant === 'story' || variant === 'reel')) {
+    return { aspectRatio: '9/16', maxHeight: isMobile ? '450px' : '550px' };
   }
 
-  // Use detected aspect ratio - preserve original dimensions
-  const isPortrait = aspectRatio < 0.9;
-  const isLandscape = aspectRatio > 1.1;
-
   if (isPortrait) {
-    // Portrait media (9:16, 3:4, etc.)
     return { 
-      aspectRatio: `${aspectRatio}`, 
+      aspectRatio: `${effectiveRatio}`, 
       maxHeight: isMobile ? '500px' : '600px',
     };
   } else if (isLandscape) {
-    // Landscape media (16:9, 4:3, etc.)
     return { 
-      aspectRatio: `${aspectRatio}`, 
+      aspectRatio: `${effectiveRatio}`, 
       maxHeight: isMobile ? '300px' : '400px' 
     };
   } else {
-    // Square-ish media
     return { 
-      aspectRatio: `${aspectRatio}`, 
+      aspectRatio: `${effectiveRatio}`, 
       maxHeight: isMobile ? '380px' : '480px' 
     };
   }
@@ -84,9 +77,19 @@ export function MediaPreviewContainer({
   onAspectRatioDetected,
   onRemove,
   onRemoveMusic,
-  variant = 'post'
+  variant = 'post',
+  selectedAspectRatio = 'original',
+  onAspectRatioChange
 }: MediaPreviewContainerProps) {
   const [detectedRatio, setDetectedRatio] = useState<number | undefined>(media?.aspectRatio);
+  const [selectedRatioValue, setSelectedRatioValue] = useState<number>(1);
+
+  // Reset detected ratio when media changes
+  useEffect(() => {
+    if (media?.aspectRatio) {
+      setDetectedRatio(media.aspectRatio);
+    }
+  }, [media?.aspectRatio]);
 
   const handleImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
@@ -102,9 +105,24 @@ export function MediaPreviewContainer({
     onAspectRatioDetected(ratio);
   }, [onAspectRatioDetected]);
 
+  const handleAspectRatioSelect = useCallback((ratioId: string, ratioValue: number) => {
+    setSelectedRatioValue(ratioValue);
+    onAspectRatioChange?.(ratioId, ratioValue);
+  }, [onAspectRatioChange]);
+
   if (!media) return null;
 
-  const containerStyle = getContainerStyle(detectedRatio || media.aspectRatio, isMobile, variant);
+  const containerStyle = getContainerStyle(
+    selectedAspectRatio, 
+    selectedRatioValue, 
+    detectedRatio || media.aspectRatio, 
+    isMobile, 
+    variant
+  );
+
+  // Determine if we need to crop (user selected different ratio than original)
+  const isCropping = selectedAspectRatio !== 'original';
+  const objectFit = isCropping ? 'cover' : 'contain';
 
   return (
     <div 
@@ -114,26 +132,36 @@ export function MediaPreviewContainer({
       {media.type === 'video' ? (
         <video
           src={media.url}
-          className="w-full h-full object-contain"
+          className="w-full h-full"
+          style={{ objectFit, filter: FILTERS.find(f => f.id === media.filter)?.style }}
           controls
           playsInline
           onLoadedMetadata={handleVideoLoad}
-          style={{ filter: FILTERS.find(f => f.id === media.filter)?.style }}
         />
       ) : (
         <img
           src={media.url}
           alt="Preview"
-          className="w-full h-full object-contain"
+          className="w-full h-full"
+          style={{ objectFit, filter: FILTERS.find(f => f.id === media.filter)?.style }}
           onLoad={handleImageLoad}
-          style={{ filter: FILTERS.find(f => f.id === media.filter)?.style }}
         />
       )}
 
-      {/* Aspect Ratio Badge */}
-      {(detectedRatio || media.aspectRatio) && (
-        <div className="absolute top-2 left-2 bg-background/80 backdrop-blur-sm rounded-md px-2 py-1 text-xs flex items-center gap-1">
-          <Maximize2 className="h-3 w-3" />
+      {/* Aspect Ratio Picker - Top Left */}
+      {onAspectRatioChange && (
+        <div className="absolute top-2 left-2 z-10">
+          <AspectRatioPicker
+            selectedRatio={selectedAspectRatio}
+            originalRatio={detectedRatio}
+            onSelectRatio={handleAspectRatioSelect}
+          />
+        </div>
+      )}
+
+      {/* Current Ratio Badge - Top Center (when picker not available) */}
+      {!onAspectRatioChange && (detectedRatio || media.aspectRatio) && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-background/80 backdrop-blur-sm rounded-md px-2 py-1 text-xs font-medium">
           {getAspectRatioLabel(detectedRatio || media.aspectRatio!)}
         </div>
       )}

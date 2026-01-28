@@ -78,6 +78,8 @@ interface MediaFile {
   musicTrack?: typeof MUSIC_TRACKS[0];
   musicStartTime?: number;
   aspectRatio?: number; // width / height - detected from media
+  selectedAspectRatio?: string; // user-selected aspect ratio id
+  selectedAspectRatioValue?: number; // user-selected ratio value
 }
 
 interface OverlayItem {
@@ -760,7 +762,7 @@ export default function CreatePage() {
               />
             )}
 
-            {/* Media Preview - Preserves original aspect ratio */}
+            {/* Media Preview - Preserves original aspect ratio with user control */}
             {mediaFiles.length > 0 && (
               <div className="space-y-4">
                 <div className="relative">
@@ -776,6 +778,16 @@ export default function CreatePage() {
                     }}
                     onRemove={() => currentMedia && removeMedia(currentMedia.id)}
                     onRemoveMusic={removeMusicFromMedia}
+                    selectedAspectRatio={currentMedia?.selectedAspectRatio || 'original'}
+                    onAspectRatioChange={(ratioId, ratioValue) => {
+                      if (currentMedia) {
+                        setMediaFiles(prev => prev.map(f => 
+                          f.id === currentMedia.id 
+                            ? { ...f, selectedAspectRatio: ratioId, selectedAspectRatioValue: ratioValue } 
+                            : f
+                        ));
+                      }
+                    }}
                   />
 
                   {mediaFiles.length > 1 && (
@@ -1055,6 +1067,16 @@ export default function CreatePage() {
                     }}
                     onRemove={() => currentMedia && removeMedia(currentMedia.id)}
                     onRemoveMusic={removeMusicFromMedia}
+                    selectedAspectRatio={currentMedia?.selectedAspectRatio || 'original'}
+                    onAspectRatioChange={(ratioId, ratioValue) => {
+                      if (currentMedia) {
+                        setMediaFiles(prev => prev.map(f => 
+                          f.id === currentMedia.id 
+                            ? { ...f, selectedAspectRatio: ratioId, selectedAspectRatioValue: ratioValue } 
+                            : f
+                        ));
+                      }
+                    }}
                   />
                 ) : (
                   <div 
@@ -1177,6 +1199,16 @@ export default function CreatePage() {
                     }}
                     onRemove={() => currentMedia && removeMedia(currentMedia.id)}
                     onRemoveMusic={removeMusicFromMedia}
+                    selectedAspectRatio={currentMedia?.selectedAspectRatio || 'original'}
+                    onAspectRatioChange={(ratioId, ratioValue) => {
+                      if (currentMedia) {
+                        setMediaFiles(prev => prev.map(f => 
+                          f.id === currentMedia.id 
+                            ? { ...f, selectedAspectRatio: ratioId, selectedAspectRatioValue: ratioValue } 
+                            : f
+                        ));
+                      }
+                    }}
                   />
                   
                   <div className={cn(
