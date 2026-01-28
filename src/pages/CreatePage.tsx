@@ -64,6 +64,7 @@ import { FILTERS, TEXT_BACKGROUNDS, MUSIC_TRACKS } from '@/components/create/fil
 import { StickerPicker, StickerData } from '@/components/create/StickerPicker';
 import { DrawingCanvas } from '@/components/create/DrawingCanvas';
 import { ARFaceFilters } from '@/components/create/ARFaceFilters';
+import { EffectsPicker } from '@/components/create/EffectsPicker';
 import { SchedulePostDialog } from '@/components/create/SchedulePostDialog';
 import { GifStickerPicker } from '@/components/create/GifStickerPicker';
 import { MediaPreviewContainer } from '@/components/create/MediaPreviewContainer';
@@ -138,6 +139,8 @@ export default function CreatePage() {
   const [showStickerPicker, setShowStickerPicker] = useState(false);
   const [showDrawingCanvas, setShowDrawingCanvas] = useState(false);
   const [showARFilters, setShowARFilters] = useState(false);
+  const [showEffectsPicker, setShowEffectsPicker] = useState(false);
+  const [effectsMode, setEffectsMode] = useState<'photo' | 'video'>('photo');
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const [showGifStickerPicker, setShowGifStickerPicker] = useState(false);
 
@@ -888,6 +891,10 @@ export default function CreatePage() {
               onEmojiClick={() => setShowEmojiPicker(true)}
               onMusicClick={() => setShowMusicPicker(true)}
               onFilterClick={mediaFiles.length > 0 ? () => setShowFilterPicker(true) : undefined}
+              onEffectsClick={() => {
+                setEffectsMode('photo');
+                setShowEffectsPicker(true);
+              }}
               onTextBackgroundClick={!mediaFiles.length ? () => setShowTextBackgroundPicker(true) : undefined}
               hasPoll={!!poll}
               hasMusic={!!currentMedia?.musicTrack}
@@ -1392,6 +1399,27 @@ export default function CreatePage() {
         open={showARFilters}
         onOpenChange={setShowARFilters}
         onCapture={handleARCapture}
+      />
+
+      {/* Effects Picker - Instagram/Snapchat style camera effects */}
+      <EffectsPicker
+        open={showEffectsPicker}
+        onOpenChange={setShowEffectsPicker}
+        onCapture={(file, url) => {
+          const newMedia = {
+            id: `${Date.now()}-effect`,
+            file,
+            url,
+            type: effectsMode === 'video' ? 'video' as const : 'image' as const,
+            filter: 'none',
+          };
+          if (activeTab === 'post') {
+            setMediaFiles(prev => [...prev, newMedia]);
+          } else {
+            setMediaFiles([newMedia]);
+          }
+        }}
+        mode={effectsMode}
       />
 
       {/* Schedule Post Dialog */}
