@@ -20,14 +20,27 @@ import {
   Link as LinkIcon,
   Calendar,
   ImageIcon,
-  Archive
+  Archive,
+  MoreHorizontal,
+  Moon,
+  Sun,
+  UserPlus,
+  LogOut
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { useTheme } from 'next-themes';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 
 export default function ProfilePage() {
   const isMobile = useIsMobile();
-  const { user, profile: authProfile, updateProfile } = useAuth();
+  const { user, profile: authProfile, updateProfile, logout } = useAuth();
   const { 
     profile, 
     posts, 
@@ -42,6 +55,7 @@ export default function ProfilePage() {
     refresh,
   } = useUserProfile();
   const navigate = useNavigate();
+  const { theme, setTheme } = useTheme();
   
   const [activeTab, setActiveTab] = useState<'posts' | 'videos' | 'saved'>('posts');
   const [followDialog, setFollowDialog] = useState<{ open: boolean; type: 'followers' | 'following' }>({
@@ -159,9 +173,41 @@ export default function ProfilePage() {
                   <Button variant="outline" size="icon" className="h-9 w-9 md:h-10 md:w-10" onClick={() => navigate('/story-archive')}>
                     <Archive className="h-4 w-4 md:h-5 md:w-5" />
                   </Button>
-                  <Button variant="outline" size="icon" className="h-9 w-9 md:h-10 md:w-10" onClick={() => navigate('/settings')}>
-                    <Settings className="h-4 w-4 md:h-5 md:w-5" />
-                  </Button>
+                  
+                  {/* More Options Dropdown - Desktop/Tablet only */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="icon" className="hidden md:flex h-10 w-10">
+                        <MoreHorizontal className="h-5 w-5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuItem onClick={() => navigate('/settings')}>
+                        <Settings className="h-4 w-4 mr-3" />
+                        Settings
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+                        {theme === 'dark' ? (
+                          <Sun className="h-4 w-4 mr-3" />
+                        ) : (
+                          <Moon className="h-4 w-4 mr-3" />
+                        )}
+                        {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => navigate('/settings')}>
+                        <UserPlus className="h-4 w-4 mr-3" />
+                        Switch Accounts
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem 
+                        onClick={logout}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <LogOut className="h-4 w-4 mr-3" />
+                        Log Out
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               )}
             </div>
