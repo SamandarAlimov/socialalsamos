@@ -159,7 +159,7 @@ export function MobileMenu({ className }: MobileMenuProps) {
 
             {/* Menu Panel */}
             <motion.div
-              className="fixed inset-y-0 right-0 z-50 w-[85%] max-w-[320px] bg-background/95 backdrop-blur-xl border-l border-border/50 shadow-2xl"
+              className="fixed inset-y-0 right-0 z-50 w-[85%] max-w-[320px] bg-background border-l border-border shadow-2xl"
               variants={menuVariants}
               initial="hidden"
               animate="visible"
@@ -171,12 +171,9 @@ export function MobileMenu({ className }: MobileMenuProps) {
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
             >
-              {/* Swipe Indicator */}
-              <div className="absolute left-2 top-1/2 -translate-y-1/2 w-1 h-16 rounded-full bg-muted-foreground/20" />
-
               {/* Header */}
               <motion.div 
-                className="flex items-center justify-between p-4 border-b border-border/50"
+                className="flex items-center justify-between p-4 border-b border-border"
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
@@ -252,7 +249,7 @@ export function MobileMenu({ className }: MobileMenuProps) {
 
               {/* Footer */}
               <motion.div 
-                className="absolute bottom-0 left-0 right-0 p-4 border-t border-border/50 bg-background/80 backdrop-blur-sm safe-area-bottom"
+                className="absolute bottom-0 left-0 right-0 p-4 border-t border-border bg-background safe-area-bottom"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
@@ -269,11 +266,6 @@ export function MobileMenu({ className }: MobileMenuProps) {
                   </div>
                   <span className="font-medium">Logout</span>
                 </button>
-
-                {/* Swipe hint */}
-                <p className="text-xs text-center text-muted-foreground mt-3">
-                  Swipe right to close
-                </p>
               </motion.div>
             </motion.div>
           </>
