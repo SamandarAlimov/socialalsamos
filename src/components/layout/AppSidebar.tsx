@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Home, 
   Search, 
@@ -14,18 +14,30 @@ import {
   ChevronRight,
   Compass,
   Wallet,
-  Sparkles
+  Sparkles,
+  MoreHorizontal,
+  Moon,
+  Sun,
+  UserPlus
 } from 'lucide-react';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { useState, useCallback } from 'react';
 import { NotificationsDropdown } from '@/components/NotificationsDropdown';
-import { UserSearchDialog } from '@/components/UserSearchDialog';
 import { Button } from '@/components/ui/button';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
 import { useNotificationSound } from '@/hooks/useNotificationSound';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { useTheme } from 'next-themes';
 
 interface NavItem {
   icon: React.ElementType;
@@ -54,9 +66,11 @@ const bottomItems: NavItem[] = [
 
 export function AppSidebar() {
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const { user, profile, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const { playMessageSound } = useNotificationSound();
+  const { theme, setTheme } = useTheme();
   
   const handleNewMessage = useCallback(() => {
     playMessageSound();
@@ -151,22 +165,106 @@ export function AppSidebar() {
         {bottomItems.map((item) => {
           const isActive = location.pathname === item.path;
           return (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group",
-                isActive 
-                  ? "bg-primary text-primary-foreground shadow-md" 
-                  : "text-sidebar-foreground hover:bg-sidebar-accent"
+            <div key={item.path} className="flex items-center gap-1">
+              <NavLink
+                to={item.path}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group flex-1",
+                  isActive 
+                    ? "bg-primary text-primary-foreground shadow-md" 
+                    : "text-sidebar-foreground hover:bg-sidebar-accent"
+                )}
+              >
+                {/* Show user avatar if available, otherwise show User icon */}
+                {profile?.avatar_url ? (
+                  <Avatar className="h-5 w-5 flex-shrink-0">
+                    <AvatarImage src={profile.avatar_url} alt={profile.display_name || 'Profile'} />
+                    <AvatarFallback>
+                      <User className="h-3 w-3" />
+                    </AvatarFallback>
+                  </Avatar>
+                ) : (
+                  <User className="h-5 w-5 flex-shrink-0" />
+                )}
+                {!collapsed && <span className="font-medium text-sm">{item.label}</span>}
+              </NavLink>
+              
+              {/* More Options - Shown on expanded sidebar */}
+              {!collapsed && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" side="top" className="w-56">
+                    <DropdownMenuItem onClick={() => navigate('/settings')}>
+                      <Settings className="h-4 w-4 mr-3" />
+                      Settings
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+                      {theme === 'dark' ? (
+                        <Sun className="h-4 w-4 mr-3" />
+                      ) : (
+                        <Moon className="h-4 w-4 mr-3" />
+                      )}
+                      {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate('/settings')}>
+                      <UserPlus className="h-4 w-4 mr-3" />
+                      Switch Accounts
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={logout}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <LogOut className="h-4 w-4 mr-3" />
+                      Log Out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
-            >
-              <item.icon className="h-5 w-5 flex-shrink-0" />
-              {!collapsed && <span className="font-medium text-sm">{item.label}</span>}
-            </NavLink>
+            </div>
           );
         })}
         
+        {/* More Options for collapsed sidebar - shown below profile */}
+        {collapsed && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="w-full h-10 rounded-xl">
+                <MoreHorizontal className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="center" side="right" className="w-56">
+              <DropdownMenuItem onClick={() => navigate('/settings')}>
+                <Settings className="h-4 w-4 mr-3" />
+                Settings
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+                {theme === 'dark' ? (
+                  <Sun className="h-4 w-4 mr-3" />
+                ) : (
+                  <Moon className="h-4 w-4 mr-3" />
+                )}
+                {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/settings')}>
+                <UserPlus className="h-4 w-4 mr-3" />
+                Switch Accounts
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem 
+                onClick={logout}
+                className="text-destructive focus:text-destructive"
+              >
+                <LogOut className="h-4 w-4 mr-3" />
+                Log Out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       {/* Collapse Toggle */}
