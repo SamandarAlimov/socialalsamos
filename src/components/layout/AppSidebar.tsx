@@ -50,7 +50,6 @@ const navItems: NavItem[] = [
 
 const bottomItems: NavItem[] = [
   { icon: User, label: 'Profile', path: '/profile' },
-  { icon: Settings, label: 'Settings', path: '/settings' },
 ];
 
 export function AppSidebar() {
