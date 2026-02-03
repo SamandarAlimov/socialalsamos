@@ -150,7 +150,7 @@ export function MobileMenu({ className }: MobileMenuProps) {
           <>
             {/* Backdrop */}
             <motion.div
-              className="fixed inset-0 z-50 bg-black/60"
+              className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm"
               variants={backdropVariants}
               initial="hidden"
               animate="visible"
@@ -161,7 +161,7 @@ export function MobileMenu({ className }: MobileMenuProps) {
             {/* Menu Panel */}
             <motion.div
               className={cn(
-                "fixed inset-y-0 right-0 z-50 w-[85%] max-w-[320px] bg-background border-l border-border shadow-2xl",
+                "fixed inset-y-0 right-0 z-[70] w-[85%] max-w-[320px] bg-background border-l border-border shadow-2xl",
                 "flex flex-col"
               )}
               variants={menuVariants}
@@ -200,12 +200,12 @@ export function MobileMenu({ className }: MobileMenuProps) {
 
               {/* Menu Items */}
               <motion.nav 
-                className="flex-1 overflow-y-auto scrollbar-hidden"
+                className="flex-1 min-h-0 overflow-y-auto scrollbar-hidden px-2 py-3"
                 variants={containerVariants}
                 initial="hidden"
                 animate="visible"
               >
-                <div className="py-2">
+                <div className="space-y-1">
                 {menuItems.map((item, idx) => {
                   const isActive = activePath === item.path;
                   
@@ -214,20 +214,22 @@ export function MobileMenu({ className }: MobileMenuProps) {
                       <button
                         onClick={() => handleNavigate(item.path)}
                         className={cn(
-                          "w-full flex items-center gap-3 px-4 py-3 transition-colors",
-                          "active:opacity-80",
+                          "w-full flex items-center gap-3 rounded-xl px-3 py-3",
+                          "transition-colors active:opacity-80",
                           isActive ? "bg-accent text-accent-foreground" : "text-foreground hover:bg-accent"
                         )}
                       >
-                        <item.icon className={cn("h-5 w-5", isActive ? "text-foreground" : "text-muted-foreground")} />
+                        <div className={cn(
+                          "flex h-10 w-10 items-center justify-center rounded-lg",
+                          isActive ? "bg-background/40" : "bg-muted"
+                        )}>
+                          <item.icon className={cn("h-5 w-5", isActive ? "text-foreground" : "text-muted-foreground")} />
+                        </div>
                         <div className="flex-1 text-left">
                           <span className="text-sm font-medium block">{item.label}</span>
                         </div>
                         <ChevronRight className="h-4 w-4 text-muted-foreground" />
                       </button>
-                      {idx !== menuItems.length - 1 && (
-                        <div className="mx-4 border-b border-border" />
-                      )}
                     </motion.div>
                   );
                 })}
@@ -236,7 +238,7 @@ export function MobileMenu({ className }: MobileMenuProps) {
 
               {/* Footer */}
               <motion.div 
-                className="shrink-0 border-t border-border bg-background safe-area-bottom"
+                className="mt-auto shrink-0 border-t border-border bg-background safe-area-bottom"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
