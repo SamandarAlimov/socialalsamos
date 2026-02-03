@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useMemo, useState, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Menu, 
@@ -20,15 +20,14 @@ interface NavItem {
   icon: React.ElementType;
   label: string;
   path: string;
-  description?: string;
 }
 
 const menuItems: NavItem[] = [
-  { icon: Compass, label: 'Discover', path: '/discover', description: 'Explore new content' },
-  { icon: ShoppingBag, label: 'Marketplace', path: '/marketplace', description: 'Buy & sell items' },
-  { icon: MapPin, label: 'Map', path: '/map', description: 'Find nearby places' },
-  { icon: Wallet, label: 'Payment', path: '/payment', description: 'Manage finances' },
-  { icon: Sparkles, label: 'AI Assistant', path: '/ai', description: 'Get AI help' },
+  { icon: Compass, label: 'Discover', path: '/discover' },
+  { icon: ShoppingBag, label: 'Marketplace', path: '/marketplace' },
+  { icon: MapPin, label: 'Map', path: '/map' },
+  { icon: Wallet, label: 'Payment', path: '/payment' },
+  { icon: Sparkles, label: 'AI Assistant', path: '/ai' },
 ];
 
 interface MobileMenuProps {
@@ -79,6 +78,8 @@ export function MobileMenu({ className }: MobileMenuProps) {
     navigate(path);
     setIsOpen(false);
   };
+
+  const activePath = useMemo(() => location.pathname, [location.pathname]);
 
   // Backdrop animation variants
   const backdropVariants = {
@@ -149,7 +150,7 @@ export function MobileMenu({ className }: MobileMenuProps) {
           <>
             {/* Backdrop */}
             <motion.div
-              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+              className="fixed inset-0 z-50 bg-black/60"
               variants={backdropVariants}
               initial="hidden"
               animate="visible"
@@ -159,7 +160,10 @@ export function MobileMenu({ className }: MobileMenuProps) {
 
             {/* Menu Panel */}
             <motion.div
-              className="fixed inset-y-0 right-0 z-50 w-[85%] max-w-[320px] bg-background border-l border-border shadow-2xl"
+              className={cn(
+                "fixed inset-y-0 right-0 z-50 w-[85%] max-w-[320px] bg-background border-l border-border shadow-2xl",
+                "flex flex-col"
+              )}
               variants={menuVariants}
               initial="hidden"
               animate="visible"
@@ -173,19 +177,21 @@ export function MobileMenu({ className }: MobileMenuProps) {
             >
               {/* Header */}
               <motion.div 
-                className="flex items-center justify-between p-4 border-b border-border"
+                className="flex items-center justify-between px-4 h-14 border-b border-border"
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
               >
                 <div>
-                  <h2 className="text-lg font-semibold">Menu</h2>
-                  <p className="text-xs text-muted-foreground">Navigate to pages</p>
+                  <h2 className="text-base font-semibold leading-none">Menu</h2>
                 </div>
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className="h-9 w-9 rounded-full hover:bg-destructive/10 hover:text-destructive transition-colors"
+                  className={cn(
+                    "h-9 w-9 rounded-full",
+                    "hover:bg-accent hover:text-accent-foreground transition-colors"
+                  )}
                   onClick={() => setIsOpen(false)}
                 >
                   <X className="h-5 w-5" />
@@ -194,78 +200,62 @@ export function MobileMenu({ className }: MobileMenuProps) {
 
               {/* Menu Items */}
               <motion.nav 
-                className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-180px)]"
+                className="flex-1 overflow-y-auto scrollbar-hidden"
                 variants={containerVariants}
                 initial="hidden"
                 animate="visible"
               >
-                {menuItems.map((item) => {
-                  const isActive = location.pathname === item.path;
+                <div className="py-2">
+                {menuItems.map((item, idx) => {
+                  const isActive = activePath === item.path;
                   
                   return (
                     <motion.div key={item.path} variants={itemVariants}>
                       <button
                         onClick={() => handleNavigate(item.path)}
                         className={cn(
-                          "w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all duration-200 group",
-                          isActive 
-                            ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25" 
-                            : "text-foreground hover:bg-accent active:scale-[0.98]"
+                          "w-full flex items-center gap-3 px-4 py-3 transition-colors",
+                          "active:opacity-80",
+                          isActive ? "bg-accent text-accent-foreground" : "text-foreground hover:bg-accent"
                         )}
                       >
-                        <div className={cn(
-                          "flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-200",
-                          isActive 
-                            ? "bg-primary-foreground/20" 
-                            : "bg-muted group-hover:bg-primary/10"
-                        )}>
-                          <item.icon className={cn(
-                            "h-5 w-5 transition-colors",
-                            isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-primary"
-                          )} />
-                        </div>
+                        <item.icon className={cn("h-5 w-5", isActive ? "text-foreground" : "text-muted-foreground")} />
                         <div className="flex-1 text-left">
-                          <span className="font-medium block">{item.label}</span>
-                          {item.description && (
-                            <span className={cn(
-                              "text-xs",
-                              isActive ? "text-primary-foreground/70" : "text-muted-foreground"
-                            )}>
-                              {item.description}
-                            </span>
-                          )}
+                          <span className="text-sm font-medium block">{item.label}</span>
                         </div>
-                        <ChevronRight className={cn(
-                          "h-4 w-4 transition-all duration-200",
-                          isActive 
-                            ? "text-primary-foreground/70" 
-                            : "text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:translate-x-1"
-                        )} />
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
                       </button>
+                      {idx !== menuItems.length - 1 && (
+                        <div className="mx-4 border-b border-border" />
+                      )}
                     </motion.div>
                   );
                 })}
+                </div>
               </motion.nav>
 
               {/* Footer */}
               <motion.div 
-                className="absolute bottom-0 left-0 right-0 p-4 border-t border-border bg-background safe-area-bottom"
+                className="shrink-0 border-t border-border bg-background safe-area-bottom"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
               >
+                <div className="p-4">
                 <button
                   onClick={() => {
                     setIsOpen(false);
                     logout();
                   }}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all duration-200 text-destructive hover:bg-destructive/10 active:scale-[0.98] group"
+                  className={cn(
+                    "w-full flex items-center gap-3 px-4 py-3 rounded-xl",
+                    "transition-colors text-destructive hover:bg-accent active:opacity-80"
+                  )}
                 >
-                  <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-destructive/10 group-hover:bg-destructive/20 transition-colors">
-                    <LogOut className="h-5 w-5" />
-                  </div>
-                  <span className="font-medium">Logout</span>
+                  <LogOut className="h-5 w-5" />
+                  <span className="text-sm font-medium">Logout</span>
                 </button>
+                </div>
               </motion.div>
             </motion.div>
           </>
