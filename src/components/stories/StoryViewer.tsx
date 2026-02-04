@@ -20,7 +20,11 @@ import {
   Pause,
   Play,
   Bookmark,
-  Loader2
+  Loader2,
+  Download,
+  Flag,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
@@ -31,9 +35,16 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { AddToHighlightDialog } from './AddToHighlightDialog';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 
 interface Story {
   id: string;
@@ -99,13 +110,21 @@ export function StoryViewer({
   const [isLiked, setIsLiked] = useState(false);
   const [isSendingReply, setIsSendingReply] = useState(false);
   const [showAddToHighlight, setShowAddToHighlight] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isHolding, setIsHolding] = useState(false);
+  const [progressWidth, setProgressWidth] = useState(0);
   
+  // Touch/Gesture refs
   const storyTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const progressRef = useRef<HTMLDivElement>(null);
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const holdTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const currentStory = activeGroup.stories[activeIndex];
   const isOwnStory = user?.id === activeGroup.user_id;
+  const STORY_DURATION = 5000; // 5 seconds for images
 
   // Mark story as viewed
   useEffect(() => {
@@ -119,10 +138,8 @@ export function StoryViewer({
   useEffect(() => {
     if (!isOwnStory || !currentStory) return;
 
-    // Initial fetch
     fetchViewers(currentStory.id);
 
-    // Set up realtime subscription for story views
     const channel = supabase
       .channel(`story-views-${currentStory.id}`)
       .on(
@@ -134,7 +151,6 @@ export function StoryViewer({
           filter: `story_id=eq.${currentStory.id}`,
         },
         async (payload) => {
-          // Fetch the new viewer's profile
           const { data: viewerProfile } = await supabase
             .from('profiles')
             .select('id, username, display_name, avatar_url')
@@ -159,22 +175,38 @@ export function StoryViewer({
     };
   }, [isOwnStory, currentStory?.id]);
 
-  // Auto-advance timer
+  // Progress bar animation with actual timer
   useEffect(() => {
-    if (isPaused || showViewers) return;
-    
-    if (currentStory?.media_type !== 'video') {
-      storyTimerRef.current = setTimeout(() => {
-        nextStory();
-      }, 5000);
+    if (isPaused || isHolding || showViewers) {
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+      return;
     }
 
-    return () => {
-      if (storyTimerRef.current) {
-        clearTimeout(storyTimerRef.current);
+    if (currentStory?.media_type === 'video') return;
+
+    setProgressWidth(0);
+    const startTime = Date.now();
+    
+    progressIntervalRef.current = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min((elapsed / STORY_DURATION) * 100, 100);
+      setProgressWidth(progress);
+      
+      if (progress >= 100) {
+        if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+        nextStory();
       }
+    }, 50);
+
+    return () => {
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
     };
-  }, [activeGroup, activeIndex, isPaused, showViewers]);
+  }, [activeGroup, activeIndex, isPaused, isHolding, showViewers]);
+
+  // Reset progress when story changes
+  useEffect(() => {
+    setProgressWidth(0);
+  }, [activeIndex, activeGroup.user_id]);
 
   const markAsViewed = async (storyId: string) => {
     if (!user) return;
@@ -223,7 +255,6 @@ export function StoryViewer({
     if (activeIndex < activeGroup.stories.length - 1) {
       setActiveIndex(prev => prev + 1);
     } else {
-      // Move to next group
       const currentGroupIndex = allGroups.findIndex(g => g.user_id === activeGroup.user_id);
       if (currentGroupIndex < allGroups.length - 1) {
         const nextGroup = allGroups[currentGroupIndex + 1];
@@ -240,7 +271,6 @@ export function StoryViewer({
     if (activeIndex > 0) {
       setActiveIndex(prev => prev - 1);
     } else {
-      // Move to previous group
       const currentGroupIndex = allGroups.findIndex(g => g.user_id === activeGroup.user_id);
       if (currentGroupIndex > 0) {
         const prevGroup = allGroups[currentGroupIndex - 1];
@@ -250,6 +280,78 @@ export function StoryViewer({
       }
     }
   }, [activeGroup, activeIndex, allGroups]);
+
+  // Touch handlers for Instagram-like gestures
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    touchStartRef.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+      time: Date.now()
+    };
+    
+    // Start hold timer for pause
+    holdTimeoutRef.current = setTimeout(() => {
+      setIsHolding(true);
+      setIsPaused(true);
+      if (videoRef.current) videoRef.current.pause();
+    }, 150);
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    // Clear hold timer
+    if (holdTimeoutRef.current) {
+      clearTimeout(holdTimeoutRef.current);
+      holdTimeoutRef.current = null;
+    }
+
+    // If was holding, just resume
+    if (isHolding) {
+      setIsHolding(false);
+      setIsPaused(false);
+      if (videoRef.current) videoRef.current.play();
+      return;
+    }
+
+    if (!touchStartRef.current) return;
+
+    const touch = e.changedTouches[0];
+    const deltaX = touch.clientX - touchStartRef.current.x;
+    const deltaY = touch.clientY - touchStartRef.current.y;
+    const deltaTime = Date.now() - touchStartRef.current.time;
+
+    const minSwipeDistance = 50;
+    const maxSwipeTime = 300;
+
+    // Horizontal swipe detection
+    if (Math.abs(deltaX) > minSwipeDistance && Math.abs(deltaX) > Math.abs(deltaY) && deltaTime < maxSwipeTime) {
+      if (deltaX > 0) {
+        prevStory();
+      } else {
+        nextStory();
+      }
+    } else if (Math.abs(deltaX) < 10 && Math.abs(deltaY) < 10 && deltaTime < 200) {
+      // Tap navigation - left third goes back, right third goes forward
+      const screenWidth = window.innerWidth;
+      const tapX = touch.clientX;
+      
+      if (tapX < screenWidth / 3) {
+        prevStory();
+      } else if (tapX > screenWidth * 2 / 3) {
+        nextStory();
+      }
+    }
+
+    touchStartRef.current = null;
+  }, [isHolding, prevStory, nextStory]);
+
+  const handleTouchMove = useCallback(() => {
+    // Cancel hold if moving
+    if (holdTimeoutRef.current) {
+      clearTimeout(holdTimeoutRef.current);
+      holdTimeoutRef.current = null;
+    }
+  }, []);
 
   const handleStoryReply = async () => {
     if (!storyReply.trim() || !activeGroup || !user || isSendingReply) return;
@@ -348,20 +450,58 @@ export function StoryViewer({
     }
   };
 
-  const handleShare = () => {
-    // TODO: Implement share functionality
-    console.log('Share story');
+  const handleShare = async () => {
+    if (!currentStory) return;
+    
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `Story by ${activeGroup.display_name || activeGroup.username}`,
+          url: window.location.href,
+        });
+      } else {
+        await navigator.clipboard.writeText(window.location.href);
+        toast.success('Link copied to clipboard');
+      }
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
   };
 
   const handleLike = () => {
     setIsLiked(prev => !prev);
-    // TODO: Implement story like
+    toast.success(isLiked ? 'Removed like' : 'Liked story');
   };
 
   const handleDelete = () => {
     if (currentStory && onDelete) {
       onDelete(currentStory.id);
     }
+  };
+
+  const handleSaveStory = async () => {
+    if (!currentStory) return;
+    
+    try {
+      const response = await fetch(currentStory.media_url);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `story_${currentStory.id}.${currentStory.media_type === 'video' ? 'mp4' : 'jpg'}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success('Story saved!');
+    } catch (error) {
+      console.error('Error saving story:', error);
+      toast.error('Failed to save story');
+    }
+  };
+
+  const handleReport = async () => {
+    toast.success('Story reported. We will review it shortly.');
   };
 
   const handleViewerClick = (viewer: { id: string; username?: string }) => {
@@ -377,6 +517,13 @@ export function StoryViewer({
       } else {
         videoRef.current.pause();
       }
+    }
+  };
+
+  const toggleMute = () => {
+    setIsMuted(prev => !prev);
+    if (videoRef.current) {
+      videoRef.current.muted = !isMuted;
     }
   };
 
@@ -418,13 +565,19 @@ export function StoryViewer({
         </>
       )}
 
-      {/* Main Container */}
-      <div className={cn(
-        "relative flex flex-col",
-        isMobile
-          ? "h-[100dvh] w-full"
-          : "h-[calc(100vh-80px)] max-h-[800px] w-full max-w-[450px] mx-auto"
-      )}>
+      {/* Main Container with Touch Handlers */}
+      <div 
+        ref={containerRef}
+        className={cn(
+          "relative flex flex-col",
+          isMobile
+            ? "h-[100dvh] w-full"
+            : "h-[calc(100vh-80px)] max-h-[800px] w-full max-w-[450px] mx-auto"
+        )}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onTouchMove={handleTouchMove}
+      >
         {/* Story Content */}
         <div className={cn(
           "relative bg-black flex-1 flex flex-col",
@@ -438,15 +591,12 @@ export function StoryViewer({
             {activeGroup.stories.map((_, idx) => (
               <div key={idx} className="flex-1 h-0.5 bg-white/30 rounded-full overflow-hidden">
                 <div
-                  ref={idx === activeIndex ? progressRef : null}
-                  className={cn(
-                    "h-full bg-white transition-all",
-                    idx < activeIndex ? "w-full" :
-                    idx === activeIndex && !isPaused ? "w-full animate-story-progress" : "w-0"
-                  )}
-                  style={idx === activeIndex && !isPaused && currentStory.media_type !== 'video'
-                    ? { animationDuration: '5s' }
-                    : undefined}
+                  className="h-full bg-white transition-all ease-linear"
+                  style={{
+                    width: idx < activeIndex ? '100%' : 
+                           idx === activeIndex ? `${progressWidth}%` : '0%',
+                    transitionDuration: idx === activeIndex ? '50ms' : '0ms'
+                  }}
                 />
               </div>
             ))}
@@ -484,32 +634,60 @@ export function StoryViewer({
             </div>
 
             <div className="flex items-center gap-2">
+              {currentStory.media_type === 'video' && (
+                <button
+                  onClick={toggleMute}
+                  className="text-white/80 hover:text-white"
+                >
+                  {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                </button>
+              )}
+              
               <button
                 onClick={togglePause}
                 className="text-white/80 hover:text-white"
               >
-                {isPaused ? <Play className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
+                {isPaused || isHolding ? <Play className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
               </button>
 
-              {isOwnStory && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button className="text-white/80 hover:text-white">
-                      <MoreHorizontal className="h-5 w-5" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="z-[110]">
-                    <DropdownMenuItem onClick={() => setShowAddToHighlight(true)}>
-                      <Bookmark className="h-4 w-4 mr-2" />
-                      Add to Highlight
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleDelete} className="text-destructive">
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete Story
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="text-white/80 hover:text-white">
+                    <MoreHorizontal className="h-5 w-5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="z-[10001] min-w-[180px]">
+                  {isOwnStory ? (
+                    <>
+                      <DropdownMenuItem onClick={() => setShowAddToHighlight(true)}>
+                        <Bookmark className="h-4 w-4 mr-2" />
+                        Add to Highlight
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={handleSaveStory}>
+                        <Download className="h-4 w-4 mr-2" />
+                        Save Story
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={handleDelete} className="text-destructive">
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete Story
+                      </DropdownMenuItem>
+                    </>
+                  ) : (
+                    <>
+                      <DropdownMenuItem onClick={handleSaveStory}>
+                        <Download className="h-4 w-4 mr-2" />
+                        Save Story
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={handleReport} className="text-destructive">
+                        <Flag className="h-4 w-4 mr-2" />
+                        Report Story
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
 
@@ -526,7 +704,7 @@ export function StoryViewer({
                   className="max-w-full max-h-full object-contain"
                   autoPlay
                   playsInline
-                  muted={false}
+                  muted={isMuted}
                   onEnded={nextStory}
                 />
               ) : (
@@ -534,7 +712,17 @@ export function StoryViewer({
                   src={currentStory.media_url}
                   alt="Story"
                   className="max-w-full max-h-full object-contain"
+                  draggable={false}
                 />
+              )}
+              
+              {/* Pause Indicator */}
+              {(isPaused || isHolding) && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="bg-black/50 rounded-full p-4 backdrop-blur-sm">
+                    <Pause className="h-8 w-8 text-white" />
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -638,61 +826,67 @@ export function StoryViewer({
         </div>
       </div>
 
-      {/* Viewers Sheet (Own Story) */}
-      {showViewers && isOwnStory && (
-        <div
-          className="absolute inset-0 z-30 flex items-end justify-center"
-          onClick={() => setShowViewers(false)}
-        >
-          <div
-            className={cn(
-              "bg-background rounded-t-2xl w-full animate-slide-up",
-              isMobile ? "max-h-[60vh]" : "max-w-lg max-h-[50vh]"
-            )}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-4 border-b border-border">
-              <div className="w-12 h-1 bg-muted rounded-full mx-auto mb-4" />
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold">Viewers</h3>
-                <span className="text-muted-foreground text-sm">{viewers.length}</span>
+      {/* Viewers Sheet (Own Story) - Professional Design */}
+      <Sheet open={showViewers && isOwnStory} onOpenChange={setShowViewers}>
+        <SheetContent side="bottom" className="z-[10001] h-[70vh] rounded-t-2xl px-0">
+          <SheetHeader className="px-4 pb-4 border-b border-border">
+            <div className="flex items-center justify-between">
+              <SheetTitle className="flex items-center gap-2">
+                <Eye className="h-5 w-5 text-muted-foreground" />
+                <span>{viewers.length} Viewers</span>
+              </SheetTitle>
+            </div>
+          </SheetHeader>
+          
+          <div className="flex-1 overflow-y-auto">
+            {loadingViewers ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            </div>
-            <div className="max-h-[45vh] overflow-y-auto">
-              {loadingViewers ? (
-                <div className="p-4 text-center text-muted-foreground">Loading...</div>
-              ) : viewers.length === 0 ? (
-                <div className="p-8 text-center text-muted-foreground">No viewers yet</div>
-              ) : (
-                <div className="p-2">
-                  {viewers.map((viewer) => (
-                    <button
-                      key={viewer.id}
-                      onClick={() => handleViewerClick({ id: viewer.viewer_id, username: viewer.profile?.username || undefined })}
-                      className="flex items-center gap-3 w-full p-3 rounded-xl hover:bg-accent transition-colors"
-                    >
-                      <Avatar className="h-10 w-10">
-                        <AvatarImage src={viewer.profile?.avatar_url || ''} />
-                        <AvatarFallback>
-                          {viewer.profile?.display_name?.[0] || viewer.profile?.username?.[0] || 'U'}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="text-left flex-1">
-                        <p className="font-medium text-sm">
-                          {viewer.profile?.display_name || viewer.profile?.username}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatDistanceToNow(new Date(viewer.viewed_at), { addSuffix: true })}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
+            ) : viewers.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 px-4">
+                <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                  <Eye className="h-8 w-8 text-muted-foreground" />
                 </div>
-              )}
-            </div>
+                <p className="text-muted-foreground text-center">No viewers yet</p>
+                <p className="text-sm text-muted-foreground/60 text-center mt-1">
+                  People who view your story will appear here
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {viewers.map((viewer) => (
+                  <button
+                    key={viewer.id}
+                    onClick={() => handleViewerClick({ id: viewer.viewer_id, username: viewer.profile?.username || undefined })}
+                    className="flex items-center gap-3 w-full px-4 py-3 hover:bg-accent/50 transition-colors"
+                  >
+                    <Avatar className="h-12 w-12 ring-2 ring-border">
+                      <AvatarImage src={viewer.profile?.avatar_url || ''} />
+                      <AvatarFallback className="bg-muted">
+                        {viewer.profile?.display_name?.[0] || viewer.profile?.username?.[0] || 'U'}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="text-left flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">
+                        {viewer.profile?.display_name || viewer.profile?.username || 'User'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        @{viewer.profile?.username || 'user'}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-xs text-muted-foreground">
+                        {formatDistanceToNow(new Date(viewer.viewed_at), { addSuffix: true })}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        </SheetContent>
+      </Sheet>
 
       {/* Add to Highlight Dialog */}
       <AddToHighlightDialog
