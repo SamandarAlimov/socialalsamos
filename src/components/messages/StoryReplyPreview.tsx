@@ -3,15 +3,23 @@ import { Play, ImageIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { StoryViewer } from '@/components/stories/StoryViewer';
 
 interface Story {
   id: string;
+  user_id: string;
   media_url: string;
   media_type: string | null;
   caption: string | null;
+  views_count: number;
+  expires_at: string;
+  created_at: string;
   profile?: {
+    id: string;
     username: string | null;
     display_name: string | null;
+    avatar_url: string | null;
+    is_verified: boolean;
   };
 }
 
@@ -23,14 +31,17 @@ interface StoryReplyPreviewProps {
 export function StoryReplyPreview({ storyId, isMine }: StoryReplyPreviewProps) {
   const [story, setStory] = useState<Story | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showViewer, setShowViewer] = useState(false);
 
   useEffect(() => {
     async function fetchStory() {
       const { data, error } = await supabase
         .from('stories')
         .select(`
-          id, media_url, media_type, caption,
-          profile:profiles!stories_user_id_fkey (username, display_name)
+          id, user_id, media_url, media_type, caption, views_count, expires_at, created_at,
+          profile:profiles!stories_user_id_fkey (
+            id, username, display_name, avatar_url, is_verified
+          )
         `)
         .eq('id', storyId)
         .single();
@@ -43,6 +54,13 @@ export function StoryReplyPreview({ storyId, isMine }: StoryReplyPreviewProps) {
 
     fetchStory();
   }, [storyId]);
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (story) {
+      setShowViewer(true);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -72,52 +90,86 @@ export function StoryReplyPreview({ storyId, isMine }: StoryReplyPreviewProps) {
 
   const isVideo = story.media_type === 'video';
 
-  return (
-    <div className={cn(
-      "flex items-center gap-2 mb-2 p-2 rounded-lg",
-      isMine ? "bg-white/10" : "bg-muted/50"
-    )}>
-      {/* Story Thumbnail */}
-      <div className="relative h-12 w-12 rounded-lg overflow-hidden flex-shrink-0 bg-black/20">
-        {isVideo ? (
-          <>
-            <video
-              src={story.media_url}
-              className="h-full w-full object-cover"
-              muted
-              playsInline
-              preload="metadata"
-            />
-            <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-              <Play className="h-4 w-4 text-white fill-white" />
-            </div>
-          </>
-        ) : (
-          <img
-            src={story.media_url}
-            alt=""
-            className="h-full w-full object-cover"
-          />
-        )}
-      </div>
+  // Build story group for viewer
+  const storyGroup = {
+    user_id: story.user_id,
+    username: story.profile?.username || null,
+    display_name: story.profile?.display_name || null,
+    avatar_url: story.profile?.avatar_url || null,
+    is_verified: story.profile?.is_verified || false,
+    stories: [{
+      id: story.id,
+      user_id: story.user_id,
+      media_url: story.media_url,
+      media_type: story.media_type || 'image',
+      caption: story.caption,
+      views_count: story.views_count,
+      expires_at: story.expires_at,
+      created_at: story.created_at,
+    }],
+    all_story_ids: [story.id],
+  };
 
-      {/* Story Info */}
-      <div className="flex-1 min-w-0">
-        <p className={cn(
-          "text-xs font-medium",
-          isMine ? "text-white/80" : "text-foreground"
-        )}>
-          Replied to story
-        </p>
-        {story.caption && (
-          <p className={cn(
-            "text-xs truncate",
-            isMine ? "text-white/50" : "text-muted-foreground"
-          )}>
-            {story.caption}
-          </p>
+  return (
+    <>
+      <button
+        onClick={handleClick}
+        className={cn(
+          "flex items-center gap-2 mb-2 p-2 rounded-lg w-full text-left transition-opacity hover:opacity-80",
+          isMine ? "bg-white/10" : "bg-muted/50"
         )}
-      </div>
-    </div>
+      >
+        {/* Story Thumbnail */}
+        <div className="relative h-12 w-12 rounded-lg overflow-hidden flex-shrink-0 bg-black/20">
+          {isVideo ? (
+            <>
+              <video
+                src={story.media_url}
+                className="h-full w-full object-cover"
+                muted
+                playsInline
+                preload="metadata"
+              />
+              <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                <Play className="h-4 w-4 text-white fill-white" />
+              </div>
+            </>
+          ) : (
+            <img
+              src={story.media_url}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          )}
+        </div>
+
+        {/* Story Info */}
+        <div className="flex-1 min-w-0">
+          <p className={cn(
+            "text-xs font-medium",
+            isMine ? "text-white/80" : "text-foreground"
+          )}>
+            Replied to story
+          </p>
+          {story.caption && (
+            <p className={cn(
+              "text-xs truncate",
+              isMine ? "text-white/50" : "text-muted-foreground"
+            )}>
+              {story.caption}
+            </p>
+          )}
+        </div>
+      </button>
+
+      {/* Story Viewer */}
+      {showViewer && (
+        <StoryViewer
+          storyGroup={storyGroup}
+          allGroups={[storyGroup]}
+          onClose={() => setShowViewer(false)}
+        />
+      )}
+    </>
   );
 }
