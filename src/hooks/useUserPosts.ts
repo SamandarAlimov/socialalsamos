@@ -12,6 +12,7 @@ export interface UserPost {
   comments_count: number;
   shares_count: number;
   bookmarks_count: number;
+  reposts_count: number;
   is_pinned: boolean;
   visibility: string;
   created_at: string;

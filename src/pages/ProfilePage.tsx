@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserProfile } from '@/hooks/useUserProfile';
+import { useUserReposts, Repost } from '@/hooks/useReposts';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FollowersFollowingDialog } from '@/components/FollowersFollowingDialog';
@@ -15,6 +16,7 @@ import {
   Grid, 
   Video, 
   Bookmark,
+  Repeat2,
   MapPin,
   Link as LinkIcon,
   Calendar,
@@ -23,6 +25,8 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { PostViewModal } from '@/components/PostViewModal';
 
 export default function ProfilePage() {
   const isMobile = useIsMobile();
@@ -41,16 +45,19 @@ export default function ProfilePage() {
     refresh,
   } = useUserProfile();
   const navigate = useNavigate();
+  const { reposts, isLoading: repostsLoading, refresh: refreshReposts } = useUserReposts(user?.id);
   
-  const [activeTab, setActiveTab] = useState<'posts' | 'videos' | 'saved'>('posts');
+  const [activeTab, setActiveTab] = useState<'posts' | 'videos' | 'reposts' | 'saved'>('posts');
   const [followDialog, setFollowDialog] = useState<{ open: boolean; type: 'followers' | 'following' }>({
     open: false,
     type: 'followers',
   });
+  const [selectedRepostPost, setSelectedRepostPost] = useState<Repost['post'] | null>(null);
 
   const tabs = [
     { id: 'posts', icon: Grid, label: 'Posts' },
     { id: 'videos', icon: Video, label: 'Videos' },
+    { id: 'reposts', icon: Repeat2, label: 'Reposts' },
     { id: 'saved', icon: Bookmark, label: 'Saved' },
   ];
 
@@ -70,9 +77,10 @@ export default function ProfilePage() {
   const handleRefresh = useCallback(async () => {
     if (refresh) {
       refresh();
+      refreshReposts();
       await new Promise(resolve => setTimeout(resolve, 500));
     }
-  }, [refresh]);
+  }, [refresh, refreshReposts]);
 
   if (isLoading) {
     return (
@@ -247,7 +255,84 @@ export default function ProfilePage() {
         </div>
 
         {/* Posts Grid */}
-        {filteredPosts.length === 0 ? (
+        {activeTab === 'reposts' ? (
+          repostsLoading ? (
+            <div className="grid grid-cols-3 gap-1 mt-4">
+              {[...Array(6)].map((_, i) => (
+                <Skeleton key={i} className="aspect-square" />
+              ))}
+            </div>
+          ) : reposts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+              <Repeat2 className="h-16 w-16 mb-4 opacity-50" />
+              <p className="text-lg font-medium">No reposts yet</p>
+              <p className="text-sm">
+                {isOwnProfile ? 'Repost content you like!' : 'This user hasn\'t reposted anything yet.'}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-1 mt-4">
+              {reposts.map((repost) => (
+                repost.post && (
+                  <button
+                    key={repost.id}
+                    onClick={() => setSelectedRepostPost(repost.post!)}
+                    className="aspect-square relative group overflow-hidden bg-muted"
+                  >
+                    {/* Repost indicator */}
+                    <div className="absolute top-2 left-2 z-10 flex items-center gap-1 bg-black/60 rounded-full px-2 py-1">
+                      <Repeat2 className="h-3 w-3 text-white" />
+                    </div>
+                    
+                    {/* Original author avatar */}
+                    {repost.post.profile && (
+                      <div className="absolute top-2 right-2 z-10">
+                        <Avatar className="h-6 w-6 border-2 border-white">
+                          <AvatarImage src={repost.post.profile.avatar_url || ''} />
+                          <AvatarFallback className="text-xs">
+                            {repost.post.profile.display_name?.[0] || 'U'}
+                          </AvatarFallback>
+                        </Avatar>
+                      </div>
+                    )}
+                    
+                    {repost.post.media_urls && repost.post.media_urls.length > 0 ? (
+                      repost.post.media_type === 'video' ? (
+                        <video
+                          src={repost.post.media_urls[0]}
+                          className="w-full h-full object-cover"
+                          muted
+                        />
+                      ) : (
+                        <img
+                          src={repost.post.media_urls[0]}
+                          alt="Repost"
+                          className="w-full h-full object-cover"
+                        />
+                      )
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center p-3 bg-gradient-to-br from-muted to-muted/50">
+                        <p className="text-xs text-center line-clamp-4">
+                          {repost.post.content || 'No content'}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* Hover overlay with stats */}
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
+                      <span className="text-white text-sm font-medium">
+                        ❤️ {repost.post.likes_count || 0}
+                      </span>
+                      <span className="text-white text-sm font-medium">
+                        💬 {repost.post.comments_count || 0}
+                      </span>
+                    </div>
+                  </button>
+                )
+              ))}
+            </div>
+          )
+        ) : filteredPosts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
             <ImageIcon className="h-16 w-16 mb-4 opacity-50" />
             <p className="text-lg font-medium">No posts yet</p>
@@ -280,6 +365,29 @@ export default function ProfilePage() {
         open={followDialog.open}
         onOpenChange={(open) => setFollowDialog(prev => ({ ...prev, open }))}
       />
+
+      {/* Repost Post View Modal */}
+      {selectedRepostPost && selectedRepostPost.profile && (
+        <PostViewModal
+          post={{
+            id: selectedRepostPost.id,
+            content: selectedRepostPost.content,
+            media_urls: selectedRepostPost.media_urls || [],
+            media_type: selectedRepostPost.media_type || 'image',
+            likes_count: selectedRepostPost.likes_count,
+            comments_count: selectedRepostPost.comments_count,
+            created_at: selectedRepostPost.created_at,
+          }}
+          profile={{
+            username: selectedRepostPost.profile.username,
+            avatar_url: selectedRepostPost.profile.avatar_url,
+            display_name: selectedRepostPost.profile.display_name,
+          }}
+          open={!!selectedRepostPost}
+          onOpenChange={(open) => !open && setSelectedRepostPost(null)}
+          onLike={() => {}}
+        />
+      )}
     </div>
   );
 

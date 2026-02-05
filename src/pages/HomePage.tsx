@@ -10,6 +10,7 @@ import {
   Bookmark, 
   Plus,
   Loader2,
+  Repeat2,
 } from 'lucide-react';
 import { usePosts, Post } from '@/hooks/usePosts';
 import { useStories, StoryGroup } from '@/hooks/useStories';
@@ -36,6 +37,7 @@ import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { StoryViewer } from '@/components/stories/StoryViewer';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { supabase } from '@/integrations/supabase/client';
+import { RepostButton } from '@/components/RepostButton';
 
 export default function HomePage() {
   const { user, profile } = useAuth();
@@ -493,6 +495,12 @@ function PostCard({
             <Share2 className="h-5 w-5 md:h-5 md:w-5" />
             <span className="text-xs md:text-sm font-medium">{post.shares_count}</span>
           </button>
+          <RepostButton
+            postId={post.id}
+            postUserId={post.user_id}
+            initialCount={0}
+            size="sm"
+          />
         </div>
         <button 
           onClick={() => setIsBookmarked(!isBookmarked)}

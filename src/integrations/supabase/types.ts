@@ -1254,6 +1254,7 @@ export type Database = {
           likes_count: number | null
           media_type: string | null
           media_urls: string[] | null
+          reposts_count: number
           shares_count: number | null
           updated_at: string | null
           user_id: string
@@ -1269,6 +1270,7 @@ export type Database = {
           likes_count?: number | null
           media_type?: string | null
           media_urls?: string[] | null
+          reposts_count?: number
           shares_count?: number | null
           updated_at?: string | null
           user_id: string
@@ -1284,6 +1286,7 @@ export type Database = {
           likes_count?: number | null
           media_type?: string | null
           media_urls?: string[] | null
+          reposts_count?: number
           shares_count?: number | null
           updated_at?: string | null
           user_id?: string
@@ -1664,6 +1667,45 @@ export type Database = {
           website?: string | null
         }
         Relationships: []
+      }
+      reposts: {
+        Row: {
+          created_at: string
+          id: string
+          post_id: string
+          quote: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          post_id: string
+          quote?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          post_id?: string
+          quote?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reposts_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reposts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       scheduled_messages: {
         Row: {
