@@ -19,7 +19,6 @@ import { useLiveStreams } from '@/hooks/useLiveStream';
 import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
 import { CreatePostForm } from '@/components/CreatePostForm';
-import { CreateStoryDialog } from '@/components/CreateStoryDialog';
 import { CommentsSection } from '@/components/CommentsSection';
 import { PostMediaCarousel } from '@/components/PostMediaCarousel';
 import { PostActionsMenu } from '@/components/PostActionsMenu';
@@ -182,13 +181,6 @@ export default function HomePage() {
         />
       )}
 
-      {/* Story Creation Dialog */}
-      <CreateStoryDialog 
-        open={showCreateStory} 
-        onOpenChange={setShowCreateStory}
-        onSuccess={refreshStories}
-      />
-
       {/* Post View Modal from URL */}
       {selectedPostForModal && selectedPostForModal.profile && (
         <PostViewModal
@@ -208,7 +200,13 @@ export default function HomePage() {
         <div className="flex gap-3 md:gap-4 overflow-x-auto pb-3 md:pb-4 scrollbar-hidden">
           {/* Your Story Button */}
           <button 
-            onClick={() => userStoryGroup ? openStory(userStoryGroup) : setShowCreateStory(true)}
+            onClick={() => {
+              if (userStoryGroup) {
+                openStory(userStoryGroup);
+              } else {
+                navigate('/create?mode=story');
+              }
+            }}
             className="flex flex-col items-center gap-1.5 md:gap-2 flex-shrink-0 touch-feedback"
           >
             <div className="relative">
@@ -280,7 +278,24 @@ export default function HomePage() {
 
       {/* Create Post - Mobile optimized */}
       <div className="mb-4 md:mb-6">
-        <CreatePostForm onPost={createPost} />
+        <div 
+          onClick={() => navigate('/create')}
+          className="cursor-pointer"
+        >
+          <div className="bg-card rounded-2xl border border-border p-4">
+            <div className="flex gap-3">
+              <Avatar className="h-10 w-10">
+                <AvatarImage src={profile?.avatar_url || ''} />
+                <AvatarFallback className="bg-primary text-primary-foreground">
+                  {profile?.display_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 py-2 px-3 bg-muted/50 rounded-xl text-muted-foreground text-sm">
+                What's on your mind?
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Feed */}

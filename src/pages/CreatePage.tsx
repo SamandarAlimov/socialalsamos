@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -110,6 +110,7 @@ export default function CreatePage() {
   // Core states
   const [activeTab, setActiveTab] = useState<'post' | 'story' | 'reel' | 'live'>('post');
   const [showLiveBroadcast, setShowLiveBroadcast] = useState(false);
+  const [searchParams] = useSearchParams();
   const [showCamera, setShowCamera] = useState(false);
   const [cameraMode, setCameraMode] = useState<'photo' | 'video' | 'both'>('both');
   const [postContent, setPostContent] = useState('');
@@ -153,6 +154,18 @@ export default function CreatePage() {
 
   const currentMedia = mediaFiles[currentMediaIndex];
   const currentBg = TEXT_BACKGROUNDS.find(b => b.id === textBackground) || TEXT_BACKGROUNDS[0];
+
+  // Handle URL query param for initial tab
+  useEffect(() => {
+    const mode = searchParams.get('mode');
+    if (mode === 'story') {
+      setActiveTab('story');
+    } else if (mode === 'reel') {
+      setActiveTab('reel');
+    } else if (mode === 'live') {
+      setActiveTab('live');
+    }
+  }, [searchParams]);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') => {
     const files = e.target.files;
