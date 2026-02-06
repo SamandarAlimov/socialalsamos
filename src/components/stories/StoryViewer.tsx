@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { useStoryViewers } from '@/hooks/useStoryViews';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -105,8 +106,6 @@ export function StoryViewer({
   const [storyReply, setStoryReply] = useState('');
   const [isPaused, setIsPaused] = useState(false);
   const [showViewers, setShowViewers] = useState(false);
-  const [viewers, setViewers] = useState<StoryViewer[]>([]);
-  const [loadingViewers, setLoadingViewers] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [isSendingReply, setIsSendingReply] = useState(false);
   const [showAddToHighlight, setShowAddToHighlight] = useState(false);
@@ -126,6 +125,11 @@ export function StoryViewer({
   const isOwnStory = user?.id === activeGroup.user_id;
   const STORY_DURATION = 5000; // 5 seconds for images
 
+  // Use real-time story viewers hook - only active when viewing own story
+  const { viewers, viewCount, isLoading: loadingViewers } = useStoryViewers(
+    isOwnStory ? currentStory?.id : null
+  );
+
   // Mark story as viewed
   useEffect(() => {
     if (currentStory && user && !isOwnStory) {
@@ -133,47 +137,6 @@ export function StoryViewer({
       onMarkAsViewed?.(currentStory.id);
     }
   }, [currentStory?.id, user, isOwnStory]);
-
-  // Fetch viewers for own story with realtime updates
-  useEffect(() => {
-    if (!isOwnStory || !currentStory) return;
-
-    fetchViewers(currentStory.id);
-
-    const channel = supabase
-      .channel(`story-views-${currentStory.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'story_views',
-          filter: `story_id=eq.${currentStory.id}`,
-        },
-        async (payload) => {
-          const { data: viewerProfile } = await supabase
-            .from('profiles')
-            .select('id, username, display_name, avatar_url')
-            .eq('id', payload.new.viewer_id)
-            .single();
-
-          if (viewerProfile) {
-            const newViewer: StoryViewer = {
-              id: payload.new.id,
-              viewer_id: payload.new.viewer_id,
-              viewed_at: payload.new.viewed_at,
-              profile: viewerProfile,
-            };
-            setViewers(prev => [newViewer, ...prev.filter(v => v.viewer_id !== newViewer.viewer_id)]);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [isOwnStory, currentStory?.id]);
 
   // Progress bar animation with actual timer
   useEffect(() => {
@@ -223,34 +186,7 @@ export function StoryViewer({
     }
   };
 
-  const fetchViewers = async (storyId: string) => {
-    setLoadingViewers(true);
-    try {
-      const { data, error } = await supabase
-        .from('story_views')
-        .select(`
-          id,
-          viewer_id,
-          viewed_at,
-          profile:profiles!story_views_viewer_id_fkey (
-            id,
-            username,
-            display_name,
-            avatar_url
-          )
-        `)
-        .eq('story_id', storyId)
-        .order('viewed_at', { ascending: false });
-
-      if (error) throw error;
-      setViewers((data || []) as unknown as StoryViewer[]);
-    } catch (error) {
-      console.error('Error fetching viewers:', error);
-    } finally {
-      setLoadingViewers(false);
-    }
-  };
-
+  // No longer need local fetchViewers - using useStoryViewers hook
   const nextStory = useCallback(() => {
     if (activeIndex < activeGroup.stories.length - 1) {
       setActiveIndex(prev => prev + 1);
@@ -750,7 +686,7 @@ export function StoryViewer({
                 className="flex items-center gap-2 text-white bg-white/10 backdrop-blur-sm rounded-full px-4 py-2 mx-auto"
               >
                 <Eye className="h-4 w-4" />
-                <span className="text-sm">{viewers.length || currentStory.views_count} viewers</span>
+                <span className="text-sm">{viewCount || viewers.length || currentStory.views_count} viewers</span>
               </button>
             </div>
           )}
@@ -833,7 +769,7 @@ export function StoryViewer({
             <div className="flex items-center justify-between">
               <SheetTitle className="flex items-center gap-2">
                 <Eye className="h-5 w-5 text-muted-foreground" />
-                <span>{viewers.length} Viewers</span>
+                <span>{viewCount || viewers.length} Viewers</span>
               </SheetTitle>
             </div>
           </SheetHeader>
