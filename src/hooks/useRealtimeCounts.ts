@@ -87,43 +87,5 @@ export function useRealtimeCounts(postId: string | null) {
   return counts;
 }
 
-// Hook for tracking story views
-export function useStoryViews(userId: string | null) {
-  const [viewedStories, setViewedStories] = useState<Set<string>>(new Set());
-
-  // Load viewed stories from localStorage
-  useEffect(() => {
-    if (!userId) return;
-    
-    const stored = localStorage.getItem(`viewed_stories_${userId}`);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        setViewedStories(new Set(parsed));
-      } catch (e) {
-        console.error('Error parsing viewed stories:', e);
-      }
-    }
-  }, [userId]);
-
-  const markAsViewed = useCallback((storyId: string) => {
-    if (!userId) return;
-    
-    setViewedStories(prev => {
-      const newSet = new Set(prev);
-      newSet.add(storyId);
-      localStorage.setItem(`viewed_stories_${userId}`, JSON.stringify([...newSet]));
-      return newSet;
-    });
-  }, [userId]);
-
-  const hasViewed = useCallback((storyId: string) => {
-    return viewedStories.has(storyId);
-  }, [viewedStories]);
-
-  const hasViewedAll = useCallback((storyIds: string[]) => {
-    return storyIds.every(id => viewedStories.has(id));
-  }, [viewedStories]);
-
-  return { viewedStories, markAsViewed, hasViewed, hasViewedAll };
-}
+// Re-export from dedicated hook for backward compatibility
+export { useStoryViews } from './useStoryViews';

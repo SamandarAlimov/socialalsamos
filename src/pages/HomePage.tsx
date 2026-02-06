@@ -67,7 +67,7 @@ export default function HomePage() {
   } = usePosts('global');
 
   const { storyGroups, isLoading: storiesLoading, refresh: refreshStories } = useStories();
-  const { markAsViewed, hasViewedAll } = useStoryViews(user?.id || null);
+  const { markAsViewed, hasViewedAll, hasUnviewed } = useStoryViews();
   const { liveStreams } = useLiveStreams();
 
   // Get post IDs for real-time counts

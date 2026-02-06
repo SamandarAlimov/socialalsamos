@@ -170,8 +170,48 @@ export function useStories() {
     }
   }, [toast, fetchStories]);
 
+  // Initial fetch
   useEffect(() => {
     fetchStories();
+  }, [fetchStories]);
+
+  // Real-time subscriptions for story updates
+  useEffect(() => {
+    // Subscribe to new stories and story deletions
+    const storiesChannel = supabase
+      .channel('stories-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'stories',
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'DELETE') {
+            // Refetch all stories when new one is added or deleted
+            fetchStories();
+          } else if (payload.eventType === 'UPDATE') {
+            // Update views_count in place without full refetch
+            const updatedStory = payload.new as any;
+            setStoryGroups(prev => 
+              prev.map(group => ({
+                ...group,
+                stories: group.stories.map(story => 
+                  story.id === updatedStory.id 
+                    ? { ...story, views_count: updatedStory.views_count }
+                    : story
+                )
+              }))
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(storiesChannel);
+    };
   }, [fetchStories]);
 
   return {
