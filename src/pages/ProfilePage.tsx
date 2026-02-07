@@ -21,7 +21,8 @@ import {
   Link as LinkIcon,
   Calendar,
   ImageIcon,
-  Archive
+  Archive,
+  Megaphone
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
@@ -162,6 +163,9 @@ export default function ProfilePage() {
                   <Button variant="default" size="sm" className="md:h-10 md:px-4" onClick={() => navigate('/settings')}>
                     <Edit3 className="h-4 w-4 mr-1.5 md:mr-2" />
                     <span className="text-sm">Edit Profile</span>
+                  </Button>
+                  <Button variant="outline" size="icon" className="h-9 w-9 md:h-10 md:w-10" onClick={() => navigate('/ads')}>
+                    <Megaphone className="h-4 w-4 md:h-5 md:w-5" />
                   </Button>
                   <Button variant="outline" size="icon" className="h-9 w-9 md:h-10 md:w-10" onClick={() => navigate('/story-archive')}>
                     <Archive className="h-4 w-4 md:h-5 md:w-5" />

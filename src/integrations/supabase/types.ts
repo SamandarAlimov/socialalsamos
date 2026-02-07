@@ -14,6 +14,195 @@ export type Database = {
   }
   public: {
     Tables: {
+      ad_clicks: {
+        Row: {
+          ad_id: string
+          created_at: string
+          device_type: string | null
+          id: string
+          placement: string
+          user_id: string | null
+        }
+        Insert: {
+          ad_id: string
+          created_at?: string
+          device_type?: string | null
+          id?: string
+          placement: string
+          user_id?: string | null
+        }
+        Update: {
+          ad_id?: string
+          created_at?: string
+          device_type?: string | null
+          id?: string
+          placement?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_clicks_ad_id_fkey"
+            columns: ["ad_id"]
+            isOneToOne: false
+            referencedRelation: "ads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ad_impressions: {
+        Row: {
+          ad_id: string
+          created_at: string
+          device_type: string | null
+          id: string
+          placement: string
+          user_id: string | null
+        }
+        Insert: {
+          ad_id: string
+          created_at?: string
+          device_type?: string | null
+          id?: string
+          placement: string
+          user_id?: string | null
+        }
+        Update: {
+          ad_id?: string
+          created_at?: string
+          device_type?: string | null
+          id?: string
+          placement?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_impressions_ad_id_fkey"
+            columns: ["ad_id"]
+            isOneToOne: false
+            referencedRelation: "ads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ad_reach: {
+        Row: {
+          ad_id: string
+          first_seen_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          ad_id: string
+          first_seen_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          ad_id?: string
+          first_seen_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_reach_ad_id_fkey"
+            columns: ["ad_id"]
+            isOneToOne: false
+            referencedRelation: "ads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ads: {
+        Row: {
+          ad_type: string
+          bid_amount: number | null
+          billing_type: string
+          budget: number
+          call_to_action: string | null
+          clicks_count: number
+          created_at: string
+          daily_budget: number | null
+          description: string | null
+          destination_url: string | null
+          end_date: string | null
+          id: string
+          impressions_count: number
+          media_type: string
+          media_url: string
+          reach_count: number
+          spent: number
+          start_date: string | null
+          status: string
+          target_age_max: number | null
+          target_age_min: number | null
+          target_countries: string[] | null
+          target_gender: string | null
+          target_interests: string[] | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ad_type?: string
+          bid_amount?: number | null
+          billing_type?: string
+          budget?: number
+          call_to_action?: string | null
+          clicks_count?: number
+          created_at?: string
+          daily_budget?: number | null
+          description?: string | null
+          destination_url?: string | null
+          end_date?: string | null
+          id?: string
+          impressions_count?: number
+          media_type?: string
+          media_url: string
+          reach_count?: number
+          spent?: number
+          start_date?: string | null
+          status?: string
+          target_age_max?: number | null
+          target_age_min?: number | null
+          target_countries?: string[] | null
+          target_gender?: string | null
+          target_interests?: string[] | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ad_type?: string
+          bid_amount?: number | null
+          billing_type?: string
+          budget?: number
+          call_to_action?: string | null
+          clicks_count?: number
+          created_at?: string
+          daily_budget?: number | null
+          description?: string | null
+          destination_url?: string | null
+          end_date?: string | null
+          id?: string
+          impressions_count?: number
+          media_type?: string
+          media_url?: string
+          reach_count?: number
+          spent?: number
+          start_date?: string | null
+          status?: string
+          target_age_max?: number | null
+          target_age_min?: number | null
+          target_countries?: string[] | null
+          target_gender?: string | null
+          target_interests?: string[] | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       ai_conversations: {
         Row: {
           context: string | null
