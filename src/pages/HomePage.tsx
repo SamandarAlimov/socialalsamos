@@ -38,6 +38,8 @@ import { StoryViewer } from '@/components/stories/StoryViewer';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { supabase } from '@/integrations/supabase/client';
 import { RepostButton } from '@/components/RepostButton';
+import { useActiveAds } from '@/hooks/useAds';
+import { FeedAd } from '@/components/ads/FeedAd';
 
 export default function HomePage() {
   const { user, profile } = useAuth();
@@ -69,6 +71,9 @@ export default function HomePage() {
   const { storyGroups, isLoading: storiesLoading, refresh: refreshStories } = useStories();
   const { markAsViewed, hasViewedAll, hasUnviewed } = useStoryViews();
   const { liveStreams } = useLiveStreams();
+  
+  // Feed ads
+  const { ads: feedAds, trackImpression, trackClick } = useActiveAds('feed', 2);
 
   // Get post IDs for real-time counts
   const postIds = useMemo(() => posts.map(p => p.id), [posts]);
@@ -302,16 +307,28 @@ export default function HomePage() {
 
       {/* Feed */}
       <div className="space-y-4 md:space-y-6">
-        {posts.map((post) => (
-          <PostCard 
-            key={post.id} 
-            post={post} 
-            onLike={() => likePost(post.id)}
-            formatTime={formatPostTime}
-            isMobile={isMobile}
-            realtimeCounts={getPostCounts(post.id)}
-            onDelete={refreshPosts}
-          />
+        {posts.map((post, index) => (
+          <div key={post.id}>
+            <PostCard 
+              post={post} 
+              onLike={() => likePost(post.id)}
+              formatTime={formatPostTime}
+              isMobile={isMobile}
+              realtimeCounts={getPostCounts(post.id)}
+              onDelete={refreshPosts}
+            />
+            
+            {/* Show ad after every 5th post */}
+            {(index + 1) % 5 === 0 && feedAds[Math.floor(index / 5) % feedAds.length] && (
+              <div className="mt-4 md:mt-6">
+                <FeedAd
+                  ad={feedAds[Math.floor(index / 5) % feedAds.length]}
+                  onImpression={(id) => trackImpression(id, 'feed')}
+                  onClick={(id) => trackClick(id, 'feed')}
+                />
+              </div>
+            )}
+          </div>
         ))}
 
         {/* Load More Trigger */}
