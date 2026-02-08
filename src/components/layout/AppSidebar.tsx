@@ -38,6 +38,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useTheme } from 'next-themes';
+import { SwitchAccountDialog } from '@/components/account/SwitchAccountDialog';
 
 interface NavItem {
   icon: React.ElementType;
@@ -69,6 +70,7 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const { user, profile, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+  const [showSwitchAccount, setShowSwitchAccount] = useState(false);
   const { playMessageSound } = useNotificationSound();
   const { theme, setTheme } = useTheme();
   
@@ -210,7 +212,7 @@ export function AppSidebar() {
                       )}
                       {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => navigate('/settings')}>
+                    <DropdownMenuItem onClick={() => setShowSwitchAccount(true)}>
                       <UserPlus className="h-4 w-4 mr-3" />
                       Switch Accounts
                     </DropdownMenuItem>
@@ -250,7 +252,7 @@ export function AppSidebar() {
                 )}
                 {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate('/settings')}>
+              <DropdownMenuItem onClick={() => setShowSwitchAccount(true)}>
                 <UserPlus className="h-4 w-4 mr-3" />
                 Switch Accounts
               </DropdownMenuItem>
@@ -278,6 +280,11 @@ export function AppSidebar() {
           <ChevronLeft className="h-4 w-4 text-muted-foreground" />
         )}
       </button>
+
+      <SwitchAccountDialog 
+        open={showSwitchAccount} 
+        onOpenChange={setShowSwitchAccount} 
+      />
     </aside>
   );
 }
