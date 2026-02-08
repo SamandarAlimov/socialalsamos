@@ -59,6 +59,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Save account to localStorage for multi-account support
+  const saveAccountToStorage = async (userId: string, session: Session) => {
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('display_name, avatar_url, username')
+        .eq('id', userId)
+        .maybeSingle();
+
+      const account = {
+        id: userId,
+        email: session.user.email || '',
+        displayName: profile?.display_name || null,
+        avatarUrl: profile?.avatar_url || null,
+        username: profile?.username || null,
+        accessToken: session.access_token,
+        refreshToken: session.refresh_token,
+        expiresAt: session.expires_at || 0,
+      };
+
+      const stored = localStorage.getItem('alsamos_accounts');
+      let accounts = stored ? JSON.parse(stored) : [];
+      
+      const existing = accounts.findIndex((a: any) => a.id === userId);
+      if (existing >= 0) {
+        accounts[existing] = account;
+      } else {
+        accounts.push(account);
+      }
+
+      localStorage.setItem('alsamos_accounts', JSON.stringify(accounts));
+      localStorage.setItem('alsamos_active_account', userId);
+    } catch (e) {
+      console.error('Failed to save account to storage:', e);
+    }
+  };
+
   useEffect(() => {
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -70,6 +107,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Defer profile fetch to avoid deadlock
           setTimeout(() => {
             fetchProfile(session.user.id);
+            // Save account for multi-account support
+            saveAccountToStorage(session.user.id, session);
           }, 0);
         } else {
           setProfile(null);
@@ -83,6 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchProfile(session.user.id);
+        saveAccountToStorage(session.user.id, session);
       }
       setIsLoading(false);
     });
