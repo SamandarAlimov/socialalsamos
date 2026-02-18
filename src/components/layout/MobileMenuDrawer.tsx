@@ -68,7 +68,8 @@ export function MobileMenuDrawer({
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
 
-  const handleSwitchAccount = () => {
+  const handleSwitchAccount = (e: React.MouseEvent) => {
+    e.stopPropagation();
     setShowSwitchAccount(true);
   };
 
@@ -302,11 +303,23 @@ export function MobileMenuDrawer({
         )}
       </AnimatePresence>
 
-      {/* Switch Account Dialog */}
-      <SwitchAccountDialog
-        open={showSwitchAccount}
-        onOpenChange={setShowSwitchAccount}
-      />
+      {/* Switch Account Dialog - rendered with high z-index */}
+      {showSwitchAccount && (
+        <div
+          className="fixed inset-0 z-[10000]"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowSwitchAccount(false);
+          }}
+        >
+          <div onClick={(e) => e.stopPropagation()}>
+            <SwitchAccountDialog
+              open={showSwitchAccount}
+              onOpenChange={setShowSwitchAccount}
+            />
+          </div>
+        </div>
+      )}
     </>
   );
 }
