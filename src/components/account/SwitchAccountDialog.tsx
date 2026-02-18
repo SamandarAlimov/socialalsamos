@@ -98,7 +98,7 @@ export function SwitchAccountDialog({ open, onOpenChange }: SwitchAccountDialogP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md z-[10001]" onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>Switch Account</DialogTitle>
           <DialogDescription>
