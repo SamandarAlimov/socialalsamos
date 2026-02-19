@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { GlobalCallProvider } from "@/contexts/GlobalCallContext";
 import { AudioPlayerProvider } from "@/contexts/AudioPlayerContext";
+import { VideoPlayerProvider } from "@/contexts/VideoPlayerContext";
 import { ThemeProvider } from "next-themes";
 import { PushNotificationProvider } from "@/components/PushNotificationProvider";
 
@@ -142,11 +143,13 @@ const App = () => (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <TooltipProvider>
         <AudioPlayerProvider>
-          <AuthProvider>
-            <BrowserRouter>
-              <AppWithGlobalCall />
-            </BrowserRouter>
-          </AuthProvider>
+          <VideoPlayerProvider>
+            <AuthProvider>
+              <BrowserRouter>
+                <AppWithGlobalCall />
+              </BrowserRouter>
+            </AuthProvider>
+          </VideoPlayerProvider>
         </AudioPlayerProvider>
       </TooltipProvider>
     </ThemeProvider>
