@@ -4,7 +4,8 @@ import { cn } from '@/lib/utils';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
 import { useNotificationSound } from '@/hooks/useNotificationSound';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useCallback } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import { SwitchAccountDialog } from '@/components/account/SwitchAccountDialog';
 
 interface NavItem {
   icon: React.ElementType;
@@ -24,6 +25,9 @@ const bottomNavItems: NavItem[] = [
 export function BottomNavbar() {
   const location = useLocation();
   const { playMessageSound } = useNotificationSound();
+  const [switchAccountOpen, setSwitchAccountOpen] = useState(false);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isLongPress = useRef(false);
   
   const handleNewMessage = useCallback(() => {
     playMessageSound();
@@ -36,18 +40,50 @@ export function BottomNavbar() {
     return 0;
   };
 
+  const handleProfilePressStart = () => {
+    isLongPress.current = false;
+    longPressTimer.current = setTimeout(() => {
+      isLongPress.current = true;
+      setSwitchAccountOpen(true);
+      if (navigator.vibrate) navigator.vibrate(50);
+    }, 500);
+  };
+
+  const handleProfilePressEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const handleProfileClick = (e: React.MouseEvent) => {
+    if (isLongPress.current) {
+      e.preventDefault();
+      isLongPress.current = false;
+    }
+  };
+
   return (
+    <>
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-lg border-t border-border md:hidden safe-area-bottom">
       <div className="flex items-center justify-around h-16 px-2">
         {bottomNavItems.map((item) => {
           const isActive = location.pathname === item.path;
           const isCreate = item.path === '/create';
+          const isProfile = item.path === '/profile';
           const badgeCount = getBadgeCount(item.badgeKey);
           
           return (
             <NavLink
               key={item.path}
               to={item.path}
+              onClick={isProfile ? handleProfileClick : undefined}
+              onMouseDown={isProfile ? handleProfilePressStart : undefined}
+              onMouseUp={isProfile ? handleProfilePressEnd : undefined}
+              onMouseLeave={isProfile ? handleProfilePressEnd : undefined}
+              onTouchStart={isProfile ? handleProfilePressStart : undefined}
+              onTouchEnd={isProfile ? handleProfilePressEnd : undefined}
+              onContextMenu={isProfile ? (e) => e.preventDefault() : undefined}
               className={cn(
                 "flex flex-col items-center justify-center gap-1 min-w-[60px] py-2 rounded-xl transition-all duration-200",
                 isCreate && "relative",
@@ -98,5 +134,7 @@ export function BottomNavbar() {
         })}
       </div>
     </nav>
+    <SwitchAccountDialog open={switchAccountOpen} onOpenChange={setSwitchAccountOpen} />
+    </>
   );
 }
