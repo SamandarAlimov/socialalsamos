@@ -94,11 +94,16 @@ export function useServiceWorker() {
     if (!state.registration) return null;
 
     try {
-      // Create application server key
       const vapidKey = 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U';
       const applicationServerKey = urlBase64ToUint8Array(vapidKey);
       
-      const subscription = await state.registration.pushManager.subscribe({
+      const reg = state.registration as ServiceWorkerRegistration & { pushManager?: PushManager };
+      if (!reg.pushManager) {
+        console.warn('[SW] Push manager not available');
+        return null;
+      }
+
+      const subscription = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: applicationServerKey as BufferSource,
       });
