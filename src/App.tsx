@@ -30,6 +30,7 @@ import StoryArchivePage from "./pages/StoryArchivePage";
 import AIPage from "./pages/AIPage";
 import ActivityPage from "./pages/ActivityPage";
 import AdsPage from "./pages/AdsPage";
+import ChannelsPage from "./pages/ChannelsPage";
 import NotFound from "./pages/NotFound";
 
 // Layout
@@ -109,6 +110,7 @@ function AppRoutes() {
         <Route path="/ai" element={<AIPage />} />
         <Route path="/activity" element={<ActivityPage />} />
         <Route path="/ads" element={<AdsPage />} />
+        <Route path="/channels" element={<ChannelsPage />} />
       </Route>
       
       {/* 404 */}
