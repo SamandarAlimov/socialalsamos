@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -14,9 +14,13 @@ import {
   CheckCheck,
   Link,
   Flag,
-  Eye,
+  Heart,
+  MessageSquare,
+  ArrowLeft,
+  BellPlus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 const QUICK_EMOJIS = ['👍', '😄', '❤️', '🥰', '👎', '🔥', '👏'];
 
@@ -66,6 +70,7 @@ export function TelegramStyleContextMenu({
   anchorRect,
 }: TelegramStyleContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const [showReadDetail, setShowReadDetail] = useState(false);
 
   const handleAction = useCallback((action?: () => void) => {
     if (action) {
@@ -75,7 +80,10 @@ export function TelegramStyleContextMenu({
   }, [onClose]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setShowReadDetail(false);
+      return;
+    }
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
@@ -83,7 +91,6 @@ export function TelegramStyleContextMenu({
     return () => document.removeEventListener('keydown', handleEsc);
   }, [isOpen, onClose]);
 
-  // Prevent body scroll when open
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -91,39 +98,36 @@ export function TelegramStyleContextMenu({
     }
   }, [isOpen]);
 
-  const menuItems = [
-    ...(readInfo ? [{
-      icon: CheckCheck,
-      label: readInfo,
-      action: onViewInfo,
-      avatars: readAvatars,
-      separator: true,
-    }] : []),
-    ...(onReply ? [{ icon: Reply, label: 'Reply', action: onReply }] : []),
-    ...(onCopy ? [{ icon: Copy, label: 'Copy', action: onCopy }] : []),
-    ...(hasMedia && onDownload ? [{ icon: Download, label: 'Save', action: onDownload }] : []),
-    ...(isMine && onEdit ? [{ icon: Edit, label: 'Edit', action: onEdit }] : []),
-    ...(onPin ? [{ 
-      icon: isPinned ? PinOff : Pin, 
-      label: isPinned ? 'Unpin' : 'Pin', 
-      action: onPin 
-    }] : []),
-    ...(onCopyLink ? [{ icon: Link, label: 'Copy Link', action: onCopyLink }] : []),
-    ...(onForward ? [{ icon: Forward, label: 'Forward', action: onForward }] : []),
-    ...(isMine && onDelete ? [{ 
-      icon: Trash2, 
-      label: 'Delete', 
-      action: onDelete, 
-      destructive: true,
-      separator: true,
-    }] : []),
-    ...(onSelect ? [{ 
-      icon: CheckSquare, 
-      label: 'Select', 
-      action: onSelect,
-      separator: true,
-    }] : []),
-  ];
+  // Build menu items matching Alsamos design order
+  const menuItems: {
+    icon: typeof Reply;
+    label: string;
+    action?: () => void;
+    destructive?: boolean;
+    separator?: 'top' | 'bottom';
+  }[] = [];
+
+  // Read info row (top, with separator below)
+  // Added separately below
+
+  // Main actions
+  if (onReply) menuItems.push({ icon: Reply, label: 'Javob yozish', action: onReply });
+  if (onCopy) menuItems.push({ icon: Copy, label: 'Nusxalash', action: onCopy });
+  if (hasMedia && onDownload) menuItems.push({ icon: Download, label: 'Saqlash', action: onDownload });
+  if (isMine && onEdit) menuItems.push({ icon: Edit, label: 'Tahrirlash', action: onEdit });
+  if (onPin) menuItems.push({ icon: isPinned ? PinOff : Pin, label: isPinned ? 'Olib tashlash' : 'Qadash', action: onPin });
+  if (onCopyLink) menuItems.push({ icon: Link, label: 'Havolani nusxalash', action: onCopyLink });
+  if (onForward) menuItems.push({ icon: Forward, label: 'Uzatish', action: onForward });
+
+  // Delete (destructive, separator above)
+  if (isMine && onDelete) {
+    menuItems.push({ icon: Trash2, label: "O'chirish", action: onDelete, destructive: true, separator: 'top' });
+  }
+
+  // Select (separator above)
+  if (onSelect) {
+    menuItems.push({ icon: CheckSquare, label: 'Tanlash', action: onSelect, separator: 'top' });
+  }
 
   return createPortal(
     <AnimatePresence>
@@ -133,31 +137,31 @@ export function TelegramStyleContextMenu({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
+          transition={{ duration: 0.18 }}
         >
           {/* Blurred backdrop */}
           <motion.div
-            className="absolute inset-0 bg-black/40 backdrop-blur-xl"
+            className="absolute inset-0 bg-black/30 backdrop-blur-2xl"
             onClick={onClose}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           />
 
-          <div ref={menuRef} className="relative z-10 w-full max-w-sm px-4 flex flex-col items-center gap-2">
+          <div ref={menuRef} className="relative z-10 w-full max-w-[340px] px-3 flex flex-col items-center gap-2.5">
             {/* Quick Emoji Reaction Bar */}
             {onAddReaction && (
               <motion.div
-                className="flex items-center gap-1 px-3 py-2 rounded-full bg-card/90 backdrop-blur-md border border-border/50 shadow-2xl"
-                initial={{ opacity: 0, y: 20, scale: 0.8 }}
+                className="flex items-center gap-0.5 px-2.5 py-1.5 rounded-full bg-white/80 dark:bg-card/90 backdrop-blur-xl shadow-lg border border-white/30 dark:border-border/30"
+                initial={{ opacity: 0, y: 16, scale: 0.85 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 20, scale: 0.8 }}
-                transition={{ duration: 0.25, delay: 0.05 }}
+                exit={{ opacity: 0, y: 16, scale: 0.85 }}
+                transition={{ duration: 0.22, delay: 0.03 }}
               >
                 {QUICK_EMOJIS.map((emoji) => (
                   <button
                     key={emoji}
-                    className="text-2xl p-1.5 hover:scale-125 active:scale-95 transition-transform"
+                    className="text-[22px] p-1.5 hover:scale-125 active:scale-90 transition-transform"
                     onClick={() => handleAction(() => onAddReaction(emoji))}
                   >
                     {emoji}
@@ -170,77 +174,84 @@ export function TelegramStyleContextMenu({
             {children && (
               <motion.div
                 className="w-full pointer-events-none"
-                initial={{ opacity: 0, scale: 0.9 }}
+                initial={{ opacity: 0, scale: 0.92 }}
                 animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                transition={{ duration: 0.2, delay: 0.05 }}
+                exit={{ opacity: 0, scale: 0.92 }}
+                transition={{ duration: 0.18, delay: 0.04 }}
               >
                 {children}
               </motion.div>
             )}
 
-            {/* Action Menu Card */}
+            {/* Action Menu Card - Alsamos Style */}
             <motion.div
-              className={cn(
-                "w-full rounded-2xl overflow-hidden shadow-2xl",
-                "bg-card/95 backdrop-blur-xl border border-border/30"
-              )}
-              initial={{ opacity: 0, y: 30, scale: 0.9 }}
+              className="w-full rounded-[20px] overflow-hidden shadow-2xl bg-white/85 dark:bg-card/90 backdrop-blur-2xl border border-white/40 dark:border-border/20"
+              initial={{ opacity: 0, y: 24, scale: 0.92 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 30, scale: 0.9 }}
-              transition={{ duration: 0.25, delay: 0.1 }}
+              exit={{ opacity: 0, y: 24, scale: 0.92 }}
+              transition={{ duration: 0.22, delay: 0.08 }}
             >
+              {/* Read Info Row */}
+              {readInfo && (
+                <>
+                  <button
+                    className="w-full flex items-center gap-3.5 px-5 py-3.5 text-left hover:bg-black/5 dark:hover:bg-accent/30 active:bg-black/10 dark:active:bg-accent/50 transition-colors"
+                    onClick={() => {
+                      if (onViewInfo) {
+                        handleAction(onViewInfo);
+                      }
+                    }}
+                  >
+                    <CheckCheck className="h-5 w-5 text-foreground/60 flex-shrink-0" />
+                    <span className="text-[15px] font-medium text-foreground/90 flex-1 truncate">
+                      {readInfo}
+                    </span>
+                    {readAvatars && readAvatars.length > 0 && (
+                      <div className="flex -space-x-2">
+                        {readAvatars.slice(0, 3).map((avatar, i) => (
+                          <Avatar key={i} className="h-7 w-7 border-2 border-white dark:border-card">
+                            <AvatarImage src={avatar.url} alt={avatar.name} />
+                            <AvatarFallback className="text-[10px] font-medium bg-muted text-muted-foreground">
+                              {avatar.name?.[0] || '?'}
+                            </AvatarFallback>
+                          </Avatar>
+                        ))}
+                      </div>
+                    )}
+                  </button>
+                  <div className="mx-5 border-t border-black/8 dark:border-border/30" />
+                </>
+              )}
+
+              {/* Menu Items */}
               {menuItems.map((item, index) => {
                 const Icon = item.icon;
-                const showTopSep = item.separator && index > 0;
-                const isLast = index === menuItems.length - 1;
-                const nextHasSep = !isLast && menuItems[index + 1]?.separator;
-
                 return (
                   <div key={`${item.label}-${index}`}>
-                    {showTopSep && (
-                      <div className="mx-4 border-t border-border/40" />
+                    {item.separator === 'top' && (
+                      <div className="mx-5 border-t border-black/8 dark:border-border/30" />
                     )}
                     <button
                       className={cn(
-                        "w-full flex items-center gap-4 px-5 py-3.5 text-left transition-colors active:bg-accent/50",
-                        "hover:bg-accent/30",
+                        "w-full flex items-center gap-4 px-5 py-3.5 text-left transition-colors",
+                        "hover:bg-black/5 dark:hover:bg-accent/30 active:bg-black/10 dark:active:bg-accent/50",
                         item.destructive && "text-destructive"
                       )}
                       onClick={() => handleAction(item.action)}
                     >
                       <Icon className={cn(
-                        "h-5 w-5 flex-shrink-0",
+                        "h-[22px] w-[22px] flex-shrink-0",
                         item.destructive ? "text-destructive" : "text-foreground/70"
-                      )} />
+                      )} strokeWidth={1.8} />
                       <span className={cn(
-                        "text-[15px] font-medium flex-1",
-                        item.destructive ? "text-destructive" : "text-foreground"
+                        "text-[16px] font-medium flex-1",
+                        item.destructive ? "text-destructive" : "text-foreground/90"
                       )}>
                         {item.label}
                       </span>
-                      {/* Read receipt avatars */}
-                      {'avatars' in item && item.avatars && (
-                        <div className="flex -space-x-2">
-                          {item.avatars.slice(0, 3).map((avatar, i) => (
-                            <div
-                              key={i}
-                              className="h-7 w-7 rounded-full bg-muted border-2 border-card overflow-hidden"
-                            >
-                              {avatar.url ? (
-                                <img src={avatar.url} alt={avatar.name} className="h-full w-full object-cover" />
-                              ) : (
-                                <div className="h-full w-full flex items-center justify-center text-[10px] font-medium text-muted-foreground">
-                                  {avatar.name?.[0] || '?'}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
                     </button>
-                    {!showTopSep && !nextHasSep && !isLast && (
-                      <div className="mx-4 border-t border-border/10" />
+                    {item.separator === 'bottom' && (
+                      <div className="mx-5 border-t border-black/8 dark:border-border/30" />
                     )}
                   </div>
                 );
