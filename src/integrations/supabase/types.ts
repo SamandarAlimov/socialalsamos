@@ -427,6 +427,191 @@ export type Database = {
           },
         ]
       }
+      channel_invite_links: {
+        Row: {
+          channel_id: string
+          code: string
+          created_at: string
+          created_by: string
+          expires_at: string | null
+          id: string
+          is_active: boolean
+          max_uses: number | null
+          uses_count: number
+        }
+        Insert: {
+          channel_id: string
+          code?: string
+          created_at?: string
+          created_by: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          max_uses?: number | null
+          uses_count?: number
+        }
+        Update: {
+          channel_id?: string
+          code?: string
+          created_at?: string
+          created_by?: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          max_uses?: number | null
+          uses_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "channel_invite_links_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      channel_join_requests: {
+        Row: {
+          channel_id: string
+          created_at: string
+          id: string
+          message: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          channel_id: string
+          created_at?: string
+          id?: string
+          message?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          channel_id?: string
+          created_at?: string
+          id?: string
+          message?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "channel_join_requests_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      channel_members: {
+        Row: {
+          channel_id: string
+          id: string
+          joined_at: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          channel_id: string
+          id?: string
+          joined_at?: string
+          role?: string
+          user_id: string
+        }
+        Update: {
+          channel_id?: string
+          id?: string
+          joined_at?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "channel_members_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      channels: {
+        Row: {
+          allow_comments: boolean
+          avatar_url: string | null
+          channel_type: string
+          cover_url: string | null
+          created_at: string
+          description: string | null
+          id: string
+          invite_code: string | null
+          is_paid: boolean
+          linked_group_id: string | null
+          name: string
+          owner_id: string
+          posts_count: number
+          subscriber_count: number
+          subscription_price: number | null
+          updated_at: string
+          username: string | null
+        }
+        Insert: {
+          allow_comments?: boolean
+          avatar_url?: string | null
+          channel_type?: string
+          cover_url?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          invite_code?: string | null
+          is_paid?: boolean
+          linked_group_id?: string | null
+          name: string
+          owner_id: string
+          posts_count?: number
+          subscriber_count?: number
+          subscription_price?: number | null
+          updated_at?: string
+          username?: string | null
+        }
+        Update: {
+          allow_comments?: boolean
+          avatar_url?: string | null
+          channel_type?: string
+          cover_url?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          invite_code?: string | null
+          is_paid?: boolean
+          linked_group_id?: string | null
+          name?: string
+          owner_id?: string
+          posts_count?: number
+          subscriber_count?: number
+          subscription_price?: number | null
+          updated_at?: string
+          username?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "channels_linked_group_id_fkey"
+            columns: ["linked_group_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       comment_likes: {
         Row: {
           comment_id: string
@@ -1435,6 +1620,7 @@ export type Database = {
       posts: {
         Row: {
           bookmarks_count: number | null
+          channel_id: string | null
           comments_count: number | null
           content: string | null
           created_at: string | null
@@ -1451,6 +1637,7 @@ export type Database = {
         }
         Insert: {
           bookmarks_count?: number | null
+          channel_id?: string | null
           comments_count?: number | null
           content?: string | null
           created_at?: string | null
@@ -1467,6 +1654,7 @@ export type Database = {
         }
         Update: {
           bookmarks_count?: number | null
+          channel_id?: string | null
           comments_count?: number | null
           content?: string | null
           created_at?: string | null
@@ -1482,6 +1670,13 @@ export type Database = {
           visibility?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "posts_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "posts_user_id_fkey"
             columns: ["user_id"]
@@ -2618,6 +2813,14 @@ export type Database = {
       }
       is_call_participant: {
         Args: { _call_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_channel_admin: {
+        Args: { _channel_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_channel_member: {
+        Args: { _channel_id: string; _user_id: string }
         Returns: boolean
       }
       is_conversation_participant: {
