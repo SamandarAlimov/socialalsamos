@@ -11,3 +11,12 @@ verify_jwt = false
 
 [functions.ai-generate-image]
 verify_jwt = false
+
+[functions.mini-app-proxy]
+verify_jwt = false
+
+[functions.giphy-search]
+verify_jwt = false
+
+[functions.send-scheduled-messages]
+verify_jwt = false

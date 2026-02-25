@@ -9,7 +9,6 @@ function isAllowedUrl(urlString: string): boolean {
     const url = new URL(urlString);
     const hostname = url.hostname.toLowerCase();
 
-    // Block private/internal IPs (SSRF protection)
     if (
       hostname === 'localhost' ||
       hostname === '0.0.0.0' ||
@@ -26,7 +25,6 @@ function isAllowedUrl(urlString: string): boolean {
       return false;
     }
 
-    // Only allow http/https
     if (url.protocol !== 'https:' && url.protocol !== 'http:') {
       return false;
     }
@@ -81,6 +79,13 @@ function rewriteUrls(html: string, baseUrl: string): string {
     );
   }
 
+  // Remove X-Frame-Options and CSP frame-ancestors from meta tags
+  html = html.replace(/<meta[^>]*http-equiv\s*=\s*["']?X-Frame-Options["']?[^>]*>/gi, '');
+  html = html.replace(
+    /(<meta[^>]*content\s*=\s*["'][^"']*)(frame-ancestors\s+[^;]*;?)([^"']*["'][^>]*>)/gi,
+    '$1$3'
+  );
+
   return html;
 }
 
@@ -90,8 +95,16 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const url = new URL(req.url);
-    const targetUrl = url.searchParams.get('url');
+    let targetUrl: string | null = null;
+
+    // Support both GET (query param) and POST (JSON body)
+    if (req.method === 'GET') {
+      const url = new URL(req.url);
+      targetUrl = url.searchParams.get('url');
+    } else if (req.method === 'POST') {
+      const body = await req.json();
+      targetUrl = body.url || null;
+    }
 
     if (!targetUrl) {
       return new Response(JSON.stringify({ error: 'Missing url parameter' }), {
@@ -100,12 +113,19 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Add protocol if missing
+    if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+      targetUrl = `https://${targetUrl}`;
+    }
+
     if (!isAllowedUrl(targetUrl)) {
       return new Response(JSON.stringify({ error: 'URL not allowed' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    console.log('Proxying URL:', targetUrl);
 
     const response = await fetch(targetUrl, {
       headers: {
@@ -119,29 +139,22 @@ Deno.serve(async (req) => {
 
     const contentType = response.headers.get('content-type') || '';
 
-    // For HTML content, rewrite relative URLs
+    // For HTML content, rewrite relative URLs and return as JSON with html field
     if (contentType.includes('text/html')) {
       let html = await response.text();
       html = rewriteUrls(html, targetUrl);
 
-      // Remove X-Frame-Options and CSP frame-ancestors from meta tags
-      html = html.replace(/<meta[^>]*http-equiv\s*=\s*["']?X-Frame-Options["']?[^>]*>/gi, '');
-      html = html.replace(
-        /(<meta[^>]*content\s*=\s*["'][^"']*)(frame-ancestors\s+[^;]*;?)([^"']*["'][^>]*>)/gi,
-        '$1$3'
-      );
-
-      return new Response(html, {
-        status: response.status,
+      return new Response(JSON.stringify({ success: true, html }), {
+        status: 200,
         headers: {
           ...corsHeaders,
-          'Content-Type': contentType,
+          'Content-Type': 'application/json',
           'Cache-Control': 'public, max-age=300',
         },
       });
     }
 
-    // For non-HTML content (CSS, JS, images), pass through
+    // For non-HTML content, pass through
     const body = await response.arrayBuffer();
     return new Response(body, {
       status: response.status,
@@ -152,6 +165,7 @@ Deno.serve(async (req) => {
       },
     });
   } catch (error) {
+    console.error('Proxy error:', error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
