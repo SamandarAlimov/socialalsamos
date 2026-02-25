@@ -6,6 +6,8 @@ import { useNotificationSound } from '@/hooks/useNotificationSound';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCallback, useRef, useState } from 'react';
 import { SwitchAccountDialog } from '@/components/account/SwitchAccountDialog';
+import { useAuth } from '@/contexts/AuthContext';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 interface NavItem {
   icon: React.ElementType;
@@ -24,6 +26,7 @@ const bottomNavItems: NavItem[] = [
 
 export function BottomNavbar() {
   const location = useLocation();
+  const { profile } = useAuth();
   const { playMessageSound } = useNotificationSound();
   const [switchAccountOpen, setSwitchAccountOpen] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -104,10 +107,22 @@ export function BottomNavbar() {
               ) : (
                 <>
                   <div className="relative">
-                    <item.icon className={cn(
-                      "h-6 w-6 transition-transform duration-200",
-                      isActive && "scale-110"
-                    )} />
+                    {isProfile && profile?.avatar_url ? (
+                      <Avatar className={cn(
+                        "h-6 w-6 border-2 transition-transform duration-200",
+                        isActive ? "border-primary scale-110" : "border-transparent"
+                      )}>
+                        <AvatarImage src={profile.avatar_url} />
+                        <AvatarFallback className="text-[10px]">
+                          {profile.display_name?.[0] || profile.username?.[0] || 'U'}
+                        </AvatarFallback>
+                      </Avatar>
+                    ) : (
+                      <item.icon className={cn(
+                        "h-6 w-6 transition-transform duration-200",
+                        isActive && "scale-110"
+                      )} />
+                    )}
                     <AnimatePresence>
                       {badgeCount > 0 && (
                         <motion.span
