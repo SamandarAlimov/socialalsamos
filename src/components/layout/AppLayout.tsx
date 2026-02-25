@@ -6,6 +6,7 @@ import { BottomNavbar } from './BottomNavbar';
 import { MobileHeader } from './MobileHeader';
 import { Loader2 } from 'lucide-react';
 import { useActivityTracking } from '@/hooks/useActivityTracking';
+import { LocationPermissionDialog } from '@/components/LocationPermissionDialog';
 
 export function AppLayout() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -59,6 +60,9 @@ export function AppLayout() {
       
       {/* Mobile Bottom Navigation */}
       <BottomNavbar />
+      
+      {/* Location Permission Dialog */}
+      <LocationPermissionDialog />
     </div>
   );
 }
