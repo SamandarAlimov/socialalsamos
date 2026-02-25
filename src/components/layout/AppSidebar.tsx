@@ -15,7 +15,6 @@ import {
   Compass,
   Wallet,
   Sparkles,
-  Megaphone,
   MoreHorizontal,
   Moon,
   Sun,
@@ -58,7 +57,6 @@ const navItems: NavItem[] = [
   { icon: ShoppingBag, label: 'Marketplace', path: '/marketplace' },
   { icon: Map, label: 'Map', path: '/map' },
   { icon: Wallet, label: 'Payment', path: '/payment' },
-  { icon: Megaphone, label: 'Channels', path: '/channels' },
   { icon: Sparkles, label: 'AI Assistant', path: '/ai' },
   { icon: PlusSquare, label: 'Create', path: '/create' },
 ];
