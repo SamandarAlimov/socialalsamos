@@ -12,6 +12,7 @@ import {
   Trash2,
   CheckSquare,
   Bookmark,
+  Megaphone,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -47,6 +48,10 @@ import { TypingIndicator } from '@/components/messages/TypingIndicator';
 import { GroupMemberManagement } from '@/components/messages/GroupMemberManagement';
 import { ScheduledMessagesSheet } from '@/components/messages/ScheduledMessagesSheet';
 import { MiniAudioPlayer } from '@/components/messages/MiniAudioPlayer';
+import { useChannels, Channel } from '@/hooks/useChannels';
+import { ChannelView } from '@/components/channels/ChannelView';
+import { CreateChannelDialog } from '@/components/channels/CreateChannelDialog';
+import { ChannelCard } from '@/components/channels/ChannelCard';
 
 type MessageTab = 'private' | 'groups' | 'channels' | 'requests' | 'archived';
 
@@ -71,6 +76,8 @@ export default function MessagesPage() {
   const [showGroupDialog, setShowGroupDialog] = useState(false);
   const [showMemberManagement, setShowMemberManagement] = useState(false);
   const [showMessageSearch, setShowMessageSearch] = useState(false);
+  const [showCreateChannelDialog, setShowCreateChannelDialog] = useState(false);
+  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   
   // Selection mode for multi-select
@@ -122,6 +129,9 @@ export default function MessagesPage() {
 
   // Self-chat (saved messages)
   const { getOrCreateSelfChat, isCreating: isCreatingSelfChat } = useSelfChat();
+
+  // Channels hook
+  const { channels: channelsList, isLoading: channelsLoading, fetchChannels, createChannel, joinChannel, leaveChannel } = useChannels();
 
   // Video call management
   const {
@@ -871,7 +881,13 @@ export default function MessagesPage() {
             <Button 
               size="icon"
               className="h-12 w-12 md:h-10 md:w-10"
-              onClick={() => setShowCreateDialog(true)}
+              onClick={() => {
+                if (activeTab === 'channels') {
+                  setShowCreateChannelDialog(true);
+                } else {
+                  setShowCreateDialog(true);
+                }
+              }}
             >
               <Plus className="h-6 w-6 md:h-5 md:w-5" />
             </Button>
@@ -899,62 +915,107 @@ export default function MessagesPage() {
           ))}
         </div>
 
-        {/* Conversation List */}
+        {/* Conversation / Channel List */}
         <ScrollArea className="flex-1 min-h-0">
-          {conversationsLoading ? (
-            <div className="flex items-center justify-center h-32">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-            </div>
-          ) : filteredConversations.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
-              {activeTab === 'requests' ? (
-                <>
-                  <Inbox className="h-10 w-10 mb-3 opacity-50" />
-                  <p className="text-sm">No message requests</p>
-                </>
-              ) : activeTab === 'archived' ? (
-                <>
-                  <Archive className="h-10 w-10 mb-3 opacity-50" />
-                  <p className="text-sm">No archived chats</p>
-                </>
-              ) : (
-                <>
-                  <MessageCircle className="h-10 w-10 mb-3 opacity-50" />
-                  <p className="text-sm">No conversations yet</p>
-                  <Button 
-                    variant="link" 
-                    className="mt-2"
-                    onClick={() => setShowCreateDialog(true)}
-                  >
-                    Start a new chat
-                  </Button>
-                </>
-              )}
-            </div>
+          {activeTab === 'channels' ? (
+            // Channels list
+            channelsLoading ? (
+              <div className="flex items-center justify-center h-32">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+              </div>
+            ) : channelsList.filter(c => c.is_member || c.channel_type === 'public').length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
+                <Megaphone className="h-10 w-10 mb-3 opacity-50" />
+                <p className="text-sm">Hozircha kanallar yo'q</p>
+                <Button 
+                  variant="link" 
+                  className="mt-2"
+                  onClick={() => setShowCreateChannelDialog(true)}
+                >
+                  Kanal yaratish
+                </Button>
+              </div>
+            ) : (
+              channelsList
+                .filter(c => {
+                  const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    c.username?.toLowerCase().includes(searchQuery.toLowerCase());
+                  return matchesSearch && (c.is_member || c.channel_type === 'public');
+                })
+                .map((channel) => (
+                  <ChannelCard
+                    key={channel.id}
+                    channel={channel}
+                    onSelect={(ch) => {
+                      setSelectedChannel(ch);
+                      setSelectedConversation(null);
+                      setShowMobileChat(true);
+                    }}
+                    onJoin={joinChannel}
+                    onLeave={leaveChannel}
+                  />
+                ))
+            )
           ) : (
-            filteredConversations.map((conv) => (
-              <ChatListItem
-                key={conv.id}
-                conversation={conv}
-                isSelected={selectedConversation?.id === conv.id}
-                isPinned={conv.is_pinned}
-                isMuted={conv.is_muted}
-                isArchived={isArchivedTab}
-                onClick={() => handleSelectConversation(conv)}
-                onArchive={() => handleArchiveConversation(conv.id)}
-                onUnarchive={() => handleUnarchiveConversation(conv.id)}
-                onPin={() => handlePinConversation(conv.id)}
-                onMute={() => handleMuteConversation(conv.id)}
-                onDelete={() => handleDeleteConversation(conv.id)}
-                onMarkRead={() => handleMarkRead(conv.id)}
-                onMarkUnread={() => handleMarkUnread(conv.id)}
-              />
-            ))
+            // Regular conversations list
+            conversationsLoading ? (
+              <div className="flex items-center justify-center h-32">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+              </div>
+            ) : filteredConversations.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
+                {activeTab === 'requests' ? (
+                  <>
+                    <Inbox className="h-10 w-10 mb-3 opacity-50" />
+                    <p className="text-sm">No message requests</p>
+                  </>
+                ) : activeTab === 'archived' ? (
+                  <>
+                    <Archive className="h-10 w-10 mb-3 opacity-50" />
+                    <p className="text-sm">No archived chats</p>
+                  </>
+                ) : (
+                  <>
+                    <MessageCircle className="h-10 w-10 mb-3 opacity-50" />
+                    <p className="text-sm">No conversations yet</p>
+                    <Button 
+                      variant="link" 
+                      className="mt-2"
+                      onClick={() => setShowCreateDialog(true)}
+                    >
+                      Start a new chat
+                    </Button>
+                  </>
+                )}
+              </div>
+            ) : (
+              filteredConversations.map((conv) => (
+                <ChatListItem
+                  key={conv.id}
+                  conversation={conv}
+                  isSelected={selectedConversation?.id === conv.id}
+                  isPinned={conv.is_pinned}
+                  isMuted={conv.is_muted}
+                  isArchived={isArchivedTab}
+                  onClick={() => {
+                    handleSelectConversation(conv);
+                    setSelectedChannel(null);
+                  }}
+                  onArchive={() => handleArchiveConversation(conv.id)}
+                  onUnarchive={() => handleUnarchiveConversation(conv.id)}
+                  onPin={() => handlePinConversation(conv.id)}
+                  onMute={() => handleMuteConversation(conv.id)}
+                  onDelete={() => handleDeleteConversation(conv.id)}
+                  onMarkRead={() => handleMarkRead(conv.id)}
+                  onMarkUnread={() => handleMarkUnread(conv.id)}
+                />
+              ))
+            )
           )}
         </ScrollArea>
       </div>
 
-      {/* Right Panel - Chat */}
+      {/* Right Panel - Chat or Channel View */}
       <div 
         className={cn(
           "flex-1 flex flex-col bg-background min-w-0",
@@ -970,7 +1031,15 @@ export default function MessagesPage() {
         onTouchMove={handleChatSwipeMove}
         onTouchEnd={handleChatSwipeEnd}
       >
-        {selectedConversation ? (
+        {selectedChannel ? (
+          <ChannelView 
+            channel={selectedChannel} 
+            onBack={() => {
+              setSelectedChannel(null);
+              setShowMobileChat(false);
+            }} 
+          />
+        ) : selectedConversation ? (
           <>
             {/* Selection Mode Header */}
             {isSelectionMode ? (
@@ -1228,6 +1297,12 @@ export default function MessagesPage() {
         open={showScheduledMessages}
         onOpenChange={setShowScheduledMessages}
         conversationId={selectedConversation?.id}
+      />
+
+      <CreateChannelDialog
+        open={showCreateChannelDialog}
+        onOpenChange={setShowCreateChannelDialog}
+        onCreateChannel={createChannel}
       />
     </div>
   );
