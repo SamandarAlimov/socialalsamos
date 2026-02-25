@@ -57,6 +57,7 @@ export default function MiniAppsPage() {
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
   const [selectedApp, setSelectedApp] = useState<MiniApp | null>(null);
+  const [openedApp, setOpenedApp] = useState<MiniApp | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", url: "", icon_url: "", category: "other" });
@@ -239,9 +240,9 @@ export default function MiniAppsPage() {
         </div>
       </ScrollArea>
 
-      {/* App Detail Overlay */}
+      {/* App Detail / Info Sheet */}
       <AnimatePresence>
-        {selectedApp && (
+        {selectedApp && !openedApp && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -261,7 +262,6 @@ export default function MiniAppsPage() {
               </div>
 
               <div className="p-5">
-                {/* App info */}
                 <div className="flex items-start gap-4 mb-4">
                   <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-muted/50 overflow-hidden border border-border/30 flex-shrink-0">
                     {selectedApp.icon_url ? (
@@ -279,7 +279,6 @@ export default function MiniAppsPage() {
                   </Button>
                 </div>
 
-                {/* Creator */}
                 {selectedApp.profiles && (
                   <div className="flex items-center gap-2 mb-4 p-2.5 rounded-xl bg-muted/30 border border-border/30">
                     <Avatar className="h-8 w-8">
@@ -294,7 +293,6 @@ export default function MiniAppsPage() {
                   </div>
                 )}
 
-                {/* Stats */}
                 <div className="flex items-center gap-6 mb-5 py-3 border-y border-border/50">
                   <div className="text-center">
                     <div className="flex items-center gap-1 justify-center">
@@ -315,16 +313,14 @@ export default function MiniAppsPage() {
                   </div>
                 </div>
 
-                {/* Launch */}
                 <Button
                   className="w-full h-12 rounded-2xl text-base font-semibold gap-2"
-                  onClick={() => window.open(selectedApp.url, "_blank", "noopener,noreferrer")}
+                  onClick={() => { setOpenedApp(selectedApp); setSelectedApp(null); }}
                 >
-                  <ExternalLink className="h-5 w-5" />
+                  <AppWindow className="h-5 w-5" />
                   Ochish
                 </Button>
 
-                {/* Delete (own apps only) */}
                 {user && selectedApp.user_id === user.id && (
                   <Button
                     variant="destructive"
@@ -335,12 +331,58 @@ export default function MiniAppsPage() {
                     O'chirish
                   </Button>
                 )}
-
-                <p className="text-xs text-muted-foreground text-center mt-3">
-                  Bu mini app tashqi havola orqali ochiladi
-                </p>
               </div>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Fullscreen In-App Browser */}
+      <AnimatePresence>
+        {openedApp && (
+          <motion.div
+            initial={{ opacity: 0, y: "100%" }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: "100%" }}
+            transition={{ type: "spring", damping: 28, stiffness: 250 }}
+            className="fixed inset-0 z-50 bg-background flex flex-col"
+          >
+            {/* Browser Header */}
+            <div className="flex items-center gap-3 px-3 py-2 border-b border-border/50 bg-card/80 backdrop-blur-xl flex-shrink-0">
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => setOpenedApp(null)}>
+                <X className="h-4 w-4" />
+              </Button>
+              <div className="flex-1 min-w-0 flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg flex items-center justify-center bg-muted/50 overflow-hidden flex-shrink-0">
+                  {openedApp.icon_url ? (
+                    <img src={openedApp.icon_url} alt="" className="w-5 h-5 rounded object-cover" />
+                  ) : (
+                    <Globe className="h-3.5 w-3.5 text-primary" />
+                  )}
+                </div>
+                <span className="text-sm font-medium text-foreground truncate">{openedApp.name}</span>
+                <span className="text-xs text-muted-foreground truncate hidden sm:inline">{openedApp.url}</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-full"
+                onClick={() => window.open(openedApp.url, "_blank", "noopener,noreferrer")}
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+
+            {/* Iframe */}
+            <div className="flex-1 relative">
+              <iframe
+                src={openedApp.url}
+                className="w-full h-full border-0"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+                allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone"
+                title={openedApp.name}
+              />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
