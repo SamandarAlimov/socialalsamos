@@ -1328,6 +1328,59 @@ export type Database = {
           },
         ]
       }
+      mini_apps: {
+        Row: {
+          category: string
+          created_at: string
+          description: string | null
+          icon_url: string | null
+          id: string
+          is_approved: boolean
+          name: string
+          rating: number
+          updated_at: string
+          url: string
+          user_id: string
+          users_count: number
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          icon_url?: string | null
+          id?: string
+          is_approved?: boolean
+          name: string
+          rating?: number
+          updated_at?: string
+          url: string
+          user_id: string
+          users_count?: number
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          icon_url?: string | null
+          id?: string
+          is_approved?: boolean
+          name?: string
+          rating?: number
+          updated_at?: string
+          url?: string
+          user_id?: string
+          users_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mini_apps_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           body: string | null
