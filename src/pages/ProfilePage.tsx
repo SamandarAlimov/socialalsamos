@@ -137,9 +137,6 @@ export default function ProfilePage() {
               showRing
               className="h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28"
             />
-            {profile.is_online && (
-              <span className="absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2 h-4 w-4 sm:h-5 sm:w-5 bg-green-500 rounded-full border-3 sm:border-4 border-background" />
-            )}
           </div>
 
           <div className="flex-1 pb-1 md:pb-2 pt-2 sm:pt-0">
