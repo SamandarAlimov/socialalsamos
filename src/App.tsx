@@ -31,6 +31,7 @@ import AIPage from "./pages/AIPage";
 import ActivityPage from "./pages/ActivityPage";
 import AdsPage from "./pages/AdsPage";
 import ChannelsPage from "./pages/ChannelsPage";
+import MiniAppsPage from "./pages/MiniAppsPage";
 import NotFound from "./pages/NotFound";
 
 // Layout
@@ -111,6 +112,7 @@ function AppRoutes() {
         <Route path="/activity" element={<ActivityPage />} />
         <Route path="/ads" element={<AdsPage />} />
         <Route path="/channels" element={<ChannelsPage />} />
+        <Route path="/mini-apps" element={<MiniAppsPage />} />
       </Route>
       
       {/* 404 */}

@@ -7,7 +7,8 @@ import {
   ShoppingBag,
   MapPin,
   Wallet,
-  Sparkles
+  Sparkles,
+  LayoutGrid
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -20,6 +21,7 @@ const menuItems: MobileMenuNavItem[] = [
   { icon: MapPin, label: 'Map', path: '/map' },
   { icon: Wallet, label: 'Payment', path: '/payment' },
   { icon: Sparkles, label: 'AI Assistant', path: '/ai' },
+  { icon: LayoutGrid, label: 'Mini Apps', path: '/mini-apps' },
 ];
 
 interface MobileMenuProps {

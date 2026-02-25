@@ -15,6 +15,7 @@ import {
   Compass,
   Wallet,
   Sparkles,
+  LayoutGrid,
   MoreHorizontal,
   Moon,
   Sun,
@@ -58,6 +59,7 @@ const navItems: NavItem[] = [
   { icon: Map, label: 'Map', path: '/map' },
   { icon: Wallet, label: 'Payment', path: '/payment' },
   { icon: Sparkles, label: 'AI Assistant', path: '/ai' },
+  { icon: LayoutGrid, label: 'Mini Apps', path: '/mini-apps' },
   { icon: PlusSquare, label: 'Create', path: '/create' },
 ];
 
