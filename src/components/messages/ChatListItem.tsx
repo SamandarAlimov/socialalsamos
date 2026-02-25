@@ -8,7 +8,7 @@ import { Conversation } from '@/hooks/useMessages';
 import { ChatListContextMenu } from './ChatListContextMenu';
 import { useSwipeToReply } from '@/hooks/useSwipeToReply';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
-import { useUserOnlineStatus } from '@/hooks/useRealtimeStatus';
+import { useOnlinePresence } from '@/contexts/OnlinePresenceContext';
 import { supabase } from '@/integrations/supabase/client';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -68,8 +68,9 @@ export function ChatListItem({
   
   const otherUserId = conversation.type === 'private' ? conversation.other_participant?.id : null;
   
-  // Use the realtime status hook for online status
-  const { isOnline } = useUserOnlineStatus(otherUserId);
+  // Use the global presence context for online status
+  const { isUserOnline } = useOnlinePresence();
+  const isOnline = otherUserId ? isUserOnline(otherUserId) : false;
   
   // Swipe to archive functionality
   const { offset, isReadyToReply, swipeHandlers } = useSwipeToReply({

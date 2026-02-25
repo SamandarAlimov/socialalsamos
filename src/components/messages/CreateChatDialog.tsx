@@ -5,6 +5,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { OnlineIndicator } from '@/components/OnlineIndicator';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -243,9 +244,7 @@ export function CreateChatDialog({
                             {(u.display_name || u.username || 'U')[0]?.toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
-                        {u.is_online && (
-                          <span className="absolute bottom-0 right-0 h-3 w-3 bg-green-500 rounded-full border-2 border-card" />
-                        )}
+                        <OnlineIndicator userId={u.id} size="sm" />
                       </div>
                       <div className="flex-1 text-left">
                         <p className="font-medium text-sm">{u.display_name || u.username}</p>

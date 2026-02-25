@@ -8,6 +8,7 @@ import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
+import { OnlineIndicator } from '@/components/OnlineIndicator';
 
 interface Creator {
   id: string;
@@ -147,15 +148,18 @@ export function PopularCreators() {
               navigate(`/user/${creator.username || creator.id}`);
             }}
           >
-            <StoryAvatar
-              userId={creator.id}
-              username={creator.username}
-              displayName={creator.display_name}
-              avatarUrl={creator.avatar_url}
-              isVerified={!!creator.is_verified}
-              size="lg"
-              showRing
-            />
+            <div className="relative">
+              <StoryAvatar
+                userId={creator.id}
+                username={creator.username}
+                displayName={creator.display_name}
+                avatarUrl={creator.avatar_url}
+                isVerified={!!creator.is_verified}
+                size="lg"
+                showRing
+              />
+              <OnlineIndicator userId={creator.id} size="sm" />
+            </div>
             <div className="text-center">
               <p className="font-medium text-sm truncate max-w-[100px]">
                 {creator.display_name || creator.username || 'User'}

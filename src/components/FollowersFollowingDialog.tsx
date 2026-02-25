@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
+import { OnlineIndicator } from '@/components/OnlineIndicator';
 import { toast } from 'sonner';
 
 interface FollowUser {
@@ -196,15 +197,18 @@ export function FollowersFollowingDialog({
                   key={u.id} 
                   className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent/50 transition-colors"
                 >
-                  <Avatar 
-                    className="h-10 w-10 cursor-pointer"
-                    onClick={() => handleUserClick(u)}
-                  >
-                    <AvatarImage src={u.avatar_url || undefined} />
-                    <AvatarFallback>
-                      {(u.display_name || u.username || 'U')[0].toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
+                  <div className="relative">
+                    <Avatar 
+                      className="h-10 w-10 cursor-pointer"
+                      onClick={() => handleUserClick(u)}
+                    >
+                      <AvatarImage src={u.avatar_url || undefined} />
+                      <AvatarFallback>
+                        {(u.display_name || u.username || 'U')[0].toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <OnlineIndicator userId={u.id} size="sm" />
+                  </div>
                   
                   <div 
                     className="flex-1 min-w-0 cursor-pointer"

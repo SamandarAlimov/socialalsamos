@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { GlobalCallProvider } from "@/contexts/GlobalCallContext";
+import { OnlinePresenceProvider } from "@/contexts/OnlinePresenceContext";
 import { AudioPlayerProvider } from "@/contexts/AudioPlayerContext";
 import { VideoPlayerProvider } from "@/contexts/VideoPlayerContext";
 import { ThemeProvider } from "next-themes";
@@ -131,9 +132,11 @@ function AppWithGlobalCall() {
       <Sonner />
       {isAuthenticated ? (
         <PushNotificationProvider>
-          <GlobalCallProvider>
-            <AppRoutes />
-          </GlobalCallProvider>
+          <OnlinePresenceProvider>
+            <GlobalCallProvider>
+              <AppRoutes />
+            </GlobalCallProvider>
+          </OnlinePresenceProvider>
         </PushNotificationProvider>
       ) : (
         <AppRoutes />
