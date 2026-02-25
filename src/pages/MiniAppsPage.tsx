@@ -16,6 +16,10 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const getProxyUrl = (url: string) =>
+  `${SUPABASE_URL}/functions/v1/mini-app-proxy?url=${encodeURIComponent(url)}`;
 import { useToast } from "@/hooks/use-toast";
 
 interface MiniApp {
@@ -376,7 +380,7 @@ export default function MiniAppsPage() {
             {/* Iframe */}
             <div className="flex-1 relative">
               <iframe
-                src={openedApp.url}
+                src={getProxyUrl(openedApp.url)}
                 className="w-full h-full border-0"
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
                 allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone"
