@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useDebounce } from '@/hooks/useDebounce';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
+import { OnlineIndicator } from '@/components/OnlineIndicator';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -281,15 +282,18 @@ function UserCard({ user, onClick }: { user: SearchUser; onClick: () => void }) 
         onClick();
       }}
     >
-      <StoryAvatar
-        userId={user.id}
-        username={user.username}
-        displayName={user.display_name}
-        avatarUrl={user.avatar_url}
-        isVerified={!!user.is_verified}
-        size="lg"
-        showRing
-      />
+      <div className="relative">
+        <StoryAvatar
+          userId={user.id}
+          username={user.username}
+          displayName={user.display_name}
+          avatarUrl={user.avatar_url}
+          isVerified={!!user.is_verified}
+          size="lg"
+          showRing
+        />
+        <OnlineIndicator userId={user.id} size="sm" />
+      </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1">
           <span className="font-medium truncate">{user.display_name || user.username}</span>

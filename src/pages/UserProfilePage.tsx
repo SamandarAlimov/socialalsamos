@@ -24,6 +24,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { FollowersFollowingDialog } from '@/components/FollowersFollowingDialog';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { StoryHighlights } from '@/components/stories/StoryHighlights';
+import { OnlineIndicator } from '@/components/OnlineIndicator';
 import { useUserPosts, UserPost } from '@/hooks/useUserPosts';
 import { useUserReposts, Repost } from '@/hooks/useReposts';
 import { cn } from '@/lib/utils';
@@ -240,15 +241,18 @@ export default function UserProfilePage() {
       {/* Profile Info */}
       <div className="relative -mt-24 px-4">
         <div className="flex flex-col md:flex-row md:items-end gap-4">
-          <StoryAvatar
-            userId={profile.id}
-            username={profile.username}
-            displayName={profile.display_name}
-            avatarUrl={profile.avatar_url}
-            isVerified={!!profile.is_verified}
-            size="xl"
-            showRing
-          />
+          <div className="relative">
+            <StoryAvatar
+              userId={profile.id}
+              username={profile.username}
+              displayName={profile.display_name}
+              avatarUrl={profile.avatar_url}
+              isVerified={!!profile.is_verified}
+              size="xl"
+              showRing
+            />
+            <OnlineIndicator userId={profile.id} size="lg" className="border-background" />
+          </div>
 
           <div className="flex-1 pb-2">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">

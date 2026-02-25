@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useUserSearch, UserProfile } from '@/hooks/useUserSearch';
+import { OnlineIndicator } from '@/components/OnlineIndicator';
 import { useDebounce } from '@/hooks/useDebounce';
 import { toast } from 'sonner';
 
@@ -38,12 +39,15 @@ function UserCard({ user, onFollow, onUnfollow, onNavigate }: UserCardProps) {
       className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
       onClick={() => onNavigate(user)}
     >
-      <Avatar className="h-12 w-12">
-        <AvatarImage src={user.avatar_url || undefined} />
-        <AvatarFallback>
-          {(user.display_name || user.username || 'U')[0].toUpperCase()}
-        </AvatarFallback>
-      </Avatar>
+      <div className="relative">
+        <Avatar className="h-12 w-12">
+          <AvatarImage src={user.avatar_url || undefined} />
+          <AvatarFallback>
+            {(user.display_name || user.username || 'U')[0].toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+        <OnlineIndicator userId={user.id} size="sm" />
+      </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1">
           <span className="font-medium truncate">

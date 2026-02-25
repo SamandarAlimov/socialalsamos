@@ -20,7 +20,7 @@ import {
 import { Conversation } from '@/hooks/useMessages';
 import { cn } from '@/lib/utils';
 import { formatLastSeen } from '@/utils/formatLastSeen';
-import { useUserOnlineStatus } from '@/hooks/useRealtimeStatus';
+import { useOnlinePresence } from '@/contexts/OnlinePresenceContext';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -74,7 +74,9 @@ export function ChatHeader({
 
   // Get real-time status for private chats (but not for self-chat)
   const otherUserId = conversation.type === 'private' && !isSelfChat ? conversation.other_participant?.id : null;
-  const { isOnline: realtimeIsOnline, lastSeen: realtimeLastSeen } = useUserOnlineStatus(otherUserId || null);
+  const { isUserOnline } = useOnlinePresence();
+  const realtimeIsOnline = otherUserId ? isUserOnline(otherUserId) : false;
+  const realtimeLastSeen = conversation.other_participant?.last_seen || null;
 
   const getName = () => {
     if (isSelfChat) {
