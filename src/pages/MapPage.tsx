@@ -576,10 +576,6 @@ export default function MapPage() {
         <div className="flex items-center gap-2">
           <MapPin className="h-5 w-5 text-primary" />
           <h1 className="text-lg font-semibold">Xarita</h1>
-          <Badge variant="secondary" className="text-[10px]">
-            <connectionStatus.icon className={cn("h-3 w-3 mr-1", connectionStatus.color)} />
-            {connectionStatus.label}
-          </Badge>
         </div>
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" className="h-9 w-9" onClick={centerOnLocation}>
@@ -750,10 +746,7 @@ export default function MapPage() {
               <MapPin className="h-5 w-5 text-primary" />
               Xarita
             </h1>
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <connectionStatus.icon className={cn("h-3 w-3", connectionStatus.color)} />
-              {connectionStatus.label}
-            </p>
+            <p className="text-xs text-muted-foreground">Real vaqt joylashuv</p>
           </div>
           <Sheet>
             <SheetTrigger asChild>
