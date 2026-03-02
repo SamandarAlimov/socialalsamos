@@ -391,7 +391,7 @@ export default function MiniAppsPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: "100%" }}
             transition={{ type: "spring", damping: 28, stiffness: 250 }}
-            className="fixed inset-0 z-50 bg-background flex flex-col"
+            className="fixed inset-0 z-[9999] bg-background flex flex-col"
           >
             {/* Browser Header */}
             <div className="flex items-center gap-3 px-3 py-2 border-b border-border/50 bg-card/80 backdrop-blur-xl flex-shrink-0">
