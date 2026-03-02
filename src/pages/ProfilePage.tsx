@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { useUserReposts, Repost } from '@/hooks/useReposts';
@@ -11,6 +11,8 @@ import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { StoryHighlights } from '@/components/stories/StoryHighlights';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   Edit3, 
   Grid, 
@@ -22,7 +24,9 @@ import {
   Calendar,
   ImageIcon,
   Archive,
-  Megaphone
+  Megaphone,
+  Camera,
+  Loader2
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
@@ -32,6 +36,9 @@ import { PostViewModal } from '@/components/PostViewModal';
 export default function ProfilePage() {
   const isMobile = useIsMobile();
   const { user, profile: authProfile, updateProfile } = useAuth();
+  const { toast } = useToast();
+  const coverInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
   const { 
     profile, 
     posts, 
@@ -75,6 +82,38 @@ export default function ProfilePage() {
     return true;
   });
 
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    setUploadingCover(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const filePath = `${user.id}/cover-${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from('message-attachments')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('message-attachments')
+        .getPublicUrl(filePath);
+
+      await supabase
+        .from('profiles')
+        .update({ cover_url: urlData.publicUrl })
+        .eq('id', user.id);
+
+      toast({ title: "Muvaffaqiyatli", description: "Cover rasm yangilandi" });
+      refresh?.();
+    } catch (err: any) {
+      toast({ title: "Xato", description: err.message || "Rasm yuklashda xatolik", variant: "destructive" });
+    } finally {
+      setUploadingCover(false);
+    }
+  };
+
   const handleRefresh = useCallback(async () => {
     if (refresh) {
       refresh();
@@ -109,7 +148,7 @@ export default function ProfilePage() {
   const pageContent = (
     <div className="max-w-4xl mx-auto py-4 md:py-8 px-3 md:px-4 pb-24 md:pb-8">
       {/* Cover Photo */}
-      <div className="relative h-36 sm:h-48 md:h-64 rounded-xl md:rounded-2xl bg-gradient-to-r from-primary/20 to-primary/40 mb-12 md:mb-16 overflow-hidden">
+      <div className="relative h-36 sm:h-48 md:h-64 rounded-xl md:rounded-2xl bg-gradient-to-r from-primary/20 to-primary/40 mb-12 md:mb-16 overflow-hidden group">
         {profile.cover_url ? (
           <img 
             src={profile.cover_url} 
@@ -120,6 +159,30 @@ export default function ProfilePage() {
           <div className="absolute inset-0 bg-gradient-to-r from-alsamos-orange-light to-alsamos-orange-dark" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-background/50 to-transparent" />
+        
+        {isOwnProfile && (
+          <>
+            <input
+              ref={coverInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleCoverUpload}
+              className="hidden"
+            />
+            <button
+              onClick={() => coverInputRef.current?.click()}
+              disabled={uploadingCover}
+              className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 text-white text-xs font-medium backdrop-blur-sm opacity-80 hover:opacity-100 transition-opacity"
+            >
+              {uploadingCover ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Camera className="h-3.5 w-3.5" />
+              )}
+              {uploadingCover ? "Yuklanmoqda..." : "Cover o'zgartirish"}
+            </button>
+          </>
+        )}
       </div>
 
       {/* Profile Info */}
