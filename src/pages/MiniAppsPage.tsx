@@ -62,6 +62,9 @@ export default function MiniAppsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", url: "", icon_url: "", category: "other" });
+  const [iconFile, setIconFile] = useState<File | null>(null);
+  const [iconPreview, setIconPreview] = useState<string | null>(null);
+  const [uploadingIcon, setUploadingIcon] = useState(false);
   const [proxyHtml, setProxyHtml] = useState<string | null>(null);
   const [proxyLoading, setProxyLoading] = useState(false);
   const [proxyError, setProxyError] = useState<string | null>(null);
@@ -121,7 +124,6 @@ export default function MiniAppsPage() {
       return;
     }
 
-    // Validate URL
     try {
       new URL(form.url);
     } catch {
@@ -130,12 +132,38 @@ export default function MiniAppsPage() {
     }
 
     setCreating(true);
+
+    let finalIconUrl = form.icon_url.trim() || null;
+
+    // Upload icon file if selected
+    if (iconFile) {
+      setUploadingIcon(true);
+      const fileExt = iconFile.name.split('.').pop();
+      const filePath = `${user.id}/${crypto.randomUUID()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from('mini-app-icons')
+        .upload(filePath, iconFile);
+
+      if (uploadError) {
+        toast({ title: "Xato", description: "Rasm yuklashda xatolik: " + uploadError.message, variant: "destructive" });
+        setCreating(false);
+        setUploadingIcon(false);
+        return;
+      }
+
+      const { data: publicData } = supabase.storage
+        .from('mini-app-icons')
+        .getPublicUrl(filePath);
+      finalIconUrl = publicData.publicUrl;
+      setUploadingIcon(false);
+    }
+
     const { error } = await supabase.from("mini_apps").insert({
       user_id: user.id,
       name: form.name.trim(),
       description: form.description.trim() || null,
       url: form.url.trim(),
-      icon_url: form.icon_url.trim() || null,
+      icon_url: finalIconUrl,
       category: form.category,
     });
 
@@ -145,6 +173,8 @@ export default function MiniAppsPage() {
       toast({ title: "Muvaffaqiyatli", description: "Mini app yaratildi!" });
       setShowCreate(false);
       setForm({ name: "", description: "", url: "", icon_url: "", category: "other" });
+      setIconFile(null);
+      setIconPreview(null);
       fetchApps();
     }
     setCreating(false);
@@ -475,8 +505,48 @@ export default function MiniAppsPage() {
               <Textarea placeholder="Qisqa tavsif..." value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="mt-1" rows={2} />
             </div>
             <div>
-              <Label>Ikonka URL (ixtiyoriy)</Label>
-              <Input placeholder="https://example.com/icon.png" value={form.icon_url} onChange={e => setForm(f => ({ ...f, icon_url: e.target.value }))} className="mt-1" />
+              <Label>Ikonka (rasm yuklash)</Label>
+              <div className="mt-1 space-y-2">
+                {iconPreview ? (
+                  <div className="flex items-center gap-3">
+                    <img src={iconPreview} alt="Icon preview" className="w-14 h-14 rounded-xl object-cover border border-border/50" />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => { setIconFile(null); setIconPreview(null); }}
+                      className="rounded-xl"
+                    >
+                      <X className="h-3.5 w-3.5 mr-1" /> O'chirish
+                    </Button>
+                  </div>
+                ) : (
+                  <label className="flex items-center justify-center gap-2 h-20 rounded-xl border-2 border-dashed border-border/60 bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors">
+                    <Plus className="h-5 w-5 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">PNG, JPG, SVG, ICO</span>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/x-icon,image/ico,image/webp"
+                      className="hidden"
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setIconFile(file);
+                          setIconPreview(URL.createObjectURL(file));
+                          setForm(f => ({ ...f, icon_url: "" }));
+                        }
+                      }}
+                    />
+                  </label>
+                )}
+                {!iconFile && (
+                  <Input
+                    placeholder="Yoki URL kiriting: https://example.com/icon.png"
+                    value={form.icon_url}
+                    onChange={e => setForm(f => ({ ...f, icon_url: e.target.value }))}
+                  />
+                )}
+              </div>
             </div>
             <div>
               <Label>Kategoriya</Label>
