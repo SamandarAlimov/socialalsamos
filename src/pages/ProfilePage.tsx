@@ -123,10 +123,10 @@ export default function ProfilePage() {
       </div>
 
       {/* Profile Info */}
-      <div className="relative -mt-16 md:-mt-24 px-2 md:px-4">
-        <div className="flex flex-col sm:flex-row sm:items-end gap-3 md:gap-4">
+      <div className="relative -mt-12 sm:-mt-16 md:-mt-24 px-2 md:px-4">
+        <div className="flex flex-col gap-3 md:gap-4">
           {/* Avatar with story ring */}
-          <div className="relative self-start sm:self-auto">
+          <div className="relative self-start">
             <StoryAvatar
               userId={profile.id}
               username={profile.username}
@@ -139,7 +139,7 @@ export default function ProfilePage() {
             />
           </div>
 
-          <div className="flex-1 pb-1 md:pb-2 pt-2 sm:pt-0">
+          <div className="flex-1">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 md:gap-4">
               <div>
                 <div className="flex items-center gap-1.5 md:gap-2">
