@@ -282,7 +282,7 @@ export default function MiniAppsPage() {
 
       {/* App Detail / Info Sheet */}
       <AnimatePresence>
-        {selectedApp && !openedApp && (
+      {selectedApp && !openedApp && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -295,7 +295,13 @@ export default function MiniAppsPage() {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: "100%", opacity: 0 }}
               transition={{ type: "spring", damping: 28, stiffness: 250 }}
-              className="relative z-10 w-full md:max-w-lg bg-background/95 backdrop-blur-2xl rounded-t-3xl md:rounded-3xl border border-border/50 shadow-2xl max-h-[85vh] overflow-auto"
+              drag="y"
+              dragConstraints={{ top: 0, bottom: 0 }}
+              dragElastic={{ top: 0, bottom: 0.6 }}
+              onDragEnd={(_, info) => {
+                if (info.offset.y > 100) setSelectedApp(null);
+              }}
+              className="relative z-10 w-full md:max-w-lg bg-background/95 backdrop-blur-2xl rounded-t-3xl md:rounded-3xl border border-border/50 shadow-2xl max-h-[92vh] overflow-auto pb-20 md:pb-0"
             >
               <div className="flex justify-center pt-3 md:hidden">
                 <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
