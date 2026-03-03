@@ -432,7 +432,30 @@ export default function MiniAppsPage() {
 
                 <Button
                   className="w-full h-12 rounded-2xl text-base font-semibold gap-2"
-                  onClick={() => { setOpenedApp(selectedApp); setSelectedApp(null); }}
+                  onClick={() => {
+                    if (!selectedApp) return;
+                    const EXTERNAL_DOMAINS = [
+                      'youtube.com', 'youtu.be', 'instagram.com', 'facebook.com', 'fb.com',
+                      'twitter.com', 'x.com', 'telegram.org', 't.me', 'paypal.com',
+                      'tiktok.com', 'linkedin.com', 'reddit.com', 'whatsapp.com',
+                      'snapchat.com', 'pinterest.com', 'amazon.com', 'netflix.com',
+                      'spotify.com', 'apple.com', 'microsoft.com', 'google.com',
+                      'github.com', 'discord.com', 'twitch.tv',
+                    ];
+                    try {
+                      const hostname = new URL(
+                        selectedApp.url.startsWith('http') ? selectedApp.url : `https://${selectedApp.url}`
+                      ).hostname.toLowerCase().replace('www.', '');
+                      const isExternal = EXTERNAL_DOMAINS.some(d => hostname === d || hostname.endsWith(`.${d}`));
+                      if (isExternal) {
+                        window.open(selectedApp.url, '_blank', 'noopener,noreferrer');
+                        setSelectedApp(null);
+                        return;
+                      }
+                    } catch {}
+                    setOpenedApp(selectedApp);
+                    setSelectedApp(null);
+                  }}
                 >
                   <AppWindow className="h-5 w-5" />
                   Ochish
