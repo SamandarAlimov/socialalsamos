@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Search, Star, Plus, Globe, X, ExternalLink,
+  Search, Star, Plus, Globe, X,
   Sparkles, Trash2, Edit2, Loader2, AppWindow
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -239,6 +239,11 @@ export default function MiniAppsPage() {
     return true;
   });
 
+  const getProxyUrl = (url: string) => {
+    const apiBase = import.meta.env.VITE_SUPABASE_URL;
+    return `${apiBase}/functions/v1/mini-app-proxy?url=${encodeURIComponent(url)}`;
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <ScrollArea className="h-[calc(100vh-4rem)] md:h-screen">
@@ -433,26 +438,6 @@ export default function MiniAppsPage() {
                 <Button
                   className="w-full h-12 rounded-2xl text-base font-semibold gap-2"
                   onClick={() => {
-                    if (!selectedApp) return;
-                    const EXTERNAL_DOMAINS = [
-                      'youtube.com', 'youtu.be', 'instagram.com', 'facebook.com', 'fb.com',
-                      'twitter.com', 'x.com', 'telegram.org', 't.me', 'paypal.com',
-                      'tiktok.com', 'linkedin.com', 'reddit.com', 'whatsapp.com',
-                      'snapchat.com', 'pinterest.com', 'amazon.com', 'netflix.com',
-                      'spotify.com', 'apple.com', 'microsoft.com', 'google.com',
-                      'github.com', 'discord.com', 'twitch.tv',
-                    ];
-                    try {
-                      const hostname = new URL(
-                        selectedApp.url.startsWith('http') ? selectedApp.url : `https://${selectedApp.url}`
-                      ).hostname.toLowerCase().replace('www.', '');
-                      const isExternal = EXTERNAL_DOMAINS.some(d => hostname === d || hostname.endsWith(`.${d}`));
-                      if (isExternal) {
-                        window.open(selectedApp.url, '_blank', 'noopener,noreferrer');
-                        setSelectedApp(null);
-                        return;
-                      }
-                    } catch {}
                     setOpenedApp(selectedApp);
                     setSelectedApp(null);
                   }}
@@ -513,14 +498,6 @@ export default function MiniAppsPage() {
                 <span className="text-sm font-medium text-foreground truncate">{openedApp.name}</span>
                 <span className="text-xs text-muted-foreground truncate hidden sm:inline">{openedApp.url}</span>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-full"
-                onClick={() => window.open(openedApp.url, "_blank", "noopener,noreferrer")}
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-              </Button>
             </div>
 
             {/* Content */}
@@ -537,16 +514,12 @@ export default function MiniAppsPage() {
                 <div className="absolute inset-0 flex items-center justify-center bg-background">
                   <div className="flex flex-col items-center gap-3 text-center px-6">
                     <Globe className="h-12 w-12 text-muted-foreground/40" />
-                    <p className="text-sm text-muted-foreground font-medium">Bu sayt iframe ichida ochilmaydi</p>
-                    <Button variant="outline" size="sm" className="rounded-xl" onClick={() => window.open(openedApp.url, "_blank", "noopener,noreferrer")}>
-                      <ExternalLink className="h-3.5 w-3.5 mr-2" />
-                      Brauzerda ochish
-                    </Button>
+                    <p className="text-sm text-muted-foreground font-medium">Mini app ichki ko'rinishda yuklanmadi</p>
                   </div>
                 </div>
               )}
               <iframe
-                src={openedApp.url}
+                src={getProxyUrl(openedApp.url)}
                 className="w-full h-full border-0"
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
                 allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone"
