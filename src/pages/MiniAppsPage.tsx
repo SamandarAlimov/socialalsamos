@@ -65,9 +65,8 @@ export default function MiniAppsPage() {
   const [iconFile, setIconFile] = useState<File | null>(null);
   const [iconPreview, setIconPreview] = useState<string | null>(null);
   const [uploadingIcon, setUploadingIcon] = useState(false);
-  const [proxyHtml, setProxyHtml] = useState<string | null>(null);
-  const [proxyLoading, setProxyLoading] = useState(false);
-  const [proxyError, setProxyError] = useState<string | null>(null);
+  const [iframeLoaded, setIframeLoaded] = useState(false);
+  const [iframeError, setIframeError] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [editingApp, setEditingApp] = useState<MiniApp | null>(null);
   const [editForm, setEditForm] = useState({ name: "", description: "", url: "", icon_url: "", category: "other" });
@@ -87,40 +86,10 @@ export default function MiniAppsPage() {
 
   useEffect(() => { fetchApps(); }, []);
 
-  // Fetch proxied HTML when an app is opened
+  // Reset iframe state when app changes
   useEffect(() => {
-    if (!openedApp) {
-      setProxyHtml(null);
-      setProxyError(null);
-      return;
-    }
-
-    const fetchProxy = async () => {
-      setProxyLoading(true);
-      setProxyError(null);
-      setProxyHtml(null);
-      try {
-        const { data, error } = await supabase.functions.invoke('mini-app-proxy', {
-          body: { url: openedApp.url },
-        });
-
-        if (error) {
-          setProxyError(error.message || "Saytni yuklashda xatolik");
-        } else if (data?.html) {
-          setProxyHtml(data.html);
-        } else if (data?.error) {
-          setProxyError(data.error);
-        } else {
-          setProxyError("Saytni yuklashda xatolik yuz berdi");
-        }
-      } catch (e: any) {
-        setProxyError(e.message || "Saytni yuklashda xatolik");
-      } finally {
-        setProxyLoading(false);
-      }
-    };
-
-    fetchProxy();
+    setIframeLoaded(false);
+    setIframeError(false);
   }, [openedApp]);
 
   const handleCreate = async () => {
@@ -533,7 +502,7 @@ export default function MiniAppsPage() {
 
             {/* Content */}
             <div className="flex-1 relative">
-              {proxyLoading && (
+              {!iframeLoaded && !iframeError && (
                 <div className="absolute inset-0 flex items-center justify-center bg-background">
                   <div className="flex flex-col items-center gap-3">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -541,11 +510,11 @@ export default function MiniAppsPage() {
                   </div>
                 </div>
               )}
-              {proxyError && (
+              {iframeError && (
                 <div className="absolute inset-0 flex items-center justify-center bg-background">
                   <div className="flex flex-col items-center gap-3 text-center px-6">
                     <Globe className="h-12 w-12 text-muted-foreground/40" />
-                    <p className="text-sm text-destructive font-medium">{proxyError}</p>
+                    <p className="text-sm text-muted-foreground font-medium">Bu sayt iframe ichida ochilmaydi</p>
                     <Button variant="outline" size="sm" className="rounded-xl" onClick={() => window.open(openedApp.url, "_blank", "noopener,noreferrer")}>
                       <ExternalLink className="h-3.5 w-3.5 mr-2" />
                       Brauzerda ochish
@@ -553,15 +522,15 @@ export default function MiniAppsPage() {
                   </div>
                 </div>
               )}
-              {proxyHtml && !proxyLoading && (
-                <iframe
-                  srcDoc={proxyHtml}
-                  className="w-full h-full border-0"
-                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
-                  allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone"
-                  title={openedApp.name}
-                />
-              )}
+              <iframe
+                src={openedApp.url}
+                className="w-full h-full border-0"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+                allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone"
+                title={openedApp.name}
+                onLoad={() => setIframeLoaded(true)}
+                onError={() => setIframeError(true)}
+              />
             </div>
           </motion.div>
         )}
