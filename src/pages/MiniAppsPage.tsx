@@ -68,6 +68,12 @@ export default function MiniAppsPage() {
   const [proxyHtml, setProxyHtml] = useState<string | null>(null);
   const [proxyLoading, setProxyLoading] = useState(false);
   const [proxyError, setProxyError] = useState<string | null>(null);
+  const [showEdit, setShowEdit] = useState(false);
+  const [editingApp, setEditingApp] = useState<MiniApp | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", description: "", url: "", icon_url: "", category: "other" });
+  const [editIconFile, setEditIconFile] = useState<File | null>(null);
+  const [editIconPreview, setEditIconPreview] = useState<string | null>(null);
+  const [updating, setUpdating] = useState(false);
 
   const fetchApps = async () => {
     const { data, error } = await supabase
@@ -187,6 +193,72 @@ export default function MiniAppsPage() {
       setSelectedApp(null);
       fetchApps();
     }
+  };
+
+  const openEditDialog = (app: MiniApp) => {
+    setEditingApp(app);
+    setEditForm({
+      name: app.name,
+      description: app.description || "",
+      url: app.url,
+      icon_url: app.icon_url || "",
+      category: app.category,
+    });
+    setEditIconFile(null);
+    setEditIconPreview(app.icon_url || null);
+    setSelectedApp(null);
+    setShowEdit(true);
+  };
+
+  const handleUpdate = async () => {
+    if (!user || !editingApp) return;
+    if (!editForm.name.trim() || !editForm.url.trim()) {
+      toast({ title: "Xato", description: "Nom va URL majburiy", variant: "destructive" });
+      return;
+    }
+
+    try { new URL(editForm.url); } catch {
+      toast({ title: "Xato", description: "URL noto'g'ri formatda", variant: "destructive" });
+      return;
+    }
+
+    setUpdating(true);
+    let finalIconUrl = editForm.icon_url.trim() || null;
+
+    if (editIconFile) {
+      const fileExt = editIconFile.name.split('.').pop();
+      const filePath = `${user.id}/${crypto.randomUUID()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from('mini-app-icons')
+        .upload(filePath, editIconFile);
+
+      if (uploadError) {
+        toast({ title: "Xato", description: "Rasm yuklashda xatolik: " + uploadError.message, variant: "destructive" });
+        setUpdating(false);
+        return;
+      }
+
+      const { data: publicData } = supabase.storage.from('mini-app-icons').getPublicUrl(filePath);
+      finalIconUrl = publicData.publicUrl;
+    }
+
+    const { error } = await supabase.from("mini_apps").update({
+      name: editForm.name.trim(),
+      description: editForm.description.trim() || null,
+      url: editForm.url.trim(),
+      icon_url: finalIconUrl,
+      category: editForm.category,
+    }).eq("id", editingApp.id);
+
+    if (error) {
+      toast({ title: "Xato", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Muvaffaqiyatli", description: "Mini app yangilandi!" });
+      setShowEdit(false);
+      setEditingApp(null);
+      fetchApps();
+    }
+    setUpdating(false);
   };
 
   const filtered = apps.filter(a => {
@@ -398,14 +470,24 @@ export default function MiniAppsPage() {
                 </Button>
 
                 {user && selectedApp.user_id === user.id && (
-                  <Button
-                    variant="destructive"
-                    className="w-full mt-3 rounded-2xl gap-2"
-                    onClick={() => handleDelete(selectedApp.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    O'chirish
-                  </Button>
+                  <div className="flex gap-2 mt-3">
+                    <Button
+                      variant="outline"
+                      className="flex-1 rounded-2xl gap-2"
+                      onClick={() => openEditDialog(selectedApp)}
+                    >
+                      <Edit2 className="h-4 w-4" />
+                      Tahrirlash
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      className="flex-1 rounded-2xl gap-2"
+                      onClick={() => handleDelete(selectedApp.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      O'chirish
+                    </Button>
+                  </div>
                 )}
               </div>
             </motion.div>
@@ -564,6 +646,90 @@ export default function MiniAppsPage() {
             <Button onClick={handleCreate} disabled={creating} className="w-full rounded-xl">
               {creating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
               Yaratish
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog open={showEdit} onOpenChange={setShowEdit}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Mini App tahrirlash</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Nom *</Label>
+              <Input placeholder="Masalan: Islom.uz" value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} className="mt-1" />
+            </div>
+            <div>
+              <Label>URL *</Label>
+              <Input placeholder="https://example.com" value={editForm.url} onChange={e => setEditForm(f => ({ ...f, url: e.target.value }))} className="mt-1" />
+            </div>
+            <div>
+              <Label>Tavsif</Label>
+              <Textarea placeholder="Qisqa tavsif..." value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} className="mt-1" rows={2} />
+            </div>
+            <div>
+              <Label>Ikonka</Label>
+              <div className="mt-1 space-y-2">
+                {editIconPreview ? (
+                  <div className="flex items-center gap-3">
+                    <img src={editIconPreview} alt="Icon preview" className="w-14 h-14 rounded-xl object-cover border border-border/50" />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => { setEditIconFile(null); setEditIconPreview(null); setEditForm(f => ({ ...f, icon_url: "" })); }}
+                      className="rounded-xl"
+                    >
+                      <X className="h-3.5 w-3.5 mr-1" /> O'chirish
+                    </Button>
+                  </div>
+                ) : (
+                  <label className="flex items-center justify-center gap-2 h-20 rounded-xl border-2 border-dashed border-border/60 bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors">
+                    <Plus className="h-5 w-5 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">PNG, JPG, SVG, ICO</span>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/x-icon,image/ico,image/webp"
+                      className="hidden"
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setEditIconFile(file);
+                          setEditIconPreview(URL.createObjectURL(file));
+                          setEditForm(f => ({ ...f, icon_url: "" }));
+                        }
+                      }}
+                    />
+                  </label>
+                )}
+                {!editIconFile && !editIconPreview && (
+                  <Input
+                    placeholder="Yoki URL kiriting: https://example.com/icon.png"
+                    value={editForm.icon_url}
+                    onChange={e => setEditForm(f => ({ ...f, icon_url: e.target.value }))}
+                  />
+                )}
+              </div>
+            </div>
+            <div>
+              <Label>Kategoriya</Label>
+              <Select value={editForm.category} onValueChange={v => setEditForm(f => ({ ...f, category: v }))}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.filter(c => c.id !== "all").map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={handleUpdate} disabled={updating} className="w-full rounded-xl">
+              {updating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Edit2 className="h-4 w-4 mr-2" />}
+              Saqlash
             </Button>
           </div>
         </DialogContent>
