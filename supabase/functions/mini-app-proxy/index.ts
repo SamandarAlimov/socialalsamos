@@ -35,51 +35,47 @@ function isAllowedUrl(urlString: string): boolean {
   }
 }
 
-function rewriteUrls(html: string, baseUrl: string): string {
+function makeProxyUrl(targetUrl: string, proxyOrigin: string): string {
+  return `${proxyOrigin}/functions/v1/mini-app-proxy?url=${encodeURIComponent(targetUrl)}`;
+}
+
+function rewriteUrls(html: string, baseUrl: string, proxyOrigin: string): string {
   const base = new URL(baseUrl);
-  const origin = base.origin;
 
-  // Rewrite src, href, action attributes with relative URLs to absolute
+  const toProxy = (inputUrl: string) => {
+    try {
+      const absolute = new URL(inputUrl, baseUrl).href;
+      return makeProxyUrl(absolute, proxyOrigin);
+    } catch {
+      return inputUrl;
+    }
+  };
+
+  // Rewrite src/href/action/poster/data-src to go through proxy
   html = html.replace(
-    /((?:src|href|action|poster|data-src)\s*=\s*["'])(?!(?:https?:|data:|blob:|javascript:|mailto:|tel:|#))([^"']*)(["'])/gi,
-    (match, prefix, url, suffix) => {
-      if (!url || url.startsWith('//')) {
-        if (url.startsWith('//')) {
-          return `${prefix}${base.protocol}${url}${suffix}`;
-        }
+    /((?:src|href|action|poster|data-src)\s*=\s*["'])([^"']*)(["'])/gi,
+    (match, prefix, value, suffix) => {
+      const raw = (value || '').trim();
+      if (!raw || raw.startsWith('#') || raw.startsWith('javascript:') || raw.startsWith('mailto:') || raw.startsWith('tel:') || raw.startsWith('data:') || raw.startsWith('blob:')) {
         return match;
       }
-      try {
-        const absolute = new URL(url, baseUrl).href;
-        return `${prefix}${absolute}${suffix}`;
-      } catch {
-        return match;
-      }
+      return `${prefix}${toProxy(raw)}${suffix}`;
     }
   );
 
-  // Rewrite url() in inline CSS
+  // Rewrite CSS url() references
   html = html.replace(
-    /url\(\s*["']?(?!(?:https?:|data:|blob:))([^"')]+)["']?\s*\)/gi,
-    (match, url) => {
-      try {
-        const absolute = new URL(url, baseUrl).href;
-        return `url("${absolute}")`;
-      } catch {
+    /url\(\s*["']?([^"')]+)["']?\s*\)/gi,
+    (match, value) => {
+      const raw = (value || '').trim();
+      if (!raw || raw.startsWith('data:') || raw.startsWith('blob:') || raw.startsWith('#')) {
         return match;
       }
+      return `url("${toProxy(raw)}")`;
     }
   );
 
-  // Inject <base> tag for any remaining relative URLs
-  if (!html.includes('<base')) {
-    html = html.replace(
-      /(<head[^>]*>)/i,
-      `$1<base href="${origin}/" target="_self">`
-    );
-  }
-
-  // Remove X-Frame-Options and CSP frame-ancestors from meta tags
+  // Remove frame-blocking meta tags
   html = html.replace(/<meta[^>]*http-equiv\s*=\s*["']?X-Frame-Options["']?[^>]*>/gi, '');
   html = html.replace(
     /(<meta[^>]*content\s*=\s*["'][^"']*)(frame-ancestors\s+[^;]*;?)([^"']*["'][^>]*>)/gi,
@@ -139,17 +135,29 @@ Deno.serve(async (req) => {
 
     const contentType = response.headers.get('content-type') || '';
 
-    // For HTML content, rewrite relative URLs and return as JSON with html field
+    // For HTML content, rewrite URLs and return html directly for iframe GET requests
     if (contentType.includes('text/html')) {
       let html = await response.text();
-      html = rewriteUrls(html, targetUrl);
+      const proxyOrigin = new URL(req.url).origin;
+      html = rewriteUrls(html, targetUrl, proxyOrigin);
+
+      if (req.method === 'GET') {
+        return new Response(html, {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'public, max-age=180',
+          },
+        });
+      }
 
       return new Response(JSON.stringify({ success: true, html }), {
         status: 200,
         headers: {
           ...corsHeaders,
           'Content-Type': 'application/json',
-          'Cache-Control': 'public, max-age=300',
+          'Cache-Control': 'public, max-age=180',
         },
       });
     }
