@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Star, Plus, Globe, X,
-  Sparkles, Trash2, Edit2, Loader2, AppWindow
+  Sparkles, Trash2, Edit2, Loader2, AppWindow, RotateCcw
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -73,6 +73,8 @@ export default function MiniAppsPage() {
   const [editIconFile, setEditIconFile] = useState<File | null>(null);
   const [editIconPreview, setEditIconPreview] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [iframeSrc, setIframeSrc] = useState("");
+  const [iframeReloadKey, setIframeReloadKey] = useState(0);
 
   const fetchApps = async () => {
     const { data, error } = await supabase
@@ -90,7 +92,32 @@ export default function MiniAppsPage() {
   useEffect(() => {
     setIframeLoaded(false);
     setIframeError(false);
-  }, [openedApp]);
+    setIframeReloadKey(0);
+  }, [openedApp?.id]);
+
+  useEffect(() => {
+    if (!openedApp) {
+      setIframeSrc("");
+      return;
+    }
+
+    const normalizedUrl = openedApp.url.startsWith("http://") || openedApp.url.startsWith("https://")
+      ? openedApp.url
+      : `https://${openedApp.url}`;
+
+    const apiBase = (import.meta.env.VITE_SUPABASE_URL as string).replace(/^http:\/\//, "https://");
+    setIframeSrc(`${apiBase}/functions/v1/mini-app-proxy?url=${encodeURIComponent(normalizedUrl)}&_ts=${openedApp.id}-${iframeReloadKey}`);
+  }, [openedApp, iframeReloadKey]);
+
+  useEffect(() => {
+    if (!openedApp || iframeLoaded || iframeError) return;
+
+    const timeout = window.setTimeout(() => {
+      setIframeError(true);
+    }, 15000);
+
+    return () => window.clearTimeout(timeout);
+  }, [openedApp, iframeLoaded, iframeError]);
 
   const handleCreate = async () => {
     if (!user) return;
@@ -239,9 +266,17 @@ export default function MiniAppsPage() {
     return true;
   });
 
-  const getProxyUrl = (url: string) => {
-    const apiBase = (import.meta.env.VITE_SUPABASE_URL as string).replace(/^http:\/\//, "https://");
-    return `${apiBase}/functions/v1/mini-app-proxy?url=${encodeURIComponent(url)}&_ts=${Date.now()}`;
+  const handleOpenApp = (app: MiniApp) => {
+    try {
+      const normalizedUrl = app.url.startsWith("http://") || app.url.startsWith("https://")
+        ? app.url
+        : `https://${app.url}`;
+      new URL(normalizedUrl);
+      setOpenedApp({ ...app, url: normalizedUrl });
+      setSelectedApp(null);
+    } catch {
+      toast({ title: "Xato", description: "Mini app URL noto'g'ri", variant: "destructive" });
+    }
   };
 
   return (
@@ -437,10 +472,7 @@ export default function MiniAppsPage() {
 
                 <Button
                   className="w-full h-12 rounded-2xl text-base font-semibold gap-2"
-                  onClick={() => {
-                    setOpenedApp(selectedApp);
-                    setSelectedApp(null);
-                  }}
+                  onClick={() => handleOpenApp(selectedApp)}
                 >
                   <AppWindow className="h-5 w-5" />
                   Ochish
@@ -515,19 +547,37 @@ export default function MiniAppsPage() {
                   <div className="flex flex-col items-center gap-3 text-center px-6">
                     <Globe className="h-12 w-12 text-muted-foreground/40" />
                     <p className="text-sm text-muted-foreground font-medium">Mini app ichki ko'rinishda yuklanmadi</p>
+                    <Button
+                      variant="outline"
+                      className="rounded-xl gap-2"
+                      onClick={() => {
+                        setIframeError(false);
+                        setIframeLoaded(false);
+                        setIframeReloadKey((prev) => prev + 1);
+                      }}
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                      Qayta yuklash
+                    </Button>
                   </div>
                 </div>
               )}
               <iframe
-                key={openedApp.id}
-                src={getProxyUrl(openedApp.url)}
+                key={`${openedApp.id}-${iframeReloadKey}`}
+                src={iframeSrc}
                 className="w-full h-full border-0"
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation allow-modals allow-downloads"
                 allow="accelerometer; autoplay; camera; clipboard-read; clipboard-write; encrypted-media; geolocation; gyroscope; microphone; picture-in-picture; web-share"
                 referrerPolicy="strict-origin-when-cross-origin"
                 title={openedApp.name}
-                onLoad={() => setIframeLoaded(true)}
-                onError={() => setIframeError(true)}
+                onLoad={() => {
+                  setIframeLoaded(true);
+                  setIframeError(false);
+                }}
+                onError={() => {
+                  setIframeLoaded(false);
+                  setIframeError(true);
+                }}
               />
             </div>
           </motion.div>
