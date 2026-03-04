@@ -240,8 +240,8 @@ export default function MiniAppsPage() {
   });
 
   const getProxyUrl = (url: string) => {
-    const apiBase = import.meta.env.VITE_SUPABASE_URL;
-    return `${apiBase}/functions/v1/mini-app-proxy?url=${encodeURIComponent(url)}`;
+    const apiBase = (import.meta.env.VITE_SUPABASE_URL as string).replace(/^http:\/\//, "https://");
+    return `${apiBase}/functions/v1/mini-app-proxy?url=${encodeURIComponent(url)}&_ts=${Date.now()}`;
   };
 
   return (
@@ -519,10 +519,12 @@ export default function MiniAppsPage() {
                 </div>
               )}
               <iframe
+                key={openedApp.id}
                 src={getProxyUrl(openedApp.url)}
                 className="w-full h-full border-0"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
-                allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation allow-modals allow-downloads"
+                allow="accelerometer; autoplay; camera; clipboard-read; clipboard-write; encrypted-media; geolocation; gyroscope; microphone; picture-in-picture; web-share"
+                referrerPolicy="strict-origin-when-cross-origin"
                 title={openedApp.name}
                 onLoad={() => setIframeLoaded(true)}
                 onError={() => setIframeError(true)}

@@ -35,8 +35,14 @@ function isAllowedUrl(urlString: string): boolean {
   }
 }
 
+function normalizeProxyOrigin(origin: string): string {
+  if (origin.startsWith('https://')) return origin;
+  if (origin.startsWith('http://')) return origin.replace('http://', 'https://');
+  return `https://${origin.replace(/^\/+/, '')}`;
+}
+
 function makeProxyUrl(targetUrl: string, proxyOrigin: string): string {
-  return `${proxyOrigin}/functions/v1/mini-app-proxy?url=${encodeURIComponent(targetUrl)}`;
+  return `${normalizeProxyOrigin(proxyOrigin)}/functions/v1/mini-app-proxy?url=${encodeURIComponent(targetUrl)}`;
 }
 
 function rewriteUrls(html: string, baseUrl: string, proxyOrigin: string): string {
@@ -138,7 +144,18 @@ Deno.serve(async (req) => {
     // For HTML content, rewrite URLs and return html directly for iframe GET requests
     if (contentType.includes('text/html')) {
       let html = await response.text();
-      const proxyOrigin = new URL(req.url).origin;
+      const proxyOrigin = normalizeProxyOrigin(new URL(req.url).origin);
+
+      const looksEscapedHtml = /^\s*&lt;!doctype html/i.test(html) || /^\s*&lt;html/i.test(html);
+      if (looksEscapedHtml) {
+        html = html
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .replace(/&amp;/g, '&');
+      }
+
       html = rewriteUrls(html, targetUrl, proxyOrigin);
 
       if (req.method === 'GET') {
