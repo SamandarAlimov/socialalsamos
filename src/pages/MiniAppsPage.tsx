@@ -105,7 +105,17 @@ export default function MiniAppsPage() {
       ? openedApp.url
       : `https://${openedApp.url}`;
 
-    const apiBase = (import.meta.env.VITE_SUPABASE_URL as string).replace(/^http:\/\//, "https://");
+    const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
+    const projectId = (import.meta.env.VITE_SUPABASE_PROJECT_ID as string | undefined)?.trim();
+    const apiBaseRaw = supabaseUrl || (projectId ? `https://${projectId}.supabase.co` : "");
+
+    if (!apiBaseRaw) {
+      setIframeSrc("");
+      setIframeError(true);
+      return;
+    }
+
+    const apiBase = apiBaseRaw.replace(/^http:\/\//, "https://");
     setIframeSrc(`${apiBase}/functions/v1/mini-app-proxy?url=${encodeURIComponent(normalizedUrl)}&_ts=${openedApp.id}-${iframeReloadKey}`);
   }, [openedApp, iframeReloadKey]);
 

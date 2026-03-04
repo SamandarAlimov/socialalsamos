@@ -140,43 +140,48 @@ Deno.serve(async (req) => {
     });
 
     const contentType = response.headers.get('content-type') || '';
+    const declaredAsHtml = contentType.includes('text/html') || contentType.includes('application/xhtml+xml');
 
-    // For HTML content, rewrite URLs and return html directly for iframe GET requests
-    if (contentType.includes('text/html')) {
+    // Some platforms return HTML as text/plain (anti-bot pages), so detect by payload too
+    if (declaredAsHtml || contentType.startsWith('text/plain')) {
       let html = await response.text();
-      const proxyOrigin = normalizeProxyOrigin(new URL(req.url).origin);
+      const trimmed = html.trimStart();
+      const looksLikeHtml = declaredAsHtml || /^<!doctype html/i.test(trimmed) || /^<html/i.test(trimmed) || /^&lt;!doctype html/i.test(trimmed) || /^&lt;html/i.test(trimmed);
 
-      const looksEscapedHtml = /^\s*&lt;!doctype html/i.test(html) || /^\s*&lt;html/i.test(html);
-      if (looksEscapedHtml) {
-        html = html
-          .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>')
-          .replace(/&quot;/g, '"')
-          .replace(/&#39;/g, "'")
-          .replace(/&amp;/g, '&');
-      }
+      if (looksLikeHtml) {
+        const proxyOrigin = normalizeProxyOrigin(new URL(req.url).origin);
 
-      html = rewriteUrls(html, targetUrl, proxyOrigin);
+        if (/^&lt;!doctype html/i.test(trimmed) || /^&lt;html/i.test(trimmed)) {
+          html = html
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/&amp;/g, '&');
+        }
 
-      if (req.method === 'GET') {
-        return new Response(html, {
+        html = rewriteUrls(html, targetUrl, proxyOrigin);
+
+        if (req.method === 'GET') {
+          return new Response(html, {
+            status: 200,
+            headers: {
+              ...corsHeaders,
+              'Content-Type': 'text/html; charset=utf-8',
+              'Cache-Control': 'public, max-age=180',
+            },
+          });
+        }
+
+        return new Response(JSON.stringify({ success: true, html }), {
           status: 200,
           headers: {
             ...corsHeaders,
-            'Content-Type': 'text/html; charset=utf-8',
+            'Content-Type': 'application/json',
             'Cache-Control': 'public, max-age=180',
           },
         });
       }
-
-      return new Response(JSON.stringify({ success: true, html }), {
-        status: 200,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json',
-          'Cache-Control': 'public, max-age=180',
-        },
-      });
     }
 
     // For non-HTML content, pass through
