@@ -96,18 +96,9 @@ function getEmbedUrl(url: string): string | null {
   }
 }
 
-// Platforms that should always open externally
-function shouldOpenExternal(url: string): boolean {
-  try {
-    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
-    const externalOnly = [
-      'facebook.com', 'm.facebook.com',
-      'twitter.com', 'x.com',
-      'linkedin.com',
-      'tiktok.com',
-    ];
-    return externalOnly.some(d => host === d || host.endsWith('.' + d));
-  } catch { return false; }
+// No platforms are forced external - all open in internal browser
+function shouldOpenExternal(_url: string): boolean {
+  return false;
 }
 
 type LoadMode = 'direct' | 'proxy' | 'embed';
