@@ -43,7 +43,7 @@ export function ForYouSection() {
       const { data } = await supabase
         .from('posts')
         .select(`
-          id, content, media_urls, media_type, likes_count, comments_count, created_at,
+          id, content, media_urls, media_type, likes_count, comments_count, views_count, created_at,
           profile:profiles!posts_user_id_fkey (id, username, avatar_url, display_name)
         `)
         .eq('visibility', 'public')
