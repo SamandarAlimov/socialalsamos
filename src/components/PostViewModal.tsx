@@ -234,9 +234,17 @@ export function PostViewModal({
                   <Bookmark className={cn("h-6 w-6", isBookmarked && 'fill-current')} />
                 </button>
               </div>
-              <p className="font-semibold text-sm">
-                {formatCount(counts.likes_count || post.likes_count)} likes
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="font-semibold text-sm">
+                  {formatCount(counts.likes_count || post.likes_count)} likes
+                </p>
+                <PostViewsDialog
+                  postId={post.id}
+                  viewsCount={(post as any).views_count || 0}
+                  iconClassName="h-4 w-4"
+                  textClassName="text-xs"
+                />
+              </div>
             </div>
           </div>
         </div>
