@@ -480,7 +480,7 @@ export default function MiniAppsPage() {
                   whileTap={{ scale: 0.97 }}
                   onClick={() => setSelectedApp(app)}
                   className={cn(
-                    "relative group flex flex-col items-center text-center p-3 sm:p-4 rounded-2xl",
+                    "relative group flex flex-col items-center text-center p-2.5 sm:p-3 md:p-4 rounded-xl sm:rounded-2xl",
                     "border border-border/50 backdrop-blur-xl bg-card/40 hover:bg-card/70",
                     "transition-all duration-300 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5"
                   )}
