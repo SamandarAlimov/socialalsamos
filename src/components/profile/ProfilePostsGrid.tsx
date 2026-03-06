@@ -10,7 +10,8 @@ import {
   LayoutList,
   Share2,
   Bookmark,
-  BarChart3
+  BarChart3,
+  Eye
 } from 'lucide-react';
 import { PostViewModal } from '@/components/PostViewModal';
 import { Button } from '@/components/ui/button';
@@ -181,6 +182,10 @@ export function ProfilePostsGrid({
                 <div className="flex items-center gap-1 text-white">
                   <MessageCircle className="h-5 w-5" />
                   <span className="font-semibold">{formatCount(post.comments_count || 0)}</span>
+                </div>
+                <div className="flex items-center gap-1 text-white">
+                  <Eye className="h-5 w-5" />
+                  <span className="font-semibold">{formatCount((post as any).views_count || 0)}</span>
                 </div>
 
                 {/* Post actions for own profile */}

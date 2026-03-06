@@ -11,6 +11,7 @@ import {
   Plus,
   Loader2,
   Repeat2,
+  Eye,
 } from 'lucide-react';
 import { usePosts, Post } from '@/hooks/usePosts';
 import { useStories, StoryGroup } from '@/hooks/useStories';
@@ -40,6 +41,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { RepostButton } from '@/components/RepostButton';
 import { useActiveAds } from '@/hooks/useAds';
 import { FeedAd } from '@/components/ads/FeedAd';
+import { PostViewsDialog } from '@/components/PostViewsDialog';
+import { usePostViews } from '@/hooks/usePostViews';
 
 export default function HomePage() {
   const { user, profile } = useAuth();
@@ -387,6 +390,12 @@ function PostCard({
   const [showComments, setShowComments] = useState(false);
   const [showLikesDialog, setShowLikesDialog] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const { recordView } = usePostViews();
+
+  // Record view when post appears
+  useEffect(() => {
+    recordView(post.id);
+  }, [post.id, recordView]);
 
   // Use real-time counts
   const likesCount = realtimeCounts.likes_count;
@@ -519,15 +528,23 @@ function PostCard({
             size="sm"
           />
         </div>
-        <button 
-          onClick={() => setIsBookmarked(!isBookmarked)}
-          className={cn(
-            "transition-colors touch-feedback",
-            isBookmarked ? 'text-primary' : 'text-muted-foreground hover:text-primary'
-          )}
-        >
-          <Bookmark className={cn("h-5 w-5 md:h-5 md:w-5", isBookmarked && 'fill-current')} />
-        </button>
+        <div className="flex items-center gap-3">
+          <PostViewsDialog
+            postId={post.id}
+            viewsCount={post.views_count || 0}
+            iconClassName="h-5 w-5 md:h-5 md:w-5"
+            textClassName="text-xs md:text-sm"
+          />
+          <button 
+            onClick={() => setIsBookmarked(!isBookmarked)}
+            className={cn(
+              "transition-colors touch-feedback",
+              isBookmarked ? 'text-primary' : 'text-muted-foreground hover:text-primary'
+            )}
+          >
+            <Bookmark className={cn("h-5 w-5 md:h-5 md:w-5", isBookmarked && 'fill-current')} />
+          </button>
+        </div>
       </div>
 
       {/* Comments Section */}

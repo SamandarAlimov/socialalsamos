@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Heart, MessageCircle, Share2, Bookmark, Music2, Volume2, VolumeX, Play, Pause, Repeat2, ArrowLeft } from 'lucide-react';
+import { Heart, MessageCircle, Share2, Bookmark, Music2, Volume2, VolumeX, Play, Pause, Repeat2, ArrowLeft, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
@@ -11,6 +11,8 @@ import { SharePostDialog } from '@/components/SharePostDialog';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
+import { PostViewsDialog } from '@/components/PostViewsDialog';
+import { usePostViews } from '@/hooks/usePostViews';
 
 function formatNumber(num: number): string {
   if (num >= 1000000) {
@@ -41,6 +43,14 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
   const [showPlayButton, setShowPlayButton] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const { lightTap, successFeedback } = useHapticFeedback();
+  const { recordView } = usePostViews();
+
+  // Record view when video becomes active
+  useEffect(() => {
+    if (isActive) {
+      recordView(video.id);
+    }
+  }, [isActive, video.id, recordView]);
 
   const videoUrl = video.media_urls?.[0] || '';
 
@@ -241,6 +251,15 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
               <Repeat2 className="h-6 w-6" />
             </div>
           </button>
+
+          {/* Views */}
+          <PostViewsDialog
+            postId={video.id}
+            viewsCount={video.views_count || 0}
+            className="flex flex-col items-center gap-1 text-white"
+            iconClassName="h-6 w-6"
+            textClassName="text-xs font-medium drop-shadow-lg"
+          />
         </div>
 
         {/* Bottom info - User info and description */}

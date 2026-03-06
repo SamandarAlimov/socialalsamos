@@ -14,6 +14,7 @@ export interface Post {
   shares_count: number;
   bookmarks_count: number;
   reposts_count: number;
+  views_count: number;
   is_pinned: boolean;
   visibility: string;
   created_at: string;

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Heart, MessageCircle, Play, BarChart3 } from 'lucide-react';
+import { Sparkles, Heart, MessageCircle, Play, BarChart3, Eye } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
@@ -16,6 +16,7 @@ interface Post {
   media_type: string | null;
   likes_count: number;
   comments_count: number;
+  views_count: number;
   created_at: string;
   is_liked?: boolean;
   profile?: {
@@ -42,7 +43,7 @@ export function ForYouSection() {
       const { data } = await supabase
         .from('posts')
         .select(`
-          id, content, media_urls, media_type, likes_count, comments_count, created_at,
+          id, content, media_urls, media_type, likes_count, comments_count, views_count, created_at,
           profile:profiles!posts_user_id_fkey (id, username, avatar_url, display_name)
         `)
         .eq('visibility', 'public')
@@ -209,6 +210,10 @@ export function ForYouSection() {
               <div className="flex items-center gap-1 text-white font-medium">
                 <MessageCircle className="h-5 w-5" />
                 <span>{formatCount(post.comments_count || 0)}</span>
+              </div>
+              <div className="flex items-center gap-1 text-white font-medium">
+                <Eye className="h-5 w-5" />
+                <span>{formatCount(post.views_count || 0)}</span>
               </div>
             </div>
             

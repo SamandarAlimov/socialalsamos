@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Dialog, 
@@ -12,7 +12,8 @@ import {
   MoreHorizontal,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Eye
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,8 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { PollDisplay, parsePollFromContent } from '@/components/PollDisplay';
 import { RichTextContent } from '@/components/RichTextContent';
+import { PostViewsDialog } from '@/components/PostViewsDialog';
+import { usePostViews } from '@/hooks/usePostViews';
 
 interface PostViewModalProps {
   post: {
@@ -58,9 +61,17 @@ export function PostViewModal({
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [showComments, setShowComments] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const { recordView } = usePostViews();
   
   // Real-time counts
   const counts = useRealtimeCounts(post.id);
+
+  // Record view when modal opens
+  useEffect(() => {
+    if (open) {
+      recordView(post.id);
+    }
+  }, [open, post.id, recordView]);
 
   const mediaUrls = post.media_urls || [];
   const hasMedia = mediaUrls.length > 0;
@@ -223,9 +234,17 @@ export function PostViewModal({
                   <Bookmark className={cn("h-6 w-6", isBookmarked && 'fill-current')} />
                 </button>
               </div>
-              <p className="font-semibold text-sm">
-                {formatCount(counts.likes_count || post.likes_count)} likes
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="font-semibold text-sm">
+                  {formatCount(counts.likes_count || post.likes_count)} likes
+                </p>
+                <PostViewsDialog
+                  postId={post.id}
+                  viewsCount={(post as any).views_count || 0}
+                  iconClassName="h-4 w-4"
+                  textClassName="text-xs"
+                />
+              </div>
             </div>
           </div>
         </div>
