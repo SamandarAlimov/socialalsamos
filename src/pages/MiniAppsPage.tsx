@@ -397,8 +397,8 @@ export default function MiniAppsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <ScrollArea className="h-[calc(100vh-7.5rem)] sm:h-[calc(100vh-4rem)] md:h-screen">
-        <div className="max-w-5xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-5 pb-6 md:pb-8">
+      <div className="h-[calc(100vh-7.5rem)] sm:h-[calc(100vh-4rem)] md:h-screen overflow-y-auto scrollbar-hidden">
+        <div className="max-w-5xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-5 pb-24 md:pb-8">
 
           {/* Header */}
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between mb-4 sm:mb-6">
@@ -431,7 +431,7 @@ export default function MiniAppsPage() {
           </motion.div>
 
           {/* Categories */}
-          <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-2 sm:pb-3 mb-4 sm:mb-5 scrollbar-hidden -mx-1 px-1">
+          <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-2 sm:pb-3 mb-4 sm:mb-5 scrollbar-hidden -mx-3 sm:-mx-4 md:-mx-6 px-3 sm:px-4 md:px-6" style={{ WebkitOverflowScrolling: 'touch' }}>
             {categories.map(cat => (
               <button
                 key={cat.id}
@@ -504,7 +504,7 @@ export default function MiniAppsPage() {
             </div>
           )}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* App Detail / Info Sheet */}
       <AnimatePresence>
