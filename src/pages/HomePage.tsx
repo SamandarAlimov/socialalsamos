@@ -390,6 +390,12 @@ function PostCard({
   const [showComments, setShowComments] = useState(false);
   const [showLikesDialog, setShowLikesDialog] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const { recordView } = usePostViews();
+
+  // Record view when post appears
+  useEffect(() => {
+    recordView(post.id);
+  }, [post.id, recordView]);
 
   // Use real-time counts
   const likesCount = realtimeCounts.likes_count;
