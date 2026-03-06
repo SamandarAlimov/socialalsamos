@@ -16,6 +16,7 @@ interface Post {
   media_type: string | null;
   likes_count: number;
   comments_count: number;
+  views_count: number;
   created_at: string;
   is_liked?: boolean;
   profile?: {
