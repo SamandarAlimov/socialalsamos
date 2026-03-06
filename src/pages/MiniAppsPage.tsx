@@ -397,14 +397,14 @@ export default function MiniAppsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <ScrollArea className="h-[calc(100vh-4rem)] md:h-screen">
-        <div className="max-w-4xl mx-auto px-4 py-5 pb-24 md:pb-8">
+      <ScrollArea className="h-[calc(100vh-7.5rem)] sm:h-[calc(100vh-4rem)] md:h-screen">
+        <div className="max-w-5xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-5 pb-6 md:pb-8">
 
           {/* Header */}
-          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between mb-6">
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between mb-4 sm:mb-6">
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-1">Mini Apps</h1>
-              <p className="text-sm text-muted-foreground">O'z ilovangizni yarating yoki boshqalarnikini kashf qiling</p>
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground mb-0.5 sm:mb-1">Mini Apps</h1>
+              <p className="text-xs sm:text-sm text-muted-foreground">O'z ilovangizni yarating yoki boshqalarnikini kashf qiling</p>
             </div>
             {user && (
               <Button onClick={() => setShowCreate(true)} className="rounded-xl gap-2">
@@ -415,13 +415,13 @@ export default function MiniAppsPage() {
           </motion.div>
 
           {/* Search */}
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="relative mb-5">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="relative mb-4 sm:mb-5">
+            <Search className="absolute left-3 sm:left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Mini app qidirish..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="pl-10 h-11 rounded-xl bg-card/50 backdrop-blur-sm border-border/50"
+              className="pl-9 sm:pl-10 h-10 sm:h-11 rounded-xl bg-card/50 backdrop-blur-sm border-border/50"
             />
             {search && (
               <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8" onClick={() => setSearch("")}>
@@ -431,13 +431,13 @@ export default function MiniAppsPage() {
           </motion.div>
 
           {/* Categories */}
-          <div className="flex gap-2 overflow-x-auto pb-3 mb-5 scrollbar-hidden -mx-1 px-1">
+          <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-2 sm:pb-3 mb-4 sm:mb-5 scrollbar-hidden -mx-1 px-1">
             {categories.map(cat => (
               <button
                 key={cat.id}
                 onClick={() => setActiveCategory(cat.id)}
                 className={cn(
-                  "px-3.5 py-2 rounded-xl text-sm font-medium whitespace-nowrap border transition-all flex-shrink-0",
+                  "px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap border transition-all flex-shrink-0",
                   activeCategory === cat.id
                     ? "bg-primary text-primary-foreground border-primary shadow-md shadow-primary/20"
                     : "bg-card/40 text-muted-foreground border-border/50 hover:bg-card/70 hover:text-foreground"
@@ -469,7 +469,7 @@ export default function MiniAppsPage() {
               )}
             </motion.div>
           ) : (
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3">
               {filtered.map((app, i) => (
                 <motion.button
                   key={app.id}
@@ -480,22 +480,22 @@ export default function MiniAppsPage() {
                   whileTap={{ scale: 0.97 }}
                   onClick={() => setSelectedApp(app)}
                   className={cn(
-                    "relative group flex flex-col items-center text-center p-3 sm:p-4 rounded-2xl",
+                    "relative group flex flex-col items-center text-center p-2.5 sm:p-3 md:p-4 rounded-xl sm:rounded-2xl",
                     "border border-border/50 backdrop-blur-xl bg-card/40 hover:bg-card/70",
                     "transition-all duration-300 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5"
                   )}
                 >
-                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-2.5 bg-muted/50 overflow-hidden border border-border/30">
+                  <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center mb-2 sm:mb-2.5 bg-muted/50 overflow-hidden border border-border/30">
                     {app.icon_url ? (
-                      <img src={app.icon_url} alt={app.name} className="w-10 h-10 rounded-xl object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                      <img src={app.icon_url} alt={app.name} className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                     ) : (
-                      <Globe className="h-7 w-7 text-primary" />
+                      <Globe className="h-5 w-5 sm:h-7 sm:w-7 text-primary" />
                     )}
                   </div>
 
-                  <h3 className="text-xs sm:text-sm font-semibold text-foreground leading-tight line-clamp-1">{app.name}</h3>
+                  <h3 className="text-[11px] sm:text-xs md:text-sm font-semibold text-foreground leading-tight line-clamp-1 w-full">{app.name}</h3>
 
-                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-1">
+                  <div className="flex items-center gap-0.5 sm:gap-1 text-[9px] sm:text-[10px] text-muted-foreground mt-0.5 sm:mt-1">
                     <Star className="h-2.5 w-2.5 text-amber-400 fill-amber-400" />
                     <span>{app.rating}</span>
                   </div>
