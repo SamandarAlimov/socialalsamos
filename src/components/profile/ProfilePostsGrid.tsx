@@ -183,6 +183,10 @@ export function ProfilePostsGrid({
                   <MessageCircle className="h-5 w-5" />
                   <span className="font-semibold">{formatCount(post.comments_count || 0)}</span>
                 </div>
+                <div className="flex items-center gap-1 text-white">
+                  <Eye className="h-5 w-5" />
+                  <span className="font-semibold">{formatCount((post as any).views_count || 0)}</span>
+                </div>
 
                 {/* Post actions for own profile */}
                 {isOwnProfile && (
