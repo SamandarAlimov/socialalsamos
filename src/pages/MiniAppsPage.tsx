@@ -415,13 +415,13 @@ export default function MiniAppsPage() {
           </motion.div>
 
           {/* Search */}
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="relative mb-5">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="relative mb-4 sm:mb-5">
+            <Search className="absolute left-3 sm:left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Mini app qidirish..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="pl-10 h-11 rounded-xl bg-card/50 backdrop-blur-sm border-border/50"
+              className="pl-9 sm:pl-10 h-10 sm:h-11 rounded-xl bg-card/50 backdrop-blur-sm border-border/50"
             />
             {search && (
               <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8" onClick={() => setSearch("")}>
