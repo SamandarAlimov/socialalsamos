@@ -397,8 +397,8 @@ export default function MiniAppsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <ScrollArea className="h-[calc(100vh-7.5rem)] sm:h-[calc(100vh-4rem)] md:h-screen">
-        <div className="max-w-5xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-5 pb-6 md:pb-8">
+      <div className="h-[calc(100vh-7.5rem)] sm:h-[calc(100vh-4rem)] md:h-screen overflow-y-auto scrollbar-hidden">
+        <div className="max-w-5xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-5 pb-24 md:pb-8">
 
           {/* Header */}
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between mb-4 sm:mb-6">
