@@ -61,9 +61,17 @@ export function PostViewModal({
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [showComments, setShowComments] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const { recordView } = usePostViews();
   
   // Real-time counts
   const counts = useRealtimeCounts(post.id);
+
+  // Record view when modal opens
+  useEffect(() => {
+    if (open) {
+      recordView(post.id);
+    }
+  }, [open, post.id, recordView]);
 
   const mediaUrls = post.media_urls || [];
   const hasMedia = mediaUrls.length > 0;
