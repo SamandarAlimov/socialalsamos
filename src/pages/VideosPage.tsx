@@ -43,6 +43,14 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
   const [showPlayButton, setShowPlayButton] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const { lightTap, successFeedback } = useHapticFeedback();
+  const { recordView } = usePostViews();
+
+  // Record view when video becomes active
+  useEffect(() => {
+    if (isActive) {
+      recordView(video.id);
+    }
+  }, [isActive, video.id, recordView]);
 
   const videoUrl = video.media_urls?.[0] || '';
 
