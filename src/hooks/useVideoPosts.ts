@@ -12,6 +12,7 @@ export interface VideoPost {
   comments_count: number;
   shares_count: number;
   bookmarks_count: number;
+  views_count: number;
   created_at: string;
   profile?: {
     id: string;
