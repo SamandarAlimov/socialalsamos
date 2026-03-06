@@ -437,7 +437,7 @@ export default function MiniAppsPage() {
                 key={cat.id}
                 onClick={() => setActiveCategory(cat.id)}
                 className={cn(
-                  "px-3.5 py-2 rounded-xl text-sm font-medium whitespace-nowrap border transition-all flex-shrink-0",
+                  "px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap border transition-all flex-shrink-0",
                   activeCategory === cat.id
                     ? "bg-primary text-primary-foreground border-primary shadow-md shadow-primary/20"
                     : "bg-card/40 text-muted-foreground border-border/50 hover:bg-card/70 hover:text-foreground"
