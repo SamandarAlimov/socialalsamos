@@ -528,15 +528,23 @@ function PostCard({
             size="sm"
           />
         </div>
-        <button 
-          onClick={() => setIsBookmarked(!isBookmarked)}
-          className={cn(
-            "transition-colors touch-feedback",
-            isBookmarked ? 'text-primary' : 'text-muted-foreground hover:text-primary'
-          )}
-        >
-          <Bookmark className={cn("h-5 w-5 md:h-5 md:w-5", isBookmarked && 'fill-current')} />
-        </button>
+        <div className="flex items-center gap-3">
+          <PostViewsDialog
+            postId={post.id}
+            viewsCount={post.views_count || 0}
+            iconClassName="h-5 w-5 md:h-5 md:w-5"
+            textClassName="text-xs md:text-sm"
+          />
+          <button 
+            onClick={() => setIsBookmarked(!isBookmarked)}
+            className={cn(
+              "transition-colors touch-feedback",
+              isBookmarked ? 'text-primary' : 'text-muted-foreground hover:text-primary'
+            )}
+          >
+            <Bookmark className={cn("h-5 w-5 md:h-5 md:w-5", isBookmarked && 'fill-current')} />
+          </button>
+        </div>
       </div>
 
       {/* Comments Section */}
