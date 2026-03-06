@@ -401,10 +401,10 @@ export default function MiniAppsPage() {
         <div className="max-w-5xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-5 pb-6 md:pb-8">
 
           {/* Header */}
-          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between mb-6">
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between mb-4 sm:mb-6">
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-1">Mini Apps</h1>
-              <p className="text-sm text-muted-foreground">O'z ilovangizni yarating yoki boshqalarnikini kashf qiling</p>
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground mb-0.5 sm:mb-1">Mini Apps</h1>
+              <p className="text-xs sm:text-sm text-muted-foreground">O'z ilovangizni yarating yoki boshqalarnikini kashf qiling</p>
             </div>
             {user && (
               <Button onClick={() => setShowCreate(true)} className="rounded-xl gap-2">
