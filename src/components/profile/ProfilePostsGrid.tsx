@@ -10,7 +10,8 @@ import {
   LayoutList,
   Share2,
   Bookmark,
-  BarChart3
+  BarChart3,
+  Eye
 } from 'lucide-react';
 import { PostViewModal } from '@/components/PostViewModal';
 import { Button } from '@/components/ui/button';
