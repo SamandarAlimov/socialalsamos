@@ -469,7 +469,7 @@ export default function MiniAppsPage() {
               )}
             </motion.div>
           ) : (
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3">
               {filtered.map((app, i) => (
                 <motion.button
                   key={app.id}
