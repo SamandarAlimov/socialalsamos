@@ -11,6 +11,7 @@ import {
   Plus,
   Loader2,
   Repeat2,
+  Eye,
 } from 'lucide-react';
 import { usePosts, Post } from '@/hooks/usePosts';
 import { useStories, StoryGroup } from '@/hooks/useStories';
