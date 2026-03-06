@@ -211,6 +211,10 @@ export function ForYouSection() {
                 <MessageCircle className="h-5 w-5" />
                 <span>{formatCount(post.comments_count || 0)}</span>
               </div>
+              <div className="flex items-center gap-1 text-white font-medium">
+                <Eye className="h-5 w-5" />
+                <span>{formatCount(post.views_count || 0)}</span>
+              </div>
             </div>
             
             {/* User info */}
