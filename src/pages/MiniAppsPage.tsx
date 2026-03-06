@@ -504,7 +504,7 @@ export default function MiniAppsPage() {
             </div>
           )}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* App Detail / Info Sheet */}
       <AnimatePresence>
