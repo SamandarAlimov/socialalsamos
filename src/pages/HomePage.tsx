@@ -41,6 +41,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { RepostButton } from '@/components/RepostButton';
 import { useActiveAds } from '@/hooks/useAds';
 import { FeedAd } from '@/components/ads/FeedAd';
+import { PostViewsDialog } from '@/components/PostViewsDialog';
+import { usePostViews } from '@/hooks/usePostViews';
 
 export default function HomePage() {
   const { user, profile } = useAuth();
