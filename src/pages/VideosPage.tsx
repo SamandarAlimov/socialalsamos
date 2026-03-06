@@ -251,6 +251,15 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
               <Repeat2 className="h-6 w-6" />
             </div>
           </button>
+
+          {/* Views */}
+          <PostViewsDialog
+            postId={video.id}
+            viewsCount={video.views_count || 0}
+            className="flex flex-col items-center gap-1 text-white"
+            iconClassName="h-6 w-6"
+            textClassName="text-xs font-medium drop-shadow-lg"
+          />
         </div>
 
         {/* Bottom info - User info and description */}
