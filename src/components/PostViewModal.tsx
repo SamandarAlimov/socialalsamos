@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Dialog, 
@@ -12,7 +12,8 @@ import {
   MoreHorizontal,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Eye
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,8 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { PollDisplay, parsePollFromContent } from '@/components/PollDisplay';
 import { RichTextContent } from '@/components/RichTextContent';
+import { PostViewsDialog } from '@/components/PostViewsDialog';
+import { usePostViews } from '@/hooks/usePostViews';
 
 interface PostViewModalProps {
   post: {
