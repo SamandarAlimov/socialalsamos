@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Heart, MessageCircle, Share2, Bookmark, Music2, Volume2, VolumeX, Play, Pause, Repeat2, ArrowLeft } from 'lucide-react';
+import { Heart, MessageCircle, Share2, Bookmark, Music2, Volume2, VolumeX, Play, Pause, Repeat2, ArrowLeft, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
@@ -11,6 +11,8 @@ import { SharePostDialog } from '@/components/SharePostDialog';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
+import { PostViewsDialog } from '@/components/PostViewsDialog';
+import { usePostViews } from '@/hooks/usePostViews';
 
 function formatNumber(num: number): string {
   if (num >= 1000000) {
