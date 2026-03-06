@@ -431,7 +431,7 @@ export default function MiniAppsPage() {
           </motion.div>
 
           {/* Categories */}
-          <div className="flex gap-2 overflow-x-auto pb-3 mb-5 scrollbar-hidden -mx-1 px-1">
+          <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-2 sm:pb-3 mb-4 sm:mb-5 scrollbar-hidden -mx-1 px-1">
             {categories.map(cat => (
               <button
                 key={cat.id}
