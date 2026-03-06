@@ -1670,6 +1670,35 @@ export type Database = {
           },
         ]
       }
+      post_views: {
+        Row: {
+          id: string
+          post_id: string
+          user_id: string
+          viewed_at: string
+        }
+        Insert: {
+          id?: string
+          post_id: string
+          user_id: string
+          viewed_at?: string
+        }
+        Update: {
+          id?: string
+          post_id?: string
+          user_id?: string
+          viewed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_views_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       posts: {
         Row: {
           bookmarks_count: number | null
@@ -1686,6 +1715,7 @@ export type Database = {
           shares_count: number | null
           updated_at: string | null
           user_id: string
+          views_count: number
           visibility: string | null
         }
         Insert: {
@@ -1703,6 +1733,7 @@ export type Database = {
           shares_count?: number | null
           updated_at?: string | null
           user_id: string
+          views_count?: number
           visibility?: string | null
         }
         Update: {
@@ -1720,6 +1751,7 @@ export type Database = {
           shares_count?: number | null
           updated_at?: string | null
           user_id?: string
+          views_count?: number
           visibility?: string | null
         }
         Relationships: [
