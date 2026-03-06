@@ -485,17 +485,17 @@ export default function MiniAppsPage() {
                     "transition-all duration-300 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5"
                   )}
                 >
-                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-2.5 bg-muted/50 overflow-hidden border border-border/30">
+                  <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center mb-2 sm:mb-2.5 bg-muted/50 overflow-hidden border border-border/30">
                     {app.icon_url ? (
-                      <img src={app.icon_url} alt={app.name} className="w-10 h-10 rounded-xl object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                      <img src={app.icon_url} alt={app.name} className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                     ) : (
-                      <Globe className="h-7 w-7 text-primary" />
+                      <Globe className="h-5 w-5 sm:h-7 sm:w-7 text-primary" />
                     )}
                   </div>
 
-                  <h3 className="text-xs sm:text-sm font-semibold text-foreground leading-tight line-clamp-1">{app.name}</h3>
+                  <h3 className="text-[11px] sm:text-xs md:text-sm font-semibold text-foreground leading-tight line-clamp-1 w-full">{app.name}</h3>
 
-                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-1">
+                  <div className="flex items-center gap-0.5 sm:gap-1 text-[9px] sm:text-[10px] text-muted-foreground mt-0.5 sm:mt-1">
                     <Star className="h-2.5 w-2.5 text-amber-400 fill-amber-400" />
                     <span>{app.rating}</span>
                   </div>
