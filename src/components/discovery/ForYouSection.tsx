@@ -70,11 +70,7 @@ export function ForYouSection() {
       .channel('foryou-realtime-counts')
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'post_likes',
-        },
+        { event: '*', schema: 'public', table: 'post_likes' },
         (payload) => {
           const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
           setPosts(prev => prev.map(p => {
@@ -86,17 +82,24 @@ export function ForYouSection() {
       )
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'comments',
-        },
+        { event: '*', schema: 'public', table: 'comments' },
         (payload) => {
           const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
           setPosts(prev => prev.map(p => {
             if (p.id !== postId) return p;
             const delta = payload.eventType === 'INSERT' ? 1 : payload.eventType === 'DELETE' ? -1 : 0;
             return { ...p, comments_count: Math.max(0, p.comments_count + delta) };
+          }));
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'post_views' },
+        (payload) => {
+          const postId = (payload.new as any)?.post_id;
+          setPosts(prev => prev.map(p => {
+            if (p.id !== postId) return p;
+            return { ...p, views_count: (p.views_count || 0) + 1 };
           }));
         }
       )

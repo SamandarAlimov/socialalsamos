@@ -240,7 +240,7 @@ export function PostViewModal({
                 </p>
                 <PostViewsDialog
                   postId={post.id}
-                  viewsCount={(post as any).views_count || 0}
+                  viewsCount={counts.views_count || (post as any).views_count || 0}
                   iconClassName="h-4 w-4"
                   textClassName="text-xs"
                 />

@@ -367,6 +367,7 @@ interface RealtimePostCounts {
   id: string;
   likes_count: number;
   comments_count: number;
+  views_count: number;
   is_liked?: boolean;
 }
 
@@ -531,7 +532,7 @@ function PostCard({
         <div className="flex items-center gap-3">
           <PostViewsDialog
             postId={post.id}
-            viewsCount={post.views_count || 0}
+            viewsCount={realtimeCounts.views_count || post.views_count || 0}
             iconClassName="h-5 w-5 md:h-5 md:w-5"
             textClassName="text-xs md:text-sm"
           />
