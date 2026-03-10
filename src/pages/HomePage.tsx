@@ -367,6 +367,7 @@ interface RealtimePostCounts {
   id: string;
   likes_count: number;
   comments_count: number;
+  views_count: number;
   is_liked?: boolean;
 }
 
