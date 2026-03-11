@@ -792,6 +792,7 @@ export default function MessagesPage() {
       }));
   }, [messages]);
   // Swipe to close state
+  const isMobile = useIsMobile();
   const [chatSwipeOffset, setChatSwipeOffset] = useState(0);
   const [isChatSwiping, setIsChatSwiping] = useState(false);
   const chatSwipeStartX = useRef(0);
