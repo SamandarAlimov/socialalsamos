@@ -820,41 +820,299 @@ export default function MessagesPage() {
     setIsChatSwiping(false);
   }, [chatSwipeOffset]);
 
+  // Left panel content
+  const leftPanelContent = (
+    <div className="flex flex-col h-full bg-card">
+      {/* Search & Create */}
+      <div className="p-4 md:p-3 border-b border-border flex-shrink-0 space-y-3">
+        <div className="flex gap-2">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 md:h-4 md:w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-11 md:pl-10 h-12 md:h-10 text-base md:text-sm bg-muted/50"
+            />
+          </div>
+          <Button 
+            size="icon"
+            variant="outline"
+            className="h-12 w-12 md:h-10 md:w-10 bg-gradient-to-br from-amber-500/10 to-orange-500/10 border-amber-500/30 hover:bg-amber-500/20"
+            onClick={handleOpenSelfChat}
+            disabled={isCreatingSelfChat}
+            title="Saved Messages"
+          >
+            <Bookmark className="h-5 w-5 md:h-4 md:w-4 text-amber-600" />
+          </Button>
+          <Button 
+            size="icon"
+            className="h-12 w-12 md:h-10 md:w-10"
+            onClick={() => {
+              if (activeTab === 'channels') {
+                setShowCreateChannelDialog(true);
+              } else {
+                setShowCreateDialog(true);
+              }
+            }}
+          >
+            <Plus className="h-6 w-6 md:h-5 md:w-5" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b border-border flex-shrink-0 overflow-x-auto scrollbar-hide">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={cn(
+              "flex-1 min-w-fit px-4 py-3 md:py-2.5 text-base md:text-sm font-medium relative transition-colors active:bg-accent/50",
+              activeTab === tab.id 
+                ? "text-primary" 
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {tab.label}
+            {activeTab === tab.id && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Conversation / Channel List */}
+      <ScrollArea className="flex-1 min-h-0">
+        {activeTab === 'channels' ? (
+          channelsLoading ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+            </div>
+          ) : channelsList.filter(c => c.is_member || c.channel_type === 'public').length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
+              <Megaphone className="h-10 w-10 mb-3 opacity-50" />
+              <p className="text-sm">Hozircha kanallar yo'q</p>
+              <Button variant="link" className="mt-2" onClick={() => setShowCreateChannelDialog(true)}>
+                Kanal yaratish
+              </Button>
+            </div>
+          ) : (
+            channelsList
+              .filter(c => {
+                const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  c.username?.toLowerCase().includes(searchQuery.toLowerCase());
+                return matchesSearch && (c.is_member || c.channel_type === 'public');
+              })
+              .map((channel) => (
+                <ChannelCard
+                  key={channel.id}
+                  channel={channel}
+                  onSelect={(ch) => { setSelectedChannel(ch); setSelectedConversation(null); setShowMobileChat(true); }}
+                  onJoin={joinChannel}
+                  onLeave={leaveChannel}
+                />
+              ))
+          )
+        ) : (
+          conversationsLoading ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+            </div>
+          ) : filteredConversations.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
+              {activeTab === 'requests' ? (
+                <><Inbox className="h-10 w-10 mb-3 opacity-50" /><p className="text-sm">No message requests</p></>
+              ) : activeTab === 'archived' ? (
+                <><Archive className="h-10 w-10 mb-3 opacity-50" /><p className="text-sm">No archived chats</p></>
+              ) : (
+                <><MessageCircle className="h-10 w-10 mb-3 opacity-50" /><p className="text-sm">No conversations yet</p>
+                  <Button variant="link" className="mt-2" onClick={() => setShowCreateDialog(true)}>Start a new chat</Button></>
+              )}
+            </div>
+          ) : (
+            filteredConversations.map((conv) => (
+              <ChatListItem
+                key={conv.id}
+                conversation={conv}
+                isSelected={selectedConversation?.id === conv.id}
+                isPinned={conv.is_pinned}
+                isMuted={conv.is_muted}
+                isArchived={isArchivedTab}
+                onClick={() => { handleSelectConversation(conv); setSelectedChannel(null); }}
+                onArchive={() => handleArchiveConversation(conv.id)}
+                onUnarchive={() => handleUnarchiveConversation(conv.id)}
+                onPin={() => handlePinConversation(conv.id)}
+                onMute={() => handleMuteConversation(conv.id)}
+                onDelete={() => handleDeleteConversation(conv.id)}
+                onMarkRead={() => handleMarkRead(conv.id)}
+                onMarkUnread={() => handleMarkUnread(conv.id)}
+              />
+            ))
+          )
+        )}
+      </ScrollArea>
+    </div>
+  );
+
+  // Right panel content
+  const rightPanelContent = (
+    <div 
+      className="flex-1 flex flex-col bg-background min-w-0 h-full"
+      style={{
+        transform: isMobile ? `translateX(${chatSwipeOffset}px)` : undefined,
+        transition: isMobile && !isChatSwiping ? 'transform 0.2s ease-out' : 'none',
+      }}
+      onTouchStart={isMobile ? handleChatSwipeStart : undefined}
+      onTouchMove={isMobile ? handleChatSwipeMove : undefined}
+      onTouchEnd={isMobile ? handleChatSwipeEnd : undefined}
+    >
+      {selectedChannel ? (
+        <ChannelView channel={selectedChannel} onBack={() => { setSelectedChannel(null); setShowMobileChat(false); }} />
+      ) : selectedConversation ? (
+        <>
+          {isSelectionMode ? (
+            <div className="flex-shrink-0 z-20 bg-card border-b border-border">
+              <div className="flex items-center justify-between p-3 md:p-4">
+                <div className="flex items-center gap-3">
+                  <Button variant="ghost" size="icon" onClick={handleExitSelectionMode}><X className="h-5 w-5" /></Button>
+                  <span className="font-medium">{selectedMessages.size} selected</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="icon" onClick={handleForwardSelected} disabled={selectedMessages.size === 0}><Forward className="h-5 w-5" /></Button>
+                  <Button variant="ghost" size="icon" onClick={handleDeleteSelected} disabled={selectedMessages.size === 0} className="text-destructive hover:text-destructive"><Trash2 className="h-5 w-5" /></Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex-shrink-0 z-20 bg-card">
+                <ChatHeader
+                  conversation={selectedConversation}
+                  typingUsers={typingUsers}
+                  onBack={() => setShowMobileChat(false)}
+                  onAudioCall={() => startCall('audio')}
+                  onVideoCall={() => startCall('video')}
+                  onSearch={() => setShowMessageSearch(true)}
+                  onViewInfo={() => {}}
+                  onManageMembers={selectedConversation.type === 'group' ? () => setShowMemberManagement(true) : undefined}
+                  onViewScheduled={() => setShowScheduledMessages(true)}
+                  scheduledCount={scheduledMessages.length}
+                />
+              </div>
+              <MiniAudioPlayer />
+            </>
+          )}
+          
+          {showMessageSearch && !isSelectionMode && (
+            <MessageSearch
+              messages={messages}
+              onHighlightMessage={(id) => {
+                setHighlightedMessageId(id);
+                const element = document.getElementById(`message-${id}`);
+                element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                setTimeout(() => setHighlightedMessageId(null), 2000);
+              }}
+              onClose={() => setShowMessageSearch(false)}
+            />
+          )}
+          
+          {pinnedMessages.length > 0 && !isSelectionMode && (
+            <PinnedMessagesBar pinnedMessages={pinnedMessages} onUnpin={unpinMessage} onScrollToMessage={handleScrollToPinnedMessage} />
+          )}
+          
+          <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-custom bg-muted/20 overscroll-contain">
+            {messagesLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                <MessageCircle className="h-16 w-16 mb-4 opacity-30" />
+                <p className="text-lg font-medium mb-1">No messages yet</p>
+                <p className="text-sm">Start the conversation!</p>
+              </div>
+            ) : (
+              <div className="p-4 space-y-4 min-w-0 max-w-full">
+                {messageGroups.map((group) => (
+                  <div key={group.date} className="min-w-0">
+                    <div className="flex items-center justify-center my-4">
+                      <span className="px-3 py-1 bg-muted rounded-full text-xs text-muted-foreground">
+                        {new Date(group.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                    <div className="space-y-2 min-w-0">
+                      {group.messages.map((message, idx) => {
+                        const prevMessage = group.messages[idx - 1];
+                        const showAvatar = !prevMessage || prevMessage.sender_id !== message.sender_id;
+                        const isMine = message.sender_id === user?.id;
+                        const senderId = message.sender_id || '';
+                        const readByOther = isMine && senderId ? isMessageRead(message.id, senderId) : false;
+                        const readAt = isMine && senderId ? getMessageReadAt(message.id, senderId) : null;
+                        return (
+                          <div key={message.id} id={`message-${message.id}`} className={cn('min-w-0', highlightedMessageId === message.id && 'animate-pulse bg-primary/10 rounded-lg')}>
+                            <EnhancedMessageBubble
+                              key={message.id}
+                              message={{ ...message, is_read: readByOther, status: readByOther ? 'read' : message.status, read_at: readAt || undefined }}
+                              isMine={isMine}
+                              isGroup={selectedConversation.type === 'group'}
+                              onReply={handleReply}
+                              onForward={handleForward}
+                              onEdit={handleEdit}
+                              onDelete={handleDelete}
+                              onPin={handlePin}
+                              onSelect={handleSelectMessage}
+                              onLongPress={handleEnterSelectionMode}
+                              isPinned={isMessagePinned(message.id)}
+                              isSelected={selectedMessages.has(message.id)}
+                              isSelectionMode={isSelectionMode}
+                              showAvatar={showAvatar}
+                              showSender={selectedConversation.type === 'group' && showAvatar}
+                              allMediaTracks={mediaTracksForPlaylist}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+                {typingUsers.length > 0 && <TypingIndicator userNames={typingUsers} />}
+                <div ref={messagesEndRef} />
+              </div>
+            )}
+          </div>
+
+          <div className="flex-shrink-0 border-t border-border bg-card pb-safe mb-16 md:mb-0">
+            <MessageInput
+              onSend={handleSendMessage}
+              onSchedule={handleScheduleMessage}
+              onTyping={setTyping}
+              replyTo={replyTo}
+              onCancelReply={() => setReplyTo(null)}
+              onShareLocation={async (location) => {
+                const locationMessage = `📍 LOCATION:${location.latitude},${location.longitude}${location.address ? `|${location.address}` : ''}`;
+                await sendMessage(locationMessage);
+              }}
+            />
+          </div>
+        </>
+      ) : (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="h-24 w-24 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+              <MessageCircle className="h-12 w-12 text-muted-foreground" />
+            </div>
+            <h3 className="text-lg font-semibold mb-2">Select a conversation</h3>
+            <p className="text-muted-foreground text-sm mb-4">Choose a chat to start messaging</p>
+            <Button onClick={() => setShowCreateDialog(true)}><Plus className="h-4 w-4 mr-2" />New Chat</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="h-[100dvh] md:h-screen flex flex-col bg-background overflow-hidden">
-      {/* Video Call Overlay */}
-      {isInCall && (
-        <VideoCallOverlay
-          localStream={localStream}
-          participants={participantsWithProfiles}
-          isMuted={isMuted}
-          isVideoOn={isVideoOn}
-          isScreenSharing={isScreenSharing}
-          isHandRaised={isHandRaised}
-          callType={callType}
-          callStartedAt={currentCall?.started_at ?? null}
-          isCallConnected={isConnected}
-          onToggleMute={toggleMute}
-          onToggleVideo={toggleVideo}
-          onToggleScreenShare={toggleScreenShare}
-          onToggleHandRaise={toggleHandRaise}
-          onEndCall={endCall}
-          currentUserName={user?.email?.split('@')[0]}
-        />
-      )}
-
-      {/* Incoming Call Dialog */}
-      <IncomingCallDialog
-        isOpen={!!incomingCall && !isInCall}
-        callerName={incomingCall?.host_profile?.display_name || incomingCall?.host_profile?.username || 'Unknown'}
-        callerAvatar={incomingCall?.host_profile?.avatar_url || undefined}
-        callType={incomingCall?.call_type || 'video'}
-        onAccept={acceptIncomingCall}
-        onDecline={declineCall}
-      />
-
-      {/* Mobile Layout */}
-      <div className="flex flex-col flex-1 md:hidden overflow-hidden">
       {/* Video Call Overlay */}
       {isInCall && (
         <VideoCallOverlay
