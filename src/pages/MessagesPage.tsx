@@ -821,7 +821,7 @@ export default function MessagesPage() {
   }, [chatSwipeOffset]);
 
   return (
-    <div className="h-[100dvh] md:h-screen flex flex-col bg-background overflow-hidden">
+    <div className="h-[100dvh] md:h-screen flex flex-col md:flex-row bg-background overflow-hidden">
       {/* Video Call Overlay */}
       {isInCall && (
         <VideoCallOverlay
@@ -853,14 +853,12 @@ export default function MessagesPage() {
         onDecline={declineCall}
       />
 
-      {isMobile ? (
-        <>
-          {/* Mobile: Left Panel */}
-          <div className={cn(
-            "w-full flex flex-col bg-card",
-            "h-[calc(100dvh-3.5rem)] pb-16",
-            showMobileChat && "hidden"
-          )}>
+      {/* Left Panel - Conversation List */}
+      <div className={cn(
+        "w-full md:w-80 lg:w-96 border-r border-border flex flex-col bg-card flex-shrink-0",
+        "h-[calc(100dvh-3.5rem)] md:h-full pb-16 md:pb-0",
+        showMobileChat && "hidden md:flex"
+      )}>
         {/* Search & Create */}
         <div className="p-4 md:p-3 border-b border-border flex-shrink-0 space-y-3">
           <div className="flex gap-2">
