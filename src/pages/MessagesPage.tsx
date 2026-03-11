@@ -821,7 +821,40 @@ export default function MessagesPage() {
   }, [chatSwipeOffset]);
 
   return (
-    <div className="h-[100dvh] md:h-screen flex flex-col md:flex-row bg-background overflow-hidden">
+    <div className="h-[100dvh] md:h-screen flex flex-col bg-background overflow-hidden">
+      {/* Video Call Overlay */}
+      {isInCall && (
+        <VideoCallOverlay
+          localStream={localStream}
+          participants={participantsWithProfiles}
+          isMuted={isMuted}
+          isVideoOn={isVideoOn}
+          isScreenSharing={isScreenSharing}
+          isHandRaised={isHandRaised}
+          callType={callType}
+          callStartedAt={currentCall?.started_at ?? null}
+          isCallConnected={isConnected}
+          onToggleMute={toggleMute}
+          onToggleVideo={toggleVideo}
+          onToggleScreenShare={toggleScreenShare}
+          onToggleHandRaise={toggleHandRaise}
+          onEndCall={endCall}
+          currentUserName={user?.email?.split('@')[0]}
+        />
+      )}
+
+      {/* Incoming Call Dialog */}
+      <IncomingCallDialog
+        isOpen={!!incomingCall && !isInCall}
+        callerName={incomingCall?.host_profile?.display_name || incomingCall?.host_profile?.username || 'Unknown'}
+        callerAvatar={incomingCall?.host_profile?.avatar_url || undefined}
+        callType={incomingCall?.call_type || 'video'}
+        onAccept={acceptIncomingCall}
+        onDecline={declineCall}
+      />
+
+      {/* Mobile Layout */}
+      <div className="flex flex-col flex-1 md:hidden overflow-hidden">
       {/* Video Call Overlay */}
       {isInCall && (
         <VideoCallOverlay
