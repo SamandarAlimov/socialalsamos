@@ -52,6 +52,8 @@ import { useChannels, Channel } from '@/hooks/useChannels';
 import { ChannelView } from '@/components/channels/ChannelView';
 import { CreateChannelDialog } from '@/components/channels/CreateChannelDialog';
 import { ChannelCard } from '@/components/channels/ChannelCard';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 type MessageTab = 'private' | 'groups' | 'channels' | 'requests' | 'archived';
 
