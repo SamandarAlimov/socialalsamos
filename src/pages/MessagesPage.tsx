@@ -822,7 +822,7 @@ export default function MessagesPage() {
 
   // Left panel content
   const leftPanelContent = (
-    <div className="flex flex-col h-full bg-card overflow-hidden">
+    <div className="flex flex-col h-full bg-card overflow-hidden min-w-0">
       {/* Search & Create */}
       <div className="p-4 md:p-3 border-b border-border flex-shrink-0 space-y-3">
         <div className="flex gap-2">
@@ -958,7 +958,7 @@ export default function MessagesPage() {
   // Right panel content
   const rightPanelContent = (
     <div 
-      className="flex-1 flex flex-col bg-background min-w-0 h-full"
+      className="flex-1 flex flex-col bg-background min-w-0 h-full overflow-hidden"
       style={{
         transform: isMobile ? `translateX(${chatSwipeOffset}px)` : undefined,
         transition: isMobile && !isChatSwiping ? 'transform 0.2s ease-out' : 'none',
@@ -1157,11 +1157,11 @@ export default function MessagesPage() {
       ) : (
         /* Desktop/Tablet Layout with Resizable Panels */
         <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
-          <ResizablePanel defaultSize={28} minSize={20} maxSize={45} className="border-r border-border overflow-hidden">
+          <ResizablePanel defaultSize={28} minSize={20} maxSize={45} className="border-r border-border overflow-hidden min-w-0">
             {leftPanelContent}
           </ResizablePanel>
-          <ResizableHandle withHandle className="hover:bg-primary/10 transition-colors data-[resize-handle-active]:bg-primary/20" />
-          <ResizablePanel defaultSize={72} minSize={50}>
+          <ResizableHandle withHandle className="hover:bg-primary/10 transition-colors data-[resize-handle-active]:bg-primary/20 z-20" />
+          <ResizablePanel defaultSize={72} minSize={50} className="min-w-0 overflow-hidden">
             {rightPanelContent}
           </ResizablePanel>
         </ResizablePanelGroup>
