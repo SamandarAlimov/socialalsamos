@@ -1,12 +1,13 @@
 /// <reference types="vite/client" />
 
+// Fix timer type compatibility between DOM and NodeJS
+type TimerHandle = ReturnType<typeof setTimeout>;
+
 declare namespace NodeJS {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  type Timeout = any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  type Timer = any;
+  type Timeout = TimerHandle;
+  type Timer = TimerHandle;
 }
 
-// Fix clearTimeout/clearInterval accepting Timeout type
-declare function clearTimeout(id?: number | ReturnType<typeof setTimeout>): void;
-declare function clearInterval(id?: number | ReturnType<typeof setInterval>): void;
+// Override clearTimeout/clearInterval to accept any timer handle
+declare function clearTimeout(id: TimerHandle | number | undefined): void;
+declare function clearInterval(id: TimerHandle | number | undefined): void;
