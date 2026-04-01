@@ -862,7 +862,7 @@ export default function MessagesPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-border flex-shrink-0 overflow-x-auto scrollbar-hide relative z-10">
+      <div className="flex border-b border-border flex-shrink-0 overflow-x-auto scrollbar-hide relative z-0">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -1156,8 +1156,8 @@ export default function MessagesPage() {
         </div>
       ) : (
         /* Desktop/Tablet Layout with Resizable Panels */
-        <ResizablePanelGroup direction="horizontal" className="flex-1">
-          <ResizablePanel defaultSize={28} minSize={20} maxSize={45} className="border-r border-border">
+        <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
+          <ResizablePanel defaultSize={28} minSize={20} maxSize={45} className="border-r border-border overflow-hidden">
             {leftPanelContent}
           </ResizablePanel>
           <ResizableHandle withHandle className="hover:bg-primary/10 transition-colors data-[resize-handle-active]:bg-primary/20" />
