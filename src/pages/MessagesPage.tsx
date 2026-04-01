@@ -1156,8 +1156,8 @@ export default function MessagesPage() {
         </div>
       ) : (
         /* Desktop/Tablet Layout with Resizable Panels */
-        <ResizablePanelGroup direction="horizontal" className="flex-1">
-          <ResizablePanel defaultSize={28} minSize={20} maxSize={45} className="border-r border-border">
+        <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
+          <ResizablePanel defaultSize={28} minSize={20} maxSize={45} className="border-r border-border overflow-hidden">
             {leftPanelContent}
           </ResizablePanel>
           <ResizableHandle withHandle className="hover:bg-primary/10 transition-colors data-[resize-handle-active]:bg-primary/20" />
