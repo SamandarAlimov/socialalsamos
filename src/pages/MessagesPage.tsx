@@ -822,7 +822,7 @@ export default function MessagesPage() {
 
   // Left panel content
   const leftPanelContent = (
-    <div className="flex flex-col h-full bg-card">
+    <div className="flex flex-col h-full bg-card overflow-hidden">
       {/* Search & Create */}
       <div className="p-4 md:p-3 border-b border-border flex-shrink-0 space-y-3">
         <div className="flex gap-2">
