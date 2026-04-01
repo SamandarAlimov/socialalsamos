@@ -958,7 +958,7 @@ export default function MessagesPage() {
   // Right panel content
   const rightPanelContent = (
     <div 
-      className="flex-1 flex flex-col bg-background min-w-0 h-full"
+      className="flex-1 flex flex-col bg-background min-w-0 h-full overflow-hidden"
       style={{
         transform: isMobile ? `translateX(${chatSwipeOffset}px)` : undefined,
         transition: isMobile && !isChatSwiping ? 'transform 0.2s ease-out' : 'none',
