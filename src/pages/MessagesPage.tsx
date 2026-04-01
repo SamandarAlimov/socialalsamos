@@ -822,7 +822,7 @@ export default function MessagesPage() {
 
   // Left panel content
   const leftPanelContent = (
-    <div className="flex flex-col h-full bg-card">
+    <div className="flex flex-col h-full bg-card overflow-hidden">
       {/* Search & Create */}
       <div className="p-4 md:p-3 border-b border-border flex-shrink-0 space-y-3">
         <div className="flex gap-2">
@@ -862,13 +862,13 @@ export default function MessagesPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-border flex-shrink-0 overflow-x-auto scrollbar-hide">
+      <div className="flex border-b border-border flex-shrink-0 overflow-x-auto scrollbar-hide relative z-10">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={cn(
-              "flex-1 min-w-fit px-4 py-3 md:py-2.5 text-base md:text-sm font-medium relative transition-colors active:bg-accent/50",
+              "flex-shrink-0 px-3 py-3 md:py-2.5 text-sm md:text-xs font-medium relative transition-colors active:bg-accent/50 whitespace-nowrap",
               activeTab === tab.id 
                 ? "text-primary" 
                 : "text-muted-foreground hover:text-foreground"
