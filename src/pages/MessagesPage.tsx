@@ -862,7 +862,7 @@ export default function MessagesPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-border flex-shrink-0 overflow-x-auto scrollbar-hide relative z-10">
+      <div className="flex border-b border-border flex-shrink-0 overflow-x-auto scrollbar-hide relative z-0">
         {tabs.map((tab) => (
           <button
             key={tab.id}
