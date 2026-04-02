@@ -862,7 +862,7 @@ export default function MessagesPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-border flex-shrink-0 overflow-x-auto scrollbar-hide relative z-0">
+      <div className="flex border-b border-border flex-shrink-0 overflow-x-auto scrollbar-hide relative z-0 isolate">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -1156,12 +1156,12 @@ export default function MessagesPage() {
         </div>
       ) : (
         /* Desktop/Tablet Layout with Resizable Panels */
-        <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
-          <ResizablePanel defaultSize={28} minSize={20} maxSize={45} className="border-r border-border overflow-hidden min-w-0">
+        <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden" style={{ contain: 'strict' }}>
+          <ResizablePanel defaultSize={28} minSize={15} maxSize={50} className="border-r border-border overflow-hidden" style={{ minWidth: 0 }}>
             {leftPanelContent}
           </ResizablePanel>
-          <ResizableHandle withHandle className="hover:bg-primary/10 transition-colors data-[resize-handle-active]:bg-primary/20 z-20" />
-          <ResizablePanel defaultSize={72} minSize={50} className="min-w-0 overflow-hidden">
+          <ResizableHandle withHandle className="hover:bg-primary/10 transition-colors data-[resize-handle-active]:bg-primary/20 z-30 relative" />
+          <ResizablePanel defaultSize={72} minSize={40} className="overflow-hidden" style={{ minWidth: 0 }}>
             {rightPanelContent}
           </ResizablePanel>
         </ResizablePanelGroup>

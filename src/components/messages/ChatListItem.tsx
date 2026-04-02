@@ -284,9 +284,9 @@ export function ChatListItem({
           </div>
           
           <div className="flex-1 min-w-0 text-left">
-            <div className="flex items-center justify-between mb-0.5">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <span className="font-medium text-base md:text-sm truncate">{getName()}</span>
+            <div className="flex items-center justify-between mb-0.5 min-w-0">
+              <div className="flex items-center gap-1.5 min-w-0 overflow-hidden flex-1">
+                <span className="font-medium text-base md:text-sm truncate block">{getName()}</span>
                 {/* Instagram-style verification badge */}
                 {conversation.type === 'private' && isVerified && (
                   <VerifiedBadge size="xs" className="md:h-3.5 md:w-3.5" />
@@ -310,12 +310,11 @@ export function ChatListItem({
             
             <div className="flex items-center justify-between gap-2 min-w-0">
               <p className={cn(
-                "text-sm flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap flex items-center",
+                "text-sm flex-1 min-w-0 truncate flex items-center",
                 isUnread
                   ? "text-foreground font-medium" 
                   : "text-muted-foreground"
               )}
-              style={{ maxWidth: 'calc(100% - 40px)' }}
               >
                 {(() => {
                   const formatted = formatLastMessage(conversation.last_message);
