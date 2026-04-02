@@ -310,12 +310,11 @@ export function ChatListItem({
             
             <div className="flex items-center justify-between gap-2 min-w-0">
               <p className={cn(
-                "text-sm flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap flex items-center",
+                "text-sm flex-1 min-w-0 truncate flex items-center",
                 isUnread
                   ? "text-foreground font-medium" 
                   : "text-muted-foreground"
               )}
-              style={{ maxWidth: 'calc(100% - 40px)' }}
               >
                 {(() => {
                   const formatted = formatLastMessage(conversation.last_message);
