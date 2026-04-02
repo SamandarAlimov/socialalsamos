@@ -246,11 +246,18 @@ export default function MessagesPage() {
 
   // Auto scroll to bottom
   const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Use requestAnimationFrame to ensure DOM is updated before scrolling
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    });
   }, []);
 
+  // Scroll to bottom when messages change
   useEffect(() => {
-    scrollToBottom();
+    // Small delay to ensure content is rendered
+    const timer = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    }, 100);
     
     // Mark messages as read when viewing them
     if (messages.length > 0 && user) {
@@ -261,7 +268,9 @@ export default function MessagesPage() {
         markAsRead(otherUserMessages);
       }
     }
-  }, [messages, scrollToBottom, markAsRead, user]);
+    
+    return () => clearTimeout(timer);
+  }, [messages, markAsRead, user]);
 
   // Tab definitions
   const tabs: { id: MessageTab; label: string }[] = [
