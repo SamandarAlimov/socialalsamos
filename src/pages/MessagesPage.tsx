@@ -317,6 +317,10 @@ export default function MessagesPage() {
     setSelectedConversation(conv);
     setShowMobileChat(true);
     setReplyTo(null);
+    // Scroll to bottom when switching conversations
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    }, 200);
   };
 
   const handleSendMessage = async (content: string, mediaUrl?: string, mediaType?: string) => {
