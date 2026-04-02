@@ -246,11 +246,18 @@ export default function MessagesPage() {
 
   // Auto scroll to bottom
   const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Use requestAnimationFrame to ensure DOM is updated before scrolling
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    });
   }, []);
 
+  // Scroll to bottom when messages change
   useEffect(() => {
-    scrollToBottom();
+    // Small delay to ensure content is rendered
+    const timer = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    }, 100);
     
     // Mark messages as read when viewing them
     if (messages.length > 0 && user) {
@@ -261,7 +268,9 @@ export default function MessagesPage() {
         markAsRead(otherUserMessages);
       }
     }
-  }, [messages, scrollToBottom, markAsRead, user]);
+    
+    return () => clearTimeout(timer);
+  }, [messages, markAsRead, user]);
 
   // Tab definitions
   const tabs: { id: MessageTab; label: string }[] = [
@@ -308,6 +317,10 @@ export default function MessagesPage() {
     setSelectedConversation(conv);
     setShowMobileChat(true);
     setReplyTo(null);
+    // Scroll to bottom when switching conversations
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    }, 200);
   };
 
   const handleSendMessage = async (content: string, mediaUrl?: string, mediaType?: string) => {
@@ -822,7 +835,7 @@ export default function MessagesPage() {
 
   // Left panel content
   const leftPanelContent = (
-    <div className="flex flex-col h-full bg-card overflow-hidden min-w-0">
+    <div className="flex flex-col h-full bg-card overflow-hidden min-w-0 w-full">
       {/* Search & Create */}
       <div className="p-4 md:p-3 border-b border-border flex-shrink-0 space-y-3">
         <div className="flex gap-2">
@@ -862,7 +875,7 @@ export default function MessagesPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-border flex-shrink-0 overflow-x-auto scrollbar-hide relative z-0 isolate">
+      <div className="flex border-b border-border flex-shrink-0 overflow-x-auto scrollbar-hide relative isolate" style={{ zIndex: 0 }}>
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -1156,12 +1169,12 @@ export default function MessagesPage() {
         </div>
       ) : (
         /* Desktop/Tablet Layout with Resizable Panels */
-        <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden" style={{ contain: 'strict' }}>
-          <ResizablePanel defaultSize={28} minSize={15} maxSize={50} className="border-r border-border overflow-hidden" style={{ minWidth: 0 }}>
+        <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
+          <ResizablePanel defaultSize={28} minSize={15} maxSize={50} className="border-r border-border overflow-hidden min-w-0">
             {leftPanelContent}
           </ResizablePanel>
-          <ResizableHandle withHandle className="hover:bg-primary/10 transition-colors data-[resize-handle-active]:bg-primary/20 z-30 relative" />
-          <ResizablePanel defaultSize={72} minSize={40} className="overflow-hidden" style={{ minWidth: 0 }}>
+          <ResizableHandle withHandle className="hover:bg-primary/10 transition-colors data-[resize-handle-active]:bg-primary/20 z-20 relative" />
+          <ResizablePanel defaultSize={72} minSize={40} className="overflow-hidden min-w-0">
             {rightPanelContent}
           </ResizablePanel>
         </ResizablePanelGroup>

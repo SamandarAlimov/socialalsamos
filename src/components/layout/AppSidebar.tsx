@@ -91,7 +91,7 @@ export function AppSidebar() {
   return (
     <aside 
       className={cn(
-        "h-screen sticky top-0 bg-sidebar border-r border-sidebar-border flex-col transition-all duration-300",
+        "h-screen sticky top-0 bg-sidebar border-r border-sidebar-border flex-col transition-all duration-300 z-30",
         "hidden md:flex", // Hide on mobile
         collapsed ? "w-[72px]" : "w-64"
       )}
@@ -274,7 +274,7 @@ export function AppSidebar() {
       {/* Collapse Toggle */}
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="absolute -right-3 top-20 bg-background border border-border rounded-full p-1.5 shadow-md hover:bg-accent transition-colors"
+        className="absolute -right-3 top-20 z-40 bg-background border border-border rounded-full p-1.5 shadow-md hover:bg-accent transition-colors"
       >
         {collapsed ? (
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
