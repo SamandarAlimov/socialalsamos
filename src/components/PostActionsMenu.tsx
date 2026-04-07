@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { 
@@ -12,7 +13,8 @@ import {
   Share2,
   Bookmark,
   EyeOff,
-  Link
+  Link,
+  Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -37,6 +39,7 @@ import { toast } from 'sonner';
 interface PostActionsMenuProps {
   postId: string;
   postUserId: string;
+  postContent?: string;
   isPinned?: boolean;
   onDelete?: () => void;
   onEdit?: () => void;
@@ -46,15 +49,21 @@ interface PostActionsMenuProps {
 export function PostActionsMenu({ 
   postId, 
   postUserId, 
+  postContent,
   isPinned = false,
   onDelete, 
   onEdit,
   onPin 
 }: PostActionsMenuProps) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isPinning, setIsPinning] = useState(false);
+
+  const handleForwardToAI = () => {
+    navigate('/ai', { state: { forwardedPost: { id: postId, content: postContent } } });
+  };
   
   const isOwner = user?.id === postUserId;
 
@@ -213,6 +222,14 @@ export function PostActionsMenu({
           <DropdownMenuItem className="cursor-pointer">
             <Bookmark className="h-4 w-4 mr-2" />
             Save post
+          </DropdownMenuItem>
+
+          <DropdownMenuItem 
+            onClick={handleForwardToAI}
+            className="cursor-pointer"
+          >
+            <Sparkles className="h-4 w-4 mr-2 text-alsamos-orange" />
+            AI ga yuborish
           </DropdownMenuItem>
           
           {!isOwner && (
