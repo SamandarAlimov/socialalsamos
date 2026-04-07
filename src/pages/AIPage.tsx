@@ -71,6 +71,8 @@ export default function AIPage() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const isMobile = useIsMobile();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [activeMode, setActiveMode] = useState<'chat' | 'imagine'>('chat');
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -81,8 +83,44 @@ export default function AIPage() {
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [forwardedPost, setForwardedPost] = useState<{ id: string; content?: string; authorName?: string; mediaUrl?: string } | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Handle forwarded post from navigation state
+  useEffect(() => {
+    const state = location.state as any;
+    if (state?.forwardedPost) {
+      const postData = state.forwardedPost;
+      // Start new conversation for this post
+      setMessages([]);
+      setCurrentConversationId(null);
+      
+      // Fetch full post data
+      supabase
+        .from('posts')
+        .select(`id, content, media_urls, media_type, likes_count, comments_count, views_count,
+          profile:profiles!posts_user_id_fkey (display_name, username, avatar_url)`)
+        .eq('id', postData.id)
+        .single()
+        .then(({ data }) => {
+          if (data) {
+            const profile = data.profile as any;
+            setForwardedPost({
+              id: data.id,
+              content: data.content || '',
+              authorName: profile?.display_name || profile?.username || 'Foydalanuvchi',
+              mediaUrl: data.media_urls?.[0] || undefined,
+            });
+          } else {
+            setForwardedPost({ id: postData.id, content: postData.content || '' });
+          }
+        });
+      
+      // Clear navigation state
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state]);
 
   useEffect(() => {
     setSidebarOpen(!isMobile);
