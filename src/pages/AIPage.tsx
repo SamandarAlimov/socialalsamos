@@ -223,10 +223,22 @@ export default function AIPage() {
     setIsLoading(true);
     
     try {
+      // Build context from forwarded post
+      let contextInfo = '';
+      if (forwardedPost) {
+        contextInfo = `\n\n[Foydalanuvchi quyidagi postni AI ga yubordi]\nPost muallifi: ${forwardedPost.authorName || 'Noma\'lum'}\nPost matni: ${forwardedPost.content || '(matn yo\'q)'}\n${forwardedPost.mediaUrl ? `Media: ${forwardedPost.mediaUrl}` : ''}`;
+      }
+
+      const aiMessages = newMsgs.map(m => ({ role: m.role, content: m.content }));
+      if (contextInfo && aiMessages.length > 0) {
+        // Inject context into the first user message
+        aiMessages[0] = { ...aiMessages[0], content: aiMessages[0].content + contextInfo };
+      }
+
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-assistant`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
-        body: JSON.stringify({ messages: newMsgs.map(m => ({ role: m.role, content: m.content })), userId: user?.id }),
+        body: JSON.stringify({ messages: aiMessages, userId: user?.id }),
       });
 
       if (!response.ok) {
