@@ -524,8 +524,49 @@ export default function AIPage() {
                     : 'Professional AI yordamchi. Savol bering, matn yozing, tahlil qiling yoki har qanday vazifada yordam so\'rang.'}
                 </p>
                 
+                {/* Forwarded Post Preview */}
+                {forwardedPost && activeMode === 'chat' && (
+                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                    className="w-full max-w-2xl mb-6">
+                    <div className="rounded-2xl border border-alsamos-orange/30 bg-card/60 backdrop-blur-sm overflow-hidden shadow-lg shadow-alsamos-orange/5">
+                      <div className="flex items-center gap-2 px-4 py-2.5 bg-alsamos-orange/10 border-b border-alsamos-orange/20">
+                        <Sparkles className="h-4 w-4 text-alsamos-orange" />
+                        <span className="text-xs font-semibold text-alsamos-orange">Post yuborildi</span>
+                        <button onClick={() => setForwardedPost(null)} className="ml-auto text-muted-foreground hover:text-foreground text-xs">✕</button>
+                      </div>
+                      <div className="p-4">
+                        {forwardedPost.mediaUrl && (
+                          <img src={forwardedPost.mediaUrl} alt="" className="w-full max-h-48 object-cover rounded-xl mb-3" />
+                        )}
+                        <p className="text-xs text-muted-foreground mb-1">@{forwardedPost.authorName}</p>
+                        {forwardedPost.content && (
+                          <p className="text-sm line-clamp-4">{forwardedPost.content}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Post-specific AI suggestions */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
+                      {[
+                        { icon: <Lightbulb className="h-4 w-4" />, title: "Shunga o'xshash yoz", prompt: "Shu postga o'xshash kontent yozib ber, lekin yangicha uslubda" },
+                        { icon: <Brain className="h-4 w-4" />, title: "Tahlil qil", prompt: "Bu post haqida chuqur tahlil ber: nima yaxshi, nima yaxshilash mumkin" },
+                        { icon: <FileText className="h-4 w-4" />, title: "Javob yoz", prompt: "Bu postga professional va qiziqarli javob yozib ber" },
+                        { icon: <Globe className="h-4 w-4" />, title: "Tarjima qil", prompt: "Bu post matnini ingliz tiliga professional tarjima qil" },
+                      ].map((s, i) => (
+                        <motion.button key={i}
+                          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.05 }}
+                          onClick={() => setInput(s.prompt)}
+                          className="flex items-center gap-2.5 p-3 rounded-xl bg-card/50 border border-border/50 hover:border-alsamos-orange/30 hover:bg-card/80 transition-all text-left group">
+                          <span className="text-alsamos-orange">{s.icon}</span>
+                          <span className="text-xs font-medium">{s.title}</span>
+                        </motion.button>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+
                 {/* Suggestion Cards */}
-                {activeMode === 'chat' && (
+                {activeMode === 'chat' && !forwardedPost && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-2xl">
                     {suggestions.map((s, i) => (
                       <motion.button key={i}
