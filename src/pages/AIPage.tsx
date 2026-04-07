@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { 
@@ -70,6 +71,8 @@ export default function AIPage() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const isMobile = useIsMobile();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [activeMode, setActiveMode] = useState<'chat' | 'imagine'>('chat');
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -80,8 +83,44 @@ export default function AIPage() {
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [forwardedPost, setForwardedPost] = useState<{ id: string; content?: string; authorName?: string; mediaUrl?: string } | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Handle forwarded post from navigation state
+  useEffect(() => {
+    const state = location.state as any;
+    if (state?.forwardedPost) {
+      const postData = state.forwardedPost;
+      // Start new conversation for this post
+      setMessages([]);
+      setCurrentConversationId(null);
+      
+      // Fetch full post data
+      supabase
+        .from('posts')
+        .select(`id, content, media_urls, media_type, likes_count, comments_count, views_count,
+          profile:profiles!posts_user_id_fkey (display_name, username, avatar_url)`)
+        .eq('id', postData.id)
+        .single()
+        .then(({ data }) => {
+          if (data) {
+            const profile = data.profile as any;
+            setForwardedPost({
+              id: data.id,
+              content: data.content || '',
+              authorName: profile?.display_name || profile?.username || 'Foydalanuvchi',
+              mediaUrl: data.media_urls?.[0] || undefined,
+            });
+          } else {
+            setForwardedPost({ id: postData.id, content: postData.content || '' });
+          }
+        });
+      
+      // Clear navigation state
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state]);
 
   useEffect(() => {
     setSidebarOpen(!isMobile);
@@ -184,10 +223,22 @@ export default function AIPage() {
     setIsLoading(true);
     
     try {
+      // Build context from forwarded post
+      let contextInfo = '';
+      if (forwardedPost) {
+        contextInfo = `\n\n[Foydalanuvchi quyidagi postni AI ga yubordi]\nPost muallifi: ${forwardedPost.authorName || 'Noma\'lum'}\nPost matni: ${forwardedPost.content || '(matn yo\'q)'}\n${forwardedPost.mediaUrl ? `Media: ${forwardedPost.mediaUrl}` : ''}`;
+      }
+
+      const aiMessages = newMsgs.map(m => ({ role: m.role, content: m.content }));
+      if (contextInfo && aiMessages.length > 0) {
+        // Inject context into the first user message
+        aiMessages[0] = { ...aiMessages[0], content: aiMessages[0].content + contextInfo };
+      }
+
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-assistant`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
-        body: JSON.stringify({ messages: newMsgs.map(m => ({ role: m.role, content: m.content })), userId: user?.id }),
+        body: JSON.stringify({ messages: aiMessages, userId: user?.id }),
       });
 
       if (!response.ok) {
@@ -232,6 +283,7 @@ export default function AIPage() {
       }
 
       await saveConversation([...newMsgs, { id: crypto.randomUUID(), role: 'assistant', content: assistantContent, timestamp: new Date() }], 'chat');
+      setForwardedPost(null);
     } catch (error: any) {
       toast({ title: 'Xatolik', description: error.message, variant: 'destructive' });
     } finally {
@@ -473,8 +525,49 @@ export default function AIPage() {
                     : 'Professional AI yordamchi. Savol bering, matn yozing, tahlil qiling yoki har qanday vazifada yordam so\'rang.'}
                 </p>
                 
+                {/* Forwarded Post Preview */}
+                {forwardedPost && activeMode === 'chat' && (
+                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                    className="w-full max-w-2xl mb-6">
+                    <div className="rounded-2xl border border-alsamos-orange/30 bg-card/60 backdrop-blur-sm overflow-hidden shadow-lg shadow-alsamos-orange/5">
+                      <div className="flex items-center gap-2 px-4 py-2.5 bg-alsamos-orange/10 border-b border-alsamos-orange/20">
+                        <Sparkles className="h-4 w-4 text-alsamos-orange" />
+                        <span className="text-xs font-semibold text-alsamos-orange">Post yuborildi</span>
+                        <button onClick={() => setForwardedPost(null)} className="ml-auto text-muted-foreground hover:text-foreground text-xs">✕</button>
+                      </div>
+                      <div className="p-4">
+                        {forwardedPost.mediaUrl && (
+                          <img src={forwardedPost.mediaUrl} alt="" className="w-full max-h-48 object-cover rounded-xl mb-3" />
+                        )}
+                        <p className="text-xs text-muted-foreground mb-1">@{forwardedPost.authorName}</p>
+                        {forwardedPost.content && (
+                          <p className="text-sm line-clamp-4">{forwardedPost.content}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Post-specific AI suggestions */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
+                      {[
+                        { icon: <Lightbulb className="h-4 w-4" />, title: "Shunga o'xshash yoz", prompt: "Shu postga o'xshash kontent yozib ber, lekin yangicha uslubda" },
+                        { icon: <Brain className="h-4 w-4" />, title: "Tahlil qil", prompt: "Bu post haqida chuqur tahlil ber: nima yaxshi, nima yaxshilash mumkin" },
+                        { icon: <FileText className="h-4 w-4" />, title: "Javob yoz", prompt: "Bu postga professional va qiziqarli javob yozib ber" },
+                        { icon: <Globe className="h-4 w-4" />, title: "Tarjima qil", prompt: "Bu post matnini ingliz tiliga professional tarjima qil" },
+                      ].map((s, i) => (
+                        <motion.button key={i}
+                          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.05 }}
+                          onClick={() => setInput(s.prompt)}
+                          className="flex items-center gap-2.5 p-3 rounded-xl bg-card/50 border border-border/50 hover:border-alsamos-orange/30 hover:bg-card/80 transition-all text-left group">
+                          <span className="text-alsamos-orange">{s.icon}</span>
+                          <span className="text-xs font-medium">{s.title}</span>
+                        </motion.button>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+
                 {/* Suggestion Cards */}
-                {activeMode === 'chat' && (
+                {activeMode === 'chat' && !forwardedPost && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-2xl">
                     {suggestions.map((s, i) => (
                       <motion.button key={i}
