@@ -283,6 +283,7 @@ export default function AIPage() {
       }
 
       await saveConversation([...newMsgs, { id: crypto.randomUUID(), role: 'assistant', content: assistantContent, timestamp: new Date() }], 'chat');
+      setForwardedPost(null);
     } catch (error: any) {
       toast({ title: 'Xatolik', description: error.message, variant: 'destructive' });
     } finally {
