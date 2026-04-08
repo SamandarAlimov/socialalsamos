@@ -1,19 +1,19 @@
 import { useState } from 'react';
-import { Heart, Star, MapPin, ShieldCheck } from 'lucide-react';
-import { Card } from '@/components/ui/card';
+import { Heart, Star, MapPin, ShieldCheck, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Product, useProductActions } from '@/hooks/useMarketplace';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
+import { motion } from 'framer-motion';
 
 interface ProductCardProps {
   product: Product;
   onSelect?: (product: Product) => void;
   onLikeChange?: () => void;
+  layout?: 'grid' | 'list';
 }
 
-export function ProductCard({ product, onSelect, onLikeChange }: ProductCardProps) {
+export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }: ProductCardProps) {
   const { triggerHaptic } = useHapticFeedback();
   const { toggleLike } = useProductActions();
   const [isLiked, setIsLiked] = useState(product.is_liked || false);
@@ -28,10 +28,8 @@ export function ProductCard({ product, onSelect, onLikeChange }: ProductCardProp
   const handleLike = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isLiking) return;
-
     setIsLiking(true);
     triggerHaptic('medium');
-    
     const success = await toggleLike(product.id, isLiked);
     if (success) {
       setIsLiked(!isLiked);
@@ -40,91 +38,121 @@ export function ProductCard({ product, onSelect, onLikeChange }: ProductCardProp
     setIsLiking(false);
   };
 
+  if (layout === 'list') {
+    return (
+      <div
+        className="flex gap-3 p-3 rounded-2xl bg-card/50 backdrop-blur-sm border border-border/30 cursor-pointer hover:bg-card/80 transition-all active:scale-[0.99]"
+        onClick={() => onSelect?.(product)}
+      >
+        <div className="w-24 h-24 rounded-xl overflow-hidden bg-muted shrink-0">
+          <img src={mainImage} alt={product.title} className="w-full h-full object-cover" loading="lazy" />
+        </div>
+        <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+          <div>
+            <h3 className="font-medium text-sm line-clamp-2 leading-snug">{product.title}</h3>
+            {product.seller && (
+              <div className="flex items-center gap-1 mt-1 text-[11px] text-muted-foreground">
+                <span className="truncate">{product.seller.business_name}</span>
+                {product.seller.is_verified && <ShieldCheck className="h-3 w-3 text-primary shrink-0" />}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-base font-bold text-primary">${product.price.toLocaleString()}</span>
+              {hasDiscount && (
+                <span className="text-[11px] text-muted-foreground line-through">${product.compare_at_price?.toLocaleString()}</span>
+              )}
+            </div>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleLike} disabled={isLiking}>
+              <Heart className={cn("h-4 w-4", isLiked && "fill-red-500 text-red-500")} />
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <Card 
-      className="overflow-hidden group cursor-pointer hover:shadow-lg transition-all duration-300 border-border/50"
+    <div
+      className="group cursor-pointer rounded-2xl overflow-hidden bg-card/50 backdrop-blur-sm border border-border/30 hover:border-primary/20 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 active:scale-[0.98]"
       onClick={() => onSelect?.(product)}
     >
-      <div className="relative aspect-square bg-muted">
+      <div className="relative aspect-square bg-muted overflow-hidden">
         <img
           src={mainImage}
           alt={product.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
           loading="lazy"
         />
         
+        {/* Gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+        
         {/* Like button */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn(
-            "absolute top-2 right-2 h-8 w-8 rounded-full backdrop-blur-sm transition-all",
-            isLiked 
-              ? "bg-red-500/20 text-red-500 hover:bg-red-500/30" 
-              : "bg-background/80 hover:bg-background"
-          )}
-          onClick={handleLike}
-          disabled={isLiking}
-        >
-          <Heart className={cn("h-4 w-4", isLiked && "fill-current")} />
-        </Button>
+        <motion.div className="absolute top-2.5 right-2.5" whileTap={{ scale: 0.85 }}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "h-8 w-8 rounded-full backdrop-blur-md shadow-sm transition-all",
+              isLiked 
+                ? "bg-red-500/20 text-red-500 hover:bg-red-500/30 border border-red-500/20" 
+                : "bg-background/70 hover:bg-background/90 border border-border/30"
+            )}
+            onClick={handleLike}
+            disabled={isLiking}
+          >
+            <Heart className={cn("h-3.5 w-3.5", isLiked && "fill-current")} />
+          </Button>
+        </motion.div>
 
-        {/* Badges */}
-        <div className="absolute top-2 left-2 flex flex-col gap-1">
+        {/* Top-left badges */}
+        <div className="absolute top-2.5 left-2.5 flex flex-col gap-1">
           {hasDiscount && (
-            <Badge className="bg-red-500 text-white text-[10px] px-1.5">
+            <span className="px-2 py-0.5 rounded-lg bg-red-500 text-white text-[10px] font-bold shadow-lg">
               -{discountPercent}%
-            </Badge>
+            </span>
           )}
           {product.is_featured && (
-            <Badge variant="secondary" className="text-[10px] px-1.5">
-              Featured
-            </Badge>
-          )}
-          {product.condition !== 'new' && (
-            <Badge variant="outline" className="bg-background/80 text-[10px] px-1.5">
-              {product.condition === 'like_new' ? 'Like New' : product.condition}
-            </Badge>
+            <span className="px-2 py-0.5 rounded-lg bg-primary/90 text-primary-foreground text-[10px] font-bold shadow-lg backdrop-blur-sm">
+              ⭐ Featured
+            </span>
           )}
         </div>
 
-        {/* Negotiable badge */}
+        {/* Bottom badges */}
         {product.is_negotiable && (
-          <div className="absolute bottom-2 left-2">
-            <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-[10px]">
-              Negotiable
-            </Badge>
+          <div className="absolute bottom-2.5 left-2.5">
+            <span className="px-2 py-0.5 rounded-lg bg-background/80 backdrop-blur-md text-[10px] font-medium text-primary border border-primary/20">
+              Kelishiladi
+            </span>
           </div>
         )}
       </div>
 
-      <div className="p-3 space-y-2">
-        {/* Title */}
-        <h3 className="font-medium text-sm line-clamp-2 leading-snug min-h-[2.5rem]">
+      <div className="p-3 space-y-1.5">
+        <h3 className="font-medium text-[13px] line-clamp-2 leading-snug min-h-[2.25rem]">
           {product.title}
         </h3>
 
-        {/* Price */}
         <div className="flex items-baseline gap-2">
-          <span className="text-lg font-bold text-primary">
+          <span className="text-base font-bold text-primary">
             ${product.price.toLocaleString()}
           </span>
           {hasDiscount && (
-            <span className="text-xs text-muted-foreground line-through">
+            <span className="text-[11px] text-muted-foreground line-through">
               ${product.compare_at_price?.toLocaleString()}
             </span>
           )}
         </div>
 
-        {/* Seller info */}
         {product.seller && (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <span className="truncate">{product.seller.business_name}</span>
-            {product.seller.is_verified && (
-              <ShieldCheck className="h-3 w-3 text-primary flex-shrink-0" />
-            )}
+            {product.seller.is_verified && <ShieldCheck className="h-3 w-3 text-primary shrink-0" />}
             {product.seller.rating > 0 && (
-              <div className="flex items-center gap-0.5 flex-shrink-0">
+              <div className="flex items-center gap-0.5 shrink-0 ml-auto">
                 <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
                 <span>{product.seller.rating.toFixed(1)}</span>
               </div>
@@ -132,14 +160,13 @@ export function ProductCard({ product, onSelect, onLikeChange }: ProductCardProp
           </div>
         )}
 
-        {/* Location */}
         {(product.location || product.seller?.location) && (
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <MapPin className="h-3 w-3" />
+          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <MapPin className="h-3 w-3 shrink-0" />
             <span className="truncate">{product.location || product.seller?.location}</span>
           </div>
         )}
       </div>
-    </Card>
+    </div>
   );
 }
