@@ -403,6 +403,27 @@ export default function MarketplacePage() {
             </motion.div>
           )}
 
+          {/* Orders Tab */}
+          {activeTab === 'orders' && (
+            <motion.div
+              key="orders"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="p-4"
+            >
+              {!user ? (
+                <EmptyState
+                  icon={<ClipboardList className="h-16 w-16" />}
+                  title="Tizimga kiring"
+                  description="Buyurtmalarni ko'rish uchun tizimga kiring"
+                />
+              ) : (
+                <OrdersView />
+              )}
+            </motion.div>
+          )}
+
           {/* Selling Tab */}
           {activeTab === 'selling' && (
             <motion.div
