@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, ShieldCheck, Truck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useCart, CartItem } from '@/hooks/useMarketplace';
+import { CheckoutSheet } from '@/components/marketplace/CheckoutSheet';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
@@ -13,8 +15,10 @@ interface CartSheetProps {
 
 export function CartSheet({ open, onOpenChange }: CartSheetProps) {
   const { items, total, updateQuantity, removeFromCart } = useCart();
+  const [showCheckout, setShowCheckout] = useState(false);
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-md p-0 flex flex-col border-l border-border/30">
         <SheetHeader className="p-4 border-b border-border/30">
@@ -92,7 +96,10 @@ export function CartSheet({ open, onOpenChange }: CartSheetProps) {
                 </p>
               </div>
               
-              <Button className="w-full h-12 rounded-xl text-sm font-semibold shadow-lg shadow-primary/20">
+              <Button 
+                className="w-full h-12 rounded-xl text-sm font-semibold shadow-lg shadow-primary/20"
+                onClick={() => { setShowCheckout(true); onOpenChange(false); }}
+              >
                 Buyurtma berish — ${total.toLocaleString()}
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
@@ -101,6 +108,8 @@ export function CartSheet({ open, onOpenChange }: CartSheetProps) {
         )}
       </SheetContent>
     </Sheet>
+    <CheckoutSheet open={showCheckout} onOpenChange={setShowCheckout} onSuccess={() => setShowCheckout(false)} />
+    </>
   );
 }
 

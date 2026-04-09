@@ -3,7 +3,7 @@ import {
   Search, Filter, ShoppingBag, Plus, Store, Package, Heart, 
   TrendingUp, Sparkles, LayoutDashboard, MapPin, Star, 
   Flame, Crown, ChevronRight, Video, Zap, SlidersHorizontal,
-  Grid3X3, LayoutList, ArrowUpDown
+  Grid3X3, LayoutList, ArrowUpDown, ClipboardList
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,9 @@ import { BecomeSeller } from '@/components/marketplace/BecomeSeller';
 import { CreateProductDialog } from '@/components/marketplace/CreateProductDialog';
 import { CartSheet } from '@/components/marketplace/CartSheet';
 import { SellerDashboard } from '@/components/marketplace/SellerDashboard';
+import { OrdersView } from '@/components/marketplace/OrdersView';
+import { SellerStorefront } from '@/components/marketplace/SellerStorefront';
+import { VideoCommerceSection } from '@/components/marketplace/VideoCommerceSection';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
@@ -49,6 +52,7 @@ export default function MarketplacePage() {
   const [sortBy, setSortBy] = useState('newest');
   const [priceRange, setPriceRange] = useState([0, 10000]);
   const [searchFocused, setSearchFocused] = useState(false);
+  const [selectedSellerId, setSelectedSellerId] = useState<string | null>(null);
   
   const { categories } = useCategories();
   const { products, isLoading: productsLoading, refresh: refreshProducts } = useProducts(selectedCategory, searchQuery);
@@ -86,6 +90,7 @@ export default function MarketplacePage() {
 
   const tabs = [
     { id: 'browse', label: 'Barchasi', icon: TrendingUp },
+    { id: 'orders', label: 'Buyurtmalar', icon: ClipboardList },
     { id: 'selling', label: 'Sotish', icon: Package },
     { id: 'saved', label: 'Saqlangan', icon: Heart },
   ];
@@ -320,6 +325,11 @@ export default function MarketplacePage() {
                 </div>
               )}
 
+              {/* Video Commerce */}
+              {selectedCategory === 'all' && !searchQuery && (
+                <VideoCommerceSection onProductSelect={handleProductSelect} />
+              )}
+
               {/* Sort & Layout Controls */}
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">
@@ -389,6 +399,27 @@ export default function MarketplacePage() {
                   title="Mahsulot topilmadi"
                   description={searchQuery ? "Boshqa so'z bilan izlab ko'ring" : "Birinchi bo'lib mahsulot joylashtiring!"}
                 />
+              )}
+            </motion.div>
+          )}
+
+          {/* Orders Tab */}
+          {activeTab === 'orders' && (
+            <motion.div
+              key="orders"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="p-4"
+            >
+              {!user ? (
+                <EmptyState
+                  icon={<ClipboardList className="h-16 w-16" />}
+                  title="Tizimga kiring"
+                  description="Buyurtmalarni ko'rish uchun tizimga kiring"
+                />
+              ) : (
+                <OrdersView />
               )}
             </motion.div>
           )}
@@ -516,9 +547,18 @@ export default function MarketplacePage() {
       </div>
 
       {/* Product Detail */}
-      <ProductDetail product={selectedProduct} onClose={() => setSelectedProduct(null)} />
+      <ProductDetail 
+        product={selectedProduct} 
+        onClose={() => setSelectedProduct(null)} 
+        onSellerClick={(id) => { setSelectedProduct(null); setSelectedSellerId(id); }}
+      />
       <CreateProductDialog open={showCreateProduct} onOpenChange={setShowCreateProduct} onSuccess={() => { refreshSeller(); refreshProducts(); }} />
       <CartSheet open={showCart} onOpenChange={setShowCart} />
+      <SellerStorefront 
+        sellerId={selectedSellerId} 
+        onClose={() => setSelectedSellerId(null)} 
+        onProductSelect={handleProductSelect}
+      />
 
       {/* Filters Sheet */}
       <Sheet open={showFilters} onOpenChange={setShowFilters}>

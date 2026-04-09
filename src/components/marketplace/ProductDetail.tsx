@@ -16,9 +16,10 @@ import { cn } from '@/lib/utils';
 interface ProductDetailProps {
   product: Product | null;
   onClose: () => void;
+  onSellerClick?: (sellerId: string) => void;
 }
 
-export function ProductDetail({ product, onClose }: ProductDetailProps) {
+export function ProductDetail({ product, onClose, onSellerClick }: ProductDetailProps) {
   const { triggerHaptic } = useHapticFeedback();
   const { toggleLike } = useProductActions();
   const { addToCart } = useCart();
@@ -213,7 +214,10 @@ export function ProductDetail({ product, onClose }: ProductDetailProps) {
 
               {/* Seller */}
               {product.seller && (
-                <div className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-border/20">
+                <div 
+                  className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-border/20 cursor-pointer hover:bg-muted/30 transition-colors"
+                  onClick={() => onSellerClick?.(product.seller!.id)}
+                >
                   <div className="flex items-center gap-3">
                     <Avatar className="h-11 w-11 ring-2 ring-border/30">
                       <AvatarImage src={product.seller.logo_url || product.seller.profile?.avatar_url || ''} />
