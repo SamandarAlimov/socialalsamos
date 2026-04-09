@@ -52,6 +52,7 @@ export default function MarketplacePage() {
   const [sortBy, setSortBy] = useState('newest');
   const [priceRange, setPriceRange] = useState([0, 10000]);
   const [searchFocused, setSearchFocused] = useState(false);
+  const [selectedSellerId, setSelectedSellerId] = useState<string | null>(null);
   
   const { categories } = useCategories();
   const { products, isLoading: productsLoading, refresh: refreshProducts } = useProducts(selectedCategory, searchQuery);
@@ -89,6 +90,7 @@ export default function MarketplacePage() {
 
   const tabs = [
     { id: 'browse', label: 'Barchasi', icon: TrendingUp },
+    { id: 'orders', label: 'Buyurtmalar', icon: ClipboardList },
     { id: 'selling', label: 'Sotish', icon: Package },
     { id: 'saved', label: 'Saqlangan', icon: Heart },
   ];
