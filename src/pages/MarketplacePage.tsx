@@ -325,6 +325,11 @@ export default function MarketplacePage() {
                 </div>
               )}
 
+              {/* Video Commerce */}
+              {selectedCategory === 'all' && !searchQuery && (
+                <VideoCommerceSection onProductSelect={handleProductSelect} />
+              )}
+
               {/* Sort & Layout Controls */}
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">
