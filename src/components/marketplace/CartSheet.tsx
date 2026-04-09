@@ -107,6 +107,8 @@ export function CartSheet({ open, onOpenChange }: CartSheetProps) {
         )}
       </SheetContent>
     </Sheet>
+    <CheckoutSheet open={showCheckout} onOpenChange={setShowCheckout} onSuccess={() => setShowCheckout(false)} />
+    </>
   );
 }
 
