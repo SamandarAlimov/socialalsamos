@@ -18,6 +18,7 @@ export function CartSheet({ open, onOpenChange }: CartSheetProps) {
   const [showCheckout, setShowCheckout] = useState(false);
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-md p-0 flex flex-col border-l border-border/30">
         <SheetHeader className="p-4 border-b border-border/30">
