@@ -3,7 +3,7 @@ import {
   Search, Filter, ShoppingBag, Plus, Store, Package, Heart, 
   TrendingUp, Sparkles, LayoutDashboard, MapPin, Star, 
   Flame, Crown, ChevronRight, Video, Zap, SlidersHorizontal,
-  Grid3X3, LayoutList, ArrowUpDown
+  Grid3X3, LayoutList, ArrowUpDown, ClipboardList
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,9 @@ import { BecomeSeller } from '@/components/marketplace/BecomeSeller';
 import { CreateProductDialog } from '@/components/marketplace/CreateProductDialog';
 import { CartSheet } from '@/components/marketplace/CartSheet';
 import { SellerDashboard } from '@/components/marketplace/SellerDashboard';
+import { OrdersView } from '@/components/marketplace/OrdersView';
+import { SellerStorefront } from '@/components/marketplace/SellerStorefront';
+import { VideoCommerceSection } from '@/components/marketplace/VideoCommerceSection';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
