@@ -547,9 +547,18 @@ export default function MarketplacePage() {
       </div>
 
       {/* Product Detail */}
-      <ProductDetail product={selectedProduct} onClose={() => setSelectedProduct(null)} />
+      <ProductDetail 
+        product={selectedProduct} 
+        onClose={() => setSelectedProduct(null)} 
+        onSellerClick={(id) => { setSelectedProduct(null); setSelectedSellerId(id); }}
+      />
       <CreateProductDialog open={showCreateProduct} onOpenChange={setShowCreateProduct} onSuccess={() => { refreshSeller(); refreshProducts(); }} />
       <CartSheet open={showCart} onOpenChange={setShowCart} />
+      <SellerStorefront 
+        sellerId={selectedSellerId} 
+        onClose={() => setSelectedSellerId(null)} 
+        onProductSelect={handleProductSelect}
+      />
 
       {/* Filters Sheet */}
       <Sheet open={showFilters} onOpenChange={setShowFilters}>
