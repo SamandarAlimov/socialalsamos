@@ -774,7 +774,7 @@ function PremiumPostCard({ post, onClick }: { post: SearchPost; onClick: () => v
               </div>
             )}
             <span className="text-xs font-semibold text-foreground truncate">
-              {post.profile?.display_name || post.profile?.username || 'Noma'lum'}
+              {post.profile?.display_name || post.profile?.username || "Noma'lum"}
             </span>
             {post.profile?.is_verified && <VerifiedBadge size="xs" />}
           </div>
