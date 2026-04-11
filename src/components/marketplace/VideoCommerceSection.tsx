@@ -117,11 +117,11 @@ export function VideoCommerceSection({ onProductSelect }: VideoCommerceSectionPr
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-pink-500/10">
-            <Play className="h-4 w-4 text-pink-500" />
+          <div className="p-1.5 rounded-lg bg-primary/10">
+            <Play className="h-4 w-4 text-primary" />
           </div>
           <h3 className="font-bold">Video Shopping</h3>
-          <Badge variant="outline" className="text-[10px] bg-pink-500/5 text-pink-500 border-pink-500/20">
+          <Badge variant="outline" className="text-[10px] bg-primary/5 text-primary border-primary/20">
             Yangi
           </Badge>
         </div>

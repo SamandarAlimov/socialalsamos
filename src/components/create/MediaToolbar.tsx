@@ -81,28 +81,28 @@ export function MediaToolbar({
       icon: ImageIcon, 
       label: 'Photo', 
       onClick: onImageClick, 
-      color: 'text-green-500',
+      color: 'text-foreground',
       show: true
     },
     { 
       icon: Video, 
       label: 'Video', 
       onClick: onVideoClick, 
-      color: 'text-blue-500',
+      color: 'text-foreground',
       show: true
     },
     { 
       icon: Camera, 
       label: 'Camera', 
       onClick: onCameraClick, 
-      color: 'text-purple-500',
+      color: 'text-foreground',
       show: true
     },
     { 
       icon: BarChart3, 
       label: 'Poll', 
       onClick: onPollClick, 
-      color: 'text-orange-500', 
+      color: 'text-foreground', 
       active: hasPoll,
       show: variant === 'post'
     },
@@ -110,21 +110,21 @@ export function MediaToolbar({
       icon: Sparkles, 
       label: 'Filter', 
       onClick: onFilterClick, 
-      color: 'text-pink-500',
+      color: 'text-foreground',
       show: !!onFilterClick
     },
     { 
       icon: Wand2, 
       label: 'Effects', 
       onClick: onEffectsClick, 
-      color: 'text-violet-500',
+      color: 'text-foreground',
       show: !!onEffectsClick
     },
     { 
       icon: Music, 
       label: 'Music', 
       onClick: onMusicClick, 
-      color: 'text-rose-500', 
+      color: 'text-foreground', 
       active: hasMusic,
       show: !!onMusicClick
     },
@@ -132,7 +132,7 @@ export function MediaToolbar({
       icon: Type, 
       label: 'Text BG', 
       onClick: onTextBackgroundClick, 
-      color: 'text-amber-500', 
+      color: 'text-foreground', 
       active: hasTextBackground,
       show: !!onTextBackgroundClick && (variant === 'story' || variant === 'post')
     },
@@ -140,49 +140,49 @@ export function MediaToolbar({
       icon: Users, 
       label: 'Collab', 
       onClick: onCollaborateClick, 
-      color: 'text-cyan-500',
+      color: 'text-foreground',
       show: !!onCollaborateClick
     },
     { 
       icon: AtSign, 
       label: 'Mention', 
       onClick: onMentionClick, 
-      color: 'text-indigo-500',
+      color: 'text-foreground',
       show: !!onMentionClick
     },
     { 
       icon: Smile, 
       label: 'Emoji', 
       onClick: onEmojiClick, 
-      color: 'text-yellow-500',
+      color: 'text-foreground',
       show: !!onEmojiClick
     },
     { 
       icon: Hash, 
       label: 'Tag', 
       onClick: onHashtagClick, 
-      color: 'text-teal-500',
+      color: 'text-foreground',
       show: !!onHashtagClick
     },
     { 
       icon: MapPin, 
       label: 'Location', 
       onClick: onLocationClick, 
-      color: 'text-red-500',
+      color: 'text-foreground',
       show: !!onLocationClick
     },
     { 
       icon: Link2, 
       label: 'Link', 
       onClick: onLinkClick, 
-      color: 'text-slate-500',
+      color: 'text-foreground',
       show: !!onLinkClick && variant === 'post'
     },
     { 
       icon: Calendar, 
       label: 'Schedule', 
       onClick: onScheduleClick, 
-      color: 'text-emerald-500',
+      color: 'text-foreground',
       show: !!onScheduleClick && variant === 'post'
     },
   ];

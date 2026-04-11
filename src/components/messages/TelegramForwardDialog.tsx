@@ -193,10 +193,7 @@ export function TelegramForwardDialog({ messages: forwardMessages, open, onOpenC
         <div className="relative">
           <Avatar className="h-12 w-12">
             <AvatarImage src={getConversationAvatar(conv) || ''} />
-            <AvatarFallback className={
-              conv.type === 'group' ? 'bg-blue-500 text-white' : 
-              conv.type === 'channel' ? 'bg-violet-500 text-white' : 'bg-primary text-primary-foreground'
-            }>
+            <AvatarFallback className="bg-primary text-primary-foreground">
               {conv.type === 'group' ? <Users className="h-5 w-5" /> : 
                conv.type === 'channel' ? <Megaphone className="h-5 w-5" /> :
                getConversationName(conv)[0]?.toUpperCase()}
