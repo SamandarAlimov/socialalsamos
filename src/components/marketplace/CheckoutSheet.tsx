@@ -223,11 +223,11 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   {/* Trust badges */}
                   <div className="flex items-center gap-4 text-xs text-muted-foreground">
                     <div className="flex items-center gap-1">
-                      <ShieldCheck className="h-3.5 w-3.5 text-green-500" />
+                      <ShieldCheck className="h-3.5 w-3.5 text-primary" />
                       Xavfsiz to'lov
                     </div>
                     <div className="flex items-center gap-1">
-                      <Truck className="h-3.5 w-3.5 text-blue-500" />
+                      <Truck className="h-3.5 w-3.5 text-primary" />
                       Kafolat
                     </div>
                   </div>

@@ -418,9 +418,9 @@ export default function AIPage() {
                         onClick={() => loadConv(conv)}
                       >
                         <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center shrink-0",
-                          conv.type === 'imagine' ? "bg-gradient-to-br from-pink-500/15 to-orange-500/15" : "bg-gradient-to-br from-alsamos-orange/10 to-alsamos-orange-dark/10"
+                          conv.type === 'imagine' ? "bg-primary/10" : "bg-primary/10"
                         )}>
-                          {conv.type === 'imagine' ? <Wand2 className="h-3.5 w-3.5 text-pink-500" /> : <MessageSquare className="h-3.5 w-3.5 text-alsamos-orange" />}
+                          {conv.type === 'imagine' ? <Wand2 className="h-3.5 w-3.5 text-primary" /> : <MessageSquare className="h-3.5 w-3.5 text-primary" />}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium truncate">{conv.title}</p>
