@@ -254,9 +254,9 @@ export function ChatListItem({
               <AvatarFallback 
                 className={cn(
                   "text-primary-foreground font-medium text-lg md:text-base",
-                  conversation.type === 'group' && 'bg-blue-500',
-                  conversation.type === 'channel' && 'bg-violet-500',
-                  isSelfChat && 'bg-gradient-to-br from-amber-500 to-orange-500',
+                  conversation.type === 'group' && 'bg-primary',
+                  conversation.type === 'channel' && 'bg-primary',
+                  isSelfChat && 'bg-primary',
                   conversation.type === 'private' && !isSelfChat && 'bg-primary'
                 )}
               >

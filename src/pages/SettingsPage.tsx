@@ -915,8 +915,8 @@ export default function SettingsPage() {
             <div className="divide-y divide-border">
               <div className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-red-500/10 flex items-center justify-center">
-                    <Heart className="h-5 w-5 text-red-500" />
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                    <Heart className="h-5 w-5 text-foreground" />
                   </div>
                   <div>
                     <p className="font-medium text-sm">Likes</p>
@@ -931,8 +931,8 @@ export default function SettingsPage() {
 
               <div className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-blue-500/10 flex items-center justify-center">
-                    <MessageCircle className="h-5 w-5 text-blue-500" />
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                    <MessageCircle className="h-5 w-5 text-foreground" />
                   </div>
                   <div>
                     <p className="font-medium text-sm">Comments</p>
@@ -947,8 +947,8 @@ export default function SettingsPage() {
 
               <div className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-green-500/10 flex items-center justify-center">
-                    <UserPlus className="h-5 w-5 text-green-500" />
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                    <UserPlus className="h-5 w-5 text-foreground" />
                   </div>
                   <div>
                     <p className="font-medium text-sm">New Followers</p>
@@ -963,8 +963,8 @@ export default function SettingsPage() {
 
               <div className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-purple-500/10 flex items-center justify-center">
-                    <AtSign className="h-5 w-5 text-purple-500" />
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                    <AtSign className="h-5 w-5 text-foreground" />
                   </div>
                   <div>
                     <p className="font-medium text-sm">Mentions</p>

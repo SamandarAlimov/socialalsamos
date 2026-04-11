@@ -851,12 +851,12 @@ export default function MessagesPage() {
           <Button 
             size="icon"
             variant="outline"
-            className="h-12 w-12 md:h-10 md:w-10 bg-gradient-to-br from-amber-500/10 to-orange-500/10 border-amber-500/30 hover:bg-amber-500/20"
+            className="h-12 w-12 md:h-10 md:w-10 bg-muted border-border hover:bg-accent"
             onClick={handleOpenSelfChat}
             disabled={isCreatingSelfChat}
             title="Saved Messages"
           >
-            <Bookmark className="h-5 w-5 md:h-4 md:w-4 text-amber-600" />
+            <Bookmark className="h-5 w-5 md:h-4 md:w-4 text-foreground" />
           </Button>
           <Button 
             size="icon"
