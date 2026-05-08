@@ -370,6 +370,49 @@ export default function MessagesPage() {
     setSelectedMessages(new Set());
   };
 
+  // Drag-to-select (pointer-based, works for touch + mouse)
+  const dragSelectActive = useRef(false);
+  const dragSelectMode = useRef<'add' | 'remove'>('add');
+  const dragVisited = useRef<Set<string>>(new Set());
+  const dragAnchorId = useRef<string | null>(null);
+
+  const findMessageIdAt = (x: number, y: number): string | null => {
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    const wrap = el?.closest('[data-message-id]') as HTMLElement | null;
+    return wrap?.getAttribute('data-message-id') || null;
+  };
+
+  const handleMessagesPointerDown = (e: React.PointerEvent) => {
+    if (!isSelectionMode) return;
+    const id = findMessageIdAt(e.clientX, e.clientY);
+    if (!id) return;
+    dragAnchorId.current = id;
+    dragVisited.current = new Set([id]);
+    dragSelectMode.current = selectedMessages.has(id) ? 'remove' : 'add';
+    dragSelectActive.current = false;
+  };
+
+  const handleMessagesPointerMove = (e: React.PointerEvent) => {
+    if (!isSelectionMode || !dragAnchorId.current) return;
+    const id = findMessageIdAt(e.clientX, e.clientY);
+    if (!id || dragVisited.current.has(id)) return;
+    dragSelectActive.current = true;
+    dragVisited.current.add(id);
+    setSelectedMessages(prev => {
+      const next = new Set(prev);
+      if (dragSelectMode.current === 'add') next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const handleMessagesPointerUp = () => {
+    dragAnchorId.current = null;
+    dragVisited.current = new Set();
+    // keep dragSelectActive true briefly so click handler on bubble can ignore it
+    setTimeout(() => { dragSelectActive.current = false; }, 0);
+  };
+
   const handleForwardSelected = () => {
     const selectedMsgs = messages.filter(m => selectedMessages.has(m.id));
     // Sort by created_at to maintain order
