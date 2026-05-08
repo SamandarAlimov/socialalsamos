@@ -471,15 +471,16 @@ export function EnhancedMessageBubble({
       <div 
         ref={bubbleRef}
         className={cn(
-          "flex group relative transition-colors",
+          "flex group relative transition-all duration-200 -mx-2 px-2 py-0.5 rounded-lg",
           isMine ? "justify-end" : "justify-start",
-          isSelected && "bg-primary/10 -mx-2 px-2 rounded-lg"
+          isSelectionMode && "cursor-pointer hover:bg-primary/5",
+          isSelected && "bg-primary/10"
         )}
         onTouchStart={(e) => {
           if (!isSelectionMode) {
             handleTouchStart(e);
-            handleLongPressStart();
           }
+          handleLongPressStart();
         }}
         onTouchMove={handleTouchMove}
         onTouchEnd={() => { handleTouchEnd(); handleLongPressEnd(); }}
@@ -489,10 +490,17 @@ export function EnhancedMessageBubble({
         onMouseLeave={handleLongPressEnd}
         onContextMenu={handleContextMenu}
       >
-        {/* Selection checkbox */}
+        {/* Selection checkbox - Android/Telegram Desktop style (left side, inline) */}
         {isSelectionMode && (
-          <div className={cn("absolute top-1/2 -translate-y-1/2 z-10", isMine ? "right-full mr-2" : "left-0 -ml-6")}>
-            {isSelected ? <CheckSquare className="h-5 w-5 text-primary" /> : <Square className="h-5 w-5 text-muted-foreground" />}
+          <div className="flex items-center justify-center pr-2 flex-shrink-0 self-center">
+            <div className={cn(
+              "h-6 w-6 rounded-full border-2 flex items-center justify-center transition-all duration-200",
+              isSelected
+                ? "bg-primary border-primary scale-100"
+                : "border-muted-foreground/40 bg-background scale-90"
+            )}>
+              {isSelected && <Check className="h-4 w-4 text-primary-foreground" strokeWidth={3} />}
+            </div>
           </div>
         )}
 
