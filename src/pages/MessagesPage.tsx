@@ -407,9 +407,18 @@ export default function MessagesPage() {
   };
 
   const handleMessagesPointerUp = () => {
+    const wasDrag = dragSelectActive.current;
     dragAnchorId.current = null;
     dragVisited.current = new Set();
-    // keep dragSelectActive true briefly so click handler on bubble can ignore it
+    if (wasDrag) {
+      // Swallow the next click so the bubble's tap-toggle doesn't undo the drag
+      const swallow = (ev: MouseEvent) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        window.removeEventListener('click', swallow, true);
+      };
+      window.addEventListener('click', swallow, true);
+    }
     setTimeout(() => { dragSelectActive.current = false; }, 0);
   };
 
