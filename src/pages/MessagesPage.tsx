@@ -1115,7 +1115,7 @@ export default function MessagesPage() {
                         const readByOther = isMine && senderId ? isMessageRead(message.id, senderId) : false;
                         const readAt = isMine && senderId ? getMessageReadAt(message.id, senderId) : null;
                         return (
-                          <div key={message.id} id={`message-${message.id}`} className={cn('min-w-0', highlightedMessageId === message.id && 'animate-pulse bg-primary/10 rounded-lg')}>
+                          <div key={message.id} id={`message-${message.id}`} data-message-id={message.id} className={cn('min-w-0', highlightedMessageId === message.id && 'animate-pulse bg-primary/10 rounded-lg')}>
                             <EnhancedMessageBubble
                               key={message.id}
                               message={{ ...message, is_read: readByOther, status: readByOther ? 'read' : message.status, read_at: readAt || undefined }}
