@@ -370,6 +370,58 @@ export default function MessagesPage() {
     setSelectedMessages(new Set());
   };
 
+  // Drag-to-select (pointer-based, works for touch + mouse)
+  const dragSelectActive = useRef(false);
+  const dragSelectMode = useRef<'add' | 'remove'>('add');
+  const dragVisited = useRef<Set<string>>(new Set());
+  const dragAnchorId = useRef<string | null>(null);
+
+  const findMessageIdAt = (x: number, y: number): string | null => {
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    const wrap = el?.closest('[data-message-id]') as HTMLElement | null;
+    return wrap?.getAttribute('data-message-id') || null;
+  };
+
+  const handleMessagesPointerDown = (e: React.PointerEvent) => {
+    if (!isSelectionMode) return;
+    const id = findMessageIdAt(e.clientX, e.clientY);
+    if (!id) return;
+    dragAnchorId.current = id;
+    dragVisited.current = new Set([id]);
+    dragSelectMode.current = selectedMessages.has(id) ? 'remove' : 'add';
+    dragSelectActive.current = false;
+  };
+
+  const handleMessagesPointerMove = (e: React.PointerEvent) => {
+    if (!isSelectionMode || !dragAnchorId.current) return;
+    const id = findMessageIdAt(e.clientX, e.clientY);
+    if (!id || dragVisited.current.has(id)) return;
+    dragSelectActive.current = true;
+    dragVisited.current.add(id);
+    setSelectedMessages(prev => {
+      const next = new Set(prev);
+      if (dragSelectMode.current === 'add') next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const handleMessagesPointerUp = () => {
+    const wasDrag = dragSelectActive.current;
+    dragAnchorId.current = null;
+    dragVisited.current = new Set();
+    if (wasDrag) {
+      // Swallow the next click so the bubble's tap-toggle doesn't undo the drag
+      const swallow = (ev: MouseEvent) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        window.removeEventListener('click', swallow, true);
+      };
+      window.addEventListener('click', swallow, true);
+    }
+    setTimeout(() => { dragSelectActive.current = false; }, 0);
+  };
+
   const handleForwardSelected = () => {
     const selectedMsgs = messages.filter(m => selectedMessages.has(m.id));
     // Sort by created_at to maintain order
@@ -1036,7 +1088,14 @@ export default function MessagesPage() {
             <PinnedMessagesBar pinnedMessages={pinnedMessages} onUnpin={unpinMessage} onScrollToMessage={handleScrollToPinnedMessage} />
           )}
           
-          <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-custom bg-muted/20 overscroll-contain">
+          <div
+            className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-custom bg-muted/20 overscroll-contain"
+            style={isSelectionMode ? { touchAction: 'pan-y' } : undefined}
+            onPointerDown={handleMessagesPointerDown}
+            onPointerMove={handleMessagesPointerMove}
+            onPointerUp={handleMessagesPointerUp}
+            onPointerCancel={handleMessagesPointerUp}
+          >
             {messagesLoading ? (
               <div className="flex items-center justify-center h-full">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -1065,7 +1124,7 @@ export default function MessagesPage() {
                         const readByOther = isMine && senderId ? isMessageRead(message.id, senderId) : false;
                         const readAt = isMine && senderId ? getMessageReadAt(message.id, senderId) : null;
                         return (
-                          <div key={message.id} id={`message-${message.id}`} className={cn('min-w-0', highlightedMessageId === message.id && 'animate-pulse bg-primary/10 rounded-lg')}>
+                          <div key={message.id} id={`message-${message.id}`} data-message-id={message.id} className={cn('min-w-0', highlightedMessageId === message.id && 'animate-pulse bg-primary/10 rounded-lg')}>
                             <EnhancedMessageBubble
                               key={message.id}
                               message={{ ...message, is_read: readByOther, status: readByOther ? 'read' : message.status, read_at: readAt || undefined }}
