@@ -1079,7 +1079,14 @@ export default function MessagesPage() {
             <PinnedMessagesBar pinnedMessages={pinnedMessages} onUnpin={unpinMessage} onScrollToMessage={handleScrollToPinnedMessage} />
           )}
           
-          <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-custom bg-muted/20 overscroll-contain">
+          <div
+            className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-custom bg-muted/20 overscroll-contain"
+            style={isSelectionMode ? { touchAction: 'pan-y' } : undefined}
+            onPointerDown={handleMessagesPointerDown}
+            onPointerMove={handleMessagesPointerMove}
+            onPointerUp={handleMessagesPointerUp}
+            onPointerCancel={handleMessagesPointerUp}
+          >
             {messagesLoading ? (
               <div className="flex items-center justify-center h-full">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
