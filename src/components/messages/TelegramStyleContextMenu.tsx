@@ -139,9 +139,9 @@ export function TelegramStyleContextMenu({
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
         >
-          {/* Blurred backdrop */}
+          {/* Subtle backdrop (no blur) */}
           <motion.div
-            className="absolute inset-0 bg-black/30 backdrop-blur-2xl"
+            className="absolute inset-0 bg-black/40"
             onClick={onClose}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
