@@ -140,13 +140,10 @@ export function EnhancedMessageBubble({
     longPressTimer.current = setTimeout(() => {
       longPressTriggered.current = true;
       mediumTap();
-      if (isSelectionMode) {
-        onLongPress?.(message.id);
-      } else {
-        setContextMenuOpen(true);
-      }
-    }, 500);
-  }, [message.id, isSelectionMode, onLongPress, mediumTap]);
+      // Android/Telegram Desktop style: long-press always enters selection mode
+      onLongPress?.(message.id);
+    }, 400);
+  }, [message.id, onLongPress, mediumTap]);
 
   const handleLongPressEnd = useCallback(() => {
     if (longPressTimer.current) {
