@@ -985,15 +985,17 @@ export default function MessagesPage() {
       ) : selectedConversation ? (
         <>
           {isSelectionMode ? (
-            <div className="flex-shrink-0 z-20 bg-card border-b border-border">
+            <div className="flex-shrink-0 z-20 bg-card/90 backdrop-blur-xl border-b border-border animate-in slide-in-from-top duration-200">
               <div className="flex items-center justify-between p-3 md:p-4">
                 <div className="flex items-center gap-3">
-                  <Button variant="ghost" size="icon" onClick={handleExitSelectionMode}><X className="h-5 w-5" /></Button>
-                  <span className="font-medium">{selectedMessages.size} selected</span>
+                  <Button variant="ghost" size="icon" onClick={handleExitSelectionMode} className="rounded-full"><X className="h-5 w-5" /></Button>
+                  <span className="font-semibold text-base">
+                    {selectedMessages.size > 0 ? `${selectedMessages.size} ta tanlandi` : 'Xabarlarni tanlang'}
+                  </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="ghost" size="icon" onClick={handleForwardSelected} disabled={selectedMessages.size === 0}><Forward className="h-5 w-5" /></Button>
-                  <Button variant="ghost" size="icon" onClick={handleDeleteSelected} disabled={selectedMessages.size === 0} className="text-destructive hover:text-destructive"><Trash2 className="h-5 w-5" /></Button>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="icon" onClick={handleForwardSelected} disabled={selectedMessages.size === 0} className="rounded-full"><Forward className="h-5 w-5" /></Button>
+                  <Button variant="ghost" size="icon" onClick={handleDeleteSelected} disabled={selectedMessages.size === 0} className="rounded-full text-destructive hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-5 w-5" /></Button>
                 </div>
               </div>
             </div>
