@@ -176,33 +176,56 @@ export function TelegramStyleContextMenu({
               transformOrigin: isMine ? 'top right' : 'top left',
               visibility: position ? 'visible' : 'hidden',
             }}
-            initial={{ opacity: 0, scale: 0.92, y: -4 }}
+            initial={{ opacity: 0, scale: 0.9, y: -8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.94, y: -4 }}
-            transition={{ duration: 0.16, ease: [0.2, 0.8, 0.2, 1] }}
+            exit={{ opacity: 0, scale: 0.94, y: -6 }}
+            transition={{ type: 'spring', stiffness: 480, damping: 32, mass: 0.6 }}
           >
             {/* Quick reactions bar */}
             {onAddReaction && (
-              <div className="flex items-center gap-0.5 px-2 py-1.5 rounded-2xl bg-popover border border-border shadow-lg">
-                {QUICK_EMOJIS.map((emoji) => (
-                  <button
+              <motion.div
+                className="flex items-center gap-0.5 px-2 py-1.5 rounded-2xl bg-popover border border-border shadow-lg"
+                initial={{ opacity: 0, scale: 0.7, y: -10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.85, y: -6 }}
+                transition={{ type: 'spring', stiffness: 520, damping: 26, mass: 0.5 }}
+              >
+                {QUICK_EMOJIS.map((emoji, i) => (
+                  <motion.button
                     key={emoji}
                     className="text-[20px] p-1 rounded-full hover:scale-125 active:scale-90 transition-transform"
                     onClick={() => handleAction(() => onAddReaction(emoji))}
+                    initial={{ opacity: 0, scale: 0.5, y: -6 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    transition={{
+                      delay: 0.04 + i * 0.025,
+                      type: 'spring',
+                      stiffness: 600,
+                      damping: 20,
+                    }}
                   >
                     {emoji}
-                  </button>
+                  </motion.button>
                 ))}
-              </div>
+              </motion.div>
             )}
 
             {/* Action menu — solid surface, no blur */}
-            <div className="rounded-2xl overflow-hidden bg-popover border border-border shadow-xl">
+            <motion.div
+              className="rounded-2xl overflow-hidden bg-popover border border-border shadow-xl"
+              initial={{ opacity: 0, scale: 0.94, y: -8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: -4 }}
+              transition={{ delay: 0.05, type: 'spring', stiffness: 460, damping: 30, mass: 0.6 }}
+            >
               {readInfo && (
                 <>
-                  <button
+                  <motion.button
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-accent active:bg-accent/80 transition-colors"
                     onClick={() => { if (onViewInfo) handleAction(onViewInfo); }}
+                    initial={{ opacity: 0, x: -6 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.08, duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
                   >
                     <CheckCheck className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                     <span className="text-[14px] font-medium text-foreground/90 flex-1 truncate">
@@ -220,7 +243,7 @@ export function TelegramStyleContextMenu({
                         ))}
                       </div>
                     )}
-                  </button>
+                  </motion.button>
                   <div className="border-t border-border" />
                 </>
               )}
@@ -230,13 +253,20 @@ export function TelegramStyleContextMenu({
                 return (
                   <div key={`${item.label}-${index}`}>
                     {item.separator === 'top' && <div className="border-t border-border" />}
-                    <button
+                    <motion.button
                       className={cn(
                         "w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors",
                         "hover:bg-accent active:bg-accent/80",
                         item.destructive && "text-destructive"
                       )}
                       onClick={() => handleAction(item.action)}
+                      initial={{ opacity: 0, x: isMine ? 8 : -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{
+                        delay: 0.09 + index * 0.022,
+                        duration: 0.22,
+                        ease: [0.2, 0.8, 0.2, 1],
+                      }}
                     >
                       <Icon
                         className={cn(
@@ -253,11 +283,11 @@ export function TelegramStyleContextMenu({
                       >
                         {item.label}
                       </span>
-                    </button>
+                    </motion.button>
                   </div>
                 );
               })}
-            </div>
+            </motion.div>
           </motion.div>
         </>
       )}
