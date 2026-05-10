@@ -599,6 +599,7 @@ export function EnhancedMessageBubble({
         isOpen={contextMenuOpen}
         onClose={() => setContextMenuOpen(false)}
         isMine={isMine}
+        anchorRect={anchorRect}
         onReply={() => onReply?.(message)}
         onForward={() => onForward?.(message)}
         onEdit={isMine ? () => onEdit?.(message) : undefined}
@@ -620,14 +621,7 @@ export function EnhancedMessageBubble({
         } : undefined}
         onAddReaction={addReaction}
         readInfo={readInfo}
-      >
-        {/* Message preview in context menu */}
-        <div className={cn("flex", isMine ? "justify-end" : "justify-start")}>
-          <div className="max-w-[85%]">
-            {renderBubbleContent(true)}
-          </div>
-        </div>
-      </TelegramStyleContextMenu>
+      />
     </>
   );
 }
