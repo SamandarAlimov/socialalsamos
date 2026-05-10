@@ -152,14 +152,19 @@ export function EnhancedMessageBubble({
     }
   }, []);
 
-  const handleClick = useCallback(() => {
+  const handleClick = useCallback((e?: React.MouseEvent) => {
     if (isSelectionMode && onSelect) {
       onSelect(message.id);
       lightTap();
-    } else if (!longPressTriggered.current) {
-      handleDoubleTap();
+      return;
     }
-  }, [isSelectionMode, onSelect, message.id, handleDoubleTap, lightTap]);
+    if (longPressTriggered.current) return;
+    // Skip if user tapped an interactive element (link, button, media controls)
+    if (e && isInteractiveTarget(e.target)) return;
+    // Telegram-style: tap on bubble opens reactions + actions menu
+    lightTap();
+    setContextMenuOpen(true);
+  }, [isSelectionMode, onSelect, message.id, lightTap]);
 
   // Right-click context menu
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
