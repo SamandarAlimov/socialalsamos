@@ -105,7 +105,15 @@ export function EnhancedMessageBubble({
   const [reactions, setReactions] = useState<ReactionGroup[]>([]);
   const { lightTap, mediumTap, successFeedback } = useHapticFeedback();
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
+
+  const openContextMenu = useCallback(() => {
+    if (bubbleRef.current) {
+      setAnchorRect(bubbleRef.current.getBoundingClientRect());
+    }
+    setContextMenuOpen(true);
+  }, []);
   
   // Swipe to reply state
   const [swipeOffset, setSwipeOffset] = useState(0);
