@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -13,11 +13,6 @@ import {
   Download,
   CheckCheck,
   Link,
-  Flag,
-  Heart,
-  MessageSquare,
-  ArrowLeft,
-  BellPlus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -47,6 +42,10 @@ interface TelegramStyleContextMenuProps {
   anchorRect?: DOMRect | null;
 }
 
+const MENU_WIDTH = 240;
+const MENU_GAP = 8;
+const VIEWPORT_PADDING = 12;
+
 export function TelegramStyleContextMenu({
   isOpen,
   onClose,
@@ -66,24 +65,18 @@ export function TelegramStyleContextMenu({
   onAddReaction,
   readInfo,
   readAvatars,
-  children,
   anchorRect,
 }: TelegramStyleContextMenuProps) {
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [showReadDetail, setShowReadDetail] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
 
   const handleAction = useCallback((action?: () => void) => {
-    if (action) {
-      action();
-    }
+    if (action) action();
     onClose();
   }, [onClose]);
 
   useEffect(() => {
-    if (!isOpen) {
-      setShowReadDetail(false);
-      return;
-    }
+    if (!isOpen) return;
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
@@ -91,14 +84,55 @@ export function TelegramStyleContextMenu({
     return () => document.removeEventListener('keydown', handleEsc);
   }, [isOpen, onClose]);
 
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      return () => { document.body.style.overflow = ''; };
-    }
-  }, [isOpen]);
+  // Anchored positioning (Android / Telegram Desktop style)
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    const compute = () => {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const node = containerRef.current;
+      const measuredHeight = node?.offsetHeight || 320;
+      const measuredWidth = node?.offsetWidth || MENU_WIDTH;
 
-  // Build menu items matching Alsamos design order
+      if (!anchorRect) {
+        setPosition({
+          top: Math.max(VIEWPORT_PADDING, (vh - measuredHeight) / 2),
+          left: Math.max(VIEWPORT_PADDING, (vw - measuredWidth) / 2),
+        });
+        return;
+      }
+
+      // Horizontal: align to bubble side, clamp to viewport
+      let left = isMine
+        ? anchorRect.right - measuredWidth
+        : anchorRect.left;
+      left = Math.min(Math.max(left, VIEWPORT_PADDING), vw - measuredWidth - VIEWPORT_PADDING);
+
+      // Vertical: prefer below bubble, otherwise above, otherwise clamp
+      const spaceBelow = vh - anchorRect.bottom - VIEWPORT_PADDING;
+      const spaceAbove = anchorRect.top - VIEWPORT_PADDING;
+      let top: number;
+      if (spaceBelow >= measuredHeight + MENU_GAP) {
+        top = anchorRect.bottom + MENU_GAP;
+      } else if (spaceAbove >= measuredHeight + MENU_GAP) {
+        top = anchorRect.top - measuredHeight - MENU_GAP;
+      } else {
+        top = Math.max(VIEWPORT_PADDING, vh - measuredHeight - VIEWPORT_PADDING);
+      }
+      setPosition({ top, left });
+    };
+    compute();
+    // Re-measure after content paints
+    const id = requestAnimationFrame(compute);
+    window.addEventListener('resize', compute);
+    window.addEventListener('scroll', compute, true);
+    return () => {
+      cancelAnimationFrame(id);
+      window.removeEventListener('resize', compute);
+      window.removeEventListener('scroll', compute, true);
+    };
+  }, [isOpen, anchorRect, isMine]);
+
   const menuItems: {
     icon: typeof Reply;
     label: string;
@@ -107,10 +141,6 @@ export function TelegramStyleContextMenu({
     separator?: 'top' | 'bottom';
   }[] = [];
 
-  // Read info row (top, with separator below)
-  // Added separately below
-
-  // Main actions
   if (onReply) menuItems.push({ icon: Reply, label: 'Javob yozish', action: onReply });
   if (onCopy) menuItems.push({ icon: Copy, label: 'Nusxalash', action: onCopy });
   if (hasMedia && onDownload) menuItems.push({ icon: Download, label: 'Saqlash', action: onDownload });
@@ -118,100 +148,72 @@ export function TelegramStyleContextMenu({
   if (onPin) menuItems.push({ icon: isPinned ? PinOff : Pin, label: isPinned ? 'Olib tashlash' : 'Qadash', action: onPin });
   if (onCopyLink) menuItems.push({ icon: Link, label: 'Havolani nusxalash', action: onCopyLink });
   if (onForward) menuItems.push({ icon: Forward, label: 'Uzatish', action: onForward });
-
-  // Delete (destructive, separator above)
-  if (isMine && onDelete) {
-    menuItems.push({ icon: Trash2, label: "O'chirish", action: onDelete, destructive: true, separator: 'top' });
-  }
-
-  // Select (separator above)
-  if (onSelect) {
-    menuItems.push({ icon: CheckSquare, label: 'Tanlash', action: onSelect, separator: 'top' });
-  }
+  if (isMine && onDelete) menuItems.push({ icon: Trash2, label: "O'chirish", action: onDelete, destructive: true, separator: 'top' });
+  if (onSelect) menuItems.push({ icon: CheckSquare, label: 'Tanlash', action: onSelect, separator: 'top' });
 
   return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <motion.div
-          className="fixed inset-0 z-[100] flex flex-col items-center justify-center"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.18 }}
-        >
-          {/* Subtle backdrop (no blur) */}
+        <>
+          {/* Transparent click-catcher — no blur, no darken (Android style) */}
           <motion.div
-            className="absolute inset-0 bg-black/40"
+            className="fixed inset-0 z-[100]"
             onClick={onClose}
+            onContextMenu={(e) => { e.preventDefault(); onClose(); }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.12 }}
           />
 
-          <div ref={menuRef} className="relative z-10 w-full max-w-[340px] px-3 flex flex-col items-center gap-2.5">
-            {/* Quick Emoji Reaction Bar */}
+          <motion.div
+            ref={containerRef}
+            className="fixed z-[101] flex flex-col gap-2"
+            style={{
+              top: position?.top ?? -9999,
+              left: position?.left ?? -9999,
+              width: MENU_WIDTH,
+              transformOrigin: isMine ? 'top right' : 'top left',
+              visibility: position ? 'visible' : 'hidden',
+            }}
+            initial={{ opacity: 0, scale: 0.92, y: -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.94, y: -4 }}
+            transition={{ duration: 0.16, ease: [0.2, 0.8, 0.2, 1] }}
+          >
+            {/* Quick reactions bar */}
             {onAddReaction && (
-              <motion.div
-                className="flex items-center gap-0.5 px-2.5 py-1.5 rounded-full bg-white/80 dark:bg-card/90 backdrop-blur-xl shadow-lg border border-white/30 dark:border-border/30"
-                initial={{ opacity: 0, y: 16, scale: 0.85 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 16, scale: 0.85 }}
-                transition={{ duration: 0.22, delay: 0.03 }}
-              >
+              <div className="flex items-center gap-0.5 px-2 py-1.5 rounded-2xl bg-popover border border-border shadow-lg">
                 {QUICK_EMOJIS.map((emoji) => (
                   <button
                     key={emoji}
-                    className="text-[22px] p-1.5 hover:scale-125 active:scale-90 transition-transform"
+                    className="text-[20px] p-1 rounded-full hover:scale-125 active:scale-90 transition-transform"
                     onClick={() => handleAction(() => onAddReaction(emoji))}
                   >
                     {emoji}
                   </button>
                 ))}
-              </motion.div>
+              </div>
             )}
 
-            {/* Message Preview */}
-            {children && (
-              <motion.div
-                className="w-full pointer-events-none"
-                initial={{ opacity: 0, scale: 0.92 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.92 }}
-                transition={{ duration: 0.18, delay: 0.04 }}
-              >
-                {children}
-              </motion.div>
-            )}
-
-            {/* Action Menu Card - Alsamos Style */}
-            <motion.div
-              className="w-full rounded-[20px] overflow-hidden shadow-2xl bg-white/85 dark:bg-card/90 backdrop-blur-2xl border border-white/40 dark:border-border/20"
-              initial={{ opacity: 0, y: 24, scale: 0.92 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 24, scale: 0.92 }}
-              transition={{ duration: 0.22, delay: 0.08 }}
-            >
-              {/* Read Info Row */}
+            {/* Action menu — solid surface, no blur */}
+            <div className="rounded-2xl overflow-hidden bg-popover border border-border shadow-xl">
               {readInfo && (
                 <>
                   <button
-                    className="w-full flex items-center gap-3.5 px-5 py-3.5 text-left hover:bg-black/5 dark:hover:bg-accent/30 active:bg-black/10 dark:active:bg-accent/50 transition-colors"
-                    onClick={() => {
-                      if (onViewInfo) {
-                        handleAction(onViewInfo);
-                      }
-                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-accent active:bg-accent/80 transition-colors"
+                    onClick={() => { if (onViewInfo) handleAction(onViewInfo); }}
                   >
-                    <CheckCheck className="h-5 w-5 text-foreground/60 flex-shrink-0" />
-                    <span className="text-[15px] font-medium text-foreground/90 flex-1 truncate">
+                    <CheckCheck className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <span className="text-[14px] font-medium text-foreground/90 flex-1 truncate">
                       {readInfo}
                     </span>
                     {readAvatars && readAvatars.length > 0 && (
                       <div className="flex -space-x-2">
                         {readAvatars.slice(0, 3).map((avatar, i) => (
-                          <Avatar key={i} className="h-7 w-7 border-2 border-white dark:border-card">
+                          <Avatar key={i} className="h-5 w-5 border-2 border-popover">
                             <AvatarImage src={avatar.url} alt={avatar.name} />
-                            <AvatarFallback className="text-[10px] font-medium bg-muted text-muted-foreground">
+                            <AvatarFallback className="text-[9px] font-medium bg-muted text-muted-foreground">
                               {avatar.name?.[0] || '?'}
                             </AvatarFallback>
                           </Avatar>
@@ -219,46 +221,45 @@ export function TelegramStyleContextMenu({
                       </div>
                     )}
                   </button>
-                  <div className="mx-5 border-t border-black/8 dark:border-border/30" />
+                  <div className="border-t border-border" />
                 </>
               )}
 
-              {/* Menu Items */}
               {menuItems.map((item, index) => {
                 const Icon = item.icon;
                 return (
                   <div key={`${item.label}-${index}`}>
-                    {item.separator === 'top' && (
-                      <div className="mx-5 border-t border-black/8 dark:border-border/30" />
-                    )}
+                    {item.separator === 'top' && <div className="border-t border-border" />}
                     <button
                       className={cn(
-                        "w-full flex items-center gap-4 px-5 py-3.5 text-left transition-colors",
-                        "hover:bg-black/5 dark:hover:bg-accent/30 active:bg-black/10 dark:active:bg-accent/50",
+                        "w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors",
+                        "hover:bg-accent active:bg-accent/80",
                         item.destructive && "text-destructive"
                       )}
                       onClick={() => handleAction(item.action)}
                     >
-                      <Icon className={cn(
-                        "h-[22px] w-[22px] flex-shrink-0",
-                        item.destructive ? "text-destructive" : "text-foreground/70"
-                      )} strokeWidth={1.8} />
-                      <span className={cn(
-                        "text-[16px] font-medium flex-1",
-                        item.destructive ? "text-destructive" : "text-foreground/90"
-                      )}>
+                      <Icon
+                        className={cn(
+                          "h-[18px] w-[18px] flex-shrink-0",
+                          item.destructive ? "text-destructive" : "text-foreground/70"
+                        )}
+                        strokeWidth={2}
+                      />
+                      <span
+                        className={cn(
+                          "text-[14px] font-medium flex-1",
+                          item.destructive ? "text-destructive" : "text-foreground/90"
+                        )}
+                      >
                         {item.label}
                       </span>
                     </button>
-                    {item.separator === 'bottom' && (
-                      <div className="mx-5 border-t border-black/8 dark:border-border/30" />
-                    )}
                   </div>
                 );
               })}
-            </motion.div>
-          </div>
-        </motion.div>
+            </div>
+          </motion.div>
+        </>
       )}
     </AnimatePresence>,
     document.body

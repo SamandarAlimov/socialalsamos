@@ -105,7 +105,15 @@ export function EnhancedMessageBubble({
   const [reactions, setReactions] = useState<ReactionGroup[]>([]);
   const { lightTap, mediumTap, successFeedback } = useHapticFeedback();
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
+
+  const openContextMenu = useCallback(() => {
+    if (bubbleRef.current) {
+      setAnchorRect(bubbleRef.current.getBoundingClientRect());
+    }
+    setContextMenuOpen(true);
+  }, []);
   
   // Swipe to reply state
   const [swipeOffset, setSwipeOffset] = useState(0);
@@ -159,18 +167,15 @@ export function EnhancedMessageBubble({
       return;
     }
     if (longPressTriggered.current) return;
-    // Skip if user tapped an interactive element (link, button, media controls)
     if (e && isInteractiveTarget(e.target)) return;
-    // Telegram-style: tap on bubble opens reactions + actions menu
     lightTap();
-    setContextMenuOpen(true);
-  }, [isSelectionMode, onSelect, message.id, lightTap]);
+    openContextMenu();
+  }, [isSelectionMode, onSelect, message.id, lightTap, openContextMenu]);
 
-  // Right-click context menu
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    setContextMenuOpen(true);
-  }, []);
+    openContextMenu();
+  }, [openContextMenu]);
 
   const isInteractiveTarget = (target: EventTarget | null) => {
     const el = target as HTMLElement | null;
@@ -459,6 +464,7 @@ export function EnhancedMessageBubble({
           isOpen={contextMenuOpen}
           onClose={() => setContextMenuOpen(false)}
           isMine={callIsMine}
+          anchorRect={anchorRect}
           onReply={() => onReply?.(message)}
           onForward={() => onForward?.(message)}
           onDelete={callIsMine ? () => onDelete?.(message.id) : undefined}
@@ -593,6 +599,7 @@ export function EnhancedMessageBubble({
         isOpen={contextMenuOpen}
         onClose={() => setContextMenuOpen(false)}
         isMine={isMine}
+        anchorRect={anchorRect}
         onReply={() => onReply?.(message)}
         onForward={() => onForward?.(message)}
         onEdit={isMine ? () => onEdit?.(message) : undefined}
@@ -614,14 +621,7 @@ export function EnhancedMessageBubble({
         } : undefined}
         onAddReaction={addReaction}
         readInfo={readInfo}
-      >
-        {/* Message preview in context menu */}
-        <div className={cn("flex", isMine ? "justify-end" : "justify-start")}>
-          <div className="max-w-[85%]">
-            {renderBubbleContent(true)}
-          </div>
-        </div>
-      </TelegramStyleContextMenu>
+      />
     </>
   );
 }
