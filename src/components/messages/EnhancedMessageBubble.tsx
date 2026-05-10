@@ -167,18 +167,15 @@ export function EnhancedMessageBubble({
       return;
     }
     if (longPressTriggered.current) return;
-    // Skip if user tapped an interactive element (link, button, media controls)
     if (e && isInteractiveTarget(e.target)) return;
-    // Telegram-style: tap on bubble opens reactions + actions menu
     lightTap();
-    setContextMenuOpen(true);
-  }, [isSelectionMode, onSelect, message.id, lightTap]);
+    openContextMenu();
+  }, [isSelectionMode, onSelect, message.id, lightTap, openContextMenu]);
 
-  // Right-click context menu
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    setContextMenuOpen(true);
-  }, []);
+    openContextMenu();
+  }, [openContextMenu]);
 
   const isInteractiveTarget = (target: EventTarget | null) => {
     const el = target as HTMLElement | null;
