@@ -464,6 +464,7 @@ export function EnhancedMessageBubble({
           isOpen={contextMenuOpen}
           onClose={() => setContextMenuOpen(false)}
           isMine={callIsMine}
+          anchorRect={anchorRect}
           onReply={() => onReply?.(message)}
           onForward={() => onForward?.(message)}
           onDelete={callIsMine ? () => onDelete?.(message.id) : undefined}
