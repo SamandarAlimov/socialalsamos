@@ -37,6 +37,7 @@ export function ChatListItem({
   isPinned = false,
   isMuted = false,
   isArchived = false,
+  compact = false,
   onClick,
   onArchive,
   onUnarchive,
