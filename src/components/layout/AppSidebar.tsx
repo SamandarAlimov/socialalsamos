@@ -290,7 +290,7 @@ export function AppSidebar() {
 
       {/* Collapse Toggle */}
       <button
-        onClick={() => setCollapsed(!collapsed)}
+        onClick={() => { setUserToggled(true); setCollapsed(!collapsed); }}
         className="absolute -right-3 top-20 z-40 bg-background border border-border rounded-full p-1.5 shadow-md hover:bg-accent transition-colors"
       >
         {collapsed ? (
