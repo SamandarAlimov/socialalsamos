@@ -885,9 +885,48 @@ export default function MessagesPage() {
     setIsChatSwiping(false);
   }, [chatSwipeOffset]);
 
+  // Detect compact (Telegram-style icon-only) chat list when panel is narrow
+  const leftPanelRef = useRef<HTMLDivElement>(null);
+  const [leftPanelWidth, setLeftPanelWidth] = useState<number>(320);
+  useEffect(() => {
+    const el = leftPanelRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setLeftPanelWidth(entry.contentRect.width);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const isCompactList = !isMobile && leftPanelWidth > 0 && leftPanelWidth < 140;
+
   // Left panel content
   const leftPanelContent = (
-    <div className="flex flex-col h-full bg-card overflow-hidden min-w-0 w-full">
+    <div ref={leftPanelRef} className="flex flex-col h-full bg-card overflow-hidden min-w-0 w-full">
+      {isCompactList ? (
+        /* Telegram-style icon-only header */
+        <div className="p-2 border-b border-border flex-shrink-0 flex flex-col gap-2 items-center">
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-10 w-10 rounded-full"
+            onClick={handleOpenSelfChat}
+            disabled={isCreatingSelfChat}
+            title="Saved Messages"
+          >
+            <Bookmark className="h-5 w-5" />
+          </Button>
+          <Button
+            size="icon"
+            className="h-10 w-10 rounded-full"
+            onClick={() => activeTab === 'channels' ? setShowCreateChannelDialog(true) : setShowCreateDialog(true)}
+            title="Yangi suhbat"
+          >
+            <Plus className="h-5 w-5" />
+          </Button>
+        </div>
+      ) : (
       {/* Search & Create */}
       <div className="p-4 md:p-3 border-b border-border flex-shrink-0 space-y-3">
         <div className="flex gap-2">
