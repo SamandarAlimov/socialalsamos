@@ -20,6 +20,7 @@ interface ChatListItemProps {
   isPinned?: boolean;
   isMuted?: boolean;
   isArchived?: boolean;
+  compact?: boolean;
   onClick: () => void;
   onArchive?: () => void;
   onUnarchive?: () => void;
