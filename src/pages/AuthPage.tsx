@@ -16,8 +16,22 @@ import {
   AtSign
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { z } from 'zod';
 
 type AuthMode = 'login' | 'signup';
+
+const loginSchema = z.object({
+  identifier: z.string().trim().min(3, 'Iltimos, email, foydalanuvchi nomi yoki telefon raqamini kiriting').max(255),
+  password: z.string().min(1, 'Parolni kiriting').max(128),
+});
+
+const signupSchema = z.object({
+  fullName: z.string().trim().min(2, 'Ism kamida 2 ta belgidan iborat boʻlsin').max(100),
+  username: z.string().trim().min(3, 'Foydalanuvchi nomi kamida 3 ta belgidan iborat boʻlsin').max(30).regex(/^[a-z0-9_]+$/, 'Faqat kichik harflar, raqamlar va _ ishlating'),
+  identifier: z.string().trim().min(3, 'Email yoki telefon raqamini kiriting').max(255),
+  password: z.string().min(8, 'Parol kamida 8 ta belgidan iborat boʻlsin').max(128),
+  confirmPassword: z.string(),
+}).refine((d) => d.password === d.confirmPassword, { message: 'Parollar mos emas', path: ['confirmPassword'] });
 
 export default function AuthPage() {
   const [mode, setMode] = useState<AuthMode>('login');
@@ -39,34 +53,25 @@ export default function AuthPage() {
     
     try {
       if (mode === 'login') {
-        const { error } = await login(identifier, password);
+        const parsed = loginSchema.safeParse({ identifier, password });
+        if (!parsed.success) {
+          toast.error(parsed.error.errors[0].message);
+          setIsSubmitting(false);
+          return;
+        }
+        const { error } = await login(parsed.data.identifier, parsed.data.password);
         if (!error) {
           toast.success('Welcome back!');
           navigate('/home');
         }
       } else {
-        // Validate confirm password
-        if (password !== confirmPassword) {
-          toast.error('Passwords do not match');
+        const parsed = signupSchema.safeParse({ fullName, username, identifier, password, confirmPassword });
+        if (!parsed.success) {
+          toast.error(parsed.error.errors[0].message);
           setIsSubmitting(false);
           return;
         }
-        
-        // Validate password length
-        if (password.length < 6) {
-          toast.error('Password must be at least 6 characters');
-          setIsSubmitting(false);
-          return;
-        }
-
-        // Validate username
-        if (username.length < 3) {
-          toast.error('Username must be at least 3 characters');
-          setIsSubmitting(false);
-          return;
-        }
-
-        const { error } = await signup(identifier, password, fullName);
+        const { error } = await signup(parsed.data.identifier, parsed.data.password, parsed.data.fullName);
         if (!error) {
           toast.success('Account created successfully!');
           navigate('/home');
