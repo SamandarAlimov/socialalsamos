@@ -986,6 +986,8 @@ export default function MessagesPage() {
           </button>
         ))}
       </div>
+      </>
+      )}
 
       {/* Conversation / Channel List */}
       <ScrollArea className="flex-1 min-h-0 [&_[data-radix-scroll-area-viewport]>div]:!block [&_[data-radix-scroll-area-viewport]>div]:!min-w-0 [&_[data-radix-scroll-area-viewport]>div]:!w-full">
