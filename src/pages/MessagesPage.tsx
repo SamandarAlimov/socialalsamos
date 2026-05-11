@@ -927,6 +927,7 @@ export default function MessagesPage() {
           </Button>
         </div>
       ) : (
+      <>
       {/* Search & Create */}
       <div className="p-4 md:p-3 border-b border-border flex-shrink-0 space-y-3">
         <div className="flex gap-2">
