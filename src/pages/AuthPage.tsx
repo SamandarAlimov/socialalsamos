@@ -53,34 +53,25 @@ export default function AuthPage() {
     
     try {
       if (mode === 'login') {
-        const { error } = await login(identifier, password);
+        const parsed = loginSchema.safeParse({ identifier, password });
+        if (!parsed.success) {
+          toast.error(parsed.error.errors[0].message);
+          setIsSubmitting(false);
+          return;
+        }
+        const { error } = await login(parsed.data.identifier, parsed.data.password);
         if (!error) {
           toast.success('Welcome back!');
           navigate('/home');
         }
       } else {
-        // Validate confirm password
-        if (password !== confirmPassword) {
-          toast.error('Passwords do not match');
+        const parsed = signupSchema.safeParse({ fullName, username, identifier, password, confirmPassword });
+        if (!parsed.success) {
+          toast.error(parsed.error.errors[0].message);
           setIsSubmitting(false);
           return;
         }
-        
-        // Validate password length
-        if (password.length < 6) {
-          toast.error('Password must be at least 6 characters');
-          setIsSubmitting(false);
-          return;
-        }
-
-        // Validate username
-        if (username.length < 3) {
-          toast.error('Username must be at least 3 characters');
-          setIsSubmitting(false);
-          return;
-        }
-
-        const { error } = await signup(identifier, password, fullName);
+        const { error } = await signup(parsed.data.identifier, parsed.data.password, parsed.data.fullName);
         if (!error) {
           toast.success('Account created successfully!');
           navigate('/home');
