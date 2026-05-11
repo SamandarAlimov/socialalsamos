@@ -1046,6 +1046,7 @@ export default function MessagesPage() {
                 isPinned={conv.is_pinned}
                 isMuted={conv.is_muted}
                 isArchived={isArchivedTab}
+                compact={isCompactList}
                 onClick={() => { handleSelectConversation(conv); setSelectedChannel(null); }}
                 onArchive={() => handleArchiveConversation(conv.id)}
                 onUnarchive={() => handleUnarchiveConversation(conv.id)}
