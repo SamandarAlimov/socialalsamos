@@ -16,8 +16,22 @@ import {
   AtSign
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { z } from 'zod';
 
 type AuthMode = 'login' | 'signup';
+
+const loginSchema = z.object({
+  identifier: z.string().trim().min(3, 'Iltimos, email, foydalanuvchi nomi yoki telefon raqamini kiriting').max(255),
+  password: z.string().min(1, 'Parolni kiriting').max(128),
+});
+
+const signupSchema = z.object({
+  fullName: z.string().trim().min(2, 'Ism kamida 2 ta belgidan iborat boʻlsin').max(100),
+  username: z.string().trim().min(3, 'Foydalanuvchi nomi kamida 3 ta belgidan iborat boʻlsin').max(30).regex(/^[a-z0-9_]+$/, 'Faqat kichik harflar, raqamlar va _ ishlating'),
+  identifier: z.string().trim().min(3, 'Email yoki telefon raqamini kiriting').max(255),
+  password: z.string().min(8, 'Parol kamida 8 ta belgidan iborat boʻlsin').max(128),
+  confirmPassword: z.string(),
+}).refine((d) => d.password === d.confirmPassword, { message: 'Parollar mos emas', path: ['confirmPassword'] });
 
 export default function AuthPage() {
   const [mode, setMode] = useState<AuthMode>('login');
