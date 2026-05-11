@@ -210,6 +210,52 @@ export function ChatListItem({
     onClick();
   };
 
+  if (compact) {
+    return (
+      <ChatListContextMenu
+        conversation={conversation}
+        isPinned={isPinned}
+        isMuted={isMuted}
+        isArchived={isArchived}
+        isUnread={isUnread}
+        onArchive={onArchive}
+        onUnarchive={onUnarchive}
+        onPin={onPin}
+        onMute={onMute}
+        onDelete={onDelete}
+        onMarkRead={onMarkRead}
+        onMarkUnread={onMarkUnread}
+      >
+        <button
+          onClick={handleClick}
+          title={getName()}
+          className={cn(
+            "w-full flex items-center justify-center py-2 transition-colors",
+            "hover:bg-accent/50 active:bg-accent/70",
+            isSelected && "bg-accent"
+          )}
+        >
+          <div className="relative">
+            <Avatar className={cn("h-11 w-11 ring-2 transition-all", isSelected ? "ring-primary" : "ring-transparent")}>
+              <AvatarImage src={getAvatar() || ''} />
+              <AvatarFallback className="bg-primary text-primary-foreground font-medium text-sm">
+                {isSelfChat ? <Bookmark className="h-4 w-4" /> : conversation.type === 'group' ? <Users className="h-4 w-4" /> : conversation.type === 'channel' ? <Megaphone className="h-4 w-4" /> : getName()[0]?.toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            {conversation.type === 'private' && isOnline && !isSelfChat && (
+              <span className="absolute bottom-0 right-0 h-3 w-3 bg-green-500 rounded-full border-2 border-card" />
+            )}
+            {isUnread && (
+              <Badge className="absolute -top-1 -right-1 h-5 min-w-[20px] rounded-full px-1 text-[10px] flex items-center justify-center">
+                {(conversation.unread_count ?? 0) > 99 ? '99+' : conversation.unread_count}
+              </Badge>
+            )}
+          </div>
+        </button>
+      </ChatListContextMenu>
+    );
+  }
+
   return (
     <ChatListContextMenu
       conversation={conversation}
