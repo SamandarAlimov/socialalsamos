@@ -197,10 +197,8 @@ export function ChatListItem({
       }
     }
     
-    // Regular message - truncate if needed
-    return { 
-      text: message.length > 35 ? `${message.substring(0, 35)}...` : message 
-    };
+    // Regular message - rely on CSS truncation to adapt to panel width
+    return { text: message };
   };
 
   const isUnread = (conversation.unread_count ?? 0) > 0;
@@ -310,7 +308,7 @@ export function ChatListItem({
             
             <div className="flex items-center justify-between gap-2 min-w-0">
               <p className={cn(
-                "text-sm flex-1 min-w-0 truncate flex items-center",
+                "text-sm flex-1 min-w-0 flex items-center gap-1 overflow-hidden",
                 isUnread
                   ? "text-foreground font-medium" 
                   : "text-muted-foreground"
@@ -321,7 +319,7 @@ export function ChatListItem({
                   return (
                     <>
                       {formatted.icon}
-                      <span>{formatted.text}</span>
+                      <span className="truncate min-w-0 flex-1">{formatted.text}</span>
                     </>
                   );
                 })()}
