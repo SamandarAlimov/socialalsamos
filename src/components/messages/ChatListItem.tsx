@@ -197,10 +197,8 @@ export function ChatListItem({
       }
     }
     
-    // Regular message - truncate if needed
-    return { 
-      text: message.length > 35 ? `${message.substring(0, 35)}...` : message 
-    };
+    // Regular message - rely on CSS truncation to adapt to panel width
+    return { text: message };
   };
 
   const isUnread = (conversation.unread_count ?? 0) > 0;
