@@ -91,6 +91,7 @@ export function AppSidebar() {
     return () => window.removeEventListener('resize', check);
   }, [userToggled]);
   const { theme, setTheme } = useTheme();
+  const { playMessageSound } = useNotificationSound();
   
   const handleNewMessage = useCallback(() => {
     playMessageSound();
