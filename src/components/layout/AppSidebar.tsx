@@ -24,7 +24,7 @@ import {
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { NotificationsDropdown } from '@/components/NotificationsDropdown';
 import { Button } from '@/components/ui/button';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
@@ -72,9 +72,26 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const { user, profile, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+  const [autoCollapsed, setAutoCollapsed] = useState(false);
+  const [userToggled, setUserToggled] = useState(false);
   const [showSwitchAccount, setShowSwitchAccount] = useState(false);
-  const { playMessageSound } = useNotificationSound();
+
+  // Auto-collapse like Telegram Desktop when viewport gets small
+  useEffect(() => {
+    const COLLAPSE_BREAKPOINT = 1100;
+    const check = () => {
+      const shouldCollapse = window.innerWidth < COLLAPSE_BREAKPOINT;
+      setAutoCollapsed(shouldCollapse);
+      if (!userToggled) {
+        setCollapsed(shouldCollapse);
+      }
+    };
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, [userToggled]);
   const { theme, setTheme } = useTheme();
+  const { playMessageSound } = useNotificationSound();
   
   const handleNewMessage = useCallback(() => {
     playMessageSound();
@@ -273,7 +290,7 @@ export function AppSidebar() {
 
       {/* Collapse Toggle */}
       <button
-        onClick={() => setCollapsed(!collapsed)}
+        onClick={() => { setUserToggled(true); setCollapsed(!collapsed); }}
         className="absolute -right-3 top-20 z-40 bg-background border border-border rounded-full p-1.5 shadow-md hover:bg-accent transition-colors"
       >
         {collapsed ? (
