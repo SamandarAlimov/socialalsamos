@@ -72,8 +72,24 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const { user, profile, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+  const [autoCollapsed, setAutoCollapsed] = useState(false);
+  const [userToggled, setUserToggled] = useState(false);
   const [showSwitchAccount, setShowSwitchAccount] = useState(false);
-  const { playMessageSound } = useNotificationSound();
+
+  // Auto-collapse like Telegram Desktop when viewport gets small
+  useEffect(() => {
+    const COLLAPSE_BREAKPOINT = 1100;
+    const check = () => {
+      const shouldCollapse = window.innerWidth < COLLAPSE_BREAKPOINT;
+      setAutoCollapsed(shouldCollapse);
+      if (!userToggled) {
+        setCollapsed(shouldCollapse);
+      }
+    };
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, [userToggled]);
   const { theme, setTheme } = useTheme();
   
   const handleNewMessage = useCallback(() => {
