@@ -1059,8 +1059,6 @@ export default function MessagesPage() {
           )
         )}
       </ScrollArea>
-      </>
-      )}
     </div>
   );
 
