@@ -888,7 +888,6 @@ export default function MessagesPage() {
   // Detect compact (Telegram-style icon-only) chat list when panel is narrow
   const leftPanelRef = useRef<HTMLDivElement>(null);
   const leftPanelHandleRef = useRef<any>(null);
-  const groupRef = useRef<HTMLDivElement>(null);
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(320);
   const snapRafRef = useRef<number | null>(null);
 
