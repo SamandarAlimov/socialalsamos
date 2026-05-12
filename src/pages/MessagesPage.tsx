@@ -909,7 +909,7 @@ export default function MessagesPage() {
   }, []);
 
   // Track latest size during drag; snap only when user releases the handle
-  const latestSizeRef = useRef<number>(28);
+  const latestSizeRef = useRef<number>(32);
   const handlePanelResize = (size: number) => {
     latestSizeRef.current = size;
   };
