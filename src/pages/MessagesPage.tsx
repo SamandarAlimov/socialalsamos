@@ -893,7 +893,7 @@ export default function MessagesPage() {
 
   // Snap target sizes (single compact size, single expanded size — no in-between)
   const COMPACT_PX = 72;
-  const EXPANDED_PCT = 28;
+  const EXPANDED_PCT = 32;
   const SNAP_THRESHOLD_PX = 220; // below this → compact; above → expanded
 
   useEffect(() => {
