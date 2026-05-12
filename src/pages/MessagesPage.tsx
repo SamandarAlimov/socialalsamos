@@ -887,7 +887,15 @@ export default function MessagesPage() {
 
   // Detect compact (Telegram-style icon-only) chat list when panel is narrow
   const leftPanelRef = useRef<HTMLDivElement>(null);
+  const leftPanelHandleRef = useRef<any>(null);
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(320);
+  const snapRafRef = useRef<number | null>(null);
+
+  // Snap target sizes (single compact size, single expanded size — no in-between)
+  const COMPACT_PX = 72;
+  const EXPANDED_PCT = 28;
+  const SNAP_THRESHOLD_PX = 220; // below this → compact; above → expanded
+
   useEffect(() => {
     const el = leftPanelRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
@@ -899,6 +907,25 @@ export default function MessagesPage() {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // Snap to either compact or expanded after user finishes dragging the handle
+  const handlePanelResize = (size: number) => {
+    const groupEl = leftPanelRef.current?.closest('[data-panel-group]') as HTMLElement | null;
+    const groupWidth = groupEl?.getBoundingClientRect().width || window.innerWidth;
+    const px = (size / 100) * groupWidth;
+    if (snapRafRef.current) cancelAnimationFrame(snapRafRef.current);
+    snapRafRef.current = requestAnimationFrame(() => {
+      const handle = leftPanelHandleRef.current;
+      if (!handle) return;
+      if (px < SNAP_THRESHOLD_PX) {
+        const compactPct = Math.max(4, (COMPACT_PX / groupWidth) * 100);
+        if (Math.abs(size - compactPct) > 0.5) handle.resize(compactPct);
+      } else {
+        if (Math.abs(size - EXPANDED_PCT) > 0.5) handle.resize(EXPANDED_PCT);
+      }
+    });
+  };
+
   const isCompactList = !isMobile && leftPanelWidth > 0 && leftPanelWidth < 140;
 
   // Left panel content
@@ -1274,7 +1301,14 @@ export default function MessagesPage() {
       ) : (
         /* Desktop/Tablet Layout with Resizable Panels */
         <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
-          <ResizablePanel defaultSize={28} minSize={6} maxSize={50} className="border-r border-border overflow-hidden min-w-0">
+          <ResizablePanel
+            ref={leftPanelHandleRef}
+            defaultSize={28}
+            minSize={4}
+            maxSize={50}
+            onResize={handlePanelResize}
+            className="border-r border-border overflow-hidden min-w-0 transition-[flex-basis] duration-150 ease-out"
+          >
             {leftPanelContent}
           </ResizablePanel>
           <ResizableHandle withHandle className="hover:bg-primary/10 transition-colors data-[resize-handle-active]:bg-primary/20 z-20 relative" />
