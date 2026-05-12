@@ -1310,7 +1310,7 @@ export default function MessagesPage() {
         <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
           <ResizablePanel
             ref={leftPanelHandleRef}
-            defaultSize={28}
+            defaultSize={32}
             minSize={4}
             maxSize={50}
             onResize={handlePanelResize}
