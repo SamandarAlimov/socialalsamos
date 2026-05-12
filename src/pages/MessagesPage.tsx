@@ -1319,7 +1319,7 @@ export default function MessagesPage() {
             {leftPanelContent}
           </ResizablePanel>
           <ResizableHandle onDragging={handleDragging} className="hover:bg-primary/10 transition-colors data-[resize-handle-active]:bg-primary/20 z-20 relative" />
-          <ResizablePanel defaultSize={72} minSize={40} className="overflow-hidden min-w-0">
+          <ResizablePanel defaultSize={68} minSize={40} className="overflow-hidden min-w-0">
             {rightPanelContent}
           </ResizablePanel>
         </ResizablePanelGroup>
