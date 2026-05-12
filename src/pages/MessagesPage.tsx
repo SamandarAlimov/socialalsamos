@@ -908,22 +908,25 @@ export default function MessagesPage() {
     return () => ro.disconnect();
   }, []);
 
-  // Snap to either compact or expanded after user finishes dragging the handle
+  // Track latest size during drag; snap only when user releases the handle
+  const latestSizeRef = useRef<number>(28);
   const handlePanelResize = (size: number) => {
+    latestSizeRef.current = size;
+  };
+  const handleDragging = (isDragging: boolean) => {
+    if (isDragging) return; // do nothing while dragging — let user move freely
+    const size = latestSizeRef.current;
     const groupEl = leftPanelRef.current?.closest('[data-panel-group]') as HTMLElement | null;
     const groupWidth = groupEl?.getBoundingClientRect().width || window.innerWidth;
     const px = (size / 100) * groupWidth;
-    if (snapRafRef.current) cancelAnimationFrame(snapRafRef.current);
-    snapRafRef.current = requestAnimationFrame(() => {
-      const handle = leftPanelHandleRef.current;
-      if (!handle) return;
-      if (px < SNAP_THRESHOLD_PX) {
-        const compactPct = Math.max(4, (COMPACT_PX / groupWidth) * 100);
-        if (Math.abs(size - compactPct) > 0.5) handle.resize(compactPct);
-      } else {
-        if (Math.abs(size - EXPANDED_PCT) > 0.5) handle.resize(EXPANDED_PCT);
-      }
-    });
+    const handle = leftPanelHandleRef.current;
+    if (!handle) return;
+    if (px < SNAP_THRESHOLD_PX) {
+      const compactPct = Math.max(4, (COMPACT_PX / groupWidth) * 100);
+      if (Math.abs(size - compactPct) > 0.5) handle.resize(compactPct);
+    } else {
+      if (Math.abs(size - EXPANDED_PCT) > 0.5) handle.resize(EXPANDED_PCT);
+    }
   };
 
   const isCompactList = !isMobile && leftPanelWidth > 0 && leftPanelWidth < 140;
@@ -1311,7 +1314,7 @@ export default function MessagesPage() {
           >
             {leftPanelContent}
           </ResizablePanel>
-          <ResizableHandle withHandle className="hover:bg-primary/10 transition-colors data-[resize-handle-active]:bg-primary/20 z-20 relative" />
+          <ResizableHandle withHandle onDragging={handleDragging} className="hover:bg-primary/10 transition-colors data-[resize-handle-active]:bg-primary/20 z-20 relative" />
           <ResizablePanel defaultSize={72} minSize={40} className="overflow-hidden min-w-0">
             {rightPanelContent}
           </ResizablePanel>
