@@ -910,7 +910,8 @@ export default function MessagesPage() {
 
   // Snap to either compact or expanded after user finishes dragging the handle
   const handlePanelResize = (size: number) => {
-    const groupWidth = groupRef.current?.getBoundingClientRect().width || window.innerWidth;
+    const groupEl = leftPanelRef.current?.closest('[data-panel-group]') as HTMLElement | null;
+    const groupWidth = groupEl?.getBoundingClientRect().width || window.innerWidth;
     const px = (size / 100) * groupWidth;
     if (snapRafRef.current) cancelAnimationFrame(snapRafRef.current);
     snapRafRef.current = requestAnimationFrame(() => {
