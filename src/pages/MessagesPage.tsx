@@ -914,19 +914,23 @@ export default function MessagesPage() {
     latestSizeRef.current = size;
   };
   const handleDragging = (isDragging: boolean) => {
-    if (isDragging) return; // do nothing while dragging — let user move freely
+    if (isDragging) return;
     const size = latestSizeRef.current;
     const groupEl = leftPanelRef.current?.closest('[data-panel-group]') as HTMLElement | null;
     const groupWidth = groupEl?.getBoundingClientRect().width || window.innerWidth;
     const px = (size / 100) * groupWidth;
     const handle = leftPanelHandleRef.current;
     if (!handle) return;
+    const compactPct = Math.max(4, (COMPACT_PX / groupWidth) * 100);
+    const minExpandedPct = (SNAP_THRESHOLD_PX / groupWidth) * 100;
     if (px < SNAP_THRESHOLD_PX) {
-      const compactPct = Math.max(4, (COMPACT_PX / groupWidth) * 100);
+      // Below threshold → snap down to compact icon-only mode
       if (Math.abs(size - compactPct) > 0.5) handle.resize(compactPct);
-    } else {
-      if (Math.abs(size - EXPANDED_PCT) > 0.5) handle.resize(EXPANDED_PCT);
+    } else if (px < SNAP_THRESHOLD_PX + 30) {
+      // Just above threshold → snap up to comfortable expanded default
+      handle.resize(Math.max(EXPANDED_PCT, minExpandedPct));
     }
+    // Otherwise (well above threshold) → leave the user's chosen width alone
   };
 
   const isCompactList = !isMobile && leftPanelWidth > 0 && leftPanelWidth < 140;
