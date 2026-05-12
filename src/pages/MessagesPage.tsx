@@ -893,7 +893,7 @@ export default function MessagesPage() {
 
   // Snap target sizes (single compact size, single expanded size — no in-between)
   const COMPACT_PX = 72;
-  const EXPANDED_PCT = 28;
+  const EXPANDED_PCT = 32;
   const SNAP_THRESHOLD_PX = 220; // below this → compact; above → expanded
 
   useEffect(() => {
@@ -909,7 +909,7 @@ export default function MessagesPage() {
   }, []);
 
   // Track latest size during drag; snap only when user releases the handle
-  const latestSizeRef = useRef<number>(28);
+  const latestSizeRef = useRef<number>(32);
   const handlePanelResize = (size: number) => {
     latestSizeRef.current = size;
   };
@@ -1310,7 +1310,7 @@ export default function MessagesPage() {
         <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
           <ResizablePanel
             ref={leftPanelHandleRef}
-            defaultSize={28}
+            defaultSize={32}
             minSize={4}
             maxSize={50}
             onResize={handlePanelResize}
@@ -1319,7 +1319,7 @@ export default function MessagesPage() {
             {leftPanelContent}
           </ResizablePanel>
           <ResizableHandle onDragging={handleDragging} className="hover:bg-primary/10 transition-colors data-[resize-handle-active]:bg-primary/20 z-20 relative" />
-          <ResizablePanel defaultSize={72} minSize={40} className="overflow-hidden min-w-0">
+          <ResizablePanel defaultSize={68} minSize={40} className="overflow-hidden min-w-0">
             {rightPanelContent}
           </ResizablePanel>
         </ResizablePanelGroup>
