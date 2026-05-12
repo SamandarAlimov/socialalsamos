@@ -1300,7 +1300,7 @@ export default function MessagesPage() {
         </div>
       ) : (
         /* Desktop/Tablet Layout with Resizable Panels */
-        <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden" ref={groupRef as any}>
+        <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
           <ResizablePanel
             ref={leftPanelHandleRef}
             defaultSize={28}
