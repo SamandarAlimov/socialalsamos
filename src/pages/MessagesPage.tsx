@@ -1300,8 +1300,15 @@ export default function MessagesPage() {
         </div>
       ) : (
         /* Desktop/Tablet Layout with Resizable Panels */
-        <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
-          <ResizablePanel defaultSize={28} minSize={6} maxSize={50} className="border-r border-border overflow-hidden min-w-0">
+        <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden" ref={groupRef as any}>
+          <ResizablePanel
+            ref={leftPanelHandleRef}
+            defaultSize={28}
+            minSize={4}
+            maxSize={50}
+            onResize={handlePanelResize}
+            className="border-r border-border overflow-hidden min-w-0 transition-[flex-basis] duration-150 ease-out"
+          >
             {leftPanelContent}
           </ResizablePanel>
           <ResizableHandle withHandle className="hover:bg-primary/10 transition-colors data-[resize-handle-active]:bg-primary/20 z-20 relative" />
