@@ -900,7 +900,42 @@ export default function MessagesPage() {
     return groups;
   };
 
-  const messageGroups = groupMessagesByDate(messages);
+  const messageGroups = useMemo(() => groupMessagesByDate(messages), [messages]);
+
+  // Flatten groups -> items for virtualization
+  type FlatItem =
+    | { kind: 'date'; key: string; date: string }
+    | { kind: 'message'; key: string; message: Message; showAvatar: boolean; isMine: boolean };
+  const flatItems = useMemo<FlatItem[]>(() => {
+    const items: FlatItem[] = [];
+    for (const group of messageGroups) {
+      items.push({ kind: 'date', key: `date-${group.date}`, date: group.date });
+      group.messages.forEach((message, idx) => {
+        const prev = group.messages[idx - 1];
+        const showAvatar = !prev || prev.sender_id !== message.sender_id;
+        items.push({
+          kind: 'message',
+          key: message.id,
+          message,
+          showAvatar,
+          isMine: message.sender_id === user?.id,
+        });
+      });
+    }
+    return items;
+  }, [messageGroups, user?.id]);
+
+  const VIRTUALIZE_THRESHOLD = 80;
+  const useVirtualization = flatItems.length > VIRTUALIZE_THRESHOLD;
+
+  const rowVirtualizer = useVirtualizer({
+    count: flatItems.length,
+    getScrollElement: () => messagesScrollRef.current,
+    estimateSize: (index) => (flatItems[index]?.kind === 'date' ? 44 : 72),
+    overscan: 12,
+    measureElement: (el) => el?.getBoundingClientRect().height ?? 72,
+    getItemKey: (index) => flatItems[index]?.key ?? index,
+  });
 
   // Build media tracks playlist for sequential playback (Telegram-style)
   const mediaTracksForPlaylist = useMemo(() => {
