@@ -92,6 +92,9 @@ export default function MessagesPage() {
   const hasJoinedRoomRef = useRef(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
+  const lastConvIdRef = useRef<string | null>(null);
+  const isAtBottomRef = useRef<boolean>(true);
 
   // Determine if we're showing archived tab
   const isArchivedTab = activeTab === 'archived';
