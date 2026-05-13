@@ -1204,6 +1204,8 @@ export default function MessagesPage() {
           )}
           
           <div
+            ref={messagesScrollRef}
+            onScroll={handleMessagesScroll}
             className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-custom bg-muted/20 overscroll-contain"
             style={isSelectionMode ? { touchAction: 'pan-y' } : undefined}
             onPointerDown={handleMessagesPointerDown}
