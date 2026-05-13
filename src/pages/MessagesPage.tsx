@@ -1384,19 +1384,39 @@ export default function MessagesPage() {
         </div>
       ) : (
         /* Desktop/Tablet Layout with Resizable Panels */
-        <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
+        <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden" autoSaveId={`messages-layout-${deviceClass}`}>
           <ResizablePanel
             ref={leftPanelHandleRef}
-            defaultSize={32}
-            minSize={4}
-            maxSize={50}
+            defaultSize={initialPct}
+            minSize={defaults.minPct}
+            maxSize={defaults.maxPct}
             onResize={handlePanelResize}
             className="border-r border-border overflow-hidden min-w-0 transition-[flex-basis] duration-150 ease-out"
           >
             {leftPanelContent}
           </ResizablePanel>
-          <ResizableHandle onDragging={handleDragging} className="hover:bg-primary/10 transition-colors data-[resize-handle-active]:bg-primary/20 z-20 relative" />
-          <ResizablePanel defaultSize={68} minSize={40} className="overflow-hidden min-w-0">
+          <ResizableHandle
+            onDragging={handleDragging}
+            className={cn(
+              "group/handle relative w-px bg-border z-20",
+              // Larger invisible hitbox for easier grabbing (12px wide)
+              "after:absolute after:inset-y-0 after:left-1/2 after:w-3 after:-translate-x-1/2 after:content-['']",
+              "hover:bg-primary/30 data-[resize-handle-active]:bg-primary",
+              "transition-colors"
+            )}
+          >
+            {/* Ghost guide line — only visible while dragging */}
+            {isResizing && (
+              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-primary/60 shadow-[0_0_0_1px_hsl(var(--primary)/0.2)]" />
+            )}
+            {/* Snap tooltip */}
+            {isResizing && resizeHint && (
+              <div className="pointer-events-none absolute top-4 left-1/2 -translate-x-1/2 z-30 px-2 py-1 rounded-md bg-popover text-popover-foreground text-xs font-medium border border-border shadow-md whitespace-nowrap">
+                {resizeHint === 'compact' ? 'Compact (icons only)' : `${Math.round(leftPanelWidth)}px`}
+              </div>
+            )}
+          </ResizableHandle>
+          <ResizablePanel defaultSize={100 - initialPct} minSize={40} className="overflow-hidden min-w-0">
             {rightPanelContent}
           </ResizablePanel>
         </ResizablePanelGroup>
