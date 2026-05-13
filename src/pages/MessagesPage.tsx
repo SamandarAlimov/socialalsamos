@@ -1443,6 +1443,34 @@ export default function MessagesPage() {
               </button>
             )}
           </div>
+
+          <div className="flex-shrink-0 border-t border-border bg-card pb-safe mb-16 md:mb-0">
+            <MessageInput
+              onSend={handleSendMessage}
+              onSchedule={handleScheduleMessage}
+              onTyping={setTyping}
+              replyTo={replyTo}
+              onCancelReply={() => setReplyTo(null)}
+              onShareLocation={async (location) => {
+                const locationMessage = `📍 LOCATION:${location.latitude},${location.longitude}${location.address ? `|${location.address}` : ''}`;
+                await sendMessage(locationMessage);
+              }}
+            />
+          </div>
+        </>
+      ) : (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="h-24 w-24 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+              <MessageCircle className="h-12 w-12 text-muted-foreground" />
+            </div>
+            <h3 className="text-lg font-semibold mb-2">Select a conversation</h3>
+            <p className="text-muted-foreground text-sm mb-4">Choose a chat to start messaging</p>
+            <Button onClick={() => setShowCreateDialog(true)}><Plus className="h-4 w-4 mr-2" />New Chat</Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 
   return (
