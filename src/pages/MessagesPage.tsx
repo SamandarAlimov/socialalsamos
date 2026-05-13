@@ -92,6 +92,9 @@ export default function MessagesPage() {
   const hasJoinedRoomRef = useRef(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
+  const lastConvIdRef = useRef<string | null>(null);
+  const isAtBottomRef = useRef<boolean>(true);
 
   // Determine if we're showing archived tab
   const isArchivedTab = activeTab === 'archived';
@@ -244,23 +247,41 @@ export default function MessagesPage() {
     }
   };
 
-  // Auto scroll to bottom
-  const scrollToBottom = useCallback(() => {
-    // Use requestAnimationFrame to ensure DOM is updated before scrolling
+  // Auto scroll to bottom — robust against late-loading media/avatars
+  const scrollToBottom = useCallback((smooth = false) => {
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    const doScroll = () => {
+      el.scrollTop = el.scrollHeight;
+    };
     requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      doScroll();
+      // Run again after layout settles (fonts, images)
+      requestAnimationFrame(doScroll);
+      setTimeout(doScroll, 120);
+      setTimeout(doScroll, 350);
     });
   }, []);
 
-  // Scroll to bottom when messages change
+  // Force-scroll to bottom whenever the selected conversation changes (Telegram-style: latest message at bottom)
   useEffect(() => {
-    // Small delay to ensure content is rendered
-    const timer = setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-    }, 100);
-    
+    const id = selectedConversation?.id ?? null;
+    if (id !== lastConvIdRef.current) {
+      lastConvIdRef.current = id;
+      isAtBottomRef.current = true;
+      scrollToBottom(false);
+    }
+  }, [selectedConversation?.id, scrollToBottom]);
+
+  // When new messages arrive, scroll only if user is at/near bottom
+  useEffect(() => {
+    if (messages.length === 0) return;
+    if (isAtBottomRef.current) {
+      scrollToBottom(false);
+    }
+
     // Mark messages as read when viewing them
-    if (messages.length > 0 && user) {
+    if (user) {
       const otherUserMessages = messages
         .filter(m => m.sender_id !== user.id)
         .map(m => m.id);
@@ -268,9 +289,28 @@ export default function MessagesPage() {
         markAsRead(otherUserMessages);
       }
     }
-    
-    return () => clearTimeout(timer);
-  }, [messages, markAsRead, user]);
+  }, [messages, markAsRead, user, scrollToBottom]);
+
+  // Re-scroll when media inside the viewport finishes loading
+  useEffect(() => {
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    const handleLoad = (e: Event) => {
+      const t = e.target as HTMLElement;
+      if (!t || (t.tagName !== 'IMG' && t.tagName !== 'VIDEO')) return;
+      if (isAtBottomRef.current) scrollToBottom(false);
+    };
+    el.addEventListener('load', handleLoad, true);
+    return () => el.removeEventListener('load', handleLoad, true);
+  }, [selectedConversation?.id, scrollToBottom]);
+
+  // Track whether the user is at the bottom (within 80px) so we don't yank their scroll while reading old messages
+  const handleMessagesScroll = useCallback(() => {
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    isAtBottomRef.current = distanceFromBottom < 80;
+  }, []);
 
   // Tab definitions
   const tabs: { id: MessageTab; label: string }[] = [
@@ -317,10 +357,8 @@ export default function MessagesPage() {
     setSelectedConversation(conv);
     setShowMobileChat(true);
     setReplyTo(null);
-    // Scroll to bottom when switching conversations
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-    }, 200);
+    isAtBottomRef.current = true;
+    // Scroll handled by selectedConversation effect
   };
 
   const handleSendMessage = async (content: string, mediaUrl?: string, mediaType?: string) => {
@@ -889,12 +927,37 @@ export default function MessagesPage() {
   const leftPanelRef = useRef<HTMLDivElement>(null);
   const leftPanelHandleRef = useRef<any>(null);
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(320);
-  const snapRafRef = useRef<number | null>(null);
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeHint, setResizeHint] = useState<'compact' | 'expanded' | null>(null);
 
   // Snap target sizes (single compact size, single expanded size — no in-between)
   const COMPACT_PX = 72;
-  const EXPANDED_PCT = 32;
   const SNAP_THRESHOLD_PX = 220; // below this → compact; above → expanded
+
+  // Device-aware default width and bounds (saved per device class)
+  const deviceClass = useMemo(() => {
+    if (typeof window === 'undefined') return 'desktop';
+    const w = window.innerWidth;
+    if (w < 768) return 'mobile';
+    if (w < 1024) return 'tablet';
+    if (w < 1440) return 'desktop';
+    return 'wide';
+  }, []);
+  const defaults = useMemo(() => {
+    switch (deviceClass) {
+      case 'tablet': return { defaultPct: 38, minPct: 6, maxPct: 55, expandedPct: 38 };
+      case 'desktop': return { defaultPct: 32, minPct: 4, maxPct: 50, expandedPct: 32 };
+      case 'wide': return { defaultPct: 26, minPct: 3, maxPct: 45, expandedPct: 26 };
+      default: return { defaultPct: 100, minPct: 100, maxPct: 100, expandedPct: 100 };
+    }
+  }, [deviceClass]);
+  const STORAGE_KEY = `messages.chatlist.width.${deviceClass}`;
+  const initialPct = useMemo(() => {
+    if (typeof window === 'undefined') return defaults.defaultPct;
+    const saved = Number(window.localStorage.getItem(STORAGE_KEY));
+    if (Number.isFinite(saved) && saved > 0 && saved <= defaults.maxPct + 1) return saved;
+    return defaults.defaultPct;
+  }, [STORAGE_KEY, defaults]);
 
   useEffect(() => {
     const el = leftPanelRef.current;
@@ -909,28 +972,40 @@ export default function MessagesPage() {
   }, []);
 
   // Track latest size during drag; snap only when user releases the handle
-  const latestSizeRef = useRef<number>(32);
+  const latestSizeRef = useRef<number>(initialPct);
+  const saveTimerRef = useRef<number | null>(null);
   const handlePanelResize = (size: number) => {
     latestSizeRef.current = size;
+    // Live hint while dragging
+    const groupEl = leftPanelRef.current?.closest('[data-panel-group]') as HTMLElement | null;
+    const groupWidth = groupEl?.getBoundingClientRect().width || window.innerWidth;
+    const px = (size / 100) * groupWidth;
+    if (isResizing) {
+      setResizeHint(px < SNAP_THRESHOLD_PX ? 'compact' : 'expanded');
+    }
+    // Debounced persist
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(() => {
+      try { window.localStorage.setItem(STORAGE_KEY, String(size)); } catch {}
+    }, 250);
   };
   const handleDragging = (isDragging: boolean) => {
+    setIsResizing(isDragging);
     if (isDragging) return;
+    setResizeHint(null);
     const size = latestSizeRef.current;
     const groupEl = leftPanelRef.current?.closest('[data-panel-group]') as HTMLElement | null;
     const groupWidth = groupEl?.getBoundingClientRect().width || window.innerWidth;
     const px = (size / 100) * groupWidth;
     const handle = leftPanelHandleRef.current;
     if (!handle) return;
-    const compactPct = Math.max(4, (COMPACT_PX / groupWidth) * 100);
+    const compactPct = Math.max(defaults.minPct, (COMPACT_PX / groupWidth) * 100);
     const minExpandedPct = (SNAP_THRESHOLD_PX / groupWidth) * 100;
     if (px < SNAP_THRESHOLD_PX) {
-      // Below threshold → snap down to compact icon-only mode
       if (Math.abs(size - compactPct) > 0.5) handle.resize(compactPct);
     } else if (px < SNAP_THRESHOLD_PX + 30) {
-      // Just above threshold → snap up to comfortable expanded default
-      handle.resize(Math.max(EXPANDED_PCT, minExpandedPct));
+      handle.resize(Math.max(defaults.expandedPct, minExpandedPct));
     }
-    // Otherwise (well above threshold) → leave the user's chosen width alone
   };
 
   const isCompactList = !isMobile && leftPanelWidth > 0 && leftPanelWidth < 140;
@@ -1166,6 +1241,8 @@ export default function MessagesPage() {
           )}
           
           <div
+            ref={messagesScrollRef}
+            onScroll={handleMessagesScroll}
             className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-custom bg-muted/20 overscroll-contain"
             style={isSelectionMode ? { touchAction: 'pan-y' } : undefined}
             onPointerDown={handleMessagesPointerDown}
@@ -1307,19 +1384,39 @@ export default function MessagesPage() {
         </div>
       ) : (
         /* Desktop/Tablet Layout with Resizable Panels */
-        <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
+        <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden" autoSaveId={`messages-layout-${deviceClass}`}>
           <ResizablePanel
             ref={leftPanelHandleRef}
-            defaultSize={32}
-            minSize={4}
-            maxSize={50}
+            defaultSize={initialPct}
+            minSize={defaults.minPct}
+            maxSize={defaults.maxPct}
             onResize={handlePanelResize}
             className="border-r border-border overflow-hidden min-w-0 transition-[flex-basis] duration-150 ease-out"
           >
             {leftPanelContent}
           </ResizablePanel>
-          <ResizableHandle onDragging={handleDragging} className="hover:bg-primary/10 transition-colors data-[resize-handle-active]:bg-primary/20 z-20 relative" />
-          <ResizablePanel defaultSize={68} minSize={40} className="overflow-hidden min-w-0">
+          <ResizableHandle
+            onDragging={handleDragging}
+            className={cn(
+              "group/handle relative w-px bg-border z-20",
+              // Larger invisible hitbox for easier grabbing (12px wide)
+              "after:absolute after:inset-y-0 after:left-1/2 after:w-3 after:-translate-x-1/2 after:content-['']",
+              "hover:bg-primary/30 data-[resize-handle-active]:bg-primary",
+              "transition-colors"
+            )}
+          >
+            {/* Ghost guide line — only visible while dragging */}
+            {isResizing && (
+              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-primary/60 shadow-[0_0_0_1px_hsl(var(--primary)/0.2)]" />
+            )}
+            {/* Snap tooltip */}
+            {isResizing && resizeHint && (
+              <div className="pointer-events-none absolute top-4 left-1/2 -translate-x-1/2 z-30 px-2 py-1 rounded-md bg-popover text-popover-foreground text-xs font-medium border border-border shadow-md whitespace-nowrap">
+                {resizeHint === 'compact' ? 'Compact (icons only)' : `${Math.round(leftPanelWidth)}px`}
+              </div>
+            )}
+          </ResizableHandle>
+          <ResizablePanel defaultSize={100 - initialPct} minSize={40} className="overflow-hidden min-w-0">
             {rightPanelContent}
           </ResizablePanel>
         </ResizablePanelGroup>
