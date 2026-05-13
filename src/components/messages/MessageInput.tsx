@@ -300,7 +300,7 @@ export function MessageInput({
               }
               handleKeyDown(e);
             }}
-            placeholder="Write a message... Use @ to mention"
+            placeholder="Write a message"
             disabled={disabled}
             rows={1}
             className={cn(

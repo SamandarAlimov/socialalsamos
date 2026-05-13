@@ -13,7 +13,9 @@ import {
   CheckSquare,
   Bookmark,
   Megaphone,
+  ArrowDown,
 } from 'lucide-react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -95,6 +97,9 @@ export default function MessagesPage() {
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   const lastConvIdRef = useRef<string | null>(null);
   const isAtBottomRef = useRef<boolean>(true);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [unreadIncomingCount, setUnreadIncomingCount] = useState(0);
+  const lastMessageIdRef = useRef<string | null>(null);
 
   // Determine if we're showing archived tab
   const isArchivedTab = activeTab === 'archived';
@@ -269,15 +274,26 @@ export default function MessagesPage() {
     if (id !== lastConvIdRef.current) {
       lastConvIdRef.current = id;
       isAtBottomRef.current = true;
+      setUnreadIncomingCount(0);
+      setShowScrollToBottom(false);
+      lastMessageIdRef.current = null;
       scrollToBottom(false);
     }
   }, [selectedConversation?.id, scrollToBottom]);
 
-  // When new messages arrive, scroll only if user is at/near bottom
+  // When new messages arrive, scroll only if user is at/near bottom; otherwise show badge
   useEffect(() => {
     if (messages.length === 0) return;
+    const newest = messages[messages.length - 1];
+    const isNewMessage = newest && newest.id !== lastMessageIdRef.current;
+    const prevId = lastMessageIdRef.current;
+    lastMessageIdRef.current = newest?.id ?? null;
+
     if (isAtBottomRef.current) {
       scrollToBottom(false);
+    } else if (isNewMessage && prevId && newest.sender_id !== user?.id) {
+      // User scrolled up and a new incoming message arrived
+      setUnreadIncomingCount((c) => c + 1);
     }
 
     // Mark messages as read when viewing them
@@ -304,13 +320,23 @@ export default function MessagesPage() {
     return () => el.removeEventListener('load', handleLoad, true);
   }, [selectedConversation?.id, scrollToBottom]);
 
-  // Track whether the user is at the bottom (within 80px) so we don't yank their scroll while reading old messages
+  // Track whether the user is at the bottom (within 80px)
   const handleMessagesScroll = useCallback(() => {
     const el = messagesScrollRef.current;
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    isAtBottomRef.current = distanceFromBottom < 80;
+    const atBottom = distanceFromBottom < 80;
+    isAtBottomRef.current = atBottom;
+    setShowScrollToBottom(distanceFromBottom > 240);
+    if (atBottom) setUnreadIncomingCount(0);
   }, []);
+
+  const handleScrollToBottomClick = useCallback(() => {
+    isAtBottomRef.current = true;
+    setUnreadIncomingCount(0);
+    setShowScrollToBottom(false);
+    scrollToBottom(true);
+  }, [scrollToBottom]);
 
   // Tab definitions
   const tabs: { id: MessageTab; label: string }[] = [
@@ -874,7 +900,42 @@ export default function MessagesPage() {
     return groups;
   };
 
-  const messageGroups = groupMessagesByDate(messages);
+  const messageGroups = useMemo(() => groupMessagesByDate(messages), [messages]);
+
+  // Flatten groups -> items for virtualization
+  type FlatItem =
+    | { kind: 'date'; key: string; date: string }
+    | { kind: 'message'; key: string; message: Message; showAvatar: boolean; isMine: boolean };
+  const flatItems = useMemo<FlatItem[]>(() => {
+    const items: FlatItem[] = [];
+    for (const group of messageGroups) {
+      items.push({ kind: 'date', key: `date-${group.date}`, date: group.date });
+      group.messages.forEach((message, idx) => {
+        const prev = group.messages[idx - 1];
+        const showAvatar = !prev || prev.sender_id !== message.sender_id;
+        items.push({
+          kind: 'message',
+          key: message.id,
+          message,
+          showAvatar,
+          isMine: message.sender_id === user?.id,
+        });
+      });
+    }
+    return items;
+  }, [messageGroups, user?.id]);
+
+  const VIRTUALIZE_THRESHOLD = 80;
+  const useVirtualization = flatItems.length > VIRTUALIZE_THRESHOLD;
+
+  const rowVirtualizer = useVirtualizer({
+    count: flatItems.length,
+    getScrollElement: () => messagesScrollRef.current,
+    estimateSize: (index) => (flatItems[index]?.kind === 'date' ? 44 : 72),
+    overscan: 12,
+    measureElement: (el) => el?.getBoundingClientRect().height ?? 72,
+    getItemKey: (index) => flatItems[index]?.key ?? index,
+  });
 
   // Build media tracks playlist for sequential playback (Telegram-style)
   const mediaTracksForPlaylist = useMemo(() => {
@@ -1240,73 +1301,146 @@ export default function MessagesPage() {
             <PinnedMessagesBar pinnedMessages={pinnedMessages} onUnpin={unpinMessage} onScrollToMessage={handleScrollToPinnedMessage} />
           )}
           
-          <div
-            ref={messagesScrollRef}
-            onScroll={handleMessagesScroll}
-            className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-custom bg-muted/20 overscroll-contain"
-            style={isSelectionMode ? { touchAction: 'pan-y' } : undefined}
-            onPointerDown={handleMessagesPointerDown}
-            onPointerMove={handleMessagesPointerMove}
-            onPointerUp={handleMessagesPointerUp}
-            onPointerCancel={handleMessagesPointerUp}
-          >
-            {messagesLoading ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-              </div>
-            ) : messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                <MessageCircle className="h-16 w-16 mb-4 opacity-30" />
-                <p className="text-lg font-medium mb-1">No messages yet</p>
-                <p className="text-sm">Start the conversation!</p>
-              </div>
-            ) : (
-              <div className="p-4 space-y-4 min-w-0 max-w-full">
-                {messageGroups.map((group) => (
-                  <div key={group.date} className="min-w-0">
-                    <div className="flex items-center justify-center my-4">
-                      <span className="px-3 py-1 bg-muted rounded-full text-xs text-muted-foreground">
-                        {new Date(group.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-                      </span>
-                    </div>
-                    <div className="space-y-2 min-w-0">
-                      {group.messages.map((message, idx) => {
-                        const prevMessage = group.messages[idx - 1];
-                        const showAvatar = !prevMessage || prevMessage.sender_id !== message.sender_id;
-                        const isMine = message.sender_id === user?.id;
-                        const senderId = message.sender_id || '';
-                        const readByOther = isMine && senderId ? isMessageRead(message.id, senderId) : false;
-                        const readAt = isMine && senderId ? getMessageReadAt(message.id, senderId) : null;
-                        return (
-                          <div key={message.id} id={`message-${message.id}`} data-message-id={message.id} className={cn('min-w-0', highlightedMessageId === message.id && 'animate-pulse bg-primary/10 rounded-lg')}>
-                            <EnhancedMessageBubble
-                              key={message.id}
-                              message={{ ...message, is_read: readByOther, status: readByOther ? 'read' : message.status, read_at: readAt || undefined }}
-                              isMine={isMine}
-                              isGroup={selectedConversation.type === 'group'}
-                              onReply={handleReply}
-                              onForward={handleForward}
-                              onEdit={handleEdit}
-                              onDelete={handleDelete}
-                              onPin={handlePin}
-                              onSelect={handleSelectMessage}
-                              onLongPress={handleEnterSelectionMode}
-                              isPinned={isMessagePinned(message.id)}
-                              isSelected={selectedMessages.has(message.id)}
-                              isSelectionMode={isSelectionMode}
-                              showAvatar={showAvatar}
-                              showSender={selectedConversation.type === 'group' && showAvatar}
-                              allMediaTracks={mediaTracksForPlaylist}
-                            />
+          <div className="flex-1 relative min-h-0">
+            <div
+              ref={messagesScrollRef}
+              onScroll={handleMessagesScroll}
+              className="absolute inset-0 overflow-y-auto overflow-x-hidden scrollbar-custom bg-muted/20 overscroll-contain"
+              style={isSelectionMode ? { touchAction: 'pan-y' } : undefined}
+              onPointerDown={handleMessagesPointerDown}
+              onPointerMove={handleMessagesPointerMove}
+              onPointerUp={handleMessagesPointerUp}
+              onPointerCancel={handleMessagesPointerUp}
+            >
+              {messagesLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                  <MessageCircle className="h-16 w-16 mb-4 opacity-30" />
+                  <p className="text-lg font-medium mb-1">No messages yet</p>
+                  <p className="text-sm">Start the conversation!</p>
+                </div>
+              ) : useVirtualization ? (
+                <div
+                  className="relative px-4 pt-4 pb-2 min-w-0 max-w-full"
+                  style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+                >
+                  {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                    const item = flatItems[virtualRow.index];
+                    if (!item) return null;
+                    return (
+                      <div
+                        key={virtualRow.key}
+                        data-index={virtualRow.index}
+                        ref={rowVirtualizer.measureElement}
+                        className="absolute left-0 right-0 px-4 min-w-0"
+                        style={{ transform: `translateY(${virtualRow.start}px)` }}
+                      >
+                        {item.kind === 'date' ? (
+                          <div className="flex items-center justify-center my-3">
+                            <span className="px-3 py-1 bg-muted rounded-full text-xs text-muted-foreground">
+                              {new Date(item.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                            </span>
                           </div>
-                        );
-                      })}
+                        ) : (() => {
+                          const message = item.message;
+                          const senderId = message.sender_id || '';
+                          const readByOther = item.isMine && senderId ? isMessageRead(message.id, senderId) : false;
+                          const readAt = item.isMine && senderId ? getMessageReadAt(message.id, senderId) : null;
+                          return (
+                            <div id={`message-${message.id}`} data-message-id={message.id} className={cn('min-w-0 py-1', highlightedMessageId === message.id && 'animate-pulse bg-primary/10 rounded-lg')}>
+                              <EnhancedMessageBubble
+                                message={{ ...message, is_read: readByOther, status: readByOther ? 'read' : message.status, read_at: readAt || undefined }}
+                                isMine={item.isMine}
+                                isGroup={selectedConversation.type === 'group'}
+                                onReply={handleReply}
+                                onForward={handleForward}
+                                onEdit={handleEdit}
+                                onDelete={handleDelete}
+                                onPin={handlePin}
+                                onSelect={handleSelectMessage}
+                                onLongPress={handleEnterSelectionMode}
+                                isPinned={isMessagePinned(message.id)}
+                                isSelected={selectedMessages.has(message.id)}
+                                isSelectionMode={isSelectionMode}
+                                showAvatar={item.showAvatar}
+                                showSender={selectedConversation.type === 'group' && item.showAvatar}
+                                allMediaTracks={mediaTracksForPlaylist}
+                              />
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-4 space-y-4 min-w-0 max-w-full">
+                  {messageGroups.map((group) => (
+                    <div key={group.date} className="min-w-0">
+                      <div className="flex items-center justify-center my-4">
+                        <span className="px-3 py-1 bg-muted rounded-full text-xs text-muted-foreground">
+                          {new Date(group.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                        </span>
+                      </div>
+                      <div className="space-y-2 min-w-0">
+                        {group.messages.map((message, idx) => {
+                          const prevMessage = group.messages[idx - 1];
+                          const showAvatar = !prevMessage || prevMessage.sender_id !== message.sender_id;
+                          const isMine = message.sender_id === user?.id;
+                          const senderId = message.sender_id || '';
+                          const readByOther = isMine && senderId ? isMessageRead(message.id, senderId) : false;
+                          const readAt = isMine && senderId ? getMessageReadAt(message.id, senderId) : null;
+                          return (
+                            <div key={message.id} id={`message-${message.id}`} data-message-id={message.id} className={cn('min-w-0', highlightedMessageId === message.id && 'animate-pulse bg-primary/10 rounded-lg')}>
+                              <EnhancedMessageBubble
+                                key={message.id}
+                                message={{ ...message, is_read: readByOther, status: readByOther ? 'read' : message.status, read_at: readAt || undefined }}
+                                isMine={isMine}
+                                isGroup={selectedConversation.type === 'group'}
+                                onReply={handleReply}
+                                onForward={handleForward}
+                                onEdit={handleEdit}
+                                onDelete={handleDelete}
+                                onPin={handlePin}
+                                onSelect={handleSelectMessage}
+                                onLongPress={handleEnterSelectionMode}
+                                isPinned={isMessagePinned(message.id)}
+                                isSelected={selectedMessages.has(message.id)}
+                                isSelectionMode={isSelectionMode}
+                                showAvatar={showAvatar}
+                                showSender={selectedConversation.type === 'group' && showAvatar}
+                                allMediaTracks={mediaTracksForPlaylist}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))}
-                {typingUsers.length > 0 && <TypingIndicator userNames={typingUsers} />}
-                <div ref={messagesEndRef} />
-              </div>
+                  ))}
+                  {typingUsers.length > 0 && <TypingIndicator userNames={typingUsers} />}
+                  <div ref={messagesEndRef} />
+                </div>
+              )}
+            </div>
+
+            {/* Scroll-to-bottom floating button */}
+            {showScrollToBottom && (
+              <button
+                type="button"
+                onClick={handleScrollToBottomClick}
+                aria-label="Eng oxirgi xabarga o'tish"
+                className="absolute bottom-4 right-4 z-20 h-11 w-11 rounded-full bg-card border border-border shadow-lg flex items-center justify-center text-foreground hover:bg-accent transition-all active:scale-95"
+              >
+                <ArrowDown className="h-5 w-5" />
+                {unreadIncomingCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[11px] font-semibold flex items-center justify-center">
+                    {unreadIncomingCount > 99 ? '99+' : unreadIncomingCount}
+                  </span>
+                )}
+              </button>
             )}
           </div>
 
