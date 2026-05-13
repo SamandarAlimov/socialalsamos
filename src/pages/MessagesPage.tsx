@@ -247,23 +247,41 @@ export default function MessagesPage() {
     }
   };
 
-  // Auto scroll to bottom
-  const scrollToBottom = useCallback(() => {
-    // Use requestAnimationFrame to ensure DOM is updated before scrolling
+  // Auto scroll to bottom — robust against late-loading media/avatars
+  const scrollToBottom = useCallback((smooth = false) => {
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    const doScroll = () => {
+      el.scrollTop = el.scrollHeight;
+    };
     requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      doScroll();
+      // Run again after layout settles (fonts, images)
+      requestAnimationFrame(doScroll);
+      setTimeout(doScroll, 120);
+      setTimeout(doScroll, 350);
     });
   }, []);
 
-  // Scroll to bottom when messages change
+  // Force-scroll to bottom whenever the selected conversation changes (Telegram-style: latest message at bottom)
   useEffect(() => {
-    // Small delay to ensure content is rendered
-    const timer = setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-    }, 100);
-    
+    const id = selectedConversation?.id ?? null;
+    if (id !== lastConvIdRef.current) {
+      lastConvIdRef.current = id;
+      isAtBottomRef.current = true;
+      scrollToBottom(false);
+    }
+  }, [selectedConversation?.id, scrollToBottom]);
+
+  // When new messages arrive, scroll only if user is at/near bottom
+  useEffect(() => {
+    if (messages.length === 0) return;
+    if (isAtBottomRef.current) {
+      scrollToBottom(false);
+    }
+
     // Mark messages as read when viewing them
-    if (messages.length > 0 && user) {
+    if (user) {
       const otherUserMessages = messages
         .filter(m => m.sender_id !== user.id)
         .map(m => m.id);
@@ -271,9 +289,28 @@ export default function MessagesPage() {
         markAsRead(otherUserMessages);
       }
     }
-    
-    return () => clearTimeout(timer);
-  }, [messages, markAsRead, user]);
+  }, [messages, markAsRead, user, scrollToBottom]);
+
+  // Re-scroll when media inside the viewport finishes loading
+  useEffect(() => {
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    const handleLoad = (e: Event) => {
+      const t = e.target as HTMLElement;
+      if (!t || (t.tagName !== 'IMG' && t.tagName !== 'VIDEO')) return;
+      if (isAtBottomRef.current) scrollToBottom(false);
+    };
+    el.addEventListener('load', handleLoad, true);
+    return () => el.removeEventListener('load', handleLoad, true);
+  }, [selectedConversation?.id, scrollToBottom]);
+
+  // Track whether the user is at the bottom (within 80px) so we don't yank their scroll while reading old messages
+  const handleMessagesScroll = useCallback(() => {
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    isAtBottomRef.current = distanceFromBottom < 80;
+  }, []);
 
   // Tab definitions
   const tabs: { id: MessageTab; label: string }[] = [
