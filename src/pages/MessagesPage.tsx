@@ -97,6 +97,9 @@ export default function MessagesPage() {
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   const lastConvIdRef = useRef<string | null>(null);
   const isAtBottomRef = useRef<boolean>(true);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [unreadIncomingCount, setUnreadIncomingCount] = useState(0);
+  const lastMessageIdRef = useRef<string | null>(null);
 
   // Determine if we're showing archived tab
   const isArchivedTab = activeTab === 'archived';
