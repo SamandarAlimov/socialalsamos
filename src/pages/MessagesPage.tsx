@@ -274,15 +274,26 @@ export default function MessagesPage() {
     if (id !== lastConvIdRef.current) {
       lastConvIdRef.current = id;
       isAtBottomRef.current = true;
+      setUnreadIncomingCount(0);
+      setShowScrollToBottom(false);
+      lastMessageIdRef.current = null;
       scrollToBottom(false);
     }
   }, [selectedConversation?.id, scrollToBottom]);
 
-  // When new messages arrive, scroll only if user is at/near bottom
+  // When new messages arrive, scroll only if user is at/near bottom; otherwise show badge
   useEffect(() => {
     if (messages.length === 0) return;
+    const newest = messages[messages.length - 1];
+    const isNewMessage = newest && newest.id !== lastMessageIdRef.current;
+    const prevId = lastMessageIdRef.current;
+    lastMessageIdRef.current = newest?.id ?? null;
+
     if (isAtBottomRef.current) {
       scrollToBottom(false);
+    } else if (isNewMessage && prevId && newest.sender_id !== user?.id) {
+      // User scrolled up and a new incoming message arrived
+      setUnreadIncomingCount((c) => c + 1);
     }
 
     // Mark messages as read when viewing them
@@ -309,13 +320,23 @@ export default function MessagesPage() {
     return () => el.removeEventListener('load', handleLoad, true);
   }, [selectedConversation?.id, scrollToBottom]);
 
-  // Track whether the user is at the bottom (within 80px) so we don't yank their scroll while reading old messages
+  // Track whether the user is at the bottom (within 80px)
   const handleMessagesScroll = useCallback(() => {
     const el = messagesScrollRef.current;
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    isAtBottomRef.current = distanceFromBottom < 80;
+    const atBottom = distanceFromBottom < 80;
+    isAtBottomRef.current = atBottom;
+    setShowScrollToBottom(distanceFromBottom > 240);
+    if (atBottom) setUnreadIncomingCount(0);
   }, []);
+
+  const handleScrollToBottomClick = useCallback(() => {
+    isAtBottomRef.current = true;
+    setUnreadIncomingCount(0);
+    setShowScrollToBottom(false);
+    scrollToBottom(true);
+  }, [scrollToBottom]);
 
   // Tab definitions
   const tabs: { id: MessageTab; label: string }[] = [
