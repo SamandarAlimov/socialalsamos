@@ -927,12 +927,37 @@ export default function MessagesPage() {
   const leftPanelRef = useRef<HTMLDivElement>(null);
   const leftPanelHandleRef = useRef<any>(null);
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(320);
-  const snapRafRef = useRef<number | null>(null);
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeHint, setResizeHint] = useState<'compact' | 'expanded' | null>(null);
 
   // Snap target sizes (single compact size, single expanded size — no in-between)
   const COMPACT_PX = 72;
-  const EXPANDED_PCT = 32;
   const SNAP_THRESHOLD_PX = 220; // below this → compact; above → expanded
+
+  // Device-aware default width and bounds (saved per device class)
+  const deviceClass = useMemo(() => {
+    if (typeof window === 'undefined') return 'desktop';
+    const w = window.innerWidth;
+    if (w < 768) return 'mobile';
+    if (w < 1024) return 'tablet';
+    if (w < 1440) return 'desktop';
+    return 'wide';
+  }, []);
+  const defaults = useMemo(() => {
+    switch (deviceClass) {
+      case 'tablet': return { defaultPct: 38, minPct: 6, maxPct: 55, expandedPct: 38 };
+      case 'desktop': return { defaultPct: 32, minPct: 4, maxPct: 50, expandedPct: 32 };
+      case 'wide': return { defaultPct: 26, minPct: 3, maxPct: 45, expandedPct: 26 };
+      default: return { defaultPct: 100, minPct: 100, maxPct: 100, expandedPct: 100 };
+    }
+  }, [deviceClass]);
+  const STORAGE_KEY = `messages.chatlist.width.${deviceClass}`;
+  const initialPct = useMemo(() => {
+    if (typeof window === 'undefined') return defaults.defaultPct;
+    const saved = Number(window.localStorage.getItem(STORAGE_KEY));
+    if (Number.isFinite(saved) && saved > 0 && saved <= defaults.maxPct + 1) return saved;
+    return defaults.defaultPct;
+  }, [STORAGE_KEY, defaults]);
 
   useEffect(() => {
     const el = leftPanelRef.current;
@@ -947,28 +972,40 @@ export default function MessagesPage() {
   }, []);
 
   // Track latest size during drag; snap only when user releases the handle
-  const latestSizeRef = useRef<number>(32);
+  const latestSizeRef = useRef<number>(initialPct);
+  const saveTimerRef = useRef<number | null>(null);
   const handlePanelResize = (size: number) => {
     latestSizeRef.current = size;
+    // Live hint while dragging
+    const groupEl = leftPanelRef.current?.closest('[data-panel-group]') as HTMLElement | null;
+    const groupWidth = groupEl?.getBoundingClientRect().width || window.innerWidth;
+    const px = (size / 100) * groupWidth;
+    if (isResizing) {
+      setResizeHint(px < SNAP_THRESHOLD_PX ? 'compact' : 'expanded');
+    }
+    // Debounced persist
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(() => {
+      try { window.localStorage.setItem(STORAGE_KEY, String(size)); } catch {}
+    }, 250);
   };
   const handleDragging = (isDragging: boolean) => {
+    setIsResizing(isDragging);
     if (isDragging) return;
+    setResizeHint(null);
     const size = latestSizeRef.current;
     const groupEl = leftPanelRef.current?.closest('[data-panel-group]') as HTMLElement | null;
     const groupWidth = groupEl?.getBoundingClientRect().width || window.innerWidth;
     const px = (size / 100) * groupWidth;
     const handle = leftPanelHandleRef.current;
     if (!handle) return;
-    const compactPct = Math.max(4, (COMPACT_PX / groupWidth) * 100);
+    const compactPct = Math.max(defaults.minPct, (COMPACT_PX / groupWidth) * 100);
     const minExpandedPct = (SNAP_THRESHOLD_PX / groupWidth) * 100;
     if (px < SNAP_THRESHOLD_PX) {
-      // Below threshold → snap down to compact icon-only mode
       if (Math.abs(size - compactPct) > 0.5) handle.resize(compactPct);
     } else if (px < SNAP_THRESHOLD_PX + 30) {
-      // Just above threshold → snap up to comfortable expanded default
-      handle.resize(Math.max(EXPANDED_PCT, minExpandedPct));
+      handle.resize(Math.max(defaults.expandedPct, minExpandedPct));
     }
-    // Otherwise (well above threshold) → leave the user's chosen width alone
   };
 
   const isCompactList = !isMobile && leftPanelWidth > 0 && leftPanelWidth < 140;
