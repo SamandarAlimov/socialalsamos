@@ -145,21 +145,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const resolveEmail = async (identifier: string): Promise<string> => {
+  const resolveEmail = async (identifier: string): Promise<string | null> => {
     const trimmed = identifier.trim();
+    if (!trimmed) return null;
     if (trimmed.includes('@')) return trimmed.toLowerCase();
     try {
       const { data, error } = await supabase.rpc('get_email_for_identifier', { _identifier: trimmed });
-      if (!error && data) return data as string;
+      if (error) {
+        console.error('resolveEmail rpc error', error);
+        return null;
+      }
+      return (data as string | null) || null;
     } catch (e) {
       console.error('resolveEmail rpc failed', e);
+      return null;
     }
-    return trimmed; // fallback — will fail with invalid creds
   };
 
   const login = async (identifier: string, password: string) => {
     setIsLoading(true);
     const email = await resolveEmail(identifier);
+
+    if (!email) {
+      toast({
+        title: 'Akkaunt topilmadi',
+        description: 'Bunday foydalanuvchi nomi yoki telefon raqami ro‘yxatdan o‘tmagan.',
+        variant: 'destructive',
+      });
+      setIsLoading(false);
+      return { error: new Error('Account not found') };
+    }
+
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
