@@ -286,13 +286,6 @@ export default function AuthPage() {
           </div>
         </div>
 
-        {/* Create Account Link */}
-        <p className="text-center mt-6 text-sm text-muted-foreground">
-          Need an Alsamos Account?{' '}
-          <a href="https://accounts.alsamos.com/signup" className="text-primary hover:underline font-medium">
-            Create Account
-          </a>
-        </p>
       </div>
     </div>
   );
