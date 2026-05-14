@@ -108,7 +108,7 @@ export default function AuthPage() {
           <div className="flex flex-col items-center mb-8">
             <AlsamosLogo size="xl" className="mb-4" />
             <p className="text-muted-foreground text-center text-sm max-w-xs">
-              Welcome to the next generation of intelligent social connectivity.
+              Ulaning, ulashing, kashf eting.
             </p>
           </div>
 
@@ -286,13 +286,6 @@ export default function AuthPage() {
           </div>
         </div>
 
-        {/* Create Account Link */}
-        <p className="text-center mt-6 text-sm text-muted-foreground">
-          Need an Alsamos Account?{' '}
-          <a href="https://accounts.alsamos.com/signup" className="text-primary hover:underline font-medium">
-            Create Account
-          </a>
-        </p>
       </div>
     </div>
   );
