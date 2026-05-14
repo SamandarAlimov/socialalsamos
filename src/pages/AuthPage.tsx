@@ -108,7 +108,7 @@ export default function AuthPage() {
           <div className="flex flex-col items-center mb-8">
             <AlsamosLogo size="xl" className="mb-4" />
             <p className="text-muted-foreground text-center text-sm max-w-xs">
-              Welcome to the next generation of intelligent social connectivity.
+              Ulaning, ulashing, kashf eting.
             </p>
           </div>
 
