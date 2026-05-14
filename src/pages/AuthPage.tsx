@@ -71,7 +71,7 @@ export default function AuthPage() {
           setIsSubmitting(false);
           return;
         }
-        const { error } = await signup(parsed.data.identifier, parsed.data.password, parsed.data.fullName);
+        const { error } = await signup(parsed.data.identifier, parsed.data.password, parsed.data.fullName, parsed.data.username);
         if (!error) {
           toast.success('Account created successfully!');
           navigate('/home');

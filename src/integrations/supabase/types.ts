@@ -2889,6 +2889,10 @@ export type Database = {
       get_admin_page_stats: { Args: never; Returns: Json }
       get_admin_platform_stats: { Args: never; Returns: Json }
       get_admin_weekly_pattern: { Args: never; Returns: Json }
+      get_email_for_identifier: {
+        Args: { _identifier: string }
+        Returns: string
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

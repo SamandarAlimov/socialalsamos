@@ -22,8 +22,8 @@ interface AuthContextType {
   profile: Profile | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signup: (email: string, password: string, displayName?: string) => Promise<{ error: Error | null }>;
+  login: (identifier: string, password: string) => Promise<{ error: Error | null }>;
+  signup: (email: string, password: string, displayName?: string, username?: string) => Promise<{ error: Error | null }>;
   logout: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
 }
@@ -145,17 +145,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const resolveEmail = async (identifier: string): Promise<string> => {
+    const trimmed = identifier.trim();
+    if (trimmed.includes('@')) return trimmed.toLowerCase();
+    try {
+      const { data, error } = await supabase.rpc('get_email_for_identifier', { _identifier: trimmed });
+      if (!error && data) return data as string;
+    } catch (e) {
+      console.error('resolveEmail rpc failed', e);
+    }
+    return trimmed; // fallback — will fail with invalid creds
+  };
+
+  const login = async (identifier: string, password: string) => {
     setIsLoading(true);
+    const email = await resolveEmail(identifier);
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (error) {
+      const msg = error.message.toLowerCase().includes('invalid login')
+        ? 'Email/username yoki parol noto‘g‘ri'
+        : error.message;
       toast({
-        title: 'Login Failed',
-        description: error.message,
+        title: 'Kirish amalga oshmadi',
+        description: msg,
         variant: 'destructive',
       });
       setIsLoading(false);
@@ -166,18 +182,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: null };
   };
 
-  const signup = async (email: string, password: string, displayName?: string) => {
+  const signup = async (email: string, password: string, displayName?: string, username?: string) => {
     setIsLoading(true);
     const redirectUrl = `${window.location.origin}/`;
+    const finalUsername = (username || email.split('@')[0]).toLowerCase().replace(/[^a-z0-9_]/g, '');
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: redirectUrl,
         data: {
-          display_name: displayName || email.split('@')[0],
-          username: email.split('@')[0],
+          display_name: displayName || finalUsername,
+          username: finalUsername,
         },
       },
     });
@@ -185,10 +202,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) {
       let message = error.message;
       if (error.message.includes('already registered')) {
-        message = 'This email is already registered. Please sign in instead.';
+        message = 'Bu email allaqachon ro‘yxatdan o‘tgan. Iltimos, kirib chiqing.';
       }
       toast({
-        title: 'Signup Failed',
+        title: 'Ro‘yxatdan o‘tish amalga oshmadi',
         description: message,
         variant: 'destructive',
       });
@@ -196,9 +213,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error };
     }
 
+    // If session is null (e.g. email confirmation required), try to sign in immediately
+    if (!data.session) {
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (signInError) {
+        toast({
+          title: 'Akkaunt yaratildi',
+          description: 'Iltimos, emailingizni tasdiqlang va qaytadan kiring.',
+        });
+        setIsLoading(false);
+        return { error: null };
+      }
+    }
+
     toast({
-      title: 'Account Created',
-      description: 'Welcome to Alsamos Social!',
+      title: 'Akkaunt yaratildi',
+      description: 'Alsamosga xush kelibsiz!',
     });
 
     setIsLoading(false);
