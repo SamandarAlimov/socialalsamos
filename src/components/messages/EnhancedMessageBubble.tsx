@@ -150,7 +150,7 @@ export function EnhancedMessageBubble({
       mediumTap();
       // Android/Telegram Desktop style: long-press always enters selection mode
       onLongPress?.(message.id);
-    }, 400);
+    }, 700);
   }, [message.id, onLongPress, mediumTap]);
 
   const handleLongPressEnd = useCallback(() => {
