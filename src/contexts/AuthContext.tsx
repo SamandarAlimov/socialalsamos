@@ -22,8 +22,8 @@ interface AuthContextType {
   profile: Profile | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signup: (email: string, password: string, displayName?: string) => Promise<{ error: Error | null }>;
+  login: (identifier: string, password: string) => Promise<{ error: Error | null }>;
+  signup: (email: string, password: string, displayName?: string, username?: string) => Promise<{ error: Error | null }>;
   logout: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
 }
