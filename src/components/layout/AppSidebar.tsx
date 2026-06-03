@@ -40,37 +40,39 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useTheme } from 'next-themes';
 import { SwitchAccountDialog } from '@/components/account/SwitchAccountDialog';
+import { useTranslation } from 'react-i18next';
 
 interface NavItem {
   icon: React.ElementType;
-  label: string;
+  labelKey: string;
   path?: string;
   badgeKey?: 'messages';
   action?: 'notifications' | 'search';
 }
 
 const navItems: NavItem[] = [
-  { icon: Home, label: 'Home', path: '/home' },
-  { icon: Search, label: 'Search', path: '/search' },
-  { icon: Compass, label: 'Discover', path: '/discover' },
-  { icon: Video, label: 'Videos', path: '/videos' },
-  { icon: MessageCircle, label: 'Messages', path: '/messages', badgeKey: 'messages' },
-  { icon: ShoppingBag, label: 'Marketplace', path: '/marketplace' },
-  { icon: Map, label: 'Map', path: '/map' },
-  { icon: Wallet, label: 'Payment', path: '/payment' },
-  { icon: Sparkles, label: 'AI Assistant', path: '/ai' },
-  { icon: LayoutGrid, label: 'Mini Apps', path: '/mini-apps' },
-  { icon: PlusSquare, label: 'Create', path: '/create' },
+  { icon: Home, labelKey: 'nav.home', path: '/home' },
+  { icon: Search, labelKey: 'nav.search', path: '/search' },
+  { icon: Compass, labelKey: 'nav.discover', path: '/discover' },
+  { icon: Video, labelKey: 'nav.videos', path: '/videos' },
+  { icon: MessageCircle, labelKey: 'nav.messages', path: '/messages', badgeKey: 'messages' },
+  { icon: ShoppingBag, labelKey: 'nav.marketplace', path: '/marketplace' },
+  { icon: Map, labelKey: 'nav.map', path: '/map' },
+  { icon: Wallet, labelKey: 'nav.payment', path: '/payment' },
+  { icon: Sparkles, labelKey: 'nav.ai', path: '/ai' },
+  { icon: LayoutGrid, labelKey: 'nav.miniApps', path: '/mini-apps' },
+  { icon: PlusSquare, labelKey: 'nav.create', path: '/create' },
 ];
 
 const bottomItems: NavItem[] = [
-  { icon: User, label: 'Profile', path: '/profile' },
+  { icon: User, labelKey: 'nav.profile', path: '/profile' },
 ];
 
 export function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, profile, logout } = useAuth();
+  const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState(false);
   const [autoCollapsed, setAutoCollapsed] = useState(false);
   const [userToggled, setUserToggled] = useState(false);
@@ -156,7 +158,7 @@ export function AppSidebar() {
                 </AnimatePresence>
               </div>
               {!collapsed && (
-                <span className="font-medium text-sm">{item.label}</span>
+                <span className="font-medium text-sm">{t(item.labelKey)}</span>
               )}
               {/* Badge in expanded mode */}
               <AnimatePresence>
@@ -207,7 +209,7 @@ export function AppSidebar() {
                 ) : (
                   <User className="h-5 w-5 flex-shrink-0" />
                 )}
-                {!collapsed && <span className="font-medium text-sm">{item.label}</span>}
+                {!collapsed && <span className="font-medium text-sm">{t(item.labelKey)}</span>}
               </NavLink>
               
               {/* More Options - Shown on expanded sidebar */}
