@@ -1,0 +1,82 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "search": "Search",
+    "loading": "Loading...",
+    "send": "Send",
+    "back": "Back",
+    "close": "Close",
+    "confirm": "Confirm",
+    "yes": "Yes",
+    "no": "No",
+    "more": "More",
+    "settings": "Settings",
+    "language": "Language"
+  },
+  "nav": {
+    "home": "Home",
+    "search": "Search",
+    "discover": "Discover",
+    "videos": "Videos",
+    "messages": "Messages",
+    "marketplace": "Marketplace",
+    "map": "Map",
+    "payment": "Payment",
+    "ai": "AI Assistant",
+    "miniApps": "Mini Apps",
+    "create": "Create",
+    "profile": "Profile",
+    "settings": "Settings",
+    "notifications": "Notifications",
+    "logout": "Logout"
+  },
+  "auth": {
+    "tagline": "Connect, share, discover.",
+    "signIn": "Sign In",
+    "signUp": "Sign Up",
+    "fullName": "Full Name",
+    "username": "Username",
+    "emailOrPhone": "Email or Mobile Number",
+    "identifier": "Email, phone or username",
+    "password": "Password",
+    "createAccount": "Create Account",
+    "loginButton": "Sign In",
+    "or": "or"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "languageDescription": "Choose interface language",
+    "profile": "Profile",
+    "notifications": "Notifications",
+    "privacy": "Privacy",
+    "appearance": "Appearance",
+    "account": "Account",
+    "devices": "Devices"
+  },
+  "messages": {
+    "writeMessage": "Write a message",
+    "noMessages": "No messages yet",
+    "online": "online",
+    "typing": "typing...",
+    "lastSeen": "last seen",
+    "newMessage": "New message",
+    "jumpToLatest": "Jump to latest"
+  },
+  "post": {
+    "viewers": "Viewers",
+    "noViewers": "No views yet",
+    "viewersCount": "{{count}} views",
+    "loadMore": "Load more",
+    "privateUser": "Private user"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "markAllAsRead": "Mark all as read",
+    "noNotifications": "No notifications",
+    "delete": "Delete"
+  }
+}
