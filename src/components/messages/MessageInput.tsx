@@ -30,6 +30,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { useTranslation } from 'react-i18next';
 
 interface ReplyTo {
   id: string;
@@ -300,7 +301,7 @@ export function MessageInput({
               }
               handleKeyDown(e);
             }}
-            placeholder="Write a message"
+            placeholder={t('messages.writeMessage')}
             disabled={disabled}
             rows={1}
             className={cn(
