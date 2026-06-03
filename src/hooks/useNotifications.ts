@@ -97,8 +97,16 @@ export function useNotifications() {
         };
       });
 
-      setNotifications(enrichedNotifications);
-      setUnreadCount(enrichedNotifications.filter(n => !n.is_read).length);
+      // Deduplicate by id as defense-in-depth
+      const seen = new Set<string>();
+      const deduped = enrichedNotifications.filter((n) => {
+        if (seen.has(n.id)) return false;
+        seen.add(n.id);
+        return true;
+      });
+
+      setNotifications(deduped);
+      setUnreadCount(deduped.filter((n) => !n.is_read).length);
     }
     setLoading(false);
   }, [user]);
@@ -142,7 +150,9 @@ export function useNotifications() {
     fetchNotifications();
   }, [fetchNotifications]);
 
-  // Real-time subscription - refetch to get actor/post data
+  // Real-time subscription - refetch to get actor/post data.
+  // IMPORTANT: do NOT depend on `notifications` here, otherwise the channel
+  // is recreated on every state change and handlers can fire twice.
   useEffect(() => {
     if (!user) return;
 
@@ -157,7 +167,6 @@ export function useNotifications() {
           filter: `user_id=eq.${user.id}`,
         },
         () => {
-          // Refetch to get enriched data
           fetchNotifications();
         }
       )
@@ -171,16 +180,14 @@ export function useNotifications() {
         },
         (payload) => {
           const updated = payload.new as { id: string; is_read: boolean };
-          // Update local state for is_read changes
-          setNotifications(prev =>
-            prev.map(n => (n.id === updated.id ? { ...n, is_read: updated.is_read } : n))
-          );
-          setUnreadCount(prev => {
-            const notification = notifications.find(n => n.id === updated.id);
-            if (notification && !notification.is_read && updated.is_read) {
-              return Math.max(0, prev - 1);
+          setNotifications((prev) => {
+            const target = prev.find((n) => n.id === updated.id);
+            if (target && !target.is_read && updated.is_read) {
+              setUnreadCount((c) => Math.max(0, c - 1));
             }
-            return prev;
+            return prev.map((n) =>
+              n.id === updated.id ? { ...n, is_read: updated.is_read } : n
+            );
           });
         }
       )
@@ -194,7 +201,7 @@ export function useNotifications() {
         },
         (payload) => {
           const deleted = payload.old as { id: string };
-          setNotifications(prev => prev.filter(n => n.id !== deleted.id));
+          setNotifications((prev) => prev.filter((n) => n.id !== deleted.id));
         }
       )
       .subscribe();
@@ -202,7 +209,7 @@ export function useNotifications() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, fetchNotifications, notifications]);
+  }, [user, fetchNotifications]);
 
   return {
     notifications,
