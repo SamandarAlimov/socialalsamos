@@ -57,6 +57,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { formatDistanceToNow } from 'date-fns';
 import { VerificationRequestDialog } from '@/components/profile/VerificationRequestDialog';
+import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 interface Profile {
   display_name: string | null;
@@ -300,6 +301,11 @@ export default function SettingsPage() {
   return (
     <div className="max-w-4xl mx-auto py-4 md:py-8 px-3 md:px-4 pb-24 md:pb-8">
       <h1 className="text-xl md:text-2xl font-bold mb-4 md:mb-8">Settings</h1>
+
+      {/* Language switcher — universal, surfaces above tabs */}
+      <div className="mb-4 md:mb-6">
+        <LanguageSwitcher />
+      </div>
 
       <Tabs defaultValue="account" className="space-y-4 md:space-y-6">
         <TabsList className="grid w-full grid-cols-4 h-auto p-1">

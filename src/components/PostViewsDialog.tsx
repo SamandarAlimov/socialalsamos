@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { Eye, Search, Users } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Eye, Search, Users, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -11,6 +12,8 @@ import { formatDistanceToNow } from 'date-fns';
 import { uz } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
+import { useRealtimePostViews } from '@/hooks/useRealtimePostViews';
+import { useTranslation } from 'react-i18next';
 
 interface Viewer {
   user_id: string;
@@ -31,43 +34,124 @@ interface PostViewsDialogProps {
   textClassName?: string;
 }
 
+const PAGE_SIZE = 30;
+
+function formatCount(count: number) {
+  if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
+  if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
+  return count.toString();
+}
+
 export function PostViewsDialog({ postId, viewsCount, className, iconClassName, textClassName }: PostViewsDialogProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [viewers, setViewers] = useState<Viewer[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [query, setQuery] = useState('');
   const navigate = useNavigate();
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const liveCount = useRealtimePostViews(postId, viewsCount);
 
+  const loadPage = useCallback(
+    async (cursor: string | null) => {
+      let q = supabase
+        .from('post_views')
+        .select(`
+          user_id,
+          viewed_at,
+          profile:profiles!post_views_user_id_fkey (
+            username,
+            display_name,
+            avatar_url,
+            is_verified
+          )
+        `)
+        .eq('post_id', postId)
+        .order('viewed_at', { ascending: false })
+        .limit(PAGE_SIZE);
+
+      if (cursor) q = q.lt('viewed_at', cursor);
+
+      const { data, error } = await q;
+      if (error) return [] as Viewer[];
+      return (data as any[]) || [];
+    },
+    [postId]
+  );
+
+  // Initial load
   useEffect(() => {
     if (!open) return;
-
     setLoading(true);
-    supabase
-      .from('post_views')
-      .select(`
-        user_id,
-        viewed_at,
-        profile:profiles!post_views_user_id_fkey (
-          username,
-          display_name,
-          avatar_url,
-          is_verified
-        )
-      `)
-      .eq('post_id', postId)
-      .order('viewed_at', { ascending: false })
-      .limit(500)
-      .then(({ data }) => {
-        setViewers((data as any[]) || []);
-        setLoading(false);
-      });
+    setViewers([]);
+    setHasMore(true);
+    loadPage(null).then((batch) => {
+      setViewers(batch);
+      setHasMore(batch.length === PAGE_SIZE);
+      setLoading(false);
+    });
+  }, [open, postId, loadPage]);
+
+  // Realtime append while dialog is open
+  useEffect(() => {
+    if (!open) return;
+    const channel = supabase
+      .channel(`post-views-dialog:${postId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'post_views',
+          filter: `post_id=eq.${postId}`,
+        },
+        async (payload) => {
+          const row = payload.new as { user_id: string; viewed_at: string };
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('username, display_name, avatar_url, is_verified')
+            .eq('id', row.user_id)
+            .maybeSingle();
+          setViewers((prev) => {
+            if (prev.some((v) => v.user_id === row.user_id)) return prev;
+            return [
+              { user_id: row.user_id, viewed_at: row.viewed_at, profile: profile || undefined },
+              ...prev,
+            ];
+          });
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [open, postId]);
 
-  const formatCount = (count: number) => {
-    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
-    if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
-    return count.toString();
-  };
+  // Infinite scroll
+  useEffect(() => {
+    if (!open || loading || !hasMore) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      async (entries) => {
+        if (!entries[0].isIntersecting || loadingMore) return;
+        setLoadingMore(true);
+        const cursor = viewers[viewers.length - 1]?.viewed_at;
+        const batch = await loadPage(cursor || null);
+        setViewers((prev) => {
+          const ids = new Set(prev.map((v) => v.user_id));
+          return [...prev, ...batch.filter((v) => !ids.has(v.user_id))];
+        });
+        setHasMore(batch.length === PAGE_SIZE);
+        setLoadingMore(false);
+      },
+      { rootMargin: '120px' }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [open, loading, hasMore, loadingMore, viewers, loadPage]);
 
   const filtered = viewers.filter((v) => {
     if (!query.trim()) return true;
@@ -88,7 +172,18 @@ export function PostViewsDialog({ postId, viewsCount, className, iconClassName, 
           )}
         >
           <Eye className={cn('h-4 w-4', iconClassName)} />
-          <span className={cn('text-xs font-medium tabular-nums', textClassName)}>{formatCount(viewsCount)}</span>
+          <AnimatePresence mode="popLayout">
+            <motion.span
+              key={liveCount}
+              initial={{ y: -6, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 6, opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              className={cn('text-xs font-medium tabular-nums', textClassName)}
+            >
+              {formatCount(liveCount)}
+            </motion.span>
+          </AnimatePresence>
         </button>
       </DialogTrigger>
       <DialogContent className="max-w-md p-0 gap-0 overflow-hidden">
@@ -98,9 +193,9 @@ export function PostViewsDialog({ postId, viewsCount, className, iconClassName, 
               <Eye className="h-4 w-4 text-alsamos-orange" />
             </div>
             <div className="flex flex-col items-start">
-              <span>Ko'rganlar</span>
+              <span>{t('post.viewers')}</span>
               <span className="text-xs font-normal text-muted-foreground tabular-nums">
-                {formatCount(viewsCount)} ta ko'rish
+                {t('post.viewersCount', { count: liveCount })}
               </span>
             </div>
           </DialogTitle>
@@ -112,7 +207,7 @@ export function PostViewsDialog({ postId, viewsCount, className, iconClassName, 
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Qidirish..."
+              placeholder={t('common.search')}
               className="pl-9 h-9 bg-background border-border/60 rounded-full text-sm"
             />
           </div>
@@ -135,47 +230,58 @@ export function PostViewsDialog({ postId, viewsCount, className, iconClassName, 
                 <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center mb-3">
                   <Users className="h-6 w-6 text-muted-foreground" />
                 </div>
-                <p className="text-sm font-medium">
-                  {query ? 'Hech narsa topilmadi' : 'Hali hech kim ko\'rmagan'}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {query ? 'Boshqa kalit so\'z bilan urinib ko\'ring' : 'Postni birinchi bo\'lib kuzating'}
-                </p>
+                <p className="text-sm font-medium">{t('post.noViewers')}</p>
               </div>
             ) : (
-              filtered.map((viewer) => (
-                <button
-                  key={viewer.user_id}
-                  onClick={() => {
-                    setOpen(false);
-                    navigate(`/user/${viewer.profile?.username || viewer.user_id}`);
-                  }}
-                  className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-muted/60 active:bg-muted w-full text-left transition-colors"
-                >
-                  <Avatar className="h-11 w-11 ring-1 ring-border/50">
-                    <AvatarImage src={viewer.profile?.avatar_url || ''} />
-                    <AvatarFallback className="bg-gradient-to-br from-alsamos-orange/20 to-alsamos-orange/5 text-alsamos-orange font-medium">
-                      {(viewer.profile?.display_name || viewer.profile?.username || 'U')[0].toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1">
-                      <span className="font-medium text-sm truncate">
-                        {viewer.profile?.display_name || viewer.profile?.username || 'Foydalanuvchi'}
-                      </span>
-                      {viewer.profile?.is_verified && <VerifiedBadge size="xs" />}
-                    </div>
-                    {viewer.profile?.username && viewer.profile?.display_name && (
-                      <p className="text-xs text-muted-foreground truncate">
-                        @{viewer.profile.username}
-                      </p>
-                    )}
+              <>
+                <AnimatePresence initial={false}>
+                  {filtered.map((viewer) => {
+                    const displayName =
+                      viewer.profile?.display_name || viewer.profile?.username || t('post.privateUser');
+                    return (
+                      <motion.button
+                        key={viewer.user_id}
+                        layout
+                        initial={{ opacity: 0, y: -8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.18 }}
+                        onClick={() => {
+                          setOpen(false);
+                          if (viewer.profile?.username) {
+                            navigate(`/user/${viewer.profile.username}`);
+                          }
+                        }}
+                        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-muted/60 active:bg-muted w-full text-left transition-colors"
+                      >
+                        <Avatar className="h-11 w-11 ring-1 ring-border/50">
+                          <AvatarImage src={viewer.profile?.avatar_url || ''} />
+                          <AvatarFallback className="bg-gradient-to-br from-alsamos-orange/20 to-alsamos-orange/5 text-alsamos-orange font-medium">
+                            {displayName[0].toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1">
+                            <span className="font-medium text-sm truncate">{displayName}</span>
+                            {viewer.profile?.is_verified && <VerifiedBadge size="xs" />}
+                          </div>
+                          {viewer.profile?.username && (
+                            <p className="text-xs text-muted-foreground truncate">@{viewer.profile.username}</p>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
+                          {formatDistanceToNow(new Date(viewer.viewed_at), { addSuffix: false, locale: uz })}
+                        </span>
+                      </motion.button>
+                    );
+                  })}
+                </AnimatePresence>
+                {hasMore && (
+                  <div ref={sentinelRef} className="flex items-center justify-center py-4">
+                    {loadingMore && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                   </div>
-                  <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
-                    {formatDistanceToNow(new Date(viewer.viewed_at), { addSuffix: false, locale: uz })}
-                  </span>
-                </button>
-              ))
+                )}
+              </>
             )}
           </div>
         </ScrollArea>

@@ -1,0 +1,82 @@
+{
+  "common": {
+    "save": "Saqlash",
+    "cancel": "Bekor qilish",
+    "delete": "O'chirish",
+    "edit": "Tahrirlash",
+    "search": "Qidirish",
+    "loading": "Yuklanmoqda...",
+    "send": "Yuborish",
+    "back": "Orqaga",
+    "close": "Yopish",
+    "confirm": "Tasdiqlash",
+    "yes": "Ha",
+    "no": "Yo'q",
+    "more": "Yana",
+    "settings": "Sozlamalar",
+    "language": "Til"
+  },
+  "nav": {
+    "home": "Bosh sahifa",
+    "search": "Qidirish",
+    "discover": "Kashf etish",
+    "videos": "Videolar",
+    "messages": "Xabarlar",
+    "marketplace": "Bozor",
+    "map": "Xarita",
+    "payment": "To'lov",
+    "ai": "AI yordamchi",
+    "miniApps": "Mini ilovalar",
+    "create": "Yaratish",
+    "profile": "Profil",
+    "settings": "Sozlamalar",
+    "notifications": "Bildirishnomalar",
+    "logout": "Chiqish"
+  },
+  "auth": {
+    "tagline": "Ulaning, ulashing, kashf eting.",
+    "signIn": "Kirish",
+    "signUp": "Ro'yxatdan o'tish",
+    "fullName": "Ism familiya",
+    "username": "Foydalanuvchi nomi",
+    "emailOrPhone": "Email yoki telefon raqam",
+    "identifier": "Email, telefon yoki username",
+    "password": "Parol",
+    "createAccount": "Akkaunt yaratish",
+    "loginButton": "Kirish",
+    "or": "yoki"
+  },
+  "settings": {
+    "title": "Sozlamalar",
+    "language": "Til",
+    "languageDescription": "Interfeys tilini tanlang",
+    "profile": "Profil",
+    "notifications": "Bildirishnomalar",
+    "privacy": "Maxfiylik",
+    "appearance": "Ko'rinish",
+    "account": "Akkaunt",
+    "devices": "Qurilmalar"
+  },
+  "messages": {
+    "writeMessage": "Xabar yozing",
+    "noMessages": "Hali xabarlar yo'q",
+    "online": "onlayn",
+    "typing": "yozmoqda...",
+    "lastSeen": "oxirgi kirish",
+    "newMessage": "Yangi xabar",
+    "jumpToLatest": "Eng oxirgisiga o'tish"
+  },
+  "post": {
+    "viewers": "Ko'rganlar",
+    "noViewers": "Hali hech kim ko'rmagan",
+    "viewersCount": "{{count}} ta ko'rish",
+    "loadMore": "Ko'proq yuklash",
+    "privateUser": "Maxfiy foydalanuvchi"
+  },
+  "notifications": {
+    "title": "Bildirishnomalar",
+    "markAllAsRead": "Hammasini o'qildi deb belgilash",
+    "noNotifications": "Bildirishnomalar yo'q",
+    "delete": "O'chirish"
+  }
+}

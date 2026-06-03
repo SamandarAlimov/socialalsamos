@@ -30,6 +30,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { useTranslation } from 'react-i18next';
 
 interface ReplyTo {
   id: string;
@@ -56,6 +57,7 @@ export function MessageInput({
   disabled,
   onShareLocation
 }: MessageInputProps) {
+  const { t } = useTranslation();
   const { uploadFile, uploading, getFileType } = useFileUpload();
   const [message, setMessage] = useState('');
   const [pendingAttachment, setPendingAttachment] = useState<{ url: string; type: string; name: string } | null>(null);
@@ -300,7 +302,7 @@ export function MessageInput({
               }
               handleKeyDown(e);
             }}
-            placeholder="Write a message"
+            placeholder={t('messages.writeMessage')}
             disabled={disabled}
             rows={1}
             className={cn(

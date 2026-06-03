@@ -1,0 +1,82 @@
+{
+  "common": {
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "delete": "Удалить",
+    "edit": "Редактировать",
+    "search": "Поиск",
+    "loading": "Загрузка...",
+    "send": "Отправить",
+    "back": "Назад",
+    "close": "Закрыть",
+    "confirm": "Подтвердить",
+    "yes": "Да",
+    "no": "Нет",
+    "more": "Ещё",
+    "settings": "Настройки",
+    "language": "Язык"
+  },
+  "nav": {
+    "home": "Главная",
+    "search": "Поиск",
+    "discover": "Открытия",
+    "videos": "Видео",
+    "messages": "Сообщения",
+    "marketplace": "Маркет",
+    "map": "Карта",
+    "payment": "Оплата",
+    "ai": "AI помощник",
+    "miniApps": "Мини-приложения",
+    "create": "Создать",
+    "profile": "Профиль",
+    "settings": "Настройки",
+    "notifications": "Уведомления",
+    "logout": "Выйти"
+  },
+  "auth": {
+    "tagline": "Общайтесь, делитесь, открывайте.",
+    "signIn": "Войти",
+    "signUp": "Регистрация",
+    "fullName": "Полное имя",
+    "username": "Имя пользователя",
+    "emailOrPhone": "Email или номер телефона",
+    "identifier": "Email, телефон или username",
+    "password": "Пароль",
+    "createAccount": "Создать аккаунт",
+    "loginButton": "Войти",
+    "or": "или"
+  },
+  "settings": {
+    "title": "Настройки",
+    "language": "Язык",
+    "languageDescription": "Выберите язык интерфейса",
+    "profile": "Профиль",
+    "notifications": "Уведомления",
+    "privacy": "Приватность",
+    "appearance": "Внешний вид",
+    "account": "Аккаунт",
+    "devices": "Устройства"
+  },
+  "messages": {
+    "writeMessage": "Напишите сообщение",
+    "noMessages": "Пока нет сообщений",
+    "online": "в сети",
+    "typing": "печатает...",
+    "lastSeen": "был(а)",
+    "newMessage": "Новое сообщение",
+    "jumpToLatest": "К последнему"
+  },
+  "post": {
+    "viewers": "Просмотры",
+    "noViewers": "Пока нет просмотров",
+    "viewersCount": "{{count}} просмотров",
+    "loadMore": "Загрузить ещё",
+    "privateUser": "Скрытый пользователь"
+  },
+  "notifications": {
+    "title": "Уведомления",
+    "markAllAsRead": "Отметить все как прочитанные",
+    "noNotifications": "Нет уведомлений",
+    "delete": "Удалить"
+  }
+}
