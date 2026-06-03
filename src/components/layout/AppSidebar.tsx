@@ -223,7 +223,7 @@ export function AppSidebar() {
                   <DropdownMenuContent align="end" side="top" className="w-56">
                     <DropdownMenuItem onClick={() => navigate('/settings')}>
                       <Settings className="h-4 w-4 mr-3" />
-                      Settings
+                      {t('nav.settings')}
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
                       {theme === 'dark' ? (
@@ -243,7 +243,7 @@ export function AppSidebar() {
                       className="text-destructive focus:text-destructive"
                     >
                       <LogOut className="h-4 w-4 mr-3" />
-                      Log Out
+                      {t('nav.logout')}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
