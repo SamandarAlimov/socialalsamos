@@ -57,6 +57,7 @@ export function MessageInput({
   disabled,
   onShareLocation
 }: MessageInputProps) {
+  const { t } = useTranslation();
   const { uploadFile, uploading, getFileType } = useFileUpload();
   const [message, setMessage] = useState('');
   const [pendingAttachment, setPendingAttachment] = useState<{ url: string; type: string; name: string } | null>(null);
