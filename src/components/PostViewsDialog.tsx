@@ -37,7 +37,7 @@ const PAGE_SIZE = 30;
 
 
 export function PostViewsDialog({ postId, viewsCount, className, iconClassName, textClassName }: PostViewsDialogProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
   const [viewers, setViewers] = useState<Viewer[]>([]);
   const [loading, setLoading] = useState(false);
@@ -175,7 +175,7 @@ export function PostViewsDialog({ postId, viewsCount, className, iconClassName, 
               transition={{ duration: 0.18 }}
               className={cn('text-xs font-medium tabular-nums', textClassName)}
             >
-              {formatCount(liveCount)}
+              {formatCompact(liveCount, i18n.language)}
             </motion.span>
           </AnimatePresence>
         </button>
@@ -264,7 +264,7 @@ export function PostViewsDialog({ postId, viewsCount, className, iconClassName, 
                           )}
                         </div>
                         <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
-                          {formatDistanceToNow(new Date(viewer.viewed_at), { addSuffix: false, locale: uz })}
+                          {formatRelative(viewer.viewed_at, i18n.language, false)}
                         </span>
                       </motion.button>
                     );
