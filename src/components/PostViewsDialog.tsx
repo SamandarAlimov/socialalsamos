@@ -8,8 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
-import { formatDistanceToNow } from 'date-fns';
-import { uz } from 'date-fns/locale';
+import { formatRelative, formatCompact } from '@/lib/i18n-format';
 import { cn } from '@/lib/utils';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { useRealtimePostViews } from '@/hooks/useRealtimePostViews';
@@ -36,11 +35,6 @@ interface PostViewsDialogProps {
 
 const PAGE_SIZE = 30;
 
-function formatCount(count: number) {
-  if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
-  if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
-  return count.toString();
-}
 
 export function PostViewsDialog({ postId, viewsCount, className, iconClassName, textClassName }: PostViewsDialogProps) {
   const { t } = useTranslation();
