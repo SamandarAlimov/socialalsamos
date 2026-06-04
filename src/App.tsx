@@ -37,6 +37,7 @@ import NotFound from "./pages/NotFound";
 
 // Layout
 import { AppLayout } from "./components/layout/AppLayout";
+import { RouteSEO } from "./components/RouteSEO";
 
 const queryClient = new QueryClient();
 
@@ -84,7 +85,9 @@ function PlaceholderPage({ title }: { title: string }) {
 
 function AppRoutes() {
   return (
-    <Routes>
+    <>
+      <RouteSEO />
+      <Routes>
       {/* Auth - First screen before login */}
       <Route path="/" element={
         <AuthRoute>
@@ -118,7 +121,8 @@ function AppRoutes() {
       
       {/* 404 */}
       <Route path="*" element={<NotFound />} />
-    </Routes>
+      </Routes>
+    </>
   );
 }
 

@@ -1,6 +1,8 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { formatDistanceToNow, isToday, isYesterday, isThisWeek, isThisMonth, differenceInMinutes, format } from 'date-fns';
+import { isToday, isYesterday, isThisWeek, isThisMonth, differenceInMinutes } from 'date-fns';
+import { useTranslation } from 'react-i18next';
+import { formatRelative, formatDate } from '@/lib/i18n-format';
 import { Heart, MessageCircle, UserPlus, AtSign, Check, Bell, BellOff, Settings, Trash2, MoreHorizontal, ChevronRight, Sparkles, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
@@ -207,12 +209,13 @@ function GroupedNotificationItem({
     group.notifications.forEach(n => onDelete(n.id));
   };
 
+  const { i18n: i18nInst } = useTranslation();
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
     if (isToday(date)) {
-      return format(date, 'HH:mm');
+      return formatDate(date, 'HH:mm', i18nInst.language);
     }
-    return formatDistanceToNow(date, { addSuffix: true });
+    return formatRelative(date, i18nInst.language);
   };
   
   const getNotificationText = () => {
