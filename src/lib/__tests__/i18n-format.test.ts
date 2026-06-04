@@ -6,7 +6,9 @@ describe("i18n-format: formatRelative", () => {
 
   it("renders relative time in Uzbek", () => {
     const out = formatRelative(twoMinAgo, "uz");
-    expect(out.toLowerCase()).toMatch(/daqiqa/);
+    // date-fns uz locale uses "minut"; we also accept native "daqiqa"
+    expect(out.toLowerCase()).toMatch(/minut|daqiqa/);
+    expect(out.toLowerCase()).toMatch(/oldin/);
   });
 
   it("renders relative time in English", () => {
