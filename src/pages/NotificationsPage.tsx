@@ -209,12 +209,13 @@ function GroupedNotificationItem({
     group.notifications.forEach(n => onDelete(n.id));
   };
 
+  const { i18n: i18nInst } = useTranslation();
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
     if (isToday(date)) {
-      return format(date, 'HH:mm');
+      return formatDate(date, 'HH:mm', i18nInst.language);
     }
-    return formatDistanceToNow(date, { addSuffix: true });
+    return formatRelative(date, i18nInst.language);
   };
   
   const getNotificationText = () => {
