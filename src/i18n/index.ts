@@ -31,6 +31,16 @@ i18n
       caches: ['localStorage'],
       lookupLocalStorage: 'alsamos-language',
     },
+    returnEmptyString: false,
   });
+
+// Sync <html lang> on init + on every language change so the entire app reflects it instantly.
+const applyHtmlLang = (lng: string) => {
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = lng;
+  }
+};
+applyHtmlLang(i18n.language || 'uz');
+i18n.on('languageChanged', applyHtmlLang);
 
 export default i18n;
