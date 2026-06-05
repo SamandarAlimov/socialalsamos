@@ -97,6 +97,8 @@ describe('useNotifications — dedup under stress', () => {
       replay.forEach((r) => listeners.forEach((l) => l({ new: r })));
       await new Promise((r) => setTimeout(r, 0));
     });
+    await new Promise((r) => setTimeout(r, 200));
+    console.log('post-act count', result.current.notifications.length, 'store', store.rows.length, 'listeners', listeners.length);
 
     await waitFor(() => expect(result.current.notifications.length).toBe(10));
     const ids = result.current.notifications.map((n) => n.id);
