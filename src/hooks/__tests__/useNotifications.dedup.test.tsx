@@ -86,24 +86,20 @@ describe('useNotifications — dedup under stress', () => {
 
   it('never shows duplicates after 10 rapid realtime triggers', async () => {
     const { result } = renderHook(() => useNotifications());
-    console.log('initial', result.current.loading);
-    await new Promise((r) => setTimeout(r, 100));
-    console.log('after wait', result.current.loading, result.current.notifications.length);
-    await waitFor(() => expect(result.current.loading).toBe(false), { timeout: 2000 });
+    await waitFor(() => expect(result.current.loading).toBe(false));
 
     await act(async () => {
       for (let i = 0; i < 10; i++) insertRow(`n-${i}`);
-      // Simulate double-fired channel: replay every event once more.
       const replay = [...store.rows];
       replay.forEach((r) => listeners.forEach((l) => l({ new: r })));
-      await new Promise((r) => setTimeout(r, 0));
+      await new Promise((r) => setTimeout(r, 50));
     });
-    await new Promise((r) => setTimeout(r, 200));
-    console.log('post-act count', result.current.notifications.length, 'store', store.rows.length, 'listeners', listeners.length);
 
     await waitFor(() => expect(result.current.notifications.length).toBe(10));
     const ids = result.current.notifications.map((n) => n.id);
     expect(new Set(ids).size).toBe(ids.length);
+    expect(listeners.length).toBe(1);
+  });
   });
 
   it('dedups when realtime and historical fetch overlap', async () => {
