@@ -3,8 +3,9 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 
 // ---- Mocks --------------------------------------------------------------
 
+const MOCK_USER = { id: 'user-1' };
 vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 'user-1' } }),
+  useAuth: () => ({ user: MOCK_USER }),
 }));
 
 // Shared mutable store the mocked supabase client reads from.
