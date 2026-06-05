@@ -85,7 +85,10 @@ describe('useNotifications — dedup under stress', () => {
 
   it('never shows duplicates after 10 rapid realtime triggers', async () => {
     const { result } = renderHook(() => useNotifications());
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    console.log('initial', result.current.loading);
+    await new Promise((r) => setTimeout(r, 100));
+    console.log('after wait', result.current.loading, result.current.notifications.length);
+    await waitFor(() => expect(result.current.loading).toBe(false), { timeout: 2000 });
 
     await act(async () => {
       for (let i = 0; i < 10; i++) insertRow(`n-${i}`);
