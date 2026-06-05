@@ -100,7 +100,6 @@ describe('useNotifications — dedup under stress', () => {
     expect(new Set(ids).size).toBe(ids.length);
     expect(listeners.length).toBe(1);
   });
-  });
 
   it('dedups when realtime and historical fetch overlap', async () => {
     // Pre-seed historical rows.
