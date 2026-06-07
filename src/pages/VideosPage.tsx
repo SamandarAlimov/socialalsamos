@@ -134,7 +134,7 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
         <video
           ref={videoRef}
           src={videoUrl}
-          className="absolute inset-0 h-full w-full object-cover"
+          className="absolute inset-0 h-full w-full object-contain bg-black"
           loop
           muted={globalMuted}
           playsInline
