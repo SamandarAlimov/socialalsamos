@@ -170,7 +170,7 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
             Yopish
           </button>
         )}
-      </div>
+      </MediaFrame>
 
       {/* Dot Indicators - Only show if multiple media */}
       {mediaUrls.length > 1 && (
