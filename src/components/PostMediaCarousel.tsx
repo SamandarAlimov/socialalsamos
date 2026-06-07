@@ -4,21 +4,11 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { usePinchZoom } from '@/hooks/usePinchZoom';
 import { VideoPlayer } from '@/components/VideoPlayer';
+import { MediaFrame } from '@/components/media/MediaFrame';
 
 interface PostMediaCarouselProps {
   mediaUrls: string[];
   mediaType: string;
-}
-
-// Instagram-style aspect clamping: portrait max 4:5, landscape max 1.91:1
-// Keeps the carousel container stable while never cropping the user's media.
-const MIN_RATIO = 4 / 5;       // 0.8  (tallest allowed)
-const MAX_RATIO = 1.91;        // widest allowed
-const DEFAULT_RATIO = 1;       // square fallback before metadata loads
-
-function clampRatio(r: number) {
-  if (!isFinite(r) || r <= 0) return DEFAULT_RATIO;
-  return Math.min(MAX_RATIO, Math.max(MIN_RATIO, r));
 }
 
 export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselProps) {
@@ -72,18 +62,16 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
     transition: isZoomed ? 'none' : 'transform 0.3s ease-out',
   };
 
-  const currentRatio = clampRatio(ratios[currentIndex] ?? (isReel ? 9 / 16 : DEFAULT_RATIO));
+  const naturalRatio = ratios[currentIndex] ?? (isReel ? 9 / 16 : undefined);
 
   return (
     <div className="relative group w-full">
       {/* Main Media Display */}
-      <div
-        ref={zoomContainerRef}
-        className={cn(
-          "relative overflow-hidden bg-black w-full flex items-center justify-center",
-          !isCurrentVideo && "touch-none"
-        )}
-        style={{ aspectRatio: String(currentRatio) }}
+      <MediaFrame
+        containerRef={zoomContainerRef}
+        variant={isReel ? 'reel' : 'feed'}
+        naturalRatio={naturalRatio}
+        className={cn(!isCurrentVideo && 'touch-none')}
         onTouchStart={!isCurrentVideo ? zoomHandlers.onTouchStart : undefined}
         onTouchMove={!isCurrentVideo ? zoomHandlers.onTouchMove : undefined}
         onTouchEnd={!isCurrentVideo ? zoomHandlers.onTouchEnd : undefined}
@@ -182,7 +170,7 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
             Yopish
           </button>
         )}
-      </div>
+      </MediaFrame>
 
       {/* Dot Indicators - Only show if multiple media */}
       {mediaUrls.length > 1 && (

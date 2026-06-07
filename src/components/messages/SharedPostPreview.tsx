@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RichTextContent } from '@/components/RichTextContent';
+import { MediaFrame } from '@/components/media/MediaFrame';
 
 interface SharedPost {
   id: string;
@@ -96,7 +97,7 @@ export function SharedPostPreview({ postId, isMine }: SharedPostPreviewProps) {
     >
       {/* Media Preview */}
       {hasMedia && (
-        <div className="relative aspect-video bg-black">
+        <MediaFrame variant="preview">
           {isVideo ? (
             <>
               <video
@@ -119,7 +120,7 @@ export function SharedPostPreview({ postId, isMine }: SharedPostPreviewProps) {
               className="w-full h-full object-contain"
             />
           )}
-        </div>
+        </MediaFrame>
       )}
 
       {/* Post Info */}
