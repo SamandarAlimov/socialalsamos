@@ -4,21 +4,11 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { usePinchZoom } from '@/hooks/usePinchZoom';
 import { VideoPlayer } from '@/components/VideoPlayer';
+import { MediaFrame } from '@/components/media/MediaFrame';
 
 interface PostMediaCarouselProps {
   mediaUrls: string[];
   mediaType: string;
-}
-
-// Instagram-style aspect clamping: portrait max 4:5, landscape max 1.91:1
-// Keeps the carousel container stable while never cropping the user's media.
-const MIN_RATIO = 4 / 5;       // 0.8  (tallest allowed)
-const MAX_RATIO = 1.91;        // widest allowed
-const DEFAULT_RATIO = 1;       // square fallback before metadata loads
-
-function clampRatio(r: number) {
-  if (!isFinite(r) || r <= 0) return DEFAULT_RATIO;
-  return Math.min(MAX_RATIO, Math.max(MIN_RATIO, r));
 }
 
 export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselProps) {
