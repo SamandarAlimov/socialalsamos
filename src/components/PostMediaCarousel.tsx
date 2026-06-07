@@ -10,8 +10,20 @@ interface PostMediaCarouselProps {
   mediaType: string;
 }
 
+// Instagram-style aspect clamping: portrait max 4:5, landscape max 1.91:1
+// Keeps the carousel container stable while never cropping the user's media.
+const MIN_RATIO = 4 / 5;       // 0.8  (tallest allowed)
+const MAX_RATIO = 1.91;        // widest allowed
+const DEFAULT_RATIO = 1;       // square fallback before metadata loads
+
+function clampRatio(r: number) {
+  if (!isFinite(r) || r <= 0) return DEFAULT_RATIO;
+  return Math.min(MAX_RATIO, Math.max(MIN_RATIO, r));
+}
+
 export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [ratios, setRatios] = useState<Record<number, number>>({});
 
   // Pinch-to-zoom hook (for images)
   const {
@@ -60,15 +72,18 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
     transition: isZoomed ? 'none' : 'transform 0.3s ease-out',
   };
 
+  const currentRatio = clampRatio(ratios[currentIndex] ?? (isReel ? 9 / 16 : DEFAULT_RATIO));
+
   return (
     <div className="relative group w-full">
       {/* Main Media Display */}
       <div
         ref={zoomContainerRef}
         className={cn(
-          "relative overflow-hidden bg-black",
-          isCurrentVideo ? "" : "touch-none aspect-square md:aspect-[4/3]"
+          "relative overflow-hidden bg-black w-full flex items-center justify-center",
+          !isCurrentVideo && "touch-none"
         )}
+        style={{ aspectRatio: String(currentRatio) }}
         onTouchStart={!isCurrentVideo ? zoomHandlers.onTouchStart : undefined}
         onTouchMove={!isCurrentVideo ? zoomHandlers.onTouchMove : undefined}
         onTouchEnd={!isCurrentVideo ? zoomHandlers.onTouchEnd : undefined}
@@ -79,10 +94,10 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
           <VideoPlayer
             key={currentMedia}
             src={currentMedia}
-            aspectMode={isReel ? 'portrait' : 'auto'}
+            aspectMode="auto"
             muted={true}
             autoPlay={false}
-            className="rounded-none"
+            className="rounded-none w-full h-full"
           />
         ) : (
           <>
@@ -90,10 +105,19 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
               key={currentMedia}
               src={currentMedia}
               alt={`Post media ${currentIndex + 1}`}
-              className="w-full h-full object-cover will-change-transform"
+              className="w-full h-full object-contain will-change-transform"
               style={zoomTransformStyle}
               loading="lazy"
               draggable={false}
+              onLoad={(e) => {
+                const img = e.currentTarget;
+                if (img.naturalWidth && img.naturalHeight) {
+                  setRatios((prev) => ({
+                    ...prev,
+                    [currentIndex]: img.naturalWidth / img.naturalHeight,
+                  }));
+                }
+              }}
             />
 
             {/* Zoom indicator for images */}
