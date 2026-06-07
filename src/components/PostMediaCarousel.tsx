@@ -72,15 +72,18 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
     transition: isZoomed ? 'none' : 'transform 0.3s ease-out',
   };
 
+  const currentRatio = clampRatio(ratios[currentIndex] ?? (isReel ? 9 / 16 : DEFAULT_RATIO));
+
   return (
     <div className="relative group w-full">
       {/* Main Media Display */}
       <div
         ref={zoomContainerRef}
         className={cn(
-          "relative overflow-hidden bg-black",
-          isCurrentVideo ? "" : "touch-none aspect-square md:aspect-[4/3]"
+          "relative overflow-hidden bg-black w-full flex items-center justify-center",
+          !isCurrentVideo && "touch-none"
         )}
+        style={{ aspectRatio: String(currentRatio) }}
         onTouchStart={!isCurrentVideo ? zoomHandlers.onTouchStart : undefined}
         onTouchMove={!isCurrentVideo ? zoomHandlers.onTouchMove : undefined}
         onTouchEnd={!isCurrentVideo ? zoomHandlers.onTouchEnd : undefined}
@@ -91,10 +94,10 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
           <VideoPlayer
             key={currentMedia}
             src={currentMedia}
-            aspectMode={isReel ? 'portrait' : 'auto'}
+            aspectMode="auto"
             muted={true}
             autoPlay={false}
-            className="rounded-none"
+            className="rounded-none w-full h-full"
           />
         ) : (
           <>
@@ -102,10 +105,19 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
               key={currentMedia}
               src={currentMedia}
               alt={`Post media ${currentIndex + 1}`}
-              className="w-full h-full object-cover will-change-transform"
+              className="w-full h-full object-contain will-change-transform"
               style={zoomTransformStyle}
               loading="lazy"
               draggable={false}
+              onLoad={(e) => {
+                const img = e.currentTarget;
+                if (img.naturalWidth && img.naturalHeight) {
+                  setRatios((prev) => ({
+                    ...prev,
+                    [currentIndex]: img.naturalWidth / img.naturalHeight,
+                  }));
+                }
+              }}
             />
 
             {/* Zoom indicator for images */}
