@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RichTextContent } from '@/components/RichTextContent';
+import { MediaFrame } from '@/components/media/MediaFrame';
 
 interface SharedPost {
   id: string;
