@@ -62,18 +62,16 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
     transition: isZoomed ? 'none' : 'transform 0.3s ease-out',
   };
 
-  const currentRatio = clampRatio(ratios[currentIndex] ?? (isReel ? 9 / 16 : DEFAULT_RATIO));
+  const naturalRatio = ratios[currentIndex] ?? (isReel ? 9 / 16 : undefined);
 
   return (
     <div className="relative group w-full">
       {/* Main Media Display */}
-      <div
-        ref={zoomContainerRef}
-        className={cn(
-          "relative overflow-hidden bg-black w-full flex items-center justify-center",
-          !isCurrentVideo && "touch-none"
-        )}
-        style={{ aspectRatio: String(currentRatio) }}
+      <MediaFrame
+        containerRef={zoomContainerRef}
+        variant={isReel ? 'reel' : 'feed'}
+        naturalRatio={naturalRatio}
+        className={cn(!isCurrentVideo && 'touch-none')}
         onTouchStart={!isCurrentVideo ? zoomHandlers.onTouchStart : undefined}
         onTouchMove={!isCurrentVideo ? zoomHandlers.onTouchMove : undefined}
         onTouchEnd={!isCurrentVideo ? zoomHandlers.onTouchEnd : undefined}
