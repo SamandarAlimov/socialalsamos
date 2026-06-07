@@ -96,12 +96,12 @@ export function SharedPostPreview({ postId, isMine }: SharedPostPreviewProps) {
     >
       {/* Media Preview */}
       {hasMedia && (
-        <div className="relative aspect-video bg-black/20">
+        <div className="relative aspect-video bg-black">
           {isVideo ? (
             <>
               <video
                 src={post.media_urls![0]}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
                 muted
                 playsInline
                 preload="metadata"
@@ -116,7 +116,7 @@ export function SharedPostPreview({ postId, isMine }: SharedPostPreviewProps) {
             <img
               src={post.media_urls![0]}
               alt=""
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain"
             />
           )}
         </div>
