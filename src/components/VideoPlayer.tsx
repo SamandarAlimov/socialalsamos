@@ -340,8 +340,7 @@ export function VideoPlayer({
         playsInline
         preload="metadata"
         className={cn(
-          'w-full h-full',
-          effectiveAspect === 'portrait' ? 'object-cover' : 'object-contain'
+          'w-full h-full object-contain'
         )}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
