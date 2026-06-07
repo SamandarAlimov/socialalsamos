@@ -302,11 +302,14 @@ export function VideoPlayer({
   }, [showControls]);
 
   // ── Aspect container class ───────────────────────────────────────────────
+  // When parent enforces sizing (e.g. PostMediaCarousel uses aspect-ratio
+  // matching the natural video ratio), we stretch to fill. Otherwise we
+  // fall back to an Instagram/YouTube-style centered container.
   const containerClass = cn(
-    'relative overflow-hidden bg-black select-none outline-none group/player',
-    effectiveAspect === 'portrait' && 'aspect-[9/16] max-h-[600px] mx-auto max-w-[340px] rounded-xl',
-    effectiveAspect === 'landscape' && 'aspect-video w-full',
-    effectiveAspect === 'square' && 'aspect-square max-w-[500px] mx-auto rounded-xl',
+    'relative overflow-hidden bg-black select-none outline-none group/player w-full h-full',
+    !className && effectiveAspect === 'portrait' && 'aspect-[9/16] max-h-[80vh] mx-auto max-w-[420px] rounded-xl',
+    !className && effectiveAspect === 'landscape' && 'aspect-video',
+    !className && effectiveAspect === 'square' && 'aspect-square max-w-[500px] mx-auto rounded-xl',
     className
   );
 
