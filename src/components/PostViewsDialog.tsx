@@ -52,16 +52,7 @@ export function PostViewsDialog({ postId, viewsCount, className, iconClassName, 
     async (cursor: string | null) => {
       let q = supabase
         .from('post_views')
-        .select(`
-          user_id,
-          viewed_at,
-          profile:profiles!post_views_user_id_fkey (
-            username,
-            display_name,
-            avatar_url,
-            is_verified
-          )
-        `)
+        .select('user_id, viewed_at')
         .eq('post_id', postId)
         .order('viewed_at', { ascending: false })
         .limit(PAGE_SIZE);
@@ -69,8 +60,22 @@ export function PostViewsDialog({ postId, viewsCount, className, iconClassName, 
       if (cursor) q = q.lt('viewed_at', cursor);
 
       const { data, error } = await q;
-      if (error) return [] as Viewer[];
-      return (data as any[]) || [];
+      if (error || !data) return [] as Viewer[];
+
+      const ids = Array.from(new Set(data.map((r: any) => r.user_id)));
+      if (ids.length === 0) return [];
+
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, username, display_name, avatar_url, is_verified')
+        .in('id', ids);
+
+      const map = new Map((profiles || []).map((p: any) => [p.id, p]));
+      return data.map((r: any) => ({
+        user_id: r.user_id,
+        viewed_at: r.viewed_at,
+        profile: map.get(r.user_id) || undefined,
+      })) as Viewer[];
     },
     [postId]
   );
