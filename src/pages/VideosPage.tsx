@@ -165,18 +165,19 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
         {/* Gradient overlay for text readability */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/70 pointer-events-none" />
 
-        {/* Mute button - positioned below mobile header safe area */}
+        {/* Mute button - subtle, top-right under safe area, Instagram-style */}
         <button
           onClick={toggleMute}
+          aria-label={globalMuted ? 'Unmute' : 'Mute'}
           className={cn(
-            "absolute right-4 h-10 w-10 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center active:scale-95 transition-transform z-10",
-            isMobile ? "top-16" : "top-4"
+            "absolute right-3 h-8 w-8 rounded-full bg-black/55 backdrop-blur-md flex items-center justify-center active:scale-90 transition-all z-10 ring-1 ring-white/10",
+            isMobile ? "top-[calc(env(safe-area-inset-top,0px)+12px)]" : "top-3"
           )}
         >
           {globalMuted ? (
-            <VolumeX className="h-5 w-5 text-white" />
+            <VolumeX className="h-4 w-4 text-white" strokeWidth={2} />
           ) : (
-            <Volume2 className="h-5 w-5 text-white" />
+            <Volume2 className="h-4 w-4 text-white" strokeWidth={2} />
           )}
         </button>
 
