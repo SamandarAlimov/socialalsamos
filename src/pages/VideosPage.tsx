@@ -326,30 +326,51 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
             </Button>
           </div>
 
-          {/* Description with Instagram-style "more" */}
+          {/* Description with Instagram-style "more" — expanded becomes scrollable card */}
           {video.content && (
             <div className="mb-2">
-              <p
-                className={cn(
-                  "text-white text-[13px] leading-snug drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] whitespace-pre-wrap break-words",
-                  !expanded && "line-clamp-2"
-                )}
-              >
-                {video.content}
-              </p>
-              {video.content.length > 80 && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setExpanded((v) => !v);
-                  }}
-                  className="text-white/80 text-[12px] font-medium mt-0.5 active:opacity-70 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
+              {expanded ? (
+                <div
+                  className="bg-black/55 backdrop-blur-md rounded-xl px-3 py-2.5 ring-1 ring-white/10"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  {expanded ? t('common.less', 'less') : t('common.more', 'more')}
-                </button>
+                  <div
+                    className="text-white text-[13px] leading-relaxed whitespace-pre-wrap break-words overflow-y-auto overscroll-contain pr-1 scrollbar-hide"
+                    style={{ maxHeight: '40vh' }}
+                  >
+                    {video.content}
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExpanded(false);
+                    }}
+                    className="text-white/70 text-[12px] font-medium mt-1.5 active:opacity-70"
+                  >
+                    {t('common.less', 'less')}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <p className="text-white text-[13px] leading-snug drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] whitespace-pre-wrap break-words line-clamp-2">
+                    {video.content}
+                  </p>
+                  {video.content.length > 80 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpanded(true);
+                      }}
+                      className="text-white/80 text-[12px] font-semibold mt-0.5 active:opacity-70 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
+                    >
+                      {t('common.more', 'more')}
+                    </button>
+                  )}
+                </>
               )}
             </div>
           )}
+
 
           {/* Music/Sound */}
           <div className="flex items-center gap-2">
