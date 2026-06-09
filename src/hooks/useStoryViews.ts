@@ -181,24 +181,31 @@ export function useStoryViewers(storyId: string | null) {
       try {
         const { data, error } = await supabase
           .from('story_views')
-          .select(`
-            id,
-            viewer_id,
-            viewed_at,
-            profile:profiles!story_views_viewer_id_fkey (
-              id,
-              username,
-              display_name,
-              avatar_url
-            )
-          `)
+          .select('id, viewer_id, viewed_at')
           .eq('story_id', storyId)
           .order('viewed_at', { ascending: false });
 
         if (error) throw error;
-        
-        setViewers(data as any || []);
-        setViewCount(data?.length || 0);
+
+        const ids = Array.from(new Set((data || []).map((r: any) => r.viewer_id)));
+        let profileMap = new Map<string, any>();
+        if (ids.length > 0) {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, username, display_name, avatar_url')
+            .in('id', ids);
+          profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+        }
+
+        const enriched = (data || []).map((r: any) => ({
+          id: r.id,
+          viewer_id: r.viewer_id,
+          viewed_at: r.viewed_at,
+          profile: profileMap.get(r.viewer_id),
+        }));
+
+        setViewers(enriched as any);
+        setViewCount(enriched.length);
       } catch (error) {
         console.error('Error fetching story viewers:', error);
       } finally {
