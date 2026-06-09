@@ -165,18 +165,19 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
         {/* Gradient overlay for text readability */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/70 pointer-events-none" />
 
-        {/* Mute button - positioned below mobile header safe area */}
+        {/* Mute button - subtle, top-right under safe area, Instagram-style */}
         <button
           onClick={toggleMute}
+          aria-label={globalMuted ? 'Unmute' : 'Mute'}
           className={cn(
-            "absolute right-4 h-10 w-10 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center active:scale-95 transition-transform z-10",
-            isMobile ? "top-16" : "top-4"
+            "absolute right-3 h-8 w-8 rounded-full bg-black/55 backdrop-blur-md flex items-center justify-center active:scale-90 transition-all z-10 ring-1 ring-white/10",
+            isMobile ? "top-[calc(env(safe-area-inset-top,0px)+12px)]" : "top-3"
           )}
         >
           {globalMuted ? (
-            <VolumeX className="h-5 w-5 text-white" />
+            <VolumeX className="h-4 w-4 text-white" strokeWidth={2} />
           ) : (
-            <Volume2 className="h-5 w-5 text-white" />
+            <Volume2 className="h-4 w-4 text-white" strokeWidth={2} />
           )}
         </button>
 
@@ -185,7 +186,7 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
           "absolute right-2 flex flex-col items-center gap-4",
           isMobile ? "bottom-28" : "bottom-20"
         )}>
-          {/* Like */}
+          {/* Like (with views nested Instagram-style) */}
           <div className="flex flex-col items-center gap-0.5">
             <button
               onClick={handleLike}
@@ -205,18 +206,17 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
                 e.stopPropagation();
                 onLikesClick();
               }}
-              className="text-white text-[11px] font-semibold tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] -mt-1 active:opacity-70"
+              className="flex flex-col items-center -mt-1 active:opacity-70"
             >
-              {formatNumber(video.likes_count || 0)}
+              <span className="text-white text-[11px] font-semibold tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] leading-tight">
+                {formatNumber(video.likes_count || 0)}
+              </span>
+              {(video.views_count || 0) > 0 && (
+                <span className="text-white/75 text-[9px] font-medium tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] leading-tight mt-0.5">
+                  {formatNumber(video.views_count || 0)} views
+                </span>
+              )}
             </button>
-            {/* Instagram-style: views displayed under likes */}
-            <PostViewsDialog
-              postId={video.id}
-              viewsCount={video.views_count || 0}
-              className="text-white/80 -mt-0.5"
-              iconClassName="h-3 w-3"
-              textClassName="text-[10px] font-medium tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
-            />
           </div>
 
           {/* Comments */}
@@ -326,30 +326,51 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
             </Button>
           </div>
 
-          {/* Description with Instagram-style "more" */}
+          {/* Description with Instagram-style "more" — expanded becomes scrollable card */}
           {video.content && (
             <div className="mb-2">
-              <p
-                className={cn(
-                  "text-white text-[13px] leading-snug drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] whitespace-pre-wrap break-words",
-                  !expanded && "line-clamp-2"
-                )}
-              >
-                {video.content}
-              </p>
-              {video.content.length > 80 && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setExpanded((v) => !v);
-                  }}
-                  className="text-white/80 text-[12px] font-medium mt-0.5 active:opacity-70 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
+              {expanded ? (
+                <div
+                  className="bg-black/55 backdrop-blur-md rounded-xl px-3 py-2.5 ring-1 ring-white/10"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  {expanded ? t('common.less', 'less') : t('common.more', 'more')}
-                </button>
+                  <div
+                    className="text-white text-[13px] leading-relaxed whitespace-pre-wrap break-words overflow-y-auto overscroll-contain pr-1 scrollbar-hide"
+                    style={{ maxHeight: '40vh' }}
+                  >
+                    {video.content}
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExpanded(false);
+                    }}
+                    className="text-white/70 text-[12px] font-medium mt-1.5 active:opacity-70"
+                  >
+                    {t('common.less', 'less')}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <p className="text-white text-[13px] leading-snug drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] whitespace-pre-wrap break-words line-clamp-2">
+                    {video.content}
+                  </p>
+                  {video.content.length > 80 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpanded(true);
+                      }}
+                      className="text-white/80 text-[12px] font-semibold mt-0.5 active:opacity-70 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
+                    >
+                      {t('common.more', 'more')}
+                    </button>
+                  )}
+                </>
               )}
             </div>
           )}
+
 
           {/* Music/Sound */}
           <div className="flex items-center gap-2">
