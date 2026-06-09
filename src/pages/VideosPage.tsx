@@ -44,6 +44,8 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
   const [isPlaying, setIsPlaying] = useState(false);
   const [showPlayButton, setShowPlayButton] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const { t } = useTranslation();
   const { lightTap, successFeedback } = useHapticFeedback();
   const { recordView } = usePostViews();
 
