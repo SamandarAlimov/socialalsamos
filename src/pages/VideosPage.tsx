@@ -180,143 +180,183 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
           )}
         </button>
 
-        {/* Right side actions */}
+        {/* Right side actions - Instagram-style plain icons */}
         <div className={cn(
-          "absolute right-3 flex flex-col items-center gap-5",
-          isMobile ? "bottom-24" : "bottom-20"
+          "absolute right-2 flex flex-col items-center gap-4",
+          isMobile ? "bottom-28" : "bottom-20"
         )}>
           {/* Like */}
-          <button 
-            onClick={handleLike}
-            className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
-          >
-            <div className={cn(
-              "h-12 w-12 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center border border-white/10",
-              video.is_liked && "text-red-500"
-            )}>
-              <Heart className={cn("h-6 w-6", video.is_liked && "fill-current")} />
-            </div>
+          <div className="flex flex-col items-center gap-0.5">
+            <button
+              onClick={handleLike}
+              className="p-2 active:scale-90 transition-transform"
+              aria-label="Like"
+            >
+              <Heart
+                className={cn(
+                  "h-8 w-8 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]",
+                  video.is_liked ? "fill-red-500 text-red-500" : "text-white"
+                )}
+                strokeWidth={1.8}
+              />
+            </button>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onLikesClick();
               }}
-              className="text-white text-xs font-medium drop-shadow-lg hover:underline"
+              className="text-white text-[11px] font-semibold tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] -mt-1 active:opacity-70"
             >
               {formatNumber(video.likes_count || 0)}
             </button>
-          </button>
+            {/* Instagram-style: views displayed under likes */}
+            <PostViewsDialog
+              postId={video.id}
+              viewsCount={video.views_count || 0}
+              className="text-white/80 -mt-0.5"
+              iconClassName="h-3 w-3"
+              textClassName="text-[10px] font-medium tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
+            />
+          </div>
 
           {/* Comments */}
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              lightTap();
-              onCommentClick();
-            }}
-            className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
+          <div className="flex flex-col items-center gap-0.5">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                lightTap();
+                onCommentClick();
+              }}
+              className="p-2 active:scale-90 transition-transform"
+              aria-label="Comments"
+            >
+              <MessageCircle
+                className="h-8 w-8 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] -scale-x-100"
+                strokeWidth={1.8}
+              />
+            </button>
+            <span className="text-white text-[11px] font-semibold tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] -mt-1">
+              {formatNumber(video.comments_count || 0)}
+            </span>
+          </div>
+
+          {/* Share */}
+          <div className="flex flex-col items-center gap-0.5">
+            <button
+              onClick={handleShare}
+              className="p-2 active:scale-90 transition-transform"
+              aria-label="Share"
+            >
+              <Send
+                className="h-8 w-8 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
+                strokeWidth={1.8}
+              />
+            </button>
+            {(video.shares_count || 0) > 0 && (
+              <span className="text-white text-[11px] font-semibold tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] -mt-1">
+                {formatNumber(video.shares_count || 0)}
+              </span>
+            )}
+          </div>
+
+          {/* Repost */}
+          <button
+            onClick={handleRepost}
+            className="p-2 active:scale-90 transition-transform"
+            aria-label="Repost"
           >
-            <div className="h-12 w-12 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white border border-white/10">
-              <MessageCircle className="h-6 w-6" />
-            </div>
-            <span className="text-white text-xs font-medium drop-shadow-lg">{formatNumber(video.comments_count || 0)}</span>
+            <Repeat2
+              className="h-8 w-8 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
+              strokeWidth={1.8}
+            />
           </button>
 
           {/* Bookmark */}
-          <button 
+          <button
             onClick={handleBookmark}
-            className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
+            className="p-2 active:scale-90 transition-transform"
+            aria-label="Save"
           >
-            <div className={cn(
-              "h-12 w-12 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white border border-white/10",
-              video.is_bookmarked && "text-yellow-400"
-            )}>
-              <Bookmark className={cn("h-6 w-6", video.is_bookmarked && "fill-current")} />
-            </div>
+            <Bookmark
+              className={cn(
+                "h-8 w-8 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]",
+                video.is_bookmarked ? "fill-white text-white" : "text-white"
+              )}
+              strokeWidth={1.8}
+            />
           </button>
 
-          {/* Share */}
-          <button 
-            onClick={handleShare}
-            className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
-          >
-            <div className="h-12 w-12 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white border border-white/10">
-              <Share2 className="h-6 w-6" />
-            </div>
-            <span className="text-white text-xs font-medium drop-shadow-lg">{formatNumber(video.shares_count || 0)}</span>
-          </button>
-
-          {/* Repost */}
-          <button 
-            onClick={handleRepost}
-            className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
-          >
-            <div className="h-12 w-12 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white border border-white/10">
-              <Repeat2 className="h-6 w-6" />
-            </div>
-          </button>
-
-          {/* Views */}
-          <PostViewsDialog
-            postId={video.id}
-            viewsCount={video.views_count || 0}
-            className="flex flex-col items-center gap-1 text-white"
-            iconClassName="h-6 w-6"
-            textClassName="text-xs font-medium drop-shadow-lg"
-          />
+          {/* Avatar mini for share/profile pop - Instagram style */}
         </div>
 
         {/* Bottom info - User info and description */}
         <div className={cn(
-          "absolute left-4 right-20",
-          isMobile ? "bottom-20" : "bottom-6"
+          "absolute left-4 right-16",
+          isMobile ? "bottom-24" : "bottom-6"
         )}>
           {/* User info with follow button */}
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-2.5 mb-2">
             <StoryAvatar
               userId={video.profile?.id || video.user_id}
               username={video.profile?.username}
               displayName={video.profile?.display_name}
               avatarUrl={video.profile?.avatar_url}
               isVerified={!!video.profile?.is_verified}
-              size="md"
+              size="sm"
               showRing
             />
-            <div className="flex items-center gap-2">
-              <span className="text-white font-bold text-sm drop-shadow-lg">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-white font-semibold text-sm drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] truncate">
                 @{video.profile?.username || 'user'}
               </span>
-              {video.profile?.is_verified && (
-                <span className="h-4 w-4 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                  <span className="text-[10px] text-white">✓</span>
-                </span>
+              {video.profile?.is_verified && <VerifiedBadge size="xs" />}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleFollow}
+              className={cn(
+                "h-7 px-3 text-xs font-semibold rounded-md border ml-1 shrink-0",
+                isFollowing
+                  ? "bg-transparent text-white border-white/40 hover:bg-white/10"
+                  : "bg-transparent text-white border-white hover:bg-white/10"
               )}
-              <span className="text-white/60 mx-1">•</span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleFollow}
+            >
+              {isFollowing ? t('common.following', 'Following') : t('common.follow', 'Follow')}
+            </Button>
+          </div>
+
+          {/* Description with Instagram-style "more" */}
+          {video.content && (
+            <div className="mb-2">
+              <p
                 className={cn(
-                  "h-7 px-3 text-xs font-semibold rounded-full border-white/30",
-                  isFollowing 
-                    ? "bg-white/10 text-white hover:bg-white/20" 
-                    : "bg-white text-black hover:bg-white/90"
+                  "text-white text-[13px] leading-snug drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] whitespace-pre-wrap break-words",
+                  !expanded && "line-clamp-2"
                 )}
               >
-                {isFollowing ? 'Following' : 'Follow'}
-              </Button>
+                {video.content}
+              </p>
+              {video.content.length > 80 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setExpanded((v) => !v);
+                  }}
+                  className="text-white/80 text-[12px] font-medium mt-0.5 active:opacity-70 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
+                >
+                  {expanded ? t('common.less', 'less') : t('common.more', 'more')}
+                </button>
+              )}
             </div>
-          </div>
-          
-          {/* Description */}
-          {video.content && (
-            <p className="text-white text-sm mb-2 line-clamp-2 drop-shadow-lg">{video.content}</p>
           )}
-          
+
           {/* Music/Sound */}
           <div className="flex items-center gap-2">
-            <Music2 className="h-4 w-4 text-white animate-spin" style={{ animationDuration: '3s' }} />
-            <span className="text-white text-xs drop-shadow-lg">Original Sound - {video.profile?.display_name || video.profile?.username}</span>
+            <Music2 className="h-3.5 w-3.5 text-white animate-spin" style={{ animationDuration: '3s' }} />
+            <span className="text-white text-[12px] drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] truncate">
+              Original Sound · {video.profile?.display_name || video.profile?.username}
+            </span>
           </div>
         </div>
       </div>
