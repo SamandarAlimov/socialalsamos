@@ -186,7 +186,7 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
           "absolute right-2 flex flex-col items-center gap-4",
           isMobile ? "bottom-28" : "bottom-20"
         )}>
-          {/* Like */}
+          {/* Like (with views nested Instagram-style) */}
           <div className="flex flex-col items-center gap-0.5">
             <button
               onClick={handleLike}
@@ -206,18 +206,17 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
                 e.stopPropagation();
                 onLikesClick();
               }}
-              className="text-white text-[11px] font-semibold tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] -mt-1 active:opacity-70"
+              className="flex flex-col items-center -mt-1 active:opacity-70"
             >
-              {formatNumber(video.likes_count || 0)}
+              <span className="text-white text-[11px] font-semibold tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] leading-tight">
+                {formatNumber(video.likes_count || 0)}
+              </span>
+              {(video.views_count || 0) > 0 && (
+                <span className="text-white/75 text-[9px] font-medium tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] leading-tight mt-0.5">
+                  {formatNumber(video.views_count || 0)} views
+                </span>
+              )}
             </button>
-            {/* Instagram-style: views displayed under likes */}
-            <PostViewsDialog
-              postId={video.id}
-              viewsCount={video.views_count || 0}
-              className="text-white/80 -mt-0.5"
-              iconClassName="h-3 w-3"
-              textClassName="text-[10px] font-medium tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
-            />
           </div>
 
           {/* Comments */}
