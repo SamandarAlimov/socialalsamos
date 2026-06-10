@@ -42,10 +42,14 @@ interface VideoCardProps {
 
 function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShareClick, onLikesClick, isMobile, globalMuted, onMuteToggle }: VideoCardProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const ytVideoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showPlayButton, setShowPlayButton] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [youtubeMode, setYoutubeMode] = useState(false);
+  const [ytPlaying, setYtPlaying] = useState(true);
+  const [ytMuted, setYtMuted] = useState(false);
   const { t } = useTranslation();
   const { lightTap, successFeedback } = useHapticFeedback();
   const { recordView } = usePostViews();
