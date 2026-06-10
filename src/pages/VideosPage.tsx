@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Heart, MessageCircle, Send, Bookmark, Music2, Volume2, VolumeX, Play, Pause, Repeat2, ArrowLeft } from 'lucide-react';
+import { Heart, MessageCircle, Send, Bookmark, Music2, Volume2, VolumeX, Play, Pause, Repeat2, ArrowLeft, Maximize2, X, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
@@ -41,10 +42,14 @@ interface VideoCardProps {
 
 function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShareClick, onLikesClick, isMobile, globalMuted, onMuteToggle }: VideoCardProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const ytVideoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showPlayButton, setShowPlayButton] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [youtubeMode, setYoutubeMode] = useState(false);
+  const [ytPlaying, setYtPlaying] = useState(true);
+  const [ytMuted, setYtMuted] = useState(false);
   const { t } = useTranslation();
   const { lightTap, successFeedback } = useHapticFeedback();
   const { recordView } = usePostViews();
@@ -181,21 +186,21 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
           )}
         </button>
 
-        {/* Right side actions - Instagram-style plain icons */}
+        {/* Right side actions - Instagram-style, compact so they don't block the video */}
         <div className={cn(
-          "absolute right-2 flex flex-col items-center gap-4",
+          "absolute right-1.5 flex flex-col items-center gap-3 z-10",
           isMobile ? "bottom-28" : "bottom-20"
         )}>
           {/* Like (with views nested Instagram-style) */}
           <div className="flex flex-col items-center gap-0.5">
             <button
               onClick={handleLike}
-              className="p-2 active:scale-90 transition-transform"
+              className="p-1.5 active:scale-90 transition-transform"
               aria-label="Like"
             >
               <Heart
                 className={cn(
-                  "h-8 w-8 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]",
+                  "h-6 w-6 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]",
                   video.is_liked ? "fill-red-500 text-red-500" : "text-white"
                 )}
                 strokeWidth={1.8}
@@ -208,12 +213,12 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
               }}
               className="flex flex-col items-center -mt-1 active:opacity-70"
             >
-              <span className="text-white text-[11px] font-semibold tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] leading-tight">
+              <span className="text-white text-[10px] font-semibold tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] leading-tight">
                 {formatNumber(video.likes_count || 0)}
               </span>
               {(video.views_count || 0) > 0 && (
-                <span className="text-white/75 text-[9px] font-medium tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] leading-tight mt-0.5">
-                  {formatNumber(video.views_count || 0)} views
+                <span className="text-white/75 text-[9px] font-medium tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] leading-tight">
+                  {formatNumber(video.views_count || 0)}
                 </span>
               )}
             </button>
@@ -227,15 +232,15 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
                 lightTap();
                 onCommentClick();
               }}
-              className="p-2 active:scale-90 transition-transform"
+              className="p-1.5 active:scale-90 transition-transform"
               aria-label="Comments"
             >
               <MessageCircle
-                className="h-8 w-8 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] -scale-x-100"
+                className="h-6 w-6 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] -scale-x-100"
                 strokeWidth={1.8}
               />
             </button>
-            <span className="text-white text-[11px] font-semibold tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] -mt-1">
+            <span className="text-white text-[10px] font-semibold tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] -mt-1">
               {formatNumber(video.comments_count || 0)}
             </span>
           </div>
@@ -244,16 +249,16 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
           <div className="flex flex-col items-center gap-0.5">
             <button
               onClick={handleShare}
-              className="p-2 active:scale-90 transition-transform"
+              className="p-1.5 active:scale-90 transition-transform"
               aria-label="Share"
             >
               <Send
-                className="h-8 w-8 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
+                className="h-6 w-6 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
                 strokeWidth={1.8}
               />
             </button>
             {(video.shares_count || 0) > 0 && (
-              <span className="text-white text-[11px] font-semibold tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] -mt-1">
+              <span className="text-white text-[10px] font-semibold tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] -mt-1">
                 {formatNumber(video.shares_count || 0)}
               </span>
             )}
@@ -262,11 +267,11 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
           {/* Repost */}
           <button
             onClick={handleRepost}
-            className="p-2 active:scale-90 transition-transform"
+            className="p-1.5 active:scale-90 transition-transform"
             aria-label="Repost"
           >
             <Repeat2
-              className="h-8 w-8 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
+              className="h-6 w-6 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
               strokeWidth={1.8}
             />
           </button>
@@ -274,24 +279,39 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
           {/* Bookmark */}
           <button
             onClick={handleBookmark}
-            className="p-2 active:scale-90 transition-transform"
+            className="p-1.5 active:scale-90 transition-transform"
             aria-label="Save"
           >
             <Bookmark
               className={cn(
-                "h-8 w-8 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]",
+                "h-6 w-6 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]",
                 video.is_bookmarked ? "fill-white text-white" : "text-white"
               )}
               strokeWidth={1.8}
             />
           </button>
 
-          {/* Avatar mini for share/profile pop - Instagram style */}
+          {/* YouTube-style large viewer */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              lightTap();
+              if (videoRef.current) videoRef.current.pause();
+              setYoutubeMode(true);
+            }}
+            className="p-1.5 active:scale-90 transition-transform"
+            aria-label="Open large player"
+          >
+            <Maximize2
+              className="h-5 w-5 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
+              strokeWidth={2}
+            />
+          </button>
         </div>
 
         {/* Bottom info - User info and description */}
         <div className={cn(
-          "absolute left-4 right-16",
+          "absolute left-4 right-14",
           isMobile ? "bottom-24" : "bottom-6"
         )}>
           {/* User info with follow button */}
@@ -326,17 +346,20 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
             </Button>
           </div>
 
-          {/* Description with Instagram-style "more" — expanded becomes scrollable card */}
+          {/* Description - tap text to toggle; expanded becomes scrollable card */}
           {video.content && (
             <div className="mb-2">
               {expanded ? (
                 <div
                   className="bg-black/55 backdrop-blur-md rounded-xl px-3 py-2.5 ring-1 ring-white/10"
                   onClick={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onTouchMove={(e) => e.stopPropagation()}
+                  onTouchEnd={(e) => e.stopPropagation()}
                 >
                   <div
                     className="text-white text-[13px] leading-relaxed whitespace-pre-wrap break-words overflow-y-auto overscroll-contain pr-1 scrollbar-hide"
-                    style={{ maxHeight: '40vh' }}
+                    style={{ maxHeight: '40vh', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
                   >
                     {video.content}
                   </div>
@@ -351,22 +374,21 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
                   </button>
                 </div>
               ) : (
-                <>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (video.content && video.content.length > 80) setExpanded(true);
+                  }}
+                  className="text-left w-full"
+                >
                   <p className="text-white text-[13px] leading-snug drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] whitespace-pre-wrap break-words line-clamp-2">
                     {video.content}
+                    {video.content.length > 80 && (
+                      <span className="text-white/80 font-semibold ml-1">… {t('common.more', 'more')}</span>
+                    )}
                   </p>
-                  {video.content.length > 80 && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setExpanded(true);
-                      }}
-                      className="text-white/80 text-[12px] font-semibold mt-0.5 active:opacity-70 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
-                    >
-                      {t('common.more', 'more')}
-                    </button>
-                  )}
-                </>
+                </button>
               )}
             </div>
           )}
@@ -381,6 +403,159 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
           </div>
         </div>
       </div>
+
+      {/* YouTube-style large viewer modal */}
+      {youtubeMode && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] bg-background flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+          onTouchEnd={(e) => e.stopPropagation()}
+        >
+          {/* Video frame - YouTube-style 16:9 centered, full width */}
+          <div className="relative w-full bg-black flex items-center justify-center" style={{ aspectRatio: '16/9' }}>
+            <video
+              ref={ytVideoRef}
+              src={videoUrl}
+              className="absolute inset-0 h-full w-full object-contain bg-black"
+              autoPlay
+              playsInline
+              loop
+              muted={ytMuted}
+              onClick={() => {
+                if (!ytVideoRef.current) return;
+                if (ytVideoRef.current.paused) {
+                  ytVideoRef.current.play();
+                  setYtPlaying(true);
+                } else {
+                  ytVideoRef.current.pause();
+                  setYtPlaying(false);
+                }
+              }}
+            />
+            {/* Close */}
+            <button
+              onClick={() => {
+                if (ytVideoRef.current) ytVideoRef.current.pause();
+                setYoutubeMode(false);
+              }}
+              className="absolute top-3 left-3 h-9 w-9 rounded-full bg-black/55 backdrop-blur-md flex items-center justify-center ring-1 ring-white/10"
+              aria-label="Close"
+              style={{ top: `calc(env(safe-area-inset-top, 0px) + 12px)` }}
+            >
+              <X className="h-5 w-5 text-white" />
+            </button>
+            {/* Mute */}
+            <button
+              onClick={() => setYtMuted((m) => !m)}
+              className="absolute right-3 h-9 w-9 rounded-full bg-black/55 backdrop-blur-md flex items-center justify-center ring-1 ring-white/10"
+              aria-label="Mute"
+              style={{ top: `calc(env(safe-area-inset-top, 0px) + 12px)` }}
+            >
+              {ytMuted ? <VolumeX className="h-4 w-4 text-white" /> : <Volume2 className="h-4 w-4 text-white" />}
+            </button>
+            {/* Play indicator */}
+            {!ytPlaying && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="h-16 w-16 rounded-full bg-black/50 flex items-center justify-center">
+                  <Play className="h-8 w-8 text-white ml-1" />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Scrollable info panel - YouTube style */}
+          <div className="flex-1 overflow-y-auto overscroll-contain bg-background">
+            <div className="px-4 pt-4 pb-3">
+              <h1 className="text-foreground text-[17px] font-semibold leading-snug">
+                {video.content?.split('\n')[0] || `@${video.profile?.username || 'user'}`}
+              </h1>
+              <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
+                <span>@{video.profile?.username || 'user'}</span>
+                <span>·</span>
+                <span>{formatNumber(video.views_count || 0)} views</span>
+              </div>
+            </div>
+
+            {/* Action row - YouTube-style pills */}
+            <div className="px-4 pb-3 flex items-center gap-2 overflow-x-auto scrollbar-hide">
+              <div className="flex items-center bg-muted rounded-full overflow-hidden shrink-0">
+                <button
+                  onClick={handleLike}
+                  className="flex items-center gap-1.5 px-3.5 py-2 active:bg-muted-foreground/10"
+                >
+                  <ThumbsUp className={cn("h-4 w-4", video.is_liked ? "fill-foreground" : "")} />
+                  <span className="text-xs font-semibold tabular-nums">{formatNumber(video.likes_count || 0)}</span>
+                </button>
+                <div className="h-5 w-px bg-border" />
+                <button className="px-3.5 py-2 active:bg-muted-foreground/10">
+                  <ThumbsDown className="h-4 w-4" />
+                </button>
+              </div>
+              <button
+                onClick={handleShare}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-muted rounded-full shrink-0 active:bg-muted-foreground/10"
+              >
+                <Send className="h-4 w-4" />
+                <span className="text-xs font-semibold">Share</span>
+              </button>
+              <button
+                onClick={handleBookmark}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-muted rounded-full shrink-0 active:bg-muted-foreground/10"
+              >
+                <Bookmark className={cn("h-4 w-4", video.is_bookmarked ? "fill-foreground" : "")} />
+                <span className="text-xs font-semibold">Save</span>
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onCommentClick(); }}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-muted rounded-full shrink-0 active:bg-muted-foreground/10"
+              >
+                <MessageCircle className="h-4 w-4" />
+                <span className="text-xs font-semibold">{formatNumber(video.comments_count || 0)}</span>
+              </button>
+            </div>
+
+            {/* Channel row */}
+            <div className="px-4 py-3 border-t border-border flex items-center gap-3">
+              <StoryAvatar
+                userId={video.profile?.id || video.user_id}
+                username={video.profile?.username}
+                displayName={video.profile?.display_name}
+                avatarUrl={video.profile?.avatar_url}
+                isVerified={!!video.profile?.is_verified}
+                size="sm"
+                showRing
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1">
+                  <span className="font-semibold text-sm truncate">
+                    {video.profile?.display_name || video.profile?.username}
+                  </span>
+                  {video.profile?.is_verified && <VerifiedBadge size="xs" />}
+                </div>
+              </div>
+              <Button
+                onClick={handleFollow}
+                size="sm"
+                className="h-8 rounded-full px-4 text-xs font-semibold"
+              >
+                {isFollowing ? t('common.following', 'Following') : t('common.follow', 'Follow')}
+              </Button>
+            </div>
+
+            {/* Description */}
+            {video.content && (
+              <div className="px-4 py-3 border-t border-border">
+                <p className="text-sm text-foreground whitespace-pre-wrap break-words leading-relaxed">
+                  {video.content}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
