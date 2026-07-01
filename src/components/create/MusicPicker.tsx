@@ -68,7 +68,7 @@ export function MusicPicker({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh]">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto overscroll-contain">
         <audio ref={audioRef} onEnded={() => setPlayingTrackId(null)} />
         
         <DialogHeader>
