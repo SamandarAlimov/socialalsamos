@@ -2089,7 +2089,6 @@ export type Database = {
           is_online: boolean | null
           is_verified: boolean | null
           last_seen: string | null
-          location: string | null
           posts_count: number | null
           updated_at: string | null
           username: string | null
@@ -2109,7 +2108,6 @@ export type Database = {
           is_online?: boolean | null
           is_verified?: boolean | null
           last_seen?: string | null
-          location?: string | null
           posts_count?: number | null
           updated_at?: string | null
           username?: string | null
@@ -2129,7 +2127,6 @@ export type Database = {
           is_online?: boolean | null
           is_verified?: boolean | null
           last_seen?: string | null
-          location?: string | null
           posts_count?: number | null
           updated_at?: string | null
           username?: string | null
