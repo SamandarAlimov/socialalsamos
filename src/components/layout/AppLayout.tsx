@@ -7,6 +7,7 @@ import { MobileHeader } from './MobileHeader';
 import { Loader2 } from 'lucide-react';
 import { useActivityTracking } from '@/hooks/useActivityTracking';
 import { LocationPermissionDialog } from '@/components/LocationPermissionDialog';
+import { cn } from '@/lib/utils';
 
 export function AppLayout() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -27,8 +28,16 @@ export function AppLayout() {
     }
   }, [isAuthenticated]);
   
-  // Hide mobile header on messages, map, and videos pages (they have their own headers/full-screen mode)
-  const hideHeaderOnPages = location.pathname === '/messages' || location.pathname === '/map' || location.pathname === '/videos';
+  // Hide mobile header on pages that have their own full-screen chrome
+  const hideHeaderOnPages =
+    location.pathname === '/messages' ||
+    location.pathname === '/map' ||
+    location.pathname === '/videos' ||
+    location.pathname === '/create';
+
+  // Immersive mobile mode: no header, no bottom nav, no padding.
+  // Desktop keeps the standard sidebar/layout.
+  const immersiveMobile = location.pathname === '/create';
 
   if (isLoading) {
     return (
@@ -49,18 +58,24 @@ export function AppLayout() {
     <div className="min-h-screen flex w-full bg-background">
       {/* Desktop Sidebar */}
       <AppSidebar />
-      
-      {/* Mobile Header - Hidden on messages and map pages */}
+
+      {/* Mobile Header - Hidden on messages/map/videos/create */}
       {!hideHeaderOnPages && <MobileHeader />}
-      
+
       {/* Main Content */}
-      <main className={`flex-1 overflow-auto md:ml-0 ${hideHeaderOnPages ? 'pt-0' : 'pt-14'} pb-20 md:pt-0 md:pb-0`}>
+      <main
+        className={cn(
+          'flex-1 overflow-auto md:ml-0 md:pt-0 md:pb-0',
+          hideHeaderOnPages ? 'pt-0' : 'pt-14',
+          immersiveMobile ? 'pb-0' : 'pb-20'
+        )}
+      >
         <Outlet />
       </main>
-      
-      {/* Mobile Bottom Navigation */}
-      <BottomNavbar />
-      
+
+      {/* Mobile Bottom Navigation (hidden on immersive routes) */}
+      {!immersiveMobile && <BottomNavbar />}
+
       {/* Location Permission Dialog */}
       <LocationPermissionDialog />
     </div>
