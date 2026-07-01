@@ -68,9 +68,10 @@ export function BottomNavbar() {
 
   return (
     <>
-    <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden safe-area-bottom">
-      {/* Premium glass container */}
-      <div className="mx-2 mb-1 rounded-2xl bg-card/80 backdrop-blur-2xl border border-border/40 shadow-lg">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden pointer-events-none">
+      {/* Instagram-style detached floating pill — transparent on 3 sides */}
+      <div className="mx-3 mb-[max(0.5rem,env(safe-area-inset-bottom))] pointer-events-auto rounded-[28px] bg-background/55 backdrop-blur-2xl border border-border/30 shadow-[0_8px_30px_-6px_rgba(0,0,0,0.35)] ring-1 ring-white/5">
+
         <div className="flex items-center justify-around h-[60px] px-1">
           {bottomNavItems.map((item) => {
             const isActive = location.pathname === item.path;
