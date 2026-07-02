@@ -7,7 +7,7 @@ import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useVideoPosts, VideoPost } from '@/hooks/useVideoPosts';
 import { Skeleton } from '@/components/ui/skeleton';
 import { VideoCommentsSheet } from '@/components/VideoCommentsSheet';
-import { PostLikesDialog } from '@/components/PostLikesDialog';
+import { PostLikesViewsDialog } from '@/components/PostLikesViewsDialog';
 import { SharePostDialog } from '@/components/SharePostDialog';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useNavigate, useSearchParams } from 'react-router-dom';
