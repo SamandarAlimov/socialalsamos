@@ -91,8 +91,8 @@ export function PostLikesViewsDialog({
       .eq('post_id', postId)
       .order('created_at', { ascending: false })
       .limit(200);
-    const withProfiles = await attachProfiles((data as any) || []);
-    // follow status
+    const rows = ((data as any) || []) as LikeRow[];
+    const withProfiles = (await attachProfiles(rows)) as LikeRow[];
     if (user && withProfiles.length) {
       const { data: follows } = await supabase
         .from('follows')
@@ -115,7 +115,8 @@ export function PostLikesViewsDialog({
       .eq('post_id', postId)
       .order('viewed_at', { ascending: false })
       .limit(200);
-    const withProfiles = await attachProfiles((data as any) || []);
+    const rows = ((data as any) || []) as ViewRow[];
+    const withProfiles = (await attachProfiles(rows)) as ViewRow[];
     setViews(withProfiles);
     setLoadingViews(false);
   }, [postId]);
