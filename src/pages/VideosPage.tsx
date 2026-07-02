@@ -7,7 +7,7 @@ import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useVideoPosts, VideoPost } from '@/hooks/useVideoPosts';
 import { Skeleton } from '@/components/ui/skeleton';
 import { VideoCommentsSheet } from '@/components/VideoCommentsSheet';
-import { PostLikesDialog } from '@/components/PostLikesDialog';
+import { PostLikesViewsDialog } from '@/components/PostLikesViewsDialog';
 import { SharePostDialog } from '@/components/SharePostDialog';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -170,21 +170,7 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
         {/* Gradient overlay for text readability */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/70 pointer-events-none" />
 
-        {/* Mute button - subtle, top-right under safe area, Instagram-style */}
-        <button
-          onClick={toggleMute}
-          aria-label={globalMuted ? 'Unmute' : 'Mute'}
-          className={cn(
-            "absolute right-3 h-8 w-8 rounded-full bg-black/55 backdrop-blur-md flex items-center justify-center active:scale-90 transition-all z-10 ring-1 ring-white/10",
-            isMobile ? "top-[calc(env(safe-area-inset-top,0px)+12px)]" : "top-3"
-          )}
-        >
-          {globalMuted ? (
-            <VolumeX className="h-4 w-4 text-white" strokeWidth={2} />
-          ) : (
-            <Volume2 className="h-4 w-4 text-white" strokeWidth={2} />
-          )}
-        </button>
+        {/* Mute button is rendered at page-level header (see VideosPage bottom) */}
 
         {/* Right side actions - Instagram-style, compact so they don't block the video */}
         <div className={cn(
@@ -732,20 +718,51 @@ export default function VideosPage() {
     );
   }
 
+  // Deep-link detection: show back button only when arriving directly at a specific post
+  const isDeepLink = Boolean(
+    searchParams.get('v') || searchParams.get('post') || searchParams.get('id')
+  );
+
   return (
     <div className={cn(
       "bg-black",
       isMobile ? "fixed inset-0 z-40" : "h-screen w-full flex items-center justify-center"
     )}>
-      {/* Mobile back button */}
-      {isMobile && (
+      {/* Page-level header controls */}
+      <div
+        className={cn(
+          "absolute left-0 right-0 z-50 flex items-center justify-between px-3 pointer-events-none",
+          isMobile ? "top-[calc(env(safe-area-inset-top,0px)+12px)]" : "top-4"
+        )}
+      >
+        {/* Back — only shown on deep-link entry */}
+        <div className="pointer-events-auto">
+          {isMobile && isDeepLink ? (
+            <button
+              onClick={() => navigate(-1)}
+              aria-label="Back"
+              className="h-9 w-9 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center active:scale-90 transition-all ring-1 ring-white/10"
+            >
+              <ArrowLeft className="h-5 w-5 text-white" />
+            </button>
+          ) : (
+            <div className="h-9 w-9" />
+          )}
+        </div>
+
+        {/* Global Mute — moved to header */}
         <button
-          onClick={() => navigate(-1)}
-          className="absolute top-4 left-4 z-50 h-10 w-10 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center"
+          onClick={handleMuteToggle}
+          aria-label={globalMuted ? 'Unmute' : 'Mute'}
+          className="pointer-events-auto h-9 w-9 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center active:scale-90 transition-all ring-1 ring-white/10"
         >
-          <ArrowLeft className="h-5 w-5 text-white" />
+          {globalMuted ? (
+            <VolumeX className="h-4.5 w-4.5 text-white" strokeWidth={2} />
+          ) : (
+            <Volume2 className="h-4.5 w-4.5 text-white" strokeWidth={2} />
+          )}
         </button>
-      )}
+      </div>
 
       <div 
         ref={containerRef}
@@ -792,12 +809,13 @@ export default function VideosPage() {
         postContent={shareVideo?.content || undefined}
       />
 
-      {/* Likes Dialog */}
-      <PostLikesDialog
+      {/* Likes + Views Tabbed Dialog */}
+      <PostLikesViewsDialog
         postId={likesVideoId || ''}
         open={likesDialogOpen}
         onOpenChange={setLikesDialogOpen}
         likesCount={likesVideo?.likes_count || 0}
+        viewsCount={likesVideo?.views_count || 0}
       />
     </div>
   );

@@ -1,7 +1,9 @@
-import { useState } from 'react';
-import { 
-  MapPin, CreditCard, Truck, ShieldCheck, ChevronRight, 
-  Loader2, CheckCircle, Package, ArrowLeft
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  MapPin, CreditCard, Truck, ShieldCheck, ChevronRight,
+  Loader2, CheckCircle, Package, ArrowLeft, Wallet, Banknote,
+  Plus, AlertCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,8 +12,10 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useCheckout } from '@/hooks/useOrders';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface CheckoutSheetProps {
   open: boolean;
@@ -19,10 +23,14 @@ interface CheckoutSheetProps {
   onSuccess?: () => void;
 }
 
+type Step = 'address' | 'payment' | 'review' | 'success';
+type PaymentMethod = 'wallet' | 'card_on_delivery' | 'cash';
+
 export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetProps) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { placeOrder, isProcessing, cartItems, cartTotal } = useCheckout();
-  const [step, setStep] = useState<'address' | 'review' | 'success'>('address');
+  const [step, setStep] = useState<Step>('address');
   const [address, setAddress] = useState({
     full_name: '',
     phone: '',
@@ -32,13 +40,40 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
     zip: '',
   });
   const [notes, setNotes] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('wallet');
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [walletLoading, setWalletLoading] = useState(false);
 
   const shippingCost = cartItems.reduce((sum, i) => sum + (i.product?.shipping_price || 0), 0);
   const grandTotal = cartTotal + shippingCost;
 
   const isAddressValid = address.full_name && address.phone && address.street && address.city;
+  const walletInsufficient = paymentMethod === 'wallet' && walletBalance !== null && walletBalance < grandTotal;
+
+  // Fetch wallet balance whenever the sheet opens / user changes
+  useEffect(() => {
+    if (!open || !user) return;
+    let cancelled = false;
+    (async () => {
+      setWalletLoading(true);
+      const { data } = await supabase
+        .from('wallets')
+        .select('balance')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (!cancelled) {
+        setWalletBalance(Number(data?.balance ?? 0));
+        setWalletLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, user]);
 
   const handlePlaceOrder = async () => {
+    if (walletInsufficient) {
+      toast.error("Hamyonda mablag' yetarli emas");
+      return;
+    }
     const result = await placeOrder(address, notes || undefined);
     if (result) {
       setStep('success');
@@ -53,32 +88,48 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
     onOpenChange(false);
   };
 
+  const goToPaymentSettings = () => {
+    onOpenChange(false);
+    navigate('/settings/payment');
+  };
+
+  const stepIndex = { address: 0, payment: 1, review: 2, success: 3 }[step];
+
+  const paymentLabel: Record<PaymentMethod, string> = {
+    wallet: 'Alsamos Hamyon',
+    card_on_delivery: 'Karta (yetkazishda)',
+    cash: 'Naqd (yetkazishda)',
+  };
+
   return (
     <Sheet open={open} onOpenChange={handleClose}>
-      <SheetContent side="bottom" className="h-[95vh] p-0 rounded-t-3xl border-t border-border/30">
+      <SheetContent side="bottom" className="h-[95vh] p-0 rounded-t-3xl border-t border-border/30 sm:max-w-2xl sm:mx-auto">
         <div className="flex flex-col h-full">
           <SheetHeader className="p-4 border-b border-border/30">
             <div className="flex items-center gap-3">
-              {step === 'review' && (
-                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl" onClick={() => setStep('address')}>
+              {(step === 'payment' || step === 'review') && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 rounded-xl"
+                  onClick={() => setStep(step === 'review' ? 'payment' : 'address')}
+                >
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
               )}
-              <SheetTitle className="flex-1">
+              <SheetTitle className="flex-1 text-left">
                 {step === 'address' && 'Yetkazib berish manzili'}
+                {step === 'payment' && "To'lov usuli"}
                 {step === 'review' && 'Buyurtmani tasdiqlash'}
                 {step === 'success' && 'Buyurtma qabul qilindi!'}
               </SheetTitle>
             </div>
-            {/* Steps indicator */}
             {step !== 'success' && (
               <div className="flex gap-2 mt-2">
-                {['address', 'review'].map((s, i) => (
+                {['address', 'payment', 'review'].map((s, i) => (
                   <div key={s} className={cn(
                     "h-1 flex-1 rounded-full transition-all",
-                    (s === step || (s === 'address' && step === 'review'))
-                      ? "bg-primary"
-                      : "bg-muted"
+                    i <= stepIndex ? "bg-primary" : "bg-muted"
                   )} />
                 ))}
               </div>
@@ -87,7 +138,6 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
 
           <ScrollArea className="flex-1">
             <AnimatePresence mode="wait">
-              {/* Address Step */}
               {step === 'address' && (
                 <motion.div
                   key="address"
@@ -97,68 +147,128 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   className="p-4 space-y-4"
                 >
                   <div className="space-y-3">
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium">To'liq ism *</label>
-                      <Input
-                        value={address.full_name}
-                        onChange={e => setAddress(p => ({ ...p, full_name: e.target.value }))}
-                        placeholder="Ism Familiya"
-                        className="rounded-xl h-11"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium">Telefon raqam *</label>
-                      <Input
-                        value={address.phone}
-                        onChange={e => setAddress(p => ({ ...p, phone: e.target.value }))}
-                        placeholder="+998 90 123 45 67"
-                        className="rounded-xl h-11"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium">Ko'cha, uy *</label>
-                      <Input
-                        value={address.street}
-                        onChange={e => setAddress(p => ({ ...p, street: e.target.value }))}
-                        placeholder="Ko'cha nomi, uy raqami"
-                        className="rounded-xl h-11"
-                      />
-                    </div>
+                    <Field label="To'liq ism *">
+                      <Input value={address.full_name} onChange={e => setAddress(p => ({ ...p, full_name: e.target.value }))} placeholder="Ism Familiya" className="rounded-xl h-11" />
+                    </Field>
+                    <Field label="Telefon raqam *">
+                      <Input value={address.phone} onChange={e => setAddress(p => ({ ...p, phone: e.target.value }))} placeholder="+998 90 123 45 67" className="rounded-xl h-11" />
+                    </Field>
+                    <Field label="Ko'cha, uy *">
+                      <Input value={address.street} onChange={e => setAddress(p => ({ ...p, street: e.target.value }))} placeholder="Ko'cha nomi, uy raqami" className="rounded-xl h-11" />
+                    </Field>
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium">Shahar *</label>
-                        <Input
-                          value={address.city}
-                          onChange={e => setAddress(p => ({ ...p, city: e.target.value }))}
-                          placeholder="Toshkent"
-                          className="rounded-xl h-11"
-                        />
+                      <Field label="Shahar *">
+                        <Input value={address.city} onChange={e => setAddress(p => ({ ...p, city: e.target.value }))} placeholder="Toshkent" className="rounded-xl h-11" />
+                      </Field>
+                      <Field label="Viloyat">
+                        <Input value={address.region} onChange={e => setAddress(p => ({ ...p, region: e.target.value }))} placeholder="Toshkent sh." className="rounded-xl h-11" />
+                      </Field>
+                    </div>
+                    <Field label="Izoh (ixtiyoriy)">
+                      <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Qo'shimcha izoh..." className="rounded-xl resize-none" rows={2} />
+                    </Field>
+                  </div>
+                </motion.div>
+              )}
+
+              {step === 'payment' && (
+                <motion.div
+                  key="payment"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="p-4 space-y-3"
+                >
+                  {/* Wallet */}
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('wallet')}
+                    className={cn(
+                      "w-full text-left rounded-2xl p-4 border transition-all",
+                      paymentMethod === 'wallet'
+                        ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                        : "border-border/50 hover:border-border bg-muted/20"
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shrink-0">
+                        <Wallet className="h-5 w-5 text-primary-foreground" />
                       </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium">Viloyat</label>
-                        <Input
-                          value={address.region}
-                          onChange={e => setAddress(p => ({ ...p, region: e.target.value }))}
-                          placeholder="Toshkent sh."
-                          className="rounded-xl h-11"
-                        />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-semibold text-sm">Alsamos Hamyon</p>
+                          {paymentMethod === 'wallet' && (
+                            <CheckCircle className="h-5 w-5 text-primary" />
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">Balansdan darhol yechiladi</p>
+                        <div className="mt-2 flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">Mavjud balans</span>
+                          <span className="text-sm font-bold tabular-nums">
+                            {walletLoading ? '…' : `$${(walletBalance ?? 0).toLocaleString()}`}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium">Izoh (ixtiyoriy)</label>
-                      <Textarea
-                        value={notes}
-                        onChange={e => setNotes(e.target.value)}
-                        placeholder="Qo'shimcha izoh..."
-                        className="rounded-xl resize-none"
-                        rows={2}
-                      />
+                    {walletInsufficient && (
+                      <div className="mt-3 flex items-center gap-2 p-2.5 rounded-lg bg-destructive/10 text-destructive text-xs">
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                        <span className="flex-1">Balans yetarli emas. To'ldiring yoki boshqa usul tanlang.</span>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); goToPaymentSettings(); }}
+                          className="font-semibold underline shrink-0"
+                        >
+                          To'ldirish
+                        </button>
+                      </div>
+                    )}
+                  </button>
+
+                  {/* Card on delivery */}
+                  <PaymentOption
+                    icon={<CreditCard className="h-5 w-5 text-primary-foreground" />}
+                    title="Karta orqali (yetkazishda)"
+                    subtitle="Kuryer POS-terminali orqali to'lov"
+                    active={paymentMethod === 'card_on_delivery'}
+                    onSelect={() => setPaymentMethod('card_on_delivery')}
+                  />
+
+                  {/* Cash */}
+                  <PaymentOption
+                    icon={<Banknote className="h-5 w-5 text-primary-foreground" />}
+                    title="Naqd (yetkazishda)"
+                    subtitle="Mahsulotni qo'lingizga olganda to'lang"
+                    active={paymentMethod === 'cash'}
+                    onSelect={() => setPaymentMethod('cash')}
+                  />
+
+                  {/* Manage cards link */}
+                  <button
+                    type="button"
+                    onClick={goToPaymentSettings}
+                    className="w-full flex items-center justify-between p-3 rounded-xl border border-dashed border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-colors text-sm"
+                  >
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Plus className="h-4 w-4" />
+                      To'lov usullarini boshqarish
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  </button>
+
+                  <div className="pt-2 flex items-center gap-4 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                      256-bit SSL
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Truck className="h-3.5 w-3.5 text-primary" />
+                      Xaridor himoyasi
                     </div>
                   </div>
                 </motion.div>
               )}
 
-              {/* Review Step */}
               {step === 'review' && (
                 <motion.div
                   key="review"
@@ -167,7 +277,6 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   exit={{ opacity: 0, x: -20 }}
                   className="p-4 space-y-4"
                 >
-                  {/* Delivery Address */}
                   <div className="p-3 rounded-xl bg-muted/30 border border-border/20 space-y-1">
                     <div className="flex items-center gap-2 text-sm font-medium">
                       <MapPin className="h-4 w-4 text-primary" />
@@ -181,7 +290,19 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                     </p>
                   </div>
 
-                  {/* Order Items */}
+                  <div className="p-3 rounded-xl bg-muted/30 border border-border/20 flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <CreditCard className="h-4 w-4 text-primary" />
+                      {paymentLabel[paymentMethod]}
+                    </div>
+                    <button
+                      onClick={() => setStep('payment')}
+                      className="text-xs text-primary font-semibold"
+                    >
+                      O'zgartirish
+                    </button>
+                  </div>
+
                   <div className="space-y-2">
                     <h4 className="text-sm font-medium">Mahsulotlar ({cartItems.length})</h4>
                     {cartItems.map(item => {
@@ -203,7 +324,6 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                     })}
                   </div>
 
-                  {/* Summary */}
                   <div className="p-3 rounded-xl bg-muted/30 border border-border/20 space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Mahsulotlar</span>
@@ -220,7 +340,6 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                     </div>
                   </div>
 
-                  {/* Trust badges */}
                   <div className="flex items-center gap-4 text-xs text-muted-foreground">
                     <div className="flex items-center gap-1">
                       <ShieldCheck className="h-3.5 w-3.5 text-primary" />
@@ -234,7 +353,6 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                 </motion.div>
               )}
 
-              {/* Success Step */}
               {step === 'success' && (
                 <motion.div
                   key="success"
@@ -263,22 +381,32 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
             </AnimatePresence>
           </ScrollArea>
 
-          {/* Bottom Action */}
           {step !== 'success' && (
             <div className="p-4 border-t border-border/30 bg-background/95 backdrop-blur-xl">
-              {step === 'address' ? (
+              {step === 'address' && (
                 <Button
                   className="w-full h-12 rounded-xl text-sm font-semibold shadow-lg shadow-primary/20"
                   disabled={!isAddressValid}
-                  onClick={() => setStep('review')}
+                  onClick={() => setStep('payment')}
                 >
                   Davom etish
                   <ChevronRight className="h-4 w-4 ml-2" />
                 </Button>
-              ) : (
+              )}
+              {step === 'payment' && (
                 <Button
                   className="w-full h-12 rounded-xl text-sm font-semibold shadow-lg shadow-primary/20"
-                  disabled={isProcessing}
+                  disabled={walletInsufficient}
+                  onClick={() => setStep('review')}
+                >
+                  Ko'rib chiqish
+                  <ChevronRight className="h-4 w-4 ml-2" />
+                </Button>
+              )}
+              {step === 'review' && (
+                <Button
+                  className="w-full h-12 rounded-xl text-sm font-semibold shadow-lg shadow-primary/20"
+                  disabled={isProcessing || walletInsufficient}
                   onClick={handlePlaceOrder}
                 >
                   {isProcessing ? (
@@ -293,5 +421,44 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-sm font-medium">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function PaymentOption({
+  icon, title, subtitle, active, onSelect,
+}: {
+  icon: React.ReactNode; title: string; subtitle: string; active: boolean; onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cn(
+        "w-full text-left rounded-2xl p-4 border transition-all",
+        active
+          ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+          : "border-border/50 hover:border-border bg-muted/20"
+      )}
+    >
+      <div className="flex items-center gap-3">
+        <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shrink-0">
+          {icon}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-sm">{title}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
+        </div>
+        {active && <CheckCircle className="h-5 w-5 text-primary shrink-0" />}
+      </div>
+    </button>
   );
 }
