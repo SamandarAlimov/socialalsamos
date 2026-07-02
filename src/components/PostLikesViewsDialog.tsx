@@ -72,7 +72,7 @@ export function PostLikesViewsDialog({
     if (open) setTab(defaultTab);
   }, [open, defaultTab]);
 
-  const attachProfiles = async <T extends { user_id: string }>(rows: T[]): Promise<(T & { profile?: Profile })[]> => {
+  const attachProfiles = async <T extends { user_id: string }>(rows: T[]): Promise<Array<T & { profile?: Profile }>> => {
     const ids = Array.from(new Set(rows.map(r => r.user_id)));
     if (!ids.length) return rows;
     const { data: profiles } = await supabase
