@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Search, Filter, ShoppingBag, Plus, Store, Package, Heart, 
   TrendingUp, Sparkles, LayoutDashboard, MapPin, Star, 
