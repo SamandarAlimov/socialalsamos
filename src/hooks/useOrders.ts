@@ -22,6 +22,11 @@ export interface Order {
   buyer_id: string;
   seller_id: string;
   status: string;
+  payment_status: string;
+  payment_method: string | null;
+  receipt_number: string | null;
+  paid_at: string | null;
+  failure_reason: string | null;
   subtotal: number;
   shipping_cost: number;
   total: number;
