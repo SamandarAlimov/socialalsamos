@@ -396,7 +396,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 w-full">
-                    <Button className="rounded-xl h-11" onClick={() => { onOpenChange(false); navigate('/settings/orders'); }}>
+                    <Button className="rounded-xl h-11" onClick={() => { onOpenChange(false); onSuccess?.(); navigate('/marketplace?tab=orders'); }}>
                       <Package className="h-4 w-4 mr-2" />
                       Buyurtmalarim
                     </Button>
