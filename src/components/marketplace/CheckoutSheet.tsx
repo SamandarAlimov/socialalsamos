@@ -72,11 +72,11 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
   const [lastResult, setLastResult] = useState<{ order_ids: string[]; payment_status: string; error?: string } | null>(null);
 
   const handlePlaceOrder = async () => {
-    if (payment === 'wallet' && walletInsufficient) {
+    if (paymentMethod === 'wallet' && walletInsufficient) {
       toast.error("Hamyonda mablag' yetarli emas");
       return;
     }
-    const result = await placeOrder(address, payment, notes || undefined);
+    const result = await placeOrder(address, paymentMethod, notes || undefined);
     setLastResult(result);
     if (result.success) {
       setStep('success');
