@@ -94,74 +94,82 @@ export function useCheckout() {
   const { items: cartItems, total: cartTotal, clearCart } = useCart();
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const placeOrder = async (shippingAddress: any, notes?: string) => {
-    if (!user || cartItems.length === 0) return null;
+export type CheckoutPaymentMethod = 'wallet' | 'card_on_delivery' | 'cash';
+
+export interface CheckoutResult {
+  success: boolean;
+  order_ids: string[];
+  payment_status: 'paid' | 'pending' | 'failed';
+  total: number;
+  error?: string;
+}
+
+const FAILURE_MESSAGES: Record<string, string> = {
+  not_authenticated: 'Iltimos, tizimga kiring',
+  invalid_payment_method: "To'lov usuli noto'g'ri",
+  empty_cart: "Savat bo'sh",
+  insufficient_balance: "Hamyonda mablag' yetarli emas. To'ldiring yoki boshqa usul tanlang.",
+};
+
+export function useCheckout() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const { items: cartItems, total: cartTotal, refresh: refreshCart } = useCart();
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const placeOrder = async (
+    shippingAddress: any,
+    paymentMethod: CheckoutPaymentMethod,
+    notes?: string,
+  ): Promise<CheckoutResult> => {
+    if (!user || cartItems.length === 0) {
+      return { success: false, order_ids: [], payment_status: 'failed', total: 0, error: 'empty_cart' };
+    }
 
     setIsProcessing(true);
-
     try {
-      // Group items by seller
-      const sellerGroups: Record<string, typeof cartItems> = {};
-      for (const item of cartItems) {
-        const sellerId = item.product?.seller_id;
-        if (!sellerId) continue;
-        if (!sellerGroups[sellerId]) sellerGroups[sellerId] = [];
-        sellerGroups[sellerId].push(item);
+      const { data, error } = await supabase.rpc('process_marketplace_order', {
+        _shipping_address: shippingAddress,
+        _payment_method: paymentMethod,
+        _notes: notes ?? null,
+      });
+
+      if (error) {
+        const code = (error.message || '').replace(/^.*:\s*/, '').trim();
+        const friendly = FAILURE_MESSAGES[code] || error.message || "Buyurtma amalga oshmadi";
+        toast({ title: "To'lov amalga oshmadi", description: friendly, variant: 'destructive' });
+        return { success: false, order_ids: [], payment_status: 'failed', total: 0, error: friendly };
       }
 
-      const orderIds: string[] = [];
+      const payload = (data ?? {}) as {
+        success?: boolean;
+        order_ids?: string[];
+        payment_status?: 'paid' | 'pending';
+        total?: number;
+      };
 
-      for (const [sellerId, items] of Object.entries(sellerGroups)) {
-        const subtotal = items.reduce((sum, i) => sum + (i.product?.price || 0) * i.quantity, 0);
-        const shippingCost = items.reduce((sum, i) => sum + (i.product?.shipping_price || 0), 0);
-        const total = subtotal + shippingCost;
+      await refreshCart();
 
-        // Create order
-        const { data: order, error: orderError } = await supabase
-          .from('orders')
-          .insert({
-            buyer_id: user.id,
-            seller_id: sellerId,
-            order_number: 'TMP',
-            subtotal,
-            shipping_cost: shippingCost,
-            total,
-            shipping_address: shippingAddress,
-            notes: notes || null,
-          })
-          .select()
-          .single();
+      toast({
+        title: payload.payment_status === 'paid' ? "To'lov muvaffaqiyatli!" : 'Buyurtma qabul qilindi',
+        description:
+          payload.payment_status === 'paid'
+            ? 'Hamyondan yechildi. Sotuvchi tez orada tayyorlaydi.'
+            : "Yetkazganda to'lang. Sotuvchi tayyorlashni boshladi.",
+      });
 
-        if (orderError || !order) {
-          toast({ title: 'Xatolik', description: orderError?.message || 'Buyurtma yaratib bo\'lmadi', variant: 'destructive' });
-          setIsProcessing(false);
-          return null;
-        }
-
-        // Create order items
-        const orderItems = items.map(item => ({
-          order_id: order.id,
-          product_id: item.product_id,
-          title: item.product?.title || 'Product',
-          quantity: item.quantity,
-          price: item.product?.price || 0,
-          total: (item.product?.price || 0) * item.quantity,
-        }));
-
-        await supabase.from('order_items').insert(orderItems);
-        orderIds.push(order.id);
-      }
-
-      // Clear cart
-      await clearCart();
-
-      toast({ title: 'Buyurtma qabul qilindi! ✅', description: 'Buyurtmangiz muvaffaqiyatli yaratildi' });
+      return {
+        success: true,
+        order_ids: payload.order_ids ?? [],
+        payment_status: payload.payment_status ?? 'pending',
+        total: payload.total ?? 0,
+      };
+    } catch (err: any) {
+      const msg = err?.message || 'Kutilmagan xatolik';
+      toast({ title: 'Xatolik', description: msg, variant: 'destructive' });
+      return { success: false, order_ids: [], payment_status: 'failed', total: 0, error: msg };
+    } finally {
       setIsProcessing(false);
-      return orderIds;
-    } catch (err) {
-      toast({ title: 'Xatolik', description: 'Buyurtma yaratib bo\'lmadi', variant: 'destructive' });
-      setIsProcessing(false);
-      return null;
     }
   };
 
