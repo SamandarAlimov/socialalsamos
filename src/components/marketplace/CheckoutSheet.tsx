@@ -23,7 +23,7 @@ interface CheckoutSheetProps {
   onSuccess?: () => void;
 }
 
-type Step = 'address' | 'payment' | 'review' | 'success';
+type Step = 'address' | 'payment' | 'review' | 'success' | 'failed';
 type PaymentMethod = 'wallet' | 'card_on_delivery' | 'cash';
 
 export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetProps) {
@@ -69,14 +69,19 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
     return () => { cancelled = true; };
   }, [open, user]);
 
+  const [lastResult, setLastResult] = useState<{ order_ids: string[]; payment_status: string; error?: string } | null>(null);
+
   const handlePlaceOrder = async () => {
-    if (walletInsufficient) {
+    if (paymentMethod === 'wallet' && walletInsufficient) {
       toast.error("Hamyonda mablag' yetarli emas");
       return;
     }
-    const result = await placeOrder(address, notes || undefined);
-    if (result) {
+    const result = await placeOrder(address, paymentMethod, notes || undefined);
+    setLastResult(result);
+    if (result.success) {
       setStep('success');
+    } else {
+      setStep('failed');
     }
   };
 
@@ -124,7 +129,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                 {step === 'success' && 'Buyurtma qabul qilindi!'}
               </SheetTitle>
             </div>
-            {step !== 'success' && (
+            {step !== 'success' && step !== 'failed' && (
               <div className="flex gap-2 mt-2">
                 {['address', 'payment', 'review'].map((s, i) => (
                   <div key={s} className={cn(
@@ -358,30 +363,84 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   key="success"
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="p-8 flex flex-col items-center justify-center text-center min-h-[400px]"
+                  className="p-6 flex flex-col items-center text-center"
                 >
                   <motion.div
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
-                    transition={{ type: 'spring', delay: 0.2 }}
-                    className="w-20 h-20 rounded-full bg-green-500/10 flex items-center justify-center mb-5"
+                    transition={{ type: 'spring', delay: 0.15 }}
+                    className="w-20 h-20 rounded-full bg-green-500/10 flex items-center justify-center mb-4"
                   >
                     <CheckCircle className="h-10 w-10 text-green-500" />
                   </motion.div>
-                  <h2 className="text-2xl font-bold mb-2">Buyurtma qabul qilindi!</h2>
-                  <p className="text-muted-foreground mb-6 max-w-xs">
-                    Buyurtmangiz muvaffaqiyatli yaratildi. Sotuvchi tez orada tayyorlab jo'natadi.
+                  <h2 className="text-xl font-bold mb-1">
+                    {lastResult?.payment_status === 'paid' ? "To'lov muvaffaqiyatli!" : 'Buyurtma qabul qilindi!'}
+                  </h2>
+                  <p className="text-muted-foreground text-sm mb-5 max-w-xs">
+                    {lastResult?.payment_status === 'paid'
+                      ? "Hamyondan yechildi. Kvitansiya profilingizga saqlandi."
+                      : "Yetkazganda to'lang. Sotuvchi tayyorlashni boshladi."}
                   </p>
-                  <Button className="rounded-xl" onClick={handleClose}>
-                    <Package className="h-4 w-4 mr-2" />
-                    Buyurtmalarimni ko'rish
-                  </Button>
+                  <div className="w-full rounded-2xl border border-border/50 bg-muted/20 p-4 mb-5 text-left">
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-muted-foreground">Buyurtmalar</span>
+                      <span className="font-semibold">{lastResult?.order_ids.length ?? 0}</span>
+                    </div>
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-muted-foreground">To'lov usuli</span>
+                      <span className="font-semibold">{paymentLabel[paymentMethod]}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Umumiy</span>
+                      <span className="font-bold text-primary">${grandTotal.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2 w-full">
+                    <Button className="rounded-xl h-11" onClick={() => { onOpenChange(false); onSuccess?.(); navigate('/marketplace?tab=orders'); }}>
+                      <Package className="h-4 w-4 mr-2" />
+                      Buyurtmalarim
+                    </Button>
+                    <Button variant="ghost" className="rounded-xl h-11" onClick={handleClose}>
+                      Yopish
+                    </Button>
+                  </div>
+                </motion.div>
+              )}
+
+              {step === 'failed' && (
+                <motion.div
+                  key="failed"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="p-6 flex flex-col items-center text-center"
+                >
+                  <div className="w-20 h-20 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
+                    <AlertCircle className="h-10 w-10 text-destructive" />
+                  </div>
+                  <h2 className="text-xl font-bold mb-1">To'lov amalga oshmadi</h2>
+                  <p className="text-muted-foreground text-sm mb-5 max-w-xs">
+                    {lastResult?.error || "Kutilmagan xatolik yuz berdi. Iltimos, qayta urinib ko'ring."}
+                  </p>
+                  <div className="flex flex-col gap-2 w-full">
+                    <Button className="rounded-xl h-11" onClick={() => setStep('review')}>
+                      Qayta urinish
+                    </Button>
+                    {paymentMethod === 'wallet' && (
+                      <Button variant="outline" className="rounded-xl h-11" onClick={goToPaymentSettings}>
+                        <Wallet className="h-4 w-4 mr-2" />
+                        Hamyonni to'ldirish
+                      </Button>
+                    )}
+                    <Button variant="ghost" className="rounded-xl h-11" onClick={() => onOpenChange(false)}>
+                      Yopish
+                    </Button>
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
           </ScrollArea>
 
-          {step !== 'success' && (
+          {step !== 'success' && step !== 'failed' && (
             <div className="p-4 border-t border-border/30 bg-background/95 backdrop-blur-xl">
               {step === 'address' && (
                 <Button

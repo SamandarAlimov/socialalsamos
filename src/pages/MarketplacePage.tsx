@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Search, Filter, ShoppingBag, Plus, Store, Package, Heart, 
   TrendingUp, Sparkles, LayoutDashboard, MapPin, Star, 
@@ -40,7 +41,14 @@ export default function MarketplacePage() {
   const { user } = useAuth();
   const { triggerHaptic } = useHapticFeedback();
   
-  const [activeTab, setActiveTab] = useState('browse');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'browse');
+
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t && t !== activeTab) setActiveTab(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);

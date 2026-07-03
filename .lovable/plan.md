@@ -1,98 +1,92 @@
+# Marketplace Professional Redesign + Real Checkout
 
-# Create Page — Instagram-darajasidagi to'liq redesign
+So'rovingiz juda katta (butun superapp: Marketplace + AI + Map + Payment + Messages + Posts qayta ko'rib chiqish). Bir turnda hammasini sifatli qilib bo'lmaydi — natija yuzaki chiqadi.
 
-Katta hajmli refactor. 5 ta bosqichga bo'lamiz — har birini alohida turnda yetkazib beraman.
+**Shu sababli bu planda faqat aniq va bajariladigan qismni qilamiz:**
+1. Marketplace UI/UX responsive redesign
+2. Real checkout `/settings/payment` bilan
+3. Order history + payment status (success/failed) + kvitansiya
+4. Kategoriyalar, qidiruv, narx filtrlari
 
----
-
-## Bosqich 1 — Layout va navigatsiya (fullscreen mode)
-
-**Maqsad:** `/create` sahifasi mobile'da to'liq ekranni egallashi, header/bottom navbar ko'rinmasligi.
-
-- `AppLayout.tsx`da `/create` route'ini "immersive" rejimga o'tkazish (header + bottom navbar yashiriladi).
-- Mobile'da yuqorida faqat `X` close ikonkasi (background transparent, safe-area top).
-- Tablet + Desktop'da X ikonka yo'q, standart sidebar/layout saqlanadi.
-- Close bosilganda `navigate(-1)` — oldingi sahifaga qaytadi (fallback `/`).
-- Body scroll lock mobile'da.
-
-**Bottom tabbar (BottomNavbar.tsx):**
-- Instagram uslubida 3 tomondan uzilgan floating shaffof tab bar (bg-black/40 + backdrop-blur-2xl, rounded-full yoki uzilgan corners, margin bilan pastda suzadi).
-- Faqat mobile'da. Icon-only, active state — Alsamos orange.
-- `/create` sahifasida tabbar yashirin.
+Qolgan katta modullar (AI hub, Map integratsiyasi, Messages xavfsizlik qatlami, Superapp AI-brain) alohida promptlarda qilinadi — pastdagi "Keyingi fazalar" ro'yxatiga qarang.
 
 ---
 
-## Bosqich 2 — Create page shell (tab arxitekturasi)
+## 1. Marketplace Responsive Redesign
 
-- Yuqorida capsul-uslubdagi mode switcher: **POST · STORY · REEL · LIVE** (Instagram'dagi pastdagi capsule kabi).
-- Har bir mode alohida flow (component):
-  - `CreatePostFlow` — kutubxona grid + preview + Next
-  - `CreateStoryFlow` — camera/media + Aa text tools + stickers
-  - `CreateReelFlow` — camera/upload + music + effects + speed + timer
-  - `CreateLiveFlow` — Go Live pre-flight (title, camera preview, audience)
-- Har bir flow o'z ichida step navigation ("New post → Edit → Share").
-- Ochiladigan sheet/dialog'lar `h-[100dvh]` va ichki `overflow-y-auto` (scroll muammolari uchun fix).
+### `src/pages/MarketplacePage.tsx`
+- Amazon/Wildberries uslubi: sticky top bar (logo + qidiruv + savat + orderlar), kategoriya chip-row (horizontal scroll mobile, wrap desktop), sort dropdown (yangi / arzon / qimmat / reyting).
+- **Grid breakpoints:** mobile `grid-cols-2`, `sm:grid-cols-3`, `md:grid-cols-3`, `lg:grid-cols-4`, `xl:grid-cols-5`, `2xl:grid-cols-6`. Gap: mobile `gap-2`, desktop `gap-4`.
+- Chap sidebar (desktop `lg:`): kategoriya daraxti + narx range slider + kondisiya (new/used) + faqat aksiya + faqat yetkazib berish. Mobile: pastdan chiqadigan `Sheet` "Filtr" tugmasi.
+- Hero banner (top featured / promo) — desktop only.
+- Empty state, skeleton loading, infinite scroll (yoki "Ko'proq yuklash").
 
----
+### `src/components/marketplace/ProductCard.tsx`
+- Nomi, narxi, discount %, sotuvchi, reyting, like — hozirgi karta yaxshi, faqat responsive typography (`text-[13px] md:text-sm`) va min-height guard qo'shamiz.
 
-## Bosqich 3 — Post flow (universal fayl yuklash)
+### `src/components/marketplace/MarketplaceFilters.tsx` (yangi)
+- Narx range (min–max), kategoriya, kondisiya, "faqat yetkazib berish", sort.
+- Mobile'da `Sheet` ichida, desktop'da sticky sidebar.
 
-- Media picker: Recents grid + camera tile + "Select multiple" (4 tagacha).
-- **Universal file support:** image, video, audio (mp3), pdf, docx, pptx, xlsx, zip, apk, exe, msi, deb, svg va h.k.
-- Non-media fayllar uchun "Attachment card" preview (icon + name + size + type badge).
-- Aspect ratio picker (1:1, 4:5, 16:9, original) — MediaFrame bilan preview.
-- Caption + mention/hashtag autocomplete.
-- Storage bucket va DB `posts.media_urls` + yangi `posts.attachments` metadata (agar kerak bo'lsa migration).
+### `src/hooks/useMarketplace.ts`
+- `useProducts` ga `filters: { minPrice, maxPrice, condition, shippingOnly, sortBy }` param qo'shamiz.
 
 ---
 
-## Bosqich 4 — Story & Reel flow
+## 2. Real Checkout (Payment integratsiyasi)
 
-**Story (Instagram screenshot bo'yicha):**
-- Fullscreen 9:16 canvas, chap tomonda vertical tool rail (Aa, Boomerang ∞, Layout, Stop).
-- Yuqorida: flash, settings.
-- Pastda katta capture tugmasi + gallery thumbnail.
+### `src/components/marketplace/CheckoutSheet.tsx` (mavjudni to'liq yozamiz)
+Bosqichlar (stepper):
+1. **Manzil / yetkazib berish** — foydalanuvchi manzili, telefon, izoh
+2. **To'lov usuli** — `wallets` balansi, `payment_methods` (linked cards), yoki naqd (yetkazganda)
+3. **Ko'rib chiqish** — mahsulotlar, jami, yetkazib berish narxi, jami
+4. **Tasdiqlash** — PIN yoki confirm dialog (memory'da yozilgan xavfsizlik talabi)
 
-**Reel:**
-- Fullscreen 9:16, chap rail: Music, Effects, Speed (1x), Timer (60s), Green screen, Captions, Enhance.
-- Yuqorida: flash, speed, timer, settings + "Add audio" pill.
-- Editing step'ida: **YouTube-uslubdagi searchable caption** — hashtag/keyword tavsiyalar, qidiruvda topilishi uchun `title` + `description` fields.
+### Database (yangi migratsiya)
+Mavjud `orders`, `order_items`, `transactions`, `wallets` jadvallari bor. Qo'shamiz:
+- `orders`: `payment_status` (pending/paid/failed/refunded), `payment_method` (wallet/card/cash), `shipping_address` jsonb, `receipt_number` — agar yo'q bo'lsa.
+- RPC funksiya `process_marketplace_order(cart_items, payment_method, address)` — SECURITY DEFINER, atomic: order yaratadi, wallet dan yechadi (agar wallet bo'lsa), transaction log yozadi, cart tozalaydi. Muvaffaqiyatsiz bo'lsa rollback.
 
----
-
-## Bosqich 5 — Live flow + universal sizing rules
-
-**Live (YouTube/Instagram):**
-- Pre-flight: kamera preview + title input + audience selector (Public / Followers / Close friends).
-- "Go Live" bosilganda mavjud `LiveStreamBroadcast` ochiladi.
-- End screen: viewer count, duration, save to profile.
-
-**Universal media sizing (bir marta MediaFrame'da centralize):**
-| Kontekst | Aspect | Behavior |
-|---|---|---|
-| Post feed | Original (4:5 dan 1.91:1 gacha clamp) | object-contain, black bg |
-| Story viewer | 9:16 | object-cover fullscreen |
-| Reel viewer | 9:16 (16:9 letterbox) | contain, centered |
-| Live | 16:9 | contain |
-| Chat preview | Original clamped | contain |
+### Wallet integratsiya
+- Checkout'da `wallets.balance` ko'rsatiladi, yetarli emasda "Hamyonni to'ldirish" tugmasi → `/settings/payment` ga o'tadi.
+- Karta orqali to'lov: hozircha mock success (chunki Stripe/Paddle o'rnatilmagan) — lekin `transactions` yoziladi va `orders.payment_status = 'paid'` bo'ladi. Kelajakda haqiqiy provayder ulanadi.
 
 ---
 
-## Texnik detallar
+## 3. Order History + Receipt
 
-- Yangi fayllar: `src/pages/CreatePage.tsx` (redesign), `src/components/create/flows/{Post,Story,Reel,Live}Flow.tsx`, `src/components/create/CreateModeSwitcher.tsx`, `src/components/create/UniversalFileUploader.tsx`.
-- Yangilanadi: `AppLayout.tsx` (immersive route detection), `BottomNavbar.tsx` (floating shaffof), `useFileUpload.ts` (kengaytirilgan MIME whitelist).
-- Migration: `posts` jadvaliga `attachments jsonb` ustuni (fayl metadata uchun) — GRANT'lar bilan.
-- Barcha Sheet/Dialog'larda `max-h-[100dvh] overflow-y-auto` — scroll fix.
+### `src/components/marketplace/OrdersView.tsx` (mavjudni yaxshilaymiz)
+- Status filterlar (Barchasi / Kutilmoqda / To'landi / Yetkazildi / Bekor qilindi).
+- Har bir order kartasi: rasm thumbnail, narxi, sana, status badge, "Kvitansiya" tugmasi.
+
+### `src/components/marketplace/OrderReceiptDialog.tsx` (yangi)
+- Kvitansiya raqami, sana, mahsulotlar, jami, to'lov usuli, sotuvchi, "PDF yuklab olish" (print CSS orqali).
+
+### Success/Fail feedback
+- Checkout tugagach `toast` + navigate `/marketplace/orders/:id` (yoki dialog ichida success ekrani).
+- Failed bo'lsa aniq xato sababi + "Qayta urinish".
 
 ---
 
-## Yetkazib berish tartibi
+## 4. Texnik (qisqa)
 
-1. **Turn 1:** Bosqich 1 (layout + shaffof tabbar) — ko'rinadigan darhol o'zgarish.
-2. **Turn 2:** Bosqich 2 (shell + mode switcher + scroll fixes).
-3. **Turn 3:** Bosqich 3 (Post + universal file uploader + migration).
-4. **Turn 4:** Bosqich 4 (Story + Reel Instagram-uslubida).
-5. **Turn 5:** Bosqich 5 (Live + sizing audit).
+- Barcha yangi tugmalar/kartalar semantic tokens (`bg-card`, `text-foreground`, `text-primary`) — hardcoded rang yo'q.
+- `useIsMobile` + `md:` / `lg:` breakpointlar orqali responsive.
+- i18n: yangi stringlar `uz.json` / `en.json` / `ru.json` ga qo'shiladi.
+- RLS: yangi RPC service_role bilan ishlaydi, foydalanuvchi faqat o'z orderini ko'radi (allaqachon shunday).
 
-Har bosqichdan keyin tekshirasiz, kerak bo'lsa tuzatamiz, keyin keyingisiga o'tamiz.
+---
+
+## Keyingi fazalar (bu planga kirmaydi — alohida so'rang)
+
+Bularni bir vaqtda qilsam sifat ketadi. Marketplace tugagach, birma-bir so'rang:
+
+- **Faza 2:** AI Hub — Marketplace bilan bog'liq mahsulot qidirish, post generatsiya, ko'p tillik, model routing
+- **Faza 3:** Map moduli — Marketplace mahsulotlarini xaritada, marker → product card
+- **Faza 4:** Messages xavfsizlik qatlami — scam/spam filter, PII detektor, message requests
+- **Faza 5:** Posts ↔ Marketplace bog'lash (post orqali mahsulot reklama)
+- **Faza 6:** AI orqali platforma boshqaruvi (settings, wallet, notifications), har bir amal uchun confirm dialog
+
+---
+
+Roziman desangiz Faza 1 (Marketplace) ni boshlayman. Rejani o'zgartirmoqchi bo'lsangiz ayting.

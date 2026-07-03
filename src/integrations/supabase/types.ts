@@ -1476,9 +1476,14 @@ export type Database = {
           buyer_id: string
           created_at: string
           currency: string | null
+          failure_reason: string | null
           id: string
           notes: string | null
           order_number: string
+          paid_at: string | null
+          payment_method: string | null
+          payment_status: string
+          receipt_number: string | null
           seller_id: string
           shipping_address: Json | null
           shipping_cost: number | null
@@ -1492,9 +1497,14 @@ export type Database = {
           buyer_id: string
           created_at?: string
           currency?: string | null
+          failure_reason?: string | null
           id?: string
           notes?: string | null
           order_number: string
+          paid_at?: string | null
+          payment_method?: string | null
+          payment_status?: string
+          receipt_number?: string | null
           seller_id: string
           shipping_address?: Json | null
           shipping_cost?: number | null
@@ -1508,9 +1518,14 @@ export type Database = {
           buyer_id?: string
           created_at?: string
           currency?: string | null
+          failure_reason?: string | null
           id?: string
           notes?: string | null
           order_number?: string
+          paid_at?: string | null
+          payment_method?: string | null
+          payment_status?: string
+          receipt_number?: string | null
           seller_id?: string
           shipping_address?: Json | null
           shipping_cost?: number | null
@@ -2915,6 +2930,14 @@ export type Database = {
       is_conversation_participant: {
         Args: { _conversation_id: string; _user_id: string }
         Returns: boolean
+      }
+      process_marketplace_order: {
+        Args: {
+          _notes?: string
+          _payment_method: string
+          _shipping_address: Json
+        }
+        Returns: Json
       }
     }
     Enums: {

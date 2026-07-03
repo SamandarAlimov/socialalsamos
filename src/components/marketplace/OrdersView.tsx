@@ -66,13 +66,28 @@ export function OrdersView({ onProductSelect }: OrdersViewProps) {
               onClick={() => setSelectedOrder(order)}
             >
               <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <div className={cn("p-1.5 rounded-lg", status.color.split(' ')[0])}>
                     <StatusIcon className={cn("h-3.5 w-3.5", status.color.split(' ')[1])} />
                   </div>
                   <Badge variant="outline" className={cn("text-[10px]", status.color)}>
                     {status.label}
                   </Badge>
+                  {order.payment_status === 'paid' && (
+                    <Badge variant="outline" className="text-[10px] bg-green-500/10 text-green-600 border-green-500/20">
+                      To'landi
+                    </Badge>
+                  )}
+                  {order.payment_status === 'pending' && (
+                    <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/20">
+                      Yetkazganda
+                    </Badge>
+                  )}
+                  {order.payment_status === 'failed' && (
+                    <Badge variant="outline" className="text-[10px] bg-destructive/10 text-destructive border-destructive/20">
+                      Muvaffaqiyatsiz
+                    </Badge>
+                  )}
                 </div>
                 <span className="text-xs text-muted-foreground">
                   {formatDistanceToNow(new Date(order.created_at))} oldin
