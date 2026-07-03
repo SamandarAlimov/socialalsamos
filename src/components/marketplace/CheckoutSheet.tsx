@@ -23,7 +23,7 @@ interface CheckoutSheetProps {
   onSuccess?: () => void;
 }
 
-type Step = 'address' | 'payment' | 'review' | 'success';
+type Step = 'address' | 'payment' | 'review' | 'success' | 'failed';
 type PaymentMethod = 'wallet' | 'card_on_delivery' | 'cash';
 
 export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetProps) {
