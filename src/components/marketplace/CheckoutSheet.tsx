@@ -69,14 +69,19 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
     return () => { cancelled = true; };
   }, [open, user]);
 
+  const [lastResult, setLastResult] = useState<{ order_ids: string[]; payment_status: string; error?: string } | null>(null);
+
   const handlePlaceOrder = async () => {
-    if (walletInsufficient) {
+    if (payment === 'wallet' && walletInsufficient) {
       toast.error("Hamyonda mablag' yetarli emas");
       return;
     }
-    const result = await placeOrder(address, notes || undefined);
-    if (result) {
+    const result = await placeOrder(address, payment, notes || undefined);
+    setLastResult(result);
+    if (result.success) {
       setStep('success');
+    } else {
+      setStep('failed');
     }
   };
 
