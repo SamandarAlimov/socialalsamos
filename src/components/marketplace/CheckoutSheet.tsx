@@ -440,7 +440,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
             </AnimatePresence>
           </ScrollArea>
 
-          {step !== 'success' && (
+          {step !== 'success' && step !== 'failed' && (
             <div className="p-4 border-t border-border/30 bg-background/95 backdrop-blur-xl">
               {step === 'address' && (
                 <Button
