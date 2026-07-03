@@ -129,7 +129,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                 {step === 'success' && 'Buyurtma qabul qilindi!'}
               </SheetTitle>
             </div>
-            {step !== 'success' && (
+            {step !== 'success' && step !== 'failed' && (
               <div className="flex gap-2 mt-2">
                 {['address', 'payment', 'review'].map((s, i) => (
                   <div key={s} className={cn(
