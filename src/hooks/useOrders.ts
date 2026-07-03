@@ -88,11 +88,6 @@ export function useOrders() {
   return { orders, isLoading, refresh: fetchOrders };
 }
 
-export function useCheckout() {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const { items: cartItems, total: cartTotal, clearCart } = useCart();
-  const [isProcessing, setIsProcessing] = useState(false);
 
 export type CheckoutPaymentMethod = 'wallet' | 'card_on_delivery' | 'cash';
 
