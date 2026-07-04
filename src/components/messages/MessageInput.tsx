@@ -31,6 +31,8 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { useTranslation } from 'react-i18next';
+import { detectPII } from '@/hooks/useMessageSafety';
+import { ShieldAlert } from 'lucide-react';
 
 interface ReplyTo {
   id: string;
