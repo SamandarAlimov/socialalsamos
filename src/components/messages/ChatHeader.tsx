@@ -16,13 +16,20 @@ import {
   Users2,
   Clock,
   Bookmark,
+  Ban,
+  Flag,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Conversation } from '@/hooks/useMessages';
 import { cn } from '@/lib/utils';
 import { formatLastSeen } from '@/utils/formatLastSeen';
 import { useOnlinePresence } from '@/contexts/OnlinePresenceContext';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBlockedUsers } from '@/hooks/useMessageSafety';
+import { BlockConfirmDialog } from './BlockConfirmDialog';
+import { ReportDialog } from './ReportDialog';
+import { EncryptedIndicator } from './EncryptedIndicator';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -67,6 +74,9 @@ export function ChatHeader({
   isAdmin,
 }: ChatHeaderProps) {
   const { user } = useAuth();
+  const [blockOpen, setBlockOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const { blockedIds, refresh: refreshBlocks } = useBlockedUsers();
   
   // Check if this is a self-chat (conversation with yourself)
   const isSelfChat = conversation.is_self_chat || 
@@ -77,6 +87,8 @@ export function ChatHeader({
   const { isUserOnline } = useOnlinePresence();
   const realtimeIsOnline = otherUserId ? isUserOnline(otherUserId) : false;
   const realtimeLastSeen = conversation.other_participant?.last_seen || null;
+  const isBlocked = otherUserId ? blockedIds.has(otherUserId) : false;
+  useEffect(() => { refreshBlocks(); }, [otherUserId, refreshBlocks]);
 
   const getName = () => {
     if (isSelfChat) {
@@ -178,11 +190,12 @@ export function ChatHeader({
           </div>
           
           <div className="text-left">
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               <h2 className="font-semibold text-sm">{getName()}</h2>
               {conversation.type === 'private' && conversation.other_participant?.is_verified && (
                 <VerifiedBadge size="xs" />
               )}
+              {conversation.is_encrypted && <EncryptedIndicator />}
             </div>
             <p className="text-xs text-muted-foreground">{getStatus()}</p>
           </div>
@@ -271,6 +284,19 @@ export function ChatHeader({
                 )}
               </>
             )}
+            {conversation.type === 'private' && !isSelfChat && otherUserId && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setReportOpen(true)}>
+                  <Flag className="h-4 w-4 mr-2" />
+                  Shikoyat qilish
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setBlockOpen(true)} className="text-destructive">
+                  <Ban className="h-4 w-4 mr-2" />
+                  {isBlocked ? 'Blokdan chiqarish' : 'Bloklash'}
+                </DropdownMenuItem>
+              </>
+            )}
             {conversation.type === 'private' && onDelete && (
               <>
                 <DropdownMenuSeparator />
@@ -283,6 +309,25 @@ export function ChatHeader({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {otherUserId && (
+        <>
+          <BlockConfirmDialog
+            open={blockOpen}
+            onOpenChange={setBlockOpen}
+            targetId={otherUserId}
+            targetName={getName()}
+            blocked={isBlocked}
+            onDone={refreshBlocks}
+          />
+          <ReportDialog
+            open={reportOpen}
+            onOpenChange={setReportOpen}
+            userId={otherUserId}
+            conversationId={conversation.id}
+          />
+        </>
+      )}
     </div>
   );
 }

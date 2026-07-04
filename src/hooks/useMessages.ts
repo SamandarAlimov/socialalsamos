@@ -20,6 +20,7 @@ export interface Conversation {
   is_pinned?: boolean;
   is_muted?: boolean;
   is_archived?: boolean;
+  is_request?: boolean;
   is_self_chat?: boolean;
   other_participant?: {
     id: string;
@@ -104,7 +105,7 @@ export function useConversations(type?: 'private' | 'group' | 'channel', showArc
       // Get user's conversations with participation info (pinned, muted, archived, last_read_at)
       const { data: participations, error: partError } = await supabase
         .from('conversation_participants')
-        .select('conversation_id, is_pinned, is_muted, is_archived, last_read_at')
+        .select('conversation_id, is_pinned, is_muted, is_archived, is_request, last_read_at')
         .eq('user_id', user.id)
         .eq('is_archived', showArchived);
 
@@ -124,6 +125,7 @@ export function useConversations(type?: 'private' | 'group' | 'channel', showArc
           is_pinned: p.is_pinned ?? false, 
           is_muted: p.is_muted ?? false,
           is_archived: p.is_archived ?? false,
+          is_request: (p as any).is_request ?? false,
           last_read_at: p.last_read_at,
         }])
       );
@@ -230,6 +232,7 @@ export function useConversations(type?: 'private' | 'group' | 'channel', showArc
             is_pinned: participantSettings?.is_pinned ?? false,
             is_muted: participantSettings?.is_muted ?? false,
             is_archived: participantSettings?.is_archived ?? false,
+            is_request: participantSettings?.is_request ?? false,
             is_self_chat: isSelfChat,
           } as Conversation;
         })

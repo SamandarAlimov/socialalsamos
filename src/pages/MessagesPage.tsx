@@ -50,6 +50,7 @@ import { TypingIndicator } from '@/components/messages/TypingIndicator';
 import { GroupMemberManagement } from '@/components/messages/GroupMemberManagement';
 import { ScheduledMessagesSheet } from '@/components/messages/ScheduledMessagesSheet';
 import { MiniAudioPlayer } from '@/components/messages/MiniAudioPlayer';
+import { MessageRequestBanner } from '@/components/messages/MessageRequestBanner';
 import { useChannels, Channel } from '@/hooks/useChannels';
 import { ChannelView } from '@/components/channels/ChannelView';
 import { CreateChannelDialog } from '@/components/channels/CreateChannelDialog';
@@ -347,15 +348,14 @@ export default function MessagesPage() {
     { id: 'archived', label: 'Archived' },
   ];
 
-  // Filter conversations - for requests tab, only show message requests (not yet accepted)
+  // Filter conversations - separate requests (is_request=true) from normal chats.
   const filteredConversations = conversations.filter(conv => {
-    // For requests tab, filter to only show incoming requests (placeholder logic - needs backend support)
+    const isReq = Boolean((conv as any).is_request);
     if (activeTab === 'requests') {
-      // This would require a field like `is_request` in the database
-      // For now, return empty to show "No message requests"
-      return false;
+      if (!isReq) return false;
+    } else {
+      if (isReq) return false;
     }
-    
     const name = conv.type === 'private' 
       ? conv.other_participant?.display_name || conv.other_participant?.username 
       : conv.name;
@@ -1297,6 +1297,15 @@ export default function MessagesPage() {
             />
           )}
           
+          {(selectedConversation as any).is_request && (
+            <MessageRequestBanner
+              conversationId={selectedConversation.id}
+              otherUserId={selectedConversation.other_participant?.id}
+              otherUserName={selectedConversation.other_participant?.display_name || selectedConversation.other_participant?.username || undefined}
+              onResolved={() => { refreshConversations(); setSelectedConversation(null); setShowMobileChat(false); }}
+            />
+          )}
+
           {pinnedMessages.length > 0 && !isSelectionMode && (
             <PinnedMessagesBar pinnedMessages={pinnedMessages} onUnpin={unpinMessage} onScrollToMessage={handleScrollToPinnedMessage} />
           )}
