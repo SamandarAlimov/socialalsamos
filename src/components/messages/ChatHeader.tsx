@@ -74,6 +74,9 @@ export function ChatHeader({
   isAdmin,
 }: ChatHeaderProps) {
   const { user } = useAuth();
+  const [blockOpen, setBlockOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const { blockedIds, refresh: refreshBlocks } = useBlockedUsers();
   
   // Check if this is a self-chat (conversation with yourself)
   const isSelfChat = conversation.is_self_chat || 
@@ -84,6 +87,8 @@ export function ChatHeader({
   const { isUserOnline } = useOnlinePresence();
   const realtimeIsOnline = otherUserId ? isUserOnline(otherUserId) : false;
   const realtimeLastSeen = conversation.other_participant?.last_seen || null;
+  const isBlocked = otherUserId ? blockedIds.has(otherUserId) : false;
+  useEffect(() => { refreshBlocks(); }, [otherUserId, refreshBlocks]);
 
   const getName = () => {
     if (isSelfChat) {
