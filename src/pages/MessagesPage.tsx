@@ -347,15 +347,14 @@ export default function MessagesPage() {
     { id: 'archived', label: 'Archived' },
   ];
 
-  // Filter conversations - for requests tab, only show message requests (not yet accepted)
+  // Filter conversations - separate requests (is_request=true) from normal chats.
   const filteredConversations = conversations.filter(conv => {
-    // For requests tab, filter to only show incoming requests (placeholder logic - needs backend support)
+    const isReq = Boolean((conv as any).is_request);
     if (activeTab === 'requests') {
-      // This would require a field like `is_request` in the database
-      // For now, return empty to show "No message requests"
-      return false;
+      if (!isReq) return false;
+    } else {
+      if (isReq) return false;
     }
-    
     const name = conv.type === 'private' 
       ? conv.other_participant?.display_name || conv.other_participant?.username 
       : conv.name;
