@@ -16,13 +16,20 @@ import {
   Users2,
   Clock,
   Bookmark,
+  Ban,
+  Flag,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Conversation } from '@/hooks/useMessages';
 import { cn } from '@/lib/utils';
 import { formatLastSeen } from '@/utils/formatLastSeen';
 import { useOnlinePresence } from '@/contexts/OnlinePresenceContext';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBlockedUsers } from '@/hooks/useMessageSafety';
+import { BlockConfirmDialog } from './BlockConfirmDialog';
+import { ReportDialog } from './ReportDialog';
+import { EncryptedIndicator } from './EncryptedIndicator';
 import {
   DropdownMenu,
   DropdownMenuContent,
