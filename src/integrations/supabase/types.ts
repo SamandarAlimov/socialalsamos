@@ -263,6 +263,30 @@ export type Database = {
         }
         Relationships: []
       }
+      blocked_users: {
+        Row: {
+          blocked_id: string
+          blocker_id: string
+          created_at: string
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          blocked_id: string
+          blocker_id: string
+          created_at?: string
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          blocked_id?: string
+          blocker_id?: string
+          created_at?: string
+          id?: string
+          reason?: string | null
+        }
+        Relationships: []
+      }
       call_history: {
         Row: {
           call_id: string
@@ -707,6 +731,7 @@ export type Database = {
           is_archived: boolean | null
           is_muted: boolean | null
           is_pinned: boolean | null
+          is_request: boolean
           joined_at: string | null
           last_read_at: string | null
           role: string | null
@@ -718,6 +743,7 @@ export type Database = {
           is_archived?: boolean | null
           is_muted?: boolean | null
           is_pinned?: boolean | null
+          is_request?: boolean
           joined_at?: string | null
           last_read_at?: string | null
           role?: string | null
@@ -729,6 +755,7 @@ export type Database = {
           is_archived?: boolean | null
           is_muted?: boolean | null
           is_pinned?: boolean | null
+          is_request?: boolean
           joined_at?: string | null
           last_read_at?: string | null
           role?: string | null
@@ -1234,6 +1261,57 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      message_reports: {
+        Row: {
+          created_at: string
+          details: string | null
+          id: string
+          reason: string
+          reporter_id: string
+          status: string
+          target_conversation_id: string | null
+          target_message_id: string | null
+          target_user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          details?: string | null
+          id?: string
+          reason: string
+          reporter_id: string
+          status?: string
+          target_conversation_id?: string | null
+          target_message_id?: string | null
+          target_user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          details?: string | null
+          id?: string
+          reason?: string
+          reporter_id?: string
+          status?: string
+          target_conversation_id?: string | null
+          target_message_id?: string | null
+          target_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_reports_target_conversation_id_fkey"
+            columns: ["target_conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_reports_target_message_id_fkey"
+            columns: ["target_message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
             referencedColumns: ["id"]
           },
         ]
@@ -2897,6 +2975,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      block_user: { Args: { _reason?: string; _target: string }; Returns: Json }
       get_admin_age_stats: { Args: never; Returns: Json }
       get_admin_country_stats: { Args: never; Returns: Json }
       get_admin_dau_trend: { Args: never; Returns: Json }
@@ -2939,6 +3018,21 @@ export type Database = {
         }
         Returns: Json
       }
+      report_content: {
+        Args: {
+          _details?: string
+          _reason: string
+          _target_conversation_id: string
+          _target_message_id: string
+          _target_user_id: string
+        }
+        Returns: Json
+      }
+      respond_to_message_request: {
+        Args: { _accept: boolean; _conversation_id: string }
+        Returns: Json
+      }
+      unblock_user: { Args: { _target: string }; Returns: Json }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
