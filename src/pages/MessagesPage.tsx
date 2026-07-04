@@ -50,6 +50,7 @@ import { TypingIndicator } from '@/components/messages/TypingIndicator';
 import { GroupMemberManagement } from '@/components/messages/GroupMemberManagement';
 import { ScheduledMessagesSheet } from '@/components/messages/ScheduledMessagesSheet';
 import { MiniAudioPlayer } from '@/components/messages/MiniAudioPlayer';
+import { MessageRequestBanner } from '@/components/messages/MessageRequestBanner';
 import { useChannels, Channel } from '@/hooks/useChannels';
 import { ChannelView } from '@/components/channels/ChannelView';
 import { CreateChannelDialog } from '@/components/channels/CreateChannelDialog';
@@ -1296,6 +1297,15 @@ export default function MessagesPage() {
             />
           )}
           
+          {(selectedConversation as any).is_request && (
+            <MessageRequestBanner
+              conversationId={selectedConversation.id}
+              otherUserId={selectedConversation.other_participant?.id}
+              otherUserName={selectedConversation.other_participant?.display_name || selectedConversation.other_participant?.username || undefined}
+              onResolved={() => { refreshConversations(); setSelectedConversation(null); setShowMobileChat(false); }}
+            />
+          )}
+
           {pinnedMessages.length > 0 && !isSelectionMode && (
             <PinnedMessagesBar pinnedMessages={pinnedMessages} onUnpin={unpinMessage} onScrollToMessage={handleScrollToPinnedMessage} />
           )}
