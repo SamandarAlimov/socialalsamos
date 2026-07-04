@@ -237,6 +237,22 @@ export function MessageInput({
         </div>
       )}
 
+      {/* PII (card / password / CVV) warning */}
+      {(() => {
+        const pii = detectPII(message);
+        if (!pii) return null;
+        return (
+          <div className="flex items-start gap-2 mb-2 px-3 py-2 bg-destructive/10 border border-destructive/30 rounded-lg text-xs">
+            <ShieldAlert className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="font-medium text-destructive">{pii.hint}</p>
+              <p className="text-muted-foreground">Shaxsiy ma'lumotlarni chat orqali yubormang. Karta raqami, parol yoki tasdiqlash kodini hech qachon ulashmang.</p>
+            </div>
+          </div>
+        );
+      })()}
+
+
       {/* Pending Attachment Preview */}
       {pendingAttachment && (
         <div className="flex items-center gap-2 mb-2 px-3 py-2 bg-muted/50 rounded-lg">
