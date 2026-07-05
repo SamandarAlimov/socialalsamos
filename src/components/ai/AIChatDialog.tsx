@@ -10,7 +10,11 @@ import {
   Sparkles,
   Settings,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  Paperclip,
+  Loader2,
+  FileText,
+  Film,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +22,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAI } from '@/contexts/AIContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useFileUpload } from '@/hooks/useFileUpload';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -39,8 +44,11 @@ export function AIChatDialog() {
   const [showImageGen, setShowImageGen] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [timeLimitWarning, setTimeLimitWarning] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<Array<{ url: string; name: string; type: string }>>([]);
+  const { uploadFile, uploading, getFileType } = useFileUpload();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -58,11 +66,35 @@ export function AIChatDialog() {
   }, [messages]);
 
   const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
-    
-    const message = input.trim();
+    if ((!input.trim() && attachments.length === 0) || isLoading) return;
+
+    let message = input.trim();
+    if (attachments.length > 0) {
+      const attachmentText = attachments
+        .map(a => `[${a.type}] ${a.name}: ${a.url}`)
+        .join('\n');
+      message = message ? `${message}\n\n${attachmentText}` : attachmentText;
+    }
     setInput('');
+    setAttachments([]);
     await sendMessage(message);
+  };
+
+  const handleFilePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    for (const file of files) {
+      if (file.size > 20 * 1024 * 1024) {
+        toast.error(`${file.name}: 20MB dan katta`);
+        continue;
+      }
+      const res = await uploadFile(file);
+      if (res) {
+        setAttachments(prev => [...prev, { url: res.url, name: res.name, type: getFileType(res.type) }]);
+      } else {
+        toast.error(`${file.name} yuklanmadi`);
+      }
+    }
   };
 
   const handleGenerateImage = async () => {
