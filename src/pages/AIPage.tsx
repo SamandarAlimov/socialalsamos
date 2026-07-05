@@ -714,6 +714,39 @@ export default function AIPage() {
         {/* Input Area */}
         <div className="p-3 sm:p-4 bg-background/80 backdrop-blur-xl border-t border-border/20">
           <div className="max-w-3xl mx-auto">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt,.md,.xlsx,.xls,.pptx,.ppt,.csv,.json,.zip,.rar,.7z"
+              className="hidden"
+              onChange={handleFilePick}
+            />
+            {attachments.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {attachments.map((a, i) => (
+                  <div key={i} className="flex items-center gap-2 bg-muted/60 border border-border/50 rounded-lg pl-2 pr-1 py-1 text-xs max-w-[220px]">
+                    {a.type === 'image' ? (
+                      <img src={a.url} className="h-7 w-7 rounded object-cover" alt="" />
+                    ) : a.type === 'video' ? (
+                      <Film className="h-4 w-4 text-alsamos-orange shrink-0" />
+                    ) : a.type === 'audio' ? (
+                      <Music className="h-4 w-4 text-alsamos-orange shrink-0" />
+                    ) : (
+                      <FileText className="h-4 w-4 text-alsamos-orange shrink-0" />
+                    )}
+                    <span className="truncate">{a.name}</span>
+                    <button
+                      onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))}
+                      className="p-0.5 hover:bg-background rounded"
+                      aria-label="Olib tashlash"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className={cn(
               "relative rounded-2xl transition-all duration-300",
               "bg-card/80 border shadow-lg",
@@ -732,26 +765,31 @@ export default function AIPage() {
                 rows={1}
               />
               <div className="absolute right-2 bottom-2 flex items-center gap-1">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 rounded-lg text-muted-foreground hover:text-alsamos-orange"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading || isLoading || isGeneratingImage}
+                  title="Fayl biriktirish (rasm, video, audio, hujjat)"
+                >
+                  {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+                </Button>
                 {!isMobile && (
-                  <>
-                    <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground" disabled>
-                      <Paperclip className="h-4 w-4" />
-                    </Button>
-                    <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground" disabled>
-                      <Mic className="h-4 w-4" />
-                    </Button>
-                  </>
+                  <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground" disabled>
+                    <Mic className="h-4 w-4" />
+                  </Button>
                 )}
                 <Button size="icon"
                   className={cn("h-8 w-8 rounded-xl transition-all duration-200",
-                    input.trim() 
+                    (input.trim() || attachments.length > 0)
                       ? activeMode === 'imagine'
                         ? "bg-gradient-to-r from-pink-500 to-orange-500 text-white hover:opacity-90 shadow-md"
                         : "bg-gradient-to-r from-alsamos-orange to-alsamos-orange-dark text-white hover:opacity-90 shadow-md shadow-alsamos-orange/20"
                       : "bg-muted text-muted-foreground"
                   )}
                   onClick={activeMode === 'imagine' ? generateImage : sendMessage}
-                  disabled={!input.trim() || isLoading || isGeneratingImage}
+                  disabled={(!input.trim() && attachments.length === 0) || isLoading || isGeneratingImage}
                 >
                   {isLoading || isGeneratingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
                 </Button>
