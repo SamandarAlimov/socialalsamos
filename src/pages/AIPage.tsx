@@ -91,6 +91,26 @@ export default function AIPage() {
   const [forwardedPost, setForwardedPost] = useState<{ id: string; content?: string; authorName?: string; mediaUrl?: string } | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { uploadFile, uploading, getFileType } = useFileUpload();
+  const [attachments, setAttachments] = useState<Array<{ url: string; name: string; type: string }>>([]);
+
+  const handleFilePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    for (const file of files) {
+      if (file.size > 20 * 1024 * 1024) {
+        sonnerToast.error(`${file.name}: 20MB dan katta`);
+        continue;
+      }
+      const res = await uploadFile(file);
+      if (res) {
+        setAttachments(prev => [...prev, { url: res.url, name: res.name, type: getFileType(res.type) }]);
+      } else {
+        sonnerToast.error(`${file.name} yuklanmadi`);
+      }
+    }
+  };
 
   // Handle forwarded post from navigation state
   useEffect(() => {
