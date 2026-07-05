@@ -206,7 +206,7 @@ export function PostLikesViewsDialog({
           </div>
 
           <TabsContent value="likes" className="m-0">
-            <ScrollArea className="max-h-[55vh]">
+            <ScrollArea className="h-[55vh]">
               <div className="p-2">
                 {loadingLikes ? (
                   <SkeletonRows />
@@ -258,7 +258,7 @@ export function PostLikesViewsDialog({
           </TabsContent>
 
           <TabsContent value="views" className="m-0">
-            <ScrollArea className="max-h-[55vh]">
+            <ScrollArea className="h-[55vh]">
               <div className="p-2">
                 {loadingViews ? (
                   <SkeletonRows />
