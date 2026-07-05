@@ -240,11 +240,17 @@ export default function AIPage() {
   };
 
   const sendMessage = async () => {
-    if (!input.trim() || isLoading) return;
-    const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: input.trim(), timestamp: new Date() };
+    if ((!input.trim() && attachments.length === 0) || isLoading) return;
+    let content = input.trim();
+    if (attachments.length > 0) {
+      const attachmentText = attachments.map(a => `[${a.type}] ${a.name}: ${a.url}`).join('\n');
+      content = content ? `${content}\n\n${attachmentText}` : attachmentText;
+    }
+    const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content, timestamp: new Date() };
     const newMsgs = [...messages, userMsg];
     setMessages(newMsgs);
     setInput('');
+    setAttachments([]);
     setIsLoading(true);
     
     try {
