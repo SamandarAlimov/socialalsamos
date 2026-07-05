@@ -53,6 +53,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useFileUpload } from '@/hooks/useFileUpload';
+import { toast as sonnerToast } from 'sonner';
 
 interface Message {
   id: string;
