@@ -31,7 +31,10 @@ import {
   Code2,
   FileText,
   Lightbulb,
-  Globe
+  Globe,
+  Film,
+  Music,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
