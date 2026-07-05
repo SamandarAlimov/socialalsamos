@@ -265,8 +265,47 @@ export function AIChatDialog() {
         )}
 
         {/* Input */}
-        <div className="p-4 border-t border-border">
+        <div className="p-4 border-t border-border space-y-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={handleFilePick}
+          />
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {attachments.map((a, i) => (
+                <div key={i} className="flex items-center gap-2 bg-muted/60 rounded-lg pl-2 pr-1 py-1 text-xs max-w-[200px]">
+                  {a.type === 'image' ? (
+                    <img src={a.url} className="h-6 w-6 rounded object-cover" alt="" />
+                  ) : a.type === 'video' ? (
+                    <Film className="h-4 w-4 text-primary shrink-0" />
+                  ) : (
+                    <FileText className="h-4 w-4 text-primary shrink-0" />
+                  )}
+                  <span className="truncate">{a.name}</span>
+                  <button
+                    onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))}
+                    className="p-0.5 hover:bg-background rounded"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="flex-shrink-0"
+              title="Fayl biriktirish"
+            >
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+            </Button>
             <Button
               variant={showImageGen ? "secondary" : "ghost"}
               size="icon"
@@ -284,7 +323,7 @@ export function AIChatDialog() {
               disabled={isLoading}
               className="flex-1"
             />
-            <Button onClick={handleSend} disabled={isLoading || !input.trim()}>
+            <Button onClick={handleSend} disabled={isLoading || (!input.trim() && attachments.length === 0)}>
               <Send className="h-4 w-4" />
             </Button>
           </div>
