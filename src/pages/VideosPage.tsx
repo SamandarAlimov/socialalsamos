@@ -202,11 +202,6 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
               <span className="text-white text-[10px] font-semibold tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] leading-tight">
                 {formatNumber(video.likes_count || 0)}
               </span>
-              {(video.views_count || 0) > 0 && (
-                <span className="text-white/75 text-[9px] font-medium tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] leading-tight">
-                  {formatNumber(video.views_count || 0)}
-                </span>
-              )}
             </button>
           </div>
 
