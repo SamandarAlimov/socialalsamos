@@ -556,6 +556,45 @@ export default function MapPage() {
   }, [mapSelectionMode]);
 
   
+  // Real place search (Nominatim) — debounced
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setPlaceSearchResults([]);
+      setPlaceSearchOpen(false);
+      return;
+    }
+    setPlaceSearchLoading(true);
+    const timeout = setTimeout(async () => {
+      try {
+        const resp = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=8&addressdetails=1`,
+          { headers: { 'Accept-Language': 'uz,ru,en' } }
+        );
+        const data = resp.ok ? await resp.json() : [];
+        setPlaceSearchResults(
+          data.map((d: any) => ({ display_name: d.display_name, lat: parseFloat(d.lat), lon: parseFloat(d.lon) }))
+        );
+        setPlaceSearchOpen(true);
+      } catch {
+        setPlaceSearchResults([]);
+      } finally {
+        setPlaceSearchLoading(false);
+      }
+    }, 350);
+    return () => clearTimeout(timeout);
+  }, [searchQuery]);
+
+  const handlePickSearchResult = useCallback((r: { display_name: string; lat: number; lon: number }) => {
+    const name = r.display_name.split(',').slice(0, 2).join(',').trim();
+    setDestination({ lat: r.lat, lng: r.lon, name });
+    setShowDirections(true);
+    setMapCenter([r.lat, r.lon]);
+    setZoom(16);
+    setPlaceSearchOpen(false);
+    setSearchQuery(name);
+  }, []);
+
   // Filter users by search
   const filteredNearby = nearbyUsers.filter((u) =>
     u.profile?.display_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
