@@ -1185,8 +1185,11 @@ export default function MapPage() {
             >
               <Popup>
                 <div className="text-center min-w-[150px]">
-                  <div className="text-3xl mb-2">
-                    {place.place_type === 'home' ? '🏠' : place.place_type === 'work' ? '💼' : place.place_type === 'study' ? '📚' : '📍'}
+                  <div className="mx-auto mb-2 w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                    {place.place_type === 'home' ? <Home className="h-6 w-6" /> :
+                     place.place_type === 'work' ? <Briefcase className="h-6 w-6" /> :
+                     place.place_type === 'study' ? <BookOpen className="h-6 w-6" /> :
+                     <MapPin className="h-6 w-6" />}
                   </div>
                   <p className="font-medium">{place.name}</p>
                   <p className="text-xs text-muted-foreground">
