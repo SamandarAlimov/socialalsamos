@@ -280,6 +280,9 @@ export default function MapPage() {
   const [mapLayer, setMapLayer] = useState<MapLayer>('standard');
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [placeSearchResults, setPlaceSearchResults] = useState<Array<{ display_name: string; lat: number; lon: number }>>([]);
+  const [placeSearchOpen, setPlaceSearchOpen] = useState(false);
+  const [placeSearchLoading, setPlaceSearchLoading] = useState(false);
   const [showNearby, setShowNearby] = useState(true);
   const [showFollowing, setShowFollowing] = useState(true);
   const [nearbyRadius, setNearbyRadius] = useState(5);
