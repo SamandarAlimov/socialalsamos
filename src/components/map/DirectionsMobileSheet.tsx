@@ -383,6 +383,8 @@ export function DirectionsMobileSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent 
         side="bottom" 
+        onInteractOutside={(e) => e.preventDefault()}
+        onPointerDownOutside={(e) => e.preventDefault()}
         className={cn(
           "rounded-t-3xl px-0 pb-20 flex flex-col z-[9999] md:hidden overflow-hidden",
           getSheetHeight()
