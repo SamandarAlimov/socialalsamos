@@ -960,8 +960,8 @@ export function DirectionsPanel({
                 onClick={() => onStepSelected?.(step.maneuver.location)}
               >
                 <div className="flex flex-col items-center shrink-0">
-                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
-                    {getManeuverIcon(step.maneuver.type, step.maneuver.modifier)}
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                    <ManeuverIcon type={step.maneuver.type} modifier={step.maneuver.modifier} className="h-4 w-4" />
                   </div>
                   {index < selectedRoute.steps.length - 1 && (
                     <div className="w-0.5 h-6 bg-border my-1" />
