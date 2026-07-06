@@ -988,8 +988,8 @@ export function DirectionsPanel({
           {/* Current Step - Large Display */}
           <div className="p-6 bg-gradient-to-br from-primary/15 via-primary/10 to-primary/5">
             <div className="flex items-start gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center text-4xl shadow-lg">
-                {getManeuverIcon(currentStep.maneuver.type, currentStep.maneuver.modifier)}
+              <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center text-primary shadow-lg">
+                <ManeuverIcon type={currentStep.maneuver.type} modifier={currentStep.maneuver.modifier} className="h-9 w-9" />
               </div>
               <div className="flex-1">
                 <p className="text-xl font-bold mb-1">{currentStep.instruction}</p>
