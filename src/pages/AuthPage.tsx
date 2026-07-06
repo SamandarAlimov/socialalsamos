@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { Button } from '@/components/ui/button';
@@ -46,6 +46,9 @@ export default function AuthPage() {
   
   const { login, signup } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const rawNext = searchParams.get('next');
+  const nextPath = rawNext && rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/home';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,7 +65,7 @@ export default function AuthPage() {
         const { error } = await login(parsed.data.identifier, parsed.data.password);
         if (!error) {
           toast.success('Welcome back!');
-          navigate('/home');
+          navigate(nextPath);
         }
       } else {
         const parsed = signupSchema.safeParse({ fullName, username, identifier, password, confirmPassword });
@@ -74,7 +77,7 @@ export default function AuthPage() {
         const { error } = await signup(parsed.data.identifier, parsed.data.password, parsed.data.fullName, parsed.data.username);
         if (!error) {
           toast.success('Account created successfully!');
-          navigate('/home');
+          navigate(nextPath);
         }
       }
     } catch (error) {
