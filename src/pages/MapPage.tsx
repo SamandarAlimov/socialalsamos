@@ -123,48 +123,41 @@ const destinationIcon = L.divIcon({
   iconAnchor: [16, 32],
 });
 
-// Frequent place markers
+// Frequent place markers - professional SVG icons
 const createPlaceIcon = (placeType: 'home' | 'work' | 'study' | 'other', name: string) => {
-  const config = {
-    home: { icon: '🏠', color: '#22c55e', bgColor: '#dcfce7' },
-    work: { icon: '💼', color: '#3b82f6', bgColor: '#dbeafe' },
-    study: { icon: '📚', color: '#f59e0b', bgColor: '#fef3c7' },
-    other: { icon: '📍', color: '#8b5cf6', bgColor: '#ede9fe' },
+  const svgIcons: Record<string, string> = {
+    home: '<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+    work: '<rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
+    study: '<path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>',
+    other: '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
   };
-  
-  const { icon, color, bgColor } = config[placeType] || config.other;
-  
+  const colors: Record<string, string> = {
+    home: '#f97316',
+    work: '#3b82f6',
+    study: '#f59e0b',
+    other: '#8b5cf6',
+  };
+  const color = colors[placeType] || colors.other;
+  const svg = svgIcons[placeType] || svgIcons.other;
+
   return L.divIcon({
     className: 'place-marker',
     html: `
-      <div style="
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        transform: translateY(-50%);
-      ">
+      <div style="display:flex;flex-direction:column;align-items:center;transform:translateY(-50%);">
         <div style="
-          width: 40px;
-          height: 40px;
-          background: ${bgColor};
-          border: 3px solid ${color};
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 20px;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.25);
-        ">${icon}</div>
+          width:40px;height:40px;background:white;border:2px solid ${color};
+          border-radius:50%;display:flex;align-items:center;justify-content:center;
+          box-shadow:0 4px 12px rgba(0,0,0,0.2);color:${color};
+        ">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            ${svg}
+          </svg>
+        </div>
         <div style="
-          margin-top: 4px;
-          background: ${color};
-          color: white;
-          padding: 2px 8px;
-          border-radius: 10px;
-          font-size: 11px;
-          font-weight: 600;
-          white-space: nowrap;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+          margin-top:4px;background:${color};color:white;padding:2px 8px;
+          border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap;
+          box-shadow:0 2px 6px rgba(0,0,0,0.15);
         ">${name}</div>
       </div>
     `,
@@ -172,6 +165,29 @@ const createPlaceIcon = (placeType: 'home' | 'work' | 'study' | 'other', name: s
     iconAnchor: [20, 30],
   });
 };
+
+// Search result / picked location marker
+const searchPinIcon = L.divIcon({
+  className: 'search-pin-marker',
+  html: `
+    <div style="position:relative;transform:translateY(-100%);">
+      <div style="
+        width:36px;height:36px;background:#f97316;border:3px solid white;
+        border-radius:50% 50% 50% 0;transform:rotate(-45deg);
+        box-shadow:0 4px 12px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;
+      ">
+        <svg xmlns="http://www.w3.org/2000/svg" style="transform:rotate(45deg)" width="16" height="16" viewBox="0 0 24 24"
+             fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/>
+          <circle cx="12" cy="10" r="3"/>
+        </svg>
+      </div>
+    </div>
+  `,
+  iconSize: [36, 40],
+  iconAnchor: [18, 40],
+});
+
 
 type MapLayer = 'standard' | 'satellite' | 'terrain';
 
