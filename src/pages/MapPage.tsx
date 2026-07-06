@@ -47,6 +47,9 @@ import {
   Footprints,
   History,
   Crosshair,
+  Home,
+  Briefcase,
+  BookOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
