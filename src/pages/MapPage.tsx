@@ -519,37 +519,41 @@ export default function MapPage() {
     setZoom(17);
   }, []);
 
-  // Handle map click for location selection
+  // Handle map click for location selection OR quick destination pick (Yandex-style)
   const handleMapClick = useCallback(async (lat: number, lng: number) => {
-    if (!mapSelectionMode) return;
-    
     // Reverse geocode to get location name
+    let name = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
     try {
       const response = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
         { headers: { 'Accept-Language': 'uz,ru,en' } }
       );
-      
-      let name = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-      
       if (response.ok) {
         const data = await response.json();
         const parts = [];
         if (data.address?.road) parts.push(data.address.road);
         if (data.address?.house_number) parts.push(data.address.house_number);
         if (parts.length === 0 && data.display_name) {
-          name = data.display_name.split(',')[0];
+          name = data.display_name.split(',').slice(0, 2).join(',').trim();
         } else if (parts.length > 0) {
           name = parts.join(' ');
         }
       }
-      
-      setSelectedMapLocation({ lat, lng, name });
-      toast.success(`${mapSelectionMode === 'origin' ? 'Boshlang\'ich nuqta' : 'Manzil'} tanlandi: ${name}`);
-    } catch (error) {
-      setSelectedMapLocation({ lat, lng, name: `${lat.toFixed(5)}, ${lng.toFixed(5)}` });
+    } catch {
+      // keep coord fallback
     }
+
+    if (mapSelectionMode) {
+      setSelectedMapLocation({ lat, lng, name });
+      toast.success(`${mapSelectionMode === 'origin' ? "Boshlang'ich nuqta" : 'Manzil'} tanlandi: ${name}`);
+      return;
+    }
+
+    // Yandex-style: single click pins a destination without closing the panel
+    setDestination({ lat, lng, name });
+    setShowDirections(true);
   }, [mapSelectionMode]);
+
   
   // Filter users by search
   const filteredNearby = nearbyUsers.filter((u) =>
