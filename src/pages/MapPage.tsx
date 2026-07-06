@@ -890,8 +890,32 @@ export default function MapPage() {
         
         <div className="p-3 border-b border-border">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Qidirish..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+            <Input
+              placeholder="Joy, manzil yoki foydalanuvchi..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => placeSearchResults.length > 0 && setPlaceSearchOpen(true)}
+              onBlur={() => setTimeout(() => setPlaceSearchOpen(false), 200)}
+              className="pl-9"
+            />
+            {placeSearchOpen && (placeSearchLoading || placeSearchResults.length > 0) && (
+              <div className="absolute left-0 right-0 top-full mt-1 bg-popover border border-border rounded-lg shadow-xl max-h-80 overflow-auto z-50">
+                {placeSearchLoading && (
+                  <div className="p-3 text-sm text-muted-foreground">Qidirilmoqda…</div>
+                )}
+                {!placeSearchLoading && placeSearchResults.map((r, i) => (
+                  <button
+                    key={`${r.lat}-${r.lon}-${i}`}
+                    onMouseDown={(e) => { e.preventDefault(); handlePickSearchResult(r); }}
+                    className="w-full text-left px-3 py-2 hover:bg-muted/60 flex items-start gap-2 border-b border-border/40 last:border-0"
+                  >
+                    <MapPin className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                    <span className="text-sm line-clamp-2">{r.display_name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         
