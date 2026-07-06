@@ -43,13 +43,13 @@ import {
   useDirections, 
   formatDistance, 
   formatDuration, 
-  getManeuverIcon,
   type SearchResult,
   type RouteAlternative,
 } from '@/hooks/useDirections';
 import { useDirectionsHistory, type SavedPlace } from '@/hooks/useDirectionsHistory';
 import { useVoiceSearch } from '@/hooks/useVoiceSearch';
 import { TransportQuickBar, type TransportMode } from './TransportModePicker';
+import { ManeuverIcon } from './ManeuverIcon';
 import { toast } from 'sonner';
 
 type MapSelectionMode = 'origin' | 'destination' | null;
