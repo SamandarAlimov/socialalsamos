@@ -890,8 +890,8 @@ export function DirectionsMobileSheet({
                       key={index}
                       className="flex items-center gap-3 p-2.5 rounded-lg bg-muted/30"
                     >
-                      <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-base">
-                        {getManeuverIcon(step.maneuver.type, step.maneuver.modifier)}
+                      <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-foreground/80">
+                        <ManeuverIcon type={step.maneuver.type} modifier={step.maneuver.modifier} className="h-4 w-4" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm truncate">{step.instruction}</p>
