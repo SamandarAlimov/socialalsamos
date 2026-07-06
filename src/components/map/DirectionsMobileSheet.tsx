@@ -845,8 +845,8 @@ export function DirectionsMobileSheet({
               {/* Current Step - Large Display */}
               <div className="p-5 bg-gradient-to-br from-primary/15 via-primary/10 to-primary/5">
                 <div className="flex items-start gap-4">
-                  <div className="w-14 h-14 rounded-2xl bg-primary/20 flex items-center justify-center text-3xl shadow-lg">
-                    {getManeuverIcon(currentStep.maneuver.type, currentStep.maneuver.modifier)}
+                  <div className="w-14 h-14 rounded-2xl bg-primary/20 flex items-center justify-center text-primary shadow-lg">
+                    <ManeuverIcon type={currentStep.maneuver.type} modifier={currentStep.maneuver.modifier} className="h-8 w-8" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-lg font-bold mb-1 truncate">{currentStep.instruction}</p>
