@@ -47,6 +47,9 @@ import {
   Footprints,
   History,
   Crosshair,
+  Home,
+  Briefcase,
+  BookOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -123,48 +126,41 @@ const destinationIcon = L.divIcon({
   iconAnchor: [16, 32],
 });
 
-// Frequent place markers
+// Frequent place markers - professional SVG icons
 const createPlaceIcon = (placeType: 'home' | 'work' | 'study' | 'other', name: string) => {
-  const config = {
-    home: { icon: '🏠', color: '#22c55e', bgColor: '#dcfce7' },
-    work: { icon: '💼', color: '#3b82f6', bgColor: '#dbeafe' },
-    study: { icon: '📚', color: '#f59e0b', bgColor: '#fef3c7' },
-    other: { icon: '📍', color: '#8b5cf6', bgColor: '#ede9fe' },
+  const svgIcons: Record<string, string> = {
+    home: '<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+    work: '<rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
+    study: '<path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>',
+    other: '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
   };
-  
-  const { icon, color, bgColor } = config[placeType] || config.other;
-  
+  const colors: Record<string, string> = {
+    home: '#f97316',
+    work: '#3b82f6',
+    study: '#f59e0b',
+    other: '#8b5cf6',
+  };
+  const color = colors[placeType] || colors.other;
+  const svg = svgIcons[placeType] || svgIcons.other;
+
   return L.divIcon({
     className: 'place-marker',
     html: `
-      <div style="
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        transform: translateY(-50%);
-      ">
+      <div style="display:flex;flex-direction:column;align-items:center;transform:translateY(-50%);">
         <div style="
-          width: 40px;
-          height: 40px;
-          background: ${bgColor};
-          border: 3px solid ${color};
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 20px;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.25);
-        ">${icon}</div>
+          width:40px;height:40px;background:white;border:2px solid ${color};
+          border-radius:50%;display:flex;align-items:center;justify-content:center;
+          box-shadow:0 4px 12px rgba(0,0,0,0.2);color:${color};
+        ">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            ${svg}
+          </svg>
+        </div>
         <div style="
-          margin-top: 4px;
-          background: ${color};
-          color: white;
-          padding: 2px 8px;
-          border-radius: 10px;
-          font-size: 11px;
-          font-weight: 600;
-          white-space: nowrap;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+          margin-top:4px;background:${color};color:white;padding:2px 8px;
+          border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap;
+          box-shadow:0 2px 6px rgba(0,0,0,0.15);
         ">${name}</div>
       </div>
     `,
@@ -172,6 +168,29 @@ const createPlaceIcon = (placeType: 'home' | 'work' | 'study' | 'other', name: s
     iconAnchor: [20, 30],
   });
 };
+
+// Search result / picked location marker
+const searchPinIcon = L.divIcon({
+  className: 'search-pin-marker',
+  html: `
+    <div style="position:relative;transform:translateY(-100%);">
+      <div style="
+        width:36px;height:36px;background:#f97316;border:3px solid white;
+        border-radius:50% 50% 50% 0;transform:rotate(-45deg);
+        box-shadow:0 4px 12px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;
+      ">
+        <svg xmlns="http://www.w3.org/2000/svg" style="transform:rotate(45deg)" width="16" height="16" viewBox="0 0 24 24"
+             fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/>
+          <circle cx="12" cy="10" r="3"/>
+        </svg>
+      </div>
+    </div>
+  `,
+  iconSize: [36, 40],
+  iconAnchor: [18, 40],
+});
+
 
 type MapLayer = 'standard' | 'satellite' | 'terrain';
 
@@ -208,9 +227,7 @@ function MapEventHandler({
     if (!onMapClick) return;
 
     const handleClick = (e: L.LeafletMouseEvent) => {
-      if (isSelecting) {
-        onMapClick(e.latlng.lat, e.latlng.lng);
-      }
+      onMapClick(e.latlng.lat, e.latlng.lng);
     };
 
     map.on('click', handleClick);
@@ -266,6 +283,9 @@ export default function MapPage() {
   const [mapLayer, setMapLayer] = useState<MapLayer>('standard');
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [placeSearchResults, setPlaceSearchResults] = useState<Array<{ display_name: string; lat: number; lon: number }>>([]);
+  const [placeSearchOpen, setPlaceSearchOpen] = useState(false);
+  const [placeSearchLoading, setPlaceSearchLoading] = useState(false);
   const [showNearby, setShowNearby] = useState(true);
   const [showFollowing, setShowFollowing] = useState(true);
   const [nearbyRadius, setNearbyRadius] = useState(5);
@@ -503,38 +523,81 @@ export default function MapPage() {
     setZoom(17);
   }, []);
 
-  // Handle map click for location selection
+  // Handle map click for location selection OR quick destination pick (Yandex-style)
   const handleMapClick = useCallback(async (lat: number, lng: number) => {
-    if (!mapSelectionMode) return;
-    
     // Reverse geocode to get location name
+    let name = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
     try {
       const response = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
         { headers: { 'Accept-Language': 'uz,ru,en' } }
       );
-      
-      let name = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-      
       if (response.ok) {
         const data = await response.json();
         const parts = [];
         if (data.address?.road) parts.push(data.address.road);
         if (data.address?.house_number) parts.push(data.address.house_number);
         if (parts.length === 0 && data.display_name) {
-          name = data.display_name.split(',')[0];
+          name = data.display_name.split(',').slice(0, 2).join(',').trim();
         } else if (parts.length > 0) {
           name = parts.join(' ');
         }
       }
-      
-      setSelectedMapLocation({ lat, lng, name });
-      toast.success(`${mapSelectionMode === 'origin' ? 'Boshlang\'ich nuqta' : 'Manzil'} tanlandi: ${name}`);
-    } catch (error) {
-      setSelectedMapLocation({ lat, lng, name: `${lat.toFixed(5)}, ${lng.toFixed(5)}` });
+    } catch {
+      // keep coord fallback
     }
+
+    if (mapSelectionMode) {
+      setSelectedMapLocation({ lat, lng, name });
+      toast.success(`${mapSelectionMode === 'origin' ? "Boshlang'ich nuqta" : 'Manzil'} tanlandi: ${name}`);
+      return;
+    }
+
+    // Yandex-style: single click pins a destination without closing the panel
+    setDestination({ lat, lng, name });
+    setShowDirections(true);
   }, [mapSelectionMode]);
+
   
+  // Real place search (Nominatim) — debounced
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setPlaceSearchResults([]);
+      setPlaceSearchOpen(false);
+      return;
+    }
+    setPlaceSearchLoading(true);
+    const timeout = setTimeout(async () => {
+      try {
+        const resp = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=8&addressdetails=1`,
+          { headers: { 'Accept-Language': 'uz,ru,en' } }
+        );
+        const data = resp.ok ? await resp.json() : [];
+        setPlaceSearchResults(
+          data.map((d: any) => ({ display_name: d.display_name, lat: parseFloat(d.lat), lon: parseFloat(d.lon) }))
+        );
+        setPlaceSearchOpen(true);
+      } catch {
+        setPlaceSearchResults([]);
+      } finally {
+        setPlaceSearchLoading(false);
+      }
+    }, 350);
+    return () => clearTimeout(timeout);
+  }, [searchQuery]);
+
+  const handlePickSearchResult = useCallback((r: { display_name: string; lat: number; lon: number }) => {
+    const name = r.display_name.split(',').slice(0, 2).join(',').trim();
+    setDestination({ lat: r.lat, lng: r.lon, name });
+    setShowDirections(true);
+    setMapCenter([r.lat, r.lon]);
+    setZoom(16);
+    setPlaceSearchOpen(false);
+    setSearchQuery(name);
+  }, []);
+
   // Filter users by search
   const filteredNearby = nearbyUsers.filter((u) =>
     u.profile?.display_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -830,8 +893,32 @@ export default function MapPage() {
         
         <div className="p-3 border-b border-border">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Qidirish..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+            <Input
+              placeholder="Joy, manzil yoki foydalanuvchi..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => placeSearchResults.length > 0 && setPlaceSearchOpen(true)}
+              onBlur={() => setTimeout(() => setPlaceSearchOpen(false), 200)}
+              className="pl-9"
+            />
+            {placeSearchOpen && (placeSearchLoading || placeSearchResults.length > 0) && (
+              <div className="absolute left-0 right-0 top-full mt-1 bg-popover border border-border rounded-lg shadow-xl max-h-80 overflow-auto z-50">
+                {placeSearchLoading && (
+                  <div className="p-3 text-sm text-muted-foreground">Qidirilmoqda…</div>
+                )}
+                {!placeSearchLoading && placeSearchResults.map((r, i) => (
+                  <button
+                    key={`${r.lat}-${r.lon}-${i}`}
+                    onMouseDown={(e) => { e.preventDefault(); handlePickSearchResult(r); }}
+                    className="w-full text-left px-3 py-2 hover:bg-muted/60 flex items-start gap-2 border-b border-border/40 last:border-0"
+                  >
+                    <MapPin className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                    <span className="text-sm line-clamp-2">{r.display_name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         
@@ -1101,8 +1188,11 @@ export default function MapPage() {
             >
               <Popup>
                 <div className="text-center min-w-[150px]">
-                  <div className="text-3xl mb-2">
-                    {place.place_type === 'home' ? '🏠' : place.place_type === 'work' ? '💼' : place.place_type === 'study' ? '📚' : '📍'}
+                  <div className="mx-auto mb-2 w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                    {place.place_type === 'home' ? <Home className="h-6 w-6" /> :
+                     place.place_type === 'work' ? <Briefcase className="h-6 w-6" /> :
+                     place.place_type === 'study' ? <BookOpen className="h-6 w-6" /> :
+                     <MapPin className="h-6 w-6" />}
                   </div>
                   <p className="font-medium">{place.name}</p>
                   <p className="text-xs text-muted-foreground">

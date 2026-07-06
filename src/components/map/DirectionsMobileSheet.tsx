@@ -47,13 +47,13 @@ import {
   useDirections, 
   formatDistance, 
   formatDuration, 
-  getManeuverIcon,
   type SearchResult,
   type RouteAlternative,
 } from '@/hooks/useDirections';
 import { useDirectionsHistory, type SavedPlace } from '@/hooks/useDirectionsHistory';
 import { useVoiceSearch } from '@/hooks/useVoiceSearch';
 import { TransportQuickBar, type TransportMode } from './TransportModePicker';
+import { ManeuverIcon } from './ManeuverIcon';
 import { toast } from 'sonner';
 
 type MapSelectionMode = 'origin' | 'destination' | null;
@@ -383,6 +383,8 @@ export function DirectionsMobileSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent 
         side="bottom" 
+        onInteractOutside={(e) => e.preventDefault()}
+        onPointerDownOutside={(e) => e.preventDefault()}
         className={cn(
           "rounded-t-3xl px-0 pb-20 flex flex-col z-[9999] md:hidden overflow-hidden",
           getSheetHeight()
@@ -816,8 +818,8 @@ export function DirectionsMobileSheet({
                       onClick={() => onStepSelected?.(step.maneuver.location)}
                     >
                       <div className="flex flex-col items-center shrink-0">
-                        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
-                          {getManeuverIcon(step.maneuver.type, step.maneuver.modifier)}
+                        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                          <ManeuverIcon type={step.maneuver.type} modifier={step.maneuver.modifier} className="h-4 w-4" />
                         </div>
                         {index < selectedRoute.steps.length - 1 && (
                           <div className="w-0.5 h-5 bg-border my-1" />
@@ -845,8 +847,8 @@ export function DirectionsMobileSheet({
               {/* Current Step - Large Display */}
               <div className="p-5 bg-gradient-to-br from-primary/15 via-primary/10 to-primary/5">
                 <div className="flex items-start gap-4">
-                  <div className="w-14 h-14 rounded-2xl bg-primary/20 flex items-center justify-center text-3xl shadow-lg">
-                    {getManeuverIcon(currentStep.maneuver.type, currentStep.maneuver.modifier)}
+                  <div className="w-14 h-14 rounded-2xl bg-primary/20 flex items-center justify-center text-primary shadow-lg">
+                    <ManeuverIcon type={currentStep.maneuver.type} modifier={currentStep.maneuver.modifier} className="h-8 w-8" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-lg font-bold mb-1 truncate">{currentStep.instruction}</p>
@@ -890,8 +892,8 @@ export function DirectionsMobileSheet({
                       key={index}
                       className="flex items-center gap-3 p-2.5 rounded-lg bg-muted/30"
                     >
-                      <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-base">
-                        {getManeuverIcon(step.maneuver.type, step.maneuver.modifier)}
+                      <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-foreground/80">
+                        <ManeuverIcon type={step.maneuver.type} modifier={step.maneuver.modifier} className="h-4 w-4" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm truncate">{step.instruction}</p>
