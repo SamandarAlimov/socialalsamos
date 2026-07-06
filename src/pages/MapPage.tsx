@@ -224,9 +224,7 @@ function MapEventHandler({
     if (!onMapClick) return;
 
     const handleClick = (e: L.LeafletMouseEvent) => {
-      if (isSelecting) {
-        onMapClick(e.latlng.lat, e.latlng.lng);
-      }
+      onMapClick(e.latlng.lat, e.latlng.lng);
     };
 
     map.on('click', handleClick);
