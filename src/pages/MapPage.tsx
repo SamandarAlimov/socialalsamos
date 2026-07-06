@@ -65,7 +65,7 @@ import { DirectionsMobileSheet } from '@/components/map/DirectionsMobileSheet';
 import { LocationHistoryPanel } from '@/components/map/LocationHistoryPanel';
 import { LocationHistoryMobileSheet } from '@/components/map/LocationHistoryMobileSheet';
 import { useLocationTracking, DailyRoute } from '@/hooks/useLocationTracking';
-import { type RouteAlternative, formatDistance, formatDuration } from '@/hooks/useDirections';
+import { type RouteAlternative, formatDistance, formatDuration, useDirections } from '@/hooks/useDirections';
 
 // Fix default marker icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
