@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { GlobalCallProvider } from "@/contexts/GlobalCallContext";
 import { OnlinePresenceProvider } from "@/contexts/OnlinePresenceContext";
@@ -29,6 +29,7 @@ import AdminPage from "./pages/AdminPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import StoryArchivePage from "./pages/StoryArchivePage";
 import AIPage from "./pages/AIPage";
+import OAuthConsent from "./pages/OAuthConsent";
 import ActivityPage from "./pages/ActivityPage";
 import AdsPage from "./pages/AdsPage";
 import ChannelsPage from "./pages/ChannelsPage";
@@ -56,10 +57,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return isAuthenticated ? <>{children}</> : <Navigate to="/" replace />;
 }
 
-// Auth route - redirects to home if already logged in
+// Auth route - redirects to home (or ?next) if already logged in
 function AuthRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
-  
+  const [searchParams] = useSearchParams();
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -67,8 +69,13 @@ function AuthRoute({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-  
-  return isAuthenticated ? <Navigate to="/home" replace /> : <>{children}</>;
+
+  if (isAuthenticated) {
+    const next = searchParams.get('next');
+    const safeNext = next && next.startsWith('/') && !next.startsWith('//') ? next : '/home';
+    return <Navigate to={safeNext} replace />;
+  }
+  return <>{children}</>;
 }
 
 // Placeholder pages
@@ -94,6 +101,10 @@ function AppRoutes() {
           <AuthPage />
         </AuthRoute>
       } />
+
+      {/* OAuth consent page (public — handles its own auth check) */}
+      <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
+
       
       {/* Protected App Routes */}
       <Route element={<AppLayout />}>
