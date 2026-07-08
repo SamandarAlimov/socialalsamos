@@ -20,3 +20,36 @@ verify_jwt = false
 
 [functions.send-scheduled-messages]
 verify_jwt = false
+
+[functions.api-gateway]
+verify_jwt = false
+
+[functions.oauth-authorize]
+verify_jwt = false
+
+[functions.oauth-clients]
+verify_jwt = false
+
+[functions.oauth-revoke]
+verify_jwt = false
+
+[functions.oauth-token]
+verify_jwt = false
+
+[functions.oauth-userinfo]
+verify_jwt = false
+
+[functions.openid-configuration]
+verify_jwt = false
+
+[functions.rate-limit-notification]
+verify_jwt = false
+
+[functions.sso-session]
+verify_jwt = false
+
+[functions.smart-reply]
+verify_jwt = false
+
+[functions.summarize-email]
+verify_jwt = false
