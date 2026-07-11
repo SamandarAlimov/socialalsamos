@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { uploadMedia } from '@/lib/mediaUpload';
 
 interface UploadResult {
   url: string;
@@ -20,34 +20,21 @@ export function useFileUpload() {
     setUploading(true);
     setProgress(0);
 
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-
-    const { data, error } = await supabase.storage
-      .from('message-attachments')
-      .upload(fileName, file, {
-        cacheControl: '3600',
-        upsert: false,
-      });
-
-    setUploading(false);
-    setProgress(100);
-
-    if (error) {
+    try {
+      const uploaded = await uploadMedia(file, { type: 'chat', visibility: 'public' });
+      setProgress(100);
+      return {
+        url: uploaded.url,
+        type: file.type,
+        name: file.name,
+        size: file.size,
+      };
+    } catch (error) {
       console.error('Upload error:', error);
       return null;
+    } finally {
+      setUploading(false);
     }
-
-    const { data: urlData } = supabase.storage
-      .from('message-attachments')
-      .getPublicUrl(data.path);
-
-    return {
-      url: urlData.publicUrl,
-      type: file.type,
-      name: file.name,
-      size: file.size,
-    };
   }, [user]);
 
   const uploadMultiple = useCallback(async (files: File[]): Promise<UploadResult[]> => {

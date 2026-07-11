@@ -9,6 +9,7 @@ import { BadgeCheck, Loader2, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { uploadMedia } from '@/lib/mediaUpload';
 
 interface VerificationRequestDialogProps {
   open: boolean;
@@ -51,18 +52,8 @@ export function VerificationRequestDialog({ open, onOpenChange }: VerificationRe
 
       // Upload ID document if provided
       if (idDocument) {
-        const fileName = `verification/${user.id}/${Date.now()}-${idDocument.name}`;
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('message-attachments')
-          .upload(fileName, idDocument);
-
-        if (uploadError) throw uploadError;
-
-        const { data: urlData } = supabase.storage
-          .from('message-attachments')
-          .getPublicUrl(uploadData.path);
-
-        idDocumentUrl = urlData.publicUrl;
+        const uploaded = await uploadMedia(idDocument, { type: 'verification', visibility: 'private' });
+        idDocumentUrl = uploaded.key;
       }
 
       // Create verification request

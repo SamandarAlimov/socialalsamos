@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { uploadMedia } from "@/lib/mediaUpload";
 
 interface MiniApp {
   id: string;
@@ -246,23 +247,15 @@ export default function MiniAppsPage() {
 
     if (iconFile) {
       setUploadingIcon(true);
-      const fileExt = iconFile.name.split('.').pop();
-      const filePath = `${user.id}/${crypto.randomUUID()}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage
-        .from('mini-app-icons')
-        .upload(filePath, iconFile);
-
-      if (uploadError) {
-        toast({ title: "Xato", description: "Rasm yuklashda xatolik: " + uploadError.message, variant: "destructive" });
+      try {
+        const uploaded = await uploadMedia(iconFile, { type: 'miniapp', visibility: 'public' });
+        finalIconUrl = uploaded.url;
+      } catch (error: any) {
+        toast({ title: "Xato", description: "Rasm yuklashda xatolik: " + (error.message || 'upload failed'), variant: "destructive" });
         setCreating(false);
         setUploadingIcon(false);
         return;
       }
-
-      const { data: publicData } = supabase.storage
-        .from('mini-app-icons')
-        .getPublicUrl(filePath);
-      finalIconUrl = publicData.publicUrl;
       setUploadingIcon(false);
     }
 
@@ -331,20 +324,14 @@ export default function MiniAppsPage() {
     let finalIconUrl = editForm.icon_url.trim() || null;
 
     if (editIconFile) {
-      const fileExt = editIconFile.name.split('.').pop();
-      const filePath = `${user.id}/${crypto.randomUUID()}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage
-        .from('mini-app-icons')
-        .upload(filePath, editIconFile);
-
-      if (uploadError) {
-        toast({ title: "Xato", description: "Rasm yuklashda xatolik: " + uploadError.message, variant: "destructive" });
+      try {
+        const uploaded = await uploadMedia(editIconFile, { type: 'miniapp', visibility: 'public' });
+        finalIconUrl = uploaded.url;
+      } catch (error: any) {
+        toast({ title: "Xato", description: "Rasm yuklashda xatolik: " + (error.message || 'upload failed'), variant: "destructive" });
         setUpdating(false);
         return;
       }
-
-      const { data: publicData } = supabase.storage.from('mini-app-icons').getPublicUrl(filePath);
-      finalIconUrl = publicData.publicUrl;
     }
 
     const { error } = await supabase.from("mini_apps").update({

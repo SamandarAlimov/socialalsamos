@@ -8,10 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { supabase } from '@/integrations/supabase/client';
 import { useCategories, useProductActions } from '@/hooks/useMarketplace';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
+import { uploadMedia } from '@/lib/mediaUpload';
 
 interface CreateProductDialogProps {
   open: boolean;
@@ -54,18 +54,11 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
     const uploadedUrls: string[] = [];
 
     for (const file of Array.from(files)) {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
-
-      const { error } = await supabase.storage
-        .from('message-attachments')
-        .upload(fileName, file);
-
-      if (!error) {
-        const { data } = supabase.storage
-          .from('message-attachments')
-          .getPublicUrl(fileName);
-        uploadedUrls.push(data.publicUrl);
+      try {
+        const uploaded = await uploadMedia(file, { type: 'product', visibility: 'public' });
+        uploadedUrls.push(uploaded.url);
+      } catch (error) {
+        console.error('Product image upload failed:', error);
       }
     }
 

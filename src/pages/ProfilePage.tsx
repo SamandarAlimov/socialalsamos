@@ -13,6 +13,7 @@ import { PullToRefresh } from '@/components/PullToRefresh';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { uploadMedia } from '@/lib/mediaUpload';
 import { 
   Edit3, 
   Grid, 
@@ -88,21 +89,11 @@ export default function ProfilePage() {
 
     setUploadingCover(true);
     try {
-      const fileExt = file.name.split('.').pop();
-      const filePath = `${user.id}/cover-${Date.now()}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage
-        .from('message-attachments')
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage
-        .from('message-attachments')
-        .getPublicUrl(filePath);
+      const uploaded = await uploadMedia(file, { type: 'avatar', visibility: 'public' });
 
       await supabase
         .from('profiles')
-        .update({ cover_url: urlData.publicUrl })
+        .update({ cover_url: uploaded.url })
         .eq('id', user.id);
 
       toast({ title: "Muvaffaqiyatli", description: "Cover rasm yangilandi" });

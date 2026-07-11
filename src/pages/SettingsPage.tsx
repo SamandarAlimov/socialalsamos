@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useUserSettings } from '@/hooks/useUserSettings';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { supabase } from '@/integrations/supabase/client';
+import { uploadMedia } from '@/lib/mediaUpload';
 import { 
   User, 
   Bell, 
@@ -240,23 +241,14 @@ export default function SettingsPage() {
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${user.id}/avatar-${Date.now()}.${fileExt}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('message-attachments')
-      .upload(fileName, file);
-
-    if (uploadError) {
+    let avatarUrl: string;
+    try {
+      const uploaded = await uploadMedia(file, { type: 'avatar', visibility: 'public' });
+      avatarUrl = uploaded.url;
+    } catch (error) {
       toast({ title: 'Error', description: 'Failed to upload avatar', variant: 'destructive' });
       return;
     }
-
-    const { data: urlData } = supabase.storage
-      .from('message-attachments')
-      .getPublicUrl(fileName);
-
-    const avatarUrl = urlData.publicUrl;
     
     await supabase
       .from('profiles')

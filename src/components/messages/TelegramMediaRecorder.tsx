@@ -12,7 +12,7 @@ import {
   SwitchCamera
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/integrations/supabase/client';
+import { uploadMedia } from '@/lib/mediaUpload';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface TelegramMediaRecorderProps {
@@ -255,20 +255,12 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     
     setIsUploading(true);
     try {
-      const ext = 'webm';
-      const fileName = `${mode}_${Date.now()}.${ext}`;
-      
-      const { data, error } = await supabase.storage
-        .from('message-attachments')
-        .upload(fileName, mediaBlob, { contentType: mediaBlob.type });
-      
-      if (error) throw error;
-      
-      const { data: publicData } = supabase.storage
-        .from('message-attachments')
-        .getPublicUrl(data.path);
-      
-      onSend(publicData.publicUrl, duration, mode === 'video' ? 'video' : 'audio');
+      const uploaded = await uploadMedia(mediaBlob, {
+        filename: `${mode}_${Date.now()}.webm`,
+        type: 'chat',
+        visibility: 'public',
+      });
+      onSend(uploaded.url, duration, mode === 'video' ? 'video' : 'audio');
       
       cleanup();
       setState('idle');

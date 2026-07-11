@@ -31,6 +31,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { uploadMedia } from '@/lib/mediaUpload';
 
 type ChatType = 'group' | 'channel';
 type Step = 'select-type' | 'select-users' | 'details' | 'admin-settings';
@@ -149,23 +150,13 @@ export function CreateGroupChannelDialog({
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('message-attachments')
-      .upload(fileName, file);
-
-    if (uploadError) {
+    try {
+      const uploaded = await uploadMedia(file, { type: 'chat', visibility: 'public' });
+      setAvatarUrl(uploaded.url);
+    } catch (error) {
       toast({ title: 'Error', description: 'Failed to upload image', variant: 'destructive' });
       return;
     }
-
-    const { data: urlData } = supabase.storage
-      .from('message-attachments')
-      .getPublicUrl(fileName);
-
-    setAvatarUrl(urlData.publicUrl);
   };
 
   const handleCreate = async () => {

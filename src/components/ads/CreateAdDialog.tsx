@@ -42,8 +42,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUserAds, AdCreateInput } from '@/hooks/useAds';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { uploadMedia } from '@/lib/mediaUpload';
 
 const formSchema = z.object({
   title: z.string().min(3, 'Kamida 3 ta belgi').max(100),
@@ -117,21 +117,8 @@ export function CreateAdDialog({ open, onOpenChange }: CreateAdDialogProps) {
     // Upload
     setIsUploading(true);
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}.${fileExt}`;
-      const filePath = `ads/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('message-attachments')
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('message-attachments')
-        .getPublicUrl(filePath);
-
-      setMediaUrl(publicUrl);
+      const uploaded = await uploadMedia(file, { type: 'post', visibility: 'public' });
+      setMediaUrl(uploaded.url);
       toast.success('Media yuklandi');
     } catch (error) {
       console.error('Upload error:', error);

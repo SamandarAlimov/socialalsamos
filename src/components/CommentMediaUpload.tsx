@@ -1,9 +1,9 @@
 import { useState, useRef } from 'react';
 import { Image, Video, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { uploadMedia } from '@/lib/mediaUpload';
 
 interface CommentMediaUploadProps {
   onMediaSelect: (url: string, type: 'image' | 'video' | 'gif') => void;
@@ -38,21 +38,8 @@ export function CommentMediaUpload({ onMediaSelect, onMediaClear, selectedMedia 
     setIsUploading(true);
 
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `comment-${Date.now()}.${fileExt}`;
-      const filePath = `comments/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('message-attachments')
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('message-attachments')
-        .getPublicUrl(filePath);
-
-      onMediaSelect(publicUrl, isImage ? 'image' : 'video');
+      const uploaded = await uploadMedia(file, { type: 'post', visibility: 'public' });
+      onMediaSelect(uploaded.url, isImage ? 'image' : 'video');
       toast.success('Media uploaded successfully');
     } catch (error) {
       console.error('Error uploading file:', error);
