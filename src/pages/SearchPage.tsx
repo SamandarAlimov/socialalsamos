@@ -20,6 +20,8 @@ import { PullToRefresh } from '@/components/PullToRefresh';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { GlobalSearchResults } from '@/components/search/GlobalSearchResults';
+
 
 // ── Types ──────────────────────────────────────────────
 interface SearchUser {
