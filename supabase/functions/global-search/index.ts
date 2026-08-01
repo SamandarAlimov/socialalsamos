@@ -304,10 +304,9 @@ async function youtubeVideos(q: string, locale: Locale, page: number, pageSize: 
       durations = Object.fromEntries((det?.items ?? []).map((v: any) => [v.id, iso8601ToSeconds(v.contentDetails?.duration)]));
     } catch { /* durations optional */ }
   }
-  // YouTube search does not support classic offset paging; emulate page slicing.
-  const sliced = page > 1 ? items.slice(0, 0) : items;
-  const source = page > 1 ? items : sliced;
-  return Promise.all(source.map((v: any) => {
+  // YouTube search uses token paging; we serve a single relevance-ranked page.
+  return Promise.all(items.map((v: any) => {
+
     const url = `https://www.youtube.com/watch?v=${v.id.videoId}`;
     return makeResult({
       type: 'video', title: stripHtml(v.snippet?.title), snippet: stripHtml(v.snippet?.description),
