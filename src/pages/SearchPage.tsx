@@ -461,25 +461,9 @@ function EmptySearchState({ recentSearches, trendingSearches, onSelect }: {
 
 // ── Global Tab ─────────────────────────────────────────
 function GlobalTab({ query }: { query: string }) {
-  return (
-    <div className="space-y-4">
-      <GlassInfoCard
-        icon={Globe}
-        title="Global qidiruv"
-        description={`"${query}" bo'yicha global internet qidiruvi. Bu funksiya tez orada ishga tushadi.`}
-        accent
-      />
-      <div className="grid grid-cols-2 gap-3">
-        {['Wikipedia', 'Yangiliklar', 'Rasmlar', 'Videolar'].map((source) => (
-          <div key={source} className="p-4 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/30 text-center">
-            <Globe className="h-5 w-5 text-muted-foreground mx-auto mb-2" />
-            <span className="text-xs font-medium text-muted-foreground">{source}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  return <GlobalSearchResults query={query} />;
 }
+
 
 // ── AI Tab ──────────────────────────────────────────────
 function AITab({ query, response, loading }: { query: string; response: string; loading: boolean }) {
