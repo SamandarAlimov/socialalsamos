@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Heart, MessageCircle, Send, Bookmark, Music2, Volume2, VolumeX, Play, Pause, Repeat2, ArrowLeft, Maximize2, X, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { Heart, MessageCircle, Send, Bookmark, Music2, Volume2, VolumeX, Play, Pause, Repeat2, ArrowLeft, Maximize2, Minimize2, X, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -27,6 +27,18 @@ function formatNumber(num: number): string {
   return num.toString();
 }
 
+function formatTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
+  const total = Math.floor(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${m}:${String(s).padStart(2, '0')}`;
+}
+
+
 interface VideoCardProps {
   video: VideoPost;
   isActive: boolean;
@@ -43,6 +55,8 @@ interface VideoCardProps {
 function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShareClick, onLikesClick, isMobile, globalMuted, onMuteToggle }: VideoCardProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const ytVideoRef = useRef<HTMLVideoElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const hideControlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showPlayButton, setShowPlayButton] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -50,6 +64,16 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
   const [youtubeMode, setYoutubeMode] = useState(false);
   const [ytPlaying, setYtPlaying] = useState(true);
   const [ytMuted, setYtMuted] = useState(false);
+  // Player state
+  const [aspect, setAspect] = useState<number | null>(null);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [buffered, setBuffered] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [speed, setSpeed] = useState(1);
+  const [showControls, setShowControls] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [seekHint, setSeekHint] = useState<null | 'forward' | 'backward'>(null);
   const { t } = useTranslation();
   const { lightTap, successFeedback } = useHapticFeedback();
   const { recordView } = usePostViews();
@@ -62,6 +86,8 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
   }, [isActive, video.id, recordView]);
 
   const videoUrl = video.media_urls?.[0] || '';
+  const isLandscape = aspect !== null && aspect > 1.15;
+  const isSquareish = aspect !== null && aspect >= 0.9 && aspect <= 1.15;
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -86,6 +112,24 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
     }
   }, [globalMuted]);
 
+  // Keep playbackRate + volume applied
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.playbackRate = speed;
+  }, [speed]);
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.volume = volume;
+  }, [volume]);
+
+  const revealControls = useCallback(() => {
+    setShowControls(true);
+    if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current);
+    hideControlsTimer.current = setTimeout(() => setShowControls(false), 2800);
+  }, []);
+
+  useEffect(() => () => {
+    if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current);
+  }, []);
+
   const togglePlay = () => {
     lightTap();
     if (!videoRef.current) return;
@@ -98,8 +142,81 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
       setIsPlaying(true);
     }
     setShowPlayButton(true);
+    revealControls();
     setTimeout(() => setShowPlayButton(false), 500);
   };
+
+  const seekBy = useCallback((seconds: number) => {
+    const el = videoRef.current;
+    if (!el) return;
+    el.currentTime = Math.min(Math.max(0, el.currentTime + seconds), el.duration || 0);
+    setSeekHint(seconds > 0 ? 'forward' : 'backward');
+    setTimeout(() => setSeekHint(null), 450);
+    revealControls();
+  }, [revealControls]);
+
+  const seekToRatio = useCallback((ratio: number) => {
+    const el = videoRef.current;
+    if (!el || !el.duration) return;
+    el.currentTime = Math.min(Math.max(0, ratio), 1) * el.duration;
+    setCurrentTime(el.currentTime);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    const node = frameRef.current;
+    if (!node) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else {
+      node.requestFullscreen?.().catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    const onFsChange = () => setIsFullscreen(document.fullscreenElement === frameRef.current);
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
+  // Keyboard shortcuts for the active video
+  useEffect(() => {
+    if (!isActive) return;
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && ['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
+      switch (e.key) {
+        case ' ':
+        case 'k':
+          e.preventDefault();
+          togglePlay();
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          seekBy(5);
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          seekBy(-5);
+          break;
+        case 'l':
+          seekBy(10);
+          break;
+        case 'j':
+          seekBy(-10);
+          break;
+        case 'm':
+          onMuteToggle();
+          break;
+        case 'f':
+          toggleFullscreen();
+          break;
+        default:
+          break;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isActive, seekBy, toggleFullscreen, onMuteToggle]);
 
   const toggleMute = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -132,13 +249,29 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
     lightTap();
   };
 
+  const progress = duration > 0 ? currentTime / duration : 0;
+
   return (
     <div className="relative h-full w-full bg-black flex items-center justify-center snap-start snap-always">
-      {/* Video Container */}
-      <div className={cn(
-        "relative h-full w-full",
-        !isMobile && "max-w-[400px] aspect-[9/16] rounded-2xl overflow-hidden shadow-2xl"
-      )}>
+      {/* Video Container — size adapts to the source aspect ratio */}
+      <div
+        ref={frameRef}
+        onMouseMove={revealControls}
+        onMouseLeave={() => setShowControls(false)}
+        className={cn(
+          "relative bg-black",
+          isMobile
+            ? "h-full w-full"
+            : cn(
+                "overflow-hidden rounded-2xl shadow-2xl",
+                isLandscape
+                  ? "w-full max-w-[min(1100px,92vw)] max-h-[82vh] aspect-video"
+                  : isSquareish
+                    ? "h-auto w-full max-w-[min(620px,92vw)] max-h-[82vh] aspect-square"
+                    : "h-full w-full max-w-[400px] aspect-[9/16]"
+              )
+        )}
+      >
         {/* Video */}
         <video
           ref={videoRef}
@@ -148,6 +281,24 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
           muted={globalMuted}
           playsInline
           onClick={togglePlay}
+          onDoubleClick={(e) => {
+            const rect = (e.currentTarget as HTMLVideoElement).getBoundingClientRect();
+            seekBy(e.clientX - rect.left > rect.width / 2 ? 10 : -10);
+          }}
+          onLoadedMetadata={(e) => {
+            const el = e.currentTarget;
+            if (el.videoWidth && el.videoHeight) setAspect(el.videoWidth / el.videoHeight);
+            setDuration(el.duration || 0);
+            el.playbackRate = speed;
+            el.volume = volume;
+          }}
+          onTimeUpdate={(e) => {
+            const el = e.currentTarget;
+            setCurrentTime(el.currentTime);
+            if (el.buffered.length) setBuffered(el.buffered.end(el.buffered.length - 1));
+          }}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
           poster={video.media_urls?.[1]}
         />
 
@@ -167,10 +318,104 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
           </div>
         </div>
 
+        {/* Double-tap seek hint */}
+        {seekHint && (
+          <div className={cn(
+            "absolute inset-y-0 w-1/3 flex items-center justify-center pointer-events-none",
+            seekHint === 'forward' ? "right-0" : "left-0"
+          )}>
+            <div className="px-3 py-2 rounded-full bg-black/55 backdrop-blur-sm text-white text-xs font-semibold">
+              {seekHint === 'forward' ? '+10s' : '−10s'}
+            </div>
+          </div>
+        )}
+
         {/* Gradient overlay for text readability */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/70 pointer-events-none" />
 
-        {/* Mute button is rendered at page-level header (see VideosPage bottom) */}
+        {/* Full player controls (YouTube-style) */}
+        <div
+          className={cn(
+            "absolute left-0 right-0 z-20 px-3 transition-opacity duration-200",
+            isMobile ? "bottom-[calc(env(safe-area-inset-bottom,0px)+82px)]" : "bottom-0 pb-2",
+            showControls || !isPlaying ? "opacity-100" : "opacity-0 pointer-events-none"
+          )}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Scrub bar */}
+          <div
+            className="group relative h-4 flex items-center cursor-pointer"
+            onPointerDown={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const move = (clientX: number) => seekToRatio((clientX - rect.left) / rect.width);
+              move(e.clientX);
+              const onMove = (ev: PointerEvent) => move(ev.clientX);
+              const onUp = () => {
+                window.removeEventListener('pointermove', onMove);
+                window.removeEventListener('pointerup', onUp);
+              };
+              window.addEventListener('pointermove', onMove);
+              window.addEventListener('pointerup', onUp);
+            }}
+          >
+            <div className="relative h-[3px] w-full rounded-full bg-white/25 overflow-hidden group-hover:h-[5px] transition-all">
+              <div
+                className="absolute inset-y-0 left-0 bg-white/35"
+                style={{ width: `${duration ? (buffered / duration) * 100 : 0}%` }}
+              />
+              <div
+                className="absolute inset-y-0 left-0 bg-primary"
+                style={{ width: `${progress * 100}%` }}
+              />
+            </div>
+            <div
+              className="absolute h-3 w-3 rounded-full bg-primary shadow -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
+              style={{ left: `${progress * 100}%` }}
+            />
+          </div>
+
+          {/* Control row */}
+          <div className="flex items-center gap-2 pt-1 text-white">
+            <button onClick={togglePlay} aria-label={isPlaying ? 'Pause' : 'Play'} className="p-1 active:scale-90 transition-transform">
+              {isPlaying ? <Pause className="h-4.5 w-4.5" /> : <Play className="h-4.5 w-4.5" />}
+            </button>
+            <button onClick={toggleMute} aria-label="Mute" className="p-1 active:scale-90 transition-transform">
+              {globalMuted ? <VolumeX className="h-4.5 w-4.5" /> : <Volume2 className="h-4.5 w-4.5" />}
+            </button>
+            {!isMobile && (
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={globalMuted ? 0 : volume}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setVolume(v);
+                  if (v > 0 && globalMuted) onMuteToggle();
+                }}
+                aria-label="Volume"
+                className="w-20 accent-primary h-1 cursor-pointer"
+              />
+            )}
+            <span className="text-[11px] tabular-nums text-white/85 ml-0.5">
+              {formatTime(currentTime)} / {formatTime(duration)}
+            </span>
+            <div className="flex-1" />
+            <button
+              onClick={() => setSpeed((s) => (s >= 2 ? 0.5 : Number((s + 0.25).toFixed(2))))}
+              className="px-2 py-0.5 rounded-md bg-white/15 text-[11px] font-semibold tabular-nums active:scale-95 transition-transform"
+              aria-label="Playback speed"
+            >
+              {speed}x
+            </button>
+            <button onClick={toggleFullscreen} aria-label="Fullscreen" className="p-1 active:scale-90 transition-transform">
+              {isFullscreen ? <Minimize2 className="h-4.5 w-4.5" /> : <Maximize2 className="h-4.5 w-4.5" />}
+            </button>
+          </div>
+        </div>
+
+
 
         {/* Right side actions - Instagram-style, compact so they don't block the video */}
         <div className={cn(
