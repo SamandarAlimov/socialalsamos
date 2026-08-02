@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { MapPin, Music2 } from 'lucide-react';
 
 interface RichTextContentProps {
   content: string;
@@ -8,6 +9,12 @@ interface RichTextContentProps {
 
 // Media format: [media:type:url]
 const MEDIA_REGEX = /\[media:(image|video|gif):([^\]]+)\]/g;
+// Legacy/structured music tags: [MUSIC]{json}  or  [MUSIC:trackId]
+const MUSIC_JSON_REGEX = /\[MUSIC\]\s*(\{[\s\S]*?\})/g;
+const MUSIC_ID_REGEX = /\[MUSIC:([^\]]+)\]/g;
+// Location line: 📍 Some place
+const LOCATION_REGEX = /^[ \t]*📍[ \t]*(.+)$/gm;
+
 
 // Format link display - show domain only for cleaner look
 function formatLinkDisplay(url: string): string {
