@@ -39,19 +39,47 @@ function formatLinkDisplay(url: string): string {
 }
 
 export function RichTextContent({ content, className }: RichTextContentProps) {
-  const { textContent, mediaItems } = useMemo(() => {
-    if (!content) return { textContent: '', mediaItems: [] };
+  const { textContent, mediaItems, musicItems, locations } = useMemo(() => {
+    if (!content) return { textContent: '', mediaItems: [], musicItems: [], locations: [] };
 
     const media: { type: 'image' | 'video' | 'gif'; url: string }[] = [];
-    
-    // Extract media items and remove them from text
-    const cleanedText = content.replace(MEDIA_REGEX, (_, type, url) => {
+    const music: { title: string; artist: string | null; audioUrl: string | null }[] = [];
+    const places: string[] = [];
+
+    let cleanedText = content.replace(MEDIA_REGEX, (_, type, url) => {
       media.push({ type: type as 'image' | 'video' | 'gif', url });
       return '';
-    }).trim();
+    });
 
-    return { textContent: cleanedText, mediaItems: media };
+    cleanedText = cleanedText.replace(MUSIC_JSON_REGEX, (_, json) => {
+      try {
+        const parsed = JSON.parse(json);
+        music.push({
+          title: parsed.title || 'Audio',
+          artist: parsed.artist || null,
+          audioUrl: parsed.audioUrl || parsed.url || null,
+        });
+      } catch {
+        music.push({ title: 'Audio', artist: null, audioUrl: null });
+      }
+      return '';
+    });
+
+    cleanedText = cleanedText.replace(MUSIC_ID_REGEX, (_, id) => {
+      music.push({ title: String(id), artist: null, audioUrl: null });
+      return '';
+    });
+
+    cleanedText = cleanedText.replace(LOCATION_REGEX, (_, place) => {
+      places.push(String(place).trim());
+      return '';
+    });
+
+    cleanedText = cleanedText.replace(/\n{3,}/g, '\n\n').trim();
+
+    return { textContent: cleanedText, mediaItems: media, musicItems: music, locations: places };
   }, [content]);
+
 
   const parsedContent = useMemo(() => {
     if (!textContent) return [];
