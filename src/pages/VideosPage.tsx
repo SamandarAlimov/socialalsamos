@@ -761,17 +761,15 @@ export default function VideosPage() {
 
       <div 
         ref={containerRef}
-        className={cn(
-          "overflow-y-scroll snap-y snap-mandatory scrollbar-hide",
-          isMobile ? "h-full w-full" : "h-full w-full max-w-[400px]"
-        )}
-        style={{ scrollSnapType: 'y mandatory' }}
-        onTouchStart={isMobile ? handleTouchStart : undefined}
-        onTouchMove={isMobile ? handleTouchMove : undefined}
-        onTouchEnd={isMobile ? handleTouchEnd : undefined}
+        className="h-full w-full overflow-y-scroll snap-y snap-mandatory scrollbar-hide overscroll-contain"
+        style={{ scrollSnapType: 'y mandatory', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
         {videos.map((video, index) => (
-          <div key={video.id} className="h-full w-full" style={{ scrollSnapAlign: 'start' }}>
+          <div key={video.id} className="h-full w-full flex items-center justify-center" style={{ scrollSnapAlign: 'start' }}>
+
             <VideoCard
               video={video}
               isActive={index === activeIndex}
