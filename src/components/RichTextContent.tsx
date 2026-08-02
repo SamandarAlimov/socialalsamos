@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { MapPin, Music2 } from 'lucide-react';
 
 interface RichTextContentProps {
   content: string;
@@ -8,6 +9,12 @@ interface RichTextContentProps {
 
 // Media format: [media:type:url]
 const MEDIA_REGEX = /\[media:(image|video|gif):([^\]]+)\]/g;
+// Legacy/structured music tags: [MUSIC]{json}  or  [MUSIC:trackId]
+const MUSIC_JSON_REGEX = /\[MUSIC\]\s*(\{[\s\S]*?\})/g;
+const MUSIC_ID_REGEX = /\[MUSIC:([^\]]+)\]/g;
+// Location line: 📍 Some place
+const LOCATION_REGEX = /^[ \t]*📍[ \t]*(.+)$/gm;
+
 
 // Format link display - show domain only for cleaner look
 function formatLinkDisplay(url: string): string {
@@ -32,19 +39,47 @@ function formatLinkDisplay(url: string): string {
 }
 
 export function RichTextContent({ content, className }: RichTextContentProps) {
-  const { textContent, mediaItems } = useMemo(() => {
-    if (!content) return { textContent: '', mediaItems: [] };
+  const { textContent, mediaItems, musicItems, locations } = useMemo(() => {
+    if (!content) return { textContent: '', mediaItems: [], musicItems: [], locations: [] };
 
     const media: { type: 'image' | 'video' | 'gif'; url: string }[] = [];
-    
-    // Extract media items and remove them from text
-    const cleanedText = content.replace(MEDIA_REGEX, (_, type, url) => {
+    const music: { title: string; artist: string | null; audioUrl: string | null }[] = [];
+    const places: string[] = [];
+
+    let cleanedText = content.replace(MEDIA_REGEX, (_, type, url) => {
       media.push({ type: type as 'image' | 'video' | 'gif', url });
       return '';
-    }).trim();
+    });
 
-    return { textContent: cleanedText, mediaItems: media };
+    cleanedText = cleanedText.replace(MUSIC_JSON_REGEX, (_, json) => {
+      try {
+        const parsed = JSON.parse(json);
+        music.push({
+          title: parsed.title || 'Audio',
+          artist: parsed.artist || null,
+          audioUrl: parsed.audioUrl || parsed.url || null,
+        });
+      } catch {
+        music.push({ title: 'Audio', artist: null, audioUrl: null });
+      }
+      return '';
+    });
+
+    cleanedText = cleanedText.replace(MUSIC_ID_REGEX, (_, id) => {
+      music.push({ title: String(id), artist: null, audioUrl: null });
+      return '';
+    });
+
+    cleanedText = cleanedText.replace(LOCATION_REGEX, (_, place) => {
+      places.push(String(place).trim());
+      return '';
+    });
+
+    cleanedText = cleanedText.replace(/\n{3,}/g, '\n\n').trim();
+
+    return { textContent: cleanedText, mediaItems: media, musicItems: music, locations: places };
   }, [content]);
+
 
   const parsedContent = useMemo(() => {
     if (!textContent) return [];
@@ -151,6 +186,44 @@ export function RichTextContent({ content, className }: RichTextContentProps) {
           })}
         </span>
       )}
+
+      {/* Music chips */}
+      {musicItems.map((track, index) => (
+        <div
+          key={`music-${index}`}
+          className="mt-2 flex items-center gap-3 rounded-xl border border-border/50 bg-muted/40 px-3 py-2"
+        >
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Music2 className="h-4 w-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-foreground">{track.title}</p>
+            {track.artist && (
+              <p className="truncate text-xs text-muted-foreground">{track.artist}</p>
+            )}
+          </div>
+          {track.audioUrl && (
+            <audio
+              src={track.audioUrl}
+              controls
+              preload="none"
+              className="h-8 max-w-[180px]"
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
+        </div>
+      ))}
+
+      {/* Location chips */}
+      {locations.map((place, index) => (
+        <div
+          key={`loc-${index}`}
+          className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-muted/60 px-2.5 py-1 text-xs text-muted-foreground"
+        >
+          <MapPin className="h-3.5 w-3.5 shrink-0 text-primary" />
+          <span className="truncate">{place}</span>
+        </div>
+      ))}
 
       {/* Render media items */}
       {mediaItems.map((media, index) => (
