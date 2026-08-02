@@ -187,6 +187,44 @@ export function RichTextContent({ content, className }: RichTextContentProps) {
         </span>
       )}
 
+      {/* Music chips */}
+      {musicItems.map((track, index) => (
+        <div
+          key={`music-${index}`}
+          className="mt-2 flex items-center gap-3 rounded-xl border border-border/50 bg-muted/40 px-3 py-2"
+        >
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Music2 className="h-4 w-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-foreground">{track.title}</p>
+            {track.artist && (
+              <p className="truncate text-xs text-muted-foreground">{track.artist}</p>
+            )}
+          </div>
+          {track.audioUrl && (
+            <audio
+              src={track.audioUrl}
+              controls
+              preload="none"
+              className="h-8 max-w-[180px]"
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
+        </div>
+      ))}
+
+      {/* Location chips */}
+      {locations.map((place, index) => (
+        <div
+          key={`loc-${index}`}
+          className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-muted/60 px-2.5 py-1 text-xs text-muted-foreground"
+        >
+          <MapPin className="h-3.5 w-3.5 shrink-0 text-primary" />
+          <span className="truncate">{place}</span>
+        </div>
+      ))}
+
       {/* Render media items */}
       {mediaItems.map((media, index) => (
         <div key={`media-${index}`} className="mt-2">
