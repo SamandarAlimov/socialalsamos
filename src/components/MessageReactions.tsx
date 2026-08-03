@@ -1,6 +1,8 @@
 import { cn } from '@/lib/utils';
 import { EmojiPicker } from './EmojiPicker';
+import { AnimatedEmoji } from '@/components/emoji/AnimatedEmoji';
 import { Plus } from 'lucide-react';
+
 
 interface ReactionGroup {
   emoji: string;
