@@ -185,34 +185,46 @@ export function TelegramStyleContextMenu({
             exit={{ opacity: 0, scale: 0.94, y: -6 }}
             transition={{ type: 'spring', stiffness: 480, damping: 32, mass: 0.6 }}
           >
-            {/* Quick reactions bar */}
+            {/* Quick reactions bar — Telegram: scrollable full set + picker */}
             {onAddReaction && (
               <motion.div
-                className="flex items-center gap-0.5 px-2 py-1.5 rounded-2xl bg-popover border border-border shadow-lg"
+                className="flex items-center gap-0.5 pl-2 pr-1 py-1.5 rounded-2xl bg-popover border border-border shadow-lg"
                 initial={{ opacity: 0, scale: 0.7, y: -10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.85, y: -6 }}
                 transition={{ type: 'spring', stiffness: 520, damping: 26, mass: 0.5 }}
               >
-                {QUICK_EMOJIS.map((emoji, i) => (
-                  <motion.button
-                    key={emoji}
-                    className="text-[20px] p-1 rounded-full hover:scale-125 active:scale-90 transition-transform"
-                    onClick={() => handleAction(() => onAddReaction(emoji))}
-                    initial={{ opacity: 0, scale: 0.5, y: -6 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    transition={{
-                      delay: 0.04 + i * 0.025,
-                      type: 'spring',
-                      stiffness: 600,
-                      damping: 20,
-                    }}
-                  >
-                    {emoji}
-                  </motion.button>
-                ))}
+                <div className="flex items-center gap-0.5 overflow-x-auto overscroll-contain scrollbar-none flex-1">
+                  {QUICK_EMOJIS.map((emoji, i) => (
+                    <motion.button
+                      key={emoji}
+                      className="p-1 rounded-full hover:scale-125 active:scale-90 transition-transform flex-shrink-0"
+                      onClick={() => handleAction(() => onAddReaction(emoji))}
+                      initial={{ opacity: 0, scale: 0.5, y: -6 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      transition={{
+                        delay: 0.04 + Math.min(i, 8) * 0.025,
+                        type: 'spring',
+                        stiffness: 600,
+                        damping: 20,
+                      }}
+                    >
+                      <AnimatedEmoji emoji={emoji} size={24} />
+                    </motion.button>
+                  ))}
+                </div>
+                <EmojiPicker
+                  onSelect={(emoji) => handleAction(() => onAddReaction(emoji))}
+                  trigger={
+                    <button className="flex-shrink-0 h-7 w-7 flex items-center justify-center rounded-full bg-muted hover:bg-accent transition-colors">
+                      <span className="text-sm leading-none text-muted-foreground">+</span>
+                    </button>
+                  }
+                />
               </motion.div>
             )}
+
+
 
             {/* Action menu — solid surface, no blur */}
             <motion.div
