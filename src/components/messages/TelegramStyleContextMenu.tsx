@@ -16,8 +16,12 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { AnimatedEmoji } from '@/components/emoji/AnimatedEmoji';
+import { EmojiPicker } from '@/components/EmojiPicker';
+import { QUICK_REACTIONS } from '@/lib/animatedEmoji';
 
-const QUICK_EMOJIS = ['👍', '😄', '❤️', '🥰', '👎', '🔥', '👏'];
+const QUICK_EMOJIS = QUICK_REACTIONS;
+
 
 interface TelegramStyleContextMenuProps {
   isOpen: boolean;
