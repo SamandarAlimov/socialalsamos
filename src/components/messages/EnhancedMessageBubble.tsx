@@ -5,6 +5,8 @@ import { cn } from '@/lib/utils';
 import { MessageAttachment } from '@/components/MessageAttachment';
 import { VoiceMessagePlayer } from '@/components/VoiceMessagePlayer';
 import { EmojiPicker } from '@/components/EmojiPicker';
+import { AnimatedEmoji } from '@/components/emoji/AnimatedEmoji';
+
 import { TelegramStyleContextMenu } from './TelegramStyleContextMenu';
 import { LocationMessage } from './LocationMessage';
 import { GroupReadReceipts } from './GroupReadReceipts';
@@ -576,7 +578,7 @@ export function EnhancedMessageBubble({
                         : "bg-muted hover:bg-accent border border-transparent"
                     )}
                   >
-                    <span>{reaction.emoji}</span>
+                    <AnimatedEmoji emoji={reaction.emoji} size={16} />
                     <span className="font-medium">{reaction.count}</span>
                   </button>
                 ))}

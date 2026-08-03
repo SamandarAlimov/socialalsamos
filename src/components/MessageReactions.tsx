@@ -1,6 +1,8 @@
 import { cn } from '@/lib/utils';
 import { EmojiPicker } from './EmojiPicker';
+import { AnimatedEmoji } from '@/components/emoji/AnimatedEmoji';
 import { Plus } from 'lucide-react';
+
 
 interface ReactionGroup {
   emoji: string;
@@ -44,7 +46,7 @@ export function MessageReactions({ reactions, onToggle, onAdd, isMine }: Message
               : "bg-muted hover:bg-accent border border-transparent"
           )}
         >
-          <span>{reaction.emoji}</span>
+          <AnimatedEmoji emoji={reaction.emoji} size={16} />
           <span className="font-medium">{reaction.count}</span>
         </button>
       ))}
