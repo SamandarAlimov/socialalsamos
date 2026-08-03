@@ -6,15 +6,34 @@ import { Slider } from '@/components/ui/slider';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MUSIC_TRACKS, MUSIC_CATEGORIES } from './filters/FilterData';
+import { useFileUpload } from '@/hooks/useFileUpload';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { Music, Play, Pause, Volume2, Search, Check, Plus } from 'lucide-react';
+import { Music, Play, Pause, Volume2, Search, Check, Plus, Upload, Loader2 } from 'lucide-react';
+
+type Track = typeof MUSIC_TRACKS[0];
 
 interface MusicPickerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  currentTrack?: typeof MUSIC_TRACKS[0] | null;
-  onSelectTrack: (track: typeof MUSIC_TRACKS[0]) => void;
+  currentTrack?: Track | null;
+  onSelectTrack: (track: Track) => void;
 }
+
+const getAudioDuration = (file: File): Promise<number> =>
+  new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const audio = new Audio(url);
+    audio.addEventListener('loadedmetadata', () => {
+      const d = Number.isFinite(audio.duration) ? Math.round(audio.duration) : 30;
+      URL.revokeObjectURL(url);
+      resolve(d);
+    });
+    audio.addEventListener('error', () => {
+      URL.revokeObjectURL(url);
+      resolve(30);
+    });
+  });
 
 export function MusicPicker({
   open,
@@ -26,9 +45,15 @@ export function MusicPicker({
   const [searchQuery, setSearchQuery] = useState('');
   const [playingTrackId, setPlayingTrackId] = useState<string | null>(null);
   const [volume, setVolume] = useState(70);
+  const [deviceTracks, setDeviceTracks] = useState<Track[]>([]);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { uploadFile, uploading } = useFileUpload();
 
-  const filteredTracks = MUSIC_TRACKS.filter(track => {
+  const allTracks: Track[] = [...deviceTracks, ...MUSIC_TRACKS];
+
+  const filteredTracks = allTracks.filter(track => {
+
     const matchesCategory = selectedCategory === 'all' || track.category === selectedCategory;
     const matchesSearch = !searchQuery || 
       track.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
