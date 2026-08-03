@@ -194,7 +194,7 @@ export function TelegramStyleContextMenu({
                 exit={{ opacity: 0, scale: 0.85, y: -6 }}
                 transition={{ type: 'spring', stiffness: 520, damping: 26, mass: 0.5 }}
               >
-                <div className="flex items-center gap-0.5 overflow-x-auto overscroll-contain scrollbar-none flex-1">
+                <div className="flex items-center gap-0.5 overflow-x-auto overscroll-contain scrollbar-hide flex-1">
                   {QUICK_EMOJIS.map((emoji, i) => (
                     <motion.button
                       key={emoji}
