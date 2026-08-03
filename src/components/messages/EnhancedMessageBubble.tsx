@@ -5,6 +5,8 @@ import { cn } from '@/lib/utils';
 import { MessageAttachment } from '@/components/MessageAttachment';
 import { VoiceMessagePlayer } from '@/components/VoiceMessagePlayer';
 import { EmojiPicker } from '@/components/EmojiPicker';
+import { AnimatedEmoji } from '@/components/emoji/AnimatedEmoji';
+
 import { TelegramStyleContextMenu } from './TelegramStyleContextMenu';
 import { LocationMessage } from './LocationMessage';
 import { GroupReadReceipts } from './GroupReadReceipts';
