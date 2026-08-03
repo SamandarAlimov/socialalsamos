@@ -91,17 +91,69 @@ export function MusicPicker({
     }
   };
 
+  const handleDeviceFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    if (!file.type.startsWith('audio/')) {
+      toast.error('Faqat audio fayl tanlang');
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error('Audio hajmi 20MB dan oshmasligi kerak');
+      return;
+    }
+
+    const duration = await getAudioDuration(file);
+    const uploaded = await uploadFile(file);
+    if (!uploaded) {
+      toast.error('Musiqani yuklab bo\'lmadi');
+      return;
+    }
+
+    const track: Track = {
+      id: `device-${Date.now()}`,
+      name: file.name.replace(/\.[^/.]+$/, ''),
+      artist: 'Mening musiqam',
+      duration,
+      category: selectedCategory === 'all' ? 'all' : selectedCategory,
+      url: uploaded.url,
+    };
+
+    setDeviceTracks(prev => [track, ...prev]);
+    toast.success('Musiqa qo\'shildi');
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto overscroll-contain">
         <audio ref={audioRef} onEnded={() => setPlayingTrackId(null)} />
-        
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="audio/*,.mp3,.m4a,.wav,.aac,.ogg,.flac"
+          className="hidden"
+          onChange={handleDeviceFile}
+        />
+
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Music className="h-5 w-5 text-primary" />
             Add Music
           </DialogTitle>
         </DialogHeader>
+
+        {/* Upload from device */}
+        <Button
+          variant="outline"
+          className="w-full gap-2"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+        >
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          {uploading ? 'Yuklanmoqda...' : 'Qurilmadan musiqa qo\'shish'}
+        </Button>
 
         {/* Search */}
         <div className="relative">
@@ -113,6 +165,7 @@ export function MusicPicker({
             className="pl-9"
           />
         </div>
+
 
         {/* Volume Control */}
         <div className="flex items-center gap-3 p-3 bg-secondary/50 rounded-xl">
