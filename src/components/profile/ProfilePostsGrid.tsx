@@ -5,6 +5,7 @@ import {
   MoreHorizontal, 
   Pin, 
   Trash2, 
+  Pencil,
   Play,
   Grid,
   LayoutList,
@@ -14,6 +15,7 @@ import {
   Eye
 } from 'lucide-react';
 import { PostViewModal } from '@/components/PostViewModal';
+import { EditPostDialog } from '@/components/EditPostDialog';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -63,6 +65,7 @@ export function ProfilePostsGrid({
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [showPostModal, setShowPostModal] = useState(false);
+  const [editPost, setEditPost] = useState<{ id: string; content: string | null } | null>(null);
 
   const handlePostClick = (post: Post) => {
     setSelectedPost(post);
@@ -204,6 +207,10 @@ export function ProfilePostsGrid({
                         <Heart className={cn("h-4 w-4 mr-2", post.is_liked && "fill-red-500 text-red-500")} />
                         {post.is_liked ? 'Unlike' : 'Like'}
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setEditPost({ id: post.id, content: post.content })}>
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Postni tahrirlash
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => onPin(post.id)}>
                         <Pin className="h-4 w-4 mr-2" />
                         {post.is_pinned ? 'Unpin from profile' : 'Pin to profile'}
@@ -254,6 +261,10 @@ export function ProfilePostsGrid({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => setEditPost({ id: post.id, content: post.content })}>
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Postni tahrirlash
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => onPin(post.id)}>
                         <Pin className="h-4 w-4 mr-2" />
                         {post.is_pinned ? 'Unpin' : 'Pin to profile'}
@@ -362,6 +373,15 @@ export function ProfilePostsGrid({
           }}
           onLike={() => onLike(selectedPost.id)}
           isOwnProfile={isOwnProfile}
+        />
+      )}
+
+      {editPost && (
+        <EditPostDialog
+          postId={editPost.id}
+          open={!!editPost}
+          onOpenChange={(o) => !o && setEditPost(null)}
+          initialContent={editPost.content || ''}
         />
       )}
     </div>

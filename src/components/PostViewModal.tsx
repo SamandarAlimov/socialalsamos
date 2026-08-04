@@ -25,6 +25,7 @@ import { PollDisplay, parsePollFromContent } from '@/components/PollDisplay';
 import { RichTextContent } from '@/components/RichTextContent';
 import { PostViewsDialog } from '@/components/PostViewsDialog';
 import { usePostViews } from '@/hooks/usePostViews';
+import { EditPostDialog } from '@/components/EditPostDialog';
 
 interface PostViewModalProps {
   post: {
@@ -61,6 +62,7 @@ export function PostViewModal({
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [showComments, setShowComments] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
   const { recordView } = usePostViews();
   
   // Real-time counts
@@ -92,6 +94,7 @@ export function PostViewModal({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl w-full p-0 overflow-hidden bg-background max-h-[90vh]">
         <div className="flex flex-col md:flex-row h-full max-h-[90vh]">
@@ -174,9 +177,16 @@ export function PostViewModal({
                   </p>
                 </div>
               </div>
-              <Button variant="ghost" size="icon" className="hidden md:flex">
-                <MoreHorizontal className="h-5 w-5" />
-              </Button>
+              {isOwnProfile && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowEdit(true)}
+                  aria-label="Postni tahrirlash"
+                >
+                  <MoreHorizontal className="h-5 w-5" />
+                </Button>
+              )}
             </div>
 
             {/* Content with Poll Support */}
@@ -250,5 +260,12 @@ export function PostViewModal({
         </div>
       </DialogContent>
     </Dialog>
+      <EditPostDialog
+        postId={post.id}
+        open={showEdit}
+        onOpenChange={setShowEdit}
+        initialContent={post.content || ''}
+      />
+    </>
   );
 }

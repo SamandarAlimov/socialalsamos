@@ -297,6 +297,7 @@ export default function MapPage() {
   const [destination, setDestination] = useState<{ lat: number; lng: number; name: string } | null>(null);
   const [showDirections, setShowDirections] = useState(false);
   const [showDirectionsPanel, setShowDirectionsPanel] = useState(false);
+  const [directionsCollapsed, setDirectionsCollapsed] = useState(false);
   const [activeRoute, setActiveRoute] = useState<RouteAlternative | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -1380,32 +1381,47 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* Desktop/Tablet Directions Panel - Isolated from map events */}
+      {/* Desktop/Tablet Directions Panel - collapsible, isolated from map events */}
       {showDirectionsPanel && (
         <div 
-          className="hidden md:block fixed top-0 bottom-0 z-[9999] pointer-events-auto"
+          className="hidden md:flex fixed top-0 bottom-0 z-[9999] pointer-events-auto items-stretch"
           style={{ left: sidebarOpen ? '320px' : '0' }}
         >
-          <DirectionsPanel
-            currentLocation={currentLocation}
-            initialDestination={destination}
-            transportMode={transportMode}
-            onTransportModeChange={setTransportMode}
-            onRouteCalculated={handleRouteCalculated}
-            onStepSelected={handleStepSelected}
-            onClose={() => {
-              setShowDirectionsPanel(false);
-              setActiveRoute(null);
-              setMapSelectionMode(null);
-            }}
-            className="h-full w-[380px]"
-            mapSelectionMode={mapSelectionMode}
-            onMapSelectionModeChange={setMapSelectionMode}
-            selectedMapLocation={selectedMapLocation}
-            onClearSelectedMapLocation={() => setSelectedMapLocation(null)}
-          />
+          {!directionsCollapsed && (
+            <DirectionsPanel
+              currentLocation={currentLocation}
+              initialDestination={destination}
+              transportMode={transportMode}
+              onTransportModeChange={setTransportMode}
+              onRouteCalculated={handleRouteCalculated}
+              onStepSelected={handleStepSelected}
+              onClose={() => {
+                setShowDirectionsPanel(false);
+                setActiveRoute(null);
+                setMapSelectionMode(null);
+              }}
+              className="h-full w-[380px]"
+              mapSelectionMode={mapSelectionMode}
+              onMapSelectionModeChange={setMapSelectionMode}
+              selectedMapLocation={selectedMapLocation}
+              onClearSelectedMapLocation={() => setSelectedMapLocation(null)}
+            />
+          )}
+          <button
+            type="button"
+            aria-label={directionsCollapsed ? "Yo'nalishlar panelini ochish" : "Yo'nalishlar panelini yig'ish"}
+            onClick={() => setDirectionsCollapsed((v) => !v)}
+            className="self-center h-16 w-6 flex items-center justify-center rounded-r-xl bg-background/90 backdrop-blur border border-l-0 border-border shadow-md hover:bg-accent transition-colors"
+          >
+            {directionsCollapsed ? (
+              <ChevronRight className="h-4 w-4" />
+            ) : (
+              <ChevronLeft className="h-4 w-4" />
+            )}
+          </button>
         </div>
       )}
+
 
       {/* Mobile Location History Sheet */}
       <LocationHistoryMobileSheet

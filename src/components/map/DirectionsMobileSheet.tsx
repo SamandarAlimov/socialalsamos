@@ -4,12 +4,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
+import { motion } from 'framer-motion';
 import {
   X,
   Navigation,
@@ -57,6 +52,10 @@ import { ManeuverIcon } from './ManeuverIcon';
 import { toast } from 'sonner';
 
 type MapSelectionMode = 'origin' | 'destination' | null;
+
+type SheetSnap = 'expanded' | 'half' | 'collapsed' | 'hidden';
+const SNAP_STORAGE_KEY = 'alsamos.map.directionsSnap';
+const SHEET_VH = 0.9;
 
 interface DirectionsMobileSheetProps {
   open: boolean;
@@ -370,34 +369,99 @@ export function DirectionsMobileSheet({
   const currentResults = activeSearch === 'origin' ? originResults : destResults;
   const hasSuggestions = favoritePlaces.length > 0 || recentPlaces.length > 0;
 
-  // Calculate sheet height based on content
-  const getSheetHeight = () => {
-    if (isNavigating) return 'h-[85vh]';
-    if (expandedView && selectedRoute) return 'h-[90vh]';
-    if (selectedRoute) return 'h-[75vh]';
-    if (currentResults.length > 0 || showSuggestions) return 'h-[75vh]';
-    return 'h-[55vh]';
+  const [snap, setSnap] = useState<SheetSnap>(() => {
+    try {
+      const saved = localStorage.getItem(SNAP_STORAGE_KEY) as SheetSnap | null;
+      if (saved && saved !== 'hidden') return saved;
+    } catch {
+      /* ignore */
+    }
+    return 'half';
+  });
+  const [sheetH, setSheetH] = useState(() =>
+    typeof window !== 'undefined' ? window.innerHeight : 800
+  );
+
+  useEffect(() => {
+    const onResize = () => setSheetH(window.innerHeight);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const snapY = {
+    expanded: 0,
+    half: sheetH * (SHEET_VH - 0.48),
+    collapsed: sheetH * (SHEET_VH - 0.17),
+    hidden: sheetH * SHEET_VH,
+  } as const;
+
+  const goTo = (s: SheetSnap) => {
+    setSnap(s);
+    try {
+      localStorage.setItem(SNAP_STORAGE_KEY, s);
+    } catch {
+      /* ignore */
+    }
   };
 
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent 
-        side="bottom" 
-        onInteractOutside={(e) => e.preventDefault()}
-        onPointerDownOutside={(e) => e.preventDefault()}
-        className={cn(
-          "rounded-t-3xl px-0 pb-20 flex flex-col z-[9999] md:hidden overflow-hidden",
-          getSheetHeight()
-        )}
-      >
-        {/* Handle bar */}
-        <div className="flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing">
-          <div className="w-12 h-1.5 bg-muted-foreground/40 rounded-full" />
-        </div>
+  const handleDragEnd = (_: unknown, info: { offset: { y: number }; velocity: { y: number } }) => {
+    const current = snapY[snap];
+    const projected = current + info.offset.y + info.velocity.y * 0.15;
+    const order: SheetSnap[] = ['expanded', 'half', 'collapsed', 'hidden'];
+    let nearest: SheetSnap = 'half';
+    let best = Infinity;
+    for (const s of order) {
+      const d = Math.abs(snapY[s] - projected);
+      if (d < best) {
+        best = d;
+        nearest = s;
+      }
+    }
+    goTo(nearest);
+  };
 
-        <SheetHeader className="px-4 pb-3 border-b border-border">
+  if (!open) return null;
+
+  if (snap === 'hidden') {
+    return (
+      <div className="md:hidden fixed bottom-24 left-1/2 -translate-x-1/2 z-[9999]">
+        <Button
+          onClick={() => goTo('half')}
+          className="rounded-full shadow-lg h-12 px-5 gap-2"
+        >
+          <Navigation className="h-4 w-4" />
+          Marshrutni ko'rsatish
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <motion.div
+        className="md:hidden fixed left-0 right-0 bottom-0 z-[9999] flex flex-col rounded-t-3xl bg-background border-t border-border shadow-2xl overflow-hidden"
+        style={{ height: `${SHEET_VH * 100}vh`, touchAction: 'none' }}
+        drag="y"
+        dragElastic={0.04}
+        dragConstraints={{ top: 0, bottom: snapY.hidden }}
+        onDragEnd={handleDragEnd}
+        initial={{ y: snapY.half }}
+        animate={{ y: snapY[snap] }}
+        transition={{ type: 'spring', stiffness: 420, damping: 40, mass: 0.8 }}
+      >
+        {/* Drag handle — 44px touch target */}
+        <button
+          type="button"
+          aria-label="Panelni ochish yoki yopish"
+          onClick={() => goTo(snap === 'expanded' ? 'collapsed' : snap === 'half' ? 'expanded' : 'half')}
+          className="w-full h-11 flex items-center justify-center cursor-grab active:cursor-grabbing shrink-0"
+        >
+          <div className="w-12 h-1.5 bg-muted-foreground/40 rounded-full" />
+        </button>
+
+        <div className="px-4 pb-3 border-b border-border shrink-0">
           <div className="flex items-center justify-between">
-            <SheetTitle className="flex items-center gap-3">
+            <div className="flex items-center gap-3">
               <div className="p-2 rounded-xl bg-primary/15">
                 <Navigation className="h-5 w-5 text-primary" />
               </div>
@@ -405,7 +469,7 @@ export function DirectionsMobileSheet({
                 <span className="text-lg font-semibold block">Yo'nalishlar</span>
                 <span className="text-xs text-muted-foreground font-normal">Marshrutni rejalashtiring</span>
               </div>
-            </SheetTitle>
+            </div>
             <div className="flex items-center gap-1">
               {voiceSupported && (
                 <Button
@@ -420,6 +484,15 @@ export function DirectionsMobileSheet({
                   {voiceEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
                 </Button>
               )}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => goTo('hidden')}
+                className="rounded-full h-9 w-9"
+                aria-label="Panelni yashirish"
+              >
+                <ChevronDown className="h-5 w-5" />
+              </Button>
               <Button 
                 variant="ghost" 
                 size="icon" 
@@ -430,9 +503,10 @@ export function DirectionsMobileSheet({
               </Button>
             </div>
           </div>
-        </SheetHeader>
+        </div>
 
-        <div className="flex-1 overflow-y-auto flex flex-col">
+        <div className="flex-1 overflow-y-auto overscroll-contain flex flex-col pb-20" style={{ touchAction: 'pan-y' }}>
+
           {/* Transport Mode Selector */}
           <div className="px-4 py-3 bg-muted/30">
             <TransportQuickBar
@@ -937,7 +1011,8 @@ export function DirectionsMobileSheet({
             </div>
           )}
         </div>
-      </SheetContent>
-    </Sheet>
+      </motion.div>
+    </>
+
   );
 }
