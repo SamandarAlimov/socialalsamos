@@ -5,6 +5,7 @@ import {
   MoreHorizontal, 
   Pin, 
   Trash2, 
+  Pencil,
   Play,
   Grid,
   LayoutList,
@@ -14,6 +15,7 @@ import {
   Eye
 } from 'lucide-react';
 import { PostViewModal } from '@/components/PostViewModal';
+import { EditPostDialog } from '@/components/EditPostDialog';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -204,6 +206,10 @@ export function ProfilePostsGrid({
                         <Heart className={cn("h-4 w-4 mr-2", post.is_liked && "fill-red-500 text-red-500")} />
                         {post.is_liked ? 'Unlike' : 'Like'}
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setEditPost({ id: post.id, content: post.content })}>
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Postni tahrirlash
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => onPin(post.id)}>
                         <Pin className="h-4 w-4 mr-2" />
                         {post.is_pinned ? 'Unpin from profile' : 'Pin to profile'}
@@ -254,6 +260,10 @@ export function ProfilePostsGrid({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => setEditPost({ id: post.id, content: post.content })}>
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Postni tahrirlash
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => onPin(post.id)}>
                         <Pin className="h-4 w-4 mr-2" />
                         {post.is_pinned ? 'Unpin' : 'Pin to profile'}
