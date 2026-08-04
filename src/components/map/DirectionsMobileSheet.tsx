@@ -4,12 +4,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
+import { motion } from 'framer-motion';
 import {
   X,
   Navigation,
@@ -57,6 +52,10 @@ import { ManeuverIcon } from './ManeuverIcon';
 import { toast } from 'sonner';
 
 type MapSelectionMode = 'origin' | 'destination' | null;
+
+type SheetSnap = 'expanded' | 'half' | 'collapsed' | 'hidden';
+const SNAP_STORAGE_KEY = 'alsamos.map.directionsSnap';
+const SHEET_VH = 0.9;
 
 interface DirectionsMobileSheetProps {
   open: boolean;
@@ -369,6 +368,25 @@ export function DirectionsMobileSheet({
 
   const currentResults = activeSearch === 'origin' ? originResults : destResults;
   const hasSuggestions = favoritePlaces.length > 0 || recentPlaces.length > 0;
+
+  const [snap, setSnap] = useState<SheetSnap>(() => {
+    try {
+      const saved = localStorage.getItem(SNAP_STORAGE_KEY) as SheetSnap | null;
+      if (saved && saved !== 'hidden') return saved;
+    } catch {
+      /* ignore */
+    }
+    return 'half';
+  });
+  const [sheetH, setSheetH] = useState(() =>
+    typeof window !== 'undefined' ? window.innerHeight : 800
+  );
+
+  useEffect(() => {
+    const onResize = () => setSheetH(window.innerHeight);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const snapY = {
     expanded: 0,
