@@ -993,7 +993,8 @@ export function DirectionsMobileSheet({
             </div>
           )}
         </div>
-      </SheetContent>
-    </Sheet>
+      </motion.div>
+    </>
+
   );
 }
