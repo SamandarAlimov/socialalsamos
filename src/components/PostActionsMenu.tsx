@@ -35,6 +35,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
+import { EditPostDialog } from '@/components/EditPostDialog';
 
 interface PostActionsMenuProps {
   postId: string;
@@ -60,6 +61,7 @@ export function PostActionsMenu({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isPinning, setIsPinning] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
 
   const handleForwardToAI = () => {
     navigate('/ai', { state: { forwardedPost: { id: postId, content: postContent } } });
@@ -164,11 +166,11 @@ export function PostActionsMenu({
           {isOwner && (
             <>
               <DropdownMenuItem 
-                onClick={onEdit}
+                onClick={() => setShowEditDialog(true)}
                 className="cursor-pointer"
               >
                 <Edit className="h-4 w-4 mr-2" />
-                Edit post
+                Postni tahrirlash
               </DropdownMenuItem>
               
               <DropdownMenuItem 
@@ -255,6 +257,14 @@ export function PostActionsMenu({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <EditPostDialog
+        postId={postId}
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        initialContent={postContent}
+        onUpdated={() => onEdit?.()}
+      />
 
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
