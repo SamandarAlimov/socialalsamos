@@ -297,6 +297,7 @@ export default function MapPage() {
   const [destination, setDestination] = useState<{ lat: number; lng: number; name: string } | null>(null);
   const [showDirections, setShowDirections] = useState(false);
   const [showDirectionsPanel, setShowDirectionsPanel] = useState(false);
+  const [directionsCollapsed, setDirectionsCollapsed] = useState(false);
   const [activeRoute, setActiveRoute] = useState<RouteAlternative | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
