@@ -94,6 +94,7 @@ export function PostViewModal({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl w-full p-0 overflow-hidden bg-background max-h-[90vh]">
         <div className="flex flex-col md:flex-row h-full max-h-[90vh]">
@@ -265,5 +266,6 @@ export function PostViewModal({
         onOpenChange={setShowEdit}
         initialContent={post.content || ''}
       />
+    </>
   );
 }
