@@ -65,6 +65,7 @@ export function ProfilePostsGrid({
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [showPostModal, setShowPostModal] = useState(false);
+  const [editPost, setEditPost] = useState<{ id: string; content: string | null } | null>(null);
 
   const handlePostClick = (post: Post) => {
     setSelectedPost(post);
@@ -372,6 +373,15 @@ export function ProfilePostsGrid({
           }}
           onLike={() => onLike(selectedPost.id)}
           isOwnProfile={isOwnProfile}
+        />
+      )}
+
+      {editPost && (
+        <EditPostDialog
+          postId={editPost.id}
+          open={!!editPost}
+          onOpenChange={(o) => !o && setEditPost(null)}
+          initialContent={editPost.content || ''}
         />
       )}
     </div>
