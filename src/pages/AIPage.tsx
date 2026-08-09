@@ -65,7 +65,10 @@ export default function AIPage() {
   // Cold start ALWAYS lands on a fresh conversation — never restore the last chat.
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
+  const [artifactsOpen, setArtifactsOpen] = useState(false);
+  const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+
   const [forwardedPost, setForwardedPost] = useState<{
     id: string;
     content?: string;
