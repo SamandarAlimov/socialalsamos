@@ -501,6 +501,10 @@ export default function AIPage() {
 
   const greetingName = profile?.display_name || profile?.username || '';
 
+  const artifacts = useMemo(() => extractArtifacts(messages), [messages]);
+  const showArtifacts = artifactsOpen && artifacts.length > 0;
+
+
   return (
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-background md:h-[calc(100vh-2rem)]">
       {/* Sidebar */}
