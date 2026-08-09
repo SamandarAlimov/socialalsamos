@@ -686,6 +686,28 @@ export default function AIPage() {
           onRemoveAttachment={(i) => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
         />
       </div>
+
+      {/* Artifacts */}
+      <AnimatePresence>
+        {showArtifacts && (
+          <motion.div
+            initial={{ x: isMobile ? '100%' : 40, opacity: isMobile ? 1 : 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: isMobile ? '100%' : 40, opacity: isMobile ? 1 : 0 }}
+            transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+            className={cn('z-50', isMobile ? 'fixed inset-0 bg-background' : 'relative shrink-0')}
+          >
+            <AIArtifactPanel
+              artifacts={artifacts}
+              activeId={activeArtifactId}
+              onSelect={setActiveArtifactId}
+              onClose={() => setArtifactsOpen(false)}
+              isMobile={isMobile}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
+
   );
 }
