@@ -282,7 +282,10 @@ export default function SettingsPage() {
     }
   };
 
+  const [section, setSection] = useState<string | null>(null);
+
   if (isLoading) {
+
 
     return (
       <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
