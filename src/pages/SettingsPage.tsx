@@ -1085,9 +1085,9 @@ export default function SettingsPage() {
             </div>
           </div>
         </TabsContent>
-          </div>
         </div>
       </Tabs>
+
 
 
       {/* Footer */}
