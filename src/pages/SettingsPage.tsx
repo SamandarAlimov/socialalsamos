@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { cn } from '@/lib/utils';
+
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from 'next-themes';
 import { useAuth } from '@/contexts/AuthContext';
@@ -282,7 +284,11 @@ export default function SettingsPage() {
     }
   };
 
+  const [section, setSection] = useState<string | null>(null);
+
   if (isLoading) {
+
+
     return (
       <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -290,22 +296,90 @@ export default function SettingsPage() {
     );
   }
 
-  return (
-    <div className="max-w-4xl mx-auto py-4 md:py-8 px-3 md:px-4 pb-24 md:pb-8">
-      <h1 className="text-xl md:text-2xl font-bold mb-4 md:mb-8">Settings</h1>
+  const sectionGroups: { title: string; items: { value: string; label: string; icon: React.ElementType; tint: string }[] }[] = [
+    {
+      title: 'Hisob',
+      items: [
+        { value: 'account', label: 'Profilim', icon: User, tint: 'text-rose-500 bg-rose-500/10' },
+        { value: 'privacy', label: 'Maxfiylik', icon: Shield, tint: 'text-amber-500 bg-amber-500/10' },
+        { value: 'devices', label: 'Qurilmalar', icon: Smartphone, tint: 'text-sky-500 bg-sky-500/10' },
+        { value: 'notifications', label: 'Bildirishnomalar', icon: Bell, tint: 'text-violet-500 bg-violet-500/10' },
+      ],
+    },
+  ];
 
-      {/* Language switcher — universal, surfaces above tabs */}
-      <div className="mb-4 md:mb-6">
-        <LanguageSwitcher />
+  const activeLabel = sectionGroups
+    .flatMap((g) => g.items)
+    .find((i) => i.value === section)?.label;
+
+  return (
+    <div className="max-w-5xl mx-auto py-4 md:py-8 px-3 md:px-4 pb-24 md:pb-8">
+      <div className="flex items-center gap-2 mb-4 md:mb-8">
+        {section && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden"
+            onClick={() => setSection(null)}
+          >
+            <ChevronRight className="h-5 w-5 rotate-180" />
+          </Button>
+        )}
+        <h1 className="text-xl md:text-2xl font-bold">
+          {section ? activeLabel : 'Sozlamalar'}
+        </h1>
       </div>
 
-      <Tabs defaultValue="account" className="space-y-4 md:space-y-6">
-        <TabsList className="grid w-full grid-cols-4 h-auto p-1">
-          <TabsTrigger value="account" className="text-xs md:text-sm py-2">Account</TabsTrigger>
-          <TabsTrigger value="privacy" className="text-xs md:text-sm py-2">Privacy</TabsTrigger>
-          <TabsTrigger value="devices" className="text-xs md:text-sm py-2">Devices</TabsTrigger>
-          <TabsTrigger value="notifications" className="text-xs md:text-sm py-2">Notif.</TabsTrigger>
-        </TabsList>
+      <Tabs value={section ?? 'account'} className="md:grid md:grid-cols-[300px_1fr] md:gap-6 md:items-start">
+        {/* Master list */}
+        <div className={cn('space-y-6', section && 'hidden md:block')}>
+          <LanguageSwitcher />
+          {sectionGroups.map((group) => (
+            <div key={group.title}>
+              <p className="px-1 pb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {group.title}
+              </p>
+              <div className="rounded-2xl border border-border bg-card overflow-hidden">
+                {group.items.map((item, idx) => {
+                  const isActive = section === item.value;
+                  return (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => setSection(item.value)}
+                      className={cn(
+                        'w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors',
+                        idx !== 0 && 'border-t border-border/60',
+                        isActive ? 'bg-primary/10' : 'hover:bg-accent/50',
+                      )}
+                    >
+                      <span className={cn('h-9 w-9 rounded-xl flex items-center justify-center shrink-0', item.tint)}>
+                        <item.icon className="h-[18px] w-[18px]" />
+                      </span>
+                      <span className={cn('flex-1 text-sm font-medium', isActive && 'text-primary')}>
+                        {item.label}
+                      </span>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Detail pane */}
+        <div className={cn('mt-6 md:mt-0 min-w-0', !section && 'hidden md:block')}>
+          {!section && (
+            <div className="hidden md:flex flex-col items-center justify-center text-center rounded-2xl border border-border bg-card/40 py-24">
+              <Palette className="h-10 w-10 text-muted-foreground mb-4" />
+              <p className="font-semibold">Sozlamani tanlang</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Chap paneldan sozlamalar bo'limini tanlang
+              </p>
+            </div>
+          )}
+
 
         {/* Account Tab */}
         <TabsContent value="account" className="space-y-6">
@@ -1017,7 +1091,10 @@ export default function SettingsPage() {
             </div>
           </div>
         </TabsContent>
+        </div>
       </Tabs>
+
+
 
       {/* Footer */}
       <div className="text-center text-xs text-muted-foreground pt-8">
