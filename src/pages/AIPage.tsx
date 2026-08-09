@@ -25,8 +25,11 @@ import { toast as sonnerToast } from 'sonner';
 import { AISidebar } from '@/components/ai/AISidebar';
 import { AIComposer, type ComposerAttachment } from '@/components/ai/AIComposer';
 import { AIMessageBubble, AIThinkingBubble } from '@/components/ai/AIMessageBubble';
+import { AIArtifactPanel } from '@/components/ai/AIArtifactPanel';
 import type { AIConversation, AIMessage } from '@/components/ai/types';
 import { detectIntent } from '@/lib/aiIntent';
+import { extractArtifacts } from '@/lib/aiArtifacts';
+
 
 const PIN_KEY = 'alsamos.ai.pinned';
 const TITLE_KEY = 'alsamos.ai.titles';
@@ -62,7 +65,10 @@ export default function AIPage() {
   // Cold start ALWAYS lands on a fresh conversation — never restore the last chat.
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
+  const [artifactsOpen, setArtifactsOpen] = useState(false);
+  const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+
   const [forwardedPost, setForwardedPost] = useState<{
     id: string;
     content?: string;
@@ -495,6 +501,10 @@ export default function AIPage() {
 
   const greetingName = profile?.display_name || profile?.username || '';
 
+  const artifacts = useMemo(() => extractArtifacts(messages), [messages]);
+  const showArtifacts = artifactsOpen && artifacts.length > 0;
+
+
   return (
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-background md:h-[calc(100vh-2rem)]">
       {/* Sidebar */}
@@ -558,6 +568,19 @@ export default function AIPage() {
               : 'Yangi suhbat'}
           </h1>
           <div className="flex-1" />
+          {artifacts.length > 0 && (
+            <Button
+              size="sm"
+              variant={artifactsOpen ? 'secondary' : 'ghost'}
+              className="h-8 gap-1.5 rounded-lg px-2.5 text-[11px]"
+              onClick={() => setArtifactsOpen((v) => !v)}
+            >
+              <FileText className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Artefaktlar</span>
+              <span className="rounded-full bg-muted/70 px-1.5 text-[10px]">{artifacts.length}</span>
+            </Button>
+          )}
+
           <div className="flex items-center gap-1.5 rounded-full bg-muted/40 px-2.5 py-1 text-[10px] text-muted-foreground">
             <Zap className="h-3 w-3 text-alsamos-orange" />
             <span className="hidden sm:inline">Avto model</span>
@@ -663,6 +686,28 @@ export default function AIPage() {
           onRemoveAttachment={(i) => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
         />
       </div>
+
+      {/* Artifacts */}
+      <AnimatePresence>
+        {showArtifacts && (
+          <motion.div
+            initial={{ x: isMobile ? '100%' : 40, opacity: isMobile ? 1 : 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: isMobile ? '100%' : 40, opacity: isMobile ? 1 : 0 }}
+            transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+            className={cn('z-50', isMobile ? 'fixed inset-0 bg-background' : 'relative shrink-0')}
+          >
+            <AIArtifactPanel
+              artifacts={artifacts}
+              activeId={activeArtifactId}
+              onSelect={setActiveArtifactId}
+              onClose={() => setArtifactsOpen(false)}
+              isMobile={isMobile}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
+
   );
 }
