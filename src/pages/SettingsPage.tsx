@@ -1017,7 +1017,10 @@ export default function SettingsPage() {
             </div>
           </div>
         </TabsContent>
+          </div>
+        </div>
       </Tabs>
+
 
       {/* Footer */}
       <div className="text-center text-xs text-muted-foreground pt-8">
