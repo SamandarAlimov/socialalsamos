@@ -25,8 +25,11 @@ import { toast as sonnerToast } from 'sonner';
 import { AISidebar } from '@/components/ai/AISidebar';
 import { AIComposer, type ComposerAttachment } from '@/components/ai/AIComposer';
 import { AIMessageBubble, AIThinkingBubble } from '@/components/ai/AIMessageBubble';
+import { AIArtifactPanel } from '@/components/ai/AIArtifactPanel';
 import type { AIConversation, AIMessage } from '@/components/ai/types';
 import { detectIntent } from '@/lib/aiIntent';
+import { extractArtifacts } from '@/lib/aiArtifacts';
+
 
 const PIN_KEY = 'alsamos.ai.pinned';
 const TITLE_KEY = 'alsamos.ai.titles';
