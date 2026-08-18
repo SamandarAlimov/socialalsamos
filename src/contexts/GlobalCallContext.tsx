@@ -33,12 +33,20 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
   const [handledCallIds, setHandledCallIds] = useState<Set<string>>(new Set());
   const callSoundRef = useRef<AudioContext | null>(null);
 
+  // Refs mirror state so the realtime subscription below can stay mounted for
+  // the whole session (single source of truth, no re-subscription churn).
+  const incomingCallRef = useRef<IncomingCall | null>(null);
+  const handledCallIdsRef = useRef<Set<string>>(new Set());
+  incomingCallRef.current = incomingCall;
+  handledCallIdsRef.current = handledCallIds;
+
   const handleCallHandled = useCallback((callId: string) => {
     setHandledCallIds(prev => new Set([...prev, callId]));
-    if (incomingCall?.id === callId) {
+    if (incomingCallRef.current?.id === callId) {
       setIncomingCall(null);
     }
-  }, [incomingCall]);
+  }, []);
+
 
   const acceptCall = useCallback(() => {
     if (incomingCall) {
