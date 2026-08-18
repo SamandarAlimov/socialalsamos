@@ -33,12 +33,20 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
   const [handledCallIds, setHandledCallIds] = useState<Set<string>>(new Set());
   const callSoundRef = useRef<AudioContext | null>(null);
 
+  // Refs mirror state so the realtime subscription below can stay mounted for
+  // the whole session (single source of truth, no re-subscription churn).
+  const incomingCallRef = useRef<IncomingCall | null>(null);
+  const handledCallIdsRef = useRef<Set<string>>(new Set());
+  incomingCallRef.current = incomingCall;
+  handledCallIdsRef.current = handledCallIds;
+
   const handleCallHandled = useCallback((callId: string) => {
     setHandledCallIds(prev => new Set([...prev, callId]));
-    if (incomingCall?.id === callId) {
+    if (incomingCallRef.current?.id === callId) {
       setIncomingCall(null);
     }
-  }, [incomingCall]);
+  }, []);
+
 
   const acceptCall = useCallback(() => {
     if (incomingCall) {
@@ -85,7 +93,7 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
           console.log('[GlobalCall] New call detected:', newCall);
 
           // Skip if it's our own call or already handled
-          if (newCall.host_id === user.id || handledCallIds.has(newCall.id)) {
+          if (newCall.host_id === user.id || handledCallIdsRef.current.has(newCall.id)) {
             console.log('[GlobalCall] Skipping - our call or already handled');
             return;
           }
@@ -135,7 +143,7 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
           
           // If call ended, dismiss the notification immediately
           if (updatedCall.status === 'ended') {
-            if (incomingCall?.id === updatedCall.id) {
+            if (incomingCallRef.current?.id === updatedCall.id) {
               console.log('[GlobalCall] Incoming call ended, dismissing');
               setIncomingCall(null);
             }
@@ -149,7 +157,7 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, handledCallIds, incomingCall]);
+  }, [user]);
 
   // Don't show dialog if already on messages page (it handles its own calls)
   const showDialog = incomingCall && location.pathname !== '/messages';
