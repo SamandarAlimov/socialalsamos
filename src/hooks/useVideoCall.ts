@@ -165,64 +165,60 @@ export function useVideoCall() {
     }
   }, [user?.id, toast]);
 
-  // Join an existing call
+  // Join an existing call — atomic, cap-enforced server side
   const joinCall = useCallback(async (callId: string): Promise<boolean> => {
     if (!user?.id) return false;
 
     setCallEnded(false);
 
     try {
-      // Check if call is still active
+      const { data, error } = await supabase.rpc('join_video_call_guarded', {
+        p_call_id: callId,
+        p_is_video_on: true,
+      });
+
+      if (error) throw error;
+
+      const result = (data ?? {}) as {
+        joined?: boolean;
+        reason?: string;
+        max_participants?: number;
+      };
+
+      if (!result.joined) {
+        if (result.reason === 'call_full') {
+          toast({
+            title: 'This group call is full',
+            description: `A maximum of ${result.max_participants ?? MAX_MESH_PARTICIPANTS} participants can join this call.`,
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: 'Call Ended',
+            description: 'This call has already ended',
+            variant: 'destructive',
+          });
+        }
+        return false;
+      }
+
       const { data: callData } = await supabase
         .from('video_calls')
         .select('*')
         .eq('id', callId)
         .single();
 
-      if (!callData || callData.status === 'ended') {
-        toast({
-          title: 'Call Ended',
-          description: 'This call has already ended',
-          variant: 'destructive',
-        });
-        return false;
-      }
-
-      // Check if already a participant
-      const { data: existing } = await supabase
-        .from('call_participants')
-        .select('id')
-        .eq('call_id', callId)
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (existing) {
-        // Update joined_at if rejoining
-        await supabase
-          .from('call_participants')
-          .update({ 
-            left_at: null,
-            joined_at: new Date().toISOString() 
-          })
-          .eq('id', existing.id);
-      } else {
-        // Add as new participant
-        await supabase
-          .from('call_participants')
-          .insert({
-            call_id: callId,
-            user_id: user.id,
-            is_muted: false,
-            is_video_on: true,
-            is_screen_sharing: false,
-            is_hand_raised: false,
-          });
-      }
+      if (!callData) return false;
 
       setCurrentCall(callData as VideoCallRecord);
       return true;
     } catch (error) {
       console.error('Failed to join call:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to join call',
+        variant: 'destructive',
+      });
       return false;
     }
   }, [user?.id, toast]);
