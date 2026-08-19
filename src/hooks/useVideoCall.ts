@@ -230,37 +230,32 @@ export function useVideoCall() {
     setCallEnded(false);
   }, []);
 
-  // Leave call - updates database and ends call if last participant
-  const leaveCall = useCallback(async () => {
-    if (!currentCall || !user?.id) return;
+  /**
+   * Leave the call. Atomic server-side lifecycle:
+   *  - 1:1 call  -> always ends the call for both sides
+   *  - group call -> only ends when the leaver was the last active participant.
+   *    Host departure is NOT special.
+   * Returns true when the whole call was ended.
+   */
+  const leaveCall = useCallback(async (): Promise<boolean> => {
+    if (!currentCall || !user?.id) return false;
 
     const callId = currentCall.id;
     console.log('[VideoCall] Leaving call:', callId);
 
     try {
-      // Update participant record
-      await supabase
-        .from('call_participants')
-        .update({ left_at: new Date().toISOString() })
-        .eq('call_id', callId)
-        .eq('user_id', user.id);
+      const { data, error } = await supabase.rpc('leave_video_call', {
+        p_call_id: callId,
+      });
 
-      // Always end the call when someone leaves in 1:1 calls
-      // This ensures both users are notified via realtime
-      await supabase
-        .from('video_calls')
-        .update({ 
-          status: 'ended',
-          ended_at: new Date().toISOString() 
-        })
-        .eq('id', callId);
+      if (error) throw error;
 
-      console.log('[VideoCall] Call marked as ended');
-
-      // Don't reset state here - let the caller handle cleanup
-      // This prevents race conditions with the realtime subscription
+      const result = (data ?? {}) as { call_ended?: boolean; active_participants?: number };
+      console.log('[VideoCall] Leave result:', result);
+      return !!result.call_ended;
     } catch (error) {
       console.error('Error leaving call:', error);
+      return false;
     }
   }, [currentCall, user?.id]);
 
