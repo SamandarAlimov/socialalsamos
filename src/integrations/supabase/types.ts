@@ -6918,6 +6918,7 @@ export type Database = {
           ended_at: string | null
           host_id: string
           id: string
+          is_group_call: boolean
           max_participants: number | null
           started_at: string | null
           status: string | null
@@ -6929,6 +6930,7 @@ export type Database = {
           ended_at?: string | null
           host_id: string
           id?: string
+          is_group_call?: boolean
           max_participants?: number | null
           started_at?: string | null
           status?: string | null
@@ -6940,6 +6942,7 @@ export type Database = {
           ended_at?: string | null
           host_id?: string
           id?: string
+          is_group_call?: boolean
           max_participants?: number | null
           started_at?: string | null
           status?: string | null
@@ -7492,6 +7495,11 @@ export type Database = {
         Args: { p_call_id: string; p_is_video_on?: boolean }
         Returns: undefined
       }
+      join_video_call_guarded: {
+        Args: { p_call_id: string; p_is_video_on?: boolean }
+        Returns: Json
+      }
+      leave_video_call: { Args: { p_call_id: string }; Returns: Json }
       log_admin_action:
         | {
             Args: {

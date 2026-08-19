@@ -3,6 +3,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
+/** Mesh topology cap: WebRTC mesh creates N-1 peer connections per client.
+ *  8 participants = 7 uplinks each, which is the practical ceiling before
+ *  CPU/bandwidth degrade. Enforced atomically in join_video_call_guarded(). */
+export const MAX_MESH_PARTICIPANTS = 8;
+
 interface VideoCallRecord {
   id: string;
   conversation_id: string | null;
@@ -11,6 +16,8 @@ interface VideoCallRecord {
   status: string;
   started_at: string | null;
   ended_at: string | null;
+  is_group_call?: boolean;
+  max_participants?: number | null;
 }
 
 interface CallParticipant {
@@ -158,64 +165,60 @@ export function useVideoCall() {
     }
   }, [user?.id, toast]);
 
-  // Join an existing call
+  // Join an existing call — atomic, cap-enforced server side
   const joinCall = useCallback(async (callId: string): Promise<boolean> => {
     if (!user?.id) return false;
 
     setCallEnded(false);
 
     try {
-      // Check if call is still active
+      const { data, error } = await supabase.rpc('join_video_call_guarded', {
+        p_call_id: callId,
+        p_is_video_on: true,
+      });
+
+      if (error) throw error;
+
+      const result = (data ?? {}) as {
+        joined?: boolean;
+        reason?: string;
+        max_participants?: number;
+      };
+
+      if (!result.joined) {
+        if (result.reason === 'call_full') {
+          toast({
+            title: 'This group call is full',
+            description: `A maximum of ${result.max_participants ?? MAX_MESH_PARTICIPANTS} participants can join this call.`,
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: 'Call Ended',
+            description: 'This call has already ended',
+            variant: 'destructive',
+          });
+        }
+        return false;
+      }
+
       const { data: callData } = await supabase
         .from('video_calls')
         .select('*')
         .eq('id', callId)
         .single();
 
-      if (!callData || callData.status === 'ended') {
-        toast({
-          title: 'Call Ended',
-          description: 'This call has already ended',
-          variant: 'destructive',
-        });
-        return false;
-      }
-
-      // Check if already a participant
-      const { data: existing } = await supabase
-        .from('call_participants')
-        .select('id')
-        .eq('call_id', callId)
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (existing) {
-        // Update joined_at if rejoining
-        await supabase
-          .from('call_participants')
-          .update({ 
-            left_at: null,
-            joined_at: new Date().toISOString() 
-          })
-          .eq('id', existing.id);
-      } else {
-        // Add as new participant
-        await supabase
-          .from('call_participants')
-          .insert({
-            call_id: callId,
-            user_id: user.id,
-            is_muted: false,
-            is_video_on: true,
-            is_screen_sharing: false,
-            is_hand_raised: false,
-          });
-      }
+      if (!callData) return false;
 
       setCurrentCall(callData as VideoCallRecord);
       return true;
     } catch (error) {
       console.error('Failed to join call:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to join call',
+        variant: 'destructive',
+      });
       return false;
     }
   }, [user?.id, toast]);
@@ -227,37 +230,32 @@ export function useVideoCall() {
     setCallEnded(false);
   }, []);
 
-  // Leave call - updates database and ends call if last participant
-  const leaveCall = useCallback(async () => {
-    if (!currentCall || !user?.id) return;
+  /**
+   * Leave the call. Atomic server-side lifecycle:
+   *  - 1:1 call  -> always ends the call for both sides
+   *  - group call -> only ends when the leaver was the last active participant.
+   *    Host departure is NOT special.
+   * Returns true when the whole call was ended.
+   */
+  const leaveCall = useCallback(async (): Promise<boolean> => {
+    if (!currentCall || !user?.id) return false;
 
     const callId = currentCall.id;
     console.log('[VideoCall] Leaving call:', callId);
 
     try {
-      // Update participant record
-      await supabase
-        .from('call_participants')
-        .update({ left_at: new Date().toISOString() })
-        .eq('call_id', callId)
-        .eq('user_id', user.id);
+      const { data, error } = await supabase.rpc('leave_video_call', {
+        p_call_id: callId,
+      });
 
-      // Always end the call when someone leaves in 1:1 calls
-      // This ensures both users are notified via realtime
-      await supabase
-        .from('video_calls')
-        .update({ 
-          status: 'ended',
-          ended_at: new Date().toISOString() 
-        })
-        .eq('id', callId);
+      if (error) throw error;
 
-      console.log('[VideoCall] Call marked as ended');
-
-      // Don't reset state here - let the caller handle cleanup
-      // This prevents race conditions with the realtime subscription
+      const result = (data ?? {}) as { call_ended?: boolean; active_participants?: number };
+      console.log('[VideoCall] Leave result:', result);
+      return !!result.call_ended;
     } catch (error) {
       console.error('Error leaving call:', error);
+      return false;
     }
   }, [currentCall, user?.id]);
 
@@ -314,8 +312,14 @@ export function useVideoCall() {
     }
   }, [currentCall]);
 
-  // Subscribe to participant changes
-  const subscribeToParticipants = useCallback(() => {
+  /**
+   * Subscribe to participant changes.
+   * `onParticipantLeft` fires when a single participant's left_at becomes
+   * non-null while the call itself stays active (group call departure).
+   */
+  const subscribeToParticipants = useCallback((
+    onParticipantLeft?: (userId: string) => void
+  ) => {
     if (!currentCall) return () => {};
 
     const channel = supabase
@@ -328,7 +332,20 @@ export function useVideoCall() {
           table: 'call_participants',
           filter: `call_id=eq.${currentCall.id}`,
         },
-        () => {
+        (payload) => {
+          const oldRow = payload.old as Partial<CallParticipant> | null;
+          const newRow = payload.new as Partial<CallParticipant> | null;
+
+          if (
+            newRow?.left_at &&
+            !oldRow?.left_at &&
+            newRow.user_id &&
+            newRow.user_id !== user?.id
+          ) {
+            console.log('[VideoCall] Participant left:', newRow.user_id);
+            onParticipantLeft?.(newRow.user_id);
+          }
+
           fetchParticipants();
         }
       )
@@ -337,7 +354,7 @@ export function useVideoCall() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentCall, fetchParticipants]);
+  }, [currentCall, fetchParticipants, user?.id]);
 
   return {
     currentCall,

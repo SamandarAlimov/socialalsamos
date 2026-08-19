@@ -733,6 +733,7 @@ export function useWebRTC(roomId: string | null) {
     connectionQuality,
     joinRoom,
     leaveRoom,
+    closePeer,
     toggleMute,
     toggleVideo,
     toggleScreenShare,
