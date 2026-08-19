@@ -763,29 +763,34 @@ export default function MessagesPage() {
     const duration = currentCall?.started_at 
       ? Math.floor((Date.now() - new Date(currentCall.started_at).getTime()) / 1000)
       : 0;
-    
-    // Insert call history message with structured data
-    if (selectedConversation && currentCall) {
+
+    const conversationForHistory = selectedConversation;
+    const callForHistory = currentCall;
+
+    // Tear down only this client's peers, then run the atomic server-side leave.
+    leaveRoom();
+    const callFullyEnded = await leaveVideoCall();
+
+    // Only write a call-history message when the whole call actually ended,
+    // otherwise every group departure would spam the conversation.
+    if (callFullyEnded && conversationForHistory && callForHistory) {
       const callHistoryData = {
         type: callType,
         status: 'ended' as const,
         duration: duration > 0 ? duration : undefined,
         timestamp: new Date().toISOString(),
-        caller_id: currentCall.host_id,
+        caller_id: callForHistory.host_id,
         callee_id: user?.id || '',
       };
-      
+
       await supabase.from('messages').insert({
-        conversation_id: selectedConversation.id,
+        conversation_id: conversationForHistory.id,
         sender_id: user?.id,
         content: JSON.stringify(callHistoryData),
         media_type: 'call_history',
       });
     }
-    
-    leaveRoom();
-    await leaveVideoCall();
-    
+
     // Reset UI state after backend update
     setIsInCall(false);
     setActiveCallId(null);
