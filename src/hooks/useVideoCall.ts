@@ -312,8 +312,14 @@ export function useVideoCall() {
     }
   }, [currentCall]);
 
-  // Subscribe to participant changes
-  const subscribeToParticipants = useCallback(() => {
+  /**
+   * Subscribe to participant changes.
+   * `onParticipantLeft` fires when a single participant's left_at becomes
+   * non-null while the call itself stays active (group call departure).
+   */
+  const subscribeToParticipants = useCallback((
+    onParticipantLeft?: (userId: string) => void
+  ) => {
     if (!currentCall) return () => {};
 
     const channel = supabase
@@ -326,7 +332,20 @@ export function useVideoCall() {
           table: 'call_participants',
           filter: `call_id=eq.${currentCall.id}`,
         },
-        () => {
+        (payload) => {
+          const oldRow = payload.old as Partial<CallParticipant> | null;
+          const newRow = payload.new as Partial<CallParticipant> | null;
+
+          if (
+            newRow?.left_at &&
+            !oldRow?.left_at &&
+            newRow.user_id &&
+            newRow.user_id !== user?.id
+          ) {
+            console.log('[VideoCall] Participant left:', newRow.user_id);
+            onParticipantLeft?.(newRow.user_id);
+          }
+
           fetchParticipants();
         }
       )
@@ -335,7 +354,7 @@ export function useVideoCall() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentCall, fetchParticipants]);
+  }, [currentCall, fetchParticipants, user?.id]);
 
   return {
     currentCall,
