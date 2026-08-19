@@ -3,6 +3,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
+/** Mesh topology cap: WebRTC mesh creates N-1 peer connections per client.
+ *  8 participants = 7 uplinks each, which is the practical ceiling before
+ *  CPU/bandwidth degrade. Enforced atomically in join_video_call_guarded(). */
+export const MAX_MESH_PARTICIPANTS = 8;
+
 interface VideoCallRecord {
   id: string;
   conversation_id: string | null;
@@ -11,6 +16,8 @@ interface VideoCallRecord {
   status: string;
   started_at: string | null;
   ended_at: string | null;
+  is_group_call?: boolean;
+  max_participants?: number | null;
 }
 
 interface CallParticipant {
