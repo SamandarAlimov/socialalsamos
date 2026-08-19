@@ -177,6 +177,7 @@ export default function MessagesPage() {
     isHandRaised,
     joinRoom,
     leaveRoom,
+    closePeer,
     toggleMute,
     toggleVideo,
     toggleScreenShare,
