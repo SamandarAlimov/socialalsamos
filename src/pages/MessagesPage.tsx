@@ -816,8 +816,11 @@ export default function MessagesPage() {
     // Fetch initial participants
     fetchParticipants();
 
-    // Subscribe to changes
-    const unsubscribe = subscribeToParticipants();
+    // Subscribe to changes. A single participant leaving a still-active group
+    // call must only tear down that peer, never the local session.
+    const unsubscribe = subscribeToParticipants((leftUserId) => {
+      closePeer(leftUserId);
+    });
 
     return () => {
       unsubscribe();

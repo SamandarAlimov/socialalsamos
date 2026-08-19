@@ -203,8 +203,11 @@ export function ChatHeader({
       </div>
       
       <div className="flex items-center gap-1">
-        {/* Hide call buttons for self-chat */}
-        {!isSelfChat && (
+        {/* Channels broadcast (live stream), they never use mesh 1:1/group calls */}
+        {isChannel && isAdmin && <GoLiveButton variant="header" />}
+
+        {/* Hide call buttons for self-chat and channel conversations */}
+        {!isSelfChat && !isChannel && (
           <>
             <Button variant="ghost" size="icon" onClick={onAudioCall}>
               <Phone className="h-5 w-5 text-muted-foreground" />
