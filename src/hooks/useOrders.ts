@@ -189,7 +189,7 @@ export function useSellerStore(sellerId?: string) {
     const { data: sellerData } = await supabase
       .from('sellers')
       .select(`
-        *,
+        id, user_id, business_name, business_type, description, logo_url, cover_url, location, website, is_verified, rating, total_reviews, total_sales, status, created_at, updated_at,
         profile:profiles(username, display_name, avatar_url, bio, followers_count)
       `)
       .eq('id', sellerId)
