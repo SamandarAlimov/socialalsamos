@@ -54,8 +54,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import {
 import { PROFILE_PUBLIC_COLUMNS } from '@/lib/profileFields';
+import {
   Table,
   TableBody,
   TableCell,
