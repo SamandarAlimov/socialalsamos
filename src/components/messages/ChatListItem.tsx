@@ -402,7 +402,7 @@ export function ChatListItem({
               )}
               >
                 {(() => {
-                  const formatted = formatLastMessage(conversation.last_message);
+                  const formatted = formatLastMessage(conversation.last_message, conversation.last_message_meta);
                   return (
                     <>
                       {formatted.icon}
