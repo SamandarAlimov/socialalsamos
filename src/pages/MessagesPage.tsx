@@ -344,13 +344,40 @@ export default function MessagesPage() {
   }, [scrollToBottom]);
 
   // Tab definitions
-  const tabs: { id: MessageTab; label: string }[] = [
+  const tabsBase: { id: MessageTab; label: string }[] = [
     { id: 'private', label: 'Private' },
     { id: 'groups', label: 'Groups' },
     { id: 'channels', label: 'Channels' },
     { id: 'requests', label: 'Requests' },
     { id: 'archived', label: 'Archived' },
   ];
+
+  // Compute per-tab unread counts from all non-archived conversations
+  const tabUnreadCounts = useMemo(() => {
+    const counts: Record<MessageTab, number> = {
+      private: 0,
+      groups: 0,
+      channels: 0,
+      requests: 0,
+      archived: 0,
+    };
+    for (const conv of allConversations) {
+      const isReq = Boolean((conv as any).is_request);
+      const unread = conv.unread_count ?? 0;
+      if (isReq) {
+        counts.requests += unread;
+      } else if (conv.type === 'private') {
+        counts.private += unread;
+      } else if (conv.type === 'group') {
+        counts.groups += unread;
+      } else if (conv.type === 'channel') {
+        counts.channels += unread;
+      }
+    }
+    return counts;
+  }, [allConversations]);
+
+  const tabs = tabsBase.map(tab => ({ ...tab, unread: tabUnreadCounts[tab.id] }));
 
   // Filter conversations - separate requests (is_request=true) from normal chats.
   const filteredConversations = conversations.filter(conv => {
