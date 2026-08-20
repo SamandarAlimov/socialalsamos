@@ -1182,13 +1182,18 @@ export default function MessagesPage() {
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={cn(
-              "flex-shrink-0 px-3 py-3 md:py-2.5 text-sm md:text-xs font-medium relative transition-colors active:bg-accent/50 whitespace-nowrap",
+              "flex-shrink-0 px-3 py-3 md:py-2.5 text-sm md:text-xs font-medium relative transition-colors active:bg-accent/50 whitespace-nowrap flex items-center gap-1.5",
               activeTab === tab.id 
                 ? "text-primary" 
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
             {tab.label}
+            {tab.unread > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold">
+                {tab.unread > 99 ? '99+' : tab.unread}
+              </span>
+            )}
             {activeTab === tab.id && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
             )}
