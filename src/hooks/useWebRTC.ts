@@ -421,14 +421,14 @@ export function useWebRTC(roomId: string | null) {
     [toast]
   );
 
-  const joinRoom = useCallback(async () => {
+  const joinRoom = useCallback(async (video = true) => {
     if (!roomId || !user?.id) return;
 
     setIsConnecting(true);
     setError(null);
     currentRoomRef.current = roomId;
 
-    const stream = await startLocalStream();
+    const stream = await startLocalStream(video, true);
     if (!stream) {
       setIsConnecting(false);
       return;

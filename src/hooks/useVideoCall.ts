@@ -46,6 +46,7 @@ export function useVideoCall() {
   const [isCreatingCall, setIsCreatingCall] = useState(false);
   const [callEnded, setCallEnded] = useState(false);
   const callSubscriptionRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const isCreatingCallRef = useRef(false);
 
   // Subscribe to call status changes
   useEffect(() => {
@@ -104,54 +105,41 @@ export function useVideoCall() {
       return null;
     }
 
+    // The ref closes the small window before React commits isCreatingCall,
+    // preventing double-clicks from creating competing call sessions.
+    if (isCreatingCallRef.current) return null;
+
+    isCreatingCallRef.current = true;
     setIsCreatingCall(true);
     setCallEnded(false);
 
     try {
-      // Create the video call record
-      const { data: call, error: callError } = await supabase
+      // The database function atomically validates membership, creates/reuses
+      // the open call, and adds the host to both participant registries.
+      const { data: callId, error: createError } = await supabase.rpc('create_video_call', {
+        p_conversation_id: conversationId,
+        p_call_type: callType,
+        p_is_video_on: callType === 'video',
+      });
+
+      if (createError) throw createError;
+      if (!callId) throw new Error('Call was not created');
+
+      const { data: call, error: readError } = await supabase
         .from('video_calls')
-        .insert({
-          conversation_id: conversationId,
-          host_id: user.id,
-          call_type: callType,
-          status: 'active',
-          started_at: null,
-        })
-        .select()
+        .select('*')
+        .eq('id', callId)
         .single();
 
-      if (callError) {
-        console.error('Error creating call:', callError);
-        throw callError;
-      }
-
-      // Add host as participant
-      const { error: participantError } = await supabase
-        .from('call_participants')
-        .insert({
-          call_id: call.id,
-          user_id: user.id,
-          is_muted: false,
-          is_video_on: callType === 'video',
-          is_screen_sharing: false,
-          is_hand_raised: false,
-        });
-
-      if (participantError) {
-        console.error('Error adding participant:', participantError);
-        await supabase.from('video_calls').delete().eq('id', call.id);
-        throw participantError;
-      }
-
-      setCurrentCall(call);
+      if (readError || !call) throw readError ?? new Error('Created call is not readable');
+      setCurrentCall(call as VideoCallRecord);
       
       toast({
         title: 'Call Started',
         description: `${callType === 'video' ? 'Video' : 'Audio'} call started`,
       });
 
-      return call.id;
+      return callId;
     } catch (error) {
       console.error('Failed to create call:', error);
       toast({
@@ -161,12 +149,13 @@ export function useVideoCall() {
       });
       return null;
     } finally {
+      isCreatingCallRef.current = false;
       setIsCreatingCall(false);
     }
   }, [user?.id, toast]);
 
   // Join an existing call — atomic, cap-enforced server side
-  const joinCall = useCallback(async (callId: string): Promise<boolean> => {
+  const joinCall = useCallback(async (callId: string, isVideoOn = true): Promise<boolean> => {
     if (!user?.id) return false;
 
     setCallEnded(false);
@@ -174,7 +163,7 @@ export function useVideoCall() {
     try {
       const { data, error } = await supabase.rpc('join_video_call_guarded', {
         p_call_id: callId,
-        p_is_video_on: true,
+        p_is_video_on: isVideoOn,
       });
 
       if (error) throw error;
