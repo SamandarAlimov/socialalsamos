@@ -7544,6 +7544,13 @@ export type Database = {
           table_name: string
         }[]
       }
+      get_seller_contact: {
+        Args: { p_seller_id: string }
+        Returns: {
+          email: string
+          phone: string
+        }[]
+      }
       get_unique_view_counts: {
         Args: { post_ids: string[] }
         Returns: {
