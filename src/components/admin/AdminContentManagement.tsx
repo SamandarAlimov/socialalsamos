@@ -55,6 +55,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
+import { PROFILE_PUBLIC_COLUMNS } from '@/lib/profileFields';
   Table,
   TableBody,
   TableCell,
@@ -190,7 +191,7 @@ export function AdminContentManagement() {
     setLoading(true);
     const { data, error } = await supabase
       .from('profiles')
-      .select('*')
+      .select(PROFILE_PUBLIC_COLUMNS)
       .order('created_at', { ascending: false })
       .limit(100);
 

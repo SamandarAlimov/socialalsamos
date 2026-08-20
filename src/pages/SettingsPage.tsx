@@ -61,6 +61,7 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import { VerificationRequestDialog } from '@/components/profile/VerificationRequestDialog';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+import { PROFILE_PUBLIC_COLUMNS } from '@/lib/profileFields';
 
 interface Profile {
   display_name: string | null;
@@ -183,7 +184,7 @@ export default function SettingsPage() {
       
       const { data } = await supabase
         .from('profiles')
-        .select('*')
+        .select(PROFILE_PUBLIC_COLUMNS)
         .eq('id', user.id)
         .single();
       

@@ -30,6 +30,7 @@ import { useUserReposts, Repost } from '@/hooks/useReposts';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PostViewModal } from '@/components/PostViewModal';
+import { PROFILE_PUBLIC_COLUMNS } from '@/lib/profileFields';
 
 interface UserProfile {
   id: string;
@@ -80,7 +81,7 @@ export default function UserProfilePage() {
       // Check if it's a UUID (for backwards compatibility) or username
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(usernameParam);
       
-      let query = supabase.from('profiles').select('*');
+      let query = supabase.from('profiles').select(PROFILE_PUBLIC_COLUMNS);
       
       if (isUUID) {
         query = query.eq('id', usernameParam);

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { PROFILE_PUBLIC_COLUMNS } from '@/lib/profileFields';
 
 export interface UserProfile {
   id: string;
@@ -59,7 +60,7 @@ export function useUserProfile(userId?: string) {
       // Fetch profile
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('*')
+        .select(PROFILE_PUBLIC_COLUMNS)
         .eq('id', targetUserId)
         .maybeSingle();
 
