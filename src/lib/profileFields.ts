@@ -6,22 +6,5 @@
  * granted to the `anon`/`authenticated` roles. Use the
  * `get_profile_private` RPC (owner or admin only) to read them.
  */
-export const PROFILE_PUBLIC_COLUMNS = [
-  'id',
-  'user_id',
-  'username',
-  'display_name',
-  'avatar_url',
-  'cover_url',
-  'bio',
-  'website',
-  'location',
-  'is_verified',
-  'is_online',
-  'last_seen',
-  'followers_count',
-  'following_count',
-  'posts_count',
-  'created_at',
-  'updated_at',
-].join(', ');
+export const PROFILE_PUBLIC_COLUMNS =
+  'id, user_id, username, display_name, avatar_url, cover_url, bio, website, location, is_verified, is_online, last_seen, followers_count, following_count, posts_count, created_at, updated_at' as const;
