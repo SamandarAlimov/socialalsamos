@@ -5,6 +5,14 @@ import { useToast } from '@/hooks/use-toast';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { unreadMessagesEmitter } from './useUnreadMessages';
 
+export interface LastMessageMeta {
+  content: string | null;
+  media_type: string | null;
+  media_url: string | null;
+  media_file_name: string | null;
+  sender_id: string | null;
+}
+
 export interface Conversation {
   id: string;
   type: 'private' | 'group' | 'channel';
@@ -16,6 +24,7 @@ export interface Conversation {
   last_message_at: string;
   created_at: string;
   last_message?: string;
+  last_message_meta?: LastMessageMeta;
   unread_count?: number;
   is_pinned?: boolean;
   is_muted?: boolean;
