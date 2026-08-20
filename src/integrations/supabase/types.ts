@@ -533,6 +533,60 @@ export type Database = {
           },
         ]
       }
+      call_invites: {
+        Row: {
+          call_id: string
+          call_type: string
+          conversation_id: string | null
+          created_at: string
+          id: string
+          invitee_id: string | null
+          inviter_id: string | null
+          metadata: Json
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          call_id: string
+          call_type?: string
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          invitee_id?: string | null
+          inviter_id?: string | null
+          metadata?: Json
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          call_id?: string
+          call_type?: string
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          invitee_id?: string | null
+          inviter_id?: string | null
+          metadata?: Json
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_invites_invitee_id_fkey"
+            columns: ["invitee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_invites_inviter_id_fkey"
+            columns: ["inviter_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       call_participants: {
         Row: {
           call_id: string
@@ -689,6 +743,51 @@ export type Database = {
           {
             foreignKeyName: "call_room_members_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      call_signals: {
+        Row: {
+          call_id: string
+          created_at: string
+          id: string
+          payload: Json
+          sender_id: string
+          target_user_id: string | null
+          type: string
+        }
+        Insert: {
+          call_id: string
+          created_at?: string
+          id?: string
+          payload?: Json
+          sender_id: string
+          target_user_id?: string | null
+          type: string
+        }
+        Update: {
+          call_id?: string
+          created_at?: string
+          id?: string
+          payload?: Json
+          sender_id?: string
+          target_user_id?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_signals_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_signals_target_user_id_fkey"
+            columns: ["target_user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -7208,6 +7307,10 @@ export type Database = {
       }
     }
     Functions: {
+      _rtc_has_column: {
+        Args: { p_column: string; p_table: string }
+        Returns: boolean
+      }
       admin_bulk_reserve: {
         Args: { p_category: string; p_reason?: string; p_usernames: string[] }
         Returns: {
@@ -7259,6 +7362,10 @@ export type Database = {
       }
       are_contacts: { Args: { a: string; b: string }; Returns: boolean }
       block_user: { Args: { _reason?: string; _target: string }; Returns: Json }
+      can_access_video_call: {
+        Args: { p_call_id: string; p_user_id: string }
+        Returns: boolean
+      }
       can_dm_user: {
         Args: { p_recipient_id: string; p_sender_id: string }
         Returns: boolean
