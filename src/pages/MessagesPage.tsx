@@ -120,6 +120,9 @@ export default function MessagesPage() {
     isArchivedTab // showArchived flag
   );
 
+  // Fetch all non-archived conversations to compute per-tab unread badges
+  const { conversations: allConversations } = useConversations(undefined, false);
+
   const { 
     messages, 
     isLoading: messagesLoading, 
