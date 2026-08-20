@@ -120,6 +120,9 @@ export default function MessagesPage() {
     isArchivedTab // showArchived flag
   );
 
+  // Fetch all non-archived conversations to compute per-tab unread badges
+  const { conversations: allConversations } = useConversations(undefined, false);
+
   const { 
     messages, 
     isLoading: messagesLoading, 
@@ -341,13 +344,40 @@ export default function MessagesPage() {
   }, [scrollToBottom]);
 
   // Tab definitions
-  const tabs: { id: MessageTab; label: string }[] = [
+  const tabsBase: { id: MessageTab; label: string }[] = [
     { id: 'private', label: 'Private' },
     { id: 'groups', label: 'Groups' },
     { id: 'channels', label: 'Channels' },
     { id: 'requests', label: 'Requests' },
     { id: 'archived', label: 'Archived' },
   ];
+
+  // Compute per-tab unread counts from all non-archived conversations
+  const tabUnreadCounts = useMemo(() => {
+    const counts: Record<MessageTab, number> = {
+      private: 0,
+      groups: 0,
+      channels: 0,
+      requests: 0,
+      archived: 0,
+    };
+    for (const conv of allConversations) {
+      const isReq = Boolean((conv as any).is_request);
+      const unread = conv.unread_count ?? 0;
+      if (isReq) {
+        counts.requests += unread;
+      } else if (conv.type === 'private') {
+        counts.private += unread;
+      } else if (conv.type === 'group') {
+        counts.groups += unread;
+      } else if (conv.type === 'channel') {
+        counts.channels += unread;
+      }
+    }
+    return counts;
+  }, [allConversations]);
+
+  const tabs = tabsBase.map(tab => ({ ...tab, unread: tabUnreadCounts[tab.id] }));
 
   // Filter conversations - separate requests (is_request=true) from normal chats.
   const filteredConversations = conversations.filter(conv => {
@@ -1152,13 +1182,18 @@ export default function MessagesPage() {
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={cn(
-              "flex-shrink-0 px-3 py-3 md:py-2.5 text-sm md:text-xs font-medium relative transition-colors active:bg-accent/50 whitespace-nowrap",
+              "flex-shrink-0 px-3 py-3 md:py-2.5 text-sm md:text-xs font-medium relative transition-colors active:bg-accent/50 whitespace-nowrap flex items-center gap-1.5",
               activeTab === tab.id 
                 ? "text-primary" 
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
             {tab.label}
+            {tab.unread > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold">
+                {tab.unread > 99 ? '99+' : tab.unread}
+              </span>
+            )}
             {activeTab === tab.id && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
             )}

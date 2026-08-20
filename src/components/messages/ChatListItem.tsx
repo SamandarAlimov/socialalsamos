@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Users, Megaphone, Pin, VolumeX, Reply, Bookmark, Phone, Video, PhoneMissed, PhoneOff } from 'lucide-react';
+import { Users, Megaphone, Pin, VolumeX, Reply, Bookmark, Phone, Video, PhoneMissed, PhoneOff, Mic, Image, FileText, MapPin, BarChart3, Sticker, Music } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
 import { Conversation } from '@/hooks/useMessages';
@@ -150,10 +150,49 @@ export function ChatListItem({
     return format(date, 'dd.MM.yyyy');
   };
 
-  // Format last message for display (handle call history JSON)
-  const formatLastMessage = (message: string | null): { text: string; icon?: React.ReactNode } => {
+  // Format last message for display (handle media-only messages, call history JSON, locations, etc.)
+  const formatLastMessage = (message: string | null, meta?: Conversation['last_message_meta']): { text: string; icon?: React.ReactNode } => {
+    const mediaType = meta?.media_type;
+    const hasRealContent = message && message.trim().length > 0;
+
+    // Media-only or media-enriched messages: content may be empty, so describe the attachment
+    if (!hasRealContent || mediaType) {
+      switch (mediaType) {
+        case 'voice':
+        case 'audio':
+          return { text: "Ovozli xabar", icon: <Mic className="h-3.5 w-3.5 text-primary inline mr-1" /> };
+        case 'image':
+        case 'album':
+        case 'photo':
+          return { text: "Rasm", icon: <Image className="h-3.5 w-3.5 text-primary inline mr-1" /> };
+        case 'video':
+          return { text: "Video", icon: <Video className="h-3.5 w-3.5 text-primary inline mr-1" /> };
+        case 'file':
+        case 'document':
+          return { text: meta?.media_file_name || "Fayl", icon: <FileText className="h-3.5 w-3.5 text-primary inline mr-1" /> };
+        case 'location':
+          return { text: "Joylashuv", icon: <MapPin className="h-3.5 w-3.5 text-primary inline mr-1" /> };
+        case 'poll':
+          return { text: "So'rov", icon: <BarChart3 className="h-3.5 w-3.5 text-primary inline mr-1" /> };
+        case 'sticker':
+          return { text: "Stiker", icon: <Sticker className="h-3.5 w-3.5 text-primary inline mr-1" /> };
+        case 'music':
+          return { text: "Musiqa", icon: <Music className="h-3.5 w-3.5 text-primary inline mr-1" /> };
+        case 'call_history':
+          // fall through to call JSON parser below
+          break;
+        default:
+          if (!hasRealContent) return { text: 'No messages yet' };
+      }
+    }
+
     if (!message) return { text: 'No messages yet' };
-    
+
+    // Location payload format used elsewhere in the app
+    if (message.startsWith('📍 LOCATION:')) {
+      return { text: 'Joylashuv', icon: <MapPin className="h-3.5 w-3.5 text-primary inline mr-1" /> };
+    }
+
     // Check if it's a call history JSON
     if (message.startsWith('{') && message.includes('"type"')) {
       try {
@@ -363,7 +402,7 @@ export function ChatListItem({
               )}
               >
                 {(() => {
-                  const formatted = formatLastMessage(conversation.last_message);
+                  const formatted = formatLastMessage(conversation.last_message, conversation.last_message_meta);
                   return (
                     <>
                       {formatted.icon}
