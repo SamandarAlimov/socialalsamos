@@ -25,7 +25,7 @@ export function AlsamosLogo({ size = 'md', showText = true, className = '' }: Al
     <div className={`flex items-center gap-3 ${className}`}>
       <img 
         src={alsamosLogo} 
-        alt="Alsamos" 
+        alt="Alsamos social platform" 
         className={`${sizeMap[size]} object-contain`}
       />
       {showText && (
