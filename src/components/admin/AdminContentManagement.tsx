@@ -312,10 +312,24 @@ export function AdminContentManagement() {
     }
   };
 
-  const openUserDetails = (user: UserProfile) => {
+  const openUserDetails = async (user: UserProfile) => {
     setSelectedUser(user);
     fetchUserDetails(user.id);
+
+    // Personal fields are only readable by admins via this secure function.
+    const { data: privateRows } = await supabase.rpc('get_profile_private', {
+      p_profile_id: user.id,
+    });
+    const priv = Array.isArray(privateRows) ? privateRows[0] : privateRows;
+    if (priv) {
+      setSelectedUser((prev) =>
+        prev && prev.id === user.id
+          ? { ...prev, birth_date: priv.birth_date ?? null, country: priv.country ?? null }
+          : prev
+      );
+    }
   };
+
 
   const getMediaIcon = (mediaType: string | null) => {
     if (mediaType === 'video') return <Play className="h-4 w-4" />;
