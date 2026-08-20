@@ -66,14 +66,13 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
           filter: `stream_id=eq.${streamId}`,
         },
         async () => {
-          // Fetch current viewer count
-          const { count } = await supabase
-            .from('live_stream_viewers')
-            .select('*', { count: 'exact', head: true })
-            .eq('stream_id', streamId)
-            .is('left_at', null);
-          
-          if (count !== null) {
+          // Viewer rows are private (owner/self only); the count comes from a
+          // secure counter function instead.
+          const { data: count } = await supabase.rpc('get_live_stream_viewer_count', {
+            p_stream_id: streamId,
+          });
+
+          if (typeof count === 'number') {
             setRealtimeViewerCount(count);
           }
         }
