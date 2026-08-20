@@ -181,7 +181,7 @@ export function useSellerProducts() {
     // Get seller profile
     const { data: sellerData } = await supabase
       .from('sellers')
-      .select('*')
+      .select('id, user_id, business_name, business_type, description, logo_url, cover_url, location, website, is_verified, rating, total_reviews, total_sales, status, created_at, updated_at')
       .eq('user_id', user.id)
       .single();
 
