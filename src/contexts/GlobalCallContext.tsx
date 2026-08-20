@@ -58,13 +58,17 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
 
   const declineCall = useCallback(async () => {
     if (incomingCall) {
-      // Update call status to declined
-      await supabase
-        .from('video_calls')
-        .update({ status: 'ended' })
-        .eq('id', incomingCall.id);
-      
-      handleCallHandled(incomingCall.id);
+      const callId = incomingCall.id;
+      const { error } = await supabase.rpc('decline_video_call', {
+        p_call_id: callId,
+      });
+
+      if (error) {
+        console.error('[GlobalCall] Failed to decline call:', error);
+        return;
+      }
+
+      handleCallHandled(callId);
     }
   }, [incomingCall, handleCallHandled]);
 

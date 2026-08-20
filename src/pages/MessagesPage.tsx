@@ -768,7 +768,7 @@ export default function MessagesPage() {
   const acceptIncomingCall = async () => {
     if (!incomingCall) return;
     
-    const success = await joinCall(incomingCall.id);
+    const success = await joinCall(incomingCall.id, incomingCall.call_type === 'video');
     if (success) {
       handleCallHandled(incomingCall.id);
       setCallType(incomingCall.call_type);
@@ -870,8 +870,8 @@ export default function MessagesPage() {
     if (hasJoinedRoomRef.current) return;
 
     hasJoinedRoomRef.current = true;
-    joinRoom();
-  }, [activeCallId, isInCall, joinRoom]);
+    void joinRoom(callType === 'video');
+  }, [activeCallId, isInCall, callType, joinRoom]);
 
   // Auto-end call when other participant ends it (via realtime database update)
   useEffect(() => {
