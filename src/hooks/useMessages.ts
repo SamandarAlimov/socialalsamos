@@ -157,7 +157,8 @@ export function useConversations(type?: 'private' | 'group' | 'channel', showArc
       const conversationsWithDetails = await Promise.all(
         (convos || []).map(async (conv) => {
           let otherParticipant = null;
-          let lastMessage = null;
+          let lastMessage: string | null = null;
+          let lastMessageMeta: LastMessageMeta | undefined = undefined;
           let unreadCount = 0;
           let isSelfChat = false;
 
@@ -201,17 +202,25 @@ export function useConversations(type?: 'private' | 'group' | 'channel', showArc
             }
           }
 
-          // Get last message
+          // Get last message with media metadata so media-only messages render a proper preview
           const { data: messages } = await supabase
             .from('messages')
-            .select('content')
+            .select('content, media_type, media_url, media_file_name, sender_id')
             .eq('conversation_id', conv.id)
             .eq('is_deleted', false)
             .order('created_at', { ascending: false })
             .limit(1);
 
           if (messages && messages.length > 0) {
-            lastMessage = messages[0].content;
+            const msg = messages[0];
+            lastMessage = msg.content;
+            lastMessageMeta = {
+              content: msg.content,
+              media_type: msg.media_type,
+              media_url: msg.media_url,
+              media_file_name: msg.media_file_name,
+              sender_id: msg.sender_id,
+            };
           }
 
           // Calculate unread count using last_read_at for efficiency
@@ -237,6 +246,7 @@ export function useConversations(type?: 'private' | 'group' | 'channel', showArc
             ...conv,
             other_participant: otherParticipant,
             last_message: lastMessage,
+            last_message_meta: lastMessageMeta,
             unread_count: unreadCount,
             is_pinned: participantSettings?.is_pinned ?? false,
             is_muted: participantSettings?.is_muted ?? false,
