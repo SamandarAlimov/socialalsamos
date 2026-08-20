@@ -196,7 +196,7 @@ export function AdminContentManagement() {
       .limit(100);
 
     if (!error && data) {
-      setUsers(data as UserProfile[]);
+      setUsers(data as unknown as UserProfile[]);
     }
     setLoading(false);
   };
