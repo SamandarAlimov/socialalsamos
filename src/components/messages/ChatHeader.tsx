@@ -30,6 +30,7 @@ import { useBlockedUsers } from '@/hooks/useMessageSafety';
 import { BlockConfirmDialog } from './BlockConfirmDialog';
 import { ReportDialog } from './ReportDialog';
 import { EncryptedIndicator } from './EncryptedIndicator';
+import { GoLiveButton } from '@/components/live/GoLiveButton';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -79,6 +80,7 @@ export function ChatHeader({
   const { blockedIds, refresh: refreshBlocks } = useBlockedUsers();
   
   // Check if this is a self-chat (conversation with yourself)
+  const isChannel = conversation.type === 'channel';
   const isSelfChat = conversation.is_self_chat || 
     (conversation.type === 'private' && conversation.other_participant?.id === user?.id);
 
@@ -204,7 +206,7 @@ export function ChatHeader({
       
       <div className="flex items-center gap-1">
         {/* Channels broadcast (live stream), they never use mesh 1:1/group calls */}
-        {isChannel && isAdmin && <GoLiveButton variant="header" />}
+        {isChannel && isAdmin && <GoLiveButton />}
 
         {/* Hide call buttons for self-chat and channel conversations */}
         {!isSelfChat && !isChannel && (
