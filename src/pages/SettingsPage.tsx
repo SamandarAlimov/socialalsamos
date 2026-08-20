@@ -187,7 +187,14 @@ export default function SettingsPage() {
         .select(PROFILE_PUBLIC_COLUMNS)
         .eq('id', user.id)
         .single();
-      
+
+      // Personal fields (birth date, country) are readable only by the owner
+      // or an admin through this secure function.
+      const { data: privateRows } = await supabase.rpc('get_profile_private', {
+        p_profile_id: user.id,
+      });
+      const priv = Array.isArray(privateRows) ? privateRows[0] : privateRows;
+
       if (data) {
         setProfile({
           display_name: data.display_name || '',
@@ -196,8 +203,8 @@ export default function SettingsPage() {
           avatar_url: data.avatar_url,
           location: data.location || '',
           website: data.website || '',
-          country: data.country || null,
-          birth_date: data.birth_date || null,
+          country: priv?.country || null,
+          birth_date: priv?.birth_date || null,
         });
       }
     };
