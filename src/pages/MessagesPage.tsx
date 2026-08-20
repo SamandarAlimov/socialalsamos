@@ -93,6 +93,7 @@ export default function MessagesPage() {
   const [callType, setCallType] = useState<'audio' | 'video'>('video');
   const [activeCallId, setActiveCallId] = useState<string | null>(null);
   const hasJoinedRoomRef = useRef(false);
+  const processedCallLinkRef = useRef<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
@@ -787,6 +788,64 @@ export default function MessagesPage() {
       });
     }
   };
+
+  // Accepting from the global dialog navigates here with a call deep-link.
+  // Resolve it from the backend rather than relying on transient context state,
+  // so refreshes and cross-page navigation cannot lose an accepted call.
+  useEffect(() => {
+    const callId = searchParams.get('call');
+    const requestedType = searchParams.get('type');
+    if (!callId || processedCallLinkRef.current === callId || isInCall) return;
+
+    processedCallLinkRef.current = callId;
+    let cancelled = false;
+
+    const openLinkedCall = async () => {
+      const { data: call, error } = await supabase
+        .from('video_calls')
+        .select('id, conversation_id, call_type, status, ended_at')
+        .eq('id', callId)
+        .maybeSingle();
+
+      if (cancelled) return;
+      if (error || !call || call.status === 'ended' || call.ended_at) {
+        processedCallLinkRef.current = null;
+        setSearchParams({}, { replace: true });
+        toast({ title: 'Call ended', description: 'This call is no longer available', variant: 'destructive' });
+        return;
+      }
+
+      const linkedType: 'audio' | 'video' =
+        (call.call_type === 'audio' || requestedType === 'audio') ? 'audio' : 'video';
+      const joined = await joinCall(callId, linkedType === 'video');
+      if (cancelled) return;
+
+      if (!joined) {
+        processedCallLinkRef.current = null;
+        setSearchParams({}, { replace: true });
+        return;
+      }
+
+      if (call.conversation_id && selectedConversation?.id !== call.conversation_id) {
+        const knownConversation = allConversations.find((item) => item.id === call.conversation_id);
+        if (knownConversation) {
+          setSelectedConversation(knownConversation);
+          setShowMobileChat(true);
+        } else {
+          await fetchConversationById(call.conversation_id);
+        }
+      }
+
+      handleCallHandled(callId);
+      setCallType(linkedType);
+      setActiveCallId(callId);
+      setIsInCall(true);
+      setSearchParams({}, { replace: true });
+    };
+
+    void openLinkedCall();
+    return () => { cancelled = true; };
+  }, [searchParams, isInCall, joinCall, allConversations, selectedConversation?.id, handleCallHandled, setSearchParams, toast]);
 
   const endCall = useCallback(async () => {
     // Calculate call duration
