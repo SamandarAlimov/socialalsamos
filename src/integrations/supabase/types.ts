@@ -7517,6 +7517,22 @@ export type Database = {
         Args: { _identifier: string }
         Returns: string
       }
+      get_live_stream_viewer_count: {
+        Args: { p_stream_id: string }
+        Returns: number
+      }
+      get_profile_private: {
+        Args: { p_profile_id: string }
+        Returns: {
+          birth_date: string
+          country: string
+          email_filters: Json
+          id: string
+          notification_preferences: Json
+          preferences: Json
+          signatures: Json
+        }[]
+      }
       get_rls_audit_report: {
         Args: never
         Returns: {
