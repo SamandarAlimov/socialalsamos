@@ -170,18 +170,49 @@ export function useWebRTC(roomId: string | null) {
     [user?.id]
   );
 
+  /**
+   * Durable signaling fallback.
+   * Broadcast is fast but lossy (a peer that has not subscribed yet never sees
+   * the frame). Every SDP/ICE frame is therefore ALSO persisted to
+   * `public.call_signals`, which both this client and the Flutter client read
+   * via postgres_changes + a backlog fetch on join. Signals are deduped by row id.
+   */
+  const persistSignal = useCallback(
+    async (event: "offer" | "answer" | "ice" | "leave", payload: SignalPayload) => {
+      if (!roomId || !user?.id) return;
+      try {
+        await supabase.from("call_signals").insert({
+          call_id: roomId,
+          sender_id: user.id,
+          target_user_id: payload.to ?? null,
+          type: event,
+          payload: payload as unknown as Record<string, unknown>,
+        });
+      } catch (e) {
+        console.warn("[WebRTC] persistSignal failed", e);
+      }
+    },
+    [roomId, user?.id]
+  );
+
   const sendSignal = useCallback(
     async (event: "offer" | "answer" | "ice" | "media" | "leave", payload: SignalPayload) => {
       const ch = channelRef.current;
-      if (!ch) return;
-      await ch.send({
-        type: "broadcast",
-        event,
-        payload,
-      });
+      if (ch) {
+        await ch.send({
+          type: "broadcast",
+          event,
+          payload,
+        });
+      }
+      // media state is ephemeral — never worth persisting
+      if (event !== "media") {
+        void persistSignal(event, payload);
+      }
     },
-    []
+    [persistSignal]
   );
+
 
   const closePeer = useCallback((peerId: string) => {
     const pc = peerConnectionsRef.current.get(peerId);
