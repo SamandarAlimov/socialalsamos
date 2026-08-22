@@ -601,6 +601,7 @@ export type Database = {
           last_seen_at: string | null
           left_at: string | null
           network_quality: string | null
+          role: string
           screen_share_track_id: string | null
           user_id: string
         }
@@ -617,6 +618,7 @@ export type Database = {
           last_seen_at?: string | null
           left_at?: string | null
           network_quality?: string | null
+          role?: string
           screen_share_track_id?: string | null
           user_id: string
         }
@@ -633,6 +635,7 @@ export type Database = {
           last_seen_at?: string | null
           left_at?: string | null
           network_quality?: string | null
+          role?: string
           screen_share_track_id?: string | null
           user_id?: string
         }
@@ -646,6 +649,70 @@ export type Database = {
           },
           {
             foreignKeyName: "call_participants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      call_quality_events: {
+        Row: {
+          bitrate_kbps: number | null
+          call_id: string
+          created_at: string
+          id: string
+          jitter_ms: number | null
+          metadata: Json
+          packets_lost: number | null
+          peer_id: string | null
+          quality: string
+          rtt_ms: number | null
+          user_id: string
+        }
+        Insert: {
+          bitrate_kbps?: number | null
+          call_id: string
+          created_at?: string
+          id?: string
+          jitter_ms?: number | null
+          metadata?: Json
+          packets_lost?: number | null
+          peer_id?: string | null
+          quality?: string
+          rtt_ms?: number | null
+          user_id: string
+        }
+        Update: {
+          bitrate_kbps?: number | null
+          call_id?: string
+          created_at?: string
+          id?: string
+          jitter_ms?: number | null
+          metadata?: Json
+          packets_lost?: number | null
+          peer_id?: string | null
+          quality?: string
+          rtt_ms?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_quality_events_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "video_calls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_quality_events_peer_id_fkey"
+            columns: ["peer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_quality_events_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -753,6 +820,7 @@ export type Database = {
         Row: {
           call_id: string
           created_at: string
+          expires_at: string
           id: string
           payload: Json
           sender_id: string
@@ -762,6 +830,7 @@ export type Database = {
         Insert: {
           call_id: string
           created_at?: string
+          expires_at?: string
           id?: string
           payload?: Json
           sender_id: string
@@ -771,6 +840,7 @@ export type Database = {
         Update: {
           call_id?: string
           created_at?: string
+          expires_at?: string
           id?: string
           payload?: Json
           sender_id?: string
@@ -4976,6 +5046,105 @@ export type Database = {
           },
         ]
       }
+      recommendation_events: {
+        Row: {
+          author_id: string | null
+          created_at: string
+          dwell_ms: number | null
+          event_type: string
+          id: string
+          metadata: Json
+          post_id: string
+          source: string
+          user_id: string
+          weight: number
+        }
+        Insert: {
+          author_id?: string | null
+          created_at?: string
+          dwell_ms?: number | null
+          event_type: string
+          id?: string
+          metadata?: Json
+          post_id: string
+          source?: string
+          user_id: string
+          weight?: number
+        }
+        Update: {
+          author_id?: string | null
+          created_at?: string
+          dwell_ms?: number | null
+          event_type?: string
+          id?: string
+          metadata?: Json
+          post_id?: string
+          source?: string
+          user_id?: string
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recommendation_events_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recommendation_events_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recommendation_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recommendation_global_rankings: {
+        Row: {
+          calculated_at: string
+          content_mode: string
+          engagement_score: number
+          freshness_score: number
+          post_id: string
+          quality_score: number
+          score: number
+        }
+        Insert: {
+          calculated_at?: string
+          content_mode?: string
+          engagement_score?: number
+          freshness_score?: number
+          post_id: string
+          quality_score?: number
+          score?: number
+        }
+        Update: {
+          calculated_at?: string
+          content_mode?: string
+          engagement_score?: number
+          freshness_score?: number
+          post_id?: string
+          quality_score?: number
+          score?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recommendation_global_rankings_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: true
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reports: {
         Row: {
           created_at: string | null
@@ -6502,6 +6671,41 @@ export type Database = {
           },
         ]
       }
+      user_recommendation_interests: {
+        Row: {
+          created_at: string
+          source: string
+          topic: string
+          updated_at: string
+          user_id: string
+          weight: number
+        }
+        Insert: {
+          created_at?: string
+          source?: string
+          topic: string
+          updated_at?: string
+          user_id: string
+          weight?: number
+        }
+        Update: {
+          created_at?: string
+          source?: string
+          topic?: string
+          updated_at?: string
+          user_id?: string
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_recommendation_interests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string | null
@@ -7011,6 +7215,7 @@ export type Database = {
       }
       video_calls: {
         Row: {
+          call_mode: string
           call_type: string | null
           conversation_id: string | null
           created_at: string | null
@@ -7018,11 +7223,15 @@ export type Database = {
           host_id: string
           id: string
           is_group_call: boolean
+          last_heartbeat_at: string | null
           max_participants: number | null
+          metadata: Json
           started_at: string | null
           status: string | null
+          title: string | null
         }
         Insert: {
+          call_mode?: string
           call_type?: string | null
           conversation_id?: string | null
           created_at?: string | null
@@ -7030,11 +7239,15 @@ export type Database = {
           host_id: string
           id?: string
           is_group_call?: boolean
+          last_heartbeat_at?: string | null
           max_participants?: number | null
+          metadata?: Json
           started_at?: string | null
           status?: string | null
+          title?: string | null
         }
         Update: {
+          call_mode?: string
           call_type?: string | null
           conversation_id?: string | null
           created_at?: string | null
@@ -7042,9 +7255,12 @@ export type Database = {
           host_id?: string
           id?: string
           is_group_call?: boolean
+          last_heartbeat_at?: string | null
           max_participants?: number | null
+          metadata?: Json
           started_at?: string | null
           status?: string | null
+          title?: string | null
         }
         Relationships: [
           {
@@ -7307,8 +7523,21 @@ export type Database = {
       }
     }
     Functions: {
+      _rtc_capacity_for_mode: { Args: { p_call_mode: string }; Returns: number }
+      _rtc_conversation_type: {
+        Args: { p_conversation_id: string }
+        Returns: string
+      }
+      _rtc_default_call_mode: {
+        Args: { p_conversation_id: string }
+        Returns: string
+      }
       _rtc_has_column: {
         Args: { p_column: string; p_table: string }
+        Returns: boolean
+      }
+      _rtc_is_conversation_participant: {
+        Args: { p_conversation_id: string; p_user_id: string }
         Returns: boolean
       }
       admin_bulk_reserve: {
@@ -7444,6 +7673,7 @@ export type Database = {
         Args: { p_user_id?: string; p_username: string }
         Returns: Json
       }
+      cleanup_expired_call_signals: { Args: never; Returns: number }
       cleanup_expired_stories: { Args: never; Returns: undefined }
       cleanup_old_search_cache: { Args: never; Returns: undefined }
       cleanup_old_search_history: { Args: never; Returns: undefined }
@@ -7656,8 +7886,42 @@ export type Database = {
         }
         Returns: Json
       }
+      recommend_public_posts: {
+        Args: { p_content_mode?: string; p_limit?: number; p_offset?: number }
+        Returns: {
+          comments_count: number
+          content: string
+          created_at: string
+          id: string
+          is_pinned: boolean
+          likes_count: number
+          media_type: string
+          media_urls: string[]
+          profile: Json
+          recommendation_reason: string
+          recommendation_score: number
+          shares_count: number
+          user_id: string
+          views_count: number
+          visibility: string
+        }[]
+      }
+      record_call_quality: {
+        Args: {
+          p_bitrate_kbps?: number
+          p_call_id: string
+          p_jitter_ms?: number
+          p_metadata?: Json
+          p_packets_lost?: number
+          p_peer_id?: string
+          p_quality?: string
+          p_rtt_ms?: number
+        }
+        Returns: undefined
+      }
       refresh_hashtags_aggregated: { Args: never; Returns: undefined }
       refresh_popular_searches: { Args: never; Returns: undefined }
+      refresh_recommendation_global_rankings: { Args: never; Returns: number }
       refund_order: {
         Args: { p_order_id: string; p_reason?: string }
         Returns: Json
@@ -7757,6 +8021,10 @@ export type Database = {
       }
       set_current_profile_photo: {
         Args: { p_photo_id: string; p_photo_url: string; p_user_id: string }
+        Returns: undefined
+      }
+      set_recommendation_interests: {
+        Args: { p_topics: string[] }
         Returns: undefined
       }
       terminate_old_user_sessions: { Args: never; Returns: number }
