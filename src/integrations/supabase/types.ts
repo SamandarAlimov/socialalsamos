@@ -7673,7 +7673,7 @@ export type Database = {
         Args: { p_user_id?: string; p_username: string }
         Returns: Json
       }
-      cleanup_expired_call_signals: { Args: never; Returns: number }
+      cleanup_expired_call_signals: { Args: never; Returns: undefined }
       cleanup_expired_stories: { Args: never; Returns: undefined }
       cleanup_old_search_cache: { Args: never; Returns: undefined }
       cleanup_old_search_history: { Args: never; Returns: undefined }
