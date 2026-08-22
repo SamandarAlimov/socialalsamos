@@ -360,6 +360,92 @@ export type Database = {
           },
         ]
       }
+      app_release_health_events: {
+        Row: {
+          app_release_id: string
+          crash_free_rate: number
+          created_at: string
+          id: string
+          sample_size: number
+          source: string
+        }
+        Insert: {
+          app_release_id: string
+          crash_free_rate: number
+          created_at?: string
+          id?: string
+          sample_size?: number
+          source?: string
+        }
+        Update: {
+          app_release_id?: string
+          crash_free_rate?: number
+          created_at?: string
+          id?: string
+          sample_size?: number
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_release_health_events_app_release_id_fkey"
+            columns: ["app_release_id"]
+            isOneToOne: false
+            referencedRelation: "app_releases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      app_releases: {
+        Row: {
+          changelog: string | null
+          crash_free_threshold: number
+          created_at: string
+          force_update: boolean
+          id: string
+          min_supported_version: string
+          platform: string
+          release_channel: string
+          rollout_percentage: number
+          shorebird_patch_number: number | null
+          status: string
+          store_url: string | null
+          updated_at: string
+          version: string
+        }
+        Insert: {
+          changelog?: string | null
+          crash_free_threshold?: number
+          created_at?: string
+          force_update?: boolean
+          id?: string
+          min_supported_version: string
+          platform: string
+          release_channel?: string
+          rollout_percentage?: number
+          shorebird_patch_number?: number | null
+          status?: string
+          store_url?: string | null
+          updated_at?: string
+          version: string
+        }
+        Update: {
+          changelog?: string | null
+          crash_free_threshold?: number
+          created_at?: string
+          force_update?: boolean
+          id?: string
+          min_supported_version?: string
+          platform?: string
+          release_channel?: string
+          rollout_percentage?: number
+          shorebird_patch_number?: number | null
+          status?: string
+          store_url?: string | null
+          updated_at?: string
+          version?: string
+        }
+        Relationships: []
+      }
       blocked_users: {
         Row: {
           blocked_id: string
@@ -1973,6 +2059,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      feature_flags: {
+        Row: {
+          description: string | null
+          enabled: boolean
+          key: string
+          min_version: string | null
+          platforms: string[]
+          rollout_percentage: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          description?: string | null
+          enabled?: boolean
+          key: string
+          min_version?: string | null
+          platforms?: string[]
+          rollout_percentage?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          description?: string | null
+          enabled?: boolean
+          key?: string
+          min_version?: string | null
+          platforms?: string[]
+          rollout_percentage?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
       }
       follows: {
         Row: {
@@ -7673,7 +7792,7 @@ export type Database = {
         Args: { p_user_id?: string; p_username: string }
         Returns: Json
       }
-      cleanup_expired_call_signals: { Args: never; Returns: undefined }
+      cleanup_expired_call_signals: { Args: never; Returns: number }
       cleanup_expired_stories: { Args: never; Returns: undefined }
       cleanup_old_search_cache: { Args: never; Returns: undefined }
       cleanup_old_search_history: { Args: never; Returns: undefined }
@@ -7878,6 +7997,15 @@ export type Database = {
             }
             Returns: string
           }
+      pause_unhealthy_app_releases: {
+        Args: never
+        Returns: {
+          app_release_id: string
+          crash_free_rate: number
+          platform: string
+          version: string
+        }[]
+      }
       process_marketplace_order: {
         Args: {
           _notes?: string
