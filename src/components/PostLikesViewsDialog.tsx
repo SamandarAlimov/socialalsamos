@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
-import { Loader2, Heart, Eye, Users, Search } from 'lucide-react';
+import { Loader as Loader2, Heart, Eye, Users, Search } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Dialog, DialogContent } from '@/components/ui/dialog';

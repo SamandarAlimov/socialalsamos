@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Paperclip, Image, FileText, Film, Loader2 } from 'lucide-react';
+import { Paperclip, Image, FileText, Film, Loader as Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,

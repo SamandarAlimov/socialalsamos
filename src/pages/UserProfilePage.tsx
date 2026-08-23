@@ -3,20 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { 
-  MessageCircle, 
-  UserPlus, 
-  UserMinus,
-  Grid, 
-  Video, 
-  MapPin,
-  Link as LinkIcon,
-  Calendar,
-  ArrowLeft,
-  Heart,
-  Play,
-  Repeat2
-} from 'lucide-react';
+import { MessageCircle, UserPlus, UserMinus, Grid2x2 as Grid, Video, MapPin, Link as LinkIcon, Calendar, ArrowLeft, Heart, Play, Repeat2 } from 'lucide-react';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { toast } from 'sonner';
 import { useConversations } from '@/hooks/useMessages';

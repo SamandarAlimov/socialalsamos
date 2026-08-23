@@ -6,12 +6,7 @@ import { useFileUpload } from '@/hooks/useFileUpload';
 import { useAutocompleteInput } from '@/hooks/useAutocompleteInput';
 import { MentionAutocomplete } from '@/components/MentionAutocomplete';
 import { HashtagAutocomplete } from '@/components/HashtagAutocomplete';
-import { 
-  Image as ImageIcon, 
-  Play, 
-  X, 
-  Loader2 
-} from 'lucide-react';
+import { Image as ImageIcon, Play, X, Loader as Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface CreatePostFormProps {

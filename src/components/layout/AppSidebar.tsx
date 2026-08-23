@@ -1,26 +1,5 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { 
-  Home, 
-  Search, 
-  Video, 
-  MessageCircle, 
-  ShoppingBag, 
-  Map, 
-  PlusSquare, 
-  User, 
-  Settings,
-  LogOut,
-  ChevronLeft,
-  ChevronRight,
-  Compass,
-  Wallet,
-  Sparkles,
-  LayoutGrid,
-  MoreHorizontal,
-  Moon,
-  Sun,
-  UserPlus
-} from 'lucide-react';
+import { Chrome as Home, Search, Video, MessageCircle, ShoppingBag, Map, SquarePlus as PlusSquare, User, Settings, LogOut, ChevronLeft, ChevronRight, Compass, Wallet, Sparkles, LayoutGrid, MoveHorizontal as MoreHorizontal, Moon, Sun, UserPlus } from 'lucide-react';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';

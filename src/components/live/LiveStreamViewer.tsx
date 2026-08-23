@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Heart, Send, Users, Radio, Loader2, WifiOff } from 'lucide-react';
+import { X, Heart, Send, Users, Radio, Loader as Loader2, WifiOff } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

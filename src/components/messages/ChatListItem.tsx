@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Users, Megaphone, Pin, VolumeX, Reply, Bookmark, Phone, Video, PhoneMissed, PhoneOff, Mic, Image, FileText, MapPin, BarChart3, Sticker, Music } from 'lucide-react';
+import { Users, Megaphone, Pin, VolumeX, Reply, Bookmark, Phone, Video, PhoneMissed, PhoneOff, Mic, Image, FileText, MapPin, ChartBar as BarChart3, Sticker, Music } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
 import { Conversation } from '@/hooks/useMessages';

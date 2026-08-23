@@ -1,21 +1,4 @@
-import { 
-  TrendingUp, 
-  PiggyBank, 
-  BarChart3, 
-  Hash,
-  Sparkles,
-  Home,
-  Receipt,
-  Wallet,
-  Building,
-  Clock,
-  FileText,
-  Car,
-  User,
-  ArrowLeftRight,
-  CreditCard,
-  LineChart
-} from 'lucide-react';
+import { TrendingUp, PiggyBank, ChartBar as BarChart3, Hash, Sparkles, Chrome as Home, Receipt, Wallet, Building, Clock, FileText, Car, User, ArrowLeftRight, CreditCard, ChartLine as LineChart } from 'lucide-react';
 import { PaymentServiceCard } from './PaymentServiceCard';
 import { PaymentSectionHeader } from './PaymentSectionHeader';
 

@@ -1,18 +1,5 @@
 import { useState } from 'react';
-import { 
-  DollarSign, 
-  Package, 
-  Eye, 
-  ShoppingCart, 
-  TrendingUp, 
-  Clock,
-  CheckCircle,
-  ChevronRight,
-  BarChart3,
-  ArrowUpRight,
-  ArrowDownRight,
-  Loader2
-} from 'lucide-react';
+import { DollarSign, Package, Eye, ShoppingCart, TrendingUp, Clock, CircleCheck as CheckCircle, ChevronRight, ChartBar as BarChart3, ArrowUpRight, ArrowDownRight, Loader as Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

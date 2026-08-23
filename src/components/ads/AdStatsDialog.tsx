@@ -7,15 +7,7 @@ import {
 import { Card, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAdStats } from '@/hooks/useAds';
-import { 
-  Eye, 
-  MousePointerClick, 
-  Users, 
-  TrendingUp,
-  DollarSign,
-  Loader2,
-  BarChart3
-} from 'lucide-react';
+import { Eye, MousePointerClick, Users, TrendingUp, DollarSign, Loader as Loader2, ChartBar as BarChart3 } from 'lucide-react';
 
 interface AdStatsDialogProps {
   adId: string;

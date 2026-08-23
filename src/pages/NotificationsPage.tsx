@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { isToday, isYesterday, isThisWeek, isThisMonth, differenceInMinutes } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 import { formatRelative, formatDate } from '@/lib/i18n-format';
-import { Heart, MessageCircle, UserPlus, AtSign, Check, Bell, BellOff, Settings, Trash2, MoreHorizontal, ChevronRight, Sparkles, Users } from 'lucide-react';
+import { Heart, MessageCircle, UserPlus, AtSign, Check, Bell, BellOff, Settings, Trash2, MoveHorizontal as MoreHorizontal, ChevronRight, Sparkles, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';

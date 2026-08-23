@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Image, Video, X, Loader2 } from 'lucide-react';
+import { Image, Video, X, Loader as Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';

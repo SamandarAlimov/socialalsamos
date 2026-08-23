@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Archive, Plus, Bookmark, Play, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { ArrowLeft, Archive, Plus, Bookmark, Play, Image as ImageIcon, Loader as Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';

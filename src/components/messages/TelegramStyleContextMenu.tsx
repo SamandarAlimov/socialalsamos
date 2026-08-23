@@ -1,19 +1,7 @@
 import { useEffect, useRef, useCallback, useState, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Reply,
-  Forward,
-  Edit,
-  Pin,
-  PinOff,
-  Trash2,
-  CheckSquare,
-  Copy,
-  Download,
-  CheckCheck,
-  Link,
-} from 'lucide-react';
+import { Reply, Forward, CreditCard as Edit, Pin, PinOff, Trash2, SquareCheck as CheckSquare, Copy, Download, CheckCheck, Link } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AnimatedEmoji } from '@/components/emoji/AnimatedEmoji';

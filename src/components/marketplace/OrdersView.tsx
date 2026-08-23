@@ -1,8 +1,5 @@
 import { useState } from 'react';
-import { 
-  Package, Clock, Truck, CheckCircle, XCircle, ChevronRight,
-  Loader2, ShoppingBag, MapPin, RotateCcw
-} from 'lucide-react';
+import { Package, Clock, Truck, CircleCheck as CheckCircle, Circle as XCircle, ChevronRight, Loader as Loader2, ShoppingBag, MapPin, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';

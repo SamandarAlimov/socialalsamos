@@ -1,10 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  MapPin, CreditCard, Truck, ShieldCheck, ChevronRight,
-  Loader2, CheckCircle, Package, ArrowLeft, Wallet, Banknote,
-  Plus, AlertCircle
-} from 'lucide-react';
+import { MapPin, CreditCard, Truck, ShieldCheck, ChevronRight, Loader as Loader2, CircleCheck as CheckCircle, Package, ArrowLeft, Wallet, Banknote, Plus, CircleAlert as AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';

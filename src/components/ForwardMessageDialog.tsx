@@ -12,7 +12,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Search, Send, Users, Megaphone, Loader2 } from 'lucide-react';
+import { Search, Send, Users, Megaphone, Loader as Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Message } from '@/hooks/useMessages';
 

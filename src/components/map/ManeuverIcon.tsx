@@ -14,7 +14,7 @@ import {
   MapPin,
   Navigation2,
 } from 'lucide-react';
-import { LucideProps } from 'lucide-react';
+import { TableProperties as LucideProps } from 'lucide-react';
 
 interface ManeuverIconProps extends LucideProps {
   type: string;

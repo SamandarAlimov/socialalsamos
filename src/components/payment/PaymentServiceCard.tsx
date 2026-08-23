@@ -1,4 +1,4 @@
-import { LucideIcon } from 'lucide-react';
+import { Video as LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface PaymentServiceCardProps {

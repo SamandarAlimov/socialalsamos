@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -36,7 +36,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const userIdRef = useRef<string | null>(null);
   const { toast } = useToast();
+
+  const setOffline = async (userId: string) => {
+    await supabase
+      .from('profiles')
+      .update({ is_online: false, last_seen: new Date().toISOString() })
+      .eq('id', userId);
+  };
 
   const fetchProfile = async (userId: string) => {
     const { data, error } = await supabase
@@ -103,6 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
+        userIdRef.current = session?.user?.id ?? null;
 
         if (session?.user) {
           // Defer profile fetch to avoid deadlock
@@ -121,6 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+      userIdRef.current = session?.user?.id ?? null;
       if (session?.user) {
         fetchProfile(session.user.id);
         saveAccountToStorage(session.user.id, session);
@@ -129,12 +139,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     // Set offline on unload
-    const handleUnload = async () => {
-      if (user) {
-        await supabase
-          .from('profiles')
-          .update({ is_online: false, last_seen: new Date().toISOString() })
-          .eq('id', user.id);
+    const handleUnload = () => {
+      const uid = userIdRef.current;
+      if (uid) {
+        setOffline(uid);
       }
     };
 
@@ -253,14 +261,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    if (user) {
-      await supabase
-        .from('profiles')
-        .update({ is_online: false, last_seen: new Date().toISOString() })
-        .eq('id', user.id);
+    const uid = userIdRef.current;
+    if (uid) {
+      await setOffline(uid);
     }
 
     await supabase.auth.signOut();
+    userIdRef.current = null;
     setUser(null);
     setSession(null);
     setProfile(null);

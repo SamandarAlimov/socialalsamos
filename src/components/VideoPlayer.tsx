@@ -1,21 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import {
-  Play,
-  Pause,
-  Volume2,
-  VolumeX,
-  Volume1,
-  Maximize2,
-  Minimize2,
-  Settings,
-  Subtitles,
-  SkipForward,
-  SkipBack,
-  Loader2,
-  ChevronRight,
-  Check,
-  ArrowLeft,
-} from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Volume1, Maximize2, Minimize2, Settings, Files as Subtitles, SkipForward, SkipBack, Loader as Loader2, ChevronRight, Check, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useVideoPlayerContext } from '@/contexts/VideoPlayerContext';
 

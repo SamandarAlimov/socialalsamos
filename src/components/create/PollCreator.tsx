@@ -3,14 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { 
-  Plus, 
-  X, 
-  Trash2,
-  GripVertical,
-  Clock,
-  BarChart3
-} from 'lucide-react';
+import { Plus, X, Trash2, GripVertical, Clock, ChartBar as BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Select,

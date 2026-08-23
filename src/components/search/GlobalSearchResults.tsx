@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Globe, BookOpen, Newspaper, ImageIcon, PlayCircle, LayoutGrid,
-  ExternalLink, AlertCircle, Loader2, Clock, KeyRound,
-} from 'lucide-react';
+import { Globe, BookOpen, Newspaper, Image as ImageIcon, CirclePlay as PlayCircle, LayoutGrid, ExternalLink, CircleAlert as AlertCircle, Loader as Loader2, Clock, KeyRound } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';

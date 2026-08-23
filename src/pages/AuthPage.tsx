@@ -4,17 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { 
-  Mail, 
-  Lock, 
-  User, 
-  Phone,
-  Loader2,
-  ArrowRight,
-  Eye,
-  EyeOff,
-  AtSign
-} from 'lucide-react';
+import { Mail, Lock, User, Phone, Loader as Loader2, ArrowRight, Eye, EyeOff, AtSign } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 

@@ -1,15 +1,4 @@
-import { 
-  Users, 
-  UserCheck, 
-  UserPlus, 
-  MessageSquare, 
-  FileText,
-  Globe,
-  Clock,
-  TrendingUp,
-  BarChart3,
-  RefreshCw
-} from 'lucide-react';
+import { Users, UserCheck, UserPlus, MessageSquare, FileText, Globe, Clock, TrendingUp, ChartBar as BarChart3, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAdminAnalytics } from '@/hooks/useAdminAnalytics';

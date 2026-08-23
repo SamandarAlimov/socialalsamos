@@ -7,26 +7,7 @@ import { useStoryViewers } from '@/hooks/useStoryViews';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  X,
-  ChevronLeft,
-  ChevronRight,
-  Send,
-  Heart,
-  Share2,
-  Smile,
-  Eye,
-  Trash2,
-  MoreHorizontal,
-  Pause,
-  Play,
-  Bookmark,
-  Loader2,
-  Download,
-  Flag,
-  Volume2,
-  VolumeX
-} from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Send, Heart, Share2, Smile, Eye, Trash2, MoveHorizontal as MoreHorizontal, Pause, Play, Bookmark, Loader as Loader2, Download, Flag, Volume2, VolumeX } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { useIsMobile } from '@/hooks/use-mobile';

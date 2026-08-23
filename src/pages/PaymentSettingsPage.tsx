@@ -1,14 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { 
-  ArrowUpRight, 
-  ArrowDownLeft, 
-  History,
-  ChevronRight,
-  Loader2,
-  RefreshCw
-} from 'lucide-react';
+import { ArrowUpRight, ArrowDownLeft, History, ChevronRight, Loader as Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';

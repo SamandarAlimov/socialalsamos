@@ -1,11 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { 
-  Search, Filter, ShoppingBag, Plus, Store, Package, Heart, 
-  TrendingUp, Sparkles, LayoutDashboard, MapPin, Star, 
-  Flame, Crown, ChevronRight, Video, Zap, SlidersHorizontal,
-  Grid3X3, LayoutList, ArrowUpDown, ClipboardList
-} from 'lucide-react';
+import { Search, Filter, ShoppingBag, Plus, Store, Package, Heart, TrendingUp, Sparkles, LayoutDashboard, MapPin, Star, Flame, Crown, ChevronRight, Video, Zap, SlidersHorizontal, Grid3x3 as Grid3X3, LayoutList, ArrowUpDown, ClipboardList } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, Copy, Download, FileCode2, FileText, ImageIcon, X } from 'lucide-react';
+import { Check, Copy, Download, FileCode2, FileText, Image as ImageIcon, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';

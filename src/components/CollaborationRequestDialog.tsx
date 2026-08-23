@@ -13,16 +13,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useCollaborations, Collaboration } from '@/hooks/useCollaborations';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
-import { 
-  Users, 
-  Check, 
-  X, 
-  Clock, 
-  SendHorizontal,
-  Image as ImageIcon,
-  Film,
-  Loader2
-} from 'lucide-react';
+import { Users, Check, X, Clock, SendHorizontal, Image as ImageIcon, Film, Loader as Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface CollaborationRequestDialogProps {

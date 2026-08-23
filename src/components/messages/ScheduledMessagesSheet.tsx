@@ -7,7 +7,7 @@ import {
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Clock, Trash2, Edit, Image, FileText, Mic, Video } from 'lucide-react';
+import { Clock, Trash2, CreditCard as Edit, Image, FileText, Mic, Video } from 'lucide-react';
 import { format } from 'date-fns';
 import { useScheduledMessages, ScheduledMessage } from '@/hooks/useScheduledMessages';
 import { cn } from '@/lib/utils';

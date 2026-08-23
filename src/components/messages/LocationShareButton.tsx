@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { MapPin, Loader2, Navigation } from 'lucide-react';
+import { MapPin, Loader as Loader2, Navigation } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog,

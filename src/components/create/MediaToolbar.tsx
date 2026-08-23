@@ -1,24 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { 
-  Image as ImageIcon, 
-  Video, 
-  Camera,
-  BarChart3,
-  MapPin,
-  AtSign,
-  Hash,
-  Smile,
-  Mic,
-  Calendar,
-  Music,
-  Users,
-  Type,
-  Sparkles,
-  Sticker,
-  Link2,
-  FileText,
-  Wand2
-} from 'lucide-react';
+import { Image as ImageIcon, Video, Camera, ChartBar as BarChart3, MapPin, AtSign, Hash, Smile, Mic, Calendar, Music, Users, Type, Sparkles, Sticker, Link2, FileText, Wand as Wand2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Tooltip,

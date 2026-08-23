@@ -6,7 +6,7 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/u
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CAMERA_EFFECTS, EFFECT_CATEGORIES, CameraEffect, getEffectFilterStyle } from './filters/EffectsData';
 import { cn } from '@/lib/utils';
-import { Wand2, Check, Camera, X, Loader2, RefreshCw } from 'lucide-react';
+import { Wand as Wand2, Check, Camera, X, Loader as Loader2, RefreshCw } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { toast } from 'sonner';
 

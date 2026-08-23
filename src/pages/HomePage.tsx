@@ -3,16 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { 
-  Heart, 
-  MessageCircle, 
-  Share2, 
-  Bookmark, 
-  Plus,
-  Loader2,
-  Repeat2,
-  Eye,
-} from 'lucide-react';
+import { Heart, MessageCircle, Share2, Bookmark, Plus, Loader as Loader2, Repeat2, Eye } from 'lucide-react';
 import { usePosts, Post } from '@/hooks/usePosts';
 import { useStories, StoryGroup } from '@/hooks/useStories';
 import { useStoryViews } from '@/hooks/useRealtimeCounts';

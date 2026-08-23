@@ -1,8 +1,5 @@
 import { useState } from 'react';
-import { 
-  ArrowLeft, ShieldCheck, Star, MapPin, MessageCircle,
-  Package, Users, Heart, Grid3X3, LayoutList, Loader2
-} from 'lucide-react';
+import { ArrowLeft, ShieldCheck, Star, MapPin, MessageCircle, Package, Users, Heart, Grid3x3 as Grid3X3, LayoutList, Loader as Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';

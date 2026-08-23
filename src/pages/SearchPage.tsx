@@ -1,11 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { 
-  Search, X, Globe, Sparkles, LayoutGrid, User, FileText, 
-  Users, Radio, ShoppingBag, Hash, TrendingUp, Clock, ArrowLeft,
-  Mic, SlidersHorizontal, ChevronRight, Heart, MessageCircle,
-  Eye, Play, Star, MapPin, Verified
-} from 'lucide-react';
+import { Search, X, Globe, Sparkles, LayoutGrid, User, FileText, Users, Radio, ShoppingBag, Hash, TrendingUp, Clock, ArrowLeft, Mic, SlidersHorizontal, ChevronRight, Heart, MessageCircle, Eye, Play, Star, MapPin, EggFried as Verified } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

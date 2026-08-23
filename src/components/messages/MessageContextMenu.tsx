@@ -6,20 +6,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
-import {
-  Eye,
-  Reply,
-  Forward,
-  Edit,
-  Pin,
-  PinOff,
-  Trash2,
-  CheckSquare,
-  Copy,
-  Download,
-  Clock,
-  CheckCheck,
-} from 'lucide-react';
+import { Eye, Reply, Forward, CreditCard as Edit, Pin, PinOff, Trash2, SquareCheck as CheckSquare, Copy, Download, Clock, CheckCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 

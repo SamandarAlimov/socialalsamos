@@ -1,24 +1,6 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { 
-  Phone, 
-  Video, 
-  Search, 
-  MoreVertical, 
-  Users, 
-  Megaphone,
-  ArrowLeft,
-  Info,
-  Bell,
-  BellOff,
-  Trash2,
-  LogOut,
-  Users2,
-  Clock,
-  Bookmark,
-  Ban,
-  Flag,
-} from 'lucide-react';
+import { Phone, Video, Search, MoveVertical as MoreVertical, Users, Megaphone, ArrowLeft, Info, Bell, BellOff, Trash2, LogOut, Users as Users2, Clock, Bookmark, Ban, Flag } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Conversation } from '@/hooks/useMessages';
 import { cn } from '@/lib/utils';

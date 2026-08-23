@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { Home, MessageCircle, PlusSquare, Video, User } from 'lucide-react';
+import { Chrome as Home, MessageCircle, SquarePlus as PlusSquare, Video, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
 import { useNotificationSound } from '@/hooks/useNotificationSound';

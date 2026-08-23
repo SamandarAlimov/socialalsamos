@@ -9,7 +9,7 @@ import { MUSIC_TRACKS, MUSIC_CATEGORIES } from './filters/FilterData';
 import { useFileUpload } from '@/hooks/useFileUpload';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { Music, Play, Pause, Volume2, Search, Check, Plus, Upload, Loader2 } from 'lucide-react';
+import { Music, Play, Pause, Volume2, Search, Check, Plus, Upload, Loader as Loader2 } from 'lucide-react';
 
 type Track = typeof MUSIC_TRACKS[0];
 

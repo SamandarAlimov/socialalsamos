@@ -13,19 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useMultiAccount } from '@/hooks/useMultiAccount';
 import { useAuth } from '@/contexts/AuthContext';
-import {
-  Check,
-  Plus,
-  Trash2,
-  User,
-  Loader2,
-  ChevronRight,
-  ArrowLeft,
-  AlertCircle,
-  Eye,
-  EyeOff,
-  Users,
-} from 'lucide-react';
+import { Check, Plus, Trash2, User, Loader as Loader2, ChevronRight, ArrowLeft, CircleAlert as AlertCircle, Eye, EyeOff, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 

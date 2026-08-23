@@ -15,42 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useLocation } from '@/hooks/useLocation';
 import { useMapPresence } from '@/hooks/useMapPresence';
 import { toast } from 'sonner';
-import {
-  MapPin,
-  Navigation,
-  Users,
-  UserPlus,
-  Settings,
-  Search,
-  Locate,
-  Eye,
-  EyeOff,
-  Battery,
-  Signal,
-  SignalLow,
-  SignalZero,
-  ChevronLeft,
-  ChevronRight,
-  ExternalLink,
-  Compass,
-  Target,
-  Globe,
-  Lock,
-  Unlock,
-  ZoomIn,
-  ZoomOut,
-  X,
-  Layers,
-  Menu,
-  MoreHorizontal,
-  Route,
-  Footprints,
-  History,
-  Crosshair,
-  Home,
-  Briefcase,
-  BookOpen,
-} from 'lucide-react';
+import { MapPin, Navigation, Users, UserPlus, Settings, Search, Locate, Eye, EyeOff, Battery, Signal, SignalLow, SignalZero, ChevronLeft, ChevronRight, ExternalLink, Compass, Target, Globe, Lock, Clock as Unlock, ZoomIn, ZoomOut, X, Layers, Menu, MoveHorizontal as MoreHorizontal, Route, Footprints, History, Crosshair, Chrome as Home, Briefcase, BookOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Sheet,

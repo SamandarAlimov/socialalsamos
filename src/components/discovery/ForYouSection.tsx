@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Heart, MessageCircle, Play, BarChart3, Eye } from 'lucide-react';
+import { Sparkles, Heart, MessageCircle, Play, ChartBar as BarChart3, Eye } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
