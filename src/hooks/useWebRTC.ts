@@ -184,9 +184,9 @@ export function useWebRTC(roomId: string | null) {
         await supabase.from("call_signals").insert({
           call_id: roomId,
           sender_id: user.id,
-          target_user_id: payload.to ?? null,
+          target_user_id: payload.to ?? undefined,
           type: event,
-          payload: payload as unknown as Record<string, unknown>,
+          payload: payload as unknown as Json,
         });
       } catch (e) {
         console.warn("[WebRTC] persistSignal failed", e);
