@@ -7710,6 +7710,7 @@ export type Database = {
       }
       are_contacts: { Args: { a: string; b: string }; Returns: boolean }
       block_user: { Args: { _reason?: string; _target: string }; Returns: Json }
+      call_heartbeat: { Args: { p_call_id: string }; Returns: boolean }
       can_access_video_call: {
         Args: { p_call_id: string; p_user_id: string }
         Returns: boolean
@@ -8014,6 +8015,7 @@ export type Database = {
         }
         Returns: Json
       }
+      reap_stale_calls: { Args: { p_stale_seconds?: number }; Returns: Json }
       recommend_public_posts: {
         Args: { p_content_mode?: string; p_limit?: number; p_offset?: number }
         Returns: {
@@ -8073,6 +8075,7 @@ export type Database = {
         Returns: Json
       }
       revoke_admin_role: { Args: { target_user_id: string }; Returns: boolean }
+      rtc_maintenance: { Args: never; Returns: Json }
       search_conversation_hashtag: {
         Args: { p_conversation_id: string; p_tag: string }
         Returns: {
