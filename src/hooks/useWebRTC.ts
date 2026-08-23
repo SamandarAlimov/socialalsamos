@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { getIceServers } from "@/lib/iceServers";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
@@ -184,9 +185,9 @@ export function useWebRTC(roomId: string | null) {
         await supabase.from("call_signals").insert({
           call_id: roomId,
           sender_id: user.id,
-          target_user_id: payload.to ?? null,
+          target_user_id: payload.to ?? undefined,
           type: event,
-          payload: payload as unknown as Record<string, unknown>,
+          payload: payload as unknown as Json,
         });
       } catch (e) {
         console.warn("[WebRTC] persistSignal failed", e);
