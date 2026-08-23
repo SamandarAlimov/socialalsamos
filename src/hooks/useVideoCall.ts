@@ -212,6 +212,41 @@ export function useVideoCall() {
     }
   }, [user?.id, toast]);
 
+  /**
+   * Liveness heartbeat.
+   * The server reaper (`reap_stale_calls`, pg_cron every minute) marks any
+   * participant silent for >90s as left and ends calls with nobody active.
+   * We therefore ping every 20s while in a call, and immediately when the tab
+   * becomes visible again, so a live participant is never reaped.
+   */
+  useEffect(() => {
+    const callId = currentCall?.id;
+    if (!callId || !user?.id || currentCall?.ended_at) return;
+
+    let cancelled = false;
+    const ping = async () => {
+      if (cancelled || document.visibilityState === 'hidden') return;
+      try {
+        await supabase.rpc('call_heartbeat', { p_call_id: callId });
+      } catch (e) {
+        console.warn('[VideoCall] heartbeat failed', e);
+      }
+    };
+
+    void ping();
+    const interval = window.setInterval(ping, 20_000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void ping();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [currentCall?.id, currentCall?.ended_at, user?.id]);
+
   // Reset call state (called after cleanup is complete)
   const resetCallState = useCallback(() => {
     setCurrentCall(null);
