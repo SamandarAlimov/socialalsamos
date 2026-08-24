@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { format, subDays, startOfWeek, endOfWeek, eachDayOfInterval } from 'date-fns';
 import { uz } from 'date-fns/locale';
-import { Clock, Calendar, TrendingUp, ChartBar as BarChart3, Activity, Smartphone, Sun, Moon, Loader as Loader2, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
+import { Clock, Calendar, TrendingUp, BarChart3, Activity, Smartphone, Sun, Moon, Loader2, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';

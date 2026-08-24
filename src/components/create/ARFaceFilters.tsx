@@ -7,7 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Sparkles, Camera, X, Check, Loader as Loader2, RefreshCw } from 'lucide-react';
+import { Sparkles, Camera, X, Check, Loader2, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 

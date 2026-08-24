@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ExternalLink, Play, Image as ImageIcon, Link2 } from 'lucide-react';
+import { ExternalLink, Play, ImageIcon, Link2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface OpenGraphData {

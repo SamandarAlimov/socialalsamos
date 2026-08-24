@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Image as ImageIcon, Film, X, Loader as Loader2 } from 'lucide-react';
+import { ImageIcon, Film, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface CreateStoryDialogProps {

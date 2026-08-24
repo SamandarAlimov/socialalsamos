@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Play, ShoppingBag, Eye, Heart, Loader as Loader2 } from 'lucide-react';
+import { Play, ShoppingBag, Eye, Heart, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';

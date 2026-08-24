@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, X, MoveHorizontal as MoreHorizontal, CreditCard as Edit2, Trash2, GripVertical } from 'lucide-react';
+import { Plus, X, MoreHorizontal, Edit2, Trash2, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

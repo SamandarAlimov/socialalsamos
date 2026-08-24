@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Image as ImageIcon, Film, Target, DollarSign, Calendar, Loader as Loader2, X, Eye } from 'lucide-react';
+import { Upload, ImageIcon, Film, Target, DollarSign, Calendar, Loader2, X, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUserAds, AdCreateInput } from '@/hooks/useAds';
 import { toast } from 'sonner';

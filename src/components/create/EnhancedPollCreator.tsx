@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Plus, X, Trash2, GripVertical, Clock, ChartBar as BarChart3, Infinity, Users, EyeOff } from 'lucide-react';
+import { Plus, X, Trash2, GripVertical, Clock, BarChart3, Infinity, Users, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Select,

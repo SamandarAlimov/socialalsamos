@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Send, Paperclip, X, Image as ImageIcon, FileText, Film, Loader as Loader2, Bold, Italic, Underline, Strikethrough, Code, Quote, Clock } from 'lucide-react';
+import { Send, Paperclip, X, ImageIcon, FileText, Film, Loader2, Bold, Italic, Underline, Strikethrough, Code, Quote, Clock } from 'lucide-react';
 import { EmojiPicker } from '@/components/EmojiPicker';
 import { TelegramMediaRecorder } from './TelegramMediaRecorder';
 import { LocationShareButton } from './LocationShareButton';

@@ -9,7 +9,7 @@ import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Heart, MessageCircle, MoveHorizontal as MoreHorizontal, Send, Trash2, Loader as Loader2, Sticker } from 'lucide-react';
+import { Heart, MessageCircle, MoreHorizontal, Send, Trash2, Loader2, Sticker } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import {

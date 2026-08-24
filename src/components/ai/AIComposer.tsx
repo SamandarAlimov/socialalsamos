@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Paperclip, ArrowUp, Square, Mic, Loader as Loader2, X, FileText, Film, Music, Zap, Image as ImageIcon } from 'lucide-react';
+import { Paperclip, ArrowUp, Square, Mic, Loader2, X, FileText, Film, Music, Zap, ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';

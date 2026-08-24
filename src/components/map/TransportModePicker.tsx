@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Car, PersonStanding, Bike, Bus, Brain as Train, Plane, Ship, CircleParking } from 'lucide-react';
+import { Car, PersonStanding, Bike, Bus, Train, Plane, Ship, CircleParking } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export type TransportMode = 'driving' | 'walking' | 'cycling' | 'transit' | 'metro' | 'taxi';

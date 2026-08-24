@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ArrowLeft, Megaphone, Users, Share2, Settings, Send, Image, MoveVertical as MoreVertical, Globe, Lock } from 'lucide-react';
+import { ArrowLeft, Megaphone, Users, Share2, Settings, Send, Image, MoreVertical, Globe, Lock } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';

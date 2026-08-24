@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { AlsamosLogo } from "@/components/AlsamosLogo";
-import { Loader as Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 // Beta namespace — narrow typed wrapper to avoid depending on ambient types.
 type OAuthApi = {

@@ -3,6 +3,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
+// Module-level guards so multiple hook instances/tabs don't race on user_sessions
+let sessionRegisterInFlight = false;
+let lastSessionRegisterAt = 0;
+
+
+
 export interface UserSettings {
   id: string;
   user_id: string;
@@ -116,6 +122,14 @@ export function useUserSettings() {
   const registerSession = useCallback(async () => {
     if (!user?.id) return;
 
+    // Throttle + de-duplicate: repeated calls (multiple tabs/mounts) caused
+    // concurrent blanket UPDATEs on user_sessions and Postgres deadlocks (500).
+    const now = Date.now();
+    if (sessionRegisterInFlight) return;
+    if (now - lastSessionRegisterAt < 30_000) return;
+    sessionRegisterInFlight = true;
+    lastSessionRegisterAt = now;
+
     const deviceInfo = {
       device_name: navigator.userAgent.includes('Mobile') ? 'Mobile Device' : 'Desktop',
       device_type: navigator.userAgent.includes('Mobile') ? 'mobile' : 'desktop',
@@ -125,15 +139,7 @@ export function useUserSettings() {
     };
 
     try {
-      // Mark all other sessions as not current
-      await supabase
-        .from('user_sessions')
-        .update({ is_current: false })
-        .eq('user_id', user.id);
-
-      // Check if this session already exists (by browser fingerprint)
-      const sessionKey = `${deviceInfo.browser_name}_${deviceInfo.os_name}_${deviceInfo.device_type}`;
-      
+      // Find this device's session first (no blanket write yet)
       const { data: existing } = await supabase
         .from('user_sessions')
         .select('id')
@@ -142,32 +148,49 @@ export function useUserSettings() {
         .eq('browser_name', deviceInfo.browser_name)
         .maybeSingle();
 
-      if (existing) {
-        // Update existing session
+      let currentId = existing?.id ?? null;
+
+      if (currentId) {
         await supabase
           .from('user_sessions')
-          .update({ 
-            ...deviceInfo, 
-            last_active_at: new Date().toISOString(),
-            is_current: true 
-          })
-          .eq('id', existing.id);
-      } else {
-        // Create new session
-        await supabase
-          .from('user_sessions')
-          .insert({ 
-            user_id: user.id, 
+          .update({
             ...deviceInfo,
-            last_active_at: new Date().toISOString() 
-          });
+            last_active_at: new Date().toISOString(),
+            is_current: true,
+          })
+          .eq('id', currentId);
+      } else {
+        const { data: inserted } = await supabase
+          .from('user_sessions')
+          .insert({
+            user_id: user.id,
+            ...deviceInfo,
+            last_active_at: new Date().toISOString(),
+          })
+          .select('id')
+          .maybeSingle();
+        currentId = inserted?.id ?? null;
+      }
+
+      // Only then demote the other sessions (never touches the row above,
+      // so parallel clients can't lock each other in reverse order).
+      if (currentId) {
+        await supabase
+          .from('user_sessions')
+          .update({ is_current: false })
+          .eq('user_id', user.id)
+          .eq('is_current', true)
+          .neq('id', currentId);
       }
 
       fetchSessions();
     } catch (error) {
       console.error('Error registering session:', error);
+    } finally {
+      sessionRegisterInFlight = false;
     }
   }, [user?.id, fetchSessions]);
+
 
   // Logout specific session
   const logoutSession = useCallback(async (sessionId: string) => {

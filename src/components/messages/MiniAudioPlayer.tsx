@@ -1,6 +1,6 @@
 import { useAudioPlayer } from '@/contexts/AudioPlayerContext';
 import { Button } from '@/components/ui/button';
-import { Play, Pause, X, Music2, Video, SkipBack, SkipForward, Loader as Loader2 } from 'lucide-react';
+import { Play, Pause, X, Music2, Video, SkipBack, SkipForward, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useRef, useCallback } from 'react';

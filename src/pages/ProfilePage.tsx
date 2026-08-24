@@ -14,7 +14,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { uploadMedia } from '@/lib/mediaUpload';
-import { CreditCard as Edit3, Grid2x2 as Grid, Video, Bookmark, Repeat2, MapPin, Link as LinkIcon, Calendar, Image as ImageIcon, Archive, Megaphone, Camera, Loader as Loader2 } from 'lucide-react';
+import { Edit3, Grid, Video, Bookmark, Repeat2, MapPin, LinkIcon, Calendar, ImageIcon, Archive, Megaphone, Camera, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';

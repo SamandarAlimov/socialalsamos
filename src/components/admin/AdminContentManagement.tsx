@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { Search, Loader as Loader2, Trash2, Eye, Ban, MessageSquare, Heart, Play, Image as ImageIcon, FileText, MoveVertical as MoreVertical, UserX, UserCheck, Mail, Calendar, MapPin, Globe, TriangleAlert as AlertTriangle } from 'lucide-react';
+import { Search, Loader2, Trash2, Eye, Ban, MessageSquare, Heart, Play, ImageIcon, FileText, MoreVertical, UserX, UserCheck, Mail, Calendar, MapPin, Globe, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Check, CheckCheck, Plus, Forward, MoveVertical as MoreVertical, Clock, CircleAlert as AlertCircle } from 'lucide-react';
+import { Check, CheckCheck, Plus, Forward, MoreVertical, Clock, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MessageAttachment } from './MessageAttachment';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';

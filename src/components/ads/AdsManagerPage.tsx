@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, ChartBar as BarChart3, Eye, MousePointerClick, Users, DollarSign, Pause, Play, Trash2, MoveHorizontal as MoreHorizontal, TrendingUp, Loader as Loader2 } from 'lucide-react';
+import { Plus, BarChart3, Eye, MousePointerClick, Users, DollarSign, Pause, Play, Trash2, MoreHorizontal, TrendingUp, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';

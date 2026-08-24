@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Search, Plus, MessageCircle, Inbox, Archive, X, Forward, Trash2, SquareCheck as CheckSquare, Bookmark, Megaphone, ArrowDown } from 'lucide-react';
+import { Search, Plus, MessageCircle, Inbox, Archive, X, Forward, Trash2, CheckSquare, Bookmark, Megaphone, ArrowDown } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';

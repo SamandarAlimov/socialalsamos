@@ -8,7 +8,7 @@ import { useUserSettings } from '@/hooks/useUserSettings';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { supabase } from '@/integrations/supabase/client';
 import { uploadMedia } from '@/lib/mediaUpload';
-import { User, Bell, Shield, Palette, Globe, Smartphone, Key, Eye, Moon, Sun, LogOut, ChevronRight, Wifi, Trash2, Monitor, Laptop, CircleCheck as CheckCircle2, Circle as XCircle, Loader as Loader2, Save, BadgeCheck, Wallet, Heart, MessageCircle, UserPlus, AtSign, Clock, ChartBar as BarChart3 } from 'lucide-react';
+import { User, Bell, Shield, Palette, Globe, Smartphone, Key, Eye, Moon, Sun, LogOut, ChevronRight, Wifi, Trash2, Monitor, Laptop, CheckCircle2, XCircle, Loader2, Save, BadgeCheck, Wallet, Heart, MessageCircle, UserPlus, AtSign, Clock, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';

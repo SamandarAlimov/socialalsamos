@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useStoryHighlights } from '@/hooks/useStoryHighlights';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Bookmark, Plus, Loader as Loader2 } from 'lucide-react';
+import { Bookmark, Plus, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog,

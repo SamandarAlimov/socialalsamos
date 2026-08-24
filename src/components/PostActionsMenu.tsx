@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { MoveHorizontal as MoreHorizontal, CreditCard as Edit, Trash2, Pin, PinOff, Flag, Copy, Share2, Bookmark, EyeOff, Link, Sparkles } from 'lucide-react';
+import { MoreHorizontal, Edit, Trash2, Pin, PinOff, Flag, Copy, Share2, Bookmark, EyeOff, Link, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,

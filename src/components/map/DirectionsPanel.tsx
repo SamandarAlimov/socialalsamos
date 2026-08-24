@@ -5,7 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { X, Navigation, MapPin, Clock, Route, ChevronRight, ChevronLeft, ArrowUpDown, Loader as Loader2, Locate, CircleAlert as AlertCircle, Play, Square, Mic, MicOff, History, Star, StarOff, Trash2, Chrome as Home, Briefcase, Coffee, Share2, Copy, Calendar, Fuel, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle2, Volume2, VolumeX, Crosshair } from 'lucide-react';
+import { X, Navigation, MapPin, Clock, Route, ChevronRight, ChevronLeft, ArrowUpDown, Loader2, Locate, AlertCircle, Play, Square, Mic, MicOff, History, Star, StarOff, Trash2, Home, Briefcase, Coffee, Share2, Copy, Calendar, Fuel, AlertTriangle, CheckCircle2, Volume2, VolumeX, Crosshair } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { 
   useDirections, 

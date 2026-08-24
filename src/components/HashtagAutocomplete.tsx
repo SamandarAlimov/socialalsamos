@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
-import { Loader as Loader2, Hash, TrendingUp } from 'lucide-react';
+import { Loader2, Hash, TrendingUp } from 'lucide-react';
 
 interface TrendingHashtag {
   hashtag: string;
