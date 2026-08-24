@@ -1,357 +1,524 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// Lightweight WebSocket relay for Flutter/Web WebRTC calls.
+//
+// Durable DB signaling remains the source-of-truth fallback. This Edge
+// Function is only a low-latency relay for offer/answer/ICE/media events.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+type Client = {
+  socket: WebSocket;
+  roomId: string;
+  userId: string;
+  joinedAt: number;
+  lastSeenAt: number;
 };
 
-// In-memory storage for rooms (in production, use Redis)
-const rooms = new Map<string, Map<string, WebSocket>>();
-const roomCallIds = new Map<string, string>(); // roomId -> callId mapping
+const rooms = new Map<string, Map<string, Client>>();
+const roomCleanupTimers = new Map<string, number>();
+const heartbeatTimers = new WeakMap<WebSocket, number>();
 
-// Helper to verify user is participant in a conversation/call
-async function verifyParticipant(userId: string, roomId: string): Promise<boolean> {
-  try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+const HEARTBEAT_MS = 15_000;
+const STALE_CLIENT_MS = 45_000;
 
-    // Check if the roomId corresponds to a video_call or conversation
-    // First check if user is a call participant
-    const { data: callParticipant } = await supabase
-      .from('call_participants')
-      .select('id')
-      .eq('call_id', roomId)
-      .eq('user_id', userId)
-      .maybeSingle();
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+};
 
-    if (callParticipant) return true;
+Deno.serve((req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
 
-    // Check if user is part of the conversation (roomId could be conversation_id)
-    const { data: convParticipant } = await supabase
-      .from('conversation_participants')
-      .select('id')
-      .eq('conversation_id', roomId)
-      .eq('user_id', userId)
-      .maybeSingle();
+  const upgrade = req.headers.get("upgrade") ?? "";
+  if (upgrade.toLowerCase() !== "websocket") {
+    return new Response("WebSocket required", {
+      status: 426,
+      headers: corsHeaders,
+    });
+  }
 
-    if (convParticipant) return true;
+  const url = new URL(req.url);
+  const initialRoomId =
+    url.searchParams.get("roomId") ?? url.searchParams.get("callId");
+  const initialUserId = url.searchParams.get("userId");
 
-    // Check if there's a video_call for this room and user is host or conversation participant
-    const { data: videoCall } = await supabase
-      .from('video_calls')
-      .select('id, host_id, conversation_id')
-      .eq('id', roomId)
-      .maybeSingle();
+  const { socket, response } = Deno.upgradeWebSocket(req);
+  let client: Client | null = null;
+  let keepAliveResolve: (() => void) | null = null;
+  const keepAlive = new Promise<void>((resolve) => {
+    keepAliveResolve = resolve;
+  });
+  EdgeRuntime.waitUntil(keepAlive);
+  const tokenUserId = getUserIdFromToken(req.headers.get("authorization"));
 
-    if (videoCall) {
-      if (videoCall.host_id === userId) return true;
-      
-      if (videoCall.conversation_id) {
-        const { data: isConvParticipant } = await supabase
-          .from('conversation_participants')
-          .select('id')
-          .eq('conversation_id', videoCall.conversation_id)
-          .eq('user_id', userId)
-          .maybeSingle();
-        
-        if (isConvParticipant) return true;
-      }
+  socket.onopen = async () => {
+    startSocketHeartbeat(socket);
+    if (initialRoomId != null && initialUserId != null && tokenUserId != null) {
+      client = await registerClient({
+        socket,
+        roomId: initialRoomId,
+        userId: initialUserId,
+        tokenUserId,
+      });
+      return;
+    }
+    socket.send(JSON.stringify({ type: "ready" }));
+  };
+
+  socket.onmessage = async (event) => {
+    const message = parseMessage(event.data);
+    if (message == null) return;
+
+    const type = String(message.type ?? "");
+    if (type.length === 0) return;
+
+    if (client != null) {
+      client.lastSeenAt = Date.now();
     }
 
-    return false;
-  } catch (error) {
-    console.error('Error verifying participant:', error);
-    return false;
+    if (type === "pong" || type === "heartbeat") {
+      if (client != null) {
+        await touchParticipant(client, type === "heartbeat");
+      }
+      socket.send(JSON.stringify({
+        type: "heartbeat-ack",
+        serverTime: new Date().toISOString(),
+      }));
+      return;
+    }
+
+    if (type === "join" || type === "join-room") {
+      const roomId =
+        stringOrNull(message.roomId) ?? stringOrNull(message.callId);
+      const userId = stringOrNull(message.userId);
+      const joinTokenUserId =
+        tokenUserId ?? getUserIdFromToken(stringOrNull(message.accessToken));
+      if (roomId == null || userId == null) {
+        socket.send(JSON.stringify({
+          type: "error",
+          message: "Missing roomId/callId or userId",
+        }));
+        return;
+      }
+      client = await registerClient({
+        socket,
+        roomId,
+        userId,
+        tokenUserId: joinTokenUserId,
+      });
+      return;
+    }
+
+    if (client == null) {
+      socket.send(JSON.stringify({
+        type: "error",
+        message: "Join the call before sending signaling messages",
+      }));
+      return;
+    }
+
+    const normalized = {
+      ...message,
+      type,
+      roomId: client.roomId,
+      callId: client.roomId,
+      userId: client.userId,
+      fromUserId: client.userId,
+      from: client.userId,
+    };
+
+    if (type === "leave" && message.ended === true) {
+      await markParticipantLeft(client, true);
+      broadcast(client.roomId, client.userId, {
+        ...normalized,
+        type: "call-ended",
+        ended: true,
+      });
+      socket.close(1000, "call_ended");
+      return;
+    }
+
+    const targetUserId =
+      stringOrNull(message.targetUserId) ?? stringOrNull(message.to);
+
+    if (targetUserId != null) {
+      sendTo(client.roomId, targetUserId, normalized);
+      return;
+    }
+
+    broadcast(client.roomId, client.userId, normalized);
+  };
+
+  socket.onerror = () => {
+    if (client != null) leave(client);
+  };
+
+  socket.onclose = () => {
+    stopSocketHeartbeat(socket);
+    if (client != null) leave(client);
+    keepAliveResolve?.();
+  };
+
+  return response;
+});
+
+async function registerClient({
+  socket,
+  roomId,
+  userId,
+  tokenUserId,
+}: {
+  socket: WebSocket;
+  roomId: string;
+  userId: string;
+  tokenUserId: string | null;
+}): Promise<Client | null> {
+  const now = Date.now();
+  const candidate: Client = {
+    socket,
+    roomId,
+    userId,
+    joinedAt: now,
+    lastSeenAt: now,
+  };
+
+  if (tokenUserId == null) {
+    send(candidate, {
+      type: "error",
+      message: "Authentication token is required",
+    });
+    socket.close(1008, "auth_required");
+    return null;
+  }
+
+  if (tokenUserId != null && tokenUserId !== userId) {
+    send(candidate, {
+      type: "error",
+      message: "User ID mismatch with authentication token",
+    });
+    socket.close(1008, "user_id_mismatch");
+    return null;
+  }
+
+  const allowed = await verifyParticipant(userId, roomId);
+  if (!allowed) {
+    send(candidate, {
+      type: "error",
+      message: "Not authorized to join this call",
+    });
+    socket.close(1008, "not_authorized");
+    return null;
+  }
+
+  const room = getRoom(roomId);
+  const previous = room.get(userId);
+  if (previous != null && previous.socket !== socket) {
+    previous.socket.close(1000, "replaced");
+  }
+  room.set(userId, candidate);
+  scheduleRoomCleanup(roomId);
+  await touchParticipant(candidate, false);
+
+  const peers = [...room.keys()].filter((id) => id !== userId);
+  send(candidate, {
+    type: "joined",
+    roomId,
+    callId: roomId,
+    userId,
+    peers,
+    participants: peers,
+    participantCount: room.size,
+  });
+
+  broadcast(roomId, userId, {
+    type: "user-joined",
+    roomId,
+    callId: roomId,
+    userId,
+    participantCount: room.size,
+  });
+
+  return candidate;
+}
+
+function getRoom(roomId: string): Map<string, Client> {
+  let room = rooms.get(roomId);
+  if (room == null) {
+    room = new Map<string, Client>();
+    rooms.set(roomId, room);
+  }
+  return room;
+}
+
+function leave(client: Client) {
+  const room = rooms.get(client.roomId);
+  if (room == null) return;
+
+  const existing = room.get(client.userId);
+  if (existing?.socket !== client.socket) return;
+
+  room.delete(client.userId);
+  void markParticipantLeft(client);
+  broadcast(client.roomId, client.userId, {
+    type: "user-left",
+    roomId: client.roomId,
+    callId: client.roomId,
+    userId: client.userId,
+    fromUserId: client.userId,
+    from: client.userId,
+  });
+
+  if (room.size === 0) rooms.delete(client.roomId);
+}
+
+function startSocketHeartbeat(socket: WebSocket) {
+  stopSocketHeartbeat(socket);
+  const timer = setInterval(() => {
+    if (socket.readyState !== WebSocket.OPEN) {
+      stopSocketHeartbeat(socket);
+      return;
+    }
+    try {
+      socket.send(JSON.stringify({
+        type: "ping",
+        serverTime: new Date().toISOString(),
+      }));
+    } catch {
+      stopSocketHeartbeat(socket);
+      try {
+        socket.close(1011, "heartbeat_failed");
+      } catch {
+        // best effort
+      }
+    }
+  }, HEARTBEAT_MS);
+  heartbeatTimers.set(socket, timer);
+}
+
+function stopSocketHeartbeat(socket: WebSocket) {
+  const timer = heartbeatTimers.get(socket);
+  if (timer != null) {
+    clearInterval(timer);
+    heartbeatTimers.delete(socket);
   }
 }
 
-// Helper to extract user ID from JWT token
-function getUserIdFromToken(authHeader: string | null): string | null {
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+function scheduleRoomCleanup(roomId: string) {
+  if (roomCleanupTimers.has(roomId)) return;
+  const timer = setInterval(() => {
+    const room = rooms.get(roomId);
+    if (room == null) {
+      clearInterval(timer);
+      roomCleanupTimers.delete(roomId);
+      return;
+    }
+    const now = Date.now();
+    for (const client of room.values()) {
+      if (now - client.lastSeenAt > STALE_CLIENT_MS) {
+        try {
+          client.socket.close(1001, "heartbeat_timeout");
+        } catch {
+          // best effort
+        }
+        leave(client);
+      }
+    }
+    if (room.size === 0) {
+      rooms.delete(roomId);
+      clearInterval(timer);
+      roomCleanupTimers.delete(roomId);
+    }
+  }, HEARTBEAT_MS);
+  roomCleanupTimers.set(roomId, timer);
+}
+
+function broadcast(
+  roomId: string,
+  exceptUserId: string,
+  message: Record<string, unknown>,
+) {
+  const room = rooms.get(roomId);
+  if (room == null) return;
+
+  for (const [peerId, peer] of room.entries()) {
+    if (peerId === exceptUserId) continue;
+    send(peer, message);
+  }
+}
+
+function sendTo(
+  roomId: string,
+  targetUserId: string,
+  message: Record<string, unknown>,
+) {
+  const peer = rooms.get(roomId)?.get(targetUserId);
+  if (peer == null) return;
+  send(peer, message);
+}
+
+function send(client: Client, message: Record<string, unknown>) {
+  if (client.socket.readyState !== WebSocket.OPEN) return;
+  client.socket.send(JSON.stringify(message));
+}
+
+function parseMessage(data: unknown): Record<string, unknown> | null {
+  try {
+    if (typeof data === "string") {
+      const parsed = JSON.parse(data);
+      return isRecord(parsed) ? parsed : null;
+    }
+    if (data instanceof ArrayBuffer) {
+      const parsed = JSON.parse(new TextDecoder().decode(data));
+      return isRecord(parsed) ? parsed : null;
+    }
+  } catch {
     return null;
   }
-  
+  return null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function getUserIdFromToken(authHeader: string | null): string | null {
+  if (authHeader == null) return null;
+
   try {
-    const token = authHeader.substring(7);
-    const parts = token.split('.');
+    const token = authHeader.startsWith("Bearer ")
+      ? authHeader.substring(7)
+      : authHeader;
+    const parts = token.split(".");
     if (parts.length !== 3) return null;
-    
+
     const payload = JSON.parse(atob(parts[1]));
-    return payload.sub || null;
+    return typeof payload.sub === "string" ? payload.sub : null;
   } catch {
     return null;
   }
 }
 
-serve(async (req) => {
-  const { headers } = req;
-  const upgradeHeader = headers.get("upgrade") || "";
-  const authHeader = headers.get("authorization");
+async function verifyParticipant(
+  userId: string,
+  callId: string,
+): Promise<boolean> {
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (supabaseUrl == null || serviceKey == null) return false;
 
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    const supabase = createClient(supabaseUrl, serviceKey);
+
+    const { data: directParticipant } = await supabase
+      .from("call_participants")
+      .select("call_id")
+      .eq("call_id", callId)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (directParticipant != null) return true;
+
+    const { data: call } = await supabase
+      .from("video_calls")
+      .select("id, host_id, conversation_id")
+      .eq("id", callId)
+      .maybeSingle();
+
+    if (call == null) return false;
+    if (call.host_id === userId) return true;
+
+    const conversationId = call.conversation_id;
+    if (typeof conversationId !== "string") return false;
+
+    const { data: byUserId } = await supabase
+      .from("conversation_participants")
+      .select("conversation_id")
+      .eq("conversation_id", conversationId)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (byUserId != null) return true;
+
+    const { data: byProfileId } = await supabase
+      .from("conversation_participants")
+      .select("conversation_id")
+      .eq("conversation_id", conversationId)
+      .eq("profile_id", userId)
+      .maybeSingle();
+
+    return byProfileId != null;
+  } catch (error) {
+    console.error("WebRTC participant verification failed", error);
+    return false;
   }
+}
 
-  // WebSocket upgrade
-  if (upgradeHeader.toLowerCase() === "websocket") {
-    const { socket, response } = Deno.upgradeWebSocket(req);
-    
-    let currentRoomId: string | null = null;
-    let currentUserId: string | null = null;
-    let isAuthenticated = false;
+async function touchParticipant(client: Client, includeHeartbeat: boolean) {
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (supabaseUrl == null || serviceKey == null) return;
 
-    // Try to get user ID from auth header
-    const tokenUserId = getUserIdFromToken(authHeader);
+    const supabase = createClient(supabaseUrl, serviceKey);
+    const now = new Date().toISOString();
+    await supabase
+      .from("call_participants")
+      .upsert({
+        call_id: client.roomId,
+        user_id: client.userId,
+        joined_at: now,
+        left_at: null,
+        connection_state: "connected",
+        last_seen_at: now,
+      }, { onConflict: "call_id,user_id" });
 
-    socket.onopen = () => {
-      console.log("WebSocket connection established");
-    };
-
-    socket.onmessage = async (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        console.log("Received message:", data.type);
-
-        switch (data.type) {
-          case 'join': {
-            const { roomId, userId } = data;
-            
-            // Verify the user ID matches the token (if token provided)
-            if (tokenUserId && tokenUserId !== userId) {
-              socket.send(JSON.stringify({
-                type: 'error',
-                message: 'User ID mismatch with authentication token',
-              }));
-              socket.close();
-              return;
-            }
-
-            // Verify user is authorized to join this room
-            const isAuthorized = await verifyParticipant(userId, roomId);
-            if (!isAuthorized) {
-              console.log(`User ${userId} not authorized for room ${roomId}`);
-              socket.send(JSON.stringify({
-                type: 'error',
-                message: 'Not authorized to join this call',
-              }));
-              socket.close();
-              return;
-            }
-
-            isAuthenticated = true;
-            currentRoomId = roomId;
-            currentUserId = userId;
-
-            // Create room if it doesn't exist
-            if (!rooms.has(roomId)) {
-              rooms.set(roomId, new Map());
-            }
-
-            const room = rooms.get(roomId)!;
-            
-            // Notify existing participants about new user
-            const existingParticipants: string[] = [];
-            room.forEach((ws, participantId) => {
-              existingParticipants.push(participantId);
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                  type: 'user-joined',
-                  userId,
-                  participantCount: room.size + 1
-                }));
-              }
-            });
-
-            // Add new participant
-            room.set(userId, socket);
-            
-            // Send existing participants to new user
-            socket.send(JSON.stringify({
-              type: 'room-joined',
-              roomId,
-              participants: existingParticipants,
-              participantCount: room.size
-            }));
-            
-            console.log(`User ${userId} joined room ${roomId}. Total participants: ${room.size}`);
-            break;
-          }
-
-          case 'offer': {
-            const { targetUserId, sdp, userId } = data;
-            if (currentRoomId) {
-              const room = rooms.get(currentRoomId);
-              const targetSocket = room?.get(targetUserId);
-              if (targetSocket && targetSocket.readyState === WebSocket.OPEN) {
-                targetSocket.send(JSON.stringify({
-                  type: 'offer',
-                  sdp,
-                  fromUserId: userId
-                }));
-              }
-            }
-            break;
-          }
-
-          case 'answer': {
-            const { targetUserId, sdp, userId } = data;
-            if (currentRoomId) {
-              const room = rooms.get(currentRoomId);
-              const targetSocket = room?.get(targetUserId);
-              if (targetSocket && targetSocket.readyState === WebSocket.OPEN) {
-                targetSocket.send(JSON.stringify({
-                  type: 'answer',
-                  sdp,
-                  fromUserId: userId
-                }));
-              }
-            }
-            break;
-          }
-
-          case 'ice-candidate': {
-            const { targetUserId, candidate, userId } = data;
-            if (currentRoomId) {
-              const room = rooms.get(currentRoomId);
-              const targetSocket = room?.get(targetUserId);
-              if (targetSocket && targetSocket.readyState === WebSocket.OPEN) {
-                targetSocket.send(JSON.stringify({
-                  type: 'ice-candidate',
-                  candidate,
-                  fromUserId: userId
-                }));
-              }
-            }
-            break;
-          }
-
-          case 'media-state': {
-            const { userId, isMuted, isVideoOn, isScreenSharing, isHandRaised } = data;
-            if (currentRoomId) {
-              const room = rooms.get(currentRoomId);
-              room?.forEach((ws, participantId) => {
-                if (participantId !== userId && ws.readyState === WebSocket.OPEN) {
-                  ws.send(JSON.stringify({
-                    type: 'media-state-changed',
-                    userId,
-                    isMuted,
-                    isVideoOn,
-                    isScreenSharing,
-                    isHandRaised
-                  }));
-                }
-              });
-            }
-            break;
-          }
-
-          case 'chat-message': {
-            const { userId, message, timestamp } = data;
-            if (currentRoomId) {
-              const room = rooms.get(currentRoomId);
-              room?.forEach((ws, participantId) => {
-                if (ws.readyState === WebSocket.OPEN) {
-                  ws.send(JSON.stringify({
-                    type: 'chat-message',
-                    userId,
-                    message,
-                    timestamp
-                  }));
-                }
-              });
-            }
-            break;
-          }
-
-          case 'leave': {
-            handleLeave(currentRoomId, currentUserId, socket);
-            break;
-          }
-
-          case 'call-ended': {
-            // Broadcast CALL_ENDED to all participants immediately
-            if (currentRoomId) {
-              const room = rooms.get(currentRoomId);
-              room?.forEach((ws, participantId) => {
-                if (participantId !== currentUserId && ws.readyState === WebSocket.OPEN) {
-                  ws.send(JSON.stringify({
-                    type: 'call-ended',
-                    userId: currentUserId,
-                  }));
-                }
-              });
-            }
-            handleLeave(currentRoomId, currentUserId, socket);
-            break;
-          }
-        }
-      } catch (error) {
-        console.error("Error handling message:", error);
-      }
-    };
-
-    socket.onclose = () => {
-      handleLeave(currentRoomId, currentUserId, socket);
-      console.log("WebSocket connection closed");
-    };
-
-    socket.onerror = (error) => {
-      console.error("WebSocket error:", error);
-    };
-
-    return response;
-  }
-
-  // REST API for room info
-  const url = new URL(req.url);
-  
-  if (url.pathname.includes('/room-info')) {
-    const roomId = url.searchParams.get('roomId');
-    if (roomId) {
-      const room = rooms.get(roomId);
-      return new Response(JSON.stringify({
-        exists: !!room,
-        participantCount: room?.size || 0
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+    if (includeHeartbeat) {
+      await supabase
+        .from("video_calls")
+        .update({ last_heartbeat_at: now })
+        .eq("id", client.roomId)
+        .is("ended_at", null);
     }
+  } catch (error) {
+    console.error("WebRTC participant heartbeat failed", error);
   }
+}
 
-  return new Response(JSON.stringify({ 
-    status: 'WebRTC Signaling Server',
-    activeRooms: rooms.size 
-  }), {
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-  });
-});
+async function markParticipantLeft(client: Client, endCall = false) {
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (supabaseUrl == null || serviceKey == null) return;
 
-function handleLeave(roomId: string | null, userId: string | null, socket: WebSocket) {
-  if (roomId && userId) {
-    const room = rooms.get(roomId);
-    if (room) {
-      room.delete(userId);
-      
-      // Notify remaining participants
-      room.forEach((ws) => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
-            type: 'user-left',
-            userId,
-            participantCount: room.size
-          }));
-        }
-      });
+    const supabase = createClient(supabaseUrl, serviceKey);
+    const now = new Date().toISOString();
+    await supabase
+      .from("call_participants")
+      .update({
+        left_at: now,
+        connection_state: "left",
+        last_seen_at: now,
+      })
+      .eq("call_id", client.roomId)
+      .eq("user_id", client.userId);
 
-      // Clean up empty rooms
-      if (room.size === 0) {
-        rooms.delete(roomId);
-      }
-      
-      console.log(`User ${userId} left room ${roomId}. Remaining: ${room.size}`);
+    if (endCall) {
+      await supabase
+        .from("video_calls")
+        .update({
+          status: "ended",
+          ended_at: now,
+          last_heartbeat_at: now,
+        })
+        .eq("id", client.roomId)
+        .is("ended_at", null);
     }
+  } catch (error) {
+    console.error("WebRTC participant leave mark failed", error);
   }
 }
