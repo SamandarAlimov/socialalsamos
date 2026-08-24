@@ -3,6 +3,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
+// Module-level guards so multiple hook instances/tabs don't race on user_sessions
+let sessionRegisterInFlight = false;
+let lastSessionRegisterAt = 0;
+
+
+
 export interface UserSettings {
   id: string;
   user_id: string;
