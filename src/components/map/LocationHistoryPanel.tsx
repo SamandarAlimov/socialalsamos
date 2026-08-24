@@ -6,7 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Chrome as Home, Briefcase, MapPin, Clock, Calendar, Route, TrendingUp, CreditCard as Edit2, Trash2, Eye, Navigation, Footprints } from 'lucide-react';
+import { Home, Briefcase, MapPin, Clock, Calendar, Route, TrendingUp, Edit2, Trash2, Eye, Navigation, Footprints } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useLocationTracking, FrequentPlace, DailyRoute } from '@/hooks/useLocationTracking';
 import { format, formatDistanceToNow } from 'date-fns';

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Star, Plus, Globe, X, Sparkles, Trash2, CreditCard as Edit2, Loader as Loader2, AppWindow, RotateCcw, ExternalLink } from "lucide-react";
+import { Search, Star, Plus, Globe, X, Sparkles, Trash2, Edit2, Loader2, AppWindow, RotateCcw, ExternalLink } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";

@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { TriangleAlert as AlertTriangle, Check, Trash2, Ban } from 'lucide-react';
+import { AlertTriangle, Check, Trash2, Ban } from 'lucide-react';
 import { useState } from 'react';
 import { useMessageSafety } from '@/hooks/useMessageSafety';
 import { BlockConfirmDialog } from './BlockConfirmDialog';

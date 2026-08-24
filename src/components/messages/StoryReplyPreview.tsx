@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Play, Image as ImageIcon } from 'lucide-react';
+import { Play, ImageIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';

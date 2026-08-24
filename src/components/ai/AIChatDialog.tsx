@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Send, Bot, User, Image as ImageIcon, Trash2, Sparkles, Settings, Clock, TriangleAlert as AlertTriangle, Paperclip, Loader as Loader2, FileText, Film } from 'lucide-react';
+import { X, Send, Bot, User, ImageIcon, Trash2, Sparkles, Settings, Clock, AlertTriangle, Paperclip, Loader2, FileText, Film } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';

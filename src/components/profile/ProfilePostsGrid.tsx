@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Heart, MessageCircle, MoveHorizontal as MoreHorizontal, Pin, Trash2, Pencil, Play, Grid2x2 as Grid, LayoutList, Share2, Bookmark, ChartBar as BarChart3, Eye } from 'lucide-react';
+import { Heart, MessageCircle, MoreHorizontal, Pin, Trash2, Pencil, Play, Grid, LayoutList, Share2, Bookmark, BarChart3, Eye } from 'lucide-react';
 import { PostViewModal } from '@/components/PostViewModal';
 import { EditPostDialog } from '@/components/EditPostDialog';
 import { Button } from '@/components/ui/button';

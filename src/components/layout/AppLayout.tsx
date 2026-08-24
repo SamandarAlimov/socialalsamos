@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { AppSidebar } from './AppSidebar';
 import { BottomNavbar } from './BottomNavbar';
 import { MobileHeader } from './MobileHeader';
-import { Loader as Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useActivityTracking } from '@/hooks/useActivityTracking';
 import { LocationPermissionDialog } from '@/components/LocationPermissionDialog';
 import { cn } from '@/lib/utils';

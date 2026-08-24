@@ -15,7 +15,7 @@ import { usePosts } from '@/hooks/usePosts';
 import { useScheduledMessages } from '@/hooks/useScheduledMessages';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { X, Loader as Loader2, ChevronLeft, ChevronRight, Play, Globe, Users, Lock, MapPin, Hash, Smile, FileText, Camera, Film, Filter, Trash2, Radio, Music, Scissors, Type, Sparkles, Sticker, Pencil, Image as ImageIcon, CalendarClock } from 'lucide-react';
+import { X, Loader2, ChevronLeft, ChevronRight, Play, Globe, Users, Lock, MapPin, Hash, Smile, FileText, Camera, Film, Filter, Trash2, Radio, Music, Scissors, Type, Sparkles, Sticker, Pencil, ImageIcon, CalendarClock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Select,

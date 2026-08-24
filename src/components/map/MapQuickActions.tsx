@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Search, Navigation, Coffee, Fuel, CircleParking, Building2, Utensils, ShoppingCart, Hotel, Hospital, GraduationCap, Landmark, Bus, Brain as Train } from 'lucide-react';
+import { Search, Navigation, Coffee, Fuel, CircleParking, Building2, Utensils, ShoppingCart, Hotel, Hospital, GraduationCap, Landmark, Bus, Train } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 

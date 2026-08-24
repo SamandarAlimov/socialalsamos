@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Copy, Check, Search, Send, Users, Loader as Loader2, Twitter, Facebook, MessageCircle as WhatsApp, Mail, Link2 } from 'lucide-react';
+import { Copy, Check, Search, Send, Users, Loader2, Twitter, Facebook, MessageCircle as WhatsApp, Mail, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';

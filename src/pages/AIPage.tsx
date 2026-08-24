@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { PanelLeft, Sparkles, Zap, Lightbulb, Code as Code2, FileText, Globe, ShoppingBag, MapPin, X } from 'lucide-react';
+import { PanelLeft, Sparkles, Zap, Lightbulb, Code2, FileText, Globe, ShoppingBag, MapPin, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';

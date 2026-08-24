@@ -4,7 +4,7 @@ import {
   Dialog, 
   DialogContent 
 } from '@/components/ui/dialog';
-import { Heart, MessageCircle, Share2, Bookmark, MoveHorizontal as MoreHorizontal, X, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
+import { Heart, MessageCircle, Share2, Bookmark, MoreHorizontal, X, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { CommentsSection } from '@/components/CommentsSection';

@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { Wifi, WifiOff, TriangleAlert as AlertTriangle } from 'lucide-react';
+import { Wifi, WifiOff, AlertTriangle } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,

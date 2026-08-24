@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Calendar } from '@/components/ui/calendar';
-import { Clock, Calendar as CalendarIcon, Send } from 'lucide-react';
+import { Clock, CalendarIcon, Send } from 'lucide-react';
 import { format, addMinutes, addHours, addDays, setHours, setMinutes, startOfToday, isBefore } from 'date-fns';
 import {
   Popover,

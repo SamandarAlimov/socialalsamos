@@ -1,4 +1,4 @@
-import { Smartphone, Lightbulb, Wifi, Building2, Banknote, Tv, Receipt, GraduationCap, Heart, Shield, Server, Globe, Bus, Phone, MoveHorizontal as MoreHorizontal, Plane, Car, Stethoscope, Dumbbell, Scale } from 'lucide-react';
+import { Smartphone, Lightbulb, Wifi, Building2, Banknote, Tv, Receipt, GraduationCap, Heart, Shield, Server, Globe, Bus, Phone, MoreHorizontal, Plane, Car, Stethoscope, Dumbbell, Scale } from 'lucide-react';
 import { PaymentServiceCard } from './PaymentServiceCard';
 import { PaymentSectionHeader } from './PaymentSectionHeader';
 

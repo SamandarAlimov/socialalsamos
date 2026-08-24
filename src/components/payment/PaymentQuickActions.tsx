@@ -4,7 +4,7 @@ import {
   Users, 
   CreditCard,
   Percent,
-  Link as LinkIcon
+  LinkIcon
 } from 'lucide-react';
 import { PaymentServiceCard } from './PaymentServiceCard';
 

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Check, Search, Send, Users, Megaphone, Loader as Loader2 } from 'lucide-react';
+import { Check, Search, Send, Users, Megaphone, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Message } from '@/hooks/useMessages';
 import { cn } from '@/lib/utils';

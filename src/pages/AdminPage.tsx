@@ -3,7 +3,7 @@ import { useAdminAccess } from '@/hooks/useAdminAccess';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
-import { CircleCheck as CheckCircle, Circle as XCircle, Clock, Loader as Loader2, Shield, UserPlus, UserMinus, Search, ExternalLink, FileText, ChartBar as BarChart3, Settings2 } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Loader2, Shield, UserPlus, UserMinus, Search, ExternalLink, FileText, BarChart3, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';

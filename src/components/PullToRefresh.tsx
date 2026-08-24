@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { Loader as Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { cn } from '@/lib/utils';
 

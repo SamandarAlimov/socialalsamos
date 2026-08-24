@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ExternalLink, Volume2, VolumeX, MoveHorizontal as MoreHorizontal, X } from 'lucide-react';
+import { ExternalLink, Volume2, VolumeX, MoreHorizontal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';

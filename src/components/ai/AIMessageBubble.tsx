@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Bot, Copy, Check, RotateCcw, Download, TriangleAlert as AlertTriangle, Maximize2 } from 'lucide-react';
+import { Bot, Copy, Check, RotateCcw, Download, AlertTriangle, Maximize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { AIMessage } from './types';

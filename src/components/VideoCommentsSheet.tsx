@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Heart, Send, MoveHorizontal as MoreHorizontal, Smile, Image as ImageIcon } from 'lucide-react';
+import { X, Heart, Send, MoreHorizontal, Smile, ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
