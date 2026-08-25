@@ -12,12 +12,21 @@ type Client = {
   lastSeenAt: number;
 };
 
+type PendingSignal = {
+  targetUserId: string;
+  createdAt: number;
+  message: Record<string, unknown>;
+};
+
 const rooms = new Map<string, Map<string, Client>>();
+const pendingSignals = new Map<string, PendingSignal[]>();
 const roomCleanupTimers = new Map<string, number>();
 const heartbeatTimers = new WeakMap<WebSocket, number>();
 
 const HEARTBEAT_MS = 15_000;
 const STALE_CLIENT_MS = 45_000;
+const PENDING_SIGNAL_TTL_MS = 30_000;
+const MAX_PENDING_SIGNALS_PER_ROOM = 300;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -239,6 +248,8 @@ async function registerClient({
     participantCount: room.size,
   });
 
+  flushPendingSignals(roomId, userId);
+
   return candidate;
 }
 
@@ -269,7 +280,10 @@ function leave(client: Client) {
     from: client.userId,
   });
 
-  if (room.size === 0) rooms.delete(client.roomId);
+  if (room.size === 0) {
+    rooms.delete(client.roomId);
+    pendingSignals.delete(client.roomId);
+  }
 }
 
 function startSocketHeartbeat(socket: WebSocket) {
@@ -326,6 +340,7 @@ function scheduleRoomCleanup(roomId: string) {
     }
     if (room.size === 0) {
       rooms.delete(roomId);
+      pendingSignals.delete(roomId);
       clearInterval(timer);
       roomCleanupTimers.delete(roomId);
     }
@@ -353,8 +368,64 @@ function sendTo(
   message: Record<string, unknown>,
 ) {
   const peer = rooms.get(roomId)?.get(targetUserId);
-  if (peer == null) return;
+  if (peer == null) {
+    queuePendingSignal(roomId, targetUserId, message);
+    return;
+  }
   send(peer, message);
+}
+
+function queuePendingSignal(
+  roomId: string,
+  targetUserId: string,
+  message: Record<string, unknown>,
+) {
+  const type = String(message.type ?? "");
+  if (!isDurableSignalType(type)) return;
+
+  const now = Date.now();
+  const active = (pendingSignals.get(roomId) ?? []).filter((signal) =>
+    now - signal.createdAt <= PENDING_SIGNAL_TTL_MS
+  );
+  active.push({
+    targetUserId,
+    createdAt: now,
+    message: { ...message },
+  });
+  pendingSignals.set(roomId, active.slice(-MAX_PENDING_SIGNALS_PER_ROOM));
+}
+
+function flushPendingSignals(roomId: string, userId: string) {
+  const queued = pendingSignals.get(roomId);
+  if (queued == null || queued.length === 0) return;
+
+  const now = Date.now();
+  const keep: PendingSignal[] = [];
+  for (const signal of queued) {
+    if (now - signal.createdAt > PENDING_SIGNAL_TTL_MS) continue;
+    if (signal.targetUserId !== userId) {
+      keep.push(signal);
+      continue;
+    }
+    sendTo(roomId, userId, signal.message);
+  }
+
+  if (keep.length === 0) {
+    pendingSignals.delete(roomId);
+  } else {
+    pendingSignals.set(roomId, keep);
+  }
+}
+
+function isDurableSignalType(type: string): boolean {
+  return type === "offer" ||
+    type === "answer" ||
+    type === "ice" ||
+    type === "ice-candidate" ||
+    type === "media-state" ||
+    type === "media-state-changed" ||
+    type === "leave" ||
+    type === "call-ended";
 }
 
 function send(client: Client, message: Record<string, unknown>) {
