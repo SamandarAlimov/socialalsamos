@@ -20,9 +20,21 @@ export default function OAuthConsent() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // The authorization server only trusts the canonical apex origin
+  // (https://alsamos.com). Visiting the consent page on www.* makes Supabase
+  // reject the request with "unauthorized request origin", so redirect first.
+  useEffect(() => {
+    if (window.location.hostname.startsWith("www.")) {
+      const url = new URL(window.location.href);
+      url.hostname = url.hostname.replace(/^www\./, "");
+      window.location.replace(url.toString());
+    }
+  }, []);
+
   useEffect(() => {
     let active = true;
     (async () => {
+      if (window.location.hostname.startsWith("www.")) return;
       if (!authorizationId) {
         setError("Missing authorization_id");
         return;

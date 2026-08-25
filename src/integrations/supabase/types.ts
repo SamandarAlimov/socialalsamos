@@ -7924,6 +7924,17 @@ export type Database = {
         }
         Returns: boolean
       }
+      heartbeat_video_call: {
+        Args: {
+          p_call_id: string
+          p_device_info?: Json
+          p_is_hand_raised?: boolean
+          p_is_muted?: boolean
+          p_is_screen_sharing?: boolean
+          p_is_video_on?: boolean
+        }
+        Returns: boolean
+      }
       insert_inbound_email: {
         Args: {
           p_body_html: string
