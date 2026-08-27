@@ -542,7 +542,7 @@ export default function AuthPage() {
 
                     <Input
                       type="email"
-                      placeholder={`ism@${ALSAMOS_MAIL_DOMAIN}`}
+                      placeholder={`username@${ALSAMOS_MAIL_DOMAIN}`}
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       icon={<Mail className="h-4 w-4" />}
@@ -638,8 +638,7 @@ export default function AuthPage() {
                         <Link className="text-primary hover:underline" to={LEGAL_ROUTES.privacy}>
                           Maxfiylik siyosati
                         </Link>
-                        ni o’qidim va qabul qilaman. Bitta email bilan{' '}
-                        {MAX_ACCOUNTS_PER_IDENTITY} tagacha akkaunt ochish mumkin.
+                        ni o’qidim va qabul qilaman.
                       </span>
                     </label>
                   </>
