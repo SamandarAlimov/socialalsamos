@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { AnimatedEmoji } from '@/components/emoji/AnimatedEmoji';
+import { TelegramEmoji } from '@/components/emoji/TelegramEmoji';
 import { EmojiPicker } from '@/components/EmojiPicker';
 
 export interface ReactionGroup {
@@ -20,8 +20,8 @@ interface TelegramReactionsProps {
 }
 
 /**
- * Telegram-style reaction chips: compact pills, animated emoji, tabular count,
- * highlighted (filled) state when the current user reacted.
+ * Telegram uslubidagi reaksiya chiplari: ixcham pill'lar, Telegramning haqiqiy
+ * animatsion emojisi, tabular hisob va bosilgan holatda to'ldirilgan ko'rinish.
  */
 export function TelegramReactions({
   reactions,
@@ -63,7 +63,7 @@ export function TelegramReactions({
                 : 'bg-muted text-foreground hover:bg-muted/70'
             )}
           >
-            <AnimatedEmoji emoji={reaction.emoji} size={18} />
+            <TelegramEmoji emoji={reaction.emoji} size={18} />
             <span className="tabular-nums leading-none">{reaction.count}</span>
           </motion.button>
         ))}
