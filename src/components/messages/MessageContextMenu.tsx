@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -6,9 +5,21 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
-import { Eye, Reply, Forward, Edit, Pin, PinOff, Trash2, CheckSquare, Copy, Download, Clock, CheckCheck } from 'lucide-react';
+import {
+  Eye,
+  Reply,
+  Forward,
+  Edit,
+  Pin,
+  PinOff,
+  Trash2,
+  CheckSquare,
+  Copy,
+  Download,
+  Clock,
+  CheckCheck,
+} from 'lucide-react';
 import { format } from 'date-fns';
-import { cn } from '@/lib/utils';
 
 interface MessageContextMenuProps {
   children: React.ReactNode;
@@ -48,51 +59,51 @@ export function MessageContextMenu({
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-      <ContextMenuContent className="w-64 rounded-xl">
-        {/* Read receipt timestamp at top for 1:1 chats */}
+      <ContextMenuContent className="w-64 rounded-2xl">
+        {/* Telegramdek yuborilgan / o'qilgan vaqti */}
         {isMine && sentAt && (
-          <div className="px-3 py-2 border-b border-border">
+          <div className="border-b border-border px-3 py-2">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Clock className="h-3.5 w-3.5" />
-              <span>Sent: {format(new Date(sentAt), 'HH:mm dd/MM/yyyy')}</span>
+              <span>Yuborilgan: {format(new Date(sentAt), 'HH:mm, dd.MM.yyyy')}</span>
             </div>
             {readAt && (
-              <div className="flex items-center gap-2 text-xs text-blue-500 mt-1">
+              <div className="mt-1 flex items-center gap-2 text-xs text-blue-500">
                 <CheckCheck className="h-3.5 w-3.5" />
-                <span>Read: {format(new Date(readAt), 'HH:mm dd/MM/yyyy')}</span>
+                <span>O'qilgan: {format(new Date(readAt), 'HH:mm, dd.MM.yyyy')}</span>
               </div>
             )}
           </div>
         )}
-        
+
         {onViewInfo && (
           <ContextMenuItem onClick={onViewInfo} className="gap-3">
             <Eye className="h-4 w-4" />
-            <span>View Info</span>
+            <span>Ma'lumot</span>
           </ContextMenuItem>
         )}
         {onReply && (
           <ContextMenuItem onClick={onReply} className="gap-3">
             <Reply className="h-4 w-4" />
-            <span>Reply</span>
+            <span>Javob berish</span>
           </ContextMenuItem>
         )}
         {onForward && (
           <ContextMenuItem onClick={onForward} className="gap-3">
             <Forward className="h-4 w-4" />
-            <span>Forward</span>
+            <span>Yo'naltirish</span>
           </ContextMenuItem>
         )}
         {onCopy && (
           <ContextMenuItem onClick={onCopy} className="gap-3">
             <Copy className="h-4 w-4" />
-            <span>Copy Text</span>
+            <span>Matnni nusxalash</span>
           </ContextMenuItem>
         )}
         {isMine && onEdit && (
           <ContextMenuItem onClick={onEdit} className="gap-3">
             <Edit className="h-4 w-4" />
-            <span>Edit</span>
+            <span>Tahrirlash</span>
           </ContextMenuItem>
         )}
         {onPin && (
@@ -100,12 +111,12 @@ export function MessageContextMenu({
             {isPinned ? (
               <>
                 <PinOff className="h-4 w-4" />
-                <span>Unpin</span>
+                <span>Qadashni bekor qilish</span>
               </>
             ) : (
               <>
                 <Pin className="h-4 w-4" />
-                <span>Pin</span>
+                <span>Qadab qo'yish</span>
               </>
             )}
           </ContextMenuItem>
@@ -113,7 +124,7 @@ export function MessageContextMenu({
         {hasMedia && onDownload && (
           <ContextMenuItem onClick={onDownload} className="gap-3">
             <Download className="h-4 w-4" />
-            <span>Download</span>
+            <span>Yuklab olish</span>
           </ContextMenuItem>
         )}
         {onSelect && (
@@ -121,7 +132,7 @@ export function MessageContextMenu({
             <ContextMenuSeparator />
             <ContextMenuItem onClick={onSelect} className="gap-3">
               <CheckSquare className="h-4 w-4" />
-              <span>Select</span>
+              <span>Tanlash</span>
             </ContextMenuItem>
           </>
         )}
@@ -130,7 +141,7 @@ export function MessageContextMenu({
             <ContextMenuSeparator />
             <ContextMenuItem onClick={onDelete} className="gap-3 text-destructive">
               <Trash2 className="h-4 w-4" />
-              <span>Delete</span>
+              <span>O'chirish</span>
             </ContextMenuItem>
           </>
         )}
