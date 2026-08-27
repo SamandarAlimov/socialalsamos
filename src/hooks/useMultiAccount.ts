@@ -5,6 +5,10 @@
  * RLS so only sibling accounts of the same identity are visible). Sessions
  * live in per-slot cookies; this hook never reads or writes tokens itself,
  * which is the key difference from the previous localStorage implementation.
+ *
+ * Agar multi-account migratsiyasi hali qo'llanmagan bo'lsa (`identity_accounts`
+ * jadvali yo'q → PostgREST `PGRST205` / 404), hook jimgina "funksiya mavjud emas"
+ * holatiga o'tadi: konsolga xato yozilmaydi va UI'da xato ko'rsatilmaydi.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -46,6 +50,15 @@ export type SwitchResult =
   | { ok: false; needsPassword: true }
   | { ok: false; error: string };
 
+/** Jadval/ustun mavjud emasligini bildiruvchi PostgREST xatolari */
+function isSchemaMissingError(error: unknown): boolean {
+  const code = (error as { code?: string } | null)?.code;
+  if (code === 'PGRST205' || code === 'PGRST202' || code === '42P01') return true;
+
+  const message = String((error as { message?: string } | null)?.message || '');
+  return /schema cache|does not exist/i.test(message);
+}
+
 export function useMultiAccount() {
   const { user } = useAuth();
   const [accounts, setAccounts] = useState<LinkedAccount[]>([]);
@@ -53,6 +66,8 @@ export function useMultiAccount() {
   const [maxAccounts, setMaxAccounts] = useState<number>(MAX_ACCOUNTS_PER_IDENTITY);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Server tomonda multi-account umuman sozlanmagan */
+  const [isSupported, setIsSupported] = useState(true);
 
   const activeSlot = getActiveSlot();
 
@@ -145,18 +160,27 @@ export function useMultiAccount() {
         })),
       );
     } catch (e) {
+      if (isSchemaMissingError(e)) {
+        // Migratsiya qo'llanmagan: funksiyani jimgina o'chiramiz
+        setIsSupported(false);
+        setAccounts([]);
+        setError(null);
+        return;
+      }
+
       console.error('useMultiAccount refresh failed', e);
-      setError('Akkauntlar ro’yxatini yuklab bo’lmadi.');
+      setError('Akkauntlar ro\u2019yxatini yuklab bo\u2019lmadi.');
     } finally {
       setIsLoading(false);
     }
   }, [user]);
 
   useEffect(() => {
+    if (!isSupported) return;
     refresh();
-  }, [refresh]);
+  }, [refresh, isSupported]);
 
-  const canAddAccount = accounts.length < maxAccounts;
+  const canAddAccount = isSupported && accounts.length < maxAccounts;
 
   /**
    * Switch to another account of the same identity. Instant when a session for
@@ -287,6 +311,7 @@ export function useMultiAccount() {
     maxAccounts,
     usedAccounts: accounts.length,
     canAddAccount,
+    isSupported,
     isLoading,
     error,
     refresh,
