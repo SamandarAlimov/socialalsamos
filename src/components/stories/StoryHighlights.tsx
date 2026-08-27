@@ -1,10 +1,21 @@
 import { useState } from 'react';
-import { Plus, X, MoreHorizontal, Edit2, Trash2, GripVertical } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { Plus, MoreHorizontal, Pencil, Trash2, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useStoryHighlights, StoryHighlight } from '@/hooks/useStoryHighlights';
 import { StoryViewer } from './StoryViewer';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Dialog,
   DialogContent,
@@ -27,6 +38,7 @@ interface StoryHighlightsProps {
 }
 
 export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
+  const { t } = useTranslation();
   const {
     highlights,
     isLoading,
@@ -39,39 +51,39 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingHighlight, setEditingHighlight] = useState<StoryHighlight | null>(null);
+  const [deletingHighlight, setDeletingHighlight] = useState<StoryHighlight | null>(null);
   const [newHighlightName, setNewHighlightName] = useState('');
   const [selectedHighlight, setSelectedHighlight] = useState<StoryHighlight | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleCreateHighlight = async () => {
     if (!newHighlightName.trim()) return;
-    
-    setIsCreating(true);
+
+    setIsSaving(true);
     await createHighlight(newHighlightName.trim());
     setNewHighlightName('');
     setShowCreateDialog(false);
-    setIsCreating(false);
+    setIsSaving(false);
   };
 
   const handleEditHighlight = async () => {
     if (!editingHighlight || !newHighlightName.trim()) return;
-    
-    setIsCreating(true);
+
+    setIsSaving(true);
     await updateHighlight(editingHighlight.id, { name: newHighlightName.trim() });
     setNewHighlightName('');
     setShowEditDialog(false);
     setEditingHighlight(null);
-    setIsCreating(false);
+    setIsSaving(false);
   };
 
-  const handleDeleteHighlight = async (highlight: StoryHighlight) => {
-    if (confirm(`Delete "${highlight.name}" highlight?`)) {
-      await deleteHighlight(highlight.id);
-    }
+  const handleDeleteHighlight = async () => {
+    if (!deletingHighlight) return;
+    await deleteHighlight(deletingHighlight.id);
+    setDeletingHighlight(null);
   };
 
-  const openEditDialog = (highlight: StoryHighlight, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const openEditDialog = (highlight: StoryHighlight) => {
     setEditingHighlight(highlight);
     setNewHighlightName(highlight.name);
     setShowEditDialog(true);
@@ -85,11 +97,11 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
 
   if (isLoading) {
     return (
-      <div className={cn("flex gap-4 overflow-x-auto pb-4 scrollbar-hidden", className)}>
+      <div className={cn('flex gap-4 overflow-x-auto pb-4 scrollbar-hidden', className)}>
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="flex flex-col items-center gap-2 flex-shrink-0">
-            <Skeleton className="w-16 h-16 rounded-full" />
-            <Skeleton className="w-12 h-3" />
+          <div key={i} className="flex flex-shrink-0 flex-col items-center gap-2">
+            <Skeleton className="h-[72px] w-[72px] rounded-full" />
+            <Skeleton className="h-3 w-12" />
           </div>
         ))}
       </div>
@@ -102,115 +114,173 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
 
   return (
     <>
-      <div className={cn("flex gap-4 overflow-x-auto pb-4 scrollbar-hidden", className)}>
-        {/* Create New Highlight Button (Only for own profile) */}
-        {isOwnProfile && (
-          <button
-            onClick={() => setShowCreateDialog(true)}
-            className="flex flex-col items-center gap-2 flex-shrink-0"
-          >
-            <div className="w-16 h-16 rounded-full border-2 border-dashed border-muted-foreground/50 flex items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors">
-              <Plus className="h-6 w-6 text-muted-foreground" />
-            </div>
-            <span className="text-xs text-muted-foreground">New</span>
-          </button>
-        )}
-
-        {/* Highlights */}
-        {highlights.map((highlight) => (
-          <div
-            key={highlight.id}
-            className="flex flex-col items-center gap-2 flex-shrink-0 group relative"
-          >
-            <button
-              onClick={() => openHighlightViewer(highlight)}
-              className="relative"
+      <div className={cn('space-y-2', className)}>
+        <div className="flex items-center justify-between">
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+            <Sparkles className="h-4 w-4 text-primary" />
+            {t('profile.highlights.title', { defaultValue: 'Tanlanganlar' })}
+          </h2>
+          {isOwnProfile && highlights.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1 rounded-full text-xs"
+              onClick={() => setShowCreateDialog(true)}
             >
-              <div className={cn(
-                "w-16 h-16 rounded-full overflow-hidden border-2",
-                highlight.items && highlight.items.length > 0
-                  ? "border-primary"
-                  : "border-muted"
-              )}>
-                {highlight.cover_url ? (
-                  <img
-                    src={highlight.cover_url}
-                    alt={highlight.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : highlight.items && highlight.items.length > 0 ? (
-                  <img
-                    src={highlight.items[0].media_url}
-                    alt={highlight.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full bg-muted flex items-center justify-center">
-                    <span className="text-2xl">{highlight.name[0]?.toUpperCase()}</span>
-                  </div>
-                )}
-              </div>
-              
-              {/* Item count badge */}
-              {highlight.items && highlight.items.length > 0 && (
-                <div className="absolute -bottom-1 -right-1 bg-primary text-primary-foreground text-[10px] font-medium rounded-full w-5 h-5 flex items-center justify-center">
-                  {highlight.items.length}
-                </div>
-              )}
-            </button>
+              <Plus className="h-3.5 w-3.5" />
+              {t('profile.highlights.new', { defaultValue: 'Yangi' })}
+            </Button>
+          )}
+        </div>
 
-            <span className="text-xs text-muted-foreground truncate max-w-[64px]">
-              {highlight.name}
+        {highlights.length === 0 && isOwnProfile ? (
+          <button
+            type="button"
+            onClick={() => setShowCreateDialog(true)}
+            className="flex w-full items-center gap-3 rounded-2xl border border-dashed border-border p-3 text-left transition-colors hover:border-primary hover:bg-primary/5"
+          >
+            <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/50">
+              <Plus className="h-5 w-5 text-muted-foreground" />
             </span>
-
-            {/* Edit/Delete Menu (Only for own profile) */}
+            <span className="min-w-0">
+              <span className="block text-sm font-medium">
+                {t('profile.highlights.createTitle', { defaultValue: 'Tanlangan yarating' })}
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                {t('profile.highlights.createHint', {
+                  defaultValue: "Story'laringizni profilda doimiy saqlab qo\u2018ying",
+                })}
+              </span>
+            </span>
+          </button>
+        ) : (
+          <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hidden">
             {isOwnProfile && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 bg-background rounded-full p-0.5 shadow-md transition-opacity">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={(e) => openEditDialog(highlight, e)}>
-                    <Edit2 className="h-4 w-4 mr-2" />
-                    Edit
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => handleDeleteHighlight(highlight)}
-                    className="text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <button
+                type="button"
+                onClick={() => setShowCreateDialog(true)}
+                className="flex flex-shrink-0 flex-col items-center gap-2"
+                aria-label={t('profile.highlights.new', { defaultValue: 'Yangi' })}
+              >
+                <span className="flex h-[72px] w-[72px] items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/5">
+                  <Plus className="h-6 w-6 text-muted-foreground" />
+                </span>
+                <span className="max-w-[72px] truncate text-xs text-muted-foreground">
+                  {t('profile.highlights.new', { defaultValue: 'Yangi' })}
+                </span>
+              </button>
             )}
+
+            {highlights.map((highlight) => {
+              const itemCount = highlight.items?.length ?? 0;
+              const cover = highlight.cover_url || highlight.items?.[0]?.media_url || null;
+
+              return (
+                <div
+                  key={highlight.id}
+                  className="group relative flex flex-shrink-0 flex-col items-center gap-2"
+                >
+                  <button
+                    type="button"
+                    onClick={() => openHighlightViewer(highlight)}
+                    className="relative"
+                    aria-label={highlight.name}
+                  >
+                    <span
+                      className={cn(
+                        'flex h-[72px] w-[72px] items-center justify-center rounded-full p-[2px]',
+                        itemCount > 0
+                          ? 'bg-gradient-to-tr from-primary via-alsamos-orange-light to-primary/60'
+                          : 'bg-muted',
+                      )}
+                    >
+                      <span className="flex h-full w-full items-center justify-center overflow-hidden rounded-full border-2 border-background bg-muted">
+                        {cover ? (
+                          <img
+                            src={cover}
+                            alt={highlight.name}
+                            loading="lazy"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-xl font-semibold text-muted-foreground">
+                            {highlight.name[0]?.toUpperCase()}
+                          </span>
+                        )}
+                      </span>
+                    </span>
+
+                    {itemCount > 0 && (
+                      <span className="absolute -bottom-0.5 -right-0.5 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-background bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+                        {itemCount}
+                      </span>
+                    )}
+                  </button>
+
+                  <span className="max-w-[72px] truncate text-xs font-medium text-foreground">
+                    {highlight.name}
+                  </span>
+
+                  {isOwnProfile && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          className="absolute -top-1 right-0 rounded-full bg-background/95 p-1 opacity-0 shadow-md backdrop-blur transition-opacity focus:opacity-100 group-hover:opacity-100"
+                          aria-label={t('common.more', { defaultValue: "Ko'proq" })}
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openEditDialog(highlight)}>
+                          <Pencil className="mr-2 h-4 w-4" />
+                          {t('common.edit', { defaultValue: 'Tahrirlash' })}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => setDeletingHighlight(highlight)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          {t('common.delete', { defaultValue: "O'chirish" })}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </div>
+              );
+            })}
           </div>
-        ))}
+        )}
       </div>
 
       {/* Create Highlight Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create Highlight</DialogTitle>
+            <DialogTitle>
+              {t('profile.highlights.createTitle', { defaultValue: 'Tanlangan yarating' })}
+            </DialogTitle>
             <DialogDescription>
-              Give your highlight a name. You can add stories from your archive later.
+              {t('profile.highlights.createDescription', {
+                defaultValue:
+                  "Tanlanganga nom bering. Story'larni keyinroq arxivdan qo\u2018shishingiz mumkin.",
+              })}
             </DialogDescription>
           </DialogHeader>
           <Input
             value={newHighlightName}
             onChange={(e) => setNewHighlightName(e.target.value)}
-            placeholder="Highlight name..."
+            placeholder={t('profile.highlights.namePlaceholder', { defaultValue: 'Nomi...' })}
             maxLength={50}
           />
           <DialogFooter>
             <Button variant="ghost" onClick={() => setShowCreateDialog(false)}>
-              Cancel
+              {t('common.cancel', { defaultValue: 'Bekor qilish' })}
             </Button>
-            <Button onClick={handleCreateHighlight} disabled={!newHighlightName.trim() || isCreating}>
-              {isCreating ? 'Creating...' : 'Create'}
+            <Button onClick={handleCreateHighlight} disabled={!newHighlightName.trim() || isSaving}>
+              {isSaving
+                ? t('common.loading', { defaultValue: 'Yuklanmoqda...' })
+                : t('common.create', { defaultValue: 'Yaratish' })}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -220,24 +290,59 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Highlight</DialogTitle>
+            <DialogTitle>
+              {t('profile.highlights.editTitle', { defaultValue: 'Tanlanganni tahrirlash' })}
+            </DialogTitle>
           </DialogHeader>
           <Input
             value={newHighlightName}
             onChange={(e) => setNewHighlightName(e.target.value)}
-            placeholder="Highlight name..."
+            placeholder={t('profile.highlights.namePlaceholder', { defaultValue: 'Nomi...' })}
             maxLength={50}
           />
           <DialogFooter>
             <Button variant="ghost" onClick={() => setShowEditDialog(false)}>
-              Cancel
+              {t('common.cancel', { defaultValue: 'Bekor qilish' })}
             </Button>
-            <Button onClick={handleEditHighlight} disabled={!newHighlightName.trim() || isCreating}>
-              {isCreating ? 'Saving...' : 'Save'}
+            <Button onClick={handleEditHighlight} disabled={!newHighlightName.trim() || isSaving}>
+              {isSaving
+                ? t('common.loading', { defaultValue: 'Yuklanmoqda...' })
+                : t('common.save', { defaultValue: 'Saqlash' })}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete confirmation */}
+      <AlertDialog
+        open={!!deletingHighlight}
+        onOpenChange={(open) => !open && setDeletingHighlight(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('profile.highlights.deleteTitle', { defaultValue: "Tanlanganni o'chirasizmi?" })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('profile.highlights.deleteDescription', {
+                defaultValue: "\u201c{{name}}\u201d butunlay o'chiriladi. Story'lar arxivda qoladi.",
+                name: deletingHighlight?.name || '',
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>
+              {t('common.cancel', { defaultValue: 'Bekor qilish' })}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteHighlight}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {t('common.delete', { defaultValue: "O'chirish" })}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Highlight Viewer */}
       {selectedHighlight && selectedHighlight.items && selectedHighlight.items.length > 0 && (
