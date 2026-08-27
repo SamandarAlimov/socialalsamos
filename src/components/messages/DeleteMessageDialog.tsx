@@ -41,60 +41,60 @@ export function DeleteMessageDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="max-w-sm">
+      <AlertDialogContent className="max-w-sm rounded-2xl">
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
             <Trash2 className="h-5 w-5 text-destructive" />
-            Delete Message
+            Xabarni o'chirish
           </AlertDialogTitle>
           <AlertDialogDescription className="text-left">
             {messagePreview && (
-              <div className="mt-2 mb-4 p-3 bg-muted rounded-lg text-sm text-foreground line-clamp-3">
-                "{messagePreview}"
-              </div>
+              <span className="mb-3 mt-2 block break-words rounded-xl bg-muted p-3 text-sm text-foreground line-clamp-3">
+                “{messagePreview}”
+              </span>
             )}
-            Choose how you want to delete this message:
+            Xabarni qanday o'chirishni tanlang:
           </AlertDialogDescription>
         </AlertDialogHeader>
-        
+
         <div className="flex flex-col gap-2">
-          {/* Delete for me - always available */}
+          {/* Faqat o'zim uchun - har doim mavjud */}
           <Button
             variant="outline"
-            className="w-full justify-start gap-3 h-auto py-3"
+            className="h-auto w-full justify-start gap-3 rounded-xl py-3"
             onClick={() => handleDelete('for_me')}
             disabled={isDeleting}
           >
             <User className="h-4 w-4 text-muted-foreground" />
-            <div className="text-left">
-              <div className="font-medium">Delete for me</div>
-              <div className="text-xs text-muted-foreground">
-                This message will be removed from your chat only
-              </div>
-            </div>
+            <span className="text-left">
+              <span className="block font-medium">Faqat o'zimda o'chirish</span>
+              <span className="block text-xs text-muted-foreground">
+                Xabar faqat sizning chatingizdan olib tashlanadi
+              </span>
+            </span>
           </Button>
-          
-          {/* Delete for everyone - only for own messages */}
+
+          {/* Hamma uchun - faqat o'z xabarlari */}
           {isMine && (
             <Button
               variant="destructive"
-              className="w-full justify-start gap-3 h-auto py-3"
+              className="h-auto w-full justify-start gap-3 rounded-xl py-3"
               onClick={() => handleDelete('for_everyone')}
               disabled={isDeleting}
             >
               <Users className="h-4 w-4" />
-              <div className="text-left">
-                <div className="font-medium">Delete for everyone</div>
-                <div className="text-xs opacity-90">
-                  This message will be removed for all participants
-                </div>
-              </div>
+              <span className="text-left">
+                <span className="block font-medium">Hamma uchun o'chirish</span>
+                <span className="block text-xs opacity-90">
+                  Xabar barcha suhbat qatnashchilaridan olib tashlanadi
+                </span>
+              </span>
             </Button>
           )}
         </div>
-        
+
         <AlertDialogFooter className="mt-2">
-          <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={isDeleting}>Bekor qilish</AlertDialogCancel>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
