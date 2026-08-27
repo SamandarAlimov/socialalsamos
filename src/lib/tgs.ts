@@ -3,8 +3,10 @@
  * bu gzip bilan siqilgan Lottie (Bodymovin) JSON fayli.
  *
  * Bu modul `.tgs` faylni yuklab, gzipdan chiqaradi va Lottie JSON qaytaradi.
- * Brauzerda `DecompressionStream('gzip')` ishlatiladi (Chrome/Edge/Safari 16.4+),
- * qo'llab-quvvatlanmasa `fflate` yoki `pako` (agar loyihada bo'lsa) ishlatiladi.
+ * Gzipdan chiqarish brauzerning o'z `DecompressionStream('gzip')` API'si bilan
+ * amalga oshiriladi (Chrome/Edge 80+, Safari 16.4+, Firefox 113+).
+ * Qo'shimcha npm paketi (pako/fflate) talab qilinmaydi — shu sababli build ham
+ * hech qanday tashqi bog'liqlikka tayanmaydi.
  */
 
 const cache = new Map<string, Promise<unknown | null>>();
@@ -15,30 +17,20 @@ async function gunzip(buffer: ArrayBuffer): Promise<Uint8Array | null> {
   // Fayl gzip emas (allaqachon JSON) bo'lsa, o'zini qaytaramiz
   if (!(bytes[0] === 0x1f && bytes[1] === 0x8b)) return bytes;
 
-  const AnyWindow = globalThis as unknown as { DecompressionStream?: any };
-  if (typeof AnyWindow.DecompressionStream === 'function') {
-    try {
-      const stream = new Blob([bytes]).stream().pipeThrough(
-        new AnyWindow.DecompressionStream('gzip')
-      );
-      const decompressed = await new Response(stream).arrayBuffer();
-      return new Uint8Array(decompressed);
-    } catch (error) {
-      console.warn('DecompressionStream ishlamadi, zaxira usul sinaladi', error);
-    }
+  const AnyGlobal = globalThis as unknown as { DecompressionStream?: any };
+  if (typeof AnyGlobal.DecompressionStream !== 'function') {
+    console.warn('DecompressionStream mavjud emas: .tgs emoji ochib bo\u2018lmadi');
+    return null;
   }
 
-  // Zaxira: fflate / pako (agar o'rnatilgan bo'lsa)
   try {
-    const fflate: any = await import(/* @vite-ignore */ 'fflate');
-    return fflate.gunzipSync(bytes);
-  } catch {
-    // e'tiborsiz
-  }
-  try {
-    const pako: any = await import(/* @vite-ignore */ 'pako');
-    return pako.ungzip(bytes);
-  } catch {
+    const stream = new Blob([bytes])
+      .stream()
+      .pipeThrough(new AnyGlobal.DecompressionStream('gzip'));
+    const decompressed = await new Response(stream).arrayBuffer();
+    return new Uint8Array(decompressed);
+  } catch (error) {
+    console.warn('gzip ochilmadi', error);
     return null;
   }
 }
