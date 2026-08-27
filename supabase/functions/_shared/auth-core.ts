@@ -8,25 +8,85 @@ export const ALSAMOS_DOMAIN = "alsamos.com";
 export const ACCOUNT_DOMAIN = "accounts.alsamos.com";
 export const MAX_ACCOUNTS = 10;
 
-/** Allowed browser origins. `*` is only used when no allowlist is configured. */
+// ---------------------------------------------------------------------
+// CORS
+//
+// A browser blocks the whole request when the preflight answer does not
+// echo an origin it can accept. Returning "the first configured origin"
+// for an unknown caller therefore breaks login on every host that was
+// forgotten in AUTH_ALLOWED_ORIGINS (custom domain, preview URL, ...).
+//
+// Policy:
+//   * AUTH_ALLOWED_ORIGINS (comma separated) is always honoured;
+//   * *.alsamos.com, Lovable/Vercel previews and localhost are allowed by
+//     default so the app keeps working on every deployment target;
+//   * anything else gets "*" - these endpoints never rely on cookies, they
+//     authorise with a bearer token, a password or a single-use ticket, so a
+//     wildcard cannot leak a session.
+// ---------------------------------------------------------------------
+
+const DEFAULT_ALLOWED_ORIGIN_PATTERNS: RegExp[] = [
+  /^https?:\/\/([a-z0-9-]+\.)*alsamos\.com$/i,
+  /^https:\/\/([a-z0-9-]+\.)*lovable\.app$/i,
+  /^https:\/\/([a-z0-9-]+\.)*lovableproject\.com$/i,
+  /^https:\/\/([a-z0-9-]+\.)*lovable\.dev$/i,
+  /^https:\/\/([a-z0-9-]+\.)*vercel\.app$/i,
+  /^http:\/\/localhost(:\d+)?$/i,
+  /^http:\/\/127\.0\.0\.1(:\d+)?$/i,
+];
+
+/** Extra origins from the environment. */
 const allowedOrigins = (Deno.env.get("AUTH_ALLOWED_ORIGINS") ?? "")
   .split(",")
-  .map((o) => o.trim())
+  .map((o) => o.trim().replace(/\/+$/, ""))
   .filter(Boolean);
 
+function isOriginAllowed(origin: string): boolean {
+  if (!origin) return false;
+  if (allowedOrigins.includes("*")) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  return DEFAULT_ALLOWED_ORIGIN_PATTERNS.some((pattern) => pattern.test(origin));
+}
+
+/** Headers supabase-js (and plain fetch callers) may send. */
+export const CORS_ALLOWED_HEADERS = [
+  "authorization",
+  "apikey",
+  "content-type",
+  "accept",
+  "accept-profile",
+  "content-profile",
+  "prefer",
+  "range",
+  "x-client-info",
+  "x-supabase-api-version",
+  "x-supabase-authorization",
+  "x-requested-with",
+].join(", ");
+
 export function corsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get("origin") ?? "";
-  const allowOrigin = allowedOrigins.length === 0
-    ? "*"
-    : allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+  const origin = (req.headers.get("origin") ?? "").replace(/\/+$/, "");
+  const requestedHeaders = req.headers.get("access-control-request-headers");
 
   return {
-    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Origin": isOriginAllowed(origin) ? origin : "*",
+    // Echo exactly what the browser asked for; fall back to the known list.
     "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Vary": "Origin",
+      requestedHeaders && requestedHeaders.trim().length > 0
+        ? requestedHeaders
+        : CORS_ALLOWED_HEADERS,
+    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+    "Vary": "Origin, Access-Control-Request-Headers",
   };
+}
+
+/**
+ * Canonical preflight answer: 204, no body, never a redirect.
+ * Every function should return this for `req.method === "OPTIONS"`.
+ */
+export function preflightResponse(req: Request): Response {
+  return new Response(null { status: 204, headers: corsHeaders(req) });
 }
 
 export function jsonResponse(
