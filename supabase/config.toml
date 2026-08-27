@@ -1,5 +1,23 @@
 project_id = "mbhjganbihamoiqmankv"
 
+# --- Alsamos identity auth ------------------------------------------------
+# These endpoints must be reachable before a session exists, so Supabase JWT
+# verification is disabled and authorisation is performed inside the function
+# (password + rate limit, single-use ticket, or manual JWT verification).
+[functions.account-login]
+verify_jwt = false
+
+[functions.account-session]
+verify_jwt = false
+
+# account-create accepts either a login ticket or a session JWT,
+# account-revoke verifies the caller's JWT manually via admin.getUser().
+[functions.account-create]
+verify_jwt = false
+
+[functions.account-revoke]
+verify_jwt = false
+
 [functions.webrtc-signaling]
 verify_jwt = false
 

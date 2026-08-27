@@ -13,6 +13,11 @@ import { PushNotificationProvider } from "@/components/PushNotificationProvider"
 
 // Pages
 import AuthPage from "./pages/AuthPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
+import PrivacyPage from "./pages/legal/PrivacyPage";
+import TermsPage from "./pages/legal/TermsPage";
+import HelpCenterPage from "./pages/legal/HelpCenterPage";
 import HomePage from "./pages/HomePage";
 import MessagesPage from "./pages/MessagesPage";
 import ProfilePage from "./pages/ProfilePage";
@@ -42,18 +47,20 @@ import { RouteSEO } from "./components/RouteSEO";
 
 const queryClient = new QueryClient();
 
+function FullscreenSpinner() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+    </div>
+  );
+}
+
 // Protected route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
-  
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-      </div>
-    );
-  }
-  
+
+  if (isLoading) return <FullscreenSpinner />;
+
   return isAuthenticated ? <>{children}</> : <Navigate to="/" replace />;
 }
 
@@ -62,13 +69,7 @@ function AuthRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
   const [searchParams] = useSearchParams();
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-      </div>
-    );
-  }
+  if (isLoading) return <FullscreenSpinner />;
 
   if (isAuthenticated) {
     const next = searchParams.get('next');
@@ -76,18 +77,6 @@ function AuthRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to={safeNext} replace />;
   }
   return <>{children}</>;
-}
-
-// Placeholder pages
-function PlaceholderPage({ title }: { title: string }) {
-  return (
-    <div className="flex items-center justify-center min-h-[60vh]">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold mb-2">{title}</h1>
-        <p className="text-muted-foreground">Coming soon...</p>
-      </div>
-    </div>
-  );
 }
 
 function AppRoutes() {
@@ -102,12 +91,20 @@ function AppRoutes() {
         </AuthRoute>
       } />
 
+      {/* Password recovery (public) */}
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+
+      {/* Legal & support (public) */}
+      <Route path="/legal/privacy" element={<PrivacyPage />} />
+      <Route path="/legal/terms" element={<TermsPage />} />
+      <Route path="/help" element={<HelpCenterPage />} />
+
       {/* OAuth consent page (public — handles its own auth check) */}
       <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
 
-      
       {/* Protected App Routes */}
-      <Route element={<AppLayout />}>
+      <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
         <Route path="/home" element={<HomePage />} />
         <Route path="/discover" element={<DiscoveryPage />} />
         <Route path="/search" element={<SearchPage />} />
@@ -129,7 +126,7 @@ function AppRoutes() {
         <Route path="/channels" element={<ChannelsPage />} />
         <Route path="/mini-apps" element={<MiniAppsPage />} />
       </Route>
-      
+
       {/* 404 */}
       <Route path="*" element={<NotFound />} />
       </Routes>
@@ -140,7 +137,7 @@ function AppRoutes() {
 // Wrapper component that provides GlobalCallProvider inside BrowserRouter
 function AppWithGlobalCall() {
   const { isAuthenticated } = useAuth();
-  
+
   return (
     <>
       <Toaster />

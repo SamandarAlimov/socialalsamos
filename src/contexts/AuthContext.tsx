@@ -3,6 +3,24 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { PROFILE_PUBLIC_COLUMNS } from '@/lib/profileFields';
+import {
+  AlsamosAuthError,
+  authErrorMessage,
+  isAlsamosEmail,
+  isUsernameValid,
+  LoginStepResult,
+  requestAccountSession,
+  requestLoginTicket,
+  toIdentityEmail,
+  TOS_VERSION,
+} from '@/lib/alsamosAuth';
+import { checkPassword } from '@/lib/passwordStrength';
+import {
+  clearAllSlots,
+  getActiveSlot,
+  purgeLegacyTokenStore,
+  setActiveSlot,
+} from '@/lib/accountSlots';
 
 interface Profile {
   id: string;
@@ -17,25 +35,48 @@ interface Profile {
   posts_count: number;
 }
 
+type AuthResult = { error: Error | null };
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   profile: Profile | null;
+  activeSlot: number;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (identifier: string, password: string) => Promise<{ error: Error | null }>;
-  signup: (email: string, password: string, displayName?: string, username?: string) => Promise<{ error: Error | null }>;
+  /** Step 1: verify the identity password, get the account list + ticket. */
+  beginLogin: (email: string, password: string) => Promise<LoginStepResult>;
+  /** Step 2: open a session for one of the identity's accounts. */
+  completeLogin: (ticket: string, accountId?: string) => Promise<AuthResult>;
+  /** Convenience: log straight into the primary (slot 1) account. */
+  login: (email: string, password: string) => Promise<AuthResult>;
+  signup: (params: {
+    email: string;
+    password: string;
+    displayName?: string;
+    username?: string;
+    acceptedTerms: boolean;
+  }) => Promise<AuthResult & { needsEmailConfirmation?: boolean }>;
+  requestPasswordReset: (email: string) => Promise<AuthResult>;
+  updatePassword: (newPassword: string) => Promise<AuthResult>;
   logout: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/** Turn a server token hash into a real session inside a given slot. */
+async function activateSlotSession(slot: number, tokenHash: string) {
+  setActiveSlot(slot);
+  return supabase.auth.verifyOtp({ type: 'magiclink', token_hash: tokenHash });
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeSlot, setActiveSlotState] = useState<number>(() => getActiveSlot());
   const userIdRef = useRef<string | null>(null);
   const { toast } = useToast();
 
@@ -60,7 +101,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (data) {
       setProfile(data as Profile);
-      // Update online status
       await supabase
         .from('profiles')
         .update({ is_online: true, last_seen: new Date().toISOString() })
@@ -68,82 +108,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Save account to localStorage for multi-account support
-  const saveAccountToStorage = async (userId: string, session: Session) => {
-    try {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('display_name, avatar_url, username')
-        .eq('id', userId)
-        .maybeSingle();
-
-      const account = {
-        id: userId,
-        email: session.user.email || '',
-        displayName: profile?.display_name || null,
-        avatarUrl: profile?.avatar_url || null,
-        username: profile?.username || null,
-        accessToken: session.access_token,
-        refreshToken: session.refresh_token,
-        expiresAt: session.expires_at || 0,
-      };
-
-      const stored = localStorage.getItem('alsamos_accounts');
-      let accounts = stored ? JSON.parse(stored) : [];
-      
-      const existing = accounts.findIndex((a: any) => a.id === userId);
-      if (existing >= 0) {
-        accounts[existing] = account;
-      } else {
-        accounts.push(account);
-      }
-
-      localStorage.setItem('alsamos_accounts', JSON.stringify(accounts));
-      localStorage.setItem('alsamos_active_account', userId);
-    } catch (e) {
-      console.error('Failed to save account to storage:', e);
-    }
-  };
-
   useEffect(() => {
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        userIdRef.current = session?.user?.id ?? null;
+    // Devices upgraded from the old multi-account implementation still carry
+    // plaintext access/refresh tokens in localStorage - drop them immediately.
+    purgeLegacyTokenStore();
 
-        if (session?.user) {
-          // Defer profile fetch to avoid deadlock
-          setTimeout(() => {
-            fetchProfile(session.user.id);
-            // Save account for multi-account support
-            saveAccountToStorage(session.user.id, session);
-          }, 0);
-        } else {
-          setProfile(null);
-        }
-      }
-    );
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+      setActiveSlotState(getActiveSlot());
+      userIdRef.current = nextSession?.user?.id ?? null;
 
-    // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      userIdRef.current = session?.user?.id ?? null;
-      if (session?.user) {
-        fetchProfile(session.user.id);
-        saveAccountToStorage(session.user.id, session);
+      if (nextSession?.user) {
+        // Deferred to avoid deadlocking the auth callback.
+        setTimeout(() => {
+          fetchProfile(nextSession.user.id);
+        }, 0);
+      } else {
+        setProfile(null);
       }
+    });
+
+    supabase.auth.getSession().then(({ data: { session: existing } }) => {
+      setSession(existing);
+      setUser(existing?.user ?? null);
+      userIdRef.current = existing?.user?.id ?? null;
+      if (existing?.user) fetchProfile(existing.user.id);
       setIsLoading(false);
     });
 
-    // Set offline on unload
     const handleUnload = () => {
       const uid = userIdRef.current;
-      if (uid) {
-        setOffline(uid);
-      }
+      if (uid) setOffline(uid);
     };
 
     window.addEventListener('beforeunload', handleUnload);
@@ -154,125 +150,214 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const resolveEmail = async (identifier: string): Promise<string | null> => {
-    const trimmed = identifier.trim();
-    if (!trimmed) return null;
-    if (trimmed.includes('@')) return trimmed.toLowerCase();
+  // ---------------------------------------------------------------------
+  // Login (two steps: credentials -> choose account)
+  // ---------------------------------------------------------------------
+  const beginLogin = async (email: string, password: string): Promise<LoginStepResult> => {
+    // Credentials are verified server side: identical response for unknown
+    // email and wrong password, rate limited, audited.
+    return requestLoginTicket(email, password);
+  };
+
+  const completeLogin = async (ticket: string, accountId?: string): Promise<AuthResult> => {
+    setIsLoading(true);
     try {
-      const { data, error } = await supabase.rpc('get_email_for_identifier', { _identifier: trimmed });
+      const result = await requestAccountSession(ticket, accountId);
+      const { error } = await activateSlotSession(result.slot_no, result.token_hash);
+
       if (error) {
-        console.error('resolveEmail rpc error', error);
-        return null;
+        toast({
+          title: 'Kirish amalga oshmadi',
+          description: authErrorMessage('SESSION_MINT_FAILED'),
+          variant: 'destructive',
+        });
+        return { error };
       }
-      return (data as string | null) || null;
+
+      setActiveSlotState(result.slot_no);
+      return { error: null };
     } catch (e) {
-      console.error('resolveEmail rpc failed', e);
-      return null;
+      const err = e instanceof AlsamosAuthError ? e : new AlsamosAuthError('UNKNOWN');
+      toast({
+        title: 'Kirish amalga oshmadi',
+        description: err.message,
+        variant: 'destructive',
+      });
+      return { error: err };
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const login = async (identifier: string, password: string) => {
-    setIsLoading(true);
-    const email = await resolveEmail(identifier);
-
-    if (!email) {
-      toast({
-        title: 'Akkaunt topilmadi',
-        description: 'Bunday foydalanuvchi nomi yoki telefon raqami ro‘yxatdan o‘tmagan.',
-        variant: 'destructive',
-      });
-      setIsLoading(false);
-      return { error: new Error('Account not found') };
-    }
-
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      const msg = error.message.toLowerCase().includes('invalid login')
-        ? 'Email/username yoki parol noto‘g‘ri'
-        : error.message;
+  const login = async (email: string, password: string): Promise<AuthResult> => {
+    try {
+      const step = await beginLogin(email, password);
+      const primary = step.accounts.find((a) => a.is_primary) ?? step.accounts[0];
+      return completeLogin(step.ticket, primary?.id);
+    } catch (e) {
+      const err = e instanceof AlsamosAuthError ? e : new AlsamosAuthError('UNKNOWN');
       toast({
         title: 'Kirish amalga oshmadi',
-        description: msg,
+        description: err.message,
         variant: 'destructive',
       });
-      setIsLoading(false);
+      return { error: err };
+    }
+  };
+
+  // ---------------------------------------------------------------------
+  // Signup (identity creation) - @alsamos.com only
+  // ---------------------------------------------------------------------
+  const signup: AuthContextType['signup'] = async ({
+    email,
+    password,
+    displayName,
+    username,
+    acceptedTerms,
+  }) => {
+    const identityEmail = toIdentityEmail(email);
+
+    if (!isAlsamosEmail(identityEmail)) {
+      const error = new AlsamosAuthError('EMAIL_DOMAIN_NOT_ALLOWED');
+      toast({
+        title: 'Ro\u2018yxatdan o\u2018tish amalga oshmadi',
+        description: error.message,
+        variant: 'destructive',
+      });
       return { error };
     }
 
-    setIsLoading(false);
-    return { error: null };
-  };
+    const finalUsername = (username || identityEmail.split('@')[0])
+      .toLowerCase()
+      .replace(/[^a-z0-9_]/g, '');
 
-  const signup = async (email: string, password: string, displayName?: string, username?: string) => {
+    if (!isUsernameValid(finalUsername)) {
+      const error = new AlsamosAuthError('USERNAME_INVALID');
+      toast({ title: 'Username xato', description: error.message, variant: 'destructive' });
+      return { error };
+    }
+
+    const strength = checkPassword(password, [identityEmail, finalUsername]);
+    if (!strength.valid) {
+      const error = new Error(strength.problems[0]);
+      toast({ title: 'Parol juda kuchsiz', description: error.message, variant: 'destructive' });
+      return { error };
+    }
+
+    if (!acceptedTerms) {
+      const error = new Error('Shartlarni qabul qilish talab etiladi.');
+      toast({ title: 'Tasdiqlash kerak', description: error.message, variant: 'destructive' });
+      return { error };
+    }
+
     setIsLoading(true);
-    const redirectUrl = `${window.location.origin}/`;
-    const finalUsername = (username || email.split('@')[0]).toLowerCase().replace(/[^a-z0-9_]/g, '');
 
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: identityEmail,
       password,
       options: {
-        emailRedirectTo: redirectUrl,
+        emailRedirectTo: `${window.location.origin}/`,
         data: {
           display_name: displayName || finalUsername,
           username: finalUsername,
+          tos_version: TOS_VERSION,
         },
       },
     });
 
+    setIsLoading(false);
+
     if (error) {
-      let message = error.message;
-      if (error.message.includes('already registered')) {
-        message = 'Bu email allaqachon ro‘yxatdan o‘tgan. Iltimos, kirib chiqing.';
-      }
+      // Never confirm whether an address is already registered.
+      const message = /already|registered|exists/i.test(error.message)
+        ? 'Agar bu manzil bo\u2018sh bo\u2018lsa, tasdiqlash xati yuborildi.'
+        : error.message;
       toast({
-        title: 'Ro‘yxatdan o‘tish amalga oshmadi',
+        title: 'Ro\u2018yxatdan o\u2018tish',
         description: message,
         variant: 'destructive',
       });
-      setIsLoading(false);
       return { error };
     }
 
-    // If session is null (e.g. email confirmation required), try to sign in immediately
-    if (!data.session) {
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInError) {
-        toast({
-          title: 'Akkaunt yaratildi',
-          description: 'Iltimos, emailingizni tasdiqlang va qaytadan kiring.',
-        });
-        setIsLoading(false);
-        return { error: null };
-      }
-    }
+    // Email confirmation is NEVER bypassed with an automatic sign-in anymore.
+    const needsEmailConfirmation = !data.session;
 
     toast({
       title: 'Akkaunt yaratildi',
-      description: 'Alsamosga xush kelibsiz!',
+      description: needsEmailConfirmation
+        ? 'Emailingizga tasdiqlash havolasi yuborildi. Havolani bosgach kirishingiz mumkin.'
+        : 'Alsamosga xush kelibsiz!',
     });
 
-    setIsLoading(false);
+    return { error: null, needsEmailConfirmation };
+  };
+
+  // ---------------------------------------------------------------------
+  // Password recovery / change
+  // ---------------------------------------------------------------------
+  const requestPasswordReset = async (email: string): Promise<AuthResult> => {
+    const identityEmail = toIdentityEmail(email);
+
+    if (!isAlsamosEmail(identityEmail)) {
+      const error = new AlsamosAuthError('EMAIL_DOMAIN_NOT_ALLOWED');
+      toast({ title: 'Email xato', description: error.message, variant: 'destructive' });
+      return { error };
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(identityEmail, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+
+    // The UI shows the same message either way, so a missing account cannot
+    // be detected from the outside.
+    if (error) console.error('resetPasswordForEmail failed', error);
+
     return { error: null };
   };
 
-  const logout = async () => {
-    const uid = userIdRef.current;
-    if (uid) {
-      await setOffline(uid);
+  const updatePassword = async (newPassword: string): Promise<AuthResult> => {
+    const strength = checkPassword(newPassword, [user?.email ?? '', profile?.username ?? '']);
+
+    if (!strength.valid) {
+      const error = new Error(strength.problems[0]);
+      toast({ title: 'Parol juda kuchsiz', description: error.message, variant: 'destructive' });
+      return { error };
     }
 
-    await supabase.auth.signOut();
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+
+    if (error) {
+      toast({ title: 'Parol o\u2018zgartirilmadi', description: error.message, variant: 'destructive' });
+      return { error };
+    }
+
+    toast({
+      title: 'Parol yangilandi',
+      description: 'Boshqa qurilmalardagi sessiyalar bekor qilinishi mumkin.',
+    });
+    return { error: null };
+  };
+
+  // ---------------------------------------------------------------------
+  // Logout - clears the server session AND every local account slot
+  // ---------------------------------------------------------------------
+  const logout = async () => {
+    const uid = userIdRef.current;
+    if (uid) await setOffline(uid);
+
+    await supabase.auth.signOut({ scope: 'global' }).catch(() => {
+      /* offline: still wipe local state below */
+    });
+
+    clearAllSlots();
+
     userIdRef.current = null;
     setUser(null);
     setSession(null);
     setProfile(null);
+    setActiveSlotState(1);
   };
-
 
   const updateProfile = async (updates: Partial<Profile>) => {
     if (!user) return;
@@ -283,19 +368,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq('id', user.id);
 
     if (error) {
-      toast({
-        title: 'Update Failed',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Update Failed', description: error.message, variant: 'destructive' });
       return;
     }
 
-    setProfile(prev => prev ? { ...prev, ...updates } : null);
-    toast({
-      title: 'Profile Updated',
-      description: 'Your changes have been saved.',
-    });
+    setProfile((prev) => (prev ? { ...prev, ...updates } : null));
+    toast({ title: 'Profile Updated', description: 'Your changes have been saved.' });
   };
 
   return (
@@ -304,10 +382,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         session,
         profile,
+        activeSlot,
         isAuthenticated: !!user,
         isLoading,
+        beginLogin,
+        completeLogin,
         login,
         signup,
+        requestPasswordReset,
+        updatePassword,
         logout,
         updateProfile,
       }}
