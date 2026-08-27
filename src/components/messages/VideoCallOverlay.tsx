@@ -1,11 +1,11 @@
-import { useState, useRef, useEffect, memo } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { 
-  Mic, 
-  MicOff, 
-  Video, 
-  VideoOff, 
-  Monitor, 
+import {
+  Mic,
+  MicOff,
+  Video,
+  VideoOff,
+  Monitor,
   Hand,
   PhoneOff,
   Maximize2,
@@ -13,11 +13,7 @@ import {
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { NetworkQualityIndicator } from './NetworkQualityIndicator';
 import { CallDebugPanel } from './CallDebugPanel';
 import type { CallStats, ICEDebugInfo } from '@/hooks/useCallStats';
@@ -80,15 +76,17 @@ export function VideoCallOverlay({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [callDuration, setCallDuration] = useState(0);
-  const [pipPosition, setPipPosition] = useState({ x: 16, y: 16 });
+  // PIP oynasi o'ng-past burchakdan boshlanadi
+  const [pipPosition, setPipPosition] = useState({ x: 12, y: 12 });
   const [isDragging, setIsDragging] = useState(false);
-  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragStartRef = useRef({ x: 0, y: 0, offsetX: 0, offsetY: 0 });
+  const draggingRef = useRef(false);
 
   const isOneOnOne = participants.length === 1;
-  const hasRemoteVideo = participants.some(p => p.stream && p.isVideoOn);
+  const isOneToOneCall = participants.length <= 1;
 
-  // Set up local video - only set srcObject once to prevent flickering
+  // Lokal videoni faqat bir marta bog'laymiz (miltillamasligi uchun)
   useEffect(() => {
     const videoEl = localVideoRef.current;
     if (videoEl && localStream && videoEl.srcObject !== localStream) {
@@ -96,7 +94,7 @@ export function VideoCallOverlay({
     }
   }, [localStream]);
 
-  // Call duration timer (starts only after call is actually connected and we have a shared start time)
+  // Qo'ng'iroq davomiyligi - faqat ulanganidan keyin sanaladi
   useEffect(() => {
     if (!isCallConnected || !callStartedAt) {
       setCallDuration(0);
@@ -111,7 +109,6 @@ export function VideoCallOverlay({
     return () => clearInterval(interval);
   }, [callStartedAt, isCallConnected]);
 
-  // Format duration
   const formatDuration = (seconds: number) => {
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
@@ -122,33 +119,36 @@ export function VideoCallOverlay({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Auto-hide controls
-  const handleMouseMove = () => {
+  // Boshqaruv tugmalarini avtomatik yashirish (Telegramdek 3.5s)
+  const revealControls = useCallback(() => {
     setShowControls(true);
-    if (controlsTimeoutRef.current) {
-      clearTimeout(controlsTimeoutRef.current);
-    }
+    if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
     controlsTimeoutRef.current = setTimeout(() => {
-      if (!isDragging) {
-        setShowControls(false);
-      }
-    }, 3000);
-  };
+      if (!draggingRef.current) setShowControls(false);
+    }, 3500);
+  }, []);
 
-  // Fullscreen toggle
+  useEffect(() => {
+    revealControls();
+    return () => {
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    };
+  }, [revealControls]);
+
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen();
+      document.documentElement.requestFullscreen?.().catch(() => {});
       setIsFullscreen(true);
     } else {
-      document.exitFullscreen();
+      document.exitFullscreen?.().catch(() => {});
       setIsFullscreen(false);
     }
   };
 
-  // PIP drag handling
+  // PIP oynasini sudrash
   const handlePipDragStart = (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
+    e.stopPropagation();
+    draggingRef.current = true;
     setIsDragging(true);
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
@@ -160,75 +160,81 @@ export function VideoCallOverlay({
     };
   };
 
-  const handlePipDrag = (e: MouseEvent | TouchEvent) => {
-    if (!isDragging) return;
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    
-    const newX = dragStartRef.current.offsetX + (clientX - dragStartRef.current.x);
-    const newY = dragStartRef.current.offsetY + (clientY - dragStartRef.current.y);
-    
-    // Keep within bounds
-    const maxX = window.innerWidth - 200;
-    const maxY = window.innerHeight - 150;
-    
-    setPipPosition({
-      x: Math.max(16, Math.min(newX, maxX)),
-      y: Math.max(16, Math.min(newY, maxY)),
-    });
-  };
-
-  const handlePipDragEnd = () => {
-    setIsDragging(false);
-  };
-
   useEffect(() => {
-    if (isDragging) {
-      window.addEventListener('mousemove', handlePipDrag);
-      window.addEventListener('mouseup', handlePipDragEnd);
-      window.addEventListener('touchmove', handlePipDrag);
-      window.addEventListener('touchend', handlePipDragEnd);
-    }
-    return () => {
-      window.removeEventListener('mousemove', handlePipDrag);
-      window.removeEventListener('mouseup', handlePipDragEnd);
-      window.removeEventListener('touchmove', handlePipDrag);
-      window.removeEventListener('touchend', handlePipDragEnd);
-    };
-  }, [isDragging]);
+    if (!isDragging) return;
 
-  // Check if this is a 1:1 call (not a group call)
-  const isOneToOneCall = participants.length <= 1;
+    const onMove = (e: MouseEvent | TouchEvent) => {
+      const clientX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
+      const clientY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
+
+      // right/bottom bo'yicha joylashgani uchun yo'nalish teskari
+      const newX = dragStartRef.current.offsetX - (clientX - dragStartRef.current.x);
+      const newY = dragStartRef.current.offsetY - (clientY - dragStartRef.current.y);
+
+      const maxX = Math.max(12, window.innerWidth - 140);
+      const maxY = Math.max(12, window.innerHeight - 220);
+
+      setPipPosition({
+        x: Math.max(12, Math.min(newX, maxX)),
+        y: Math.max(12, Math.min(newY, maxY)),
+      });
+    };
+
+    const onEnd = () => {
+      draggingRef.current = false;
+      setIsDragging(false);
+      // Telegramdek eng yaqin burchakka yopishadi
+      setPipPosition((pos) => ({
+        x: pos.x > window.innerWidth / 2 - 70 ? window.innerWidth - 152 : 12,
+        y: pos.y,
+      }));
+      revealControls();
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onEnd);
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('touchend', onEnd);
+
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onEnd);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onEnd);
+    };
+  }, [isDragging, revealControls]);
 
   return (
-    <div 
-      className="fixed inset-0 bg-black z-[9999] flex flex-col"
-      onMouseMove={handleMouseMove}
-      style={{ 
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        height: '100dvh',
-        width: '100vw',
-      }}
+    <div
+      className="chat-no-select fixed inset-0 z-[9999] flex flex-col bg-black"
+      onMouseMove={revealControls}
+      onTouchStart={revealControls}
+      onClick={revealControls}
+      style={{ height: '100dvh', width: '100vw' }}
     >
-      {/* Status Bar */}
-      <div className={cn(
-        "absolute top-0 left-0 right-0 z-20 px-4 py-3 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent transition-opacity duration-300 safe-area-inset-top",
-        showControls ? "opacity-100" : "opacity-0"
-      )}>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-white">
-            <div className={cn(
-              "w-2 h-2 rounded-full animate-pulse",
-              isCallConnected ? "bg-green-500" : "bg-yellow-500"
-            )} />
-            <span className="text-sm font-medium">
-              {isCallConnected && callStartedAt ? formatDuration(callDuration) : 'Connecting…'}
-            </span>
-          </div>
+      {/* Yuqori holat paneli */}
+      <div
+        className={cn(
+          'safe-area-inset-top absolute left-0 right-0 top-0 z-20 flex items-center justify-between gap-2 bg-gradient-to-b from-black/80 to-transparent px-3 py-2.5 sm:px-4 sm:py-3',
+          'tg-transition',
+          showControls ? 'opacity-100' : 'pointer-events-none opacity-0'
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-2 text-white">
+          <div
+            className={cn(
+              'h-2 w-2 shrink-0 animate-pulse rounded-full',
+              isCallConnected ? 'bg-green-500' : 'bg-yellow-500'
+            )}
+          />
+          <span className="truncate text-xs font-medium tabular-nums sm:text-sm">
+            {isCallConnected && callStartedAt
+              ? formatDuration(callDuration)
+              : 'Ulanmoqda...'}
+          </span>
+          <span className="hidden truncate text-xs text-white/60 sm:inline">
+            {callType === 'video' ? "Video qo'ng'iroq" : "Audio qo'ng'iroq"}
+          </span>
         </div>
         <NetworkQualityIndicator
           quality={callStats?.quality || 'disconnected'}
@@ -239,21 +245,17 @@ export function VideoCallOverlay({
         />
       </div>
 
-      {/* Reconnecting Banner */}
+      {/* Qayta ulanish banneri */}
       {isReconnecting && (
-        <div className="absolute top-14 left-0 right-0 z-20 bg-yellow-500/90 text-black text-center py-2 text-sm font-medium animate-pulse">
-          Reconnecting...
+        <div className="absolute left-0 right-0 top-14 z-20 animate-pulse bg-yellow-500/90 py-2 text-center text-xs font-medium text-black sm:text-sm">
+          Qayta ulanmoqda...
         </div>
       )}
 
-      {/* Debug Panel (dev mode only) */}
-      {callStats && debugInfo && (
-        <CallDebugPanel stats={callStats} debugInfo={debugInfo} />
-      )}
+      {callStats && debugInfo && <CallDebugPanel stats={callStats} debugInfo={debugInfo} />}
 
-      {/* Main Video Area */}
-      <div className="flex-1 relative">
-        {/* 1-on-1 Call: Remote video fullscreen */}
+      {/* Asosiy video maydoni */}
+      <div className="relative flex-1">
         {isOneOnOne && participants[0] ? (
           <div className="absolute inset-0">
             {participants[0].stream && participants[0].isVideoOn ? (
@@ -261,111 +263,121 @@ export function VideoCallOverlay({
                 autoPlay
                 playsInline
                 ref={(el) => {
-                  if (el && participants[0].stream) {
+                  if (el && participants[0].stream && el.srcObject !== participants[0].stream) {
                     el.srcObject = participants[0].stream;
                   }
                 }}
-                className="w-full h-full object-cover"
+                className="h-full w-full object-cover"
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
-                <div className="flex flex-col items-center gap-4">
-                  <Avatar className="h-32 w-32 md:h-40 md:w-40">
+              <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
+                <div className="flex flex-col items-center gap-4 px-6">
+                  <Avatar className="h-24 w-24 sm:h-32 sm:w-32 md:h-40 md:w-40">
                     <AvatarImage src={participants[0].avatarUrl} />
-                    <AvatarFallback className="text-4xl md:text-5xl bg-primary/20 text-primary">
+                    <AvatarFallback className="bg-primary/20 text-3xl text-primary sm:text-4xl md:text-5xl">
                       {participants[0].name?.[0] || 'U'}
                     </AvatarFallback>
                   </Avatar>
                   <div className="text-center">
-                    <h3 className="text-xl md:text-2xl font-semibold text-white">
-                      {participants[0].name || 'Participant'}
+                    <h3 className="truncate text-lg font-semibold text-white sm:text-xl md:text-2xl">
+                      {participants[0].name || 'Suhbatdosh'}
                     </h3>
                     {participants[0].isMuted && (
-                      <p className="text-sm text-white/60 flex items-center justify-center gap-1 mt-1">
-                        <MicOff className="h-4 w-4" /> Muted
+                      <p className="mt-1 flex items-center justify-center gap-1 text-xs text-white/60 sm:text-sm">
+                        <MicOff className="h-4 w-4" /> Mikrofon o'chirilgan
                       </p>
                     )}
                   </div>
                 </div>
               </div>
             )}
-            
-            {/* Participant status overlay */}
-            <div className={cn(
-              "absolute bottom-28 left-4 flex items-center gap-2 px-4 py-2 bg-black/60 rounded-full backdrop-blur transition-opacity duration-300",
-              showControls ? "opacity-100" : "opacity-0"
-            )}>
-              <span className="text-sm text-white font-medium">
-                {participants[0].name || 'Participant'}
+
+            <div
+              className={cn(
+                'tg-transition absolute bottom-28 left-3 flex max-w-[70%] items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 backdrop-blur sm:left-4 sm:px-4 sm:py-2',
+                showControls ? 'opacity-100' : 'opacity-0'
+              )}
+            >
+              <span className="truncate text-xs font-medium text-white sm:text-sm">
+                {participants[0].name || 'Suhbatdosh'}
               </span>
-              {participants[0].isMuted && <MicOff className="h-4 w-4 text-red-400" />}
-              {participants[0].isHandRaised && <Hand className="h-4 w-4 text-yellow-400" />}
+              {participants[0].isMuted && <MicOff className="h-4 w-4 shrink-0 text-red-400" />}
+              {participants[0].isHandRaised && (
+                <Hand className="h-4 w-4 shrink-0 text-yellow-400" />
+              )}
             </div>
           </div>
         ) : participants.length === 0 ? (
-          /* Waiting for connection - show connecting message for 1:1 calls */
           <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
-            <div className="text-center">
-              <div className="animate-pulse mb-4">
-                <div className="h-24 w-24 rounded-full bg-primary/20 flex items-center justify-center mx-auto">
+            <div className="px-6 text-center">
+              <div className="mb-4 animate-pulse">
+                <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-primary/20 sm:h-24 sm:w-24">
                   {callType === 'video' ? (
-                    <Video className="h-12 w-12 text-primary" />
+                    <Video className="h-10 w-10 text-primary sm:h-12 sm:w-12" />
                   ) : (
-                    <Mic className="h-12 w-12 text-primary" />
+                    <Mic className="h-10 w-10 text-primary sm:h-12 sm:w-12" />
                   )}
                 </div>
               </div>
-              <h3 className="text-xl font-semibold text-white mb-2">
-                {isOneToOneCall ? 'Connecting...' : 'Waiting for others to join...'}
+              <h3 className="mb-2 text-lg font-semibold text-white sm:text-xl">
+                {isOneToOneCall ? 'Ulanmoqda...' : "Boshqalar qo'shilishini kutmoqdamiz..."}
               </h3>
-              <p className="text-white/60">
-                {isOneToOneCall ? 'Please wait while the call connects' : 'Share the call link to invite participants'}
+              <p className="text-sm text-white/60">
+                {isOneToOneCall
+                  ? "Qo'ng'iroq ulanguncha kutib turing"
+                  : "Taklif qilish uchun qo'ng'iroq havolasini ulashing"}
               </p>
             </div>
           </div>
         ) : (
-          /* Group call grid */
-          <div className={cn(
-            "grid gap-2 p-2 h-full",
-            participants.length <= 2 ? "grid-cols-1 md:grid-cols-2" :
-            participants.length <= 4 ? "grid-cols-2" :
-            participants.length <= 9 ? "grid-cols-2 md:grid-cols-3" :
-            "grid-cols-3 md:grid-cols-4"
-          )}>
+          <div
+            className={cn(
+              'grid h-full gap-1.5 p-1.5 sm:gap-2 sm:p-2',
+              participants.length <= 2
+                ? 'grid-cols-1 md:grid-cols-2'
+                : participants.length <= 4
+                  ? 'grid-cols-2'
+                  : participants.length <= 9
+                    ? 'grid-cols-2 md:grid-cols-3'
+                    : 'grid-cols-3 md:grid-cols-4'
+            )}
+          >
             {participants.map((participant) => (
-              <div 
-                key={participant.id} 
-                className="relative bg-gray-800 rounded-xl overflow-hidden"
+              <div
+                key={participant.id}
+                className="relative overflow-hidden rounded-xl bg-gray-800 sm:rounded-2xl"
               >
                 {participant.stream && participant.isVideoOn ? (
                   <video
                     autoPlay
                     playsInline
                     ref={(el) => {
-                      if (el && participant.stream) {
+                      if (el && participant.stream && el.srcObject !== participant.stream) {
                         el.srcObject = participant.stream;
                       }
                     }}
-                    className="w-full h-full object-cover"
+                    className="h-full w-full object-cover"
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-700 to-gray-900">
-                    <Avatar className="h-16 w-16 md:h-20 md:w-20">
+                  <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-gray-700 to-gray-900">
+                    <Avatar className="h-14 w-14 sm:h-16 sm:w-16 md:h-20 md:w-20">
                       <AvatarImage src={participant.avatarUrl} />
-                      <AvatarFallback className="text-2xl bg-primary/20 text-primary">
+                      <AvatarFallback className="bg-primary/20 text-xl text-primary sm:text-2xl">
                         {participant.name?.[0] || 'U'}
                       </AvatarFallback>
                     </Avatar>
                   </div>
                 )}
-                
-                <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2 px-2 py-1 bg-black/60 rounded-full backdrop-blur text-xs">
-                    <span className="text-white">{participant.name || 'Participant'}</span>
-                    {participant.isMuted && <MicOff className="h-3 w-3 text-red-400" />}
+
+                <div className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-between gap-1 sm:bottom-2 sm:left-2 sm:right-2">
+                  <div className="flex min-w-0 items-center gap-1.5 rounded-full bg-black/60 px-2 py-1 text-[11px] backdrop-blur sm:text-xs">
+                    <span className="truncate text-white">
+                      {participant.name || "A'zo"}
+                    </span>
+                    {participant.isMuted && <MicOff className="h-3 w-3 shrink-0 text-red-400" />}
                   </div>
                   {participant.isHandRaised && (
-                    <div className="p-1.5 bg-yellow-500/80 rounded-full">
+                    <div className="shrink-0 rounded-full bg-yellow-500/80 p-1.5">
                       <Hand className="h-3 w-3 text-white" />
                     </div>
                   )}
@@ -375,15 +387,16 @@ export function VideoCallOverlay({
           </div>
         )}
 
-        {/* Local Video PIP (draggable) */}
-        <div 
+        {/* O'zimizning kichik oynamiz (sudralади) */}
+        <div
           className={cn(
-            "absolute w-32 h-24 md:w-48 md:h-36 bg-gray-800 rounded-xl overflow-hidden shadow-2xl border-2 border-white/20 cursor-move transition-opacity",
-            showControls || isDragging ? "opacity-100" : "opacity-70"
+            'no-drag absolute h-24 w-[104px] cursor-move overflow-hidden rounded-xl border-2 border-white/20 bg-gray-800 shadow-2xl sm:h-32 sm:w-44 md:h-36 md:w-48',
+            isDragging ? '' : 'tg-transition',
+            showControls || isDragging ? 'opacity-100' : 'opacity-70'
           )}
           style={{
             right: pipPosition.x,
-            bottom: pipPosition.y + 96, // Account for control bar
+            bottom: pipPosition.y + 96,
           }}
           onMouseDown={handlePipDragStart}
           onTouchStart={handlePipDragStart}
@@ -394,29 +407,28 @@ export function VideoCallOverlay({
               autoPlay
               playsInline
               muted
-              className="w-full h-full object-cover scale-x-[-1]"
+              className="h-full w-full scale-x-[-1] object-cover"
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-700 to-gray-900">
-              <Avatar className="h-12 w-12 md:h-14 md:w-14">
+            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-gray-700 to-gray-900">
+              <Avatar className="h-10 w-10 sm:h-12 sm:w-12 md:h-14 md:w-14">
                 <AvatarImage src={currentUserAvatar} />
-                <AvatarFallback className="text-lg bg-primary/20 text-primary">
-                  {currentUserName?.[0] || 'Y'}
+                <AvatarFallback className="bg-primary/20 text-lg text-primary">
+                  {currentUserName?.[0] || 'S'}
                 </AvatarFallback>
               </Avatar>
             </div>
           )}
-          
-          {/* Status indicators */}
+
           <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1">
-            <span className="px-1.5 py-0.5 bg-black/60 rounded text-[10px] text-white">You</span>
+            <span className="rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">Siz</span>
             {isMuted && (
-              <div className="p-1 bg-red-500 rounded-full">
+              <div className="rounded-full bg-red-500 p-1">
                 <MicOff className="h-2.5 w-2.5 text-white" />
               </div>
             )}
             {!isVideoOn && (
-              <div className="p-1 bg-red-500 rounded-full">
+              <div className="rounded-full bg-red-500 p-1">
                 <VideoOff className="h-2.5 w-2.5 text-white" />
               </div>
             )}
@@ -424,65 +436,82 @@ export function VideoCallOverlay({
         </div>
       </div>
 
-      {/* Call Controls - Fixed above everything including BottomNavbar */}
-      <div className={cn(
-        "h-24 md:h-24 flex items-center justify-center gap-3 md:gap-4 px-4 pb-6 md:pb-4 bg-gradient-to-t from-black via-black/90 to-black/60 backdrop-blur transition-opacity duration-300 safe-area-inset-bottom",
-        showControls ? "opacity-100" : "opacity-0"
-      )}>
+      {/* Qo'ng'iroq tugmalari */}
+      <div
+        className={cn(
+          'safe-area-inset-bottom flex h-24 items-center justify-center gap-2.5 bg-gradient-to-t from-black via-black/90 to-black/60 px-3 pb-6 backdrop-blur sm:gap-4 sm:px-4 md:pb-4',
+          'tg-transition',
+          showControls ? 'opacity-100' : 'pointer-events-none opacity-0'
+        )}
+      >
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              variant={isMuted ? "destructive" : "secondary"}
+              variant={isMuted ? 'destructive' : 'secondary'}
               size="icon"
-              className="rounded-full h-12 w-12 md:h-14 md:w-14"
+              className="tg-transition h-11 w-11 rounded-full active:scale-95 sm:h-12 sm:w-12 md:h-14 md:w-14"
               onClick={onToggleMute}
+              aria-label={isMuted ? 'Mikrofonni yoqish' : "Mikrofonni o'chirish"}
             >
-              {isMuted ? <MicOff className="h-5 w-5 md:h-6 md:w-6" /> : <Mic className="h-5 w-5 md:h-6 md:w-6" />}
+              {isMuted ? (
+                <MicOff className="h-5 w-5 md:h-6 md:w-6" />
+              ) : (
+                <Mic className="h-5 w-5 md:h-6 md:w-6" />
+              )}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{isMuted ? 'Unmute' : 'Mute'}</TooltipContent>
+          <TooltipContent>{isMuted ? 'Mikrofonni yoqish' : "Mikrofonni o'chirish"}</TooltipContent>
         </Tooltip>
 
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              variant={!isVideoOn ? "destructive" : "secondary"}
+              variant={!isVideoOn ? 'destructive' : 'secondary'}
               size="icon"
-              className="rounded-full h-12 w-12 md:h-14 md:w-14"
+              className="tg-transition h-11 w-11 rounded-full active:scale-95 sm:h-12 sm:w-12 md:h-14 md:w-14"
               onClick={onToggleVideo}
+              aria-label={isVideoOn ? "Kamerani o'chirish" : 'Kamerani yoqish'}
             >
-              {isVideoOn ? <Video className="h-5 w-5 md:h-6 md:w-6" /> : <VideoOff className="h-5 w-5 md:h-6 md:w-6" />}
+              {isVideoOn ? (
+                <Video className="h-5 w-5 md:h-6 md:w-6" />
+              ) : (
+                <VideoOff className="h-5 w-5 md:h-6 md:w-6" />
+              )}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{isVideoOn ? 'Turn off camera' : 'Turn on camera'}</TooltipContent>
+          <TooltipContent>{isVideoOn ? "Kamerani o'chirish" : 'Kamerani yoqish'}</TooltipContent>
         </Tooltip>
 
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              variant={isScreenSharing ? "default" : "secondary"}
+              variant={isScreenSharing ? 'default' : 'secondary'}
               size="icon"
-              className="rounded-full h-12 w-12 md:h-14 md:w-14 hidden md:flex"
+              className="tg-transition hidden h-12 w-12 rounded-full active:scale-95 md:flex md:h-14 md:w-14"
               onClick={onToggleScreenShare}
+              aria-label="Ekranni ulashish"
             >
               <Monitor className="h-5 w-5 md:h-6 md:w-6" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{isScreenSharing ? 'Stop sharing' : 'Share screen'}</TooltipContent>
+          <TooltipContent>
+            {isScreenSharing ? "Ulashishni to'xtatish" : 'Ekranni ulashish'}
+          </TooltipContent>
         </Tooltip>
 
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              variant={isHandRaised ? "default" : "secondary"}
+              variant={isHandRaised ? 'default' : 'secondary'}
               size="icon"
-              className="rounded-full h-12 w-12 md:h-14 md:w-14"
+              className="tg-transition h-11 w-11 rounded-full active:scale-95 sm:h-12 sm:w-12 md:h-14 md:w-14"
               onClick={onToggleHandRaise}
+              aria-label="Qo'l ko'tarish"
             >
               <Hand className="h-5 w-5 md:h-6 md:w-6" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{isHandRaised ? 'Lower hand' : 'Raise hand'}</TooltipContent>
+          <TooltipContent>{isHandRaised ? "Qo'lni tushirish" : "Qo'l ko'tarish"}</TooltipContent>
         </Tooltip>
 
         <Tooltip>
@@ -490,13 +519,20 @@ export function VideoCallOverlay({
             <Button
               variant="secondary"
               size="icon"
-              className="rounded-full h-12 w-12 md:h-14 md:w-14 hidden md:flex"
+              className="tg-transition hidden h-12 w-12 rounded-full active:scale-95 md:flex md:h-14 md:w-14"
               onClick={toggleFullscreen}
+              aria-label="To'liq ekran"
             >
-              {isFullscreen ? <Minimize2 className="h-5 w-5 md:h-6 md:w-6" /> : <Maximize2 className="h-5 w-5 md:h-6 md:w-6" />}
+              {isFullscreen ? (
+                <Minimize2 className="h-5 w-5 md:h-6 md:w-6" />
+              ) : (
+                <Maximize2 className="h-5 w-5 md:h-6 md:w-6" />
+              )}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}</TooltipContent>
+          <TooltipContent>
+            {isFullscreen ? "To'liq ekrandan chiqish" : "To'liq ekran"}
+          </TooltipContent>
         </Tooltip>
 
         <Tooltip>
@@ -504,13 +540,14 @@ export function VideoCallOverlay({
             <Button
               variant="destructive"
               size="icon"
-              className="rounded-full h-14 w-14 md:h-16 md:w-16 ml-2"
+              className="tg-transition ml-1 h-13 w-13 rounded-full active:scale-95 sm:ml-2 sm:h-14 sm:w-14 md:h-16 md:w-16"
               onClick={onEndCall}
+              aria-label="Tugatish"
             >
               <PhoneOff className="h-6 w-6 md:h-7 md:w-7" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>End call</TooltipContent>
+          <TooltipContent>Qo'ng'iroqni tugatish</TooltipContent>
         </Tooltip>
       </div>
     </div>
