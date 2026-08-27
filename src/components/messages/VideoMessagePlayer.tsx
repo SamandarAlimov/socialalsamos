@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Button } from '@/components/ui/button';
-import { Play, Pause, Volume2, VolumeX, Maximize2 } from 'lucide-react';
+import { Play, Volume2, VolumeX, Maximize2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { MediaTrack } from '@/contexts/AudioPlayerContext';
@@ -12,24 +11,23 @@ interface VideoMessagePlayerProps {
   autoPlay?: boolean;
   messageId?: string;
   senderName?: string;
-  /** All media messages in the conversation for sequential playback */
+  /** Ketma-ket ijro uchun suhbatdagi barcha media xabarlar */
   allMediaTracks?: MediaTrack[];
-  /** Callback when video ends to trigger next playback */
+  /** Video tugaganda keyingisiga o'tish uchun callback */
   onEnded?: () => void;
-  /** Whether the video was recorded from webcam (should be mirrored) */
+  /** Kamerada yozilgan bo'lsa oyna effekti berilади */
   isWebcamRecording?: boolean;
 }
 
-export function VideoMessagePlayer({ 
-  url, 
-  isMine, 
-  className, 
-  autoPlay = false,
+const SIZE = 240; // Telegram video note diametri
+const RING = 3;
+
+export function VideoMessagePlayer({
+  url,
+  className,
   messageId,
-  senderName,
-  allMediaTracks = [],
   onEnded,
-  isWebcamRecording = false
+  isWebcamRecording = false,
 }: VideoMessagePlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -39,26 +37,7 @@ export function VideoMessagePlayer({
   const [duration, setDuration] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [showControls, setShowControls] = useState(true);
-  const [isVisible, setIsVisible] = useState(false);
-  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Visibility tracking (no autoplay - Telegram behavior)
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const [entry] = entries;
-        setIsVisible(entry.isIntersecting);
-        // No autoplay on scroll - user must explicitly click to play
-      },
-      { threshold: [0, 0.5, 1] }
-    );
-
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, []);
+  const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -68,22 +47,14 @@ export function VideoMessagePlayer({
       setDuration(video.duration);
       setIsLoading(false);
     };
-
-    const handleTimeUpdate = () => {
-      setCurrentTime(video.currentTime);
-    };
-
+    const handleTimeUpdate = () => setCurrentTime(video.currentTime);
     const handleEnded = () => {
       setIsPlaying(false);
       video.currentTime = 0;
-      // Trigger sequential playback callback
+      setCurrentTime(0);
       onEnded?.();
     };
-
-    const handleCanPlay = () => {
-      setIsLoading(false);
-    };
-
+    const handleCanPlay = () => setIsLoading(false);
     const handlePlay = () => setIsPlaying(true);
     const handlePause = () => setIsPlaying(false);
 
@@ -104,6 +75,21 @@ export function VideoMessagePlayer({
     };
   }, [onEnded]);
 
+  // Nazorat elementlarini avtomatik yashirish
+  const resetControlsTimeout = useCallback(() => {
+    if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    setShowControls(true);
+    if (isPlaying) {
+      controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 2500);
+    }
+  }, [isPlaying]);
+
+  useEffect(() => {
+    return () => {
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    };
+  }, []);
+
   const togglePlayPause = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -111,162 +97,147 @@ export function VideoMessagePlayer({
     if (isPlaying) {
       video.pause();
     } else {
-      video.play();
+      // Telegramda video xabar bosilganda ovoz bilan ijro etiladi
+      video.muted = false;
+      setIsMuted(false);
+      void video.play();
     }
     resetControlsTimeout();
-  }, [isPlaying]);
+  }, [isPlaying, resetControlsTimeout]);
 
-  const toggleMute = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    const video = videoRef.current;
-    if (!video) return;
-
-    video.muted = !isMuted;
-    setIsMuted(!isMuted);
-    resetControlsTimeout();
-  }, [isMuted]);
-
-  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    const video = videoRef.current;
-    if (!video || duration === 0) return;
-
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const percentage = clickX / rect.width;
-    video.currentTime = percentage * duration;
-    resetControlsTimeout();
-  };
+  const toggleMute = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const video = videoRef.current;
+      if (!video) return;
+      video.muted = !isMuted;
+      setIsMuted(!isMuted);
+      resetControlsTimeout();
+    },
+    [isMuted, resetControlsTimeout]
+  );
 
   const openFullscreen = (e: React.MouseEvent) => {
     e.stopPropagation();
     const video = videoRef.current;
-    if (!video) return;
-
-    if (video.requestFullscreen) {
-      video.requestFullscreen();
-    }
+    if (video?.requestFullscreen) void video.requestFullscreen();
   };
 
   const formatTime = (seconds: number): string => {
+    if (!isFinite(seconds) || isNaN(seconds) || seconds < 0) return '0:00';
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-
-  const resetControlsTimeout = () => {
-    if (controlsTimeoutRef.current) {
-      clearTimeout(controlsTimeoutRef.current);
-    }
-    setShowControls(true);
-    if (isPlaying) {
-      controlsTimeoutRef.current = setTimeout(() => {
-        setShowControls(false);
-      }, 3000);
-    }
-  };
-
-  const handleMouseMove = () => {
-    resetControlsTimeout();
-  };
+  const progress = duration > 0 ? currentTime / duration : 0;
+  const radius = SIZE / 2 - RING / 2;
+  const circumference = 2 * Math.PI * radius;
 
   return (
-    <div 
+    <div
       ref={containerRef}
-      className={cn(
-        "relative rounded-2xl overflow-hidden bg-black group cursor-pointer",
-        "max-w-[260px] aspect-square",
-        className
-      )}
-      onMouseMove={handleMouseMove}
+      data-message-id={messageId}
+      className={cn('relative shrink-0 cursor-pointer select-none', className)}
+      style={{ width: SIZE, height: SIZE, maxWidth: '100%' }}
+      onMouseMove={resetControlsTimeout}
       onMouseLeave={() => isPlaying && setShowControls(false)}
       onClick={togglePlayPause}
     >
-      {/* Circular video container - Telegram style */}
-      <div className="relative w-full h-full rounded-2xl overflow-hidden">
+      {/* Doiraviy video (Telegram video note) */}
+      <div className="relative h-full w-full overflow-hidden rounded-full bg-black">
         <video
           ref={videoRef}
           src={url}
-          className="w-full h-full object-cover"
+          className="h-full w-full object-cover"
           style={isWebcamRecording ? { transform: 'scaleX(-1)' } : undefined}
           playsInline
           muted={isMuted}
-          preload="auto"
-          loop
+          preload="metadata"
         />
 
-        {/* Loading Overlay */}
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-            <div className="animate-spin rounded-full h-8 w-8 border-2 border-white border-t-transparent" />
+            <span className="h-8 w-8 animate-spin rounded-full border-2 border-white border-t-transparent" />
           </div>
         )}
 
-        {/* Play/Pause Overlay */}
         {!isPlaying && !isLoading && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
+            initial={{ opacity: 0, scale: 0.85 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="absolute inset-0 flex items-center justify-center bg-black/30"
+            className="absolute inset-0 flex items-center justify-center bg-black/25"
           >
-            <motion.div 
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
-              className="h-16 w-16 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center"
+            <motion.span
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.94 }}
+              className="flex h-16 w-16 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm"
             >
-              <Play className="h-8 w-8 text-white ml-1" fill="white" />
-            </motion.div>
+              <Play className="ml-1 h-8 w-8 text-white" fill="white" />
+            </motion.span>
           </motion.div>
         )}
-
-        {/* Duration badge - top right */}
-        <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded-full">
-          <span className="text-[10px] text-white/90 tabular-nums font-medium">
-            {formatTime(duration - currentTime)}
-          </span>
-        </div>
-
-        {/* Mute button - bottom left */}
-        <motion.button
-          initial={{ opacity: 0 }}
-          animate={{ opacity: showControls || !isPlaying ? 1 : 0 }}
-          onClick={toggleMute}
-          className="absolute bottom-2 left-2 h-8 w-8 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/80 transition-colors"
-        >
-          {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-        </motion.button>
-
-        {/* Progress bar - bottom */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: showControls || !isPlaying ? 1 : 0 }}
-          className="absolute bottom-0 left-0 right-0 p-2"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div 
-            className="h-1 bg-white/30 rounded-full cursor-pointer"
-            onClick={handleSeek}
-          >
-            <motion.div 
-              className="h-full bg-white rounded-full"
-              style={{ width: `${progress}%` }}
-              transition={{ duration: 0.1 }}
-            />
-          </div>
-        </motion.div>
-
-        {/* Fullscreen button - bottom right */}
-        <motion.button
-          initial={{ opacity: 0 }}
-          animate={{ opacity: showControls || !isPlaying ? 1 : 0 }}
-          onClick={openFullscreen}
-          className="absolute bottom-2 right-2 h-8 w-8 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/80 transition-colors"
-        >
-          <Maximize2 className="h-4 w-4" />
-        </motion.button>
       </div>
+
+      {/* Aylana bo'ylab progress (Telegramdek) */}
+      <svg
+        className="pointer-events-none absolute inset-0 -rotate-90"
+        width={SIZE}
+        height={SIZE}
+        viewBox={`0 0 ${SIZE} ${SIZE}`}
+      >
+        <circle
+          cx={SIZE / 2}
+          cy={SIZE / 2}
+          r={radius}
+          fill="none"
+          stroke="rgba(255,255,255,0.28)"
+          strokeWidth={RING}
+        />
+        <circle
+          cx={SIZE / 2}
+          cy={SIZE / 2}
+          r={radius}
+          fill="none"
+          stroke="#ffffff"
+          strokeWidth={RING}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference * (1 - progress)}
+          style={{ transition: 'stroke-dashoffset 0.15s linear' }}
+        />
+      </svg>
+
+      {/* Qolgan vaqt */}
+      <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-2 py-0.5 backdrop-blur-sm">
+        <span className="text-[10px] font-medium tabular-nums text-white/90">
+          {formatTime(Math.max(0, duration - currentTime))}
+        </span>
+      </div>
+
+      {/* Ovoz tugmasi */}
+      <motion.button
+        type="button"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: showControls || !isPlaying ? 1 : 0 }}
+        onClick={toggleMute}
+        aria-label={isMuted ? 'Ovozni yoqish' : "Ovozni o'chirish"}
+        className="absolute bottom-2 left-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-colors hover:bg-black/80"
+      >
+        {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+      </motion.button>
+
+      {/* To'liq ekran */}
+      <motion.button
+        type="button"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: showControls || !isPlaying ? 1 : 0 }}
+        onClick={openFullscreen}
+        aria-label="To'liq ekran"
+        className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-colors hover:bg-black/80"
+      >
+        <Maximize2 className="h-4 w-4" />
+      </motion.button>
     </div>
   );
 }
