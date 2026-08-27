@@ -1,21 +1,31 @@
-import { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { 
-  Dialog, 
-  DialogContent 
-} from '@/components/ui/dialog';
-import { Heart, MessageCircle, Share2, Bookmark, MoreHorizontal, X, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import {
+  Heart,
+  MessageCircle,
+  Share2,
+  Bookmark,
+  MoreHorizontal,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Pin,
+} from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { CommentsSection } from '@/components/CommentsSection';
 import { useRealtimeCounts } from '@/hooks/useRealtimeCounts';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { useTranslation } from 'react-i18next';
 import { PollDisplay, parsePollFromContent } from '@/components/PollDisplay';
 import { RichTextContent } from '@/components/RichTextContent';
 import { PostViewsDialog } from '@/components/PostViewsDialog';
+import { PostMusicCard } from '@/components/PostMusicCard';
 import { usePostViews } from '@/hooks/usePostViews';
 import { EditPostDialog } from '@/components/EditPostDialog';
+import { useToast } from '@/hooks/use-toast';
+import { formatCompactCount, parseMusicFromContent } from '@/lib/postMarkers';
 
 interface PostViewModalProps {
   post: {
@@ -25,6 +35,7 @@ interface PostViewModalProps {
     media_type: string | null;
     likes_count: number;
     comments_count: number;
+    views_count?: number;
     is_pinned?: boolean;
     is_liked?: boolean;
     created_at: string;
@@ -48,208 +59,277 @@ export function PostViewModal({
   onLike,
   isOwnProfile = false,
 }: PostViewModalProps) {
-  const navigate = useNavigate();
+  const { t } = useTranslation();
+  const { toast } = useToast();
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
-  const [showComments, setShowComments] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const { recordView } = usePostViews();
-  
-  // Real-time counts
-  const counts = useRealtimeCounts(post.id);
 
-  // Record view when modal opens
-  useEffect(() => {
-    if (open) {
-      recordView(post.id);
-    }
-  }, [open, post.id, recordView]);
+  const counts = useRealtimeCounts(post.id);
 
   const mediaUrls = post.media_urls || [];
   const hasMedia = mediaUrls.length > 0;
   const hasMultipleMedia = mediaUrls.length > 1;
 
-  const nextMedia = () => {
-    setCurrentMediaIndex(prev => (prev + 1) % mediaUrls.length);
+  useEffect(() => {
+    if (open) {
+      setCurrentMediaIndex(0);
+      recordView(post.id);
+    }
+  }, [open, post.id, recordView]);
+
+  const nextMedia = useCallback(() => {
+    setCurrentMediaIndex((prev) => (mediaUrls.length ? (prev + 1) % mediaUrls.length : 0));
+  }, [mediaUrls.length]);
+
+  const prevMedia = useCallback(() => {
+    setCurrentMediaIndex((prev) =>
+      mediaUrls.length ? (prev - 1 + mediaUrls.length) % mediaUrls.length : 0,
+    );
+  }, [mediaUrls.length]);
+
+  // Klaviatura bilan boshqarish — premium galereya tajribasi
+  useEffect(() => {
+    if (!open || !hasMultipleMedia) return;
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'ArrowRight') nextMedia();
+      if (event.key === 'ArrowLeft') prevMedia();
+    };
+
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, hasMultipleMedia, nextMedia, prevMedia]);
+
+  const handleShare = async () => {
+    const url = `${window.location.origin}/user/${profile.username ?? ''}?post=${post.id}`;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: profile.display_name || profile.username || 'Alsamos',
+          url,
+        });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      toast({
+        title: t('post.share.copied', { defaultValue: 'Havola nusxalandi' }),
+      });
+    } catch {
+      // foydalanuvchi bekor qildi — xabar kerak emas
+    }
   };
 
-  const prevMedia = () => {
-    setCurrentMediaIndex(prev => (prev - 1 + mediaUrls.length) % mediaUrls.length);
-  };
+  const likes = counts.likes_count ?? post.likes_count ?? 0;
+  const comments = counts.comments_count ?? post.comments_count ?? 0;
+  const views = counts.views_count ?? post.views_count ?? 0;
 
-  const formatCount = (count: number) => {
-    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
-    if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
-    return count.toString();
-  };
+  const { pollData, cleanContent } = parsePollFromContent(post.content || '');
+  const { music, cleanContent: textContent } = parseMusicFromContent(cleanContent);
 
   return (
     <>
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl w-full p-0 overflow-hidden bg-background max-h-[90vh]">
-        <div className="flex flex-col md:flex-row h-full max-h-[90vh]">
-          {/* Media Section */}
-          {hasMedia && (
-            <div className="relative flex-1 bg-black flex items-center justify-center min-h-[300px] md:min-h-[500px]">
-              {post.media_type === 'video' ? (
-                <video
-                  src={mediaUrls[currentMediaIndex]}
-                  controls
-                  className="max-w-full max-h-full object-contain"
-                  playsInline
-                />
-              ) : (
-                <img
-                  src={mediaUrls[currentMediaIndex]}
-                  alt=""
-                  className="max-w-full max-h-full object-contain"
-                />
-              )}
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="w-[96vw] max-w-6xl overflow-hidden rounded-2xl border-border/60 bg-background p-0 shadow-2xl sm:rounded-2xl md:max-h-[92vh]">
+          <div className="flex max-h-[92vh] flex-col md:flex-row">
+            {/* Media */}
+            {hasMedia && (
+              <div className="group relative flex flex-1 items-center justify-center bg-gradient-to-b from-neutral-950 to-black min-h-[46vh] md:min-h-[560px]">
+                {post.media_type === 'video' ? (
+                  <video
+                    key={mediaUrls[currentMediaIndex]}
+                    src={mediaUrls[currentMediaIndex]}
+                    controls
+                    autoPlay
+                    playsInline
+                    className="max-h-[92vh] max-w-full object-contain"
+                  />
+                ) : (
+                  <img
+                    key={mediaUrls[currentMediaIndex]}
+                    src={mediaUrls[currentMediaIndex]}
+                    alt=""
+                    className="max-h-[92vh] max-w-full animate-in fade-in duration-200 object-contain"
+                  />
+                )}
 
-              {/* Navigation arrows */}
-              {hasMultipleMedia && (
-                <>
-                  <button
-                    onClick={prevMedia}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 rounded-full p-2 text-white hover:bg-black/70"
-                  >
-                    <ChevronLeft className="h-5 w-5" />
-                  </button>
-                  <button
-                    onClick={nextMedia}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 rounded-full p-2 text-white hover:bg-black/70"
-                  >
-                    <ChevronRight className="h-5 w-5" />
-                  </button>
-                  {/* Media indicators */}
-                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1">
-                    {mediaUrls.map((_, idx) => (
-                      <div
-                        key={idx}
-                        className={cn(
-                          "w-2 h-2 rounded-full transition-colors",
-                          idx === currentMediaIndex ? "bg-white" : "bg-white/50"
-                        )}
-                      />
-                    ))}
+                {post.is_pinned && (
+                  <span className="absolute left-3 top-3 flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white backdrop-blur">
+                    <Pin className="h-3 w-3" />
+                    {t('post.pinned', { defaultValue: 'Mahkamlangan' })}
+                  </span>
+                )}
+
+                {hasMultipleMedia && (
+                  <>
+                    <span className="absolute right-14 top-3 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white backdrop-blur">
+                      {currentMediaIndex + 1} / {mediaUrls.length}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={prevMedia}
+                      aria-label={t('common.previous', { defaultValue: 'Oldingi' })}
+                      className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white opacity-0 backdrop-blur transition hover:bg-black/70 focus-visible:opacity-100 group-hover:opacity-100 md:opacity-0"
+                    >
+                      <ChevronLeft className="h-5 w-5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={nextMedia}
+                      aria-label={t('common.next', { defaultValue: 'Keyingi' })}
+                      className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white opacity-0 backdrop-blur transition hover:bg-black/70 focus-visible:opacity-100 group-hover:opacity-100 md:opacity-0"
+                    >
+                      <ChevronRight className="h-5 w-5" />
+                    </button>
+
+                    <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 gap-1.5">
+                      {mediaUrls.map((url, idx) => (
+                        <button
+                          key={url}
+                          type="button"
+                          onClick={() => setCurrentMediaIndex(idx)}
+                          aria-label={`${idx + 1}`}
+                          className={cn(
+                            'h-1.5 rounded-full transition-all',
+                            idx === currentMediaIndex ? 'w-6 bg-white' : 'w-1.5 bg-white/50 hover:bg-white/80',
+                          )}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => onOpenChange(false)}
+                  aria-label={t('common.close', { defaultValue: 'Yopish' })}
+                  className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur transition hover:bg-black/70"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Tafsilotlar */}
+            <div
+              className={cn(
+                'flex min-h-0 flex-col bg-background',
+                hasMedia ? 'md:w-[400px] md:border-l md:border-border/60' : 'w-full',
+              )}
+            >
+              <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <Avatar className="h-10 w-10 ring-2 ring-primary/25">
+                    <AvatarImage src={profile.avatar_url || ''} />
+                    <AvatarFallback>{profile.username?.[0]?.toUpperCase() || 'U'}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold leading-tight">
+                      {profile.display_name || profile.username}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {profile.username ? `@${profile.username} \u00b7 ` : ''}
+                      {format(new Date(post.created_at), 'd MMM yyyy, HH:mm')}
+                    </p>
                   </div>
-                </>
-              )}
+                </div>
 
-              {/* Close button */}
-              <button
-                onClick={() => onOpenChange(false)}
-                className="absolute top-2 right-2 bg-black/50 rounded-full p-2 text-white hover:bg-black/70 md:hidden"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-          )}
+                {isOwnProfile && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0 rounded-full"
+                    onClick={() => setShowEdit(true)}
+                    aria-label={t('post.edit', { defaultValue: 'Postni tahrirlash' })}
+                  >
+                    <MoreHorizontal className="h-5 w-5" />
+                  </Button>
+                )}
+              </div>
 
-          {/* Details Section */}
-          <div className={cn(
-            "flex flex-col",
-            hasMedia ? "md:w-[350px] border-l border-border" : "w-full"
-          )}>
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-border">
-              <div className="flex items-center gap-3">
-                <Avatar className="h-10 w-10">
-                  <AvatarImage src={profile.avatar_url || ''} />
-                  <AvatarFallback>
-                    {profile.username?.[0]?.toUpperCase() || 'U'}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="font-semibold">{profile.display_name || profile.username}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {format(new Date(post.created_at), 'MMM d, yyyy')}
-                  </p>
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {(textContent || music || pollData) && (
+                  <div className="space-y-3 border-b border-border/60 px-4 py-3">
+                    {textContent && (
+                      <RichTextContent content={textContent} className="text-sm leading-relaxed" />
+                    )}
+                    {music && <PostMusicCard music={music} />}
+                    {pollData && <PollDisplay postId={post.id} pollData={pollData} />}
+                  </div>
+                )}
+
+                <div className="px-4 py-3">
+                  <CommentsSection postId={post.id} />
                 </div>
               </div>
-              {isOwnProfile && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowEdit(true)}
-                  aria-label="Postni tahrirlash"
-                >
-                  <MoreHorizontal className="h-5 w-5" />
-                </Button>
-              )}
-            </div>
 
-            {/* Content with Poll Support */}
-            {post.content && (() => {
-              const { pollData, cleanContent } = parsePollFromContent(post.content);
-              return (
-                <>
-                  {cleanContent && (
-                    <div className="p-4 border-b border-border">
-                      <RichTextContent content={cleanContent} className="text-sm" />
-                    </div>
-                  )}
-                  {pollData && (
-                    <div className="p-4 border-b border-border">
-                      <PollDisplay postId={post.id} pollData={pollData} />
-                    </div>
-                  )}
-                </>
-              );
-            })()}
+              {/* Amallar paneli */}
+              <div className="border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur">
+                <div className="mb-2 flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={onLike}
+                    aria-label={t('post.like', { defaultValue: 'Yoqtirish' })}
+                    className={cn(
+                      'flex h-10 w-10 items-center justify-center rounded-full transition-all active:scale-90',
+                      post.is_liked
+                        ? 'text-red-500 hover:bg-red-500/10'
+                        : 'text-muted-foreground hover:bg-muted hover:text-red-500',
+                    )}
+                  >
+                    <Heart className={cn('h-[22px] w-[22px]', post.is_liked && 'fill-current')} />
+                  </button>
 
-            {/* Comments */}
-            <div className="flex-1 overflow-y-auto p-4 max-h-[300px] md:max-h-none">
-              <CommentsSection postId={post.id} />
-            </div>
+                  <span className="mr-2 text-sm font-semibold tabular-nums">
+                    {formatCompactCount(likes)}
+                  </span>
 
-            {/* Actions */}
-            <div className="p-4 border-t border-border">
-              <div className="flex items-center gap-4 mb-2">
-                <button
-                  onClick={onLike}
-                  className={cn(
-                    "flex items-center gap-1.5 transition-colors",
-                    post.is_liked ? 'text-red-500' : 'text-muted-foreground hover:text-red-500'
-                  )}
-                >
-                  <Heart className={cn("h-6 w-6", post.is_liked && 'fill-current')} />
-                </button>
-                <button 
-                  onClick={() => setShowComments(!showComments)}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <MessageCircle className="h-6 w-6" />
-                </button>
-                <button className="text-muted-foreground hover:text-foreground">
-                  <Share2 className="h-6 w-6" />
-                </button>
-                <button 
-                  onClick={() => setIsBookmarked(!isBookmarked)}
-                  className={cn(
-                    "ml-auto",
-                    isBookmarked ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  <Bookmark className={cn("h-6 w-6", isBookmarked && 'fill-current')} />
-                </button>
-              </div>
-              <div className="flex items-center justify-between">
-                <p className="font-semibold text-sm">
-                  {formatCount(counts.likes_count || post.likes_count)} likes
-                </p>
+                  <div className="flex h-10 items-center gap-1.5 rounded-full px-2 text-muted-foreground">
+                    <MessageCircle className="h-[22px] w-[22px]" />
+                    <span className="text-sm font-semibold tabular-nums">
+                      {formatCompactCount(comments)}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleShare}
+                    aria-label={t('post.share.action', { defaultValue: 'Ulashish' })}
+                    className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-90"
+                  >
+                    <Share2 className="h-[22px] w-[22px]" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsBookmarked((prev) => !prev)}
+                    aria-label={t('post.save', { defaultValue: 'Saqlash' })}
+                    className={cn(
+                      'ml-auto flex h-10 w-10 items-center justify-center rounded-full transition-all active:scale-90',
+                      isBookmarked
+                        ? 'text-primary hover:bg-primary/10'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                    )}
+                  >
+                    <Bookmark className={cn('h-[22px] w-[22px]', isBookmarked && 'fill-current')} />
+                  </button>
+                </div>
+
                 <PostViewsDialog
                   postId={post.id}
-                  viewsCount={counts.views_count || (post as any).views_count || 0}
-                  iconClassName="h-4 w-4"
+                  viewsCount={views}
+                  iconClassName="h-3.5 w-3.5"
                   textClassName="text-xs"
                 />
               </div>
             </div>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
       <EditPostDialog
         postId={post.id}
         open={showEdit}
