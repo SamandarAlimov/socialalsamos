@@ -1,8 +1,8 @@
 import { cn } from '@/lib/utils';
+import { motion } from 'framer-motion';
 import { EmojiPicker } from './EmojiPicker';
 import { AnimatedEmoji } from '@/components/emoji/AnimatedEmoji';
-import { Plus } from 'lucide-react';
-
+import { SmilePlus } from 'lucide-react';
 
 interface ReactionGroup {
   emoji: string;
@@ -17,47 +17,63 @@ interface MessageReactionsProps {
   isMine?: boolean;
 }
 
+/**
+ * Telegram uslubidagi reaksiya chiplari.
+ * Yangi xabar bubble'lari `messages/TelegramReactions` dan foydalanadi;
+ * bu komponent qolgan eski joylar uchun bir xil ko'rinishni ta'minlaydi.
+ */
 export function MessageReactions({ reactions, onToggle, onAdd, isMine }: MessageReactionsProps) {
+  const addButton = (
+    <EmojiPicker
+      onSelect={onAdd}
+      trigger={
+        <button
+          type="button"
+          aria-label="Reaksiya qo'shish"
+          title="Reaksiya qo'shish"
+          className="inline-flex h-[26px] w-[26px] items-center justify-center rounded-full bg-muted/70 text-muted-foreground opacity-0 transition-all hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+        >
+          <SmilePlus className="h-3.5 w-3.5" />
+        </button>
+      }
+    />
+  );
+
   if (reactions.length === 0) {
     return (
-      <div className="flex justify-end mt-1">
-        <EmojiPicker
-          onSelect={onAdd}
-          trigger={
-            <button className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-accent">
-              <Plus className="h-3 w-3 text-muted-foreground" />
-            </button>
-          }
-        />
-      </div>
+      <div className={cn('mt-1 flex', isMine ? 'justify-end' : 'justify-start')}>{addButton}</div>
     );
   }
 
   return (
-    <div className={cn("flex flex-wrap gap-1 mt-1", isMine ? "justify-end" : "justify-start")}>
+    <div
+      className={cn(
+        'mt-1 flex flex-wrap items-center gap-1',
+        isMine ? 'justify-end' : 'justify-start'
+      )}
+    >
       {reactions.map((reaction) => (
-        <button
+        <motion.button
           key={reaction.emoji}
+          type="button"
           onClick={() => onToggle(reaction.emoji)}
+          whileTap={{ scale: 0.92 }}
+          initial={{ opacity: 0, scale: 0.85 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: 'spring', stiffness: 420, damping: 26 }}
+          aria-pressed={reaction.hasReacted}
           className={cn(
-            "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs transition-colors",
+            'inline-flex h-[26px] items-center gap-1 rounded-full px-2 text-xs transition-colors',
             reaction.hasReacted
-              ? "bg-primary/20 text-primary border border-primary/30"
-              : "bg-muted hover:bg-accent border border-transparent"
+              ? 'bg-primary/15 text-primary ring-1 ring-inset ring-primary/30'
+              : 'bg-muted text-foreground/80 hover:bg-muted/70'
           )}
         >
           <AnimatedEmoji emoji={reaction.emoji} size={16} />
-          <span className="font-medium">{reaction.count}</span>
-        </button>
+          <span className="font-medium tabular-nums">{reaction.count}</span>
+        </motion.button>
       ))}
-      <EmojiPicker
-        onSelect={onAdd}
-        trigger={
-          <button className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center justify-center h-6 w-6 rounded-full hover:bg-accent">
-            <Plus className="h-3 w-3 text-muted-foreground" />
-          </button>
-        }
-      />
+      {addButton}
     </div>
   );
 }
