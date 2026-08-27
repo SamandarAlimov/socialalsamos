@@ -1,7 +1,19 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Search, Plus, MessageCircle, Inbox, Archive, X, Forward, Trash2, CheckSquare, Bookmark, Megaphone, ArrowDown } from 'lucide-react';
+import {
+  Search,
+  Plus,
+  MessageCircle,
+  Inbox,
+  Archive,
+  X,
+  Forward,
+  Trash2,
+  Bookmark,
+  Megaphone,
+  ArrowDown,
+} from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -16,9 +28,10 @@ import { usePinnedMessages } from '@/hooks/usePinnedMessages';
 import { useReadReceipts } from '@/hooks/useReadReceipts';
 import { useScheduledMessages } from '@/hooks/useScheduledMessages';
 import { useSelfChat } from '@/hooks/useSelfChat';
+import { useLiveLocation } from '@/hooks/useLiveLocation';
 import { useToast } from '@/hooks/use-toast';
 
-// Components
+// Komponentlar
 import { ChatListItem } from '@/components/messages/ChatListItem';
 import { ChatHeader } from '@/components/messages/ChatHeader';
 import { EnhancedMessageBubble } from '@/components/messages/EnhancedMessageBubble';
@@ -26,13 +39,13 @@ import { MessageInput } from '@/components/messages/MessageInput';
 import { CreateChatDialog } from '@/components/messages/CreateChatDialog';
 import { CreateGroupChannelDialog } from '@/components/messages/CreateGroupChannelDialog';
 import { VideoCallOverlay } from '@/components/messages/VideoCallOverlay';
-import { ForwardMessageDialog } from '@/components/ForwardMessageDialog';
 import { TelegramForwardDialog } from '@/components/messages/TelegramForwardDialog';
 import { MessageSearch } from '@/components/messages/MessageSearch';
 import { IncomingCallDialog } from '@/components/messages/IncomingCallDialog';
 import { PinnedMessagesBar } from '@/components/messages/PinnedMessagesBar';
 import { EditMessageDialog } from '@/components/messages/EditMessageDialog';
 import { DeleteMessageDialog, DeleteScope } from '@/components/messages/DeleteMessageDialog';
+import { JumpToDateDialog } from '@/components/messages/JumpToDateDialog';
 import { TypingIndicator } from '@/components/messages/TypingIndicator';
 import { GroupMemberManagement } from '@/components/messages/GroupMemberManagement';
 import { ScheduledMessagesSheet } from '@/components/messages/ScheduledMessagesSheet';
@@ -42,26 +55,57 @@ import { useChannels, Channel } from '@/hooks/useChannels';
 import { ChannelView } from '@/components/channels/ChannelView';
 import { CreateChannelDialog } from '@/components/channels/CreateChannelDialog';
 import { ChannelCard } from '@/components/channels/ChannelCard';
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from '@/components/ui/resizable';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 type MessageTab = 'private' | 'groups' | 'channels' | 'requests' | 'archived';
+
+const LOCATION_PREFIX = '\ud83d\udccd LOCATION:';
+
+/** Sana yorlig'i: Bugun / Kecha / 12-mart, dushanba */
+function formatDateLabel(dateString: string): string {
+  const date = new Date(dateString);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+
+  if (date.toDateString() === today.toDateString()) return 'Bugun';
+  if (date.toDateString() === yesterday.toDateString()) return 'Kecha';
+
+  try {
+    return date.toLocaleDateString('uz-UZ', {
+      day: 'numeric',
+      month: 'long',
+      weekday: 'long',
+      ...(date.getFullYear() !== today.getFullYear() ? { year: 'numeric' } : {}),
+    });
+  } catch {
+    return date.toLocaleDateString();
+  }
+}
 
 export default function MessagesPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
-  
-  // UI State
+
+  // Interfeys holati
   const [activeTab, setActiveTab] = useState<MessageTab>('private');
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showMobileChat, setShowMobileChat] = useState(false);
-  
-  // Message State
-  const [replyTo, setReplyTo] = useState<{ id: string; content: string; sender_name: string } | null>(null);
-  const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
+
+  // Xabar holati
+  const [replyTo, setReplyTo] = useState<{
+    id: string;
+    content: string;
+    sender_name: string;
+  } | null>(null);
   const [forwardMessages, setForwardMessages] = useState<Message[]>([]);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [deletingMessage, setDeletingMessage] = useState<Message | null>(null);
@@ -69,13 +113,15 @@ export default function MessagesPage() {
   const [showMemberManagement, setShowMemberManagement] = useState(false);
   const [showMessageSearch, setShowMessageSearch] = useState(false);
   const [showCreateChannelDialog, setShowCreateChannelDialog] = useState(false);
+  const [showJumpToDate, setShowJumpToDate] = useState(false);
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
-  
-  // Selection mode for multi-select
+
+  // Ko'p tanlash rejimi
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
-  // Call State
+
+  // Qo'ng'iroq holati
   const [isInCall, setIsInCall] = useState(false);
   const [callType, setCallType] = useState<'audio' | 'video'>('video');
   const [activeCallId, setActiveCallId] = useState<string | null>(null);
@@ -90,56 +136,60 @@ export default function MessagesPage() {
   const [unreadIncomingCount, setUnreadIncomingCount] = useState(0);
   const lastMessageIdRef = useRef<string | null>(null);
 
-  // Determine if we're showing archived tab
   const isArchivedTab = activeTab === 'archived';
 
-  // Hooks - main conversations (non-archived)
-  const { 
-    conversations, 
-    isLoading: conversationsLoading, 
-    createPrivateConversation, 
+  const {
+    conversations,
+    isLoading: conversationsLoading,
+    createPrivateConversation,
     createGroup,
     refresh: refreshConversations,
   } = useConversations(
-    activeTab === 'private' ? 'private' : 
-    activeTab === 'groups' ? 'group' : 
-    activeTab === 'channels' ? 'channel' : 
-    activeTab === 'archived' ? undefined : undefined,
-    isArchivedTab // showArchived flag
+    activeTab === 'private'
+      ? 'private'
+      : activeTab === 'groups'
+        ? 'group'
+        : activeTab === 'channels'
+          ? 'channel'
+          : undefined,
+    isArchivedTab
   );
 
-  // Fetch all non-archived conversations to compute per-tab unread badges
   const { conversations: allConversations } = useConversations(undefined, false);
 
-  const { 
-    messages, 
-    isLoading: messagesLoading, 
-    typingUsers, 
-    sendMessage, 
+  const {
+    messages,
+    isLoading: messagesLoading,
+    typingUsers,
+    sendMessage,
     editMessage,
     deleteMessage,
     deleteMessageForMe,
-    setTyping 
+    setTyping,
   } = useMessages(selectedConversation?.id || null);
 
-  // Read receipts
-  const { markAsRead, isMessageRead, getMessageReadAt } = useReadReceipts(selectedConversation?.id || null);
+  const { markAsRead, isMessageRead, getMessageReadAt } = useReadReceipts(
+    selectedConversation?.id || null
+  );
 
-  // Scheduled messages
-  const { scheduleMessage, scheduledMessages } = useScheduledMessages(selectedConversation?.id || undefined);
+  const { scheduleMessage, scheduledMessages } = useScheduledMessages(
+    selectedConversation?.id || undefined
+  );
   const [showScheduledMessages, setShowScheduledMessages] = useState(false);
 
-  // Self-chat (saved messages)
   const { getOrCreateSelfChat, isCreating: isCreatingSelfChat } = useSelfChat();
 
-  // Channels hook
-  const { channels: channelsList, isLoading: channelsLoading, fetchChannels, createChannel, joinChannel, leaveChannel } = useChannels();
+  const {
+    channels: channelsList,
+    isLoading: channelsLoading,
+    createChannel,
+    joinChannel,
+    leaveChannel,
+  } = useChannels();
 
-  // Video call management
   const {
     currentCall,
     callParticipants,
-    isCreatingCall,
     callEnded,
     createCall,
     joinCall,
@@ -150,14 +200,8 @@ export default function MessagesPage() {
     subscribeToParticipants,
   } = useVideoCall();
 
-  // Incoming call notifications
-  const {
-    incomingCall,
-    handleCallHandled,
-    declineCall,
-  } = useIncomingCalls();
+  const { incomingCall, handleCallHandled, declineCall } = useIncomingCalls();
 
-  // WebRTC for actual peer connections - use call ID as room ID for authorization
   const {
     localStream,
     participants: webrtcParticipants,
@@ -175,21 +219,36 @@ export default function MessagesPage() {
     toggleHandRaise,
   } = useWebRTC(activeCallId);
 
-  // Merge WebRTC participants with profile data from database
-  const participantsWithProfiles = webrtcParticipants.map(p => {
-    const dbParticipant = callParticipants.find(cp => cp.user_id === p.id);
+  const participantsWithProfiles = webrtcParticipants.map((p) => {
+    const dbParticipant = callParticipants.find((cp) => cp.user_id === p.id);
     return {
       ...p,
-      name: dbParticipant?.profile?.display_name || dbParticipant?.profile?.username || 'Participant',
+      name:
+        dbParticipant?.profile?.display_name ||
+        dbParticipant?.profile?.username ||
+        "A'zo",
       avatarUrl: dbParticipant?.profile?.avatar_url || undefined,
     };
   });
 
-  // Deep link handling
+  // Jonli joylashuv
+  const liveLocation = useLiveLocation({
+    onUpdate: async ({ latitude, longitude }) => {
+      const session = liveLocationSessionRef.current;
+      if (!session) return;
+      await supabase
+        .from('messages')
+        .update({ media_url: `${latitude},${longitude}` })
+        .eq('id', session.messageId);
+    },
+  });
+  const liveLocationSessionRef = useRef<{ messageId: string } | null>(null);
+
+  // Chuqur havolalar
   useEffect(() => {
     const conversationId = searchParams.get('conversation');
     if (conversationId && !selectedConversation) {
-      const conv = conversations.find(c => c.id === conversationId);
+      const conv = conversations.find((c) => c.id === conversationId);
       if (conv) {
         setSelectedConversation(conv);
         setSearchParams({}, { replace: true });
@@ -206,8 +265,8 @@ export default function MessagesPage() {
         .from('conversations')
         .select('*')
         .eq('id', conversationId)
-        .single();
-      
+        .maybeSingle();
+
       if (convData) {
         let otherParticipant = null;
         if (convData.type === 'private' && user) {
@@ -223,7 +282,7 @@ export default function MessagesPage() {
               .from('profiles')
               .select('id, username, display_name, avatar_url, is_online, last_seen')
               .eq('id', participants[0].user_id)
-              .single();
+              .maybeSingle();
             otherParticipant = profile;
           }
         }
@@ -235,17 +294,16 @@ export default function MessagesPage() {
           last_message: undefined,
           unread_count: 0,
         };
-        
+
         setSelectedConversation(fullConv);
         setSearchParams({}, { replace: true });
         setShowMobileChat(true);
       }
     } catch (error) {
-      console.error('Error fetching conversation:', error);
+      console.error('Suhbatni yuklashda xatolik:', error);
     }
   };
 
-  // Auto scroll to bottom — robust against late-loading media/avatars
   const scrollToBottom = useCallback((smooth = false) => {
     const el = messagesScrollRef.current;
     if (!el) return;
@@ -254,14 +312,12 @@ export default function MessagesPage() {
     };
     requestAnimationFrame(() => {
       doScroll();
-      // Run again after layout settles (fonts, images)
       requestAnimationFrame(doScroll);
       setTimeout(doScroll, 120);
       setTimeout(doScroll, 350);
     });
   }, []);
 
-  // Force-scroll to bottom whenever the selected conversation changes (Telegram-style: latest message at bottom)
   useEffect(() => {
     const id = selectedConversation?.id ?? null;
     if (id !== lastConvIdRef.current) {
@@ -274,7 +330,6 @@ export default function MessagesPage() {
     }
   }, [selectedConversation?.id, scrollToBottom]);
 
-  // When new messages arrive, scroll only if user is at/near bottom; otherwise show badge
   useEffect(() => {
     if (messages.length === 0) return;
     const newest = messages[messages.length - 1];
@@ -285,22 +340,19 @@ export default function MessagesPage() {
     if (isAtBottomRef.current) {
       scrollToBottom(false);
     } else if (isNewMessage && prevId && newest.sender_id !== user?.id) {
-      // User scrolled up and a new incoming message arrived
       setUnreadIncomingCount((c) => c + 1);
     }
 
-    // Mark messages as read when viewing them
     if (user) {
       const otherUserMessages = messages
-        .filter(m => m.sender_id !== user.id)
-        .map(m => m.id);
+        .filter((m) => m.sender_id !== user.id)
+        .map((m) => m.id);
       if (otherUserMessages.length > 0) {
         markAsRead(otherUserMessages);
       }
     }
   }, [messages, markAsRead, user, scrollToBottom]);
 
-  // Re-scroll when media inside the viewport finishes loading
   useEffect(() => {
     const el = messagesScrollRef.current;
     if (!el) return;
@@ -313,7 +365,6 @@ export default function MessagesPage() {
     return () => el.removeEventListener('load', handleLoad, true);
   }, [selectedConversation?.id, scrollToBottom]);
 
-  // Track whether the user is at the bottom (within 80px)
   const handleMessagesScroll = useCallback(() => {
     const el = messagesScrollRef.current;
     if (!el) return;
@@ -331,16 +382,15 @@ export default function MessagesPage() {
     scrollToBottom(true);
   }, [scrollToBottom]);
 
-  // Tab definitions
+  // Bo'limlar (o'zbekcha)
   const tabsBase: { id: MessageTab; label: string }[] = [
-    { id: 'private', label: 'Private' },
-    { id: 'groups', label: 'Groups' },
-    { id: 'channels', label: 'Channels' },
-    { id: 'requests', label: 'Requests' },
-    { id: 'archived', label: 'Archived' },
+    { id: 'private', label: 'Shaxsiy' },
+    { id: 'groups', label: 'Guruhlar' },
+    { id: 'channels', label: 'Kanallar' },
+    { id: 'requests', label: "So'rovlar" },
+    { id: 'archived', label: 'Arxiv' },
   ];
 
-  // Compute per-tab unread counts from all non-archived conversations
   const tabUnreadCounts = useMemo(() => {
     const counts: Record<MessageTab, number> = {
       private: 0,
@@ -352,36 +402,30 @@ export default function MessagesPage() {
     for (const conv of allConversations) {
       const isReq = Boolean((conv as any).is_request);
       const unread = conv.unread_count ?? 0;
-      if (isReq) {
-        counts.requests += unread;
-      } else if (conv.type === 'private') {
-        counts.private += unread;
-      } else if (conv.type === 'group') {
-        counts.groups += unread;
-      } else if (conv.type === 'channel') {
-        counts.channels += unread;
-      }
+      if (isReq) counts.requests += unread;
+      else if (conv.type === 'private') counts.private += unread;
+      else if (conv.type === 'group') counts.groups += unread;
+      else if (conv.type === 'channel') counts.channels += unread;
     }
     return counts;
   }, [allConversations]);
 
-  const tabs = tabsBase.map(tab => ({ ...tab, unread: tabUnreadCounts[tab.id] }));
+  const tabs = tabsBase.map((tab) => ({ ...tab, unread: tabUnreadCounts[tab.id] }));
 
-  // Filter conversations - separate requests (is_request=true) from normal chats.
-  const filteredConversations = conversations.filter(conv => {
+  const filteredConversations = conversations.filter((conv) => {
     const isReq = Boolean((conv as any).is_request);
     if (activeTab === 'requests') {
       if (!isReq) return false;
-    } else {
-      if (isReq) return false;
+    } else if (isReq) {
+      return false;
     }
-    const name = conv.type === 'private' 
-      ? conv.other_participant?.display_name || conv.other_participant?.username 
-      : conv.name;
+    const name =
+      conv.type === 'private'
+        ? conv.other_participant?.display_name || conv.other_participant?.username
+        : conv.name;
     return name?.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
-  // Unarchive conversation handler
   const handleUnarchiveConversation = async (conversationId: string) => {
     try {
       await supabase
@@ -389,21 +433,23 @@ export default function MessagesPage() {
         .update({ is_archived: false })
         .eq('conversation_id', conversationId)
         .eq('user_id', user?.id);
-      
+
       refreshConversations();
-      toast({ title: 'Unarchived', description: 'Conversation restored' });
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to unarchive conversation', variant: 'destructive' });
+      toast({ title: 'Arxivdan chiqarildi', description: 'Suhbat qaytarildi' });
+    } catch {
+      toast({
+        title: 'Xatolik',
+        description: 'Arxivdan chiqarib bo\u2018lmadi',
+        variant: 'destructive',
+      });
     }
   };
 
-  // Handlers
   const handleSelectConversation = (conv: Conversation) => {
     setSelectedConversation(conv);
     setShowMobileChat(true);
     setReplyTo(null);
     isAtBottomRef.current = true;
-    // Scroll handled by selectedConversation effect
   };
 
   const handleSendMessage = async (content: string, mediaUrl?: string, mediaType?: string) => {
@@ -411,34 +457,92 @@ export default function MessagesPage() {
     setReplyTo(null);
   };
 
-  const handleScheduleMessage = async (scheduledFor: Date, content: string, mediaUrl?: string, mediaType?: string) => {
+  const handleScheduleMessage = async (
+    scheduledFor: Date,
+    content: string,
+    mediaUrl?: string,
+    mediaType?: string
+  ) => {
     if (selectedConversation) {
       await scheduleMessage(selectedConversation.id, scheduledFor, content, mediaUrl, mediaType);
     }
   };
 
+  // Joylashuv (oddiy va jonli)
+  const handleShareLocation = async (location: {
+    latitude: number;
+    longitude: number;
+    address?: string;
+    liveDurationSeconds?: number;
+  }) => {
+    const base = `${LOCATION_PREFIX}${location.latitude},${location.longitude}${
+      location.address ? `|${location.address}` : ''
+    }`;
+
+    if (!location.liveDurationSeconds || !selectedConversation || !user) {
+      await sendMessage(base);
+      return;
+    }
+
+    // Jonli joylashuv: xabarni yaratamiz va uni davriy yangilaymiz
+    const expiresAt = new Date(Date.now() + location.liveDurationSeconds * 1000).toISOString();
+    const { data, error } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: selectedConversation.id,
+        sender_id: user.id,
+        content: `${base}|LIVE:${expiresAt}`,
+        media_url: `${location.latitude},${location.longitude}`,
+        media_type: 'live_location',
+      })
+      .select('id')
+      .maybeSingle();
+
+    if (error || !data) {
+      toast({
+        title: 'Xatolik',
+        description: 'Jonli joylashuvni yuborib bo\u2018lmadi',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    liveLocationSessionRef.current = { messageId: data.id };
+    await liveLocation.start({
+      messageId: data.id,
+      conversationId: selectedConversation.id,
+      durationSeconds: location.liveDurationSeconds,
+    });
+    toast({
+      title: 'Jonli joylashuv yoqildi',
+      description: 'Joylashuvingiz belgilangan vaqt davomida yangilanadi',
+    });
+  };
+
+  useEffect(() => {
+    if (!liveLocation.isSharing) {
+      liveLocationSessionRef.current = null;
+    }
+  }, [liveLocation.isSharing]);
+
   const handleReply = (message: Message) => {
     setReplyTo({
       id: message.id,
       content: message.content || '',
-      sender_name: message.sender?.display_name || message.sender?.username || 'Unknown',
+      sender_name:
+        message.sender?.display_name || message.sender?.username || 'Foydalanuvchi',
     });
   };
 
   const handleForward = (message: Message) => {
-    // Single message forward
     setForwardMessages([message]);
   };
 
-  // Multi-select handlers
   const handleSelectMessage = (messageId: string) => {
-    setSelectedMessages(prev => {
+    setSelectedMessages((prev) => {
       const newSet = new Set(prev);
-      if (newSet.has(messageId)) {
-        newSet.delete(messageId);
-      } else {
-        newSet.add(messageId);
-      }
+      if (newSet.has(messageId)) newSet.delete(messageId);
+      else newSet.add(messageId);
       return newSet;
     });
   };
@@ -453,7 +557,7 @@ export default function MessagesPage() {
     setSelectedMessages(new Set());
   };
 
-  // Drag-to-select (pointer-based, works for touch + mouse)
+  // Sudrab tanlash
   const dragSelectActive = useRef(false);
   const dragSelectMode = useRef<'add' | 'remove'>('add');
   const dragVisited = useRef<Set<string>>(new Set());
@@ -481,7 +585,7 @@ export default function MessagesPage() {
     if (!id || dragVisited.current.has(id)) return;
     dragSelectActive.current = true;
     dragVisited.current.add(id);
-    setSelectedMessages(prev => {
+    setSelectedMessages((prev) => {
       const next = new Set(prev);
       if (dragSelectMode.current === 'add') next.add(id);
       else next.delete(id);
@@ -494,7 +598,6 @@ export default function MessagesPage() {
     dragAnchorId.current = null;
     dragVisited.current = new Set();
     if (wasDrag) {
-      // Swallow the next click so the bubble's tap-toggle doesn't undo the drag
       const swallow = (ev: MouseEvent) => {
         ev.stopPropagation();
         ev.preventDefault();
@@ -502,33 +605,37 @@ export default function MessagesPage() {
       };
       window.addEventListener('click', swallow, true);
     }
-    setTimeout(() => { dragSelectActive.current = false; }, 0);
+    setTimeout(() => {
+      dragSelectActive.current = false;
+    }, 0);
   };
 
   const handleForwardSelected = () => {
-    const selectedMsgs = messages.filter(m => selectedMessages.has(m.id));
-    // Sort by created_at to maintain order
-    selectedMsgs.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    const selectedMsgs = messages.filter((m) => selectedMessages.has(m.id));
+    selectedMsgs.sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
     setForwardMessages(selectedMsgs);
     handleExitSelectionMode();
   };
 
   const handleDeleteSelected = async () => {
-    // Only delete own messages
-    const mySelectedMessages = messages.filter(m => selectedMessages.has(m.id) && m.sender_id === user?.id);
-    for (const msg of mySelectedMessages) {
+    // Telegramdek: 1:1 chatda ikki tomon ham o'chira oladi
+    const isPrivate = selectedConversation?.type === 'private';
+    const targets = messages.filter(
+      (m) => selectedMessages.has(m.id) && (isPrivate || m.sender_id === user?.id)
+    );
+    for (const msg of targets) {
       await deleteMessage(msg.id);
     }
     handleExitSelectionMode();
     toast({
-      title: 'Deleted',
-      description: `${mySelectedMessages.length} message${mySelectedMessages.length > 1 ? 's' : ''} deleted`,
+      title: "O'chirildi",
+      description: `${targets.length} ta xabar o'chirildi`,
     });
   };
 
-  const handleEdit = (message: Message) => {
-    setEditingMessage(message);
-  };
+  const handleEdit = (message: Message) => setEditingMessage(message);
 
   const handleEditSave = async (messageId: string, newContent: string) => {
     await editMessage(messageId, newContent);
@@ -536,10 +643,8 @@ export default function MessagesPage() {
   };
 
   const handleDelete = async (messageId: string) => {
-    const message = messages.find(m => m.id === messageId);
-    if (message) {
-      setDeletingMessage(message);
-    }
+    const message = messages.find((m) => m.id === messageId);
+    if (message) setDeletingMessage(message);
   };
 
   const handleDeleteConfirm = async (scope: DeleteScope) => {
@@ -553,33 +658,26 @@ export default function MessagesPage() {
     }
   };
 
-  // Pinned Messages
-  const { 
-    pinnedMessages, 
-    pinMessage, 
-    unpinMessage, 
-    isMessagePinned 
-  } = usePinnedMessages(selectedConversation?.id || null);
+  const { pinnedMessages, pinMessage, unpinMessage, isMessagePinned } = usePinnedMessages(
+    selectedConversation?.id || null
+  );
 
   const handlePin = async (messageId: string) => {
-    const isPinned = isMessagePinned(messageId);
-    if (isPinned) {
-      await unpinMessage(messageId);
-    } else {
-      await pinMessage(messageId);
-    }
+    if (isMessagePinned(messageId)) await unpinMessage(messageId);
+    else await pinMessage(messageId);
   };
 
-  const handleScrollToPinnedMessage = (messageId: string) => {
+  const highlightMessage = useCallback((messageId: string) => {
     const element = document.getElementById(`message-${messageId}`);
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setHighlightedMessageId(messageId);
       setTimeout(() => setHighlightedMessageId(null), 2000);
     }
-  };
+  }, []);
 
-  // Conversation context menu handlers
+  const handleScrollToPinnedMessage = (messageId: string) => highlightMessage(messageId);
+
   const handleArchiveConversation = async (conversationId: string) => {
     try {
       await supabase
@@ -587,127 +685,129 @@ export default function MessagesPage() {
         .update({ is_archived: true })
         .eq('conversation_id', conversationId)
         .eq('user_id', user?.id);
-      
+
       if (selectedConversation?.id === conversationId) {
         setSelectedConversation(null);
         setShowMobileChat(false);
       }
-      
+
       refreshConversations();
-      toast({ title: 'Archived', description: 'Conversation archived' });
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to archive conversation', variant: 'destructive' });
+      toast({ title: 'Arxivlandi', description: 'Suhbat arxivga solindi' });
+    } catch {
+      toast({
+        title: 'Xatolik',
+        description: 'Arxivlab bo\u2018lmadi',
+        variant: 'destructive',
+      });
     }
   };
 
   const handlePinConversation = async (conversationId: string) => {
     try {
-      // Toggle pin status
       const { data: participant } = await supabase
         .from('conversation_participants')
         .select('is_pinned')
         .eq('conversation_id', conversationId)
         .eq('user_id', user?.id)
-        .single();
-      
+        .maybeSingle();
+
       const newPinnedStatus = !(participant?.is_pinned ?? false);
-      
+
       await supabase
         .from('conversation_participants')
         .update({ is_pinned: newPinnedStatus })
         .eq('conversation_id', conversationId)
         .eq('user_id', user?.id);
-      
+
       refreshConversations();
-      toast({ 
-        title: newPinnedStatus ? 'Pinned' : 'Unpinned', 
-        description: newPinnedStatus ? 'Conversation pinned to top' : 'Conversation unpinned' 
+      toast({
+        title: newPinnedStatus ? 'Qadaldi' : 'Qadash bekor qilindi',
+        description: newPinnedStatus
+          ? 'Suhbat yuqoriga qadaldi'
+          : 'Suhbat oddiy holatga qaytdi',
       });
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to update pin status', variant: 'destructive' });
+    } catch {
+      toast({ title: 'Xatolik', description: 'Amalni bajarib bo\u2018lmadi', variant: 'destructive' });
     }
   };
 
   const handleMuteConversation = async (conversationId: string) => {
     try {
-      // Toggle mute status
       const { data: participant } = await supabase
         .from('conversation_participants')
         .select('is_muted')
         .eq('conversation_id', conversationId)
         .eq('user_id', user?.id)
-        .single();
-      
+        .maybeSingle();
+
       const newMutedStatus = !(participant?.is_muted ?? false);
-      
+
       await supabase
         .from('conversation_participants')
         .update({ is_muted: newMutedStatus })
         .eq('conversation_id', conversationId)
         .eq('user_id', user?.id);
-      
+
       refreshConversations();
-      toast({ 
-        title: newMutedStatus ? 'Muted' : 'Unmuted', 
-        description: newMutedStatus ? 'Notifications muted' : 'Notifications enabled' 
+      toast({
+        title: newMutedStatus ? 'Ovozsiz qilindi' : 'Ovoz yoqildi',
+        description: newMutedStatus
+          ? 'Bildirishnomalar o\u2018chirildi'
+          : 'Bildirishnomalar yoqildi',
       });
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to update mute status', variant: 'destructive' });
+    } catch {
+      toast({ title: 'Xatolik', description: 'Amalni bajarib bo\u2018lmadi', variant: 'destructive' });
     }
   };
 
   const handleDeleteConversation = async (conversationId: string) => {
     try {
-      // Remove participant (soft delete for user)
       await supabase
         .from('conversation_participants')
         .delete()
         .eq('conversation_id', conversationId)
         .eq('user_id', user?.id);
-      
+
       if (selectedConversation?.id === conversationId) {
         setSelectedConversation(null);
         setShowMobileChat(false);
       }
-      
+
       refreshConversations();
-      toast({ title: 'Deleted', description: 'Conversation deleted' });
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to delete conversation', variant: 'destructive' });
+      toast({ title: "O'chirildi", description: 'Suhbat o\u2018chirildi' });
+    } catch {
+      toast({ title: 'Xatolik', description: 'O\u2018chirib bo\u2018lmadi', variant: 'destructive' });
     }
   };
 
   const handleMarkRead = async (conversationId: string) => {
     try {
-      // Get all unread messages in this conversation
       const { data: unreadMessages } = await supabase
         .from('messages')
         .select('id')
         .eq('conversation_id', conversationId)
         .neq('sender_id', user?.id);
-      
+
       if (unreadMessages && unreadMessages.length > 0) {
-        // Insert read receipts for all messages
-        const readReceipts = unreadMessages.map(m => ({
+        const readReceipts = unreadMessages.map((m) => ({
           message_id: m.id,
           user_id: user?.id,
         }));
-        
+
         await supabase
           .from('message_reads')
           .upsert(readReceipts, { onConflict: 'message_id,user_id' });
       }
-      
+
       refreshConversations();
-      toast({ title: 'Marked as read', description: 'All messages marked as read' });
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to mark as read', variant: 'destructive' });
+      toast({ title: "O'qilgan deb belgilandi" });
+    } catch {
+      toast({ title: 'Xatolik', description: 'Amalni bajarib bo\u2018lmadi', variant: 'destructive' });
     }
   };
 
   const handleMarkUnread = async (conversationId: string) => {
     try {
-      // Delete read receipts for the last few messages to make it appear unread
       const { data: recentMessages } = await supabase
         .from('messages')
         .select('id')
@@ -715,70 +815,59 @@ export default function MessagesPage() {
         .neq('sender_id', user?.id)
         .order('created_at', { ascending: false })
         .limit(5);
-      
+
       if (recentMessages && recentMessages.length > 0) {
         await supabase
           .from('message_reads')
           .delete()
           .eq('user_id', user?.id)
-          .in('message_id', recentMessages.map(m => m.id));
+          .in(
+            'message_id',
+            recentMessages.map((m) => m.id)
+          );
       }
-      
+
       refreshConversations();
-      toast({ title: 'Marked as unread', description: 'Conversation marked as unread' });
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to mark as unread', variant: 'destructive' });
+      toast({ title: "O'qilmagan deb belgilandi" });
+    } catch {
+      toast({ title: 'Xatolik', description: 'Amalni bajarib bo\u2018lmadi', variant: 'destructive' });
     }
   };
 
   const startCall = async (type: 'audio' | 'video') => {
     if (!selectedConversation) {
-      toast({
-        title: 'Error',
-        description: 'No conversation selected',
-        variant: 'destructive',
-      });
+      toast({ title: 'Xatolik', description: 'Suhbat tanlanmagan', variant: 'destructive' });
       return;
     }
 
     setCallType(type);
-    
-    // Create call record in database for authorization
+
     const callId = await createCall(selectedConversation.id, type);
     if (callId) {
-      handleCallHandled(callId); // Mark as handled so we don't get incoming notification
+      handleCallHandled(callId);
       setActiveCallId(callId);
       setIsInCall(true);
-      // WebRTC will auto-join when activeCallId is set
     }
   };
 
   const acceptIncomingCall = async () => {
     if (!incomingCall) return;
-    
+
     const success = await joinCall(incomingCall.id, incomingCall.call_type === 'video');
     if (success) {
       handleCallHandled(incomingCall.id);
       setCallType(incomingCall.call_type);
       setActiveCallId(incomingCall.id);
       setIsInCall(true);
-      
-      toast({
-        title: 'Call joined',
-        description: `Connected to ${incomingCall.host_profile?.display_name || 'caller'}`,
-      });
     } else {
       toast({
-        title: 'Error',
-        description: 'Failed to join call',
+        title: 'Xatolik',
+        description: "Qo'ng'iroqqa qo'shilib bo\u2018lmadi",
         variant: 'destructive',
       });
     }
   };
 
-  // Accepting from the global dialog navigates here with a call deep-link.
-  // Resolve it from the backend rather than relying on transient context state,
-  // so refreshes and cross-page navigation cannot lose an accepted call.
   useEffect(() => {
     const callId = searchParams.get('call');
     const requestedType = searchParams.get('type');
@@ -798,12 +887,16 @@ export default function MessagesPage() {
       if (error || !call || call.status === 'ended' || call.ended_at) {
         processedCallLinkRef.current = null;
         setSearchParams({}, { replace: true });
-        toast({ title: 'Call ended', description: 'This call is no longer available', variant: 'destructive' });
+        toast({
+          title: "Qo'ng'iroq tugagan",
+          description: "Bu qo'ng'iroq endi mavjud emas",
+          variant: 'destructive',
+        });
         return;
       }
 
       const linkedType: 'audio' | 'video' =
-        (call.call_type === 'audio' || requestedType === 'audio') ? 'audio' : 'video';
+        call.call_type === 'audio' || requestedType === 'audio' ? 'audio' : 'video';
       const joined = await joinCall(callId, linkedType === 'video');
       if (cancelled) return;
 
@@ -814,7 +907,9 @@ export default function MessagesPage() {
       }
 
       if (call.conversation_id && selectedConversation?.id !== call.conversation_id) {
-        const knownConversation = allConversations.find((item) => item.id === call.conversation_id);
+        const knownConversation = allConversations.find(
+          (item) => item.id === call.conversation_id
+        );
         if (knownConversation) {
           setSelectedConversation(knownConversation);
           setShowMobileChat(true);
@@ -831,24 +926,31 @@ export default function MessagesPage() {
     };
 
     void openLinkedCall();
-    return () => { cancelled = true; };
-  }, [searchParams, isInCall, joinCall, allConversations, selectedConversation?.id, handleCallHandled, setSearchParams, toast]);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    searchParams,
+    isInCall,
+    joinCall,
+    allConversations,
+    selectedConversation?.id,
+    handleCallHandled,
+    setSearchParams,
+    toast,
+  ]);
 
   const endCall = useCallback(async () => {
-    // Calculate call duration
-    const duration = currentCall?.started_at 
+    const duration = currentCall?.started_at
       ? Math.floor((Date.now() - new Date(currentCall.started_at).getTime()) / 1000)
       : 0;
 
     const conversationForHistory = selectedConversation;
     const callForHistory = currentCall;
 
-    // Tear down only this client's peers, then run the atomic server-side leave.
     leaveRoom();
     const callFullyEnded = await leaveVideoCall();
 
-    // Only write a call-history message when the whole call actually ended,
-    // otherwise every group departure would spam the conversation.
     if (callFullyEnded && conversationForHistory && callForHistory) {
       const callHistoryData = {
         type: callType,
@@ -867,33 +969,25 @@ export default function MessagesPage() {
       });
     }
 
-    // Reset UI state after backend update
     setIsInCall(false);
     setActiveCallId(null);
     hasJoinedRoomRef.current = false;
     resetCallState();
-  }, [currentCall, selectedConversation, callType, user?.id, leaveRoom, leaveVideoCall, resetCallState]);
+  }, [
+    currentCall,
+    selectedConversation,
+    callType,
+    user?.id,
+    leaveRoom,
+    leaveVideoCall,
+    resetCallState,
+  ]);
 
-  const formatCallDuration = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    
-    if (hours > 0) {
-      return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    }
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // Subscribe to participant changes and sync media state
   useEffect(() => {
     if (!isInCall || !currentCall) return;
 
-    // Fetch initial participants
     fetchParticipants();
 
-    // Subscribe to changes. A single participant leaving a still-active group
-    // call must only tear down that peer, never the local session.
     const unsubscribe = subscribeToParticipants((leftUserId) => {
       closePeer(leftUserId);
     });
@@ -903,14 +997,12 @@ export default function MessagesPage() {
     };
   }, [isInCall, currentCall, fetchParticipants, subscribeToParticipants]);
 
-  // Sync media state to database
   useEffect(() => {
     if (isInCall && currentCall) {
       updateMediaState(isMuted, isVideoOn, isScreenSharing, isHandRaised);
     }
   }, [isMuted, isVideoOn, isScreenSharing, isHandRaised, isInCall, currentCall, updateMediaState]);
 
-  // Auto-join WebRTC room when call is created/joined (only once per call)
   useEffect(() => {
     if (!activeCallId || !isInCall) return;
     if (hasJoinedRoomRef.current) return;
@@ -919,20 +1011,12 @@ export default function MessagesPage() {
     void joinRoom(callType === 'video');
   }, [activeCallId, isInCall, callType, joinRoom]);
 
-  // Auto-end call when other participant ends it (via realtime database update)
   useEffect(() => {
     if (callEnded && isInCall) {
-      console.log('[MessagesPage] Call ended by other participant, cleaning up');
-      
-      // Clean up WebRTC first
       leaveRoom();
-      
-      // Reset all call UI state
       setIsInCall(false);
       setActiveCallId(null);
       hasJoinedRoomRef.current = false;
-      
-      // Reset video call hook state
       resetCallState();
     }
   }, [callEnded, isInCall, leaveRoom, resetCallState]);
@@ -948,13 +1032,10 @@ export default function MessagesPage() {
 
   const handleCreateGroup = async (name: string, memberIds: string[]) => {
     const conv = await createGroup(name, memberIds);
-    if (conv) {
-      setActiveTab('groups');
-    }
+    if (conv) setActiveTab('groups');
     return conv;
   };
 
-  // Handle opening self-chat (saved messages)
   const handleOpenSelfChat = async () => {
     const selfConv = await getOrCreateSelfChat();
     if (selfConv) {
@@ -964,15 +1045,14 @@ export default function MessagesPage() {
     }
   };
 
-  // Group messages by date (filter out deleted messages completely)
+  // Xabarlarni sanaga ko'ra guruhlash
   const groupMessagesByDate = (msgs: Message[]) => {
     const groups: { date: string; messages: Message[] }[] = [];
     let currentDate = '';
-    
-    // Filter out deleted messages - they should not appear at all
-    const activeMessages = msgs.filter(msg => !msg.is_deleted);
-    
-    activeMessages.forEach(msg => {
+
+    const activeMessages = msgs.filter((msg) => !msg.is_deleted);
+
+    activeMessages.forEach((msg) => {
       const msgDate = new Date(msg.created_at).toDateString();
       if (msgDate !== currentDate) {
         currentDate = msgDate;
@@ -981,16 +1061,42 @@ export default function MessagesPage() {
         groups[groups.length - 1].messages.push(msg);
       }
     });
-    
+
     return groups;
   };
 
   const messageGroups = useMemo(() => groupMessagesByDate(messages), [messages]);
 
-  // Flatten groups -> items for virtualization
+  // Kun tanlash oynasi uchun mavjud sanalar
+  const availableDates = useMemo(
+    () => messageGroups.map((g) => new Date(g.date).toISOString()),
+    [messageGroups]
+  );
+
+  const handleJumpToDate = useCallback(
+    (date: Date) => {
+      const target = date.toDateString();
+      const group = messageGroups.find((g) => g.date === target);
+      setShowJumpToDate(false);
+      if (!group || group.messages.length === 0) {
+        toast({ title: 'Bu kunda xabar yo\u2018q' });
+        return;
+      }
+      const firstId = group.messages[0].id;
+      setTimeout(() => highlightMessage(firstId), 60);
+    },
+    [messageGroups, highlightMessage, toast]
+  );
+
   type FlatItem =
     | { kind: 'date'; key: string; date: string }
-    | { kind: 'message'; key: string; message: Message; showAvatar: boolean; isMine: boolean };
+    | {
+        kind: 'message';
+        key: string;
+        message: Message;
+        showAvatar: boolean;
+        isMine: boolean;
+      };
   const flatItems = useMemo<FlatItem[]>(() => {
     const items: FlatItem[] = [];
     for (const group of messageGroups) {
@@ -1022,43 +1128,59 @@ export default function MessagesPage() {
     getItemKey: (index) => flatItems[index]?.key ?? index,
   });
 
-  // Build media tracks playlist for sequential playback (Telegram-style)
   const mediaTracksForPlaylist = useMemo(() => {
     return messages
-      .filter(msg => 
-        !msg.is_deleted && 
-        msg.media_url && 
-        (msg.media_type === 'audio' || msg.media_type === 'video')
+      .filter(
+        (msg) =>
+          !msg.is_deleted &&
+          msg.media_url &&
+          (msg.media_type === 'audio' || msg.media_type === 'video')
       )
-      .map(msg => ({
+      .map((msg) => ({
         id: msg.id,
         url: msg.media_url!,
-        name: msg.media_type === 'audio' ? 'Voice message' : 'Video message',
-        artist: msg.sender?.display_name || msg.sender?.username || 'Unknown',
-        title: msg.media_type === 'audio' ? 'Voice message' : 'Video message',
+        name: msg.media_type === 'audio' ? 'Ovozli xabar' : 'Video xabar',
+        artist: msg.sender?.display_name || msg.sender?.username || 'Foydalanuvchi',
+        title: msg.media_type === 'audio' ? 'Ovozli xabar' : 'Video xabar',
         senderName: msg.sender?.display_name || msg.sender?.username,
         type: msg.media_type as 'audio' | 'video',
       }));
   }, [messages]);
-  // Swipe to close state
+
+  // Chatni surib yopish
   const isMobile = useIsMobile();
   const [chatSwipeOffset, setChatSwipeOffset] = useState(0);
   const [isChatSwiping, setIsChatSwiping] = useState(false);
   const chatSwipeStartX = useRef(0);
+  const chatSwipeStartY = useRef(0);
+  const chatSwipeAxis = useRef<'unknown' | 'horizontal' | 'vertical'>('unknown');
   const chatSwipeThreshold = 100;
 
   const handleChatSwipeStart = useCallback((e: React.TouchEvent) => {
     chatSwipeStartX.current = e.touches[0].clientX;
+    chatSwipeStartY.current = e.touches[0].clientY;
+    chatSwipeAxis.current = 'unknown';
     setIsChatSwiping(true);
   }, []);
 
-  const handleChatSwipeMove = useCallback((e: React.TouchEvent) => {
-    if (!isChatSwiping) return;
-    const diff = e.touches[0].clientX - chatSwipeStartX.current;
-    if (diff > 0) {
-      setChatSwipeOffset(Math.min(diff, 200));
-    }
-  }, [isChatSwiping]);
+  const handleChatSwipeMove = useCallback(
+    (e: React.TouchEvent) => {
+      if (!isChatSwiping) return;
+      const dx = e.touches[0].clientX - chatSwipeStartX.current;
+      const dy = e.touches[0].clientY - chatSwipeStartY.current;
+
+      if (chatSwipeAxis.current === 'unknown') {
+        if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+        chatSwipeAxis.current = Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical';
+      }
+      if (chatSwipeAxis.current !== 'horizontal') return;
+
+      // Faqat chap chetdan boshlangan surish chatni yopadi (Telegramdek)
+      if (chatSwipeStartX.current > 60) return;
+      if (dx > 0) setChatSwipeOffset(Math.min(dx, 200));
+    },
+    [isChatSwiping]
+  );
 
   const handleChatSwipeEnd = useCallback(() => {
     if (chatSwipeOffset >= chatSwipeThreshold) {
@@ -1067,20 +1189,19 @@ export default function MessagesPage() {
     }
     setChatSwipeOffset(0);
     setIsChatSwiping(false);
+    chatSwipeAxis.current = 'unknown';
   }, [chatSwipeOffset]);
 
-  // Detect compact (Telegram-style icon-only) chat list when panel is narrow
+  // Ixcham chat ro'yxati
   const leftPanelRef = useRef<HTMLDivElement>(null);
   const leftPanelHandleRef = useRef<any>(null);
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(320);
   const [isResizing, setIsResizing] = useState(false);
   const [resizeHint, setResizeHint] = useState<'compact' | 'expanded' | null>(null);
 
-  // Snap target sizes (single compact size, single expanded size — no in-between)
   const COMPACT_PX = 72;
-  const SNAP_THRESHOLD_PX = 220; // below this → compact; above → expanded
+  const SNAP_THRESHOLD_PX = 220;
 
-  // Device-aware default width and bounds (saved per device class)
   const deviceClass = useMemo(() => {
     if (typeof window === 'undefined') return 'desktop';
     const w = window.innerWidth;
@@ -1091,10 +1212,14 @@ export default function MessagesPage() {
   }, []);
   const defaults = useMemo(() => {
     switch (deviceClass) {
-      case 'tablet': return { defaultPct: 38, minPct: 6, maxPct: 55, expandedPct: 38 };
-      case 'desktop': return { defaultPct: 32, minPct: 4, maxPct: 50, expandedPct: 32 };
-      case 'wide': return { defaultPct: 26, minPct: 3, maxPct: 45, expandedPct: 26 };
-      default: return { defaultPct: 100, minPct: 100, maxPct: 100, expandedPct: 100 };
+      case 'tablet':
+        return { defaultPct: 38, minPct: 6, maxPct: 55, expandedPct: 38 };
+      case 'desktop':
+        return { defaultPct: 32, minPct: 4, maxPct: 50, expandedPct: 32 };
+      case 'wide':
+        return { defaultPct: 26, minPct: 3, maxPct: 45, expandedPct: 26 };
+      default:
+        return { defaultPct: 100, minPct: 100, maxPct: 100, expandedPct: 100 };
     }
   }, [deviceClass]);
   const STORAGE_KEY = `messages.chatlist.width.${deviceClass}`;
@@ -1109,30 +1234,25 @@ export default function MessagesPage() {
     const el = leftPanelRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setLeftPanelWidth(entry.contentRect.width);
-      }
+      for (const entry of entries) setLeftPanelWidth(entry.contentRect.width);
     });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
-  // Track latest size during drag; snap only when user releases the handle
   const latestSizeRef = useRef<number>(initialPct);
   const saveTimerRef = useRef<number | null>(null);
   const handlePanelResize = (size: number) => {
     latestSizeRef.current = size;
-    // Live hint while dragging
     const groupEl = leftPanelRef.current?.closest('[data-panel-group]') as HTMLElement | null;
     const groupWidth = groupEl?.getBoundingClientRect().width || window.innerWidth;
     const px = (size / 100) * groupWidth;
-    if (isResizing) {
-      setResizeHint(px < SNAP_THRESHOLD_PX ? 'compact' : 'expanded');
-    }
-    // Debounced persist
+    if (isResizing) setResizeHint(px < SNAP_THRESHOLD_PX ? 'compact' : 'expanded');
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(() => {
-      try { window.localStorage.setItem(STORAGE_KEY, String(size)); } catch {}
+      try {
+        window.localStorage.setItem(STORAGE_KEY, String(size));
+      } catch {}
     }, 250);
   };
   const handleDragging = (isDragging: boolean) => {
@@ -1156,118 +1276,145 @@ export default function MessagesPage() {
 
   const isCompactList = !isMobile && leftPanelWidth > 0 && leftPanelWidth < 140;
 
-  // Left panel content
+  const renderDatePill = (date: string, className?: string) => (
+    <div className={cn('flex items-center justify-center', className)}>
+      <button
+        type="button"
+        onClick={() => setShowJumpToDate(true)}
+        className="tg-transition rounded-full bg-muted/90 px-3 py-1 text-xs text-muted-foreground backdrop-blur hover:bg-muted active:scale-95"
+        title="Kun tanlash"
+      >
+        {formatDateLabel(date)}
+      </button>
+    </div>
+  );
+
+  // Chap panel
   const leftPanelContent = (
-    <div ref={leftPanelRef} className="flex flex-col h-full bg-card overflow-hidden min-w-0 w-full">
+    <div
+      ref={leftPanelRef}
+      className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-card"
+    >
       {isCompactList ? (
-        /* Telegram-style icon-only header */
-        <div className="p-2 border-b border-border flex-shrink-0 flex flex-col gap-2 items-center">
+        <div className="flex flex-shrink-0 flex-col items-center gap-2 border-b border-border p-2">
           <Button
             size="icon"
             variant="ghost"
             className="h-10 w-10 rounded-full"
             onClick={handleOpenSelfChat}
             disabled={isCreatingSelfChat}
-            title="Saved Messages"
+            title="Saqlangan xabarlar"
           >
             <Bookmark className="h-5 w-5" />
           </Button>
           <Button
             size="icon"
             className="h-10 w-10 rounded-full"
-            onClick={() => activeTab === 'channels' ? setShowCreateChannelDialog(true) : setShowCreateDialog(true)}
+            onClick={() =>
+              activeTab === 'channels'
+                ? setShowCreateChannelDialog(true)
+                : setShowCreateDialog(true)
+            }
             title="Yangi suhbat"
           >
             <Plus className="h-5 w-5" />
           </Button>
         </div>
       ) : (
-      <>
-      {/* Search & Create */}
-      <div className="p-4 md:p-3 border-b border-border flex-shrink-0 space-y-3">
-        <div className="flex gap-2">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 md:h-4 md:w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-11 md:pl-10 h-12 md:h-10 text-base md:text-sm bg-muted/50"
-            />
+        <>
+          {/* Qidiruv va yaratish */}
+          <div className="flex-shrink-0 space-y-3 border-b border-border p-3 sm:p-4 md:p-3">
+            <div className="flex gap-2">
+              <div className="relative min-w-0 flex-1">
+                <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground md:h-4 md:w-4" />
+                <Input
+                  placeholder="Qidirish..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-11 bg-muted/50 pl-11 text-base sm:h-12 md:h-10 md:pl-10 md:text-sm"
+                />
+              </div>
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-11 w-11 shrink-0 border-border bg-muted hover:bg-accent sm:h-12 sm:w-12 md:h-10 md:w-10"
+                onClick={handleOpenSelfChat}
+                disabled={isCreatingSelfChat}
+                title="Saqlangan xabarlar"
+              >
+                <Bookmark className="h-5 w-5 text-foreground md:h-4 md:w-4" />
+              </Button>
+              <Button
+                size="icon"
+                className="h-11 w-11 shrink-0 sm:h-12 sm:w-12 md:h-10 md:w-10"
+                onClick={() => {
+                  if (activeTab === 'channels') setShowCreateChannelDialog(true);
+                  else if (activeTab === 'groups') setShowGroupDialog(true);
+                  else setShowCreateDialog(true);
+                }}
+                title="Yangi"
+              >
+                <Plus className="h-6 w-6 md:h-5 md:w-5" />
+              </Button>
+            </div>
           </div>
-          <Button 
-            size="icon"
-            variant="outline"
-            className="h-12 w-12 md:h-10 md:w-10 bg-muted border-border hover:bg-accent"
-            onClick={handleOpenSelfChat}
-            disabled={isCreatingSelfChat}
-            title="Saved Messages"
-          >
-            <Bookmark className="h-5 w-5 md:h-4 md:w-4 text-foreground" />
-          </Button>
-          <Button 
-            size="icon"
-            className="h-12 w-12 md:h-10 md:w-10"
-            onClick={() => {
-              if (activeTab === 'channels') {
-                setShowCreateChannelDialog(true);
-              } else {
-                setShowCreateDialog(true);
-              }
-            }}
-          >
-            <Plus className="h-6 w-6 md:h-5 md:w-5" />
-          </Button>
-        </div>
-      </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-border flex-shrink-0 overflow-x-auto scrollbar-hide relative isolate" style={{ zIndex: 0 }}>
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={cn(
-              "flex-shrink-0 px-3 py-3 md:py-2.5 text-sm md:text-xs font-medium relative transition-colors active:bg-accent/50 whitespace-nowrap flex items-center gap-1.5",
-              activeTab === tab.id 
-                ? "text-primary" 
-                : "text-muted-foreground hover:text-foreground"
-            )}
+          {/* Bo'limlar */}
+          <div
+            className="scrollbar-hide relative isolate flex flex-shrink-0 overflow-x-auto border-b border-border"
+            style={{ zIndex: 0 }}
           >
-            {tab.label}
-            {tab.unread > 0 && (
-              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold">
-                {tab.unread > 99 ? '99+' : tab.unread}
-              </span>
-            )}
-            {activeTab === tab.id && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-            )}
-          </button>
-        ))}
-      </div>
-      </>
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  'tg-transition relative flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap px-3 py-3 text-sm font-medium active:bg-accent/50 md:py-2.5 md:text-xs',
+                  activeTab === tab.id
+                    ? 'text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {tab.label}
+                {tab.unread > 0 && (
+                  <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+                    {tab.unread > 99 ? '99+' : tab.unread}
+                  </span>
+                )}
+                {activeTab === tab.id && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+            ))}
+          </div>
+        </>
       )}
 
-      {/* Conversation / Channel List */}
-      <ScrollArea className="flex-1 min-h-0 [&_[data-radix-scroll-area-viewport]>div]:!block [&_[data-radix-scroll-area-viewport]>div]:!min-w-0 [&_[data-radix-scroll-area-viewport]>div]:!w-full">
+      {/* Suhbatlar / kanallar ro'yxati */}
+      <ScrollArea className="min-h-0 flex-1 [&_[data-radix-scroll-area-viewport]>div]:!block [&_[data-radix-scroll-area-viewport]>div]:!w-full [&_[data-radix-scroll-area-viewport]>div]:!min-w-0">
         {activeTab === 'channels' ? (
           channelsLoading ? (
-            <div className="flex items-center justify-center h-32">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+            <div className="flex h-32 items-center justify-center">
+              <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
             </div>
-          ) : channelsList.filter(c => c.is_member || c.channel_type === 'public').length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
-              <Megaphone className="h-10 w-10 mb-3 opacity-50" />
+          ) : channelsList.filter((c) => c.is_member || c.channel_type === 'public').length ===
+            0 ? (
+            <div className="flex h-48 flex-col items-center justify-center px-6 text-center text-muted-foreground">
+              <Megaphone className="mb-3 h-10 w-10 opacity-50" />
               <p className="text-sm">Hozircha kanallar yo'q</p>
-              <Button variant="link" className="mt-2" onClick={() => setShowCreateChannelDialog(true)}>
+              <Button
+                variant="link"
+                className="mt-2"
+                onClick={() => setShowCreateChannelDialog(true)}
+              >
                 Kanal yaratish
               </Button>
             </div>
           ) : (
             channelsList
-              .filter(c => {
-                const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              .filter((c) => {
+                const matchesSearch =
+                  c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                   c.username?.toLowerCase().includes(searchQuery.toLowerCase());
                 return matchesSearch && (c.is_member || c.channel_type === 'public');
               })
@@ -1275,88 +1422,137 @@ export default function MessagesPage() {
                 <ChannelCard
                   key={channel.id}
                   channel={channel}
-                  onSelect={(ch) => { setSelectedChannel(ch); setSelectedConversation(null); setShowMobileChat(true); }}
+                  onSelect={(ch) => {
+                    setSelectedChannel(ch);
+                    setSelectedConversation(null);
+                    setShowMobileChat(true);
+                  }}
                   onJoin={joinChannel}
                   onLeave={leaveChannel}
                 />
               ))
           )
+        ) : conversationsLoading ? (
+          <div className="flex h-32 items-center justify-center">
+            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
+          </div>
+        ) : filteredConversations.length === 0 ? (
+          <div className="flex h-48 flex-col items-center justify-center px-6 text-center text-muted-foreground">
+            {activeTab === 'requests' ? (
+              <>
+                <Inbox className="mb-3 h-10 w-10 opacity-50" />
+                <p className="text-sm">So'rovlar yo'q</p>
+              </>
+            ) : activeTab === 'archived' ? (
+              <>
+                <Archive className="mb-3 h-10 w-10 opacity-50" />
+                <p className="text-sm">Arxivda hech nima yo'q</p>
+              </>
+            ) : (
+              <>
+                <MessageCircle className="mb-3 h-10 w-10 opacity-50" />
+                <p className="text-sm">Hozircha suhbatlar yo'q</p>
+                <Button variant="link" className="mt-2" onClick={() => setShowCreateDialog(true)}>
+                  Yangi suhbat boshlash
+                </Button>
+              </>
+            )}
+          </div>
         ) : (
-          conversationsLoading ? (
-            <div className="flex items-center justify-center h-32">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-            </div>
-          ) : filteredConversations.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
-              {activeTab === 'requests' ? (
-                <><Inbox className="h-10 w-10 mb-3 opacity-50" /><p className="text-sm">No message requests</p></>
-              ) : activeTab === 'archived' ? (
-                <><Archive className="h-10 w-10 mb-3 opacity-50" /><p className="text-sm">No archived chats</p></>
-              ) : (
-                <><MessageCircle className="h-10 w-10 mb-3 opacity-50" /><p className="text-sm">No conversations yet</p>
-                  <Button variant="link" className="mt-2" onClick={() => setShowCreateDialog(true)}>Start a new chat</Button></>
-              )}
-            </div>
-          ) : (
-            filteredConversations.map((conv) => (
-              <ChatListItem
-                key={conv.id}
-                conversation={conv}
-                isSelected={selectedConversation?.id === conv.id}
-                isPinned={conv.is_pinned}
-                isMuted={conv.is_muted}
-                isArchived={isArchivedTab}
-                compact={isCompactList}
-                onClick={() => { handleSelectConversation(conv); setSelectedChannel(null); }}
-                onArchive={() => handleArchiveConversation(conv.id)}
-                onUnarchive={() => handleUnarchiveConversation(conv.id)}
-                onPin={() => handlePinConversation(conv.id)}
-                onMute={() => handleMuteConversation(conv.id)}
-                onDelete={() => handleDeleteConversation(conv.id)}
-                onMarkRead={() => handleMarkRead(conv.id)}
-                onMarkUnread={() => handleMarkUnread(conv.id)}
-              />
-            ))
-          )
+          filteredConversations.map((conv) => (
+            <ChatListItem
+              key={conv.id}
+              conversation={conv}
+              isSelected={selectedConversation?.id === conv.id}
+              isPinned={conv.is_pinned}
+              isMuted={conv.is_muted}
+              isArchived={isArchivedTab}
+              compact={isCompactList}
+              onClick={() => {
+                handleSelectConversation(conv);
+                setSelectedChannel(null);
+              }}
+              onArchive={() => handleArchiveConversation(conv.id)}
+              onUnarchive={() => handleUnarchiveConversation(conv.id)}
+              onPin={() => handlePinConversation(conv.id)}
+              onMute={() => handleMuteConversation(conv.id)}
+              onDelete={() => handleDeleteConversation(conv.id)}
+              onMarkRead={() => handleMarkRead(conv.id)}
+              onMarkUnread={() => handleMarkUnread(conv.id)}
+            />
+          ))
         )}
       </ScrollArea>
     </div>
   );
 
-  // Right panel content
+  // O'ng panel
   const rightPanelContent = (
-    <div 
-      className="flex-1 flex flex-col bg-background min-w-0 h-full overflow-hidden"
+    <div
+      className="chat-shell flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background"
       style={{
         transform: isMobile ? `translateX(${chatSwipeOffset}px)` : undefined,
-        transition: isMobile && !isChatSwiping ? 'transform 0.2s ease-out' : 'none',
+        transition:
+          isMobile && !isChatSwiping ? 'transform 260ms cubic-bezier(0.32, 0.72, 0, 1)' : 'none',
       }}
       onTouchStart={isMobile ? handleChatSwipeStart : undefined}
       onTouchMove={isMobile ? handleChatSwipeMove : undefined}
       onTouchEnd={isMobile ? handleChatSwipeEnd : undefined}
+      onTouchCancel={isMobile ? handleChatSwipeEnd : undefined}
     >
       {selectedChannel ? (
-        <ChannelView channel={selectedChannel} onBack={() => { setSelectedChannel(null); setShowMobileChat(false); }} />
+        <ChannelView
+          channel={selectedChannel}
+          onBack={() => {
+            setSelectedChannel(null);
+            setShowMobileChat(false);
+          }}
+        />
       ) : selectedConversation ? (
         <>
           {isSelectionMode ? (
-            <div className="flex-shrink-0 z-20 bg-card/90 backdrop-blur-xl border-b border-border animate-in slide-in-from-top duration-200">
-              <div className="flex items-center justify-between p-3 md:p-4">
-                <div className="flex items-center gap-3">
-                  <Button variant="ghost" size="icon" onClick={handleExitSelectionMode} className="rounded-full"><X className="h-5 w-5" /></Button>
-                  <span className="font-semibold text-base">
-                    {selectedMessages.size > 0 ? `${selectedMessages.size} ta tanlandi` : 'Xabarlarni tanlang'}
+            <div className="z-20 flex-shrink-0 animate-in border-b border-border bg-card/90 backdrop-blur-xl duration-200 slide-in-from-top">
+              <div className="flex items-center justify-between gap-2 p-2.5 sm:p-3 md:p-4">
+                <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleExitSelectionMode}
+                    className="h-9 w-9 shrink-0 rounded-full"
+                  >
+                    <X className="h-5 w-5" />
+                  </Button>
+                  <span className="truncate text-sm font-semibold sm:text-base">
+                    {selectedMessages.size > 0
+                      ? `${selectedMessages.size} ta tanlandi`
+                      : 'Xabarlarni tanlang'}
                   </span>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="icon" onClick={handleForwardSelected} disabled={selectedMessages.size === 0} className="rounded-full"><Forward className="h-5 w-5" /></Button>
-                  <Button variant="ghost" size="icon" onClick={handleDeleteSelected} disabled={selectedMessages.size === 0} className="rounded-full text-destructive hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-5 w-5" /></Button>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleForwardSelected}
+                    disabled={selectedMessages.size === 0}
+                    className="h-9 w-9 rounded-full"
+                  >
+                    <Forward className="h-5 w-5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleDeleteSelected}
+                    disabled={selectedMessages.size === 0}
+                    className="h-9 w-9 rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <Trash2 className="h-5 w-5" />
+                  </Button>
                 </div>
               </div>
             </div>
           ) : (
             <>
-              <div className="flex-shrink-0 z-20 bg-card">
+              <div className="z-20 flex-shrink-0 bg-card">
                 <ChatHeader
                   conversation={selectedConversation}
                   typingUsers={typingUsers}
@@ -1365,46 +1561,58 @@ export default function MessagesPage() {
                   onVideoCall={() => startCall('video')}
                   onSearch={() => setShowMessageSearch(true)}
                   onViewInfo={() => {}}
-                  onManageMembers={selectedConversation.type === 'group' ? () => setShowMemberManagement(true) : undefined}
+                  onManageMembers={
+                    selectedConversation.type === 'group'
+                      ? () => setShowMemberManagement(true)
+                      : undefined
+                  }
                   onViewScheduled={() => setShowScheduledMessages(true)}
                   scheduledCount={scheduledMessages.length}
+                  isAdmin={selectedConversation.owner_id === user?.id}
                 />
               </div>
               <MiniAudioPlayer />
             </>
           )}
-          
+
           {showMessageSearch && !isSelectionMode && (
             <MessageSearch
               messages={messages}
-              onHighlightMessage={(id) => {
-                setHighlightedMessageId(id);
-                const element = document.getElementById(`message-${id}`);
-                element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                setTimeout(() => setHighlightedMessageId(null), 2000);
-              }}
+              onHighlightMessage={(id) => highlightMessage(id)}
               onClose={() => setShowMessageSearch(false)}
             />
           )}
-          
+
           {(selectedConversation as any).is_request && (
             <MessageRequestBanner
               conversationId={selectedConversation.id}
               otherUserId={selectedConversation.other_participant?.id}
-              otherUserName={selectedConversation.other_participant?.display_name || selectedConversation.other_participant?.username || undefined}
-              onResolved={() => { refreshConversations(); setSelectedConversation(null); setShowMobileChat(false); }}
+              otherUserName={
+                selectedConversation.other_participant?.display_name ||
+                selectedConversation.other_participant?.username ||
+                undefined
+              }
+              onResolved={() => {
+                refreshConversations();
+                setSelectedConversation(null);
+                setShowMobileChat(false);
+              }}
             />
           )}
 
           {pinnedMessages.length > 0 && !isSelectionMode && (
-            <PinnedMessagesBar pinnedMessages={pinnedMessages} onUnpin={unpinMessage} onScrollToMessage={handleScrollToPinnedMessage} />
+            <PinnedMessagesBar
+              pinnedMessages={pinnedMessages}
+              onUnpin={unpinMessage}
+              onScrollToMessage={handleScrollToPinnedMessage}
+            />
           )}
-          
-          <div className="flex-1 relative min-h-0">
+
+          <div className="relative min-h-0 flex-1">
             <div
               ref={messagesScrollRef}
               onScroll={handleMessagesScroll}
-              className="absolute inset-0 overflow-y-auto overflow-x-hidden scrollbar-custom bg-muted/20 overscroll-contain"
+              className="scrollbar-custom absolute inset-0 overflow-y-auto overflow-x-hidden overscroll-contain bg-muted/20"
               style={isSelectionMode ? { touchAction: 'pan-y' } : undefined}
               onPointerDown={handleMessagesPointerDown}
               onPointerMove={handleMessagesPointerMove}
@@ -1412,18 +1620,18 @@ export default function MessagesPage() {
               onPointerCancel={handleMessagesPointerUp}
             >
               {messagesLoading ? (
-                <div className="flex items-center justify-center h-full">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+                <div className="flex h-full items-center justify-center">
+                  <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
                 </div>
               ) : messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                  <MessageCircle className="h-16 w-16 mb-4 opacity-30" />
-                  <p className="text-lg font-medium mb-1">No messages yet</p>
-                  <p className="text-sm">Start the conversation!</p>
+                <div className="flex h-full flex-col items-center justify-center px-6 text-center text-muted-foreground">
+                  <MessageCircle className="mb-4 h-16 w-16 opacity-30" />
+                  <p className="mb-1 text-lg font-medium">Hozircha xabar yo'q</p>
+                  <p className="text-sm">Suhbatni boshlang!</p>
                 </div>
               ) : useVirtualization ? (
                 <div
-                  className="relative px-4 pt-4 pb-2 min-w-0 max-w-full"
+                  className="relative min-w-0 max-w-full px-2 pb-2 pt-4 sm:px-4"
                   style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
                 >
                   {rowVirtualizer.getVirtualItems().map((virtualRow) => {
@@ -1434,71 +1642,110 @@ export default function MessagesPage() {
                         key={virtualRow.key}
                         data-index={virtualRow.index}
                         ref={rowVirtualizer.measureElement}
-                        className="absolute left-0 right-0 px-4 min-w-0"
+                        className="absolute left-0 right-0 min-w-0 px-2 sm:px-4"
                         style={{ transform: `translateY(${virtualRow.start}px)` }}
                       >
                         {item.kind === 'date' ? (
-                          <div className="flex items-center justify-center my-3">
-                            <span className="px-3 py-1 bg-muted rounded-full text-xs text-muted-foreground">
-                              {new Date(item.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-                            </span>
-                          </div>
-                        ) : (() => {
-                          const message = item.message;
-                          const senderId = message.sender_id || '';
-                          const readByOther = item.isMine && senderId ? isMessageRead(message.id, senderId) : false;
-                          const readAt = item.isMine && senderId ? getMessageReadAt(message.id, senderId) : null;
-                          return (
-                            <div id={`message-${message.id}`} data-message-id={message.id} className={cn('min-w-0 py-1', highlightedMessageId === message.id && 'animate-pulse bg-primary/10 rounded-lg')}>
-                              <EnhancedMessageBubble
-                                message={{ ...message, is_read: readByOther, status: readByOther ? 'read' : message.status, read_at: readAt || undefined }}
-                                isMine={item.isMine}
-                                isGroup={selectedConversation.type === 'group'}
-                                onReply={handleReply}
-                                onForward={handleForward}
-                                onEdit={handleEdit}
-                                onDelete={handleDelete}
-                                onPin={handlePin}
-                                onSelect={handleSelectMessage}
-                                onLongPress={handleEnterSelectionMode}
-                                isPinned={isMessagePinned(message.id)}
-                                isSelected={selectedMessages.has(message.id)}
-                                isSelectionMode={isSelectionMode}
-                                showAvatar={item.showAvatar}
-                                showSender={selectedConversation.type === 'group' && item.showAvatar}
-                                allMediaTracks={mediaTracksForPlaylist}
-                              />
-                            </div>
-                          );
-                        })()}
+                          renderDatePill(item.date, 'my-3')
+                        ) : (
+                          (() => {
+                            const message = item.message;
+                            const senderId = message.sender_id || '';
+                            const readByOther =
+                              item.isMine && senderId
+                                ? isMessageRead(message.id, senderId)
+                                : false;
+                            const readAt =
+                              item.isMine && senderId
+                                ? getMessageReadAt(message.id, senderId)
+                                : null;
+                            return (
+                              <div
+                                id={`message-${message.id}`}
+                                data-message-id={message.id}
+                                className={cn(
+                                  'min-w-0 py-1',
+                                  highlightedMessageId === message.id &&
+                                    'animate-pulse rounded-lg bg-primary/10'
+                                )}
+                              >
+                                <EnhancedMessageBubble
+                                  message={{
+                                    ...message,
+                                    is_read: readByOther,
+                                    status: readByOther ? 'read' : message.status,
+                                    read_at: readAt || undefined,
+                                  }}
+                                  isMine={item.isMine}
+                                  isGroup={selectedConversation.type === 'group'}
+                                  canDeleteForEveryone={
+                                    selectedConversation.type === 'private' ||
+                                    selectedConversation.owner_id === user?.id
+                                  }
+                                  onReply={handleReply}
+                                  onForward={handleForward}
+                                  onEdit={handleEdit}
+                                  onDelete={handleDelete}
+                                  onPin={handlePin}
+                                  onSelect={handleSelectMessage}
+                                  onLongPress={handleEnterSelectionMode}
+                                  isPinned={isMessagePinned(message.id)}
+                                  isSelected={selectedMessages.has(message.id)}
+                                  isSelectionMode={isSelectionMode}
+                                  showAvatar={item.showAvatar}
+                                  showSender={
+                                    selectedConversation.type === 'group' && item.showAvatar
+                                  }
+                                  allMediaTracks={mediaTracksForPlaylist}
+                                />
+                              </div>
+                            );
+                          })()
+                        )}
                       </div>
                     );
                   })}
                 </div>
               ) : (
-                <div className="p-4 space-y-4 min-w-0 max-w-full">
+                <div className="min-w-0 max-w-full space-y-4 p-2 sm:p-4">
                   {messageGroups.map((group) => (
                     <div key={group.date} className="min-w-0">
-                      <div className="flex items-center justify-center my-4">
-                        <span className="px-3 py-1 bg-muted rounded-full text-xs text-muted-foreground">
-                          {new Date(group.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-                        </span>
-                      </div>
-                      <div className="space-y-2 min-w-0">
+                      {renderDatePill(group.date, 'my-4')}
+                      <div className="min-w-0 space-y-2">
                         {group.messages.map((message, idx) => {
                           const prevMessage = group.messages[idx - 1];
-                          const showAvatar = !prevMessage || prevMessage.sender_id !== message.sender_id;
+                          const showAvatar =
+                            !prevMessage || prevMessage.sender_id !== message.sender_id;
                           const isMine = message.sender_id === user?.id;
                           const senderId = message.sender_id || '';
-                          const readByOther = isMine && senderId ? isMessageRead(message.id, senderId) : false;
-                          const readAt = isMine && senderId ? getMessageReadAt(message.id, senderId) : null;
+                          const readByOther =
+                            isMine && senderId ? isMessageRead(message.id, senderId) : false;
+                          const readAt =
+                            isMine && senderId ? getMessageReadAt(message.id, senderId) : null;
                           return (
-                            <div key={message.id} id={`message-${message.id}`} data-message-id={message.id} className={cn('min-w-0', highlightedMessageId === message.id && 'animate-pulse bg-primary/10 rounded-lg')}>
+                            <div
+                              key={message.id}
+                              id={`message-${message.id}`}
+                              data-message-id={message.id}
+                              className={cn(
+                                'min-w-0',
+                                highlightedMessageId === message.id &&
+                                  'animate-pulse rounded-lg bg-primary/10'
+                              )}
+                            >
                               <EnhancedMessageBubble
-                                key={message.id}
-                                message={{ ...message, is_read: readByOther, status: readByOther ? 'read' : message.status, read_at: readAt || undefined }}
+                                message={{
+                                  ...message,
+                                  is_read: readByOther,
+                                  status: readByOther ? 'read' : message.status,
+                                  read_at: readAt || undefined,
+                                }}
                                 isMine={isMine}
                                 isGroup={selectedConversation.type === 'group'}
+                                canDeleteForEveryone={
+                                  selectedConversation.type === 'private' ||
+                                  selectedConversation.owner_id === user?.id
+                                }
                                 onReply={handleReply}
                                 onForward={handleForward}
                                 onEdit={handleEdit}
@@ -1510,7 +1757,9 @@ export default function MessagesPage() {
                                 isSelected={selectedMessages.has(message.id)}
                                 isSelectionMode={isSelectionMode}
                                 showAvatar={showAvatar}
-                                showSender={selectedConversation.type === 'group' && showAvatar}
+                                showSender={
+                                  selectedConversation.type === 'group' && showAvatar
+                                }
                                 allMediaTracks={mediaTracksForPlaylist}
                               />
                             </div>
@@ -1525,47 +1774,65 @@ export default function MessagesPage() {
               )}
             </div>
 
-            {/* Scroll-to-bottom floating button */}
+            {/* Pastga o'tish tugmasi */}
             {showScrollToBottom && (
               <button
                 type="button"
                 onClick={handleScrollToBottomClick}
                 aria-label="Eng oxirgi xabarga o'tish"
-                className="absolute bottom-4 right-4 z-20 h-11 w-11 rounded-full bg-card border border-border shadow-lg flex items-center justify-center text-foreground hover:bg-accent transition-all active:scale-95"
+                className="tg-transition absolute bottom-4 right-3 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-lg hover:bg-accent active:scale-95 sm:right-4"
               >
                 <ArrowDown className="h-5 w-5" />
                 {unreadIncomingCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[11px] font-semibold flex items-center justify-center">
+                  <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground">
                     {unreadIncomingCount > 99 ? '99+' : unreadIncomingCount}
                   </span>
                 )}
               </button>
             )}
+
+            {/* Jonli joylashuv paneli */}
+            {liveLocation.isSharing && (
+              <div className="absolute bottom-4 left-3 z-20 flex items-center gap-2 rounded-full border border-border bg-card/95 px-3 py-1.5 shadow-lg backdrop-blur sm:left-4">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
+                <span className="text-xs font-medium">Jonli joylashuv yoqilgan</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 rounded-full px-2 text-xs text-destructive"
+                  onClick={() => liveLocation.stop()}
+                >
+                  To'xtatish
+                </Button>
+              </div>
+            )}
           </div>
 
-          <div className="flex-shrink-0 border-t border-border bg-card pb-safe mb-16 md:mb-0">
+          <div className="pb-safe mb-16 flex-shrink-0 border-t border-border bg-card md:mb-0">
             <MessageInput
               onSend={handleSendMessage}
               onSchedule={handleScheduleMessage}
               onTyping={setTyping}
               replyTo={replyTo}
               onCancelReply={() => setReplyTo(null)}
-              onShareLocation={async (location) => {
-                const locationMessage = `📍 LOCATION:${location.latitude},${location.longitude}${location.address ? `|${location.address}` : ''}`;
-                await sendMessage(locationMessage);
-              }}
+              onShareLocation={handleShareLocation}
             />
           </div>
         </>
       ) : (
-        <div className="flex-1 flex items-center justify-center">
+        <div className="flex flex-1 items-center justify-center px-6">
           <div className="text-center">
-            <div className="h-24 w-24 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+            <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-muted">
               <MessageCircle className="h-12 w-12 text-muted-foreground" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">Select a conversation</h3>
-            <p className="text-muted-foreground text-sm mb-4">Choose a chat to start messaging</p>
-            <Button onClick={() => setShowCreateDialog(true)}><Plus className="h-4 w-4 mr-2" />New Chat</Button>
+            <h3 className="mb-2 text-lg font-semibold">Suhbatni tanlang</h3>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Yozishni boshlash uchun chatni tanlang
+            </p>
+            <Button onClick={() => setShowCreateDialog(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Yangi suhbat
+            </Button>
           </div>
         </div>
       )}
@@ -1573,8 +1840,8 @@ export default function MessagesPage() {
   );
 
   return (
-    <div className="h-[100dvh] md:h-screen flex flex-col bg-background overflow-hidden">
-      {/* Video Call Overlay */}
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-background md:h-screen">
+      {/* Qo'ng'iroq oynasi */}
       {isInCall && (
         <VideoCallOverlay
           localStream={localStream}
@@ -1595,77 +1862,145 @@ export default function MessagesPage() {
         />
       )}
 
-      {/* Incoming Call Dialog */}
+      {/* Kiruvchi qo'ng'iroq */}
       <IncomingCallDialog
         isOpen={!!incomingCall && !isInCall}
-        callerName={incomingCall?.host_profile?.display_name || incomingCall?.host_profile?.username || 'Unknown'}
+        callerName={
+          incomingCall?.host_profile?.display_name ||
+          incomingCall?.host_profile?.username ||
+          'Foydalanuvchi'
+        }
         callerAvatar={incomingCall?.host_profile?.avatar_url || undefined}
         callType={incomingCall?.call_type || 'video'}
         onAccept={acceptIncomingCall}
         onDecline={declineCall}
       />
 
-      {/* Mobile Layout */}
+      {/* Mobil ko'rinish */}
       {isMobile ? (
-        <div className="flex flex-col flex-1 overflow-hidden">
-          <div className={cn("flex-1 flex flex-col h-[calc(100dvh-3.5rem)] pb-16", showMobileChat && "hidden")}>
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <div
+            className={cn(
+              'flex h-[calc(100dvh-3.5rem)] flex-1 flex-col pb-16',
+              showMobileChat && 'hidden'
+            )}
+          >
             {leftPanelContent}
           </div>
-          <div className={cn("fixed inset-0 z-10 flex flex-col h-[100dvh]", !showMobileChat && "hidden")}>
+          <div
+            className={cn(
+              'fixed inset-0 z-10 flex h-[100dvh] flex-col',
+              !showMobileChat && 'hidden'
+            )}
+          >
             {rightPanelContent}
           </div>
         </div>
       ) : (
-        /* Desktop/Tablet Layout with Resizable Panels */
-        <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden" autoSaveId={`messages-layout-${deviceClass}`}>
+        <ResizablePanelGroup
+          direction="horizontal"
+          className="flex-1 overflow-hidden"
+          autoSaveId={`messages-layout-${deviceClass}`}
+        >
           <ResizablePanel
             ref={leftPanelHandleRef}
             defaultSize={initialPct}
             minSize={defaults.minPct}
             maxSize={defaults.maxPct}
             onResize={handlePanelResize}
-            className="border-r border-border overflow-hidden min-w-0 transition-[flex-basis] duration-150 ease-out"
+            className="min-w-0 overflow-hidden border-r border-border transition-[flex-basis] duration-150 ease-out"
           >
             {leftPanelContent}
           </ResizablePanel>
           <ResizableHandle
             onDragging={handleDragging}
             className={cn(
-              "group/handle relative w-px bg-border z-20",
-              // Larger invisible hitbox for easier grabbing (12px wide)
+              'group/handle relative z-20 w-px bg-border',
               "after:absolute after:inset-y-0 after:left-1/2 after:w-3 after:-translate-x-1/2 after:content-['']",
-              "hover:bg-primary/30 data-[resize-handle-active]:bg-primary",
-              "transition-colors"
+              'hover:bg-primary/30 data-[resize-handle-active]:bg-primary',
+              'transition-colors'
             )}
           >
-            {/* Ghost guide line — only visible while dragging */}
             {isResizing && (
-              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-primary/60 shadow-[0_0_0_1px_hsl(var(--primary)/0.2)]" />
+              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-primary/60" />
             )}
-            {/* Snap tooltip */}
             {isResizing && resizeHint && (
-              <div className="pointer-events-none absolute top-4 left-1/2 -translate-x-1/2 z-30 px-2 py-1 rounded-md bg-popover text-popover-foreground text-xs font-medium border border-border shadow-md whitespace-nowrap">
-                {resizeHint === 'compact' ? 'Compact (icons only)' : `${Math.round(leftPanelWidth)}px`}
+              <div className="pointer-events-none absolute left-1/2 top-4 z-30 -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-xs font-medium text-popover-foreground shadow-md">
+                {resizeHint === 'compact'
+                  ? 'Ixcham (faqat ikonkalar)'
+                  : `${Math.round(leftPanelWidth)}px`}
               </div>
             )}
           </ResizableHandle>
-          <ResizablePanel defaultSize={100 - initialPct} minSize={40} className="overflow-hidden min-w-0">
+          <ResizablePanel
+            defaultSize={100 - initialPct}
+            minSize={40}
+            className="min-w-0 overflow-hidden"
+          >
             {rightPanelContent}
           </ResizablePanel>
         </ResizablePanelGroup>
       )}
 
-      {/* Dialogs */}
-      <CreateChatDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} onCreatePrivate={handleCreatePrivate} onCreateGroup={handleCreateGroup} />
-      <CreateGroupChannelDialog open={showGroupDialog} onOpenChange={setShowGroupDialog} onCreated={(id) => { setShowGroupDialog(false); setActiveTab('groups'); }} />
-      <TelegramForwardDialog messages={forwardMessages} open={forwardMessages.length > 0} onOpenChange={(open) => !open && setForwardMessages([])} />
-      <EditMessageDialog message={editingMessage} open={!!editingMessage} onOpenChange={(open) => !open && setEditingMessage(null)} onSave={handleEditSave} />
-      <DeleteMessageDialog open={!!deletingMessage} onOpenChange={(open) => !open && setDeletingMessage(null)} onConfirm={handleDeleteConfirm} messagePreview={deletingMessage?.content || undefined} isMine={deletingMessage?.sender_id === user?.id} />
+      {/* Oynalar */}
+      <CreateChatDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        onCreatePrivate={handleCreatePrivate}
+        onCreateGroup={handleCreateGroup}
+      />
+      <CreateGroupChannelDialog
+        open={showGroupDialog}
+        onOpenChange={setShowGroupDialog}
+        onCreated={() => {
+          setShowGroupDialog(false);
+          setActiveTab('groups');
+          refreshConversations();
+        }}
+      />
+      <TelegramForwardDialog
+        messages={forwardMessages}
+        open={forwardMessages.length > 0}
+        onOpenChange={(open) => !open && setForwardMessages([])}
+      />
+      <EditMessageDialog
+        message={editingMessage}
+        open={!!editingMessage}
+        onOpenChange={(open) => !open && setEditingMessage(null)}
+        onSave={handleEditSave}
+      />
+      <DeleteMessageDialog
+        open={!!deletingMessage}
+        onOpenChange={(open) => !open && setDeletingMessage(null)}
+        onConfirm={handleDeleteConfirm}
+        messagePreview={deletingMessage?.content || undefined}
+        isMine={deletingMessage?.sender_id === user?.id}
+      />
+      <JumpToDateDialog
+        open={showJumpToDate}
+        onOpenChange={setShowJumpToDate}
+        availableDates={availableDates}
+        onSelectDate={handleJumpToDate}
+      />
       {selectedConversation && selectedConversation.type === 'group' && (
-        <GroupMemberManagement open={showMemberManagement} onOpenChange={setShowMemberManagement} conversationId={selectedConversation.id} conversationName={selectedConversation.name || undefined} isAdmin={selectedConversation.owner_id === user?.id} />
+        <GroupMemberManagement
+          open={showMemberManagement}
+          onOpenChange={setShowMemberManagement}
+          conversationId={selectedConversation.id}
+          conversationName={selectedConversation.name || undefined}
+          isAdmin={selectedConversation.owner_id === user?.id}
+        />
       )}
-      <ScheduledMessagesSheet open={showScheduledMessages} onOpenChange={setShowScheduledMessages} conversationId={selectedConversation?.id} />
-      <CreateChannelDialog open={showCreateChannelDialog} onOpenChange={setShowCreateChannelDialog} onCreateChannel={createChannel} />
+      <ScheduledMessagesSheet
+        open={showScheduledMessages}
+        onOpenChange={setShowScheduledMessages}
+        conversationId={selectedConversation?.id}
+      />
+      <CreateChannelDialog
+        open={showCreateChannelDialog}
+        onOpenChange={setShowCreateChannelDialog}
+        onCreateChannel={createChannel}
+      />
     </div>
   );
 }
