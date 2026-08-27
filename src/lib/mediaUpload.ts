@@ -11,6 +11,22 @@ export interface MediaUploadResult {
   size: number;
 }
 
+/** Xatolik matnini foydalanuvchi tushunadigan holatga keltirish */
+async function readError(response: Response, fallback: string): Promise<string> {
+  try {
+    const text = await response.text();
+    if (!text) return `${fallback} (${response.status})`;
+    try {
+      const json = JSON.parse(text) as { error?: string; message?: string };
+      return json.error || json.message || `${fallback} (${response.status})`;
+    } catch {
+      return `${fallback} (${response.status}): ${text.slice(0, 140)}`;
+    }
+  } catch {
+    return `${fallback} (${response.status})`;
+  }
+}
+
 export async function uploadMedia(
   file: File | Blob,
   options: { filename?: string; type?: string; visibility?: 'public' | 'private' } = {}
@@ -18,40 +34,51 @@ export async function uploadMedia(
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
   if (!token) {
-    throw new Error('Not authenticated');
+    throw new Error('Sessiya topilmadi - qaytadan tizimga kiring');
   }
 
   const filename = options.filename || (file instanceof File ? file.name : 'upload.bin');
   const contentType = file.type || 'application/octet-stream';
-  const presign = await fetch(`${API_BASE}/api/media/presign`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      filename,
-      content_type: contentType,
-      size: file.size,
-      type: options.type || 'file',
-      visibility: options.visibility || 'public',
-    }),
-  });
+
+  let presign: Response;
+  try {
+    presign = await fetch(`${API_BASE}/api/media/presign`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        filename,
+        content_type: contentType,
+        size: file.size,
+        type: options.type || 'file',
+        visibility: options.visibility || 'public',
+      }),
+    });
+  } catch {
+    throw new Error('Serverga ulanib bo\u2018lmadi - internetni tekshirib qayta urinib ko\u2018ring');
+  }
 
   if (!presign.ok) {
-    const error = await presign.json().catch(() => ({}));
-    throw new Error(error.error || `Upload presign failed (${presign.status})`);
+    throw new Error(await readError(presign, 'Yuklash uchun ruxsat olinmadi'));
   }
 
   const signed = await presign.json();
-  const upload = await fetch(signed.upload_url, {
-    method: signed.method || 'PUT',
-    headers: signed.headers || { 'Content-Type': contentType },
-    body: file,
-  });
+
+  let upload: Response;
+  try {
+    upload = await fetch(signed.upload_url, {
+      method: signed.method || 'PUT',
+      headers: signed.headers || { 'Content-Type': contentType },
+      body: file,
+    });
+  } catch {
+    throw new Error('Fayl saqlash serveriga yuborilmadi - qayta urinib ko\u2018ring');
+  }
 
   if (!upload.ok) {
-    throw new Error(`MinIO upload failed (${upload.status})`);
+    throw new Error(await readError(upload, 'Faylni saqlash amalga oshmadi'));
   }
 
   return {
