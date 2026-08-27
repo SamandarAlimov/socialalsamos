@@ -15,6 +15,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { uploadMedia } from '@/lib/mediaUpload';
+import { toExternalUrl, stripProtocol } from '@/lib/urls';
 import { Edit3, Grid, Video, Bookmark, Repeat2, MapPin, LinkIcon, Calendar, ImageIcon, Archive, Megaphone, Camera, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { uz as uzDateLocale, ru as ruDateLocale, enUS as enDateLocale } from 'date-fns/locale';
@@ -245,12 +246,12 @@ export default function ProfilePage() {
               <span className="flex items-center gap-1">
                 <LinkIcon className="h-4 w-4" />
                 <a
-                  href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`}
+                  href={toExternalUrl(profile.website)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary hover:underline"
                 >
-                  {profile.website.replace(/^https?:\/\//, '')}
+                  {stripProtocol(profile.website)}
                 </a>
               </span>
             )}
@@ -339,12 +340,10 @@ export default function ProfilePage() {
                     onClick={() => setSelectedRepostPost(repost.post!)}
                     className="aspect-square relative group overflow-hidden bg-muted"
                   >
-                    {/* Repost indicator */}
                     <div className="absolute top-2 left-2 z-10 flex items-center gap-1 bg-black/60 rounded-full px-2 py-1">
                       <Repeat2 className="h-3 w-3 text-white" />
                     </div>
 
-                    {/* Original author avatar */}
                     {repost.post.profile && (
                       <div className="absolute top-2 right-2 z-10">
                         <Avatar className="h-6 w-6 border-2 border-white">
@@ -378,7 +377,6 @@ export default function ProfilePage() {
                       </div>
                     )}
 
-                    {/* Hover overlay with stats */}
                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
                       <span className="text-white text-sm font-medium">
                         ❤️ {repost.post.likes_count || 0}

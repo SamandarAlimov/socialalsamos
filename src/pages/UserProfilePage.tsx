@@ -16,6 +16,7 @@ import { OnlineIndicator } from '@/components/OnlineIndicator';
 import { useUserPosts, UserPost } from '@/hooks/useUserPosts';
 import { useUserReposts, Repost } from '@/hooks/useReposts';
 import { cn } from '@/lib/utils';
+import { toExternalUrl, stripProtocol } from '@/lib/urls';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PostViewModal } from '@/components/PostViewModal';
 import { PROFILE_PUBLIC_COLUMNS } from '@/lib/profileFields';
@@ -57,7 +58,6 @@ export default function UserProfilePage() {
   });
   const { createPrivateConversation } = useConversations();
 
-  // Get userId from profile after fetching by username
   const userId = profile?.id;
   const { posts, isLoading: postsLoading, likePost } = useUserPosts(userId);
   const { reposts, isLoading: repostsLoading } = useUserReposts(userId);
@@ -69,7 +69,6 @@ export default function UserProfilePage() {
     setLoading(true);
 
     try {
-      // Check if it's a UUID (for backwards compatibility) or username
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(usernameParam);
 
       let query = supabase.from('profiles').select(PROFILE_PUBLIC_COLUMNS);
@@ -84,7 +83,6 @@ export default function UserProfilePage() {
 
       if (error) throw error;
 
-      // If accessed by UUID, redirect to username URL
       if (isUUID && data?.username) {
         navigate(`/user/${data.username}`, { replace: true });
         return;
@@ -92,7 +90,6 @@ export default function UserProfilePage() {
 
       setProfile(data);
 
-      // Check if following
       if (user && data && user.id !== data.id) {
         const { data: followData } = await supabase
           .from('follows')
@@ -209,7 +206,6 @@ export default function UserProfilePage() {
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
-      {/* Back button */}
       <Button
         variant="ghost"
         size="sm"
@@ -319,12 +315,12 @@ export default function UserProfilePage() {
               <span className="flex items-center gap-1">
                 <LinkIcon className="h-4 w-4" />
                 <a
-                  href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`}
+                  href={toExternalUrl(profile.website)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary hover:underline"
                 >
-                  {profile.website}
+                  {stripProtocol(profile.website)}
                 </a>
               </span>
             )}
@@ -418,12 +414,10 @@ export default function UserProfilePage() {
                       onClick={() => setSelectedRepostPost(repost.post!)}
                       className="aspect-square relative group overflow-hidden bg-muted rounded-lg"
                     >
-                      {/* Repost indicator */}
                       <div className="absolute top-2 left-2 z-10 flex items-center gap-1 bg-black/60 rounded-full px-2 py-1">
                         <Repeat2 className="h-3 w-3 text-white" />
                       </div>
 
-                      {/* Original author avatar */}
                       {repost.post.profile && (
                         <div className="absolute top-2 right-2 z-10">
                           <Avatar className="h-6 w-6 border-2 border-white">
@@ -457,7 +451,6 @@ export default function UserProfilePage() {
                         </div>
                       )}
 
-                      {/* Hover overlay with stats */}
                       <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
                         <div className="flex items-center gap-1 text-white">
                           <Heart className="h-5 w-5" fill="white" />
@@ -536,7 +529,6 @@ export default function UserProfilePage() {
                     </div>
                   )}
 
-                  {/* Hover overlay */}
                   <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
                     <div className="flex items-center gap-1 text-white">
                       <Heart className="h-5 w-5" fill="white" />
