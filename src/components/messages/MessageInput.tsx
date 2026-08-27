@@ -17,14 +17,15 @@ import {
   EyeOff,
   Type,
   ShieldAlert,
+  Music2,
 } from 'lucide-react';
 import { EmojiPicker } from '@/components/EmojiPicker';
 import { TelegramMediaRecorder } from './TelegramMediaRecorder';
 import { LocationShareButton } from './LocationShareButton';
 import { ScheduleMessageDialog } from './ScheduleMessageDialog';
 import { MentionAutocomplete } from '@/components/MentionAutocomplete';
-import { useFileUpload } from '@/hooks/useFileUpload';
 import { useMentionInput } from '@/hooks/useMentionInput';
+import { uploadMedia } from '@/lib/mediaUpload';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -56,7 +57,42 @@ interface MessageInputProps {
   }) => void;
 }
 
-const MAX_FILE_MB = 20;
+const MAX_FILE_MB = 50;
+
+type MediaKind = 'image' | 'video' | 'audio' | 'document';
+
+function detectKind(mimeType: string, fileName?: string): MediaKind {
+  const mime = (mimeType || '').toLowerCase();
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('video/')) return 'video';
+  if (mime.startsWith('audio/')) return 'audio';
+
+  const ext = (fileName || '').split('.').pop()?.toLowerCase() || '';
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'avif', 'bmp'].includes(ext))
+    return 'image';
+  if (['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v', '3gp'].includes(ext)) return 'video';
+  if (['mp3', 'wav', 'ogg', 'oga', 'm4a', 'aac', 'flac', 'opus'].includes(ext)) return 'audio';
+  return 'document';
+}
+
+function formatSize(bytes: number) {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+interface PendingAttachment {
+  url: string;
+  /** Chatga yuboriladigan tur (media yoki document) */
+  type: MediaKind;
+  /** Faylning haqiqiy turi - "media sifatida" qaytarish uchun kerak */
+  kind: MediaKind;
+  name: string;
+  size: number;
+  /** Yuklashdan oldingi mahalliy ko'rinish (tez preview uchun) */
+  localPreview?: string;
+}
 
 export function MessageInput({
   onSend,
@@ -68,13 +104,9 @@ export function MessageInput({
   onShareLocation,
 }: MessageInputProps) {
   const { t } = useTranslation();
-  const { uploadFile, uploading, getFileType } = useFileUpload();
+  const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
-  const [pendingAttachment, setPendingAttachment] = useState<{
-    url: string;
-    type: string;
-    name: string;
-  } | null>(null);
+  const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
   const [showFormatting, setShowFormatting] = useState(false);
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const [attachmentOpen, setAttachmentOpen] = useState(false);
@@ -84,6 +116,7 @@ export function MessageInput({
   const documentInputRef = useRef<HTMLInputElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const localPreviewRef = useRef<string | null>(null);
   const {
     mentionState,
     handleInputChange: handleMentionChange,
@@ -92,17 +125,18 @@ export function MessageInput({
   } = useMentionInput();
 
   useEffect(() => {
-    if (replyTo) {
-      inputRef.current?.focus();
-    }
+    if (replyTo) inputRef.current?.focus();
+  }, [replyTo]);
 
+  useEffect(() => {
     return () => {
       // Chatdan chiqilganda "yozmoqda" holati qotib qolmasligi uchun
       onTyping(false);
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       if (longPressTimeoutRef.current) clearTimeout(longPressTimeoutRef.current);
+      if (localPreviewRef.current) URL.revokeObjectURL(localPreviewRef.current);
     };
-  }, [replyTo, onTyping]);
+  }, [onTyping]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
@@ -116,8 +150,15 @@ export function MessageInput({
   };
 
   const handleMentionSelect = (username: string) => {
-    const newValue = insertMention(message, username, inputRef);
-    setMessage(newValue);
+    setMessage(insertMention(message, username, inputRef));
+  };
+
+  const clearAttachment = () => {
+    if (localPreviewRef.current) {
+      URL.revokeObjectURL(localPreviewRef.current);
+      localPreviewRef.current = null;
+    }
+    setPendingAttachment(null);
   };
 
   const handleSend = async () => {
@@ -127,7 +168,7 @@ export function MessageInput({
     await onSend(message.trim(), pendingAttachment?.url, pendingAttachment?.type);
 
     setMessage('');
-    setPendingAttachment(null);
+    clearAttachment();
     onTyping(false);
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -141,31 +182,59 @@ export function MessageInput({
     }
   };
 
-  const handleFileUpload = (url: string, type: string, name: string) => {
-    setPendingAttachment({ url, type, name });
-  };
-
-  const uploadAndAttach = async (file: File) => {
+  /**
+   * Faylni yuklaydi. `asDocument` true bo'lsa, rasm/video ham fayl (document)
+   * sifatida yuboriladi - Telegramdagi "Send as file" bilan bir xil.
+   */
+  const uploadAndAttach = async (file: File, asDocument = false) => {
     if (file.size > MAX_FILE_MB * 1024 * 1024) {
       toast.error(`Fayl hajmi ${MAX_FILE_MB} MB dan kichik bo'lishi kerak`);
       return;
     }
 
-    const result = await uploadFile(file);
-    if (result) {
-      handleFileUpload(result.url, getFileType(result.type), result.name);
-      setAttachmentOpen(false);
-    } else {
-      toast.error('Faylni yuklashda xatolik');
+    const kind = detectKind(file.type, file.name);
+
+    // Tezkor mahalliy preview (yuklash tugashini kutmasdan)
+    let localPreview: string | undefined;
+    if (kind === 'image' || kind === 'video') {
+      localPreview = URL.createObjectURL(file);
+      if (localPreviewRef.current) URL.revokeObjectURL(localPreviewRef.current);
+      localPreviewRef.current = localPreview;
+    }
+
+    setUploading(true);
+    setAttachmentOpen(false);
+
+    try {
+      const uploaded = await uploadMedia(file, { type: 'chat', visibility: 'public' });
+      setPendingAttachment({
+        url: uploaded.url,
+        type: asDocument ? 'document' : kind,
+        kind,
+        name: file.name,
+        size: file.size,
+        localPreview,
+      });
+    } catch (err) {
+      // Aniq sababni ko'rsatamiz - "xatolik" degan umumiy matn foydasiz
+      const reason = err instanceof Error ? err.message : 'Kutilmagan xatolik';
+      toast.error(`Yuklab bo'lmadi: ${reason}`);
+      if (localPreview) {
+        URL.revokeObjectURL(localPreview);
+        localPreviewRef.current = null;
+      }
+    } finally {
+      setUploading(false);
     }
   };
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    await uploadAndAttach(file);
-    e.target.value = '';
-  };
+  const handleFileSelect =
+    (asDocument: boolean) => async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      const input = e.target;
+      if (file) await uploadAndAttach(file, asDocument);
+      input.value = '';
+    };
 
   // Telegramdek: rasmni to'g'ridan-to'g'ri paste qilish
   const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -241,11 +310,14 @@ export function MessageInput({
   };
 
   const pii = detectPII(message);
+  const previewSrc = pendingAttachment?.localPreview || pendingAttachment?.url;
+  const canToggleAsDocument =
+    pendingAttachment && (pendingAttachment.kind === 'image' || pendingAttachment.kind === 'video');
 
   return (
     <div
       className={cn(
-        'relative z-10 border-t border-border bg-card p-3 transition-colors',
+        'relative z-10 border-t border-border bg-card p-3 tg-transition',
         isDragging && 'bg-muted/60'
       )}
       onDragOver={(e) => {
@@ -261,14 +333,14 @@ export function MessageInput({
         type="file"
         accept="image/*,video/*"
         className="hidden"
-        onChange={handleFileSelect}
+        onChange={handleFileSelect(false)}
       />
+      {/* Har qanday fayl - rasm/video ham fayl sifatida yuborilishi mumkin */}
       <input
         ref={documentInputRef}
         type="file"
-        accept=".pdf,.doc,.docx,.txt,.xlsx,.xls,.pptx,.ppt,.zip,.rar"
         className="hidden"
-        onChange={handleFileSelect}
+        onChange={handleFileSelect(true)}
       />
 
       {isDragging && (
@@ -284,7 +356,13 @@ export function MessageInput({
             <p className="text-xs font-medium text-primary">{replyTo.sender_name}</p>
             <p className="truncate text-sm text-muted-foreground">{replyTo.content}</p>
           </div>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onCancelReply}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 rounded-full"
+            onClick={onCancelReply}
+            aria-label="Javobni bekor qilish"
+          >
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -304,30 +382,83 @@ export function MessageInput({
         </div>
       )}
 
-      {/* Tanlangan fayl preview */}
+      {/* Yuklanmoqda holati */}
+      {uploading && !pendingAttachment && (
+        <div className="mb-2 flex items-center gap-2 rounded-xl bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Yuklanmoqda...
+        </div>
+      )}
+
+      {/* Tanlangan fayl preview - Telegramdek kattaroq va tushunarli */}
       {pendingAttachment && (
-        <div className="mb-2 flex items-center gap-2 rounded-xl bg-muted/50 px-3 py-2">
-          {pendingAttachment.type === 'image' ? (
-            <img
-              src={pendingAttachment.url}
-              alt="Ko'rinish"
-              className="h-12 w-12 rounded-lg object-cover"
-            />
-          ) : (
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
-              {pendingAttachment.type === 'video' ? (
-                <Film className="h-5 w-5 text-muted-foreground" />
-              ) : (
-                <FileText className="h-5 w-5 text-muted-foreground" />
-              )}
-            </div>
-          )}
-          <span className="min-w-0 flex-1 truncate text-sm">{pendingAttachment.name}</span>
+        <div className="mb-2 flex items-center gap-3 rounded-2xl border border-border bg-muted/40 p-2">
+          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-muted">
+            {pendingAttachment.kind === 'image' && previewSrc ? (
+              <img src={previewSrc} alt="" className="h-full w-full object-cover no-drag" />
+            ) : pendingAttachment.kind === 'video' && previewSrc ? (
+              <video
+                src={previewSrc}
+                className="h-full w-full object-cover"
+                muted
+                playsInline
+                preload="metadata"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center">
+                {pendingAttachment.kind === 'video' ? (
+                  <Film className="h-6 w-6 text-muted-foreground" />
+                ) : pendingAttachment.kind === 'audio' ? (
+                  <Music2 className="h-6 w-6 text-muted-foreground" />
+                ) : (
+                  <FileText className="h-6 w-6 text-muted-foreground" />
+                )}
+              </div>
+            )}
+            {uploading && (
+              <span className="absolute inset-0 flex items-center justify-center bg-black/40">
+                <Loader2 className="h-5 w-5 animate-spin text-white" />
+              </span>
+            )}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{pendingAttachment.name}</p>
+            <p className="text-xs text-muted-foreground">
+              {formatSize(pendingAttachment.size)}
+              {pendingAttachment.type === 'document' && pendingAttachment.kind !== 'document'
+                ? ' \u00b7 fayl sifatida'
+                : ''}
+            </p>
+            {canToggleAsDocument && (
+              <button
+                type="button"
+                onClick={() =>
+                  setPendingAttachment((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          type: prev.type === 'document' ? prev.kind : 'document',
+                        }
+                      : prev
+                  )
+                }
+                className="mt-0.5 text-xs font-medium text-primary hover:underline"
+              >
+                {pendingAttachment.type === 'document'
+                  ? pendingAttachment.kind === 'image'
+                    ? 'Rasm sifatida yuborish'
+                    : 'Video sifatida yuborish'
+                  : 'Fayl sifatida yuborish'}
+              </button>
+            )}
+          </div>
+
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
-            onClick={() => setPendingAttachment(null)}
+            className="h-8 w-8 shrink-0 rounded-full"
+            onClick={clearAttachment}
             aria-label="Bekor qilish"
           >
             <X className="h-4 w-4" />
@@ -342,7 +473,7 @@ export function MessageInput({
             <Button
               variant="ghost"
               size="icon"
-              className="h-10 w-10 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="h-10 w-10 shrink-0 rounded-full text-muted-foreground tg-transition hover:bg-muted hover:text-foreground"
               disabled={uploading}
               aria-label="Fayl qo'shish"
             >
@@ -353,20 +484,20 @@ export function MessageInput({
               )}
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-56 rounded-2xl p-2" align="start">
+          <PopoverContent className="w-60 rounded-2xl p-2" align="start">
             <button
               onClick={() => imageVideoInputRef.current?.click()}
-              className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-muted"
+              className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left tg-transition hover:bg-muted"
             >
               <ImageIcon className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm">Rasm yoki video</span>
             </button>
             <button
               onClick={() => documentInputRef.current?.click()}
-              className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-muted"
+              className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left tg-transition hover:bg-muted"
             >
               <FileText className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">Fayl</span>
+              <span className="text-sm">Fayl sifatida yuborish</span>
             </button>
             {onShareLocation && <LocationShareButton onShareLocation={onShareLocation} />}
           </PopoverContent>
@@ -393,7 +524,7 @@ export function MessageInput({
             disabled={disabled}
             rows={1}
             className={cn(
-              'w-full resize-none rounded-2xl border border-border bg-muted/50 px-4 py-2.5 pr-20 text-sm',
+              'chat-selectable w-full resize-none rounded-2xl border border-border bg-muted/50 px-4 py-2.5 pr-20 text-sm',
               'focus:outline-none focus:ring-2 focus:ring-primary/40',
               'min-h-[44px] max-h-[120px]',
               disabled && 'cursor-not-allowed opacity-50'
@@ -423,7 +554,7 @@ export function MessageInput({
               aria-label="Matnni formatlash"
               title="Matnni formatlash"
               className={cn(
-                'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
+                'flex h-8 w-8 items-center justify-center rounded-full tg-transition',
                 showFormatting
                   ? 'bg-muted text-foreground'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -443,14 +574,14 @@ export function MessageInput({
           <Button
             variant="default"
             size="icon"
-            className="h-10 w-10 shrink-0 rounded-full"
+            className="h-10 w-10 shrink-0 rounded-full tg-transition active:scale-95"
             onClick={handleSend}
             onMouseDown={startLongPress}
             onMouseUp={cancelLongPress}
             onMouseLeave={cancelLongPress}
             onTouchStart={startLongPress}
             onTouchEnd={cancelLongPress}
-            disabled={disabled}
+            disabled={disabled || uploading}
             aria-label="Yuborish"
             title={onSchedule ? 'Yuborish (uzoq bosilsa - rejalashtirish)' : 'Yuborish'}
           >
@@ -481,7 +612,7 @@ export function MessageInput({
               pendingAttachment?.type
             );
             setMessage('');
-            setPendingAttachment(null);
+            clearAttachment();
           }}
         />
       )}
@@ -504,7 +635,7 @@ export function MessageInput({
               onClick={() => insertFormatting(key)}
               aria-label={label}
               title={label}
-              className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground tg-transition hover:bg-muted hover:text-foreground"
             >
               <Icon className="h-4 w-4" />
             </button>
