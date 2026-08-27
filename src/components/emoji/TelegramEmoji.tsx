@@ -26,6 +26,9 @@ type EmojiMode = 'pending' | 'webp' | 'tgs' | 'fallback';
  *  1. `public/emoji/tgs/<codepoint>.tgs` (Lottie vektor) — mavjud bo'lsa eng sifatlisi
  *  2. Telegram animatsion `.webp` to'plami (jsDelivr CDN) — hech narsa yuklamasdan ishlaydi
  *  3. `AnimatedEmoji` (Noto animated / statik / tizim emojisi) — hech qachon buzilmaydi
+ *
+ * Muhim: `lottie-web` dinamik import qilinadi (alohida chunk), lekin
+ * `@vite-ignore` ISHLATILMAYDI — aks holda brauzer bare-specifier'ni yechа olmaydi.
  */
 export function TelegramEmoji({
   emoji,
@@ -73,7 +76,7 @@ export function TelegramEmoji({
       }
 
       try {
-        const lottie: any = await import(/* @vite-ignore */ 'lottie-web');
+        const lottie: any = await import('lottie-web');
         if (cancelled) return;
         setMode('tgs');
         // konteyner keyingi renderdan so'ng paydo bo'ladi
