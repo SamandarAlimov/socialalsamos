@@ -4,7 +4,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Input } from '@/components/ui/input';
 import { Smile, Search, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { AnimatedEmoji } from '@/components/emoji/AnimatedEmoji';
+import { TelegramEmoji } from '@/components/emoji/TelegramEmoji';
 import {
   EMOJI_CATEGORIES,
   getRecentEmojis,
@@ -46,46 +46,47 @@ export function EmojiPicker({ onSelect, trigger, className }: EmojiPickerProps) 
           </Button>
         )}
       </PopoverTrigger>
-      <PopoverContent className="w-[340px] p-0 overflow-hidden" align="end">
-        {/* Search */}
-        <div className="p-2 border-b border-border">
+      <PopoverContent className="w-[340px] overflow-hidden p-0" align="end">
+        {/* Qidirish */}
+        <div className="border-b border-border p-2">
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Emoji qidirish..."
-              className="pl-8 h-9"
+              className="h-9 pl-8"
             />
           </div>
         </div>
 
-        {/* Emoji grid */}
-        <div className="p-2 grid grid-cols-8 gap-0.5 h-56 overflow-y-auto overscroll-contain">
+        {/* Emojilar to'ri */}
+        <div className="grid h-56 grid-cols-8 gap-0.5 overflow-y-auto overscroll-contain p-2">
           {visible.map((emoji, i) => (
             <button
               key={`${emoji}-${i}`}
               onClick={() => handleSelect(emoji)}
-              className="h-9 w-9 flex items-center justify-center rounded-lg hover:bg-accent active:scale-90 transition-all"
+              className="tg-transition flex h-9 w-9 items-center justify-center rounded-lg hover:bg-accent active:scale-90"
+              title={emoji}
             >
-              <AnimatedEmoji emoji={emoji} size={28} playOnHover />
+              <TelegramEmoji emoji={emoji} size={28} playOnHover />
             </button>
           ))}
           {visible.length === 0 && (
-            <div className="col-span-8 flex items-center justify-center h-full text-xs text-muted-foreground">
+            <div className="col-span-8 flex h-full items-center justify-center text-xs text-muted-foreground">
               Topilmadi
             </div>
           )}
         </div>
 
-        {/* Category bar */}
+        {/* Kategoriyalar */}
         {!query.trim() && (
-          <div className="flex items-center gap-0.5 px-2 py-1.5 border-t border-border overflow-x-auto">
+          <div className="scrollbar-hide flex items-center gap-0.5 overflow-x-auto border-t border-border px-2 py-1.5">
             {recent.length > 0 && (
               <button
                 onClick={() => setActiveKey('recent')}
                 className={cn(
-                  'h-8 w-8 flex-shrink-0 flex items-center justify-center rounded-lg transition-colors',
+                  'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-colors',
                   activeKey === 'recent' ? 'bg-primary/15 text-primary' : 'hover:bg-accent'
                 )}
                 title="Oxirgi"
@@ -99,11 +100,11 @@ export function EmojiPicker({ onSelect, trigger, className }: EmojiPickerProps) 
                 onClick={() => setActiveKey(cat.key)}
                 title={cat.label}
                 className={cn(
-                  'h-8 w-8 flex-shrink-0 flex items-center justify-center rounded-lg transition-colors',
+                  'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-colors',
                   activeKey === cat.key ? 'bg-primary/15' : 'hover:bg-accent'
                 )}
               >
-                <AnimatedEmoji emoji={cat.icon} size={20} />
+                <TelegramEmoji emoji={cat.icon} size={20} animated={false} />
               </button>
             ))}
           </div>
