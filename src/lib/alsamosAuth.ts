@@ -2,12 +2,16 @@
  * Alsamos authentication policy - single source of truth for the client.
  *
  * Model ("Owner identity + linked accounts"):
- *   - You log in with ONE identity email: <name>@alsamos.com
- *   - That identity may own up to 10 superapp accounts (slots 1..10)
- *   - Slot 1 is the primary account and carries the identity password
+ *   - One identity email <name>@alsamos.com owns up to 10 superapp accounts.
+ *   - Slot 1 is the primary account and carries the identity password.
  *   - Slots 2..10 use a technical login email <username>@accounts.alsamos.com
  *     and have no usable password: their sessions are minted by the server
  *     only after the identity password has been verified.
+ *
+ * Logging in accepts THREE kinds of identifier (resolved server side only):
+ *   - email    : <name>@alsamos.com or a preserved legacy address
+ *   - username : of any account owned by the identity
+ *   - phone    : the identity phone number, in any human formatting
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -49,6 +53,39 @@ export function isUsernameValid(value: string): boolean {
   return /^[a-z0-9_]{3,30}$/.test((value ?? '').trim().toLowerCase());
 }
 
+/**
+ * Phone numbers are stored and compared in E.164 form. Any human formatting
+ * is accepted: "+998 90 123 45 67", "998901234567", "(90) 123-45-67".
+ */
+export function normalizePhoneInput(value: string): string | null {
+  const digits = (value ?? '').replace(/[^0-9]/g, '');
+  if (!digits) return null;
+  const e164 = `+${digits}`;
+  return /^\+[1-9][0-9]{7,14}$/.test(e164) ? e164 : null;
+}
+
+export type IdentifierKind = 'email' | 'phone' | 'username' | 'invalid';
+
+/** Mirrors classifyIdentifier() in supabase/functions/_shared/auth-core.ts */
+export function classifyIdentifier(raw: string): IdentifierKind {
+  const value = (raw ?? '').trim().toLowerCase();
+  if (!value) return 'invalid';
+  if (value.includes('@')) return 'email';
+  if (/^[+0-9][0-9\s().\-_]{6,}$/.test(value)) {
+    return normalizePhoneInput(value) ? 'phone' : 'invalid';
+  }
+  return isUsernameValid(value) ? 'username' : 'invalid';
+}
+
+/** Canonical form sent to the server (phones become E.164). */
+export function canonicalIdentifier(raw: string): string {
+  const value = (raw ?? '').trim().toLowerCase();
+  if (classifyIdentifier(value) === 'phone') {
+    return normalizePhoneInput(value) ?? value;
+  }
+  return value;
+}
+
 /** Accepts "name" or "name@alsamos.com" and always returns the full address. */
 export function toIdentityEmail(input: string): string {
   const value = normalizeEmail(input);
@@ -71,6 +108,7 @@ export type LoginStepResult = {
   accounts: PublicAccount[];
   identity: {
     email: string;
+    phone?: string | null;
     migration_status: 'legacy' | 'claimed' | 'migrated';
     used: number;
     max: number;
@@ -89,9 +127,11 @@ export type AuthErrorCode =
   | 'ACCOUNT_CREATE_FAILED'
   | 'USERNAME_INVALID'
   | 'USERNAME_TAKEN'
+  | 'PHONE_INVALID'
   | 'PRIMARY_ACCOUNT_PROTECTED'
   | 'SESSION_MINT_FAILED'
   | 'UNAUTHORIZED'
+  | 'IDENTITY_UNAVAILABLE'
   | 'NETWORK'
   | 'UNKNOWN';
 
@@ -109,29 +149,33 @@ export class AlsamosAuthError extends Error {
 export function authErrorMessage(code: AuthErrorCode): string {
   switch (code) {
     case 'INVALID_CREDENTIALS':
-      return 'Email yoki parol xato.';
+      return 'Kirish maʼlumotlari xato.';
     case 'EMAIL_DOMAIN_NOT_ALLOWED':
-      return `Faqat @${ALSAMOS_MAIL_DOMAIN} manzili bilan kirish mumkin.`;
+      return `Ro’yxatdan o’tish faqat @${ALSAMOS_MAIL_DOMAIN} manzili bilan.`;
     case 'EMAIL_NOT_CONFIRMED':
       return 'Email hali tasdiqlanmagan. Pochtangizdagi havolani bosing.';
     case 'TOO_MANY_ATTEMPTS':
-      return 'Juda ko\u2018p urinish. 15 daqiqadan keyin qayta urinib ko\u2018ring.';
+      return 'Juda ko’p urinish. 15 daqiqadan keyin qayta urinib ko’ring.';
     case 'TICKET_INVALID':
       return 'Sessiya muddati tugadi. Iltimos, qaytadan kiring.';
     case 'ACCOUNT_LIMIT_REACHED':
-      return `Bitta email uchun maksimal ${MAX_ACCOUNTS_PER_IDENTITY} akkaunt ochish mumkin.`;
+      return `Bitta identifikator uchun maksimal ${MAX_ACCOUNTS_PER_IDENTITY} akkaunt ochish mumkin.`;
     case 'USERNAME_INVALID':
-      return 'Username 3-30 belgi, faqat a-z, 0-9 va _ bo\u2018lishi kerak.';
+      return 'Username 3-30 belgi, faqat a-z, 0-9 va _ bo’lishi kerak.';
     case 'USERNAME_TAKEN':
       return 'Bu username band.';
+    case 'PHONE_INVALID':
+      return 'Telefon raqamni xalqaro shaklda kiriting, masalan +998901234567.';
     case 'PRIMARY_ACCOUNT_PROTECTED':
-      return 'Asosiy akkauntni uzib bo\u2018lmaydi.';
+      return 'Asosiy akkauntni uzib bo’lmaydi.';
     case 'ACCOUNT_NOT_FOUND':
       return 'Akkaunt topilmadi.';
     case 'UNAUTHORIZED':
-      return 'Ruxsat yo\u2018q. Qaytadan kiring.';
+      return 'Ruxsat yo’q. Qaytadan kiring.';
+    case 'IDENTITY_UNAVAILABLE':
+      return 'Akkaunt maʼlumotlarini yuklab bo’lmadi. Keyinroq urinib ko’ring.';
     case 'NETWORK':
-      return 'Tarmoq xatosi. Internetni tekshirib qayta urinib ko\u2018ring.';
+      return 'Tarmoq xatosi. Internetni tekshirib qayta urinib ko’ring.';
     default:
       return 'Kutilmagan xatolik yuz berdi.';
   }
@@ -168,10 +212,13 @@ async function invokeAuthFunction<T>(
   return data as T;
 }
 
-/** Step 1: verify identity credentials, get the list of owned accounts. */
-export function requestLoginTicket(email: string, password: string) {
+/**
+ * Step 1: verify the identity credentials and get the list of owned accounts.
+ * `identifier` may be an email, a username or a phone number.
+ */
+export function requestLoginTicket(identifier: string, password: string) {
   return invokeAuthFunction<LoginStepResult>('account-login', {
-    email: toIdentityEmail(email),
+    identifier: canonicalIdentifier(identifier),
     password,
   });
 }

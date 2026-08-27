@@ -9,6 +9,7 @@ import {
   isAlsamosEmail,
   isUsernameValid,
   LoginStepResult,
+  normalizePhoneInput,
   requestAccountSession,
   requestLoginTicket,
   toIdentityEmail,
@@ -44,15 +45,19 @@ interface AuthContextType {
   activeSlot: number;
   isAuthenticated: boolean;
   isLoading: boolean;
-  /** Step 1: verify the identity password, get the account list + ticket. */
-  beginLogin: (email: string, password: string) => Promise<LoginStepResult>;
+  /**
+   * Step 1: verify the identity password, get the account list + ticket.
+   * `identifier` may be an email, a username or a phone number.
+   */
+  beginLogin: (identifier: string, password: string) => Promise<LoginStepResult>;
   /** Step 2: open a session for one of the identity's accounts. */
   completeLogin: (ticket: string, accountId?: string) => Promise<AuthResult>;
   /** Convenience: log straight into the primary (slot 1) account. */
-  login: (email: string, password: string) => Promise<AuthResult>;
+  login: (identifier: string, password: string) => Promise<AuthResult>;
   signup: (params: {
     email: string;
     password: string;
+    phone?: string;
     displayName?: string;
     username?: string;
     acceptedTerms: boolean;
@@ -153,10 +158,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ---------------------------------------------------------------------
   // Login (two steps: credentials -> choose account)
   // ---------------------------------------------------------------------
-  const beginLogin = async (email: string, password: string): Promise<LoginStepResult> => {
+  const beginLogin = async (identifier: string, password: string): Promise<LoginStepResult> => {
     // Credentials are verified server side: identical response for unknown
-    // email and wrong password, rate limited, audited.
-    return requestLoginTicket(email, password);
+    // identifier and wrong password, rate limited, audited.
+    return requestLoginTicket(identifier, password);
   };
 
   const completeLogin = async (ticket: string, accountId?: string): Promise<AuthResult> => {
@@ -189,9 +194,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = async (email: string, password: string): Promise<AuthResult> => {
+  const login = async (identifier: string, password: string): Promise<AuthResult> => {
     try {
-      const step = await beginLogin(email, password);
+      const step = await beginLogin(identifier, password);
       const primary = step.accounts.find((a) => a.is_primary) ?? step.accounts[0];
       return completeLogin(step.ticket, primary?.id);
     } catch (e) {
@@ -206,11 +211,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // ---------------------------------------------------------------------
-  // Signup (identity creation) - @alsamos.com only
+  // Signup (identity creation) - the identity email must be @alsamos.com,
+  // while login later accepts email, username or phone.
   // ---------------------------------------------------------------------
   const signup: AuthContextType['signup'] = async ({
     email,
     password,
+    phone,
     displayName,
     username,
     acceptedTerms,
@@ -220,7 +227,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!isAlsamosEmail(identityEmail)) {
       const error = new AlsamosAuthError('EMAIL_DOMAIN_NOT_ALLOWED');
       toast({
-        title: 'Ro\u2018yxatdan o\u2018tish amalga oshmadi',
+        title: 'Ro’yxatdan o’tish amalga oshmadi',
         description: error.message,
         variant: 'destructive',
       });
@@ -235,6 +242,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const error = new AlsamosAuthError('USERNAME_INVALID');
       toast({ title: 'Username xato', description: error.message, variant: 'destructive' });
       return { error };
+    }
+
+    // Phone is optional, but when present it must be a valid E.164 number:
+    // it becomes a login identifier, so a broken value would lock the user out.
+    let normalizedPhone: string | null = null;
+    if (phone && phone.trim()) {
+      normalizedPhone = normalizePhoneInput(phone);
+      if (!normalizedPhone) {
+        const error = new AlsamosAuthError('PHONE_INVALID');
+        toast({ title: 'Telefon raqam xato', description: error.message, variant: 'destructive' });
+        return { error };
+      }
     }
 
     const strength = checkPassword(password, [identityEmail, finalUsername]);
@@ -260,6 +279,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         data: {
           display_name: displayName || finalUsername,
           username: finalUsername,
+          phone: normalizedPhone,
           tos_version: TOS_VERSION,
         },
       },
@@ -270,10 +290,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) {
       // Never confirm whether an address is already registered.
       const message = /already|registered|exists/i.test(error.message)
-        ? 'Agar bu manzil bo\u2018sh bo\u2018lsa, tasdiqlash xati yuborildi.'
+        ? 'Agar bu manzil bo’sh bo’lsa, tasdiqlash xati yuborildi.'
         : error.message;
       toast({
-        title: 'Ro\u2018yxatdan o\u2018tish',
+        title: 'Ro’yxatdan o’tish',
         description: message,
         variant: 'destructive',
       });
@@ -328,7 +348,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase.auth.updateUser({ password: newPassword });
 
     if (error) {
-      toast({ title: 'Parol o\u2018zgartirilmadi', description: error.message, variant: 'destructive' });
+      toast({ title: 'Parol o’zgartirilmadi', description: error.message, variant: 'destructive' });
       return { error };
     }
 
@@ -368,12 +388,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq('id', user.id);
 
     if (error) {
-      toast({ title: 'Update Failed', description: error.message, variant: 'destructive' });
+      toast({ title: 'Saqlanmadi', description: error.message, variant: 'destructive' });
       return;
     }
 
     setProfile((prev) => (prev ? { ...prev, ...updates } : null));
-    toast({ title: 'Profile Updated', description: 'Your changes have been saved.' });
+    toast({ title: 'Profil yangilandi', description: 'O’zgarishlar saqlandi.' });
   };
 
   return (

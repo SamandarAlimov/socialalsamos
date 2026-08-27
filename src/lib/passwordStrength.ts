@@ -22,7 +22,7 @@ const BLOCKED_PATTERNS = [
 
 export type PasswordCheck = {
   score: 0 | 1 | 2 | 3 | 4;
-  label: 'juda kuchsiz' | 'kuchsiz' | 'o\u2018rtacha' | 'kuchli' | 'juda kuchli';
+  label: 'juda kuchsiz' | 'kuchsiz' | 'o’rtacha' | 'kuchli' | 'juda kuchli';
   valid: boolean;
   problems: string[];
 };
@@ -32,10 +32,10 @@ export function checkPassword(password: string, context: string[] = []): Passwor
   const problems: string[] = [];
 
   if (value.length < PASSWORD_MIN_LENGTH) {
-    problems.push(`Kamida ${PASSWORD_MIN_LENGTH} belgi bo\u2018lishi kerak`);
+    problems.push(`Kamida ${PASSWORD_MIN_LENGTH} belgi bo’lishi kerak`);
   }
   if (value.length > PASSWORD_MAX_LENGTH) {
-    problems.push(`Ko\u2018pi bilan ${PASSWORD_MAX_LENGTH} belgi`);
+    problems.push(`Ko’pi bilan ${PASSWORD_MAX_LENGTH} belgi`);
   }
 
   const hasLower = /[a-z]/.test(value);
@@ -50,13 +50,13 @@ export function checkPassword(password: string, context: string[] = []): Passwor
 
   const lowered = value.toLowerCase();
   if (BLOCKED_PATTERNS.some((pattern) => lowered.includes(pattern))) {
-    problems.push('Juda oson topiladigan so\u2018z ishlatilgan');
+    problems.push('Juda oson topiladigan so’z ishlatilgan');
   }
 
   for (const item of context) {
     const clean = (item ?? '').trim().toLowerCase();
     if (clean.length >= 4 && lowered.includes(clean)) {
-      problems.push('Parol email yoki username bilan bir xil bo\u2018lmasligi kerak');
+      problems.push('Parol email yoki username bilan bir xil bo’lmasligi kerak');
       break;
     }
   }
@@ -75,7 +75,7 @@ export function checkPassword(password: string, context: string[] = []): Passwor
   const labels: PasswordCheck['label'][] = [
     'juda kuchsiz',
     'kuchsiz',
-    'o\u2018rtacha',
+    'o’rtacha',
     'kuchli',
     'juda kuchli',
   ];

@@ -10,7 +10,9 @@ import {
   Loader2,
   Lock,
   Mail,
+  Phone,
   User,
+  UserRound,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
@@ -24,10 +26,12 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   ALSAMOS_MAIL_DOMAIN,
   AlsamosAuthError,
+  classifyIdentifier,
   isAlsamosEmail,
   LEGAL_ROUTES,
   LoginStepResult,
   MAX_ACCOUNTS_PER_IDENTITY,
+  normalizePhoneInput,
   PublicAccount,
   toIdentityEmail,
 } from '@/lib/alsamosAuth';
@@ -36,31 +40,48 @@ import { checkPassword, passwordStrengthColor } from '@/lib/passwordStrength';
 type AuthMode = 'login' | 'signup';
 type LoginStep = 'credentials' | 'chooseAccount';
 
-const emailField = z
+/** Login accepts an email, a username or a phone number. */
+const identifierField = z
+  .string()
+  .trim()
+  .min(3, 'Email, username yoki telefon raqamni kiriting')
+  .max(255)
+  .refine((value) => classifyIdentifier(value) !== 'invalid', {
+    message: 'Email, username yoki telefon raqamni to’g’ri kiriting',
+  });
+
+const loginSchema = z.object({
+  identifier: identifierField,
+  password: z.string().min(1, 'Parolni kiriting').max(128),
+});
+
+/** Signup still creates an @alsamos.com identity. */
+const signupEmailField = z
   .string()
   .trim()
   .min(3, 'Emailni kiriting')
   .max(255)
   .refine((value) => isAlsamosEmail(toIdentityEmail(value)), {
-    message: `Faqat @${ALSAMOS_MAIL_DOMAIN} manzili bilan kirish mumkin`,
+    message: `Ro’yxatdan o’tish faqat @${ALSAMOS_MAIL_DOMAIN} manzili bilan`,
   });
-
-const loginSchema = z.object({
-  email: emailField,
-  password: z.string().min(1, 'Parolni kiriting').max(128),
-});
 
 const signupSchema = z
   .object({
-    fullName: z.string().trim().min(2, 'Ism kamida 2 ta belgidan iborat bo\u2018lsin').max(100),
+    fullName: z.string().trim().min(2, 'Ism kamida 2 ta belgidan iborat bo’lsin').max(100),
     username: z
       .string()
       .trim()
-      .min(3, 'Foydalanuvchi nomi kamida 3 ta belgi')
+      .min(3, 'Username kamida 3 ta belgi')
       .max(30)
-      .regex(/^[a-z0-9_]+$/, 'Faqat kichik harflar, raqamlar va _'),
-    email: emailField,
-    password: z.string().min(10, 'Parol kamida 10 ta belgidan iborat bo\u2018lsin').max(128),
+      .regex(/^[a-z0-9_]+$/, 'Username: faqat kichik harflar, raqamlar va _'),
+    email: signupEmailField,
+    phone: z
+      .string()
+      .trim()
+      .refine((value) => normalizePhoneInput(value) !== null, {
+        message: 'Telefon raqamni +998901234567 shaklida kiriting',
+      }),
+    password: z.string().min(10, 'Parol kamida 10 ta belgidan iborat bo’lsin').max(128),
     confirmPassword: z.string(),
   })
   .refine((d) => d.password === d.confirmPassword, {
@@ -72,11 +93,17 @@ export default function AuthPage() {
   const [mode, setMode] = useState<AuthMode>('login');
   const [step, setStep] = useState<LoginStep>('credentials');
 
+  // Login
+  const [identifier, setIdentifier] = useState('');
+
+  // Signup
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [phone, setPhone] = useState('');
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
+
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const [showPassword, setShowPassword] = useState(false);
@@ -97,7 +124,9 @@ export default function AuthPage() {
   );
 
   const resetForm = () => {
+    setIdentifier('');
     setEmail('');
+    setPhone('');
     setPassword('');
     setConfirmPassword('');
     setFullName('');
@@ -108,14 +137,14 @@ export default function AuthPage() {
   };
 
   const handleLogin = async () => {
-    const parsed = loginSchema.safeParse({ email, password });
+    const parsed = loginSchema.safeParse({ identifier, password });
     if (!parsed.success) {
       toast.error(parsed.error.errors[0].message);
       return;
     }
 
     try {
-      const result = await beginLogin(toIdentityEmail(parsed.data.email), parsed.data.password);
+      const result = await beginLogin(parsed.data.identifier, parsed.data.password);
       setLoginStep(result);
       setPassword('');
 
@@ -160,6 +189,7 @@ export default function AuthPage() {
       fullName,
       username,
       email,
+      phone,
       password,
       confirmPassword,
     });
@@ -175,13 +205,14 @@ export default function AuthPage() {
     }
 
     if (!acceptedTerms) {
-      toast.error('Shartlar va Maxfiylik siyosatini qabul qiling');
+      toast.error('Foydalanish shartlari va Maxfiylik siyosatini qabul qiling');
       return;
     }
 
     const { error, needsEmailConfirmation } = await signup({
       email: toIdentityEmail(parsed.data.email),
       password: parsed.data.password,
+      phone: parsed.data.phone,
       displayName: parsed.data.fullName,
       username: parsed.data.username,
       acceptedTerms,
@@ -208,7 +239,7 @@ export default function AuthPage() {
         await handleSignup();
       }
     } catch {
-      toast.error('Kirish amalga oshmadi. Qaytadan urinib ko\u2018ring.');
+      toast.error('Amalga oshmadi. Qaytadan urinib ko’ring.');
     } finally {
       setIsSubmitting(false);
     }
@@ -314,16 +345,29 @@ export default function AuthPage() {
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  Ro\u2018yxatdan o\u2018tish
+                  Ro’yxatdan o’tish
                 </button>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                {mode === 'signup' && (
+                {mode === 'login' ? (
+                  /* Email, username or phone number */
+                  <Input
+                    type="text"
+                    placeholder="Email, username yoki telefon raqam"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    icon={<UserRound className="h-4 w-4" />}
+                    autoComplete="username"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    required
+                  />
+                ) : (
                   <>
                     <Input
                       type="text"
-                      placeholder="To\u2018liq ism"
+                      placeholder="To’liq ism"
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       icon={<User className="h-4 w-4" />}
@@ -340,26 +384,35 @@ export default function AuthPage() {
                       }
                       icon={<AtSign className="h-4 w-4" />}
                       autoComplete="username"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      required
+                    />
+
+                    <Input
+                      type="email"
+                      placeholder={`ism@${ALSAMOS_MAIL_DOMAIN}`}
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      icon={<Mail className="h-4 w-4" />}
+                      autoComplete="email"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      required
+                    />
+
+                    <Input
+                      type="tel"
+                      placeholder="+998 90 123 45 67"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      icon={<Phone className="h-4 w-4" />}
+                      autoComplete="tel"
+                      inputMode="tel"
                       required
                     />
                   </>
                 )}
-
-                {/* Identity email - @alsamos.com only */}
-                <div className="space-y-1">
-                  <Input
-                    type="email"
-                    placeholder={`ism@${ALSAMOS_MAIL_DOMAIN}`}
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    icon={<Mail className="h-4 w-4" />}
-                    autoComplete="email"
-                    required
-                  />
-                  <p className="pl-1 text-xs text-muted-foreground">
-                    Kirish faqat @{ALSAMOS_MAIL_DOMAIN} manzili bilan.
-                  </p>
-                </div>
 
                 {/* Password */}
                 <div className="relative">
@@ -376,7 +429,7 @@ export default function AuthPage() {
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    aria-label="Parolni ko\u2018rsatish"
+                    aria-label="Parolni ko’rsatish"
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -413,7 +466,7 @@ export default function AuthPage() {
                         type="button"
                         onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                        aria-label="Parolni ko\u2018rsatish"
+                        aria-label="Parolni ko’rsatish"
                       >
                         {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
@@ -434,7 +487,7 @@ export default function AuthPage() {
                         <Link className="text-primary hover:underline" to={LEGAL_ROUTES.privacy}>
                           Maxfiylik siyosati
                         </Link>
-                        ni o\u2018qidim va qabul qilaman. Bitta email bilan{' '}
+                        ni o’qidim va qabul qilaman. Bitta email bilan{' '}
                         {MAX_ACCOUNTS_PER_IDENTITY} tagacha akkaunt ochish mumkin.
                       </span>
                     </label>
