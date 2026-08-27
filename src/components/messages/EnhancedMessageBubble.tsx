@@ -1,29 +1,26 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Check, CheckCheck, Plus, Clock, AlertCircle, ReplyIcon, Forward, Pin, Square, CheckSquare } from 'lucide-react';
+import { Check, CheckCheck, Clock, AlertCircle, ReplyIcon, Forward, Pin, Square, CheckSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MessageAttachment } from '@/components/MessageAttachment';
 import { VoiceMessagePlayer } from '@/components/VoiceMessagePlayer';
-import { EmojiPicker } from '@/components/EmojiPicker';
 import { AnimatedEmoji } from '@/components/emoji/AnimatedEmoji';
 
 import { TelegramStyleContextMenu } from './TelegramStyleContextMenu';
+import { TelegramReactions, ReactionGroup } from './TelegramReactions';
 import { LocationMessage } from './LocationMessage';
 import { GroupReadReceipts } from './GroupReadReceipts';
 import { MessageContent } from './MessageContent';
 import { SharedPostPreview } from './SharedPostPreview';
 import { StoryReplyPreview } from './StoryReplyPreview';
 import { CallHistoryMessage, CallHistoryData } from './CallHistoryMessage';
+import { getEmojiOnlyInfo } from '@/lib/emojiOnly';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useUserSettings } from '@/hooks/useUserSettings';
 import { format } from 'date-fns';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 
 interface Message {
   id: string;
@@ -54,13 +51,6 @@ interface Message {
     sender_name: string;
     original_content: string;
   };
-}
-
-interface ReactionGroup {
-  emoji: string;
-  count: number;
-  users: string[];
-  hasReacted: boolean;
 }
 
 import { MediaTrack } from '@/contexts/AudioPlayerContext';
@@ -297,6 +287,8 @@ export function EnhancedMessageBubble({
   const addReaction = async (emoji: string) => {
     if (!user) return;
     lightTap();
+    const already = reactions.find(r => r.emoji === emoji && r.hasReacted);
+    if (already) return;
     await supabase
       .from('message_reactions')
       .insert({
@@ -374,75 +366,163 @@ export function EnhancedMessageBubble({
     ? (message.read_at ? `Read at ${format(new Date(message.read_at), 'HH:mm')}` : 'Read')
     : null;
 
-  // Message bubble content renderer (used both inline and in context menu preview)
-  const renderBubbleContent = (isPreview = false) => (
+  const senderProfilePath = message.sender?.username
+    ? `/user/${message.sender.username}`
+    : message.sender?.id
+      ? `/user/${message.sender.id}`
+      : null;
+
+  const senderLabel = message.sender?.display_name || message.sender?.username || 'Foydalanuvchi';
+
+  /**
+   * Telegram renders emoji-only messages without a bubble, scaled by count:
+   * 1 emoji -> very large, 2 -> large, 3 -> medium, 4+ -> normal text bubble.
+   */
+  const emojiOnly =
+    !message.is_deleted &&
+    !message.media_url &&
+    !message.story_id &&
+    !message.shared_post_id &&
+    !isLocationMessage &&
+    !isCallHistoryMessage &&
+    message.content
+      ? getEmojiOnlyInfo(message.content)
+      : null;
+
+  const renderStatusRow = (transparent = false) => (
     <div
       className={cn(
-        "rounded-2xl px-4 py-2.5 relative",
-        isMine 
-          ? "bg-primary text-primary-foreground rounded-br-md" 
-          : "bg-card text-card-foreground rounded-bl-md border border-border",
-        message.status === 'failed' && "bg-destructive/20 border-destructive"
+        'mt-1 flex items-center justify-end gap-1.5',
+        transparent
+          ? 'text-muted-foreground'
+          : isMine
+            ? 'text-primary-foreground/70'
+            : 'text-muted-foreground'
       )}
     >
-      {message.forwarded_from && (
-        <div className="flex items-center gap-1 text-xs opacity-70 mb-1">
-          <Forward className="h-3 w-3" />
-          <span>Forwarded from {message.forwarded_from.sender_name}</span>
-        </div>
-      )}
-      {(isGroup || showSender) && !isMine && message.sender && (
-        <p className="text-xs font-medium text-primary mb-1">
-          {message.sender.display_name || message.sender.username}
-        </p>
-      )}
-      {message.is_deleted ? (
-        <p className="text-sm italic opacity-50">Message deleted</p>
-      ) : isLocationMessage && locationData ? (
-        <LocationMessage latitude={locationData.latitude} longitude={locationData.longitude} address={locationData.address} isMine={isMine} senderName={message.sender?.display_name || undefined} />
-      ) : (
-        <>
-          {message.story_id && <StoryReplyPreview storyId={message.story_id} isMine={isMine} />}
-          {message.shared_post_id && <SharedPostPreview postId={message.shared_post_id} isMine={isMine} />}
-          {isVoiceMessage ? (
-            <VoiceMessagePlayer url={message.media_url!} isMine={isMine} autoPlay={false} messageId={message.id} senderName={message.sender?.display_name || message.sender?.username || undefined} allMediaTracks={isPreview ? [] : allMediaTracks} />
+      <span className="text-[10px]">{formatTime(message.created_at)}</span>
+      {message.is_edited && <span className="text-[10px]">(edited)</span>}
+      {isMine && (
+        <span className="inline-flex items-center">
+          {message.status === 'sending' ? (
+            <Clock className="h-3 w-3 animate-pulse" />
+          ) : message.status === 'failed' ? (
+            <AlertCircle className="h-3 w-3 text-destructive" />
+          ) : message.status === 'read' || message.is_read ? (
+            <CheckCheck className="h-3.5 w-3.5 text-[#0095F6]" />
+          ) : message.status === 'delivered' ? (
+            <CheckCheck className="h-3.5 w-3.5" />
           ) : (
-            <>
-              {message.content && !message.content.startsWith('[') && !message.shared_post_id && (
-                <MessageContent content={message.content} isMine={isMine} />
-              )}
-              {message.media_url && message.media_type && (
-                <div className={cn("mt-2", !message.content && "-m-1")}>
-                  <MessageAttachment url={message.media_url} type={message.media_type as 'image' | 'video' | 'audio' | 'document'} isMine={isMine} autoPlay={false} />
-                </div>
-              )}
-            </>
+            <Check className="h-3 w-3" />
           )}
-        </>
+        </span>
       )}
-      <div className={cn("flex items-center justify-end gap-1.5 mt-1", isMine ? "text-primary-foreground/70" : "text-muted-foreground")}>
-        <span className="text-[10px]">{formatTime(message.created_at)}</span>
-        {message.is_edited && <span className="text-[10px]">(edited)</span>}
-        {isMine && (
-          <span className="inline-flex items-center">
-            {message.status === 'sending' ? (
-              <Clock className="h-3 w-3 animate-pulse" />
-            ) : message.status === 'failed' ? (
-              <AlertCircle className="h-3 w-3 text-destructive" />
-            ) : message.status === 'read' || message.is_read ? (
-              <CheckCheck className="h-3.5 w-3.5 text-[#0095F6]" />
-            ) : message.status === 'delivered' ? (
-              <CheckCheck className="h-3.5 w-3.5" />
-            ) : (
-              <Check className="h-3 w-3" />
-            )}
-          </span>
-        )}
-      </div>
     </div>
   );
 
-  // Render call history message
+  // Message bubble content renderer (used both inline and in context menu preview)
+  const renderBubbleContent = (isPreview = false) => {
+    // Bubble-less, Telegram-sized emoji message
+    if (emojiOnly) {
+      return (
+        <div className={cn('flex flex-col', isMine ? 'items-end' : 'items-start')}>
+          <div className="flex items-end gap-1">
+            {emojiOnly.emojis.map((emoji, index) => (
+              <AnimatedEmoji
+                key={`${emoji}-${index}`}
+                emoji={emoji}
+                size={emojiOnly.size}
+                className="select-none"
+              />
+            ))}
+          </div>
+          {renderStatusRow(true)}
+        </div>
+      );
+    }
+
+    return (
+      <div
+        className={cn(
+          'relative min-w-0 max-w-full overflow-hidden rounded-2xl px-3.5 py-2',
+          isMine
+            ? 'bg-primary text-primary-foreground rounded-br-md'
+            : 'bg-card text-card-foreground rounded-bl-md border border-border',
+          message.status === 'failed' && 'bg-destructive/20 border-destructive'
+        )}
+        style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
+      >
+        {message.forwarded_from && (
+          <div className="mb-1 flex items-center gap-1 text-xs opacity-70">
+            <Forward className="h-3 w-3 shrink-0" />
+            <span className="truncate">Forwarded from {message.forwarded_from.sender_name}</span>
+          </div>
+        )}
+
+        {(isGroup || showSender) && !isMine && message.sender && (
+          senderProfilePath && !isPreview ? (
+            <Link
+              to={senderProfilePath}
+              onClick={(e) => e.stopPropagation()}
+              className="mb-1 block truncate text-xs font-semibold text-primary hover:underline"
+            >
+              {senderLabel}
+            </Link>
+          ) : (
+            <p className="mb-1 truncate text-xs font-semibold text-primary">{senderLabel}</p>
+          )
+        )}
+
+        {message.is_deleted ? (
+          <p className="text-sm italic opacity-50">Message deleted</p>
+        ) : isLocationMessage && locationData ? (
+          <LocationMessage
+            latitude={locationData.latitude}
+            longitude={locationData.longitude}
+            address={locationData.address}
+            isMine={isMine}
+            senderName={message.sender?.display_name || undefined}
+          />
+        ) : (
+          <>
+            {message.story_id && <StoryReplyPreview storyId={message.story_id} isMine={isMine} />}
+            {message.shared_post_id && <SharedPostPreview postId={message.shared_post_id} isMine={isMine} />}
+            {isVoiceMessage ? (
+              <VoiceMessagePlayer
+                url={message.media_url!}
+                isMine={isMine}
+                autoPlay={false}
+                messageId={message.id}
+                senderName={message.sender?.display_name || message.sender?.username || undefined}
+                allMediaTracks={isPreview ? [] : allMediaTracks}
+              />
+            ) : (
+              <>
+                {message.content && !message.content.startsWith('[') && !message.shared_post_id && (
+                  <MessageContent content={message.content} isMine={isMine} />
+                )}
+                {message.media_url && message.media_type && (
+                  <div className={cn('min-w-0 max-w-full', message.content ? 'mt-2' : '-mx-1.5 -mt-0.5')}>
+                    <MessageAttachment
+                      url={message.media_url}
+                      type={message.media_type as 'image' | 'video' | 'audio' | 'document'}
+                      isMine={isMine}
+                      autoPlay={false}
+                      senderName={message.sender?.display_name || message.sender?.username || undefined}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        {renderStatusRow()}
+      </div>
+    );
+  };
+
+  // Render call history message (side-aligned by caller inside CallHistoryMessage)
   if (isCallHistoryMessage && callHistoryData) {
     const callIsMine = callHistoryData.caller_id === user?.id;
     return (
@@ -484,7 +564,7 @@ export function EnhancedMessageBubble({
       <div 
         ref={bubbleRef}
         className={cn(
-          "flex group relative transition-all duration-200 -mx-2 px-2 py-0.5 rounded-lg",
+          "flex group relative transition-all duration-200 -mx-2 px-2 py-0.5 rounded-lg overflow-hidden",
           isMine ? "justify-end" : "justify-start",
           isSelectionMode && "cursor-pointer hover:bg-primary/5",
           isSelected && "bg-primary/10"
@@ -529,34 +609,50 @@ export function EnhancedMessageBubble({
         {/* Reply swipe indicators */}
         {!isMine && (
           <div className={cn("absolute left-0 top-1/2 -translate-y-1/2 flex items-center justify-center transition-opacity", isReadyToReply ? "opacity-100" : "opacity-50")} style={{ width: swipeOffset, opacity: swipeOffset > 10 ? Math.min(swipeOffset / swipeThreshold, 1) : 0 }}>
-            <div className={cn("h-8 w-8 rounded-full bg-primary flex items-center justify-center transition-transform", isReadyToReply && "scale-110")}>
-              <ReplyIcon className="h-4 w-4 text-primary-foreground" />
+            <div className={cn("h-8 w-8 rounded-full bg-muted flex items-center justify-center transition-transform", isReadyToReply && "scale-110")}>
+              <ReplyIcon className="h-4 w-4 text-foreground" />
             </div>
           </div>
         )}
         {isMine && (
           <div className={cn("absolute right-0 top-1/2 -translate-y-1/2 flex items-center justify-center transition-opacity", isReadyToReply ? "opacity-100" : "opacity-50")} style={{ width: swipeOffset, opacity: swipeOffset > 10 ? Math.min(swipeOffset / swipeThreshold, 1) : 0 }}>
-            <div className={cn("h-8 w-8 rounded-full bg-primary flex items-center justify-center transition-transform", isReadyToReply && "scale-110")}>
-              <ReplyIcon className="h-4 w-4 text-primary-foreground" />
+            <div className={cn("h-8 w-8 rounded-full bg-muted flex items-center justify-center transition-transform", isReadyToReply && "scale-110")}>
+              <ReplyIcon className="h-4 w-4 text-foreground" />
             </div>
           </div>
         )}
 
         <div 
-          className="flex items-end gap-2 max-w-[85%] md:max-w-[75%] transition-transform"
+          className="flex min-w-0 max-w-[85%] items-end gap-2 transition-transform md:max-w-[75%]"
           style={{ transform: isMine ? `translateX(-${swipeOffset}px)` : `translateX(${swipeOffset}px)` }}
         >
           {!isMine && showAvatar && (
-            <Avatar className="h-8 w-8 flex-shrink-0">
-              <AvatarImage src={message.sender?.avatar_url || ''} />
-              <AvatarFallback className="text-xs bg-primary text-primary-foreground">
-                {message.sender?.display_name?.[0] || message.sender?.username?.[0] || 'U'}
-              </AvatarFallback>
-            </Avatar>
+            senderProfilePath ? (
+              <Link
+                to={senderProfilePath}
+                onClick={(e) => e.stopPropagation()}
+                className="flex-shrink-0"
+                aria-label={senderLabel}
+              >
+                <Avatar className="h-8 w-8 transition-transform hover:scale-105">
+                  <AvatarImage src={message.sender?.avatar_url || ''} />
+                  <AvatarFallback className="text-xs bg-primary text-primary-foreground">
+                    {message.sender?.display_name?.[0] || message.sender?.username?.[0] || 'U'}
+                  </AvatarFallback>
+                </Avatar>
+              </Link>
+            ) : (
+              <Avatar className="h-8 w-8 flex-shrink-0">
+                <AvatarImage src={message.sender?.avatar_url || ''} />
+                <AvatarFallback className="text-xs bg-primary text-primary-foreground">
+                  {message.sender?.display_name?.[0] || message.sender?.username?.[0] || 'U'}
+                </AvatarFallback>
+              </Avatar>
+            )
           )}
           {!isMine && !showAvatar && <div className="w-8 flex-shrink-0" />}
           
-          <div className="flex flex-col">
+          <div className="flex min-w-0 max-w-full flex-col">
             {renderBubbleContent()}
             
             {/* Group Read Receipts */}
@@ -564,34 +660,13 @@ export function EnhancedMessageBubble({
               <GroupReadReceipts messageId={message.id} senderId={message.sender_id} isMine={isMine} />
             )}
             
-            {/* Reactions */}
-            {(reactions.length > 0 || true) && (
-              <div className={cn("flex flex-wrap gap-1 mt-1", isMine ? "justify-end" : "justify-start")}>
-                {reactions.map((reaction) => (
-                  <button
-                    key={reaction.emoji}
-                    onClick={() => toggleReaction(reaction.emoji)}
-                    className={cn(
-                      "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-all active:scale-95",
-                      reaction.hasReacted
-                        ? "bg-primary/20 text-primary border border-primary/30"
-                        : "bg-muted hover:bg-accent border border-transparent"
-                    )}
-                  >
-                    <AnimatedEmoji emoji={reaction.emoji} size={16} />
-                    <span className="font-medium">{reaction.count}</span>
-                  </button>
-                ))}
-                <EmojiPicker
-                  onSelect={addReaction}
-                  trigger={
-                    <button className="opacity-0 group-hover:opacity-100 md:transition-opacity inline-flex items-center justify-center h-6 w-6 rounded-full hover:bg-accent active:scale-95">
-                      <Plus className="h-3 w-3 text-muted-foreground" />
-                    </button>
-                  }
-                />
-              </div>
-            )}
+            {/* Telegram-style reactions */}
+            <TelegramReactions
+              reactions={reactions}
+              isMine={isMine}
+              onToggle={toggleReaction}
+              onAdd={addReaction}
+            />
           </div>
         </div>
       </div>
