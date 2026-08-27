@@ -10,6 +10,7 @@ import { AudioPlayerProvider } from "@/contexts/AudioPlayerContext";
 import { VideoPlayerProvider } from "@/contexts/VideoPlayerContext";
 import { ThemeProvider } from "next-themes";
 import { PushNotificationProvider } from "@/components/PushNotificationProvider";
+import { ChatWallpaperProvider } from "@/components/chat/ChatWallpaperProvider";
 
 // Pages
 import AuthPage from "./pages/AuthPage";
@@ -24,6 +25,7 @@ import ProfilePage from "./pages/ProfilePage";
 import UserProfilePage from "./pages/UserProfilePage";
 import SettingsPage from "./pages/SettingsPage";
 import SecurityPage from "./pages/SecurityPage";
+import ChatWallpaperPage from "./pages/ChatWallpaperPage";
 import PaymentSettingsPage from "./pages/PaymentSettingsPage";
 import CreatePage from "./pages/CreatePage";
 import MapPage from "./pages/MapPage";
@@ -121,6 +123,7 @@ function AppRoutes() {
         <Route path="/user/:username" element={<UserProfilePage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/security" element={<SecurityPage />} />
+        <Route path="/settings/chat-wallpaper" element={<ChatWallpaperPage />} />
         <Route path="/payment" element={<PaymentSettingsPage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/story-archive" element={<StoryArchivePage />} />
@@ -150,6 +153,8 @@ function AppWithGlobalCall() {
         <PushNotificationProvider>
           <OnlinePresenceProvider>
             <GlobalCallProvider>
+              {/* Tanlangan chat fonini chat oynasiga qo'llaydi */}
+              <ChatWallpaperProvider />
               <AppRoutes />
             </GlobalCallProvider>
           </OnlinePresenceProvider>
