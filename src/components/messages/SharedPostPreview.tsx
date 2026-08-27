@@ -34,6 +34,8 @@ export function SharedPostPreview({ postId, isMine }: SharedPostPreviewProps) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function fetchPost() {
       const { data, error } = await supabase
         .from('posts')
@@ -44,21 +46,24 @@ export function SharedPostPreview({ postId, isMine }: SharedPostPreviewProps) {
         .eq('id', postId)
         .single();
 
-      if (!error && data) {
-        setPost(data as SharedPost);
-      }
+      if (cancelled) return;
+      if (!error && data) setPost(data as SharedPost);
       setIsLoading(false);
     }
 
     fetchPost();
+    return () => {
+      cancelled = true;
+    };
   }, [postId]);
+
+  const surface = isMine
+    ? 'bg-primary-foreground/10 border-primary-foreground/20'
+    : 'bg-muted/50 border-border';
 
   if (isLoading) {
     return (
-      <div className={cn(
-        "rounded-xl overflow-hidden border",
-        isMine ? "bg-white/10 border-white/20" : "bg-muted/50 border-border"
-      )}>
+      <div className={cn('overflow-hidden rounded-2xl border', surface)}>
         <Skeleton className="h-32 w-full" />
       </div>
     );
@@ -66,104 +71,116 @@ export function SharedPostPreview({ postId, isMine }: SharedPostPreviewProps) {
 
   if (!post) {
     return (
-      <div className={cn(
-        "rounded-xl p-3 text-center text-sm",
-        isMine ? "bg-white/10 text-white/60" : "bg-muted/50 text-muted-foreground"
-      )}>
-        Post not available
+      <div
+        className={cn(
+          'rounded-2xl border p-3 text-center text-sm',
+          surface,
+          isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'
+        )}
+      >
+        Post mavjud emas
       </div>
     );
   }
 
-  const hasMedia = post.media_urls && post.media_urls.length > 0;
+  const mediaUrl = post.media_urls?.[0];
+  const hasMedia = Boolean(mediaUrl);
   const isVideo = post.media_type === 'video' || post.media_type === 'reel';
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isVideo) {
-      navigate(`/videos?v=${post.id}`);
-    } else {
-      navigate(`/home?post=${post.id}`);
-    }
+    navigate(isVideo ? `/videos?v=${post.id}` : `/home?post=${post.id}`);
   };
 
   return (
     <div
       onClick={handleClick}
+      role="link"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          navigate(isVideo ? `/videos?v=${post.id}` : `/home?post=${post.id}`);
+        }
+      }}
       className={cn(
-        "rounded-xl overflow-hidden border cursor-pointer transition-transform hover:scale-[1.02]",
-        isMine ? "bg-white/10 border-white/20" : "bg-muted/50 border-border"
+        'cursor-pointer overflow-hidden rounded-2xl border transition-colors',
+        surface,
+        isMine ? 'hover:bg-primary-foreground/15' : 'hover:bg-muted/70'
       )}
     >
-      {/* Media Preview */}
+      {/* Media ko'rinishi */}
       {hasMedia && (
         <MediaFrame variant="preview">
           {isVideo ? (
             <>
               <video
-                src={post.media_urls![0]}
-                className="w-full h-full object-contain"
+                src={mediaUrl}
+                className="h-full w-full object-contain"
                 muted
                 playsInline
                 preload="metadata"
               />
               <div className="absolute inset-0 flex items-center justify-center">
-                <div className="bg-black/50 rounded-full p-2">
-                  <Play className="h-6 w-6 text-white fill-white" />
-                </div>
+                <span className="rounded-full bg-black/50 p-2 backdrop-blur-sm">
+                  <Play className="h-6 w-6 fill-white text-white" />
+                </span>
               </div>
+              <span className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">
+                Video
+              </span>
             </>
           ) : (
-            <img
-              src={post.media_urls![0]}
-              alt=""
-              className="w-full h-full object-contain"
-            />
+            <img src={mediaUrl} alt="" loading="lazy" className="h-full w-full object-contain" />
           )}
         </MediaFrame>
       )}
 
-      {/* Post Info */}
-      <div className="p-3 space-y-2">
-        {/* Author */}
-        <div className="flex items-center gap-2">
+      {/* Post ma'lumotlari */}
+      <div className="space-y-2 p-3">
+        <div className="flex min-w-0 items-center gap-2">
           <Avatar className="h-6 w-6">
             <AvatarImage src={post.profile?.avatar_url || ''} />
             <AvatarFallback className="text-xs">
               {post.profile?.display_name?.[0] || post.profile?.username?.[0] || 'U'}
             </AvatarFallback>
           </Avatar>
-          <span className={cn(
-            "text-sm font-medium",
-            isMine ? "text-white" : "text-foreground"
-          )}>
-            {post.profile?.display_name || post.profile?.username}
+          <span
+            className={cn(
+              'truncate text-sm font-medium',
+              isMine ? 'text-primary-foreground' : 'text-foreground'
+            )}
+          >
+            {post.profile?.display_name || post.profile?.username || "Noma'lum"}
           </span>
         </div>
 
-        {/* Content */}
         {post.content && (
-          <div className={cn(
-            "text-sm line-clamp-2",
-            isMine ? "text-white/80" : "text-muted-foreground"
-          )}>
+          <div
+            className={cn(
+              'line-clamp-2 break-words text-sm',
+              isMine ? 'text-primary-foreground/80' : 'text-muted-foreground'
+            )}
+            style={{ overflowWrap: 'anywhere' }}
+          >
             <RichTextContent content={post.content} />
           </div>
         )}
 
-        {/* Stats */}
-        <div className={cn(
-          "flex items-center gap-4 text-xs",
-          isMine ? "text-white/60" : "text-muted-foreground"
-        )}>
-          <div className="flex items-center gap-1">
+        <div
+          className={cn(
+            'flex items-center gap-4 text-xs',
+            isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'
+          )}
+        >
+          <span className="flex items-center gap-1">
             <Heart className="h-3.5 w-3.5" />
-            <span>{post.likes_count || 0}</span>
-          </div>
-          <div className="flex items-center gap-1">
+            <span className="tabular-nums">{post.likes_count || 0}</span>
+          </span>
+          <span className="flex items-center gap-1">
             <MessageCircle className="h-3.5 w-3.5" />
-            <span>{post.comments_count || 0}</span>
-          </div>
+            <span className="tabular-nums">{post.comments_count || 0}</span>
+          </span>
         </div>
       </div>
     </div>
