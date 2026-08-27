@@ -8,7 +8,7 @@ import { useUserSettings } from '@/hooks/useUserSettings';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { supabase } from '@/integrations/supabase/client';
 import { uploadMedia } from '@/lib/mediaUpload';
-import { User, Bell, Shield, Palette, Globe, Smartphone, Key, Eye, Moon, Sun, LogOut, ChevronRight, Wifi, Trash2, Monitor, Laptop, CheckCircle2, XCircle, Loader2, Save, BadgeCheck, Wallet, Heart, MessageCircle, UserPlus, AtSign, Clock, BarChart3 } from 'lucide-react';
+import { User, Bell, Shield, Palette, Globe, Smartphone, Key, Eye, Moon, Sun, LogOut, ChevronRight, Wifi, Trash2, Monitor, Laptop, CheckCircle2, XCircle, Loader2, Save, BadgeCheck, Wallet, Heart, MessageCircle, UserPlus, AtSign, Clock, BarChart3, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
@@ -32,6 +32,7 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import { VerificationRequestDialog } from '@/components/profile/VerificationRequestDialog';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+import { ChatWallpaperEditor } from '@/components/settings/ChatWallpaperEditor';
 import { PROFILE_PUBLIC_COLUMNS } from '@/lib/profileFields';
 
 interface Profile {
@@ -285,6 +286,12 @@ export default function SettingsPage() {
         { value: 'notifications', label: 'Bildirishnomalar', icon: Bell, tint: 'text-violet-500 bg-violet-500/10' },
       ],
     },
+    {
+      title: 'Chat',
+      items: [
+        { value: 'chat-wallpaper', label: 'Chat foni', icon: ImageIcon, tint: 'text-emerald-500 bg-emerald-500/10' },
+      ],
+    },
   ];
 
   const activeLabel = sectionGroups
@@ -458,26 +465,26 @@ export default function SettingsPage() {
                       <SelectValue placeholder="Davlatingizni tanlang" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Uzbekistan">🇺🇿 O'zbekiston</SelectItem>
-                      <SelectItem value="Russia">🇷🇺 Rossiya</SelectItem>
-                      <SelectItem value="Kazakhstan">🇰🇿 Qozog'iston</SelectItem>
-                      <SelectItem value="Kyrgyzstan">🇰🇬 Qirg'iziston</SelectItem>
-                      <SelectItem value="Tajikistan">🇹🇯 Tojikiston</SelectItem>
-                      <SelectItem value="Turkmenistan">🇹🇲 Turkmaniston</SelectItem>
-                      <SelectItem value="Turkey">🇹🇷 Turkiya</SelectItem>
-                      <SelectItem value="United States">🇺🇸 AQSh</SelectItem>
-                      <SelectItem value="United Kingdom">🇬🇧 Buyuk Britaniya</SelectItem>
-                      <SelectItem value="Germany">🇩🇪 Germaniya</SelectItem>
-                      <SelectItem value="France">🇫🇷 Fransiya</SelectItem>
-                      <SelectItem value="Italy">🇮🇹 Italiya</SelectItem>
-                      <SelectItem value="Spain">🇪🇸 Ispaniya</SelectItem>
-                      <SelectItem value="South Korea">🇰🇷 Janubiy Koreya</SelectItem>
-                      <SelectItem value="Japan">🇯🇵 Yaponiya</SelectItem>
-                      <SelectItem value="China">🇨🇳 Xitoy</SelectItem>
-                      <SelectItem value="India">🇮🇳 Hindiston</SelectItem>
-                      <SelectItem value="UAE">🇦🇪 BAA</SelectItem>
-                      <SelectItem value="Saudi Arabia">🇸🇦 Saudiya Arabistoni</SelectItem>
-                      <SelectItem value="Other">🌍 Boshqa</SelectItem>
+                      <SelectItem value="Uzbekistan">{'\u{1F1FA}\u{1F1FF}'} O'zbekiston</SelectItem>
+                      <SelectItem value="Russia">{'\u{1F1F7}\u{1F1FA}'} Rossiya</SelectItem>
+                      <SelectItem value="Kazakhstan">{'\u{1F1F0}\u{1F1FF}'} Qozog'iston</SelectItem>
+                      <SelectItem value="Kyrgyzstan">{'\u{1F1F0}\u{1F1EC}'} Qirg'iziston</SelectItem>
+                      <SelectItem value="Tajikistan">{'\u{1F1F9}\u{1F1EF}'} Tojikiston</SelectItem>
+                      <SelectItem value="Turkmenistan">{'\u{1F1F9}\u{1F1F2}'} Turkmaniston</SelectItem>
+                      <SelectItem value="Turkey">{'\u{1F1F9}\u{1F1F7}'} Turkiya</SelectItem>
+                      <SelectItem value="United States">{'\u{1F1FA}\u{1F1F8}'} AQSh</SelectItem>
+                      <SelectItem value="United Kingdom">{'\u{1F1EC}\u{1F1E7}'} Buyuk Britaniya</SelectItem>
+                      <SelectItem value="Germany">{'\u{1F1E9}\u{1F1EA}'} Germaniya</SelectItem>
+                      <SelectItem value="France">{'\u{1F1EB}\u{1F1F7}'} Fransiya</SelectItem>
+                      <SelectItem value="Italy">{'\u{1F1EE}\u{1F1F9}'} Italiya</SelectItem>
+                      <SelectItem value="Spain">{'\u{1F1EA}\u{1F1F8}'} Ispaniya</SelectItem>
+                      <SelectItem value="South Korea">{'\u{1F1F0}\u{1F1F7}'} Janubiy Koreya</SelectItem>
+                      <SelectItem value="Japan">{'\u{1F1EF}\u{1F1F5}'} Yaponiya</SelectItem>
+                      <SelectItem value="China">{'\u{1F1E8}\u{1F1F3}'} Xitoy</SelectItem>
+                      <SelectItem value="India">{'\u{1F1EE}\u{1F1F3}'} Hindiston</SelectItem>
+                      <SelectItem value="UAE">{'\u{1F1E6}\u{1F1EA}'} BAA</SelectItem>
+                      <SelectItem value="Saudi Arabia">{'\u{1F1F8}\u{1F1E6}'} Saudiya Arabistoni</SelectItem>
+                      <SelectItem value="Other">{'\u{1F30D}'} Boshqa</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -550,6 +557,24 @@ export default function SettingsPage() {
               <Button variant="outline" onClick={() => navigate('/activity')}>
                 <Clock className="h-4 w-4 mr-2" />
                 Ko'rish
+              </Button>
+            </div>
+          </div>
+
+          {/* Chat foni (tez kirish) */}
+          <div className="bg-card rounded-xl border border-border p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <ImageIcon className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold">Chat foni</h3>
+                  <p className="text-sm text-muted-foreground">Chat oynasi uchun fon rasmi yoki gradient tanlang</p>
+                </div>
+              </div>
+              <Button variant="outline" onClick={() => setSection('chat-wallpaper')}>
+                Tanlash
               </Button>
             </div>
           </div>
@@ -711,6 +736,19 @@ export default function SettingsPage() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+        </TabsContent>
+
+        {/* Chat foni */}
+        <TabsContent value="chat-wallpaper" className="space-y-6">
+          <div className="bg-card rounded-xl border border-border p-4 md:p-6">
+            <div className="mb-4">
+              <h2 className="font-semibold">Chat foni</h2>
+              <p className="text-sm text-muted-foreground">
+                Tayyor fonlardan tanlang yoki o'z rasmingizni yuklang. Tanlov shu qurilmada saqlanadi va barcha chatlarga qo'llanadi.
+              </p>
+            </div>
+            <ChatWallpaperEditor />
+          </div>
         </TabsContent>
 
         {/* Privacy Tab */}
@@ -878,8 +916,8 @@ export default function SettingsPage() {
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            {session.os_name && `${session.os_name} • `}
-                            {session.browser_name && `${session.browser_name} • `}
+                            {session.os_name && `${session.os_name} \u2022 `}
+                            {session.browser_name && `${session.browser_name} \u2022 `}
                             {session.ip_address || 'Unknown IP'}
                           </p>
                           <p className="text-xs text-muted-foreground">
@@ -1078,7 +1116,7 @@ export default function SettingsPage() {
       {/* Footer */}
       <div className="text-center text-xs text-muted-foreground pt-8">
         <p>Alsamos Social v1.0.0</p>
-        <p className="mt-1">© 2024 Alsamos. All rights reserved.</p>
+        <p className="mt-1">{'\u00A9'} 2024 Alsamos. All rights reserved.</p>
       </div>
 
       {/* Logout Session Dialog */}
