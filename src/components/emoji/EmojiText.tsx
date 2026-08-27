@@ -1,61 +1,40 @@
-import { useMemo } from 'react';
-import { cn } from '@/lib/utils';
-import { AnimatedEmoji } from '@/components/emoji/AnimatedEmoji';
+import { Fragment, useMemo } from 'react';
 import { splitInlineEmoji, getEmojiOnlyInfo } from '@/lib/emojiOnly';
+import { TelegramEmoji } from '@/components/emoji/TelegramEmoji';
+import { cn } from '@/lib/utils';
 
 interface EmojiTextProps {
-  /** Ko'rsatiladigan oddiy matn (emojilar rasmga aylantiriladi). */
-  text: string | null | undefined;
-  className?: string;
-  /** Matn ichidagi emoji o'lchami (px). */
+  /** Ko'rsatiladigan matn */
+  text: string;
+  /** Oddiy matn ichidagi emoji o'lchami */
   size?: number;
-  /** Animatsiyali (Telegram/Noto) emojilar. */
+  /** Animatsiyani yoqish/o'chirish */
   animated?: boolean;
-  /**
-   * Matn faqat emojidan iborat bo'lsa, Telegramdek kattalashtirish
-   * (1 ta -> 64, 2 ta -> 48, 3 ta -> 40).
-   */
-  enlargeEmojiOnly?: boolean;
+  className?: string;
 }
 
 /**
- * Platformadagi barcha matnlar uchun umumiy emoji renderi.
+ * Platforma bo'ylab ishlatiladigan emoji renderer.
  *
- * Postlar, izohlar, bio, kanal/guruh nomlari va boshqa joylarda ishlatiladi.
- * Aktivlar `src/lib/emojiAssets.ts` orqali: lokal Telegram to'plami ->
- * Noto animated -> Apple static -> tizim emojisi.
+ * Matn ichidagi barcha emojilar Telegramdek animatsion ko'rinishda
+ * chiziladi (`.tgs` bo'lsa haqiqiy Telegram animatsiyasi). Faqat emojidan
+ * iborat qisqa matnlar Telegramdagidek kattalashadi: 1 ta → eng katta,
+ * 3 tagacha → kichrayib boradi.
  */
-export function EmojiText({
-  text,
-  className,
-  size = 19,
-  animated = true,
-  enlargeEmojiOnly = false,
-}: EmojiTextProps) {
-  const value = text ?? '';
+export function EmojiText({ text, size = 18, animated = true, className }: EmojiTextProps) {
+  const emojiOnly = useMemo(() => getEmojiOnlyInfo(text), [text]);
+  const parts = useMemo(() => splitInlineEmoji(text), [text]);
 
-  const emojiOnly = useMemo(
-    () => (enlargeEmojiOnly ? getEmojiOnlyInfo(value) : null),
-    [value, enlargeEmojiOnly]
-  );
-
-  const parts = useMemo(() => splitInlineEmoji(value), [value]);
-
-  if (!value) return null;
-
-  // Faqat emoji: kattalashtirilgan ko'rinish
+  // Faqat emojidan iborat xabar — katta ko'rinish
   if (emojiOnly) {
-    const big =
-      emojiOnly.emojis.length === 1 ? 64 : emojiOnly.emojis.length === 2 ? 48 : 40;
     return (
-      <span className={cn('inline-flex items-end gap-0.5', className)}>
+      <span className={cn('inline-flex flex-wrap items-center gap-1', className)}>
         {emojiOnly.emojis.map((emoji, index) => (
-          <AnimatedEmoji
+          <TelegramEmoji
             key={`${emoji}-${index}`}
             emoji={emoji}
-            size={big}
+            size={emojiOnly.size}
             animated={animated}
-            title={emoji}
           />
         ))}
       </span>
@@ -66,18 +45,19 @@ export function EmojiText({
     <span className={className}>
       {parts.map((part, index) =>
         part.type === 'emoji' ? (
-          <AnimatedEmoji
+          <TelegramEmoji
             key={`e-${index}`}
             emoji={part.value}
             size={size}
             animated={animated}
             inline
-            title={part.value}
           />
         ) : (
-          <span key={`t-${index}`}>{part.value}</span>
+          <Fragment key={`t-${index}`}>{part.value}</Fragment>
         )
       )}
     </span>
   );
 }
+
+export default EmojiText;
