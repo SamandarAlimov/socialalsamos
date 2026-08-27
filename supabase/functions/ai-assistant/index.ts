@@ -1,10 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { guard, preflight, jsonResponse, corsHeaders, guardError } from "../_shared/guard.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const FUNCTION_NAME = "ai-assistant";
+// Bir foydalanuvchi uchun soatda ruxsat etilgan suhbat chaqiruvlari.
+const RATE_LIMIT = 60;
+const RATE_WINDOW_MINUTES = 60;
 
 // Task-based model routing across free Lovable AI models.
 // Fast/general is default; heavier tasks upgrade to Pro; simple/high-volume downgrade to Lite.
@@ -75,38 +75,64 @@ Return ONLY the JSON object.`;
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const pre = preflight(req);
+  if (pre) return pre;
+
+  if (req.method !== "POST") {
+    return guardError(req, "METHOD_NOT_ALLOWED", "Faqat POST so'rovi qabul qilinadi.", 405);
+  }
 
   try {
-    const { messages, userId, context } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    // Autentifikatsiya + foydalanuvchi bo'yicha limit.
+    // AUTH_ENFORCE=log bo'lganda bloklamaydi, faqat function_usage ga yozadi.
+    const gate = await guard(req, {
+      functionName: FUNCTION_NAME,
+      limit: RATE_LIMIT,
+      windowMinutes: RATE_WINDOW_MINUTES,
+      requireAuth: true,
+    });
+    if (gate.response) return gate.response;
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const body = await req.json().catch(() => null);
+    if (!body || !Array.isArray(body.messages)) {
+      return guardError(req, "INVALID_REQUEST", "messages massivi talab qilinadi.", 400);
+    }
+    const { messages, context } = body as { messages: Array<Record<string, unknown>>; context?: string };
+
+    // MUHIM: userId endi so'rov tanasidan OLINMAYDI. Ilgari body.userId ishlatilgani
+    // uchun har kim boshqa foydalanuvchining profili, hamyoni va AI sozlamalarini
+    // o'qib/o'zgartirib yuborishi mumkin edi.
+    const userId = gate.userId;
+    const admin = gate.admin;
+
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      console.error("LOVABLE_API_KEY is not configured");
+      return guardError(req, "SERVER_ERROR", "AI xizmati sozlanmagan.", 500);
+    }
 
     let userContext = "";
     let currentTopics: string[] | null = null;
-    let profile: any = null;
-    let wallet: any = null;
-    let aiPrefs: any = null;
 
     if (userId) {
-      const [{ data: p }, { data: w }, { data: prefs }] = await Promise.all([
-        supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
-        supabase.from("wallets").select("*").eq("user_id", userId).maybeSingle(),
-        supabase.from("ai_preferences").select("*").eq("user_id", userId).maybeSingle(),
+      const [{ data: profile }, { data: wallet }, { data: aiPrefs }] = await Promise.all([
+        admin.from("profiles").select("display_name, username, followers_count").eq("id", userId).maybeSingle(),
+        admin.from("wallets").select("balance, currency").eq("user_id", userId).maybeSingle(),
+        admin.from("ai_preferences").select("*").eq("user_id", userId).maybeSingle(),
       ]);
-      profile = p; wallet = w; aiPrefs = prefs;
-      currentTopics = prefs?.recommendation_topics ?? null;
+      currentTopics = (aiPrefs as { recommendation_topics?: string[] } | null)?.recommendation_topics ?? null;
+
+      const prefs = aiPrefs as {
+        content_filter?: string[];
+        daily_time_limit_minutes?: number;
+      } | null;
 
       userContext = `
 User profile: ${profile?.display_name || "?"} (@${profile?.username || "?"}), followers ${profile?.followers_count || 0}
 Wallet balance: ${wallet?.balance || 0} ${wallet?.currency || "UZS"}
 Recommendation topics: ${currentTopics?.join(", ") || "all"}
-Content filters: ${aiPrefs?.content_filter?.join(", ") || "none"}
-Daily time limit: ${aiPrefs?.daily_time_limit_minutes || "unlimited"} min`;
+Content filters: ${prefs?.content_filter?.join(", ") || "none"}
+Daily time limit: ${prefs?.daily_time_limit_minutes || "unlimited"} min`;
     }
 
     const lastUser = [...messages].reverse().find((m: any) => m.role === "user")?.content ?? "";
@@ -114,11 +140,11 @@ Daily time limit: ${aiPrefs?.daily_time_limit_minutes || "unlimited"} min`;
     // Classify: route model + detect language + detect recommendation changes.
     const cls = await classifyRequest(LOVABLE_API_KEY, String(lastUser), currentTopics);
 
-    // Apply recommendation changes if requested.
+    // Apply recommendation changes if requested — faqat JWT dan olingan userId uchun.
     let recNote = "";
     if (userId && (cls.update_recommendations || cls.clear_recommendations)) {
       const newTopics = cls.clear_recommendations ? [] : (cls.update_recommendations ?? []);
-      const { error: upErr } = await supabase
+      const { error: upErr } = await admin
         .from("ai_preferences")
         .upsert({ user_id: userId, recommendation_topics: newTopics }, { onConflict: "user_id" });
       if (!upErr) {
@@ -167,26 +193,29 @@ Extra context: ${context || "none"}`;
 
     if (!response.ok) {
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again shortly." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonResponse(
+          req,
+          { error: "Juda ko'p so'rov. Birozdan so'ng qayta urinib ko'ring.", code: "TOO_MANY_ATTEMPTS" },
+          429,
+        );
       }
       if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add credits in workspace billing." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonResponse(
+          req,
+          { error: "AI kreditlari tugagan. Billing bo'limida kredit qo'shing.", code: "SERVER_ERROR" },
+          402,
+        );
       }
       const errorText = await response.text();
       console.error("AI gateway error:", response.status, errorText);
-      return new Response(JSON.stringify({ error: "AI service error" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return guardError(req, "SERVER_ERROR", "AI xizmatida xatolik.", 500);
     }
 
     return new Response(response.body, {
       headers: {
-        ...corsHeaders,
+        ...corsHeaders(req),
         "Content-Type": "text/event-stream",
+        "Cache-Control": "no-store",
         "X-AI-Model": model,
         "X-AI-Task": cls.task,
         "X-AI-Language": cls.language,
@@ -194,8 +223,6 @@ Extra context: ${context || "none"}`;
     });
   } catch (error) {
     console.error("AI assistant error:", error);
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return guardError(req, "SERVER_ERROR", "Kutilmagan xatolik yuz berdi.", 500);
   }
 });
