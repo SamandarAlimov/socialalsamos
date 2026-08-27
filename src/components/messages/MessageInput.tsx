@@ -244,12 +244,12 @@ export function MessageInput({
           {pendingAttachment.type === 'image' ? (
             <img src={pendingAttachment.url} alt="Preview" className="h-12 w-12 object-cover rounded" />
           ) : pendingAttachment.type === 'video' ? (
-            <div className="h-12 w-12 bg-accent rounded flex items-center justify-center">
-              <Film className="h-5 w-5 text-primary" />
+            <div className="h-12 w-12 bg-muted rounded flex items-center justify-center">
+              <Film className="h-5 w-5 text-muted-foreground" />
             </div>
           ) : (
-            <div className="h-12 w-12 bg-accent rounded flex items-center justify-center">
-              <FileText className="h-5 w-5" />
+            <div className="h-12 w-12 bg-muted rounded flex items-center justify-center">
+              <FileText className="h-5 w-5 text-muted-foreground" />
             </div>
           )}
           <span className="flex-1 text-sm truncate">{pendingAttachment.name}</span>
@@ -274,14 +274,14 @@ export function MessageInput({
           <PopoverContent className="w-56 p-2" align="start">
             <button
               onClick={() => imageVideoInputRef.current?.click()}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-accent transition-colors text-left"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted transition-colors text-left"
             >
               <ImageIcon className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm">Photo or Video</span>
             </button>
             <button
               onClick={() => documentInputRef.current?.click()}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-accent transition-colors text-left"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted transition-colors text-left"
             >
               <FileText className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm">Document</span>
@@ -341,7 +341,7 @@ export function MessageInput({
           </div>
         </div>
 
-        {/* Send / Voice-Video Button */}
+        {/* Send button, or the single Telegram-style mic/video recorder button */}
         {message.trim() || pendingAttachment ? (
           <Button 
             variant="default" 
@@ -384,8 +384,10 @@ export function MessageInput({
         ) : (
           <TelegramMediaRecorder 
             onSend={(url, duration, type) => {
-              const durationStr = `${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')}`;
-              onSend(`${type === 'video' ? 'Video' : 'Voice'} message (${durationStr})`, url, type);
+              // Telegram sends voice / round-video messages with no text body:
+              // the bubble itself renders the player, so a placeholder caption
+              // like "Voice message (0:12)" must not be stored as content.
+              onSend('', url, type);
             }}
           />
         )}

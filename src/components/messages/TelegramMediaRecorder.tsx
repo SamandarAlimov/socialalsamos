@@ -23,6 +23,9 @@ interface TelegramMediaRecorderProps {
 type RecordingState = 'idle' | 'recording' | 'preview';
 type RecordingMode = 'voice' | 'video';
 
+/** Telegram switches between mic and video with a quick tap, and records on press-and-hold. */
+const HOLD_TO_RECORD_MS = 320;
+
 export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorderProps) {
   const [state, setState] = useState<RecordingState>('idle');
   const [mode, setMode] = useState<RecordingMode>('voice');
@@ -33,6 +36,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
   const [isPlaying, setIsPlaying] = useState(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [audioLevels, setAudioLevels] = useState<number[]>(Array(32).fill(4));
+  const [isHolding, setIsHolding] = useState(false);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -44,10 +48,13 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const holdTriggeredRef = useRef(false);
 
   useEffect(() => {
     return () => {
       cleanup();
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
     };
   }, []);
 
@@ -313,6 +320,41 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     }
   };
 
+  /* ---------- Idle button interaction (Telegram behaviour) ---------- */
+
+  const clearHoldTimer = () => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  };
+
+  const handleHoldStart = () => {
+    holdTriggeredRef.current = false;
+    setIsHolding(true);
+    clearHoldTimer();
+    holdTimerRef.current = setTimeout(() => {
+      holdTriggeredRef.current = true;
+      startRecording(mode);
+    }, HOLD_TO_RECORD_MS);
+  };
+
+  const handleHoldEnd = () => {
+    setIsHolding(false);
+    clearHoldTimer();
+    if (!holdTriggeredRef.current) {
+      // Quick tap swaps the mode, exactly like Telegram's mic <-> round-video swap
+      setMode(prev => (prev === 'voice' ? 'video' : 'voice'));
+    }
+    holdTriggeredRef.current = false;
+  };
+
+  const handleHoldCancel = () => {
+    setIsHolding(false);
+    clearHoldTimer();
+    holdTriggeredRef.current = false;
+  };
+
   // Video Preview Screen
   if (state === 'preview' && mode === 'video' && mediaUrl) {
     return (
@@ -552,7 +594,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
           variant="default"
           size="icon"
           className="h-10 w-10 rounded-full bg-primary"
-          onClick={stopRecording}
+          onClick={handleSend ? stopRecording : stopRecording}
         >
           <Square className="h-4 w-4 fill-current" />
         </Button>
@@ -560,26 +602,65 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     );
   }
 
-  // Idle State - Two Buttons
+  // Idle State - ONE Telegram-style button that swaps between mic and video
   return (
-    <div className="flex items-center gap-1">
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-10 w-10 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
-        onClick={() => startRecording('voice')}
+    <div className="relative flex items-center">
+      <button
+        type="button"
+        aria-label={mode === 'voice' ? "Ovozli xabar (bosib turing)" : "Video xabar (bosib turing)"}
+        title={
+          mode === 'voice'
+            ? "Yozish uchun bosib turing \u00b7 video xabarga o'tish uchun bir marta bosing"
+            : "Yozish uchun bosib turing \u00b7 ovozli xabarga o'tish uchun bir marta bosing"
+        }
+        onPointerDown={handleHoldStart}
+        onPointerUp={handleHoldEnd}
+        onPointerLeave={handleHoldCancel}
+        onPointerCancel={handleHoldCancel}
+        onContextMenu={(e) => e.preventDefault()}
+        className={cn(
+          'relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-muted-foreground transition-colors',
+          'hover:bg-muted hover:text-foreground active:scale-95',
+          isHolding && 'bg-primary/15 text-primary'
+        )}
       >
-        <Mic className="h-5 w-5" />
-      </Button>
-      
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-10 w-10 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
-        onClick={() => startRecording('video')}
-      >
-        <Video className="h-5 w-5" />
-      </Button>
+        <AnimatePresence initial={false} mode="wait">
+          <motion.span
+            key={mode}
+            initial={{ y: 14, opacity: 0, scale: 0.7, rotate: -20 }}
+            animate={{ y: 0, opacity: 1, scale: 1, rotate: 0 }}
+            exit={{ y: -14, opacity: 0, scale: 0.7, rotate: 20 }}
+            transition={{ type: 'spring', stiffness: 420, damping: 28 }}
+            className="absolute inset-0 flex items-center justify-center"
+          >
+            {mode === 'voice' ? <Mic className="h-5 w-5" /> : <Video className="h-5 w-5" />}
+          </motion.span>
+        </AnimatePresence>
+
+        {/* Hold ripple */}
+        {isHolding && (
+          <motion.span
+            initial={{ scale: 0.6, opacity: 0.45 }}
+            animate={{ scale: 1.6, opacity: 0 }}
+            transition={{ duration: 0.6, repeat: Infinity }}
+            className="pointer-events-none absolute inset-0 rounded-full bg-primary/30"
+          />
+        )}
+      </button>
+
+      {/* Slide-to-cancel style hint while holding */}
+      <AnimatePresence>
+        {isHolding && (
+          <motion.span
+            initial={{ opacity: 0, x: 6 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 6 }}
+            className="pointer-events-none absolute right-full mr-2 whitespace-nowrap rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground"
+          >
+            Bekor qilish uchun qo'yib yuboring
+          </motion.span>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
