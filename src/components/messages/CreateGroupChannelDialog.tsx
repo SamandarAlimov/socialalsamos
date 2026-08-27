@@ -4,6 +4,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -13,19 +14,20 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { 
-  Search, 
-  Users, 
-  Megaphone, 
-  Lock, 
-  ArrowRight, 
-  ArrowLeft, 
-  Camera, 
-  X, 
+import {
+  Search,
+  Users,
+  Megaphone,
+  Lock,
+  ArrowRight,
+  ArrowLeft,
+  Camera,
+  X,
   Globe,
   Shield,
   Crown,
-  UserPlus
+  UserPlus,
+  Loader2,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -35,6 +37,9 @@ import { uploadMedia } from '@/lib/mediaUpload';
 
 type ChatType = 'group' | 'channel';
 type Step = 'select-type' | 'select-users' | 'details' | 'admin-settings';
+
+const MAX_NAME = 128;
+const MAX_DESCRIPTION = 255;
 
 interface User {
   id: string;
@@ -69,8 +74,11 @@ export function CreateGroupChannelDialog({
   const [description, setDescription] = useState('');
   const [isPublic, setIsPublic] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+
+  const typeLabel = chatType === 'group' ? 'Guruh' : 'Kanal';
 
   useEffect(() => {
     if (open) {
@@ -83,12 +91,15 @@ export function CreateGroupChannelDialog({
       setIsPublic(false);
       setSearchQuery('');
       setAvatarUrl(null);
+      setAvatarUploading(false);
     }
   }, [open, defaultType]);
 
   useEffect(() => {
+    if (!user || step !== 'select-users') return;
+    let cancelled = false;
+
     const fetchUsers = async () => {
-      if (!user || step !== 'select-users') return;
       setLoading(true);
 
       let query = supabase
@@ -97,18 +108,23 @@ export function CreateGroupChannelDialog({
         .neq('id', user.id)
         .limit(50);
 
-      if (searchQuery) {
-        query = query.or(`username.ilike.%${searchQuery}%,display_name.ilike.%${searchQuery}%`);
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim();
+        query = query.or(`username.ilike.%${q}%,display_name.ilike.%${q}%`);
       }
 
       const { data, error } = await query;
-      if (!error && data) {
-        setUsers(data);
-      }
+      if (cancelled) return;
+      if (!error && data) setUsers(data);
       setLoading(false);
     };
 
-    fetchUsers();
+    // Telegramdek: yozayotganda har bir harfda so'rov ketmasin
+    const timer = setTimeout(fetchUsers, searchQuery ? 250 : 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [user, step, searchQuery]);
 
   const handleTypeSelect = (type: ChatType) => {
@@ -117,75 +133,94 @@ export function CreateGroupChannelDialog({
   };
 
   const handleUserSelect = (userId: string) => {
-    setSelectedUsers(prev =>
-      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+    setSelectedUsers((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
     );
+    setAdminUsers((prev) => prev.filter((id) => id !== userId || selectedUsers.includes(userId)));
   };
 
   const handleAdminToggle = (userId: string) => {
-    setAdminUsers(prev =>
-      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+    setAdminUsers((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
     );
   };
 
   const handleNext = () => {
-    if (step === 'select-users') {
-      setStep('details');
-    } else if (step === 'details') {
-      setStep('admin-settings');
-    }
+    if (step === 'select-users') setStep('details');
+    else if (step === 'details') setStep('admin-settings');
   };
 
   const handleBack = () => {
-    if (step === 'admin-settings') {
-      setStep('details');
-    } else if (step === 'details') {
-      setStep('select-users');
-    } else if (step === 'select-users') {
-      setStep('select-type');
-    }
+    if (step === 'admin-settings') setStep('details');
+    else if (step === 'details') setStep('select-users');
+    else if (step === 'select-users') setStep(defaultType ? 'select-users' : 'select-type');
   };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file || !user) return;
 
+    setAvatarUploading(true);
     try {
       const uploaded = await uploadMedia(file, { type: 'chat', visibility: 'public' });
       setAvatarUrl(uploaded.url);
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to upload image', variant: 'destructive' });
-      return;
+    } catch (error: any) {
+      toast({
+        title: 'Xatolik',
+        description: error?.message || "Rasmni yuklab bo'lmadi",
+        variant: 'destructive',
+      });
+    } finally {
+      setAvatarUploading(false);
     }
   };
 
   const handleCreate = async () => {
     if (!name.trim() || !user) return;
-    
+
     setCreating(true);
     try {
-      // Create conversation
-      const { data: newConv, error: convError } = await supabase
+      const basePayload: Record<string, unknown> = {
+        type: chatType,
+        name: name.trim(),
+        description: description.trim() || null,
+        avatar_url: avatarUrl,
+        owner_id: user.id,
+        last_message_at: new Date().toISOString(),
+      };
+
+      // Ba'zi bazalarda is_public / subscribers_count ustunlari bo'lmasligi mumkin -
+      // shu holatda ularsiz qayta urinamiz, yaratish bekor bo'lib qolmasin.
+      let newConv: { id: string } | null = null;
+      const firstAttempt = await supabase
         .from('conversations')
         .insert({
-          type: chatType,
-          name,
-          description: description || null,
-          avatar_url: avatarUrl,
-          owner_id: user.id,
+          ...basePayload,
           is_public: isPublic,
           subscribers_count: selectedUsers.length + 1,
-        })
+        } as any)
         .select()
         .single();
 
-      if (convError) throw convError;
+      if (firstAttempt.error) {
+        const retry = await supabase
+          .from('conversations')
+          .insert(basePayload as any)
+          .select()
+          .single();
+        if (retry.error) throw retry.error;
+        newConv = retry.data as { id: string };
+      } else {
+        newConv = firstAttempt.data as { id: string };
+      }
 
-      // Add participants with roles
+      const uniqueMembers = Array.from(new Set(selectedUsers.filter((id) => id && id !== user.id)));
+
       const participants = [
         { conversation_id: newConv.id, user_id: user.id, role: 'owner' },
-        ...selectedUsers.map(id => ({
-          conversation_id: newConv.id,
+        ...uniqueMembers.map((id) => ({
+          conversation_id: newConv!.id,
           user_id: id,
           role: adminUsers.includes(id) ? 'admin' : 'member',
         })),
@@ -195,20 +230,29 @@ export function CreateGroupChannelDialog({
         .from('conversation_participants')
         .insert(participants);
 
-      if (partError) throw partError;
+      if (partError) {
+        // Yarim yaratilgan suhbat qolmasligi uchun tozalaymiz
+        await supabase.from('conversations').delete().eq('id', newConv.id);
+        throw partError;
+      }
 
       toast({
-        title: 'Success',
-        description: `${chatType === 'group' ? 'Group' : 'Channel'} created successfully`,
+        title: `${typeLabel} yaratildi`,
+        description:
+          uniqueMembers.length > 0
+            ? `${uniqueMembers.length} a'zo qo'shildi`
+            : chatType === 'channel'
+              ? "Endi obunachilarni taklif qilishingiz mumkin"
+              : "Endi a'zolarni taklif qilishingiz mumkin",
       });
 
       onCreated?.(newConv.id);
       onOpenChange(false);
     } catch (error: any) {
-      console.error('Error creating:', error);
+      console.error('Error creating conversation:', error);
       toast({
-        title: 'Error',
-        description: `Failed to create ${chatType}`,
+        title: 'Xatolik',
+        description: error?.message || `${typeLabel} yaratib bo'lmadi`,
         variant: 'destructive',
       });
     } finally {
@@ -217,42 +261,55 @@ export function CreateGroupChannelDialog({
   };
 
   const chatTypes = [
-    { 
-      id: 'group' as ChatType, 
-      icon: Users, 
-      label: 'New Group', 
-      description: 'Up to 200,000 members, admins with roles',
-      color: 'bg-blue-500'
+    {
+      id: 'group' as ChatType,
+      icon: Users,
+      label: 'Yangi guruh',
+      description: "A'zolar bilan birga yozishish, adminlar va rollar",
+      color: 'bg-blue-500',
     },
-    { 
-      id: 'channel' as ChatType, 
-      icon: Megaphone, 
-      label: 'New Channel', 
-      description: 'Broadcast to unlimited subscribers',
-      color: 'bg-violet-500'
+    {
+      id: 'channel' as ChatType,
+      icon: Megaphone,
+      label: 'Yangi kanal',
+      description: "Cheksiz obunachilarga e'lon tarqatish",
+      color: 'bg-violet-500',
     },
   ];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[92vh] w-[calc(100vw-1.5rem)] max-w-md overflow-y-auto rounded-2xl p-4 sm:p-6">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-1 text-base sm:text-lg">
             {step !== 'select-type' && (
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-8 w-8 -ml-2"
+              <Button
+                variant="ghost"
+                size="icon"
+                className="-ml-2 h-8 w-8 shrink-0 rounded-full"
                 onClick={handleBack}
+                aria-label="Orqaga"
               >
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             )}
-            {step === 'select-type' && 'Create New'}
-            {step === 'select-users' && 'Add Members'}
-            {step === 'details' && `${chatType === 'group' ? 'Group' : 'Channel'} Details`}
-            {step === 'admin-settings' && 'Admin Settings'}
+            <span className="truncate">
+              {step === 'select-type' && 'Nima yaratamiz?'}
+              {step === 'select-users' &&
+                (chatType === 'channel' ? "Obunachilar qo'shish" : "A'zolar qo'shish")}
+              {step === 'details' && `${typeLabel} ma'lumotlari`}
+              {step === 'admin-settings' && 'Adminlar'}
+            </span>
           </DialogTitle>
+          <DialogDescription className="text-xs">
+            {step === 'select-type' && "Guruh yoki kanal tanlang"}
+            {step === 'select-users' &&
+              (chatType === 'channel'
+                ? "Bu qadamni o'tkazib yuborsangiz ham bo'ladi"
+                : "Kimlarni qo'shmoqchisiz?")}
+            {step === 'details' && `${typeLabel} nomi, rasmi va tavsifi`}
+            {step === 'admin-settings' && "Kimga admin huquqi berilsin?"}
+          </DialogDescription>
         </DialogHeader>
 
         {step === 'select-type' && (
@@ -261,14 +318,19 @@ export function CreateGroupChannelDialog({
               <button
                 key={type.id}
                 onClick={() => handleTypeSelect(type.id)}
-                className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-accent transition-colors text-left"
+                className="tg-transition flex w-full items-center gap-3 rounded-2xl p-3 text-left hover:bg-accent active:scale-[0.99] sm:gap-4 sm:p-4"
               >
-                <div className={cn("h-12 w-12 rounded-full flex items-center justify-center", type.color)}>
-                  <type.icon className="h-6 w-6 text-white" />
+                <div
+                  className={cn(
+                    'flex h-11 w-11 shrink-0 items-center justify-center rounded-full sm:h-12 sm:w-12',
+                    type.color
+                  )}
+                >
+                  <type.icon className="h-5 w-5 text-white sm:h-6 sm:w-6" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="font-medium">{type.label}</p>
-                  <p className="text-sm text-muted-foreground">{type.description}</p>
+                  <p className="text-xs text-muted-foreground sm:text-sm">{type.description}</p>
                 </div>
               </button>
             ))}
@@ -276,30 +338,33 @@ export function CreateGroupChannelDialog({
         )}
 
         {step === 'select-users' && (
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search users..."
+                placeholder="Foydalanuvchilarni qidirish..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
+                className="rounded-xl pl-10"
               />
             </div>
 
             {selectedUsers.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {selectedUsers.map(userId => {
-                  const selectedUser = users.find(u => u.id === userId);
+                {selectedUsers.map((userId) => {
+                  const selectedUser = users.find((u) => u.id === userId);
                   return (
                     <div
                       key={userId}
-                      className="flex items-center gap-1 px-2 py-1 bg-primary/10 rounded-full text-sm"
+                      className="flex max-w-full items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-sm"
                     >
-                      <span>{selectedUser?.display_name || selectedUser?.username}</span>
+                      <span className="truncate">
+                        {selectedUser?.display_name || selectedUser?.username || 'Foydalanuvchi'}
+                      </span>
                       <button
                         onClick={() => handleUserSelect(userId)}
-                        className="h-4 w-4 rounded-full hover:bg-primary/20 flex items-center justify-center"
+                        className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full hover:bg-primary/20"
+                        aria-label="Olib tashlash"
                       >
                         <X className="h-3 w-3" />
                       </button>
@@ -309,24 +374,24 @@ export function CreateGroupChannelDialog({
               </div>
             )}
 
-            <ScrollArea className="h-[300px]">
+            <ScrollArea className="h-[45vh] max-h-[300px]">
               {loading ? (
-                <div className="flex items-center justify-center h-32">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+                <div className="flex h-32 items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
                 </div>
               ) : users.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  No users found
+                <div className="py-8 text-center text-sm text-muted-foreground">
+                  Foydalanuvchi topilmadi
                 </div>
               ) : (
-                <div className="space-y-1">
+                <div className="space-y-1 pr-2">
                   {users.map((u) => (
                     <button
                       key={u.id}
                       onClick={() => handleUserSelect(u.id)}
-                      className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-accent transition-colors"
+                      className="tg-transition flex w-full items-center gap-3 rounded-xl p-2.5 hover:bg-accent sm:p-3"
                     >
-                      <div className="relative">
+                      <div className="relative shrink-0">
                         <Avatar className="h-10 w-10">
                           <AvatarImage src={u.avatar_url || ''} />
                           <AvatarFallback>
@@ -334,13 +399,15 @@ export function CreateGroupChannelDialog({
                           </AvatarFallback>
                         </Avatar>
                         {u.is_online && (
-                          <span className="absolute bottom-0 right-0 h-3 w-3 bg-green-500 rounded-full border-2 border-card" />
+                          <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-card bg-green-500" />
                         )}
                       </div>
-                      <div className="flex-1 text-left">
-                        <p className="font-medium text-sm">{u.display_name || u.username}</p>
+                      <div className="min-w-0 flex-1 text-left">
+                        <p className="truncate text-sm font-medium">
+                          {u.display_name || u.username || 'Foydalanuvchi'}
+                        </p>
                         {u.username && u.display_name && (
-                          <p className="text-xs text-muted-foreground">@{u.username}</p>
+                          <p className="truncate text-xs text-muted-foreground">@{u.username}</p>
                         )}
                       </div>
                       <Checkbox checked={selectedUsers.includes(u.id)} />
@@ -350,34 +417,37 @@ export function CreateGroupChannelDialog({
               )}
             </ScrollArea>
 
-            {selectedUsers.length > 0 && (
-              <Button onClick={handleNext} className="w-full">
-                Next ({selectedUsers.length} selected)
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            )}
+            <Button onClick={handleNext} className="w-full rounded-xl">
+              {selectedUsers.length > 0
+                ? `Davom etish (${selectedUsers.length} tanlandi)`
+                : chatType === 'channel'
+                  ? "A'zosiz davom etish"
+                  : 'Davom etish'}
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
           </div>
         )}
 
         {step === 'details' && (
-          <div className="space-y-6">
-            {/* Avatar Upload */}
+          <div className="space-y-5">
             <div className="flex justify-center">
-              <label className="relative group cursor-pointer">
+              <label className="group relative cursor-pointer">
                 <input
                   type="file"
                   accept="image/*"
                   onChange={handleAvatarUpload}
                   className="hidden"
                 />
-                <div className="h-24 w-24 rounded-full bg-muted flex items-center justify-center overflow-hidden">
-                  {avatarUrl ? (
-                    <img src={avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
+                <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-muted sm:h-24 sm:w-24">
+                  {avatarUploading ? (
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  ) : avatarUrl ? (
+                    <img src={avatarUrl} alt={typeLabel} className="h-full w-full object-cover" />
                   ) : (
-                    <Camera className="h-8 w-8 text-muted-foreground group-hover:text-foreground transition-colors" />
+                    <Camera className="tg-transition h-7 w-7 text-muted-foreground group-hover:text-foreground" />
                   )}
                 </div>
-                <span className="absolute bottom-0 right-0 h-8 w-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground">
+                <span className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
                   <Camera className="h-4 w-4" />
                 </span>
               </label>
@@ -385,138 +455,157 @@ export function CreateGroupChannelDialog({
 
             <div className="space-y-4">
               <div>
-                <Label htmlFor="name">{chatType === 'group' ? 'Group' : 'Channel'} Name</Label>
+                <Label htmlFor="conv-name">{typeLabel} nomi</Label>
                 <Input
-                  id="name"
-                  placeholder={chatType === 'group' ? 'My Awesome Group' : 'My Channel'}
+                  id="conv-name"
+                  placeholder={chatType === 'group' ? 'Masalan: Do\u2018stlar' : 'Masalan: Yangiliklar'}
                   value={name}
+                  maxLength={MAX_NAME}
                   onChange={(e) => setName(e.target.value)}
-                  className="mt-1.5"
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="description">Description (optional)</Label>
-                <Textarea
-                  id="description"
-                  placeholder="What's this about?"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="mt-1.5 resize-none"
-                  rows={3}
+                  className="mt-1.5 rounded-xl"
                 />
               </div>
 
-              {/* Public/Private toggle */}
-              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-                <div className="flex items-center gap-3">
+              <div>
+                <Label htmlFor="conv-description">Tavsif (majburiy emas)</Label>
+                <Textarea
+                  id="conv-description"
+                  placeholder="Bu yerda nima haqida gaplashiladi?"
+                  value={description}
+                  maxLength={MAX_DESCRIPTION}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="mt-1.5 resize-none rounded-xl"
+                  rows={3}
+                />
+                <p className="mt-1 text-right text-[11px] tabular-nums text-muted-foreground">
+                  {description.length}/{MAX_DESCRIPTION}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 rounded-2xl bg-muted/50 p-3 sm:p-4">
+                <div className="flex min-w-0 items-center gap-3">
                   {isPublic ? (
-                    <Globe className="h-5 w-5 text-primary" />
+                    <Globe className="h-5 w-5 shrink-0 text-primary" />
                   ) : (
-                    <Lock className="h-5 w-5 text-muted-foreground" />
+                    <Lock className="h-5 w-5 shrink-0 text-muted-foreground" />
                   )}
-                  <div>
-                    <p className="font-medium text-sm">
-                      {isPublic ? 'Public' : 'Private'} {chatType}
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">
+                      {isPublic ? 'Ochiq' : 'Yopiq'} {typeLabel.toLowerCase()}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {isPublic 
-                        ? 'Anyone can find and join'
-                        : 'Only invited members can join'}
+                      {isPublic
+                        ? "Har kim topib qo'shilishi mumkin"
+                        : "Faqat taklif qilinganlar qo'shiladi"}
                     </p>
                   </div>
                 </div>
-                <Switch
-                  checked={isPublic}
-                  onCheckedChange={setIsPublic}
-                />
+                <Switch checked={isPublic} onCheckedChange={setIsPublic} />
               </div>
 
               <p className="text-sm text-muted-foreground">
-                {selectedUsers.length} member{selectedUsers.length !== 1 ? 's' : ''} will be added
+                {selectedUsers.length} ta a'zo qo'shiladi
               </p>
             </div>
 
-            <Button 
-              onClick={handleNext}
-              disabled={!name.trim()}
-              className="w-full"
-            >
-              Set Admin Roles
-              <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
+            {selectedUsers.length > 0 ? (
+              <Button onClick={handleNext} disabled={!name.trim()} className="w-full rounded-xl">
+                Admin huquqlarini belgilash
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            ) : (
+              <Button
+                onClick={handleCreate}
+                disabled={!name.trim() || creating}
+                className="w-full rounded-xl"
+              >
+                {creating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Yaratilmoqda...
+                  </>
+                ) : (
+                  `${typeLabel} yaratish`
+                )}
+              </Button>
+            )}
           </div>
         )}
 
         {step === 'admin-settings' && (
           <div className="space-y-4">
-            <div className="p-4 bg-muted/50 rounded-lg">
-              <div className="flex items-center gap-2 mb-2">
+            <div className="rounded-2xl bg-muted/50 p-3 sm:p-4">
+              <div className="mb-2 flex items-center gap-2">
                 <Shield className="h-4 w-4 text-primary" />
-                <p className="font-medium text-sm">Admin Permissions</p>
+                <p className="text-sm font-medium">Admin huquqlari</p>
               </div>
               <p className="text-xs text-muted-foreground">
-                Admins can add/remove members, pin messages, and manage settings.
+                Adminlar a'zo qo'shishi/chiqarishi, xabar qadashi va sozlamalarni boshqarishi
+                mumkin.
               </p>
             </div>
 
-            <ScrollArea className="h-[250px]">
-              <div className="space-y-2">
-                {/* Owner (current user) */}
-                <div className="flex items-center justify-between p-3 rounded-lg bg-primary/10 border border-primary/20">
-                  <div className="flex items-center gap-3">
+            <ScrollArea className="h-[40vh] max-h-[250px]">
+              <div className="space-y-2 pr-2">
+                <div className="flex items-center justify-between rounded-xl border border-primary/20 bg-primary/10 p-3">
+                  <div className="flex min-w-0 items-center gap-3">
                     <Avatar className="h-10 w-10">
-                      <AvatarFallback>You</AvatarFallback>
+                      <AvatarFallback>Siz</AvatarFallback>
                     </Avatar>
-                    <div>
-                      <p className="font-medium text-sm">You</p>
-                      <p className="text-xs text-muted-foreground">Owner</p>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">Siz</p>
+                      <p className="text-xs text-muted-foreground">Egasi</p>
                     </div>
                   </div>
-                  <Crown className="h-5 w-5 text-primary" />
+                  <Crown className="h-5 w-5 shrink-0 text-primary" />
                 </div>
 
-                {selectedUsers.map(userId => {
-                  const selectedUser = users.find(u => u.id === userId);
+                {selectedUsers.map((userId) => {
+                  const selectedUser = users.find((u) => u.id === userId);
                   const isAdmin = adminUsers.includes(userId);
                   return (
                     <div
                       key={userId}
                       className={cn(
-                        "flex items-center justify-between p-3 rounded-lg transition-colors",
-                        isAdmin ? "bg-blue-500/10 border border-blue-500/20" : "bg-muted/50"
+                        'tg-transition flex items-center justify-between gap-2 rounded-xl p-3',
+                        isAdmin ? 'border border-blue-500/20 bg-blue-500/10' : 'bg-muted/50'
                       )}
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
                         <Avatar className="h-10 w-10">
                           <AvatarImage src={selectedUser?.avatar_url || ''} />
                           <AvatarFallback>
-                            {(selectedUser?.display_name || selectedUser?.username || 'U')[0]?.toUpperCase()}
+                            {(selectedUser?.display_name ||
+                              selectedUser?.username ||
+                              'U')[0]?.toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
-                        <div>
-                          <p className="font-medium text-sm">
-                            {selectedUser?.display_name || selectedUser?.username}
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">
+                            {selectedUser?.display_name ||
+                              selectedUser?.username ||
+                              'Foydalanuvchi'}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {isAdmin ? 'Admin' : 'Member'}
+                            {isAdmin ? 'Admin' : "A'zo"}
                           </p>
                         </div>
                       </div>
                       <Button
-                        variant={isAdmin ? "secondary" : "outline"}
+                        variant={isAdmin ? 'secondary' : 'outline'}
                         size="sm"
+                        className="shrink-0 rounded-xl"
                         onClick={() => handleAdminToggle(userId)}
                       >
                         {isAdmin ? (
                           <>
-                            <Shield className="h-4 w-4 mr-1" />
+                            <Shield className="mr-1 h-4 w-4" />
                             Admin
                           </>
                         ) : (
                           <>
-                            <UserPlus className="h-4 w-4 mr-1" />
-                            Make Admin
+                            <UserPlus className="mr-1 h-4 w-4" />
+                            Admin qilish
                           </>
                         )}
                       </Button>
@@ -526,12 +615,15 @@ export function CreateGroupChannelDialog({
               </div>
             </ScrollArea>
 
-            <Button 
-              onClick={handleCreate} 
-              disabled={creating}
-              className="w-full"
-            >
-              {creating ? 'Creating...' : `Create ${chatType === 'group' ? 'Group' : 'Channel'}`}
+            <Button onClick={handleCreate} disabled={creating} className="w-full rounded-xl">
+              {creating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Yaratilmoqda...
+                </>
+              ) : (
+                `${typeLabel} yaratish`
+              )}
             </Button>
           </div>
         )}
