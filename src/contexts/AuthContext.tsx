@@ -13,7 +13,6 @@ import {
   LoginStepResult,
   normalizePhoneInput,
   requestAccountSession,
-  requestLoginTicket,
   toIdentityEmail,
   TOS_VERSION,
 } from '@/lib/alsamosAuth';
@@ -160,33 +159,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ---------------------------------------------------------------------
   // Login
   //
-  // Primary path: Supabase Auth password grant (always reachable).
-  // Secondary path: the account-login edge function, which is only needed for
-  // linked accounts (slots 2..10) and 2FA. If the edge function is not
-  // deployed or blocked by CORS, logging in still works.
+  // Signing in talks ONLY to Supabase Auth (/auth/v1/token), exactly like the
+  // original implementation. No edge function is involved, so an undeployed or
+  // CORS-blocked `account-login` can never prevent anyone from logging in.
   // ---------------------------------------------------------------------
   const beginLogin = async (identifier: string, password: string): Promise<LoginStepResult> => {
-    try {
-      return await directPasswordLogin(identifier, password);
-    } catch (directError) {
-      if (
-        directError instanceof AlsamosAuthError &&
-        (directError.code === 'EMAIL_NOT_CONFIRMED' || directError.code === 'TOO_MANY_ATTEMPTS')
-      ) {
-        throw directError;
-      }
-
-      try {
-        return await requestLoginTicket(identifier, password);
-      } catch (edgeError) {
-        console.warn('account-login unavailable, using direct sign-in result', edgeError);
-        throw directError;
-      }
-    }
+    return directPasswordLogin(identifier, password);
   };
 
   const completeLogin = async (ticket: string, accountId?: string): Promise<AuthResult> => {
-    // The direct path already opened the session; nothing left to exchange.
+    // Sign-in already opened the session; nothing left to exchange.
     if (ticket === DIRECT_SESSION_TICKET) {
       const { data } = await supabase.auth.getSession();
 
@@ -205,6 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: null };
     }
 
+    // Only used by the multi-account switcher (slots 2..10).
     setIsLoading(true);
     try {
       const result = await requestAccountSession(ticket, accountId);
@@ -340,7 +323,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error };
     }
 
-    // Email confirmation is NEVER bypassed with an automatic sign-in anymore.
     const needsEmailConfirmation = !data.session;
 
     toast({
