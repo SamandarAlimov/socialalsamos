@@ -1,9 +1,22 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+// Alsamos API Gateway — tashqi mijozlar uchun API kalit tekshiruvi.
+//
+// MUHIM: bu endpoint JWT bilan emas, API kalit bilan ishlaydi. Shuning uchun
+// config.toml da verify_jwt = false ATAYLAB qoldirilgan — uni yoqish barcha
+// tashqi integratsiyalarni sindirar edi. Himoya funksiya ichida.
+//
+// TUZATILGAN MUAMMOLAR:
+//  1. Filtr injection: ilgari kalit `.or(`api_key.eq.${apiKey},...`)` ichiga
+//     to'g'ridan-to'g'ri qo'yilardi. Vergul/qavs kabi belgilar bilan filtrni
+//     buzish mumkin edi. Endi kalit formati validatsiya qilinadi va ikki alohida
+//     .eq() so'rovi ishlatiladi.
+//  2. profiles.email / profiles.user_id ustunlari mavjud emas edi — shu sababli
+//     limit bildirishnomasi hech qachon yuborilmagan. Endi email
+//     rate-limit-notification funksiyasi ichida bazadan olinadi.
+//  3. Bildirishnoma chaqiruvi CRON_SECRET (bo'lmasa service key) bilan yuboriladi.
+//  4. Xatolar bir xil shaklda, ichki tafsilotlarsiz qaytariladi.
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-api-key',
-}
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { corsHeaders as sharedCors, preflight } from '../_shared/guard.ts'
 
 interface ApiKeyData {
   id: string
@@ -17,221 +30,194 @@ interface ApiKeyData {
   key_type: string
 }
 
+// Kalitlar faqat harf/raqam/._- belgilaridan iborat bo'lishi kerak.
+const KEY_PATTERN = /^[A-Za-z0-9._-]{16,128}$/
+
+function gatewayCors(req: Request): Record<string, string> {
+  return {
+    ...sharedCors(req, 'GET, POST, PUT, PATCH, DELETE, OPTIONS'),
+    'Access-Control-Allow-Headers':
+      'authorization, x-client-info, apikey, content-type, x-api-key',
+  }
+}
+
+function fail(req: Request, status: number, error: string, code: string, extra: Record<string, unknown> = {}) {
+  return new Response(JSON.stringify({ error, code, ...extra }), {
+    status,
+    headers: { ...gatewayCors(req), 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+  })
+}
+
 Deno.serve(async (req) => {
   const startTime = Date.now()
-  
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
-  }
+
+  const pre = preflight(req, 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
+  if (pre) return pre
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
 
-  // Extract API key from header or query param
-  const apiKey = req.headers.get('x-api-key') || new URL(req.url).searchParams.get('api_key')
-  const endpoint = new URL(req.url).pathname
+  const url = new URL(req.url)
+  const apiKey = req.headers.get('x-api-key') || url.searchParams.get('api_key')
+  const endpoint = url.pathname
   const method = req.method
-  const ipAddress = req.headers.get('x-forwarded-for') || req.headers.get('cf-connecting-ip') || 'unknown'
-  const userAgent = req.headers.get('user-agent') || 'unknown'
+  const ipAddress =
+    (req.headers.get('x-forwarded-for') || '').split(',')[0].trim() ||
+    req.headers.get('cf-connecting-ip') ||
+    'unknown'
+  const userAgent = (req.headers.get('user-agent') || 'unknown').slice(0, 500)
 
-  // Helper function to log the request
   async function logRequest(
     apiKeyId: string | null,
     userId: string | null,
     statusCode: number,
     errorMessage: string | null = null,
-    requestBody: Record<string, unknown> | null = null
+    requestBody: Record<string, unknown> | null = null,
   ) {
     const responseTime = Date.now() - startTime
-    
-    if (apiKeyId && userId) {
-      try {
-        await supabase.from('api_usage_logs').insert({
-          api_key_id: apiKeyId,
-          user_id: userId,
-          endpoint,
-          method,
-          status_code: statusCode,
-          response_time_ms: responseTime,
-          ip_address: ipAddress,
-          user_agent: userAgent,
-          request_body: requestBody,
-          error_message: errorMessage,
-        })
-
-        // Increment daily request count
-        await supabase.rpc('increment_api_requests', { key_id: apiKeyId })
-      } catch (logError) {
-        console.error('Failed to log API request:', logError)
-      }
+    if (!apiKeyId || !userId) return
+    try {
+      await supabase.from('api_usage_logs').insert({
+        api_key_id: apiKeyId,
+        user_id: userId,
+        endpoint,
+        method,
+        status_code: statusCode,
+        response_time_ms: responseTime,
+        ip_address: ipAddress,
+        user_agent: userAgent,
+        request_body: requestBody,
+        error_message: errorMessage,
+      })
+      await supabase.rpc('increment_api_requests', { key_id: apiKeyId })
+    } catch (logError) {
+      console.error('Failed to log API request:', logError)
     }
   }
 
-  // Validate API key presence
   if (!apiKey) {
-    console.log('API request rejected: No API key provided')
-    return new Response(
-      JSON.stringify({ error: 'API key is required', code: 'MISSING_API_KEY' }),
-      { 
-        status: 401, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
-    )
+    return fail(req, 401, 'API key is required', 'MISSING_API_KEY')
   }
 
-  // Look up the API key
-  const { data: keyData, error: keyError } = await supabase
-    .from('api_keys')
-    .select('id, user_id, api_key, secret_key, is_active, requests_today, requests_limit, domains, key_type')
-    .or(`api_key.eq.${apiKey},secret_key.eq.${apiKey}`)
-    .maybeSingle()
+  // Format tekshiruvi: injection va keraksiz DB so'rovlarining oldini oladi.
+  if (!KEY_PATTERN.test(apiKey)) {
+    return fail(req, 401, 'Invalid API key', 'INVALID_API_KEY')
+  }
 
-  if (keyError) {
+  const columns =
+    'id, user_id, api_key, secret_key, is_active, requests_today, requests_limit, domains, key_type'
+
+  // Ikki alohida qat'iy .eq() so'rovi — .or() satrini qurishdan voz kechildi.
+  let keyData: ApiKeyData | null = null
+  try {
+    const byPublic = await supabase.from('api_keys').select(columns).eq('api_key', apiKey).maybeSingle()
+    if (byPublic.error) throw byPublic.error
+    keyData = (byPublic.data as ApiKeyData | null) ?? null
+
+    if (!keyData) {
+      const bySecret = await supabase.from('api_keys').select(columns).eq('secret_key', apiKey).maybeSingle()
+      if (bySecret.error) throw bySecret.error
+      keyData = (bySecret.data as ApiKeyData | null) ?? null
+    }
+  } catch (keyError) {
     console.error('Database error looking up API key:', keyError)
-    return new Response(
-      JSON.stringify({ error: 'Internal server error', code: 'DB_ERROR' }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
-    )
+    return fail(req, 500, 'Internal server error', 'DB_ERROR')
   }
 
   if (!keyData) {
-    console.log('API request rejected: Invalid API key')
-    return new Response(
-      JSON.stringify({ error: 'Invalid API key', code: 'INVALID_API_KEY' }),
-      { 
-        status: 401, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
-    )
+    return fail(req, 401, 'Invalid API key', 'INVALID_API_KEY')
   }
 
-  const typedKeyData = keyData as ApiKeyData
-
-  // Check if key is active
-  if (!typedKeyData.is_active) {
-    await logRequest(typedKeyData.id, typedKeyData.user_id, 403, 'API key is disabled')
-    console.log('API request rejected: API key is disabled')
-    return new Response(
-      JSON.stringify({ error: 'API key is disabled', code: 'KEY_DISABLED' }),
-      { 
-        status: 403, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
-    )
+  if (!keyData.is_active) {
+    await logRequest(keyData.id, keyData.user_id, 403, 'API key is disabled')
+    return fail(req, 403, 'API key is disabled', 'KEY_DISABLED')
   }
 
-  // Check rate limit
-  if (typedKeyData.requests_limit && typedKeyData.requests_today >= typedKeyData.requests_limit) {
-    await logRequest(typedKeyData.id, typedKeyData.user_id, 429, 'Rate limit exceeded')
-    console.log('API request rejected: Rate limit exceeded')
-    return new Response(
-      JSON.stringify({ 
-        error: 'Rate limit exceeded', 
-        code: 'RATE_LIMIT_EXCEEDED',
-        limit: typedKeyData.requests_limit,
-        used: typedKeyData.requests_today
-      }),
-      { 
-        status: 429, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
-    )
+  if (keyData.requests_limit && keyData.requests_today >= keyData.requests_limit) {
+    await logRequest(keyData.id, keyData.user_id, 429, 'Rate limit exceeded')
+    return fail(req, 429, 'Rate limit exceeded', 'RATE_LIMIT_EXCEEDED', {
+      limit: keyData.requests_limit,
+      used: keyData.requests_today,
+    })
   }
 
-  // Check domain restrictions (if any)
+  // Domen cheklovi
   const origin = req.headers.get('origin')
-  if (typedKeyData.domains && typedKeyData.domains.length > 0 && origin) {
-    const originHost = new URL(origin).hostname
-    const isAllowed = typedKeyData.domains.some(domain => 
-      originHost === domain || originHost.endsWith(`.${domain}`)
-    )
-    
+  if (keyData.domains && keyData.domains.length > 0 && origin) {
+    let originHost = ''
+    try {
+      originHost = new URL(origin).hostname.toLowerCase()
+    } catch {
+      originHost = ''
+    }
+    const isAllowed =
+      originHost.length > 0 &&
+      keyData.domains.some((domain) => {
+        const clean = String(domain).toLowerCase().trim()
+        return clean.length > 0 && (originHost === clean || originHost.endsWith(`.${clean}`))
+      })
+
     if (!isAllowed) {
-      await logRequest(typedKeyData.id, typedKeyData.user_id, 403, 'Domain not allowed')
-      console.log('API request rejected: Domain not allowed -', originHost)
-      return new Response(
-        JSON.stringify({ error: 'Domain not allowed', code: 'DOMAIN_RESTRICTED' }),
-        { 
-          status: 403, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      )
+      await logRequest(keyData.id, keyData.user_id, 403, 'Domain not allowed')
+      return fail(req, 403, 'Domain not allowed', 'DOMAIN_RESTRICTED')
     }
   }
 
-  // Parse request body if present
-  let requestBody = null
-  if (req.method !== 'GET' && req.method !== 'HEAD') {
+  // So'rov tanasi (faqat JSON bo'lsa va juda katta bo'lmasa jurnalga yoziladi)
+  let requestBody: Record<string, unknown> | null = null
+  if (method !== 'GET' && method !== 'HEAD') {
     try {
       const text = await req.text()
-      if (text) {
-        requestBody = JSON.parse(text)
+      if (text && text.length <= 100_000) {
+        const parsed = JSON.parse(text)
+        requestBody = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : null
       }
     } catch {
-      // Body isn't JSON, that's fine
+      // JSON emas — muammo yo'q
     }
   }
 
-  // Log successful validation
-  await logRequest(typedKeyData.id, typedKeyData.user_id, 200, null, requestBody)
+  await logRequest(keyData.id, keyData.user_id, 200, null, requestBody)
 
-  // Check if approaching rate limit and send notification
-  if (typedKeyData.requests_limit) {
-    const usagePercent = ((typedKeyData.requests_today + 1) / typedKeyData.requests_limit) * 100
-    
-    // Send notification at 80% and 95% thresholds
-    const thresholds = [80, 95]
-    for (const threshold of thresholds) {
-      if (usagePercent >= threshold) {
-        // Get user email for notification
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('user_id', typedKeyData.user_id)
-          .maybeSingle()
+  // Limitga yaqinlashganda bildirishnoma (80% va 95%).
+  if (keyData.requests_limit) {
+    const usagePercent = ((keyData.requests_today + 1) / keyData.requests_limit) * 100
+    const threshold = usagePercent >= 95 ? 95 : usagePercent >= 80 ? 80 : null
 
-        if (profile?.email) {
-          // Fire and forget - don't await, let it run in background
-          fetch(`${supabaseUrl}/functions/v1/rate-limit-notification`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${supabaseServiceKey}`,
-            },
-            body: JSON.stringify({
-              apiKeyId: typedKeyData.id,
-              apiKeyName: typedKeyData.api_key.substring(0, 8) + '...',
-              userId: typedKeyData.user_id,
-              userEmail: profile.email,
-              currentUsage: typedKeyData.requests_today + 1,
-              limit: typedKeyData.requests_limit,
-              thresholdPercent: threshold,
-            }),
-          }).catch(err => console.error('Failed to trigger rate limit notification:', err))
-        }
-        break // Only send one notification per request
-      }
+    if (threshold != null) {
+      const cronSecret = Deno.env.get('CRON_SECRET') || supabaseServiceKey
+      // Fire-and-forget: email manzili funksiya ichida bazadan olinadi.
+      fetch(`${supabaseUrl}/functions/v1/rate-limit-notification`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${supabaseServiceKey}`,
+          'x-cron-secret': cronSecret,
+        },
+        body: JSON.stringify({
+          apiKeyId: keyData.id,
+          thresholdPercent: threshold,
+        }),
+      }).catch((err) => console.error('Failed to trigger rate limit notification:', err))
     }
   }
 
-  // Return success with key info
-  console.log('API request validated successfully for key:', typedKeyData.id)
   return new Response(
     JSON.stringify({
       success: true,
       message: 'API key validated successfully',
-      key_type: typedKeyData.key_type,
-      user_id: typedKeyData.user_id,
-      requests_remaining: typedKeyData.requests_limit ? typedKeyData.requests_limit - typedKeyData.requests_today - 1 : null
+      key_type: keyData.key_type,
+      user_id: keyData.user_id,
+      requests_remaining: keyData.requests_limit
+        ? Math.max(keyData.requests_limit - keyData.requests_today - 1, 0)
+        : null,
     }),
-    { 
-      status: 200, 
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-    }
+    {
+      status: 200,
+      headers: { ...gatewayCors(req), 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    },
   )
 })
