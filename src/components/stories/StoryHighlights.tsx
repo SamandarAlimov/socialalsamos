@@ -4,6 +4,7 @@ import { Plus, MoreHorizontal, Pencil, Trash2, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { EmojiText } from '@/components/emoji/EmojiText';
 import { useStoryHighlights, StoryHighlight } from '@/hooks/useStoryHighlights';
 import { StoryViewer } from './StoryViewer';
 import {
@@ -36,6 +37,9 @@ interface StoryHighlightsProps {
   userId: string;
   className?: string;
 }
+
+// i18next interpolatsiya tokeni (kod ichida to'g'ridan-to'g'ri yozilmaydi)
+const NAME_TOKEN = '{' + '{name}' + '}';
 
 export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
   const { t } = useTranslation();
@@ -204,7 +208,7 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
                           />
                         ) : (
                           <span className="text-xl font-semibold text-muted-foreground">
-                            {highlight.name[0]?.toUpperCase()}
+                            <EmojiText text={highlight.name.slice(0, 2)} size={22} />
                           </span>
                         )}
                       </span>
@@ -217,8 +221,8 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
                     )}
                   </button>
 
-                  <span className="max-w-[72px] truncate text-xs font-medium text-foreground">
-                    {highlight.name}
+                  <span className="flex max-w-[72px] items-center gap-0.5 overflow-hidden whitespace-nowrap text-xs font-medium text-foreground">
+                    <EmojiText text={highlight.name} size={13} className="truncate" />
                   </span>
 
                   {isOwnProfile && (
@@ -325,7 +329,8 @@ export function StoryHighlights({ userId, className }: StoryHighlightsProps) {
             </AlertDialogTitle>
             <AlertDialogDescription>
               {t('profile.highlights.deleteDescription', {
-                defaultValue: "\u201c{{name}}\u201d butunlay o'chiriladi. Story'lar arxivda qoladi.",
+                defaultValue:
+                  '\u201c' + NAME_TOKEN + "\u201d butunlay o'chiriladi. Story'lar arxivda qoladi.",
                 name: deletingHighlight?.name || '',
               })}
             </AlertDialogDescription>
