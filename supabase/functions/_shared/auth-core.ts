@@ -11,10 +11,10 @@ export const MAX_ACCOUNTS = 10;
 // ---------------------------------------------------------------------
 // CORS
 //
-// A browser blocks the whole request when the preflight answer does not
-// echo an origin it can accept. Returning "the first configured origin"
-// for an unknown caller therefore breaks login on every host that was
-// forgotten in AUTH_ALLOWED_ORIGINS (custom domain, preview URL, ...).
+// A browser blocks the whole request when the preflight answer does not echo
+// an origin it can accept. Returning "the first configured origin" for an
+// unknown caller therefore breaks login on every host that was forgotten in
+// AUTH_ALLOWED_ORIGINS (custom domain, preview URL, ...).
 //
 // Policy:
 //   * AUTH_ALLOWED_ORIGINS (comma separated) is always honoured;
@@ -86,7 +86,7 @@ export function corsHeaders(req: Request): Record<string, string> {
  * Every function should return this for `req.method === "OPTIONS"`.
  */
 export function preflightResponse(req: Request): Response {
-  return new Response(null { status: 204, headers: corsHeaders(req) });
+  return new Response(null, { status: 204, headers: corsHeaders(req) });
 }
 
 export function jsonResponse(
