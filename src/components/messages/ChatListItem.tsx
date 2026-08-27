@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Users, Megaphone, Pin, VolumeX, Reply, Bookmark, Phone, Video, PhoneMissed, PhoneOff, Mic, Image, FileText, MapPin, BarChart3, Sticker, Music } from 'lucide-react';
+import { Users, Megaphone, Pin, VolumeX, Reply, Bookmark, Phone, Video, PhoneMissed, PhoneOff, PhoneIncoming, PhoneOutgoing, VideoOff, Mic, Image, FileText, MapPin, BarChart3, Sticker, Music } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
 import { Conversation } from '@/hooks/useMessages';
@@ -30,6 +30,13 @@ interface ChatListItemProps {
   onMarkRead?: () => void;
   onMarkUnread?: () => void;
 }
+
+/** Telegram uses a neutral (gray) highlight for the active chat row, never an accent color. */
+const SELECTED_ROW = 'bg-muted dark:bg-muted';
+const HOVER_ROW = 'hover:bg-muted/60 active:bg-muted/80';
+
+/** Telegram renders media hints in the same muted tone as the preview text. */
+const PREVIEW_ICON = 'h-3.5 w-3.5 shrink-0 text-muted-foreground';
 
 export function ChatListItem({ 
   conversation, 
@@ -150,34 +157,100 @@ export function ChatListItem({
     return format(date, 'dd.MM.yyyy');
   };
 
+  const formatCallDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  /**
+   * Telegram-style preview for a call history payload.
+   * Audio and video calls are always distinguished, and the direction
+   * (incoming / outgoing) is derived from the caller id.
+   */
+  const formatCallPreview = (callData: {
+    type: 'audio' | 'video';
+    status?: string;
+    duration?: number;
+    caller_id?: string;
+  }): { text: string; icon: React.ReactNode } => {
+    const isVideo = callData.type === 'video';
+    const isOutgoing = !!user?.id && callData.caller_id === user.id;
+    const label = isVideo ? "Video qo'ng'iroq" : "Ovozli qo'ng'iroq";
+
+    switch (callData.status) {
+      case 'missed':
+        return {
+          text: isOutgoing ? `${label} · javobsiz` : `O'tkazib yuborilgan ${label.toLowerCase()}`,
+          icon: isVideo
+            ? <VideoOff className={cn(PREVIEW_ICON, 'text-red-500')} />
+            : <PhoneMissed className={cn(PREVIEW_ICON, 'text-red-500')} />,
+        };
+      case 'declined':
+        return {
+          text: `${label} · rad etildi`,
+          icon: isVideo
+            ? <VideoOff className={cn(PREVIEW_ICON, 'text-red-500')} />
+            : <PhoneOff className={cn(PREVIEW_ICON, 'text-red-500')} />,
+        };
+      case 'cancelled':
+        return {
+          text: `${label} · bekor qilindi`,
+          icon: isVideo
+            ? <VideoOff className={PREVIEW_ICON} />
+            : <PhoneOff className={PREVIEW_ICON} />,
+        };
+      case 'ended': {
+        const duration = callData.duration ? ` · ${formatCallDuration(callData.duration)}` : '';
+        return {
+          text: `${isOutgoing ? 'Chiquvchi' : 'Kiruvchi'} ${label.toLowerCase()}${duration}`,
+          icon: isVideo
+            ? <Video className={cn(PREVIEW_ICON, 'text-emerald-500')} />
+            : isOutgoing
+              ? <PhoneOutgoing className={cn(PREVIEW_ICON, 'text-emerald-500')} />
+              : <PhoneIncoming className={cn(PREVIEW_ICON, 'text-emerald-500')} />,
+        };
+      }
+      default:
+        return {
+          text: label,
+          icon: isVideo ? <Video className={PREVIEW_ICON} /> : <Phone className={PREVIEW_ICON} />,
+        };
+    }
+  };
+
   // Format last message for display (handle media-only messages, call history JSON, locations, etc.)
   const formatLastMessage = (message: string | null, meta?: Conversation['last_message_meta']): { text: string; icon?: React.ReactNode } => {
     const mediaType = meta?.media_type;
     const hasRealContent = message && message.trim().length > 0;
+    const caption = hasRealContent && !message.startsWith('{') ? message : null;
 
-    // Media-only or media-enriched messages: content may be empty, so describe the attachment
+    // Media-only or media-enriched messages: content may be empty, so describe the attachment.
+    // Telegram keeps the caption visible next to the media label when there is one.
     if (!hasRealContent || mediaType) {
       switch (mediaType) {
         case 'voice':
+          return { text: caption || 'Ovozli xabar', icon: <Mic className={PREVIEW_ICON} /> };
         case 'audio':
-          return { text: "Ovozli xabar", icon: <Mic className="h-3.5 w-3.5 text-primary inline mr-1" /> };
+          return { text: caption || 'Ovozli xabar', icon: <Mic className={PREVIEW_ICON} /> };
         case 'image':
-        case 'album':
         case 'photo':
-          return { text: "Rasm", icon: <Image className="h-3.5 w-3.5 text-primary inline mr-1" /> };
+          return { text: caption || 'Rasm', icon: <Image className={PREVIEW_ICON} /> };
+        case 'album':
+          return { text: caption || 'Albom', icon: <Image className={PREVIEW_ICON} /> };
         case 'video':
-          return { text: "Video", icon: <Video className="h-3.5 w-3.5 text-primary inline mr-1" /> };
+          return { text: caption || 'Video', icon: <Video className={PREVIEW_ICON} /> };
         case 'file':
         case 'document':
-          return { text: meta?.media_file_name || "Fayl", icon: <FileText className="h-3.5 w-3.5 text-primary inline mr-1" /> };
+          return { text: caption || meta?.media_file_name || 'Fayl', icon: <FileText className={PREVIEW_ICON} /> };
         case 'location':
-          return { text: "Joylashuv", icon: <MapPin className="h-3.5 w-3.5 text-primary inline mr-1" /> };
+          return { text: caption || 'Joylashuv', icon: <MapPin className={PREVIEW_ICON} /> };
         case 'poll':
-          return { text: "So'rov", icon: <BarChart3 className="h-3.5 w-3.5 text-primary inline mr-1" /> };
+          return { text: caption || "So'rov", icon: <BarChart3 className={PREVIEW_ICON} /> };
         case 'sticker':
-          return { text: "Stiker", icon: <Sticker className="h-3.5 w-3.5 text-primary inline mr-1" /> };
+          return { text: caption || 'Stiker', icon: <Sticker className={PREVIEW_ICON} /> };
         case 'music':
-          return { text: "Musiqa", icon: <Music className="h-3.5 w-3.5 text-primary inline mr-1" /> };
+          return { text: caption || meta?.media_file_name || 'Musiqa', icon: <Music className={PREVIEW_ICON} /> };
         case 'call_history':
           // fall through to call JSON parser below
           break;
@@ -190,7 +263,7 @@ export function ChatListItem({
 
     // Location payload format used elsewhere in the app
     if (message.startsWith('📍 LOCATION:')) {
-      return { text: 'Joylashuv', icon: <MapPin className="h-3.5 w-3.5 text-primary inline mr-1" /> };
+      return { text: 'Joylashuv', icon: <MapPin className={PREVIEW_ICON} /> };
     }
 
     // Check if it's a call history JSON
@@ -198,48 +271,20 @@ export function ChatListItem({
       try {
         const callData = JSON.parse(message);
         if (callData.type === 'video' || callData.type === 'audio') {
-          const isVideo = callData.type === 'video';
-          const status = callData.status;
-          
-          let statusText = '';
-          let icon: React.ReactNode = null;
-          
-          switch (status) {
-            case 'missed':
-              statusText = isVideo ? "O'tkazib yuborilgan video qo'ng'iroq" : "O'tkazib yuborilgan qo'ng'iroq";
-              icon = <PhoneMissed className="h-3.5 w-3.5 text-red-500 inline mr-1" />;
-              break;
-            case 'declined':
-              statusText = isVideo ? "Rad etilgan video qo'ng'iroq" : "Rad etilgan qo'ng'iroq";
-              icon = <PhoneOff className="h-3.5 w-3.5 text-orange-500 inline mr-1" />;
-              break;
-            case 'ended':
-              statusText = isVideo ? "Video qo'ng'iroq" : "Qo'ng'iroq";
-              if (callData.duration) {
-                const mins = Math.floor(callData.duration / 60);
-                const secs = callData.duration % 60;
-                statusText += ` (${mins}:${secs.toString().padStart(2, '0')})`;
-              }
-              icon = isVideo 
-                ? <Video className="h-3.5 w-3.5 text-green-500 inline mr-1" />
-                : <Phone className="h-3.5 w-3.5 text-green-500 inline mr-1" />;
-              break;
-            default:
-              statusText = isVideo ? "Video qo'ng'iroq" : "Qo'ng'iroq";
-              icon = isVideo 
-                ? <Video className="h-3.5 w-3.5 text-primary inline mr-1" />
-                : <Phone className="h-3.5 w-3.5 text-primary inline mr-1" />;
-          }
-          
-          return { text: statusText, icon };
+          return formatCallPreview(callData);
         }
       } catch {
         // Not valid JSON, treat as regular message
       }
     }
+
+    // Legacy plain-text call fallback
+    if (message.startsWith('📞')) {
+      return { text: message.replace('📞', '').trim() || "Qo'ng'iroq", icon: <Phone className={PREVIEW_ICON} /> };
+    }
     
     // Regular message - rely on CSS truncation to adapt to panel width
-    return { text: message };
+    return { text: message.replace(/\s+/g, ' ').trim() };
   };
 
   const isUnread = (conversation.unread_count ?? 0) > 0;
@@ -270,12 +315,12 @@ export function ChatListItem({
           title={getName()}
           className={cn(
             "w-full flex items-center justify-center py-2 transition-colors",
-            "hover:bg-accent/50 active:bg-accent/70",
-            isSelected && "bg-accent"
+            HOVER_ROW,
+            isSelected && SELECTED_ROW
           )}
         >
           <div className="relative">
-            <Avatar className={cn("h-11 w-11 ring-2 transition-all", isSelected ? "ring-primary" : "ring-transparent")}>
+            <Avatar className={cn("h-11 w-11 ring-2 transition-all", isSelected ? "ring-muted-foreground/30" : "ring-transparent")}>
               <AvatarImage src={getAvatar() || ''} />
               <AvatarFallback className="bg-primary text-primary-foreground font-medium text-sm">
                 {isSelfChat ? <Bookmark className="h-4 w-4" /> : conversation.type === 'group' ? <Users className="h-4 w-4" /> : conversation.type === 'channel' ? <Megaphone className="h-4 w-4" /> : getName()[0]?.toUpperCase()}
@@ -311,25 +356,25 @@ export function ChatListItem({
       onMarkUnread={onMarkUnread}
     >
       <div className="relative overflow-hidden">
-        {/* Swipe action indicator */}
+        {/* Swipe action indicator (neutral, Telegram-like) */}
         <div 
           className={cn(
-            "absolute left-0 top-0 bottom-0 flex items-center justify-center bg-orange-500 transition-opacity",
-            isReadyToReply ? "opacity-100" : "opacity-70"
+            "absolute left-0 top-0 bottom-0 flex items-center justify-center bg-muted-foreground/25 transition-opacity",
+            isReadyToReply ? "opacity-100" : "opacity-60"
           )}
           style={{ width: Math.max(offset, 0) }}
         >
-          <Reply className="h-5 w-5 text-white" />
+          <Reply className="h-5 w-5 text-foreground" />
         </div>
 
         <button
           onClick={handleClick}
           {...swipeHandlers}
           className={cn(
-            "w-full px-4 py-3 md:px-3 md:py-2.5 flex items-center gap-3 transition-all duration-200 border-b border-border/30",
-            "hover:bg-accent/50 active:bg-accent/70",
+            "w-full px-4 py-3 md:px-3 md:py-2.5 flex items-center gap-3 transition-colors duration-150 border-b border-border/30",
+            HOVER_ROW,
             "min-h-[72px] md:min-h-0", // Larger touch target on mobile
-            isSelected && "bg-accent"
+            isSelected && SELECTED_ROW
           )}
           style={{ transform: `translateX(${offset}px)` }}
         >
