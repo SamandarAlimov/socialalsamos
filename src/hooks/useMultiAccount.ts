@@ -1,240 +1,298 @@
-import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { Session } from '@supabase/supabase-js';
+/**
+ * Multi-account support for one Alsamos identity.
+ *
+ * The account list comes from the database (`identity_accounts`, protected by
+ * RLS so only sibling accounts of the same identity are visible). Sessions
+ * live in per-slot cookies; this hook never reads or writes tokens itself,
+ * which is the key difference from the previous localStorage implementation.
+ */
 
-interface StoredAccount {
+import { useCallback, useEffect, useMemo, useState } from 'react';
+
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  AlsamosAuthError,
+  authErrorMessage,
+  MAX_ACCOUNTS_PER_IDENTITY,
+  requestAccountCreate,
+  requestAccountRevoke,
+  requestAccountSession,
+  requestLoginTicket,
+} from '@/lib/alsamosAuth';
+import {
+  clearSlot,
+  getActiveSlot,
+  occupiedSlots,
+  setActiveSlot,
+  writeAccountMeta,
+} from '@/lib/accountSlots';
+
+export type LinkedAccount = {
   id: string;
-  email: string;
+  userId: string;
+  slot: number;
+  username: string | null;
   displayName: string | null;
   avatarUrl: string | null;
-  username: string | null;
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number;
-}
+  isPrimary: boolean;
+  /** A session for this account is stored on this device. */
+  hasLocalSession: boolean;
+  isActive: boolean;
+};
 
-const ACCOUNTS_STORAGE_KEY = 'alsamos_accounts';
-const ACTIVE_ACCOUNT_KEY = 'alsamos_active_account';
+export type SwitchResult =
+  | { ok: true }
+  | { ok: false; needsPassword: true }
+  | { ok: false; error: string };
 
 export function useMultiAccount() {
-  const [accounts, setAccounts] = useState<StoredAccount[]>([]);
-  const [activeAccountId, setActiveAccountId] = useState<string | null>(null);
+  const { user } = useAuth();
+  const [accounts, setAccounts] = useState<LinkedAccount[]>([]);
+  const [identityEmail, setIdentityEmail] = useState<string | null>(null);
+  const [maxAccounts, setMaxAccounts] = useState<number>(MAX_ACCOUNTS_PER_IDENTITY);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Load accounts from localStorage
+  const activeSlot = getActiveSlot();
+
+  const refresh = useCallback(async () => {
+    if (!user) {
+      setAccounts([]);
+      setIdentityEmail(null);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const { data: own, error: ownError } = await supabase
+        .from('identity_accounts')
+        .select('identity_id')
+        .eq('user_id', user.id)
+        .neq('status', 'deleted')
+        .maybeSingle();
+
+      if (ownError) throw ownError;
+      if (!own?.identity_id) {
+        setAccounts([]);
+        return;
+      }
+
+      const [{ data: rows, error: rowsError }, { data: identity }] = await Promise.all([
+        supabase
+          .from('identity_accounts')
+          .select('id, user_id, slot_no, is_primary, status')
+          .eq('identity_id', own.identity_id)
+          .eq('status', 'active')
+          .order('slot_no', { ascending: true }),
+        supabase
+          .from('auth_identities')
+          .select('alsamos_email, max_accounts')
+          .eq('id', own.identity_id)
+          .maybeSingle(),
+      ]);
+
+      if (rowsError) throw rowsError;
+
+      const list = rows ?? [];
+      const userIds = list.map((row) => row.user_id as string);
+
+      const { data: profiles } = userIds.length
+        ? await supabase
+            .from('profiles')
+            .select('id, username, display_name, avatar_url')
+            .in('id', userIds)
+        : { data: [] as Array<Record<string, unknown>> };
+
+      const profileById = new Map(
+        (profiles ?? []).map((p) => [p.id as string, p as Record<string, unknown>]),
+      );
+      const localSlots = occupiedSlots();
+
+      const mapped: LinkedAccount[] = list.map((row) => {
+        const slot = row.slot_no as number;
+        const profile = profileById.get(row.user_id as string);
+
+        return {
+          id: row.id as string,
+          userId: row.user_id as string,
+          slot,
+          username: (profile?.username as string | null) ?? null,
+          displayName: (profile?.display_name as string | null) ?? null,
+          avatarUrl: (profile?.avatar_url as string | null) ?? null,
+          isPrimary: Boolean(row.is_primary),
+          hasLocalSession: localSlots.includes(slot),
+          isActive: (row.user_id as string) === user.id,
+        };
+      });
+
+      setAccounts(mapped);
+      setIdentityEmail((identity?.alsamos_email as string | null) ?? null);
+      setMaxAccounts((identity?.max_accounts as number | null) ?? MAX_ACCOUNTS_PER_IDENTITY);
+
+      // Cache non-sensitive metadata only (no tokens, ever).
+      writeAccountMeta(
+        mapped.map((account) => ({
+          slot: account.slot,
+          accountId: account.id,
+          userId: account.userId,
+          username: account.username,
+          displayName: account.displayName,
+          avatarUrl: account.avatarUrl,
+          isPrimary: account.isPrimary,
+        })),
+      );
+    } catch (e) {
+      console.error('useMultiAccount refresh failed', e);
+      setError('Akkauntlar ro\u2018yxatini yuklab bo\u2018lmadi.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user]);
+
   useEffect(() => {
-    const stored = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as StoredAccount[];
-        setAccounts(parsed);
-      } catch (e) {
-        console.error('Failed to parse stored accounts:', e);
-      }
-    }
+    refresh();
+  }, [refresh]);
 
-    const activeId = localStorage.getItem(ACTIVE_ACCOUNT_KEY);
-    if (activeId) {
-      setActiveAccountId(activeId);
-    }
-  }, []);
+  const canAddAccount = accounts.length < maxAccounts;
 
-  // Save current session as an account
-  const saveCurrentAccount = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+  /**
+   * Switch to another account of the same identity. Instant when a session for
+   * that slot exists on this device, otherwise the identity password is needed.
+   */
+  const switchToAccount = useCallback(
+    async (account: LinkedAccount): Promise<SwitchResult> => {
+      if (account.isActive) return { ok: true };
 
-    // Fetch profile data
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('display_name, avatar_url, username')
-      .eq('id', session.user.id)
-      .maybeSingle();
-
-    const newAccount: StoredAccount = {
-      id: session.user.id,
-      email: session.user.email || '',
-      displayName: profile?.display_name || null,
-      avatarUrl: profile?.avatar_url || null,
-      username: profile?.username || null,
-      accessToken: session.access_token,
-      refreshToken: session.refresh_token,
-      expiresAt: session.expires_at || 0,
-    };
-
-    setAccounts(prev => {
-      // Update existing or add new
-      const existing = prev.findIndex(a => a.id === newAccount.id);
-      let updated: StoredAccount[];
-      
-      if (existing >= 0) {
-        updated = [...prev];
-        updated[existing] = newAccount;
-      } else {
-        updated = [...prev, newAccount];
+      if (!account.hasLocalSession) {
+        return { ok: false, needsPassword: true };
       }
 
-      localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(updated));
-      return updated;
-    });
-
-    setActiveAccountId(newAccount.id);
-    localStorage.setItem(ACTIVE_ACCOUNT_KEY, newAccount.id);
-  }, []);
-
-  // Switch to a different account
-  const switchToAccount = useCallback(async (accountId: string) => {
-    const account = accounts.find(a => a.id === accountId);
-    if (!account) return { error: new Error('Account not found') };
-
-    setIsLoading(true);
-
-    try {
-      // First save current session
-      await saveCurrentAccount();
-
-      // Set the session for the selected account
-      const { data, error } = await supabase.auth.setSession({
-        access_token: account.accessToken,
-        refresh_token: account.refreshToken,
-      });
-
-      if (error) {
-        // Token might be expired, need to re-login
-        setIsLoading(false);
-        return { error, needsReauth: true, account };
-      }
-
-      // Update the stored account with new tokens
-      if (data.session) {
-        const updatedAccount: StoredAccount = {
-          ...account,
-          accessToken: data.session.access_token,
-          refreshToken: data.session.refresh_token,
-          expiresAt: data.session.expires_at || 0,
-        };
-
-        setAccounts(prev => {
-          const updated = prev.map(a => a.id === accountId ? updatedAccount : a);
-          localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(updated));
-          return updated;
-        });
-      }
-
-      setActiveAccountId(accountId);
-      localStorage.setItem(ACTIVE_ACCOUNT_KEY, accountId);
-      setIsLoading(false);
-
-      // Reload page to refresh all data
+      setActiveSlot(account.slot);
       window.location.reload();
-      
-      return { error: null };
-    } catch (err) {
-      setIsLoading(false);
-      return { error: err as Error };
-    }
-  }, [accounts, saveCurrentAccount]);
+      return { ok: true };
+    },
+    [],
+  );
 
-  // Add new account (opens login flow)
-  const addAccount = useCallback(async (email: string, password: string) => {
-    setIsLoading(true);
-
-    try {
-      // First save current session
-      await saveCurrentAccount();
-
-      // Sign out current user
-      await supabase.auth.signOut();
-
-      // Sign in with new credentials
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) {
-        setIsLoading(false);
-        return { error };
+  /** Re-authenticate a specific account with the identity password. */
+  const authenticateAccount = useCallback(
+    async (account: LinkedAccount, password: string): Promise<SwitchResult> => {
+      if (!identityEmail) {
+        return { ok: false, error: 'Identifikator emaili topilmadi.' };
       }
 
-      if (data.session) {
-        // Fetch profile for the new account
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('display_name, avatar_url, username')
-          .eq('id', data.session.user.id)
-          .maybeSingle();
+      try {
+        const step = await requestLoginTicket(identityEmail, password);
+        const result = await requestAccountSession(step.ticket, account.id);
 
-        const newAccount: StoredAccount = {
-          id: data.session.user.id,
-          email: data.session.user.email || '',
-          displayName: profile?.display_name || null,
-          avatarUrl: profile?.avatar_url || null,
-          username: profile?.username || null,
-          accessToken: data.session.access_token,
-          refreshToken: data.session.refresh_token,
-          expiresAt: data.session.expires_at || 0,
-        };
+        setActiveSlot(result.slot_no);
+        const { error: verifyError } = await supabase.auth.verifyOtp({
+          type: 'magiclink',
+          token_hash: result.token_hash,
+        });
 
-        setAccounts(prev => {
-          const existing = prev.findIndex(a => a.id === newAccount.id);
-          let updated: StoredAccount[];
-          
-          if (existing >= 0) {
-            updated = [...prev];
-            updated[existing] = newAccount;
-          } else {
-            updated = [...prev, newAccount];
+        if (verifyError) {
+          return { ok: false, error: authErrorMessage('SESSION_MINT_FAILED') };
+        }
+
+        window.location.reload();
+        return { ok: true };
+      } catch (e) {
+        const err = e instanceof AlsamosAuthError ? e : new AlsamosAuthError('UNKNOWN');
+        return { ok: false, error: err.message };
+      }
+    },
+    [identityEmail],
+  );
+
+  /** Create an additional account (slot 2..10) and switch into it. */
+  const addAccount = useCallback(
+    async (username: string, displayName?: string): Promise<SwitchResult> => {
+      if (!canAddAccount) {
+        return { ok: false, error: authErrorMessage('ACCOUNT_LIMIT_REACHED') };
+      }
+
+      try {
+        const created = await requestAccountCreate({ username, displayName });
+
+        if (created.token_hash) {
+          setActiveSlot(created.slot_no);
+          const { error: verifyError } = await supabase.auth.verifyOtp({
+            type: 'magiclink',
+            token_hash: created.token_hash,
+          });
+
+          if (verifyError) {
+            await refresh();
+            return { ok: false, error: authErrorMessage('SESSION_MINT_FAILED') };
           }
 
-          localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(updated));
-          return updated;
-        });
+          window.location.reload();
+          return { ok: true };
+        }
 
-        setActiveAccountId(newAccount.id);
-        localStorage.setItem(ACTIVE_ACCOUNT_KEY, newAccount.id);
+        await refresh();
+        return { ok: true };
+      } catch (e) {
+        const err = e instanceof AlsamosAuthError ? e : new AlsamosAuthError('UNKNOWN');
+        return { ok: false, error: err.message };
+      }
+    },
+    [canAddAccount, refresh],
+  );
+
+  /**
+   * Remove an account from this device.
+   * `mode: 'unlink'` additionally frees its slot for the identity.
+   * Server-side refresh tokens are revoked in both cases, so a stolen token
+   * cannot be replayed (the old implementation only cleared localStorage).
+   */
+  const removeAccount = useCallback(
+    async (account: LinkedAccount, mode: 'signout' | 'unlink' = 'signout'): Promise<SwitchResult> => {
+      try {
+        await requestAccountRevoke(account.id, mode);
+      } catch (e) {
+        const err = e instanceof AlsamosAuthError ? e : new AlsamosAuthError('UNKNOWN');
+        return { ok: false, error: err.message };
       }
 
-      setIsLoading(false);
-      window.location.reload();
-      return { error: null };
-    } catch (err) {
-      setIsLoading(false);
-      return { error: err as Error };
-    }
-  }, [saveCurrentAccount]);
+      clearSlot(account.slot);
 
-  // Remove an account
-  const removeAccount = useCallback((accountId: string) => {
-    setAccounts(prev => {
-      const updated = prev.filter(a => a.id !== accountId);
-      localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(updated));
-      return updated;
-    });
+      if (account.slot === activeSlot) {
+        const fallback = accounts.find((a) => a.slot !== account.slot && a.hasLocalSession);
+        setActiveSlot(fallback?.slot ?? 1);
+        window.location.href = fallback ? '/home' : '/';
+        return { ok: true };
+      }
 
-    // If removing active account, clear active
-    if (activeAccountId === accountId) {
-      localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
-      setActiveAccountId(null);
-    }
-  }, [activeAccountId]);
+      await refresh();
+      return { ok: true };
+    },
+    [accounts, activeSlot, refresh],
+  );
 
-  // Clear all accounts on logout
-  const clearAllAccounts = useCallback(() => {
-    localStorage.removeItem(ACCOUNTS_STORAGE_KEY);
-    localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
-    setAccounts([]);
-    setActiveAccountId(null);
-  }, []);
+  const activeAccount = useMemo(
+    () => accounts.find((account) => account.isActive) ?? null,
+    [accounts],
+  );
 
   return {
     accounts,
-    activeAccountId,
+    activeAccount,
+    activeSlot,
+    identityEmail,
+    maxAccounts,
+    usedAccounts: accounts.length,
+    canAddAccount,
     isLoading,
-    saveCurrentAccount,
+    error,
+    refresh,
     switchToAccount,
+    authenticateAccount,
     addAccount,
     removeAccount,
-    clearAllAccounts,
   };
 }
