@@ -12,6 +12,9 @@
  *   - email    : <name>@alsamos.com or a preserved legacy address
  *   - username : of any account owned by the identity
  *   - phone    : the identity phone number, in any human formatting
+ *
+ * When 2FA is on, step 1 returns `mfa_required` and the ticket can only be
+ * spent on verifyMfaLogin().
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -21,6 +24,7 @@ import {
   MAX_ACCOUNTS_PER_IDENTITY,
   TOS_VERSION,
 } from '@/lib/authConstants';
+import { getDeviceId } from '@/lib/deviceId';
 
 export {
   ALSAMOS_ACCOUNT_DOMAIN,
@@ -94,6 +98,15 @@ export function toIdentityEmail(input: string): string {
   return `${value}@${ALSAMOS_MAIL_DOMAIN}`;
 }
 
+/** TOTP codes are 6 digits; recovery codes are "xxxx-xxxx-xxxx" base32. */
+export function isTotpCode(value: string): boolean {
+  return /^[0-9]{6}$/.test((value ?? '').replace(/\s/g, ''));
+}
+
+export function isRecoveryCode(value: string): boolean {
+  return (value ?? '').toUpperCase().replace(/[^A-Z2-7]/g, '').length >= 8;
+}
+
 export type PublicAccount = {
   id: string;
   slot_no: number;
@@ -103,16 +116,39 @@ export type PublicAccount = {
   avatar_url: string | null;
 };
 
+export type IdentitySummary = {
+  email: string;
+  phone?: string | null;
+  migration_status: 'legacy' | 'claimed' | 'migrated';
+  used: number;
+  max: number;
+};
+
 export type LoginStepResult = {
   ticket: string;
   accounts: PublicAccount[];
-  identity: {
-    email: string;
-    phone?: string | null;
-    migration_status: 'legacy' | 'claimed' | 'migrated';
-    used: number;
-    max: number;
-  };
+  identity: IdentitySummary;
+  /** When true the ticket may ONLY be used with verifyMfaLogin(). */
+  mfa_required?: boolean;
+  mfa_method?: 'totp' | null;
+};
+
+export type TwoFactorStatus = {
+  enabled: boolean;
+  pending: boolean;
+  codes_left: number;
+};
+
+export type ActiveDevice = {
+  id: string;
+  slot_no: number;
+  label: string;
+  user_agent: string | null;
+  ip: string | null;
+  created_at: string;
+  last_seen_at: string;
+  is_current_account: boolean;
+  is_current_device: boolean;
 };
 
 export type AuthErrorCode =
@@ -132,6 +168,11 @@ export type AuthErrorCode =
   | 'SESSION_MINT_FAILED'
   | 'UNAUTHORIZED'
   | 'IDENTITY_UNAVAILABLE'
+  | 'MFA_CODE_INVALID'
+  | 'MFA_ALREADY_ENABLED'
+  | 'MFA_NOT_PENDING'
+  | 'DEVICE_NOT_FOUND'
+  | 'METHOD_NOT_ALLOWED'
   | 'NETWORK'
   | 'UNKNOWN';
 
@@ -174,6 +215,14 @@ export function authErrorMessage(code: AuthErrorCode): string {
       return 'Ruxsat yo’q. Qaytadan kiring.';
     case 'IDENTITY_UNAVAILABLE':
       return 'Akkaunt maʼlumotlarini yuklab bo’lmadi. Keyinroq urinib ko’ring.';
+    case 'MFA_CODE_INVALID':
+      return 'Kod xato yoki muddati tugagan. Ilovadagi yangi kodni kiriting.';
+    case 'MFA_ALREADY_ENABLED':
+      return '2FA allaqachon yoqilgan.';
+    case 'MFA_NOT_PENDING':
+      return '2FA sozlash boshlanmagan. Avval QR kodni oling.';
+    case 'DEVICE_NOT_FOUND':
+      return 'Qurilma topilmadi yoki allaqachon uzilgan.';
     case 'NETWORK':
       return 'Tarmoq xatosi. Internetni tekshirib qayta urinib ko’ring.';
     default:
@@ -181,8 +230,16 @@ export function authErrorMessage(code: AuthErrorCode): string {
   }
 }
 
+type AuthFunctionName =
+  | 'account-login'
+  | 'account-session'
+  | 'account-create'
+  | 'account-revoke'
+  | 'account-2fa'
+  | 'account-devices';
+
 async function invokeAuthFunction<T>(
-  name: 'account-login' | 'account-session' | 'account-create' | 'account-revoke',
+  name: AuthFunctionName,
   body: Record<string, unknown>,
 ): Promise<T> {
   const { data, error } = await supabase.functions.invoke(name, { body });
@@ -220,6 +277,16 @@ export function requestLoginTicket(identifier: string, password: string) {
   return invokeAuthFunction<LoginStepResult>('account-login', {
     identifier: canonicalIdentifier(identifier),
     password,
+    device_id: getDeviceId(),
+  });
+}
+
+/** Step 1b (only when mfa_required): TOTP or recovery code. */
+export function verifyMfaLogin(ticket: string, code: string) {
+  return invokeAuthFunction<LoginStepResult & { method: 'totp' | 'recovery' }>('account-2fa', {
+    action: 'verify_login',
+    ticket,
+    code: code.trim(),
   });
 }
 
@@ -229,7 +296,11 @@ export function requestAccountSession(ticket: string, accountId?: string) {
     token_hash: string;
     slot_no: number;
     account: { id: string; slot_no: number; is_primary: boolean };
-  }>('account-session', { ticket, account_id: accountId ?? null });
+  }>('account-session', {
+    ticket,
+    account_id: accountId ?? null,
+    device_id: getDeviceId(),
+  });
 }
 
 /** Create an additional account (slot 2..10) for the current identity. */
@@ -257,5 +328,68 @@ export function requestAccountRevoke(
   return invokeAuthFunction<{ ok: true; revoked_tokens: number }>('account-revoke', {
     account_id: accountId,
     mode,
+  });
+}
+
+// ---------------------------------------------------------------------
+// Two-factor authentication (session required)
+// ---------------------------------------------------------------------
+
+export function fetchTwoFactorStatus() {
+  return invokeAuthFunction<TwoFactorStatus>('account-2fa', { action: 'status' });
+}
+
+/** Returns the shared secret ONCE, for the QR code. */
+export function startTwoFactorSetup() {
+  return invokeAuthFunction<{ secret: string; otpauth_url: string }>('account-2fa', {
+    action: 'setup',
+  });
+}
+
+/** Confirms the enrolment and returns the recovery codes ONCE. */
+export function enableTwoFactor(code: string) {
+  return invokeAuthFunction<{ enabled: true; recovery_codes: string[] }>('account-2fa', {
+    action: 'enable',
+    code: code.trim(),
+  });
+}
+
+export function disableTwoFactor(code: string) {
+  return invokeAuthFunction<{ enabled: false }>('account-2fa', {
+    action: 'disable',
+    code: code.trim(),
+  });
+}
+
+export function regenerateRecoveryCodes(code: string) {
+  return invokeAuthFunction<{ recovery_codes: string[] }>('account-2fa', {
+    action: 'regenerate_codes',
+    code: code.trim(),
+  });
+}
+
+// ---------------------------------------------------------------------
+// Active devices / sessions (session required)
+// ---------------------------------------------------------------------
+
+export function listActiveDevices() {
+  return invokeAuthFunction<{ devices: ActiveDevice[] }>('account-devices', {
+    action: 'list',
+    client_device_id: getDeviceId(),
+  });
+}
+
+export function revokeDevice(deviceId: string) {
+  return invokeAuthFunction<{ ok: true; revoked_tokens: number | null }>('account-devices', {
+    action: 'revoke',
+    device_id: deviceId,
+    client_device_id: getDeviceId(),
+  });
+}
+
+export function revokeOtherDevices() {
+  return invokeAuthFunction<{ ok: true; revoked_devices: number }>('account-devices', {
+    action: 'revoke_others',
+    client_device_id: getDeviceId(),
   });
 }

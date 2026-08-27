@@ -1,5 +1,14 @@
 project_id = "mbhjganbihamoiqmankv"
 
+# =====================================================================
+# verify_jwt policy
+#
+# verify_jwt = false means Supabase does NOT check a JWT before the
+# function runs, so the function itself MUST authorise every request.
+# Each entry below states how that is done. Anything without an explicit
+# reason is a bug.
+# =====================================================================
+
 # --- Alsamos identity auth ------------------------------------------------
 # These endpoints must be reachable before a session exists, so Supabase JWT
 # verification is disabled and authorisation is performed inside the function
@@ -18,30 +27,70 @@ verify_jwt = false
 [functions.account-revoke]
 verify_jwt = false
 
+# account-2fa: "verify_login" runs during login (no session yet) and is
+# protected by a purpose-bound single-use ticket + rate limiting; every other
+# action verifies the session JWT manually via admin.getUser().
+[functions.account-2fa]
+verify_jwt = false
+
+# account-devices verifies the caller's JWT manually via admin.getUser()
+# and checks that each device belongs to the caller's identity.
+[functions.account-devices]
+verify_jwt = false
+
+# --- Realtime signalling --------------------------------------------------
+# WebSocket upgrade requests cannot carry an Authorization header, so the
+# token is passed as a query parameter and validated inside the function.
 [functions.webrtc-signaling]
 verify_jwt = false
 
 [functions.live-stream-signaling]
 verify_jwt = false
 
+# --- AI endpoints ---------------------------------------------------------
+# TODO(audit): these spend paid provider quota. They must verify the caller's
+# JWT manually and apply a per-user rate limit; see docs/security-audit.md.
 [functions.ai-assistant]
 verify_jwt = false
 
 [functions.ai-generate-image]
 verify_jwt = false
 
+[functions.smart-reply]
+verify_jwt = false
+
+[functions.summarize-email]
+verify_jwt = false
+
+# --- Proxies / third party ------------------------------------------------
+# TODO(audit): mini-app-proxy must keep a strict host allowlist (SSRF) and
+# giphy-search must not expose the upstream API key.
 [functions.mini-app-proxy]
 verify_jwt = false
 
 [functions.giphy-search]
 verify_jwt = false
 
+# --- Scheduled jobs ------------------------------------------------------
+# Invoked by cron, not by a user: they must require a shared secret header
+# (CRON_SECRET) instead of a JWT.
 [functions.send-scheduled-messages]
 verify_jwt = false
 
+[functions.rate-limit-notification]
+verify_jwt = false
+
+# --- Public API surface ---------------------------------------------------
+# api-gateway authenticates with an API key (public.api_keys), not a JWT.
 [functions.api-gateway]
 verify_jwt = false
 
+# --- OAuth2 / OpenID Connect ---------------------------------------------
+# Required by the specs to be reachable without a Supabase JWT:
+#   * openid-configuration and oauth-userinfo are spec endpoints,
+#   * oauth-token / oauth-revoke authenticate the CLIENT (id + secret),
+#   * oauth-authorize authenticates the END USER with a session cookie/JWT
+#     inside the function and shows the consent + account picker.
 [functions.oauth-authorize]
 verify_jwt = false
 
@@ -60,14 +109,7 @@ verify_jwt = false
 [functions.openid-configuration]
 verify_jwt = false
 
-[functions.rate-limit-notification]
-verify_jwt = false
-
+# --- Cross-domain SSO ----------------------------------------------------
+# sso-session exchanges a short-lived token between *.alsamos.com apps.
 [functions.sso-session]
-verify_jwt = false
-
-[functions.smart-reply]
-verify_jwt = false
-
-[functions.summarize-email]
 verify_jwt = false
