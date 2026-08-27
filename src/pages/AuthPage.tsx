@@ -7,10 +7,12 @@ import {
   Check,
   Eye,
   EyeOff,
+  KeyRound,
   Loader2,
   Lock,
   Mail,
   Phone,
+  ShieldCheck,
   User,
   UserRound,
 } from 'lucide-react';
@@ -28,17 +30,20 @@ import {
   AlsamosAuthError,
   classifyIdentifier,
   isAlsamosEmail,
+  isRecoveryCode,
+  isTotpCode,
   LEGAL_ROUTES,
   LoginStepResult,
   MAX_ACCOUNTS_PER_IDENTITY,
   normalizePhoneInput,
   PublicAccount,
   toIdentityEmail,
+  verifyMfaLogin,
 } from '@/lib/alsamosAuth';
 import { checkPassword, passwordStrengthColor } from '@/lib/passwordStrength';
 
 type AuthMode = 'login' | 'signup';
-type LoginStep = 'credentials' | 'chooseAccount';
+type LoginStep = 'credentials' | 'mfa' | 'chooseAccount';
 
 /** Login accepts an email, a username or a phone number. */
 const identifierField = z
@@ -106,6 +111,11 @@ export default function AuthPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
+  // Second factor
+  const [mfaCode, setMfaCode] = useState('');
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
+  const [verifyingMfa, setVerifyingMfa] = useState(false);
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -132,8 +142,30 @@ export default function AuthPage() {
     setFullName('');
     setUsername('');
     setAcceptedTerms(false);
+    setMfaCode('');
+    setUseRecoveryCode(false);
     setLoginStep(null);
     setStep('credentials');
+  };
+
+  /**
+   * After credentials (and the second factor, when enabled) are accepted:
+   * open the only account directly, or let the user pick one.
+   */
+  const proceedWithAccounts = async (result: LoginStepResult) => {
+    setLoginStep(result);
+
+    if (result.accounts.length <= 1) {
+      const only = result.accounts[0];
+      const { error } = await completeLogin(result.ticket, only?.id);
+      if (!error) {
+        toast.success('Xush kelibsiz!');
+        navigate(nextPath);
+      }
+      return;
+    }
+
+    setStep('chooseAccount');
   };
 
   const handleLogin = async () => {
@@ -145,24 +177,59 @@ export default function AuthPage() {
 
     try {
       const result = await beginLogin(parsed.data.identifier, parsed.data.password);
-      setLoginStep(result);
       setPassword('');
 
-      // One account -> no reason to make the user choose.
-      if (result.accounts.length <= 1) {
-        const only = result.accounts[0];
-        const { error } = await completeLogin(result.ticket, only?.id);
-        if (!error) {
-          toast.success('Xush kelibsiz!');
-          navigate(nextPath);
-        }
+      // 2FA is on: the ticket can only be spent on the code check.
+      if (result.mfa_required) {
+        setLoginStep(result);
+        setMfaCode('');
+        setUseRecoveryCode(false);
+        setStep('mfa');
         return;
       }
 
-      setStep('chooseAccount');
+      await proceedWithAccounts(result);
     } catch (e) {
       const err = e instanceof AlsamosAuthError ? e : new AlsamosAuthError('UNKNOWN');
       toast.error(err.message);
+    }
+  };
+
+  const handleVerifyMfa = async () => {
+    if (!loginStep) return;
+
+    const value = mfaCode.trim();
+    const looksValid = useRecoveryCode ? isRecoveryCode(value) : isTotpCode(value);
+    if (!looksValid) {
+      toast.error(
+        useRecoveryCode
+          ? 'Zaxira kodni to’liq kiriting.'
+          : 'Ilovadagi 6 xonali kodni kiriting.',
+      );
+      return;
+    }
+
+    setVerifyingMfa(true);
+    try {
+      const verified = await verifyMfaLogin(loginStep.ticket, value);
+      setMfaCode('');
+
+      if (verified.method === 'recovery') {
+        toast.warning('Zaxira kod ishlatildi. Sozlamalarda yangi kodlar oling.');
+      }
+
+      await proceedWithAccounts(verified);
+    } catch (e) {
+      const err = e instanceof AlsamosAuthError ? e : new AlsamosAuthError('UNKNOWN');
+      toast.error(err.message);
+
+      // An expired or fully consumed ticket means starting over.
+      if (err.code === 'TICKET_INVALID' || err.code === 'TOO_MANY_ATTEMPTS') {
+        setStep('credentials');
+        setLoginStep(null);
+      }
+    } finally {
+      setVerifyingMfa(false);
     }
   };
 
@@ -264,7 +331,91 @@ export default function AuthPage() {
             </p>
           </div>
 
-          {step === 'chooseAccount' && loginStep ? (
+          {step === 'mfa' && loginStep ? (
+            /* ---------------- Second factor ---------------- */
+            <div className="space-y-4">
+              <div className="flex flex-col items-center text-center">
+                <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
+                  <ShieldCheck className="h-6 w-6 text-primary" />
+                </span>
+                <h2 className="text-lg font-semibold">Ikki qadamli tasdiqlash</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {useRecoveryCode
+                    ? 'Zaxira kodlaringizdan birini kiriting. Har bir kod bir marta ishlaydi.'
+                    : 'Autentifikator ilovasidagi 6 xonali kodni kiriting.'}
+                </p>
+              </div>
+
+              <Input
+                type="text"
+                value={mfaCode}
+                onChange={(e) =>
+                  setMfaCode(
+                    useRecoveryCode
+                      ? e.target.value.toUpperCase().slice(0, 20)
+                      : e.target.value.replace(/[^0-9]/g, '').slice(0, 6),
+                  )
+                }
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void handleVerifyMfa();
+                  }
+                }}
+                placeholder={useRecoveryCode ? 'XXXX-XXXX-XXXX' : '123456'}
+                icon={<KeyRound className="h-4 w-4" />}
+                inputMode={useRecoveryCode ? 'text' : 'numeric'}
+                autoComplete={useRecoveryCode ? 'off' : 'one-time-code'}
+                autoFocus
+                className={useRecoveryCode ? 'tracking-widest' : 'text-center text-lg tracking-[0.4em]'}
+              />
+
+              <Button
+                type="button"
+                variant="hero"
+                size="lg"
+                className="w-full"
+                disabled={verifyingMfa}
+                onClick={handleVerifyMfa}
+              >
+                {verifyingMfa ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <>
+                    Tasdiqlash
+                    <ArrowRight className="ml-1 h-4 w-4" />
+                  </>
+                )}
+              </Button>
+
+              <button
+                type="button"
+                className="w-full text-center text-sm text-primary hover:underline"
+                onClick={() => {
+                  setUseRecoveryCode((prev) => !prev);
+                  setMfaCode('');
+                }}
+              >
+                {useRecoveryCode
+                  ? 'Autentifikator kodini kiritaman'
+                  : 'Ilovaga kira olmayapsizmi? Zaxira koddan foydalanish'}
+              </button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                onClick={() => {
+                  setStep('credentials');
+                  setLoginStep(null);
+                  setMfaCode('');
+                }}
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Orqaga
+              </Button>
+            </div>
+          ) : step === 'chooseAccount' && loginStep ? (
             /* ---------------- Account chooser ---------------- */
             <div className="space-y-3">
               <div className="text-center">
