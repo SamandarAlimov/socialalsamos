@@ -76,7 +76,7 @@ export function SwitchAccountDialog({ open, onOpenChange }: SwitchAccountDialogP
       return;
     }
 
-    toast({ title: 'Almashtirib bo\u2018lmadi', description: result.error, variant: 'destructive' });
+    toast({ title: 'Almashtirib bo’lmadi', description: result.error, variant: 'destructive' });
   };
 
   const handleReauth = async (e: React.FormEvent) => {
@@ -99,7 +99,7 @@ export function SwitchAccountDialog({ open, onOpenChange }: SwitchAccountDialogP
 
     const normalized = username.trim().toLowerCase();
     if (!isUsernameValid(normalized)) {
-      setFormError('Username 3-30 belgi, faqat a-z, 0-9 va _ bo\u2018lishi kerak.');
+      setFormError('Username 3-30 belgi, faqat a-z, 0-9 va _ bo’lishi kerak.');
       return;
     }
 
@@ -144,7 +144,7 @@ export function SwitchAccountDialog({ open, onOpenChange }: SwitchAccountDialogP
                 ostidagi akkauntlar. Limit: {usedAccounts}/{maxAccounts || MAX_ACCOUNTS_PER_IDENTITY}
               </>
             ) : (
-              'Akkauntlaringiz ro\u2018yxati.'
+              'Akkauntlaringiz ro’yxati.'
             )}
           </DialogDescription>
         </DialogHeader>
@@ -178,7 +178,7 @@ export function SwitchAccountDialog({ open, onOpenChange }: SwitchAccountDialogP
                   </div>
                   <p className="truncate text-xs text-muted-foreground">
                     @{account.username ?? '—'} · slot {account.slot}
-                    {!account.hasLocalSession && !account.isActive && ' · parol so\u2018raladi'}
+                    {!account.hasLocalSession && !account.isActive && ' · parol so’raladi'}
                   </p>
                 </div>
 
@@ -241,7 +241,7 @@ export function SwitchAccountDialog({ open, onOpenChange }: SwitchAccountDialogP
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="new-display-name">Ko\u2018rinadigan ism (ixtiyoriy)</Label>
+              <Label htmlFor="new-display-name">Ko’rinadigan ism (ixtiyoriy)</Label>
               <Input
                 id="new-display-name"
                 value={displayName}
@@ -252,7 +252,7 @@ export function SwitchAccountDialog({ open, onOpenChange }: SwitchAccountDialogP
 
             <p className="text-xs text-muted-foreground">
               Yangi akkaunt uchun alohida email yoki parol kerak emas: u
-              {identityEmail ? ` ${identityEmail}` : ' identifikatoringiz'} ga bog\u2018lanadi.
+              {identityEmail ? ` ${identityEmail}` : ' identifikatoringiz'} ga bog’lanadi.
             </p>
 
             {formError && <p className="text-sm text-destructive">{formError}</p>}
@@ -275,7 +275,7 @@ export function SwitchAccountDialog({ open, onOpenChange }: SwitchAccountDialogP
               <span className="font-medium text-foreground">
                 @{pendingAccount?.username ?? 'akkaunt'}
               </span>{' '}
-              uchun bu qurilmada sessiya yo\u2018q. Identifikator parolini kiriting.
+              uchun bu qurilmada sessiya yo’q. Identifikator parolini kiriting.
             </p>
 
             <div className="space-y-2">

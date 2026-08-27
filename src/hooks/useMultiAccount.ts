@@ -146,7 +146,7 @@ export function useMultiAccount() {
       );
     } catch (e) {
       console.error('useMultiAccount refresh failed', e);
-      setError('Akkauntlar ro\u2018yxatini yuklab bo\u2018lmadi.');
+      setError('Akkauntlar ro’yxatini yuklab bo’lmadi.');
     } finally {
       setIsLoading(false);
     }
