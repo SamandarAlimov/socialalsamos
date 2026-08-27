@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { Button } from '@/components/ui/button';
-import { Play, Pause } from 'lucide-react';
+import { Play, Pause, Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { useAudioPlayer, MediaTrack } from '@/contexts/AudioPlayerContext';
@@ -13,33 +12,34 @@ interface VoiceMessagePlayerProps {
   senderName?: string;
   messageId?: string;
   onPlay?: () => void;
-  /** All media messages in the conversation for sequential playback */
+  /** Ketma-ket ijro uchun suhbatdagi barcha media xabarlar */
   allMediaTracks?: MediaTrack[];
 }
 
-export function VoiceMessagePlayer({ 
-  url, 
-  duration, 
-  isMine, 
-  autoPlay = false, 
-  senderName, 
+const VOICE_LABEL = 'Ovozli xabar';
+const BAR_COUNT = 44;
+
+export function VoiceMessagePlayer({
+  url,
+  duration,
+  isMine,
+  senderName,
   messageId,
   onPlay,
-  allMediaTracks = []
+  allMediaTracks = [],
 }: VoiceMessagePlayerProps) {
-  const { 
-    currentTrack, 
-    isPlaying: globalIsPlaying, 
-    currentTime: globalCurrentTime, 
+  const {
+    currentTrack,
+    isPlaying: globalIsPlaying,
+    currentTime: globalCurrentTime,
     duration: globalDuration,
-    play, 
-    pause, 
-    resume, 
+    play,
+    pause,
+    resume,
     seek,
-    setPlaylist
+    setPlaylist,
   } = useAudioPlayer();
-  
-  // Check if this is the currently playing track
+
   const isThisTrack = currentTrack?.url === url;
   const isPlaying = isThisTrack && globalIsPlaying;
   const currentTime = isThisTrack ? globalCurrentTime : 0;
@@ -48,50 +48,29 @@ export function VoiceMessagePlayer({
   const [localDuration, setLocalDuration] = useState(duration || 0);
   const [isLoading, setIsLoading] = useState(!duration);
   const [playbackRate, setPlaybackRate] = useState(1);
-  const [isVisible, setIsVisible] = useState(false);
+  const [listened, setListened] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Generate stable waveform bars based on URL
+  // URL asosida barqaror waveform (har safar bir xil ko'rinadi)
   const waveformBars = useMemo(() => {
     const seed = url.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return Array.from({ length: 40 }).map((_, i) => {
+    return Array.from({ length: BAR_COUNT }).map((_, i) => {
       const baseHeight = 25 + ((seed * (i + 1) * 7) % 60);
-      const variation = Math.sin((i / 40) * Math.PI * 4) * 15;
-      return Math.min(95, Math.max(15, baseHeight + variation));
+      const variation = Math.sin((i / BAR_COUNT) * Math.PI * 4) * 15;
+      return Math.min(95, Math.max(18, baseHeight + variation));
     });
   }, [url]);
 
-  // Visibility tracking (no autoplay - Telegram behavior)
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const [entry] = entries;
-        setIsVisible(entry.isIntersecting);
-        // No autoplay on scroll - user must explicitly click to play
-      },
-      { threshold: [0, 0.5, 1] }
-    );
-
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, []);
-
-  // Load metadata for duration display when not playing
+  // Metadata (davomiylik) yuklash
   useEffect(() => {
     if (!isThisTrack && !duration) {
       const audio = new Audio(url);
-      
+
       const handleLoadedMetadata = () => {
         setLocalDuration(audio.duration);
         setIsLoading(false);
       };
-      
-      const handleCanPlay = () => {
-        setIsLoading(false);
-      };
+      const handleCanPlay = () => setIsLoading(false);
 
       audio.addEventListener('loadedmetadata', handleLoadedMetadata);
       audio.addEventListener('canplay', handleCanPlay);
@@ -101,82 +80,90 @@ export function VoiceMessagePlayer({
         audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
         audio.removeEventListener('canplay', handleCanPlay);
       };
-    } else {
-      setIsLoading(false);
     }
+    setIsLoading(false);
   }, [url, duration, isThisTrack]);
+
+  // Bir marta eshitilgandan keyin "yangi" nuqtasi o'chadi (Telegramdek)
+  useEffect(() => {
+    if (isPlaying) setListened(true);
+  }, [isPlaying]);
+
+  const buildTrack = useCallback(
+    (): MediaTrack => ({
+      id: messageId || url,
+      url,
+      name: VOICE_LABEL,
+      artist: senderName || 'Foydalanuvchi',
+      title: VOICE_LABEL,
+      senderName,
+      type: 'audio',
+    }),
+    [messageId, url, senderName]
+  );
 
   const togglePlayback = useCallback(() => {
     if (isLoading) return;
 
     if (isThisTrack) {
-      if (globalIsPlaying) {
-        pause();
-      } else {
-        resume();
-      }
-    } else {
-      // Create track for this message
-      const track: MediaTrack = {
-        id: messageId || url,
-        url,
-        name: 'Voice message',
-        artist: senderName || 'Unknown',
-        title: 'Voice message',
-        senderName,
-        type: 'audio'
-      };
-      
-      // If we have a playlist, use it for sequential playback
-      if (allMediaTracks.length > 0) {
-        const startIndex = allMediaTracks.findIndex(t => t.url === url);
-        if (startIndex >= 0) {
-          setPlaylist(allMediaTracks, startIndex);
-        } else {
-          play(track);
-        }
-      } else {
-        play(track);
-      }
-      onPlay?.();
+      if (globalIsPlaying) pause();
+      else resume();
+      return;
     }
-  }, [isLoading, isThisTrack, globalIsPlaying, pause, resume, play, setPlaylist, messageId, url, senderName, onPlay, allMediaTracks]);
 
-  const handleWaveformClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const totalDuration = isThisTrack ? playingDuration : localDuration;
-    if (totalDuration === 0) return;
-    
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const percentage = clickX / rect.width;
-    const newTime = percentage * totalDuration;
-    
-    if (isThisTrack) {
-      seek(newTime);
+    const track = buildTrack();
+    if (allMediaTracks.length > 0) {
+      const startIndex = allMediaTracks.findIndex((t) => t.url === url);
+      if (startIndex >= 0) setPlaylist(allMediaTracks, startIndex);
+      else play(track);
     } else {
-      // Start playing from this position
-      const track: MediaTrack = {
-        id: messageId || url,
-        url,
-        name: 'Voice message',
-        artist: senderName || 'Unknown',
-        title: 'Voice message',
-        senderName,
-        type: 'audio'
-      };
       play(track);
-      setTimeout(() => seek(newTime), 100);
     }
-  }, [isThisTrack, playingDuration, localDuration, seek, play, messageId, url, senderName]);
+    onPlay?.();
+  }, [
+    isLoading,
+    isThisTrack,
+    globalIsPlaying,
+    pause,
+    resume,
+    play,
+    setPlaylist,
+    buildTrack,
+    url,
+    onPlay,
+    allMediaTracks,
+  ]);
 
-  const cyclePlaybackRate = useCallback(() => {
-    const rates = [1, 1.5, 2];
-    const currentIndex = rates.indexOf(playbackRate);
-    const nextRate = rates[(currentIndex + 1) % rates.length];
-    setPlaybackRate(nextRate);
-    
-    // TODO: Update playback rate in global player if this is current track
-  }, [playbackRate]);
+  const handleWaveformClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const totalDuration = isThisTrack ? playingDuration : localDuration;
+      if (totalDuration === 0) return;
+
+      const rect = e.currentTarget.getBoundingClientRect();
+      const percentage = (e.clientX - rect.left) / rect.width;
+      const newTime = Math.max(0, Math.min(totalDuration, percentage * totalDuration));
+
+      if (isThisTrack) {
+        seek(newTime);
+      } else {
+        play(buildTrack());
+        setTimeout(() => seek(newTime), 120);
+      }
+    },
+    [isThisTrack, playingDuration, localDuration, seek, play, buildTrack]
+  );
+
+  const cyclePlaybackRate = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const rates = [1, 1.5, 2];
+      const nextRate = rates[(rates.indexOf(playbackRate) + 1) % rates.length];
+      setPlaybackRate(nextRate);
+      const el = document.querySelector('audio');
+      if (el instanceof HTMLAudioElement) el.playbackRate = nextRate;
+    },
+    [playbackRate]
+  );
 
   const formatTime = (seconds: number): string => {
     if (!isFinite(seconds) || isNaN(seconds)) return '0:00';
@@ -190,85 +177,104 @@ export function VoiceMessagePlayer({
   const progress = totalDuration > 0 ? (displayTime / totalDuration) * 100 : 0;
 
   return (
-    <div 
+    <div
       ref={containerRef}
       className={cn(
-        "flex items-center gap-3 min-w-[220px] max-w-[280px]",
-        isMine ? "text-primary-foreground" : "text-foreground"
+        'flex min-w-[220px] max-w-[280px] items-center gap-2.5',
+        isMine ? 'text-primary-foreground' : 'text-foreground'
       )}
     >
-      <Button
-        variant="ghost"
-        size="icon"
-        className={cn(
-          "h-11 w-11 rounded-full flex-shrink-0 transition-all",
-          isMine 
-            ? "hover:bg-primary-foreground/20 text-primary-foreground bg-primary-foreground/10" 
-            : "hover:bg-accent bg-accent/50",
-          isLoading && "opacity-50"
-        )}
+      {/* Play / Pause */}
+      <button
+        type="button"
         onClick={togglePlayback}
         disabled={isLoading}
+        aria-label={isPlaying ? "To'xtatish" : 'Eshitish'}
+        className={cn(
+          'relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors',
+          isMine
+            ? 'bg-primary-foreground/15 text-primary-foreground hover:bg-primary-foreground/25'
+            : 'bg-muted text-foreground hover:bg-muted/70',
+          isLoading && 'opacity-50'
+        )}
       >
         {isLoading ? (
-          <div className="animate-spin rounded-full h-5 w-5 border-2 border-current border-t-transparent" />
+          <span className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
         ) : isPlaying ? (
           <Pause className="h-5 w-5" />
         ) : (
-          <Play className="h-5 w-5 ml-0.5" />
+          <Play className="ml-0.5 h-5 w-5" />
         )}
-      </Button>
 
-      <div className="flex-1 min-w-0">
-        {/* Waveform visualization */}
-        <div 
-          className="flex items-center gap-[2px] h-8 cursor-pointer"
+        {/* Eshitilmagan xabar belgisi */}
+        {!listened && !isMine && (
+          <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-card" />
+        )}
+      </button>
+
+      <div className="min-w-0 flex-1">
+        {/* Waveform */}
+        <div
+          className="flex h-8 cursor-pointer items-center gap-[2px]"
           onClick={handleWaveformClick}
+          role="slider"
+          aria-label="Ovoz pozitsiyasi"
+          aria-valuenow={Math.round(progress)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          tabIndex={0}
         >
           {waveformBars.map((height, i) => {
             const barProgress = (i / waveformBars.length) * 100;
             const isFilled = barProgress <= progress;
             const isActive = isPlaying && Math.abs(barProgress - progress) < 3;
-            
+
             return (
               <motion.div
                 key={i}
                 className={cn(
-                  "w-[2px] rounded-full transition-colors duration-75",
+                  'w-[2px] rounded-full transition-colors duration-75',
                   isFilled
-                    ? isMine ? "bg-primary-foreground" : "bg-primary"
-                    : isMine ? "bg-primary-foreground/30" : "bg-muted-foreground/30"
+                    ? isMine
+                      ? 'bg-primary-foreground'
+                      : 'bg-foreground/80'
+                    : isMine
+                      ? 'bg-primary-foreground/30'
+                      : 'bg-muted-foreground/30'
                 )}
-                animate={{
-                  height: `${height}%`,
-                  scaleY: isActive ? 1.25 : 1,
-                }}
+                animate={{ height: `${height}%`, scaleY: isActive ? 1.25 : 1 }}
                 transition={{ duration: 0.1 }}
               />
             );
           })}
         </div>
-        
-        {/* Time and playback rate */}
-        <div className="flex justify-between items-center mt-1">
-          <span className={cn(
-            "text-[11px] tabular-nums",
-            isMine ? "text-primary-foreground/70" : "text-muted-foreground"
-          )}>
-            {isPlaying ? formatTime(displayTime) : formatTime(totalDuration)}
-          </span>
-          
-          <button
-            onClick={cyclePlaybackRate}
+
+        {/* Vaqt va tezlik */}
+        <div className="mt-0.5 flex items-center justify-between">
+          <span
             className={cn(
-              "text-[10px] font-medium px-1.5 py-0.5 rounded transition-colors",
-              isMine 
-                ? "text-primary-foreground/70 hover:bg-primary-foreground/10" 
-                : "text-muted-foreground hover:bg-muted"
+              'flex items-center gap-1 text-[11px] tabular-nums',
+              isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'
             )}
           >
-            {playbackRate}x
-          </button>
+            <Mic className="h-3 w-3" />
+            {isPlaying || displayTime > 0 ? formatTime(displayTime) : formatTime(totalDuration)}
+          </span>
+
+          {(isPlaying || playbackRate !== 1) && (
+            <button
+              type="button"
+              onClick={cyclePlaybackRate}
+              className={cn(
+                'rounded-full px-1.5 py-0.5 text-[10px] font-semibold transition-colors',
+                isMine
+                  ? 'text-primary-foreground/80 hover:bg-primary-foreground/15'
+                  : 'text-muted-foreground hover:bg-muted'
+              )}
+            >
+              {playbackRate}x
+            </button>
+          )}
         </div>
       </div>
     </div>
