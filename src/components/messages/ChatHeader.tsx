@@ -18,6 +18,8 @@ import {
   Bookmark,
   Ban,
   Flag,
+  Settings2,
+  Rocket,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -30,6 +32,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBlockedUsers } from '@/hooks/useMessageSafety';
 import { BlockConfirmDialog } from './BlockConfirmDialog';
 import { ReportDialog } from './ReportDialog';
+import { GroupChannelSettingsSheet } from './GroupChannelSettingsSheet';
 import { GoLiveButton } from '@/components/live/GoLiveButton';
 import {
   DropdownMenu,
@@ -77,9 +80,12 @@ export function ChatHeader({
   const { user } = useAuth();
   const [blockOpen, setBlockOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTabBoost, setSettingsTabBoost] = useState(false);
   const { blockedIds, refresh: refreshBlocks } = useBlockedUsers();
 
   const isChannel = conversation.type === 'channel';
+  const isGroupOrChannel = conversation.type === 'group' || conversation.type === 'channel';
   const isSelfChat =
     conversation.is_self_chat ||
     (conversation.type === 'private' && conversation.other_participant?.id === user?.id);
@@ -143,11 +149,21 @@ export function ChatHeader({
 
   const isOnline = conversation.type === 'private' && !isSelfChat && realtimeIsOnline;
 
-  // Telegramdek: shaxsiy chatda sarlavha bosilganda profil ochiladi
+  // Telegramdek: shaxsiy chatda sarlavha bosilganda profil ochiladi.
+  // Guruh/kanalda sarlavha bosilganda sozlamalar (ma'lumot) oynasi ochiladi.
   const profilePath =
     conversation.type === 'private' && !isSelfChat && (otherUsername || otherUserId)
       ? `/user/${otherUsername || otherUserId}`
       : null;
+
+  const handleHeaderClick = () => {
+    if (isGroupOrChannel) {
+      setSettingsTabBoost(false);
+      setSettingsOpen(true);
+      return;
+    }
+    onViewInfo?.();
+  };
 
   const headerInner = (
     <>
@@ -219,7 +235,7 @@ export function ChatHeader({
             {headerInner}
           </Link>
         ) : (
-          <button onClick={onViewInfo} className={headerClasses}>
+          <button onClick={handleHeaderClick} className={headerClasses}>
             {headerInner}
           </button>
         )}
@@ -278,7 +294,7 @@ export function ChatHeader({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 rounded-2xl">
-            {onViewInfo && (
+            {onViewInfo && !isGroupOrChannel && (
               <DropdownMenuItem onClick={onViewInfo}>
                 <Info className="mr-2 h-4 w-4" />
                 Ma'lumot
@@ -316,8 +332,26 @@ export function ChatHeader({
                 )}
               </DropdownMenuItem>
             )}
-            {(conversation.type === 'group' || conversation.type === 'channel') && (
+            {isGroupOrChannel && (
               <>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setSettingsTabBoost(false);
+                    setSettingsOpen(true);
+                  }}
+                >
+                  <Settings2 className="mr-2 h-4 w-4" />
+                  {isChannel ? 'Kanal sozlamalari' : 'Guruh sozlamalari'}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setSettingsTabBoost(true);
+                    setSettingsOpen(true);
+                  }}
+                >
+                  <Rocket className="mr-2 h-4 w-4" />
+                  Boost berish
+                </DropdownMenuItem>
                 {onManageMembers && (
                   <DropdownMenuItem onClick={onManageMembers}>
                     <Users2 className="mr-2 h-4 w-4" />
@@ -363,6 +397,17 @@ export function ChatHeader({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {isGroupOrChannel && (
+        <GroupChannelSettingsSheet
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          conversationId={conversation.id}
+          conversationType={conversation.type === 'channel' ? 'channel' : 'group'}
+          isAdmin={Boolean(isAdmin)}
+          initialTab={settingsTabBoost ? 'boost' : 'general'}
+        />
+      )}
 
       {otherUserId && (
         <>
