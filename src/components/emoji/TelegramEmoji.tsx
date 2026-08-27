@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatedEmoji } from '@/components/emoji/AnimatedEmoji';
 import { loadTgsAnimation, telegramEmojiCandidates } from '@/lib/tgs';
+import { telegramAnimatedEmojiUrl } from '@/lib/telegramEmojiCdn';
 import { cn } from '@/lib/utils';
 
 interface TelegramEmojiProps {
@@ -16,12 +17,15 @@ interface TelegramEmojiProps {
   title?: string;
 }
 
+type EmojiMode = 'pending' | 'webp' | 'tgs' | 'fallback';
+
 /**
- * Telegramning haqiqiy animatsion emojisi (`.tgs` = gzip Lottie).
+ * Telegramning HAQIQIY animatsion emojisi.
  *
- * `public/emoji/tgs/<codepoint>.tgs` faylini topsa, Lottie orqali o'ynatadi.
- * Topilmasa yoki lottie-web mavjud bo'lmasa — avvalgi `AnimatedEmoji`
- * (Noto animated / Apple static / tizim emojisi) ga qaytadi.
+ * Tartib:
+ *  1. `public/emoji/tgs/<codepoint>.tgs` (Lottie vektor) — mavjud bo'lsa eng sifatlisi
+ *  2. Telegram animatsion `.webp` to'plami (jsDelivr CDN) — hech narsa yuklamasdan ishlaydi
+ *  3. `AnimatedEmoji` (Noto animated / statik / tizim emojisi) — hech qachon buzilmaydi
  */
 export function TelegramEmoji({
   emoji,
@@ -34,44 +38,57 @@ export function TelegramEmoji({
 }: TelegramEmojiProps) {
   const containerRef = useRef<HTMLSpanElement>(null);
   const animationRef = useRef<any>(null);
-  const [hasTgs, setHasTgs] = useState<boolean | null>(null);
+  const webpUrl = telegramAnimatedEmojiUrl(emoji);
+  const [mode, setMode] = useState<EmojiMode>(() =>
+    animated && webpUrl ? 'webp' : 'pending'
+  );
 
+  // Emoji o'zgarsa boshlang'ich holatga qaytamiz
+  useEffect(() => {
+    setMode(animated && webpUrl ? 'webp' : 'pending');
+  }, [emoji, animated, webpUrl]);
+
+  // Lokal .tgs fayl bo'lsa — unga "yuksaltiramiz"
   useEffect(() => {
     let cancelled = false;
 
     const setup = async () => {
       if (!animated) {
-        setHasTgs(false);
+        setMode('fallback');
         return;
       }
 
-      // 1) Telegram to'plamidan animatsiyani izlaymiz
       let animationData: unknown | null = null;
       for (const url of telegramEmojiCandidates(emoji)) {
         animationData = await loadTgsAnimation(url);
         if (animationData) break;
       }
+
       if (cancelled) return;
+
       if (!animationData) {
-        setHasTgs(false);
+        // .tgs yo'q — webp bo'lsa shuni qoldiramiz, aks holda fallback
+        setMode(webpUrl ? 'webp' : 'fallback');
         return;
       }
 
-      // 2) lottie-web ni dinamik yuklaymiz (o'rnatilmagan bo'lsa fallback)
       try {
         const lottie: any = await import(/* @vite-ignore */ 'lottie-web');
-        if (cancelled || !containerRef.current) return;
-
-        animationRef.current = (lottie.default || lottie).loadAnimation({
-          container: containerRef.current,
-          renderer: 'svg',
-          loop: !playOnHover,
-          autoplay: !playOnHover,
-          animationData,
+        if (cancelled) return;
+        setMode('tgs');
+        // konteyner keyingi renderdan so'ng paydo bo'ladi
+        requestAnimationFrame(() => {
+          if (cancelled || !containerRef.current) return;
+          animationRef.current = (lottie.default || lottie).loadAnimation({
+            container: containerRef.current,
+            renderer: 'svg',
+            loop: !playOnHover,
+            autoplay: !playOnHover,
+            animationData,
+          });
         });
-        setHasTgs(true);
       } catch {
-        if (!cancelled) setHasTgs(false);
+        if (!cancelled) setMode(webpUrl ? 'webp' : 'fallback');
       }
     };
 
@@ -86,7 +103,7 @@ export function TelegramEmoji({
       }
       animationRef.current = null;
     };
-  }, [emoji, animated, playOnHover]);
+  }, [emoji, animated, playOnHover, webpUrl]);
 
   const handleEnter = () => {
     if (playOnHover && animationRef.current) {
@@ -94,8 +111,7 @@ export function TelegramEmoji({
     }
   };
 
-  // TGS topilmadi yoki hali tekshirilmoqda — eski usulga qaytamiz
-  if (hasTgs === false) {
+  if (mode === 'fallback' || mode === 'pending') {
     return (
       <AnimatedEmoji
         emoji={emoji}
@@ -109,22 +125,38 @@ export function TelegramEmoji({
     );
   }
 
+  const wrapperClass = cn(
+    inline
+      ? 'inline-block align-[-0.15em]'
+      : 'inline-flex items-center justify-center',
+    className
+  );
+
+  if (mode === 'webp' && webpUrl) {
+    return (
+      <img
+        src={webpUrl}
+        alt={emoji}
+        title={title || emoji}
+        width={size}
+        height={size}
+        loading="lazy"
+        draggable={false}
+        className={cn(wrapperClass, 'no-drag select-none object-contain')}
+        style={{ width: size, height: size }}
+        onError={() => setMode('fallback')}
+      />
+    );
+  }
+
   return (
     <span
-      className={cn(
-        inline ? 'inline-block align-[-0.15em]' : 'inline-flex items-center justify-center',
-        className
-      )}
+      className={wrapperClass}
       style={{ width: size, height: size }}
       title={title || emoji}
       onMouseEnter={handleEnter}
     >
       <span ref={containerRef} style={{ width: size, height: size }} />
-      {hasTgs === null && (
-        <span className="sr-only" aria-hidden={false}>
-          {emoji}
-        </span>
-      )}
     </span>
   );
 }
