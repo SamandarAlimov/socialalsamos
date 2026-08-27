@@ -1,5 +1,4 @@
 import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
 import { MapPin, Navigation, ExternalLink } from 'lucide-react';
 import { MapContainer, TileLayer, Marker } from 'react-leaflet';
 import L from 'leaflet';
@@ -8,11 +7,14 @@ import { cn } from '@/lib/utils';
 
 // Fix default marker icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
+const LEAFLET_IMG = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images';
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconRetinaUrl: `${LEAFLET_IMG}/marker-icon-2x.png`,
+  iconUrl: `${LEAFLET_IMG}/marker-icon.png`,
+  shadowUrl: `${LEAFLET_IMG}/marker-shadow.png`,
 });
+
+const OSM_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 interface LocationMessageProps {
   latitude: number;
@@ -22,29 +24,38 @@ interface LocationMessageProps {
   senderName?: string;
 }
 
-export function LocationMessage({ 
-  latitude, 
-  longitude, 
+export function LocationMessage({
+  latitude,
+  longitude,
   address,
   isMine,
-  senderName 
+  senderName,
 }: LocationMessageProps) {
   const navigate = useNavigate();
-  
+
+  const title = address || senderName || 'Joylashuv';
+
   const handleOpenInApp = () => {
-    navigate(`/map?destLat=${latitude}&destLng=${longitude}&destName=${encodeURIComponent(address || senderName || 'Shared Location')}`);
-  };
-  
-  const handleOpenExternal = () => {
-    window.open(
-      `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`,
-      '_blank'
+    navigate(
+      `/map?destLat=${latitude}&destLng=${longitude}&destName=${encodeURIComponent(title)}`
     );
   };
-  
+
+  const handleOpenExternal = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const base = 'https://www.google.com/maps/search/?api=1&query=';
+    window.open(`${base}${latitude},${longitude}`, '_blank', 'noopener,noreferrer');
+  };
+
   return (
-    <div className="w-64 overflow-hidden rounded-lg">
-      <div className="h-32 relative">
+    <div className="w-[260px] max-w-full overflow-hidden rounded-2xl border border-border/60 bg-card">
+      {/* Map preview - butun blok bosilsa ilova ichidagi xaritaga o'tadi */}
+      <button
+        type="button"
+        onClick={handleOpenInApp}
+        className="relative block h-[150px] w-full cursor-pointer"
+        aria-label="Xaritada ko'rish"
+      >
         <MapContainer
           center={[latitude, longitude]}
           zoom={15}
@@ -53,62 +64,60 @@ export function LocationMessage({
           dragging={false}
           scrollWheelZoom={false}
           doubleClickZoom={false}
+          touchZoom={false}
+          keyboard={false}
           attributionControl={false}
         >
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
+          <TileLayer url={OSM_TILE_URL} />
           <Marker position={[latitude, longitude]} />
         </MapContainer>
-        <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent pointer-events-none" />
-      </div>
-      
-      <div className={cn(
-        "p-2 space-y-2",
-        isMine ? "bg-primary/90" : "bg-card"
-      )}>
+
+        {/* Klik xaritaga tushmasligi uchun shaffof qatlam */}
+        <div className="absolute inset-0 z-[400] bg-gradient-to-t from-black/25 via-transparent to-transparent" />
+
+        <span className="absolute bottom-2 left-2 z-[401] rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">
+          {latitude.toFixed(4)}, {longitude.toFixed(4)}
+        </span>
+      </button>
+
+      {/* Ma'lumot va amallar */}
+      <div className="space-y-2 p-2.5">
         <div className="flex items-start gap-2">
-          <MapPin className={cn(
-            "h-4 w-4 flex-shrink-0 mt-0.5",
-            isMine ? "text-primary-foreground" : "text-primary"
-          )} />
-          <div className="flex-1 min-w-0">
-            <p className={cn(
-              "text-xs font-medium truncate",
-              isMine ? "text-primary-foreground" : "text-foreground"
-            )}>
-              {address || 'Shared Location'}
+          <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
+            <MapPin className="h-3.5 w-3.5 text-foreground" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p
+              className="truncate text-[13px] font-medium text-foreground"
+              style={{ overflowWrap: 'anywhere' }}
+            >
+              {title}
             </p>
-            <p className={cn(
-              "text-[10px]",
-              isMine ? "text-primary-foreground/70" : "text-muted-foreground"
-            )}>
-              {latitude.toFixed(6)}, {longitude.toFixed(6)}
-            </p>
+            <p className="text-[11px] text-muted-foreground">Joylashuv</p>
           </div>
         </div>
-        
-        <div className="flex gap-1">
-          <Button
-            size="sm"
-            variant={isMine ? "secondary" : "default"}
-            className="flex-1 h-7 text-xs"
+
+        <div className="flex gap-1.5">
+          <button
+            type="button"
             onClick={handleOpenInApp}
-          >
-            <Navigation className="h-3 w-3 mr-1" />
-            Directions
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
             className={cn(
-              "h-7",
-              isMine && "border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10"
+              'flex h-8 flex-1 items-center justify-center gap-1.5 rounded-xl text-xs font-medium transition-colors',
+              'bg-muted text-foreground hover:bg-muted/70 active:bg-muted'
             )}
-            onClick={handleOpenExternal}
           >
-            <ExternalLink className="h-3 w-3" />
-          </Button>
+            <Navigation className="h-3.5 w-3.5" />
+            Yo'nalish
+          </button>
+          <button
+            type="button"
+            onClick={handleOpenExternal}
+            aria-label="Tashqi xaritada ochish"
+            title="Tashqi xaritada ochish"
+            className="flex h-8 w-9 items-center justify-center rounded-xl bg-muted text-foreground transition-colors hover:bg-muted/70"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
     </div>
