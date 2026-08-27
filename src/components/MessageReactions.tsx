@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { EmojiPicker } from './EmojiPicker';
-import { AnimatedEmoji } from '@/components/emoji/AnimatedEmoji';
+import { TelegramEmoji } from '@/components/emoji/TelegramEmoji';
 import { SmilePlus } from 'lucide-react';
 
 interface ReactionGroup {
@@ -69,7 +69,7 @@ export function MessageReactions({ reactions, onToggle, onAdd, isMine }: Message
               : 'bg-muted text-foreground/80 hover:bg-muted/70'
           )}
         >
-          <AnimatedEmoji emoji={reaction.emoji} size={16} />
+          <TelegramEmoji emoji={reaction.emoji} size={16} />
           <span className="font-medium tabular-nums">{reaction.count}</span>
         </motion.button>
       ))}
