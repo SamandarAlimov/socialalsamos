@@ -1,5 +1,11 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { Home, MessageCircle, PlusSquare, Video, User } from 'lucide-react';
+import {
+  Home,
+  MessageCircle,
+  Plus,
+  Video,
+  User,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
 import { useNotificationSound } from '@/hooks/useNotificationSound';
@@ -16,13 +22,16 @@ interface NavItem {
   badgeKey?: 'messages';
 }
 
+/** Pastdagi asosiy navigatsiya (o'zbekcha) */
 const bottomNavItems: NavItem[] = [
-  { icon: Home, label: 'Home', path: '/home' },
-  { icon: MessageCircle, label: 'Messages', path: '/messages', badgeKey: 'messages' },
-  { icon: PlusSquare, label: 'Create', path: '/create' },
-  { icon: Video, label: 'Videos', path: '/videos' },
-  { icon: User, label: 'Profile', path: '/profile' },
+  { icon: Home, label: 'Asosiy', path: '/home' },
+  { icon: MessageCircle, label: 'Xabarlar', path: '/messages', badgeKey: 'messages' },
+  { icon: Plus, label: 'Yaratish', path: '/create' },
+  { icon: Video, label: 'Videolar', path: '/videos' },
+  { icon: User, label: 'Profil', path: '/profile' },
 ];
+
+const LONG_PRESS_MS = 450;
 
 export function BottomNavbar() {
   const location = useLocation();
@@ -31,11 +40,11 @@ export function BottomNavbar() {
   const [switchAccountOpen, setSwitchAccountOpen] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPress = useRef(false);
-  
+
   const handleNewMessage = useCallback(() => {
     playMessageSound();
   }, [playMessageSound]);
-  
+
   const { unreadCount: messagesUnreadCount } = useUnreadMessages(handleNewMessage);
 
   const getBadgeCount = (badgeKey?: 'messages') => {
@@ -43,13 +52,17 @@ export function BottomNavbar() {
     return 0;
   };
 
+  const tapHaptic = () => {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(8);
+  };
+
   const handleProfilePressStart = () => {
     isLongPress.current = false;
     longPressTimer.current = setTimeout(() => {
       isLongPress.current = true;
       setSwitchAccountOpen(true);
-      if (navigator.vibrate) navigator.vibrate(50);
-    }, 500);
+      if (navigator.vibrate) navigator.vibrate(35);
+    }, LONG_PRESS_MS);
   };
 
   const handleProfilePressEnd = () => {
@@ -63,105 +76,126 @@ export function BottomNavbar() {
     if (isLongPress.current) {
       e.preventDefault();
       isLongPress.current = false;
+      return;
     }
+    tapHaptic();
   };
 
   return (
     <>
-    <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden pointer-events-none">
-      {/* Instagram-style detached floating pill — transparent on 3 sides */}
-      <div className="mx-3 mb-[max(0.5rem,env(safe-area-inset-bottom))] pointer-events-auto rounded-[28px] bg-background/55 backdrop-blur-2xl border border-border/30 shadow-[0_8px_30px_-6px_rgba(0,0,0,0.35)] ring-1 ring-white/5">
+      <nav
+        className="pointer-events-none fixed bottom-0 left-0 right-0 z-50 md:hidden"
+        aria-label="Asosiy navigatsiya"
+      >
+        {/* Suzuvchi kapsula panel */}
+        <div className="pointer-events-auto mx-2.5 mb-[max(0.5rem,env(safe-area-inset-bottom))] rounded-[26px] border border-border/40 bg-background/70 shadow-[0_10px_34px_-8px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
+          <div className="flex h-[62px] items-stretch justify-around px-1.5">
+            {bottomNavItems.map((item) => {
+              const isActive = location.pathname === item.path;
+              const isCreate = item.path === '/create';
+              const isProfile = item.path === '/profile';
+              const badgeCount = getBadgeCount(item.badgeKey);
 
-        <div className="flex items-center justify-around h-[60px] px-1">
-          {bottomNavItems.map((item) => {
-            const isActive = location.pathname === item.path;
-            const isCreate = item.path === '/create';
-            const isProfile = item.path === '/profile';
-            const badgeCount = getBadgeCount(item.badgeKey);
-            
-            return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                onClick={isProfile ? handleProfileClick : undefined}
-                onMouseDown={isProfile ? handleProfilePressStart : undefined}
-                onMouseUp={isProfile ? handleProfilePressEnd : undefined}
-                onMouseLeave={isProfile ? handleProfilePressEnd : undefined}
-                onTouchStart={isProfile ? handleProfilePressStart : undefined}
-                onTouchEnd={isProfile ? handleProfilePressEnd : undefined}
-                onContextMenu={isProfile ? (e) => e.preventDefault() : undefined}
-                className={cn(
-                  "relative flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1.5 rounded-xl transition-all duration-200",
-                  isActive 
-                    ? "text-primary" 
-                    : "text-muted-foreground"
-                )}
-              >
-                {/* Active indicator pill */}
-                {isActive && !isCreate && (
-                  <motion.div
-                    layoutId="bottomNavActive"
-                    className="absolute -top-0.5 w-5 h-[3px] rounded-full bg-primary"
-                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                  />
-                )}
+              return (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  aria-label={item.label}
+                  aria-current={isActive ? 'page' : undefined}
+                  onClick={isProfile ? handleProfileClick : tapHaptic}
+                  onMouseDown={isProfile ? handleProfilePressStart : undefined}
+                  onMouseUp={isProfile ? handleProfilePressEnd : undefined}
+                  onMouseLeave={isProfile ? handleProfilePressEnd : undefined}
+                  onTouchStart={isProfile ? handleProfilePressStart : undefined}
+                  onTouchEnd={isProfile ? handleProfilePressEnd : undefined}
+                  onContextMenu={isProfile ? (e) => e.preventDefault() : undefined}
+                  className={cn(
+                    'group relative flex min-w-[58px] flex-1 select-none flex-col items-center justify-center gap-0.5 rounded-2xl',
+                    'transition-transform duration-150 active:scale-[0.92]',
+                    isActive ? 'text-primary' : 'text-muted-foreground'
+                  )}
+                >
+                  {/* Aktiv fon kapsulasi (silliq ko'chadi) */}
+                  {isActive && !isCreate && (
+                    <motion.span
+                      layoutId="bottomNavActiveBg"
+                      className="absolute inset-x-1 inset-y-1.5 -z-10 rounded-2xl bg-primary/10"
+                      transition={{ type: 'spring', stiffness: 480, damping: 34 }}
+                    />
+                  )}
 
-                {isCreate ? (
-                  <div className={cn(
-                    "flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-200",
-                    isActive 
-                      ? "bg-primary text-primary-foreground shadow-md" 
-                      : "bg-muted text-muted-foreground"
-                  )}>
-                    <item.icon className="h-5 w-5" />
-                  </div>
-                ) : (
-                  <>
-                    <div className="relative">
-                      {isProfile && profile?.avatar_url ? (
-                        <Avatar className={cn(
-                          "h-6 w-6 transition-all duration-200",
-                          isActive && "ring-2 ring-primary ring-offset-1 ring-offset-card"
-                        )}>
-                          <AvatarImage src={profile.avatar_url} />
-                          <AvatarFallback className="text-[10px] bg-muted text-muted-foreground">
-                            {profile.display_name?.[0] || profile.username?.[0] || 'U'}
-                          </AvatarFallback>
-                        </Avatar>
-                      ) : (
-                        <item.icon className={cn(
-                          "h-[22px] w-[22px] transition-all duration-200",
-                          isActive && "scale-105"
-                        )} />
+                  {isCreate ? (
+                    <motion.div
+                      whileTap={{ scale: 0.9 }}
+                      className={cn(
+                        'flex h-11 w-11 items-center justify-center rounded-2xl transition-all duration-200',
+                        isActive
+                          ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/30'
+                          : 'bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-md shadow-primary/20'
                       )}
-                      <AnimatePresence>
-                        {badgeCount > 0 && (
-                          <motion.span
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            exit={{ scale: 0 }}
-                            className="absolute -top-1.5 -right-2 h-4 min-w-4 px-0.5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center"
+                    >
+                      <Plus className="h-6 w-6" strokeWidth={2.6} />
+                    </motion.div>
+                  ) : (
+                    <>
+                      <div className="relative flex h-[26px] items-center justify-center">
+                        {isProfile && profile?.avatar_url ? (
+                          <Avatar
+                            className={cn(
+                              'h-[24px] w-[24px] transition-all duration-200',
+                              isActive && 'ring-2 ring-primary ring-offset-1 ring-offset-background'
+                            )}
                           >
-                            {badgeCount > 9 ? '9+' : badgeCount}
+                            <AvatarImage src={profile.avatar_url} />
+                            <AvatarFallback className="bg-muted text-[10px] text-muted-foreground">
+                              {profile.display_name?.[0] || profile.username?.[0] || 'F'}
+                            </AvatarFallback>
+                          </Avatar>
+                        ) : (
+                          <motion.span
+                            animate={{ scale: isActive ? 1.08 : 1, y: isActive ? -1 : 0 }}
+                            transition={{ type: 'spring', stiffness: 420, damping: 26 }}
+                            className="flex items-center justify-center"
+                          >
+                            <item.icon
+                              className="h-[23px] w-[23px]"
+                              strokeWidth={isActive ? 2.5 : 1.9}
+                            />
                           </motion.span>
                         )}
-                      </AnimatePresence>
-                    </div>
-                    <span className={cn(
-                      "text-[10px] transition-all duration-200",
-                      isActive ? "font-semibold" : "font-medium"
-                    )}>
-                      {item.label}
-                    </span>
-                  </>
-                )}
-              </NavLink>
-            );
-          })}
+
+                        <AnimatePresence>
+                          {badgeCount > 0 && (
+                            <motion.span
+                              initial={{ scale: 0, opacity: 0 }}
+                              animate={{ scale: 1, opacity: 1 }}
+                              exit={{ scale: 0, opacity: 0 }}
+                              transition={{ type: 'spring', stiffness: 520, damping: 24 }}
+                              className="absolute -right-2.5 -top-1.5 flex h-[17px] min-w-[17px] items-center justify-center rounded-full border-2 border-background bg-destructive px-1 text-[10px] font-bold leading-none text-destructive-foreground"
+                            >
+                              {badgeCount > 99 ? '99+' : badgeCount}
+                            </motion.span>
+                          )}
+                        </AnimatePresence>
+                      </div>
+
+                      <span
+                        className={cn(
+                          'text-[10px] leading-none transition-all duration-200',
+                          isActive ? 'font-semibold opacity-100' : 'font-medium opacity-80'
+                        )}
+                      >
+                        {item.label}
+                      </span>
+                    </>
+                  )}
+                </NavLink>
+              );
+            })}
+          </div>
         </div>
-      </div>
-    </nav>
-    <SwitchAccountDialog open={switchAccountOpen} onOpenChange={setSwitchAccountOpen} />
+      </nav>
+      <SwitchAccountDialog open={switchAccountOpen} onOpenChange={setSwitchAccountOpen} />
     </>
   );
 }
