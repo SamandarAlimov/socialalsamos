@@ -1,36 +1,37 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin, Music2 } from 'lucide-react';
+import { EmojiText } from '@/components/emoji/EmojiText';
+import { getEmojiOnlyInfo } from '@/lib/emojiOnly';
+import { AnimatedEmoji } from '@/components/emoji/AnimatedEmoji';
 
 interface RichTextContentProps {
   content: string;
   className?: string;
+  /** Matn ichidagi emoji o'lchami (px). */
+  emojiSize?: number;
 }
 
-// Media format: [media:type:url]
+// Media formati: [media:type:url]
 const MEDIA_REGEX = /\[media:(image|video|gif):([^\]]+)\]/g;
-// Legacy/structured music tags: [MUSIC]{json}  or  [MUSIC:trackId]
+// Musiqa teglari: [MUSIC]{json}  yoki  [MUSIC:trackId]
 const MUSIC_JSON_REGEX = /\[MUSIC\]\s*(\{[\s\S]*?\})/g;
 const MUSIC_ID_REGEX = /\[MUSIC:([^\]]+)\]/g;
-// Location line: 📍 Some place
-const LOCATION_REGEX = /^[ \t]*📍[ \t]*(.+)$/gm;
+// Joylashuv qatori: "\ud83d\udccd Joy nomi"
+const LOCATION_REGEX = new RegExp('^[ \\t]*\\ud83d\\udccd[ \\t]*(.+)$', 'gm');
 
-
-// Format link display - show domain only for cleaner look
+// Havolani chiroyli ko'rsatish - asosan domen
 function formatLinkDisplay(url: string): string {
   try {
     const urlObj = new URL(url);
     const domain = urlObj.hostname.replace('www.', '');
     const path = urlObj.pathname;
-    
-    // For short paths, show domain + path
+
     if (path.length <= 20 && path !== '/') {
       return domain + path;
     }
-    // For long paths, just show domain
     return domain + (path !== '/' ? '/...' : '');
   } catch {
-    // If URL parsing fails, truncate manually
     if (url.length > 35) {
       return url.substring(0, 32) + '...';
     }
@@ -38,7 +39,7 @@ function formatLinkDisplay(url: string): string {
   }
 }
 
-export function RichTextContent({ content, className }: RichTextContentProps) {
+export function RichTextContent({ content, className, emojiSize = 19 }: RichTextContentProps) {
   const { textContent, mediaItems, musicItems, locations } = useMemo(() => {
     if (!content) return { textContent: '', mediaItems: [], musicItems: [], locations: [] };
 
@@ -80,59 +81,42 @@ export function RichTextContent({ content, className }: RichTextContentProps) {
     return { textContent: cleanedText, mediaItems: media, musicItems: music, locations: places };
   }, [content]);
 
+  // Faqat emojidan iborat post/izoh - Telegramdek kattalashtiriladi
+  const emojiOnly = useMemo(() => getEmojiOnlyInfo(textContent), [textContent]);
 
   const parsedContent = useMemo(() => {
     if (!textContent) return [];
 
-    const parts: { type: 'text' | 'mention' | 'hashtag' | 'link'; value: string; display?: string }[] = [];
-    
-    // Combined regex for mentions, hashtags, and URLs
+    const parts: {
+      type: 'text' | 'mention' | 'hashtag' | 'link';
+      value: string;
+      display?: string;
+    }[] = [];
+
+    // Mention, hashtag va URL uchun umumiy regex
     const pattern = /(@[a-zA-Z0-9_]+)|(#[a-zA-Z0-9_]+)|(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g;
-    
+
     let lastIndex = 0;
     let match;
 
     while ((match = pattern.exec(textContent)) !== null) {
-      // Add text before the match
       if (match.index > lastIndex) {
-        parts.push({
-          type: 'text',
-          value: textContent.slice(lastIndex, match.index),
-        });
+        parts.push({ type: 'text', value: textContent.slice(lastIndex, match.index) });
       }
 
       if (match[1]) {
-        // Mention (@username)
-        parts.push({
-          type: 'mention',
-          value: match[1].slice(1), // Remove @
-          display: match[1],
-        });
+        parts.push({ type: 'mention', value: match[1].slice(1), display: match[1] });
       } else if (match[2]) {
-        // Hashtag (#tag)
-        parts.push({
-          type: 'hashtag',
-          value: match[2].slice(1), // Remove #
-          display: match[2],
-        });
+        parts.push({ type: 'hashtag', value: match[2].slice(1), display: match[2] });
       } else if (match[3]) {
-        // URL
-        parts.push({
-          type: 'link',
-          value: match[3],
-          display: match[3],
-        });
+        parts.push({ type: 'link', value: match[3], display: match[3] });
       }
 
       lastIndex = pattern.lastIndex;
     }
 
-    // Add remaining text
     if (lastIndex < textContent.length) {
-      parts.push({
-        type: 'text',
-        value: textContent.slice(lastIndex),
-      });
+      parts.push({ type: 'text', value: textContent.slice(lastIndex) });
     }
 
     return parts;
@@ -140,54 +124,68 @@ export function RichTextContent({ content, className }: RichTextContentProps) {
 
   return (
     <div className={className}>
-      {/* Render text content */}
-      {parsedContent.length > 0 && (
-        <span className="whitespace-pre-wrap">
-          {parsedContent.map((part, index) => {
-            switch (part.type) {
-              case 'mention':
-                return (
-                  <Link
-                    key={index}
-                    to={`/user/${part.value}`}
-                    className="text-alsamos-orange-light font-semibold hover:text-alsamos-orange-dark hover:underline transition-colors cursor-pointer"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    @{part.value}
-                  </Link>
-                );
-              case 'hashtag':
-                return (
-                  <Link
-                    key={index}
-                    to={`/search?q=%23${part.value}`}
-                    className="text-blue-400 font-medium hover:text-blue-300 hover:underline transition-colors"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    #{part.value}
-                  </Link>
-                );
-              case 'link':
-                return (
-                  <a
-                    key={index}
-                    href={part.value}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sky-400 hover:text-sky-300 underline underline-offset-2 break-all transition-colors"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {formatLinkDisplay(part.value)}
-                  </a>
-                );
-              default:
-                return <span key={index}>{part.value}</span>;
-            }
-          })}
+      {/* Faqat emoji bo'lsa - katta animatsion emojilar */}
+      {emojiOnly ? (
+        <span className="inline-flex items-end gap-1">
+          {emojiOnly.emojis.map((emoji, index) => (
+            <AnimatedEmoji
+              key={`big-${index}`}
+              emoji={emoji}
+              size={emojiOnly.emojis.length === 1 ? 72 : emojiOnly.emojis.length === 2 ? 56 : 44}
+              title={emoji}
+            />
+          ))}
         </span>
+      ) : (
+        parsedContent.length > 0 && (
+          <span className="whitespace-pre-wrap">
+            {parsedContent.map((part, index) => {
+              switch (part.type) {
+                case 'mention':
+                  return (
+                    <Link
+                      key={index}
+                      to={`/user/${part.value}`}
+                      className="cursor-pointer font-semibold text-alsamos-orange-light transition-colors hover:text-alsamos-orange-dark hover:underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      @{part.value}
+                    </Link>
+                  );
+                case 'hashtag':
+                  return (
+                    <Link
+                      key={index}
+                      to={`/search?q=%23${part.value}`}
+                      className="font-medium text-blue-400 transition-colors hover:text-blue-300 hover:underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      #{part.value}
+                    </Link>
+                  );
+                case 'link':
+                  return (
+                    <a
+                      key={index}
+                      href={part.value}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="break-all text-sky-400 underline underline-offset-2 transition-colors hover:text-sky-300"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {formatLinkDisplay(part.value)}
+                    </a>
+                  );
+                default:
+                  // Matn ichidagi emojilar Telegram uslubida rasmga aylantiriladi
+                  return <EmojiText key={index} text={part.value} size={emojiSize} />;
+              }
+            })}
+          </span>
+        )
       )}
 
-      {/* Music chips */}
+      {/* Musiqa chiplari */}
       {musicItems.map((track, index) => (
         <div
           key={`music-${index}`}
@@ -214,7 +212,7 @@ export function RichTextContent({ content, className }: RichTextContentProps) {
         </div>
       ))}
 
-      {/* Location chips */}
+      {/* Joylashuv chiplari */}
       {locations.map((place, index) => (
         <div
           key={`loc-${index}`}
@@ -225,20 +223,16 @@ export function RichTextContent({ content, className }: RichTextContentProps) {
         </div>
       ))}
 
-      {/* Render media items */}
+      {/* Media */}
       {mediaItems.map((media, index) => (
         <div key={`media-${index}`} className="mt-2">
           {media.type === 'video' ? (
-            <video
-              src={media.url}
-              controls
-              className="max-w-full rounded-lg max-h-48"
-            />
+            <video src={media.url} controls className="max-h-48 max-w-full rounded-lg" />
           ) : (
             <img
               src={media.url}
-              alt={media.type === 'gif' ? 'GIF' : 'Image'}
-              className="max-w-full rounded-lg max-h-48 object-contain"
+              alt={media.type === 'gif' ? 'GIF' : 'Rasm'}
+              className="max-h-48 max-w-full rounded-lg object-contain"
               loading="lazy"
             />
           )}
