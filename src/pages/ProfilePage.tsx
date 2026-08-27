@@ -20,6 +20,8 @@ import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { StoryHighlights } from '@/components/stories/StoryHighlights';
 import { PullToRefresh } from '@/components/PullToRefresh';
+import { RichTextContent } from '@/components/RichTextContent';
+import { EmojiText } from '@/components/emoji/EmojiText';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -245,7 +247,10 @@ export default function ProfilePage() {
               <div>
                 <div className="flex items-center gap-1.5 md:gap-2">
                   <h1 className="text-xl md:text-2xl font-bold">
-                    {profile.display_name || profile.username || t('profile.user')}
+                    <EmojiText
+                      text={profile.display_name || profile.username || t('profile.user')}
+                      size={22}
+                    />
                   </h1>
                   {profile.is_verified && (
                     <VerifiedBadge size="sm" className="md:hidden" />
@@ -310,9 +315,17 @@ export default function ProfilePage() {
 
         {/* Bio */}
         <div className="mt-4 md:mt-6 max-w-2xl">
-          <p className="text-sm md:text-base text-foreground leading-relaxed">
-            {profile.bio || t('profile.noBio')}
-          </p>
+          {profile.bio ? (
+            <RichTextContent
+              content={profile.bio}
+              className="text-sm md:text-base text-foreground leading-relaxed"
+              emojiSize={20}
+            />
+          ) : (
+            <p className="text-sm md:text-base text-muted-foreground leading-relaxed">
+              {t('profile.noBio')}
+            </p>
+          )}
           <div className="flex flex-wrap gap-3 md:gap-4 mt-3 md:mt-4 text-xs md:text-sm text-muted-foreground">
             {readableLocation && (
               <span className="flex items-center gap-1">
@@ -437,7 +450,7 @@ export default function ProfilePage() {
                       <>
                         <div
                           className="absolute inset-0 scale-110 bg-cover bg-center opacity-60 blur-xl"
-                          style={{ backgroundImage: `url(${repost.post.media_urls[0]})` }}
+                          style={{ backgroundImage: 'url(' + repost.post.media_urls[0] + ')' }}
                           aria-hidden="true"
                         />
                         {repost.post.media_type === 'video' ? (
