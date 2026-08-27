@@ -12,6 +12,15 @@ interface PinnedMessagesBarProps {
   className?: string;
 }
 
+/** Telegramdek media xabarlar uchun tushunarli preview matni */
+function previewText(content: string | null | undefined, maxLength = 60) {
+  const text = (content || '').trim();
+  if (!text) return 'Media xabar';
+  if (text.startsWith('\ud83d\udccd LOCATION:')) return 'Joylashuv';
+  if (text.startsWith('[POLL]')) return "So'rov";
+  return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+}
+
 export function PinnedMessagesBar({
   pinnedMessages,
   onUnpin,
@@ -23,116 +32,149 @@ export function PinnedMessagesBar({
 
   if (pinnedMessages.length === 0) return null;
 
-  const currentPinned = pinnedMessages[currentIndex];
+  const safeIndex = Math.min(currentIndex, pinnedMessages.length - 1);
+  const currentPinned = pinnedMessages[safeIndex];
 
   const handleNavigate = (direction: 'prev' | 'next') => {
-    if (direction === 'prev') {
-      setCurrentIndex(prev => (prev > 0 ? prev - 1 : pinnedMessages.length - 1));
-    } else {
-      setCurrentIndex(prev => (prev < pinnedMessages.length - 1 ? prev + 1 : 0));
-    }
-  };
-
-  const truncateContent = (content: string | null, maxLength = 50) => {
-    if (!content) return 'Media message';
-    return content.length > maxLength ? content.substring(0, maxLength) + '...' : content;
+    setCurrentIndex((prev) =>
+      direction === 'prev'
+        ? prev > 0
+          ? prev - 1
+          : pinnedMessages.length - 1
+        : prev < pinnedMessages.length - 1
+          ? prev + 1
+          : 0
+    );
   };
 
   return (
-    <div className={cn('bg-card/80 backdrop-blur border-b border-border', className)}>
-      {/* Collapsed View */}
-      {!isExpanded && (
-        <div 
-          className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-accent/50 transition-colors"
+    <div className={cn('border-b border-border bg-card/80 backdrop-blur', className)}>
+      {!isExpanded ? (
+        <div
+          className="flex cursor-pointer items-center gap-2.5 px-3 py-2 transition-colors hover:bg-muted/50"
           onClick={() => onScrollToMessage?.(currentPinned.message_id)}
         >
-          <Pin className="h-4 w-4 text-primary shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-muted-foreground">
-              Pinned by {currentPinned.message?.sender?.display_name || 'Unknown'}
+          {/* Telegramdek chapdagi vertikal indikator chiziqlari */}
+          <div className="flex h-8 flex-col justify-between gap-[2px]">
+            {pinnedMessages.slice(0, 4).map((_, i) => (
+              <span
+                key={i}
+                className={cn(
+                  'w-[2px] flex-1 rounded-full',
+                  i === safeIndex % Math.min(pinnedMessages.length, 4)
+                    ? 'bg-primary'
+                    : 'bg-border'
+                )}
+              />
+            ))}
+          </div>
+
+          <Pin className="h-4 w-4 shrink-0 text-primary" />
+
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-medium text-primary">
+              Qadalgan xabar
+              {pinnedMessages.length > 1 ? ` #${safeIndex + 1}` : ''}
             </p>
-            <p className="text-sm truncate">
-              {truncateContent(currentPinned.message?.content)}
+            <p className="truncate text-sm text-muted-foreground">
+              {previewText(currentPinned.message?.content)}
             </p>
           </div>
-          
+
           {pinnedMessages.length > 1 && (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-0.5">
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
-                onClick={(e) => { e.stopPropagation(); handleNavigate('prev'); }}
+                className="h-6 w-6 rounded-full hover:bg-muted"
+                aria-label="Oldingi"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleNavigate('prev');
+                }}
               >
                 <ChevronUp className="h-4 w-4" />
               </Button>
-              <span className="text-xs text-muted-foreground min-w-[3ch] text-center">
-                {currentIndex + 1}/{pinnedMessages.length}
+              <span className="min-w-[3ch] text-center text-xs tabular-nums text-muted-foreground">
+                {safeIndex + 1}/{pinnedMessages.length}
               </span>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
-                onClick={(e) => { e.stopPropagation(); handleNavigate('next'); }}
+                className="h-6 w-6 rounded-full hover:bg-muted"
+                aria-label="Keyingi"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleNavigate('next');
+                }}
               >
                 <ChevronDown className="h-4 w-4" />
               </Button>
             </div>
           )}
-          
+
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6"
-            onClick={(e) => { e.stopPropagation(); setIsExpanded(true); }}
+            className="h-6 w-6 rounded-full hover:bg-muted"
+            aria-label="Barchasini ko'rish"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsExpanded(true);
+            }}
           >
             <ChevronDown className="h-4 w-4" />
           </Button>
         </div>
-      )}
-
-      {/* Expanded View */}
-      {isExpanded && (
+      ) : (
         <div className="p-2">
-          <div className="flex items-center justify-between mb-2 px-2">
+          <div className="mb-2 flex items-center justify-between px-2">
             <div className="flex items-center gap-2">
               <Pin className="h-4 w-4 text-primary" />
-              <span className="text-sm font-medium">Pinned Messages ({pinnedMessages.length})</span>
+              <span className="text-sm font-medium">
+                Qadalgan xabarlar ({pinnedMessages.length})
+              </span>
             </div>
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6"
+              className="h-6 w-6 rounded-full hover:bg-muted"
+              aria-label="Yopish"
               onClick={() => setIsExpanded(false)}
             >
               <ChevronUp className="h-4 w-4" />
             </Button>
           </div>
-          
+
           <ScrollArea className="max-h-48">
             <div className="space-y-1">
               {pinnedMessages.map((pinned) => (
                 <div
                   key={pinned.id}
-                  className="flex items-center gap-2 p-2 rounded-lg hover:bg-accent/50 cursor-pointer transition-colors group"
+                  className="group flex cursor-pointer items-center gap-2 rounded-xl p-2 transition-colors hover:bg-muted/60"
                   onClick={() => {
                     onScrollToMessage?.(pinned.message_id);
                     setIsExpanded(false);
                   }}
                 >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-muted-foreground">
-                      {pinned.message?.sender?.display_name || 'Unknown'}
+                  <span className="h-8 w-[2px] shrink-0 rounded-full bg-primary/60" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium text-primary">
+                      {pinned.message?.sender?.display_name || "Noma'lum"}
                     </p>
-                    <p className="text-sm truncate">
-                      {truncateContent(pinned.message?.content, 80)}
+                    <p className="truncate text-sm text-muted-foreground">
+                      {previewText(pinned.message?.content, 80)}
                     </p>
                   </div>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={(e) => { e.stopPropagation(); onUnpin(pinned.message_id); }}
+                    className="h-6 w-6 rounded-full opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
+                    aria-label="Qadashni bekor qilish"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUnpin(pinned.message_id);
+                    }}
                   >
                     <X className="h-3 w-3" />
                   </Button>
