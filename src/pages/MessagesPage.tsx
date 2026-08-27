@@ -41,6 +41,7 @@ import { CreateGroupChannelDialog } from '@/components/messages/CreateGroupChann
 import { VideoCallOverlay } from '@/components/messages/VideoCallOverlay';
 import { TelegramForwardDialog } from '@/components/messages/TelegramForwardDialog';
 import { MessageSearch } from '@/components/messages/MessageSearch';
+import { GlobalSearchResults } from '@/components/messages/GlobalSearchResults';
 import { IncomingCallDialog } from '@/components/messages/IncomingCallDialog';
 import { PinnedMessagesBar } from '@/components/messages/PinnedMessagesBar';
 import { EditMessageDialog } from '@/components/messages/EditMessageDialog';
@@ -116,6 +117,7 @@ export default function MessagesPage() {
   const [showJumpToDate, setShowJumpToDate] = useState(false);
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [pendingJumpMessageId, setPendingJumpMessageId] = useState<string | null>(null);
 
   // Ko'p tanlash rejimi
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -137,6 +139,7 @@ export default function MessagesPage() {
   const lastMessageIdRef = useRef<string | null>(null);
 
   const isArchivedTab = activeTab === 'archived';
+  const isSearching = searchQuery.trim().length > 0;
 
   const {
     conversations,
@@ -232,6 +235,7 @@ export default function MessagesPage() {
   });
 
   // Jonli joylashuv
+  const liveLocationSessionRef = useRef<{ messageId: string } | null>(null);
   const liveLocation = useLiveLocation({
     onUpdate: async ({ latitude, longitude }) => {
       const session = liveLocationSessionRef.current;
@@ -242,7 +246,6 @@ export default function MessagesPage() {
         .eq('id', session.messageId);
     },
   });
-  const liveLocationSessionRef = useRef<{ messageId: string } | null>(null);
 
   // Chuqur havolalar
   useEffect(() => {
@@ -298,10 +301,12 @@ export default function MessagesPage() {
         setSelectedConversation(fullConv);
         setSearchParams({}, { replace: true });
         setShowMobileChat(true);
+        return fullConv;
       }
     } catch (error) {
       console.error('Suhbatni yuklashda xatolik:', error);
     }
+    return null;
   };
 
   const scrollToBottom = useCallback((smooth = false) => {
@@ -419,11 +424,7 @@ export default function MessagesPage() {
     } else if (isReq) {
       return false;
     }
-    const name =
-      conv.type === 'private'
-        ? conv.other_participant?.display_name || conv.other_participant?.username
-        : conv.name;
-    return name?.toLowerCase().includes(searchQuery.toLowerCase());
+    return true;
   });
 
   const handleUnarchiveConversation = async (conversationId: string) => {
@@ -450,6 +451,36 @@ export default function MessagesPage() {
     setShowMobileChat(true);
     setReplyTo(null);
     isAtBottomRef.current = true;
+  };
+
+  // Umumiy qidiruvdan chat/xabar tanlash
+  const handleGlobalSelectConversation = async (
+    conversationId: string,
+    messageId?: string
+  ) => {
+    setSelectedChannel(null);
+    const known =
+      allConversations.find((c) => c.id === conversationId) ||
+      conversations.find((c) => c.id === conversationId);
+
+    if (known) {
+      handleSelectConversation(known);
+    } else {
+      await fetchConversationById(conversationId);
+    }
+
+    setSearchQuery('');
+    if (messageId) setPendingJumpMessageId(messageId);
+  };
+
+  const handleGlobalSelectUser = async (userId: string) => {
+    setSelectedChannel(null);
+    setSearchQuery('');
+    const conv = await createPrivateConversation(userId);
+    if (conv) {
+      setSelectedConversation(conv);
+      setShowMobileChat(true);
+    }
   };
 
   const handleSendMessage = async (content: string, mediaUrl?: string, mediaType?: string) => {
@@ -673,8 +704,26 @@ export default function MessagesPage() {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setHighlightedMessageId(messageId);
       setTimeout(() => setHighlightedMessageId(null), 2000);
+      return true;
     }
+    return false;
   }, []);
+
+  // Qidiruvdan tanlangan xabarga o'tish (chat yuklanib bo'lgach)
+  useEffect(() => {
+    if (!pendingJumpMessageId || messagesLoading || messages.length === 0) return;
+    const timer = setTimeout(() => {
+      const found = highlightMessage(pendingJumpMessageId);
+      if (!found) {
+        toast({
+          title: 'Xabar topilmadi',
+          description: 'Xabar eskirgan bo\u2018lishi mumkin',
+        });
+      }
+      setPendingJumpMessageId(null);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [pendingJumpMessageId, messagesLoading, messages, highlightMessage, toast]);
 
   const handleScrollToPinnedMessage = (messageId: string) => highlightMessage(messageId);
 
@@ -1328,11 +1377,21 @@ export default function MessagesPage() {
               <div className="relative min-w-0 flex-1">
                 <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground md:h-4 md:w-4" />
                 <Input
-                  placeholder="Qidirish..."
+                  placeholder="Chat, foydalanuvchi yoki xabar qidirish..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-11 bg-muted/50 pl-11 text-base sm:h-12 md:h-10 md:pl-10 md:text-sm"
+                  className="h-11 bg-muted/50 pl-11 pr-10 text-base sm:h-12 md:h-10 md:pl-10 md:text-sm"
                 />
+                {isSearching && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    aria-label="Qidiruvni tozalash"
+                    className="tg-transition absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-accent"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
               </div>
               <Button
                 size="icon"
@@ -1359,40 +1418,49 @@ export default function MessagesPage() {
             </div>
           </div>
 
-          {/* Bo'limlar */}
-          <div
-            className="scrollbar-hide relative isolate flex flex-shrink-0 overflow-x-auto border-b border-border"
-            style={{ zIndex: 0 }}
-          >
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  'tg-transition relative flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap px-3 py-3 text-sm font-medium active:bg-accent/50 md:py-2.5 md:text-xs',
-                  activeTab === tab.id
-                    ? 'text-primary'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                {tab.label}
-                {tab.unread > 0 && (
-                  <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
-                    {tab.unread > 99 ? '99+' : tab.unread}
-                  </span>
-                )}
-                {activeTab === tab.id && (
-                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-                )}
-              </button>
-            ))}
-          </div>
+          {/* Bo'limlar (qidiruv paytida yashiriladi) */}
+          {!isSearching && (
+            <div
+              className="scrollbar-hide relative isolate flex flex-shrink-0 overflow-x-auto border-b border-border"
+              style={{ zIndex: 0 }}
+            >
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    'tg-transition relative flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap px-3 py-3 text-sm font-medium active:bg-accent/50 md:py-2.5 md:text-xs',
+                    activeTab === tab.id
+                      ? 'text-primary'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  {tab.label}
+                  {tab.unread > 0 && (
+                    <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+                      {tab.unread > 99 ? '99+' : tab.unread}
+                    </span>
+                  )}
+                  {activeTab === tab.id && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
         </>
       )}
 
-      {/* Suhbatlar / kanallar ro'yxati */}
+      {/* Natijalar / suhbatlar / kanallar */}
       <ScrollArea className="min-h-0 flex-1 [&_[data-radix-scroll-area-viewport]>div]:!block [&_[data-radix-scroll-area-viewport]>div]:!w-full [&_[data-radix-scroll-area-viewport]>div]:!min-w-0">
-        {activeTab === 'channels' ? (
+        {isSearching ? (
+          <GlobalSearchResults
+            query={searchQuery}
+            conversations={allConversations}
+            onSelectConversation={handleGlobalSelectConversation}
+            onSelectUser={handleGlobalSelectUser}
+          />
+        ) : activeTab === 'channels' ? (
           channelsLoading ? (
             <div className="flex h-32 items-center justify-center">
               <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
@@ -1412,12 +1480,7 @@ export default function MessagesPage() {
             </div>
           ) : (
             channelsList
-              .filter((c) => {
-                const matchesSearch =
-                  c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                  c.username?.toLowerCase().includes(searchQuery.toLowerCase());
-                return matchesSearch && (c.is_member || c.channel_type === 'public');
-              })
+              .filter((c) => c.is_member || c.channel_type === 'public')
               .map((channel) => (
                 <ChannelCard
                   key={channel.id}
