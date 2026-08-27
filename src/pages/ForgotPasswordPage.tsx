@@ -23,7 +23,7 @@ export default function ForgotPasswordPage() {
 
     const identityEmail = toIdentityEmail(email);
     if (!isAlsamosEmail(identityEmail)) {
-      setError(`Faqat @${ALSAMOS_MAIL_DOMAIN} manzili qabul qilinadi.`);
+      setError(`Tiklash havolasi faqat @${ALSAMOS_MAIL_DOMAIN} manziliga yuboriladi.`);
       return;
     }
 
@@ -45,8 +45,8 @@ export default function ForgotPasswordPage() {
           <CardHeader>
             <CardTitle>Parolni tiklash</CardTitle>
             <CardDescription>
-              Alsamos identifikatoringiz - <strong>{`ism@${ALSAMOS_MAIL_DOMAIN}`}</strong>.
-              Tiklash havolasi shu manzilga yuboriladi.
+              Parol identifikator emailingizga bog’langan. Tiklash havolasi shu manzilga
+              yuboriladi.
             </CardDescription>
           </CardHeader>
 
@@ -55,7 +55,7 @@ export default function ForgotPasswordPage() {
               <div className="space-y-4 text-center">
                 <MailCheck className="mx-auto h-10 w-10 text-emerald-500" />
                 <p className="text-sm text-muted-foreground">
-                  Agar bu manzil ro\u2018yxatdan o\u2018tgan bo\u2018lsa, tiklash havolasi yuborildi.
+                  Agar bu manzil ro’yxatdan o’tgan bo’lsa, tiklash havolasi yuborildi.
                   Havola 1 soat davomida amal qiladi.
                 </p>
                 <Button asChild className="w-full">

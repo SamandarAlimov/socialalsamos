@@ -100,10 +100,11 @@ export default function ResetPasswordPage() {
             ) : !linkValid ? (
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  Havola yaroqsiz yoki muddati tugagan. Iltimos, tiklash havolasini qaytadan so\u2018rang.
+                  Havola yaroqsiz yoki muddati tugagan. Iltimos, tiklash havolasini qaytadan
+                  so’rang.
                 </p>
                 <Button asChild className="w-full">
-                  <Link to="/forgot-password">Qaytadan so\u2018rash</Link>
+                  <Link to="/forgot-password">Qaytadan so’rash</Link>
                 </Button>
               </div>
             ) : (
