@@ -31,6 +31,8 @@ import { ProfilePhotosDialog } from '@/components/profile/ProfilePhotosDialog';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { StoryHighlights } from '@/components/stories/StoryHighlights';
 import { OnlineIndicator } from '@/components/OnlineIndicator';
+import { RichTextContent } from '@/components/RichTextContent';
+import { EmojiText } from '@/components/emoji/EmojiText';
 import { useUserPosts, UserPost } from '@/hooks/useUserPosts';
 import { useUserReposts, Repost } from '@/hooks/useReposts';
 import { cn } from '@/lib/utils';
@@ -287,7 +289,10 @@ export default function UserProfilePage() {
               <div>
                 <div className="flex items-center gap-2">
                   <h1 className="text-2xl font-bold">
-                    {profile.display_name || profile.username || t('profile.user')}
+                    <EmojiText
+                      text={profile.display_name || profile.username || t('profile.user')}
+                      size={24}
+                    />
                   </h1>
                   {profile.is_verified && (
                     <VerifiedBadge size="lg" />
@@ -351,7 +356,11 @@ export default function UserProfilePage() {
         {/* Bio */}
         <div className="mt-6 max-w-2xl">
           {profile.bio && (
-            <p className="text-foreground leading-relaxed">{profile.bio}</p>
+            <RichTextContent
+              content={profile.bio}
+              className="text-foreground leading-relaxed"
+              emojiSize={20}
+            />
           )}
           <div className="flex flex-wrap gap-4 mt-4 text-sm text-muted-foreground">
             {readableLocation && (
@@ -504,7 +513,7 @@ export default function UserProfilePage() {
                         <>
                           <div
                             className="absolute inset-0 scale-110 bg-cover bg-center opacity-60 blur-xl"
-                            style={{ backgroundImage: `url(${repost.post.media_urls[0]})` }}
+                            style={{ backgroundImage: 'url(' + repost.post.media_urls[0] + ')' }}
                             aria-hidden="true"
                           />
                           {repost.post.media_type === 'video' ? (
