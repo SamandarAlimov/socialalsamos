@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatedEmoji } from '@/components/emoji/AnimatedEmoji';
 import { loadTgsAnimation, telegramEmojiCandidates } from '@/lib/tgs';
-import { telegramAnimatedEmojiUrl } from '@/lib/telegramEmojiCdn';
+import { resolveTelegramEmojiUrl } from '@/lib/telegramEmojiResolve';
 import { cn } from '@/lib/utils';
 
 interface TelegramEmojiProps {
@@ -38,7 +38,7 @@ export function TelegramEmoji({
 }: TelegramEmojiProps) {
   const containerRef = useRef<HTMLSpanElement>(null);
   const animationRef = useRef<any>(null);
-  const webpUrl = telegramAnimatedEmojiUrl(emoji);
+  const webpUrl = resolveTelegramEmojiUrl(emoji);
   const [mode, setMode] = useState<EmojiMode>(() =>
     animated && webpUrl ? 'webp' : 'pending'
   );
