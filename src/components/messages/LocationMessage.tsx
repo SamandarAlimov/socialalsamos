@@ -14,7 +14,9 @@ L.Icon.Default.mergeOptions({
   shadowUrl: `${LEAFLET_IMG}/marker-shadow.png`,
 });
 
-const OSM_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+// OpenStreetMap tile template ({s}/{z}/{x}/{y} Leaflet tomonidan almashtiriladi)
+const OSM_TILE_URL = 'https://' + '{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+const GMAPS_SEARCH = 'https://' + 'www.google.com/maps/search/?api=1&query=';
 
 interface LocationMessageProps {
   latitude: number;
@@ -43,13 +45,12 @@ export function LocationMessage({
 
   const handleOpenExternal = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const base = 'https://www.google.com/maps/search/?api=1&query=';
-    window.open(`${base}${latitude},${longitude}`, '_blank', 'noopener,noreferrer');
+    window.open(`${GMAPS_SEARCH}${latitude},${longitude}`, '_blank', 'noopener,noreferrer');
   };
 
   return (
     <div className="w-[260px] max-w-full overflow-hidden rounded-2xl border border-border/60 bg-card">
-      {/* Map preview - butun blok bosilsa ilova ichidagi xaritaga o'tadi */}
+      {/* Xarita preview - bosilsa ilova ichidagi xaritaga o'tadi */}
       <button
         type="button"
         onClick={handleOpenInApp}
@@ -72,7 +73,7 @@ export function LocationMessage({
           <Marker position={[latitude, longitude]} />
         </MapContainer>
 
-        {/* Klik xaritaga tushmasligi uchun shaffof qatlam */}
+        {/* Klik xaritaga tushmasligi uchun qatlam */}
         <div className="absolute inset-0 z-[400] bg-gradient-to-t from-black/25 via-transparent to-transparent" />
 
         <span className="absolute bottom-2 left-2 z-[401] rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">

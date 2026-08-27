@@ -1,12 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
-import { Checkbox } from '@/components/ui/checkbox';
 import { BarChart3, Users, Clock, Check } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
-import { formatDistanceToNow, addHours, addDays, isPast } from 'date-fns';
+import { addHours, addDays, isPast } from 'date-fns';
 
 interface PollOption {
   id: string;
@@ -35,35 +31,50 @@ interface StoredVote {
   votedAt: string;
 }
 
+/** Telegram uslubida qolgan vaqtni qisqa formatda ko'rsatish */
+function formatRemaining(expiry: Date): string {
+  const ms = expiry.getTime() - Date.now();
+  if (ms <= 0) return "So'rov tugadi";
+  const minutes = Math.floor(ms / 60000);
+  if (minutes < 60) return `${Math.max(1, minutes)} daqiqa qoldi`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} soat qoldi`;
+  const days = Math.floor(hours / 24);
+  return `${days} kun qoldi`;
+}
+
 export function PollDisplay({ postId, pollData, onVote }: PollDisplayProps) {
-  const { user } = useAuth();
   const [options, setOptions] = useState(pollData.options);
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [hasVoted, setHasVoted] = useState(false);
   const [isVoting, setIsVoting] = useState(false);
   const [totalVotes, setTotalVotes] = useState(0);
 
-  // Calculate poll expiry
   const getExpiryDate = useCallback(() => {
     const created = new Date(pollData.createdAt);
     switch (pollData.duration) {
-      case '1h': return addHours(created, 1);
-      case '6h': return addHours(created, 6);
-      case '1d': return addDays(created, 1);
-      case '3d': return addDays(created, 3);
-      case '7d': return addDays(created, 7);
-      default: return addDays(created, 1);
+      case '1h':
+        return addHours(created, 1);
+      case '6h':
+        return addHours(created, 6);
+      case '1d':
+        return addDays(created, 1);
+      case '3d':
+        return addDays(created, 3);
+      case '7d':
+        return addDays(created, 7);
+      default:
+        return addDays(created, 1);
     }
   }, [pollData.createdAt, pollData.duration]);
 
   const expiryDate = getExpiryDate();
   const isExpired = isPast(expiryDate);
 
-  // Load user's vote from localStorage and calculate totals
   useEffect(() => {
     const storageKey = `poll_vote_${postId}`;
     const storedVote = localStorage.getItem(storageKey);
-    
+
     if (storedVote) {
       try {
         const vote: StoredVote = JSON.parse(storedVote);
@@ -74,77 +85,61 @@ export function PollDisplay({ postId, pollData, onVote }: PollDisplayProps) {
       }
     }
 
-    // Calculate total votes
     const total = options.reduce((sum, opt) => sum + opt.votes, 0);
     setTotalVotes(total);
   }, [postId, options]);
 
-  // Subscribe to realtime vote updates
   useEffect(() => {
-    // We'll use a simple approach - store votes in localStorage
-    // In production, you'd want a separate polls table
     const storageKey = `poll_votes_${postId}`;
     const storedVotes = localStorage.getItem(storageKey);
-    
+
     if (storedVotes) {
       try {
         const votes: PollOption[] = JSON.parse(storedVotes);
         setOptions(votes);
       } catch {
-        // Use original options
+        // asl variantlar ishlatiladi
       }
     }
   }, [postId]);
 
-  const handleOptionSelect = (optionId: string) => {
-    if (hasVoted || isExpired) return;
+  const submitVote = async (ids: string[]) => {
+    if (ids.length === 0 || hasVoted || isExpired) return;
 
-    if (pollData.allowMultiple) {
-      setSelectedOptions(prev => 
-        prev.includes(optionId) 
-          ? prev.filter(id => id !== optionId)
-          : [...prev, optionId]
-      );
-    } else {
-      setSelectedOptions([optionId]);
-    }
-  };
-
-  const handleVote = async () => {
-    if (selectedOptions.length === 0 || hasVoted || isExpired) return;
-    
     setIsVoting(true);
-
     try {
-      // Update vote counts
-      const updatedOptions = options.map(opt => ({
+      const updatedOptions = options.map((opt) => ({
         ...opt,
-        votes: selectedOptions.includes(opt.id) ? opt.votes + 1 : opt.votes
+        votes: ids.includes(opt.id) ? opt.votes + 1 : opt.votes,
       }));
 
       setOptions(updatedOptions);
       setHasVoted(true);
 
-      // Store vote in localStorage
-      const storageKey = `poll_vote_${postId}`;
-      const vote: StoredVote = {
-        optionIds: selectedOptions,
-        votedAt: new Date().toISOString()
-      };
-      localStorage.setItem(storageKey, JSON.stringify(vote));
-
-      // Store updated options for realtime sync
+      const vote: StoredVote = { optionIds: ids, votedAt: new Date().toISOString() };
+      localStorage.setItem(`poll_vote_${postId}`, JSON.stringify(vote));
       localStorage.setItem(`poll_votes_${postId}`, JSON.stringify(updatedOptions));
 
-      // Update total
-      const newTotal = updatedOptions.reduce((sum, opt) => sum + opt.votes, 0);
-      setTotalVotes(newTotal);
-
+      setTotalVotes(updatedOptions.reduce((sum, opt) => sum + opt.votes, 0));
       onVote?.();
     } catch (error) {
-      console.error('Error voting:', error);
+      console.error('Ovoz berishda xatolik:', error);
     } finally {
       setIsVoting(false);
+    }
+  };
+
+  const handleOptionSelect = (optionId: string) => {
+    if (hasVoted || isExpired) return;
+
+    if (pollData.allowMultiple) {
+      setSelectedOptions((prev) =>
+        prev.includes(optionId) ? prev.filter((id) => id !== optionId) : [...prev, optionId]
+      );
+    } else {
+      // Telegramda bitta javobli so'rovda tanlash bilan darhol ovoz beriladi
+      setSelectedOptions([optionId]);
+      void submitVote([optionId]);
     }
   };
 
@@ -153,136 +148,153 @@ export function PollDisplay({ postId, pollData, onVote }: PollDisplayProps) {
     return Math.round((votes / totalVotes) * 100);
   };
 
+  const showResults = hasVoted || isExpired;
+  const subtitle = pollData.isAnonymous
+    ? pollData.allowMultiple
+      ? "Anonim so'rov · bir nechta javob"
+      : "Anonim so'rov"
+    : pollData.allowMultiple
+      ? "Ochiq so'rov · bir nechta javob"
+      : "Ochiq so'rov";
+
   return (
-    <div className="space-y-4 p-4 rounded-xl bg-secondary/30 border border-border">
-      {/* Question */}
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
-          <BarChart3 className="h-5 w-5 text-primary" />
-        </div>
-        <div className="flex-1">
-          <h3 className="font-semibold text-lg">{pollData.question}</h3>
-          <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
-            <span className="flex items-center gap-1">
-              <Users className="h-3.5 w-3.5" />
-              {totalVotes} {totalVotes === 1 ? 'vote' : 'votes'}
-            </span>
-            <span className="flex items-center gap-1">
-              <Clock className="h-3.5 w-3.5" />
-              {isExpired 
-                ? 'Poll ended' 
-                : `Ends ${formatDistanceToNow(expiryDate, { addSuffix: true })}`
-              }
-            </span>
-          </div>
+    <div className="w-full max-w-full space-y-3 overflow-hidden rounded-2xl border border-border/60 bg-card p-3">
+      {/* Savol */}
+      <div className="flex items-start gap-2.5">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
+          <BarChart3 className="h-4 w-4 text-foreground" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3
+            className="text-[15px] font-semibold leading-snug text-foreground"
+            style={{ overflowWrap: 'anywhere' }}
+          >
+            {pollData.question}
+          </h3>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">{subtitle}</p>
         </div>
       </div>
 
-      {/* Options */}
-      <div className="space-y-2">
+      {/* Variantlar */}
+      <div className="space-y-1.5">
         {options.map((option) => {
           const percentage = getPercentage(option.votes);
           const isSelected = selectedOptions.includes(option.id);
-          const showResults = hasVoted || isExpired;
 
           return (
             <button
               key={option.id}
+              type="button"
               onClick={() => handleOptionSelect(option.id)}
-              disabled={hasVoted || isExpired}
+              disabled={showResults || isVoting}
               className={cn(
-                "w-full text-left rounded-lg transition-all relative overflow-hidden",
-                !showResults && "hover:bg-secondary/50",
-                isSelected && !showResults && "ring-2 ring-primary"
+                'relative block w-full overflow-hidden rounded-xl px-3 py-2.5 text-left transition-colors',
+                !showResults && 'bg-muted/40 hover:bg-muted/70 active:bg-muted',
+                !showResults && isSelected && 'bg-muted',
+                showResults && 'bg-transparent px-0 py-1.5'
               )}
             >
-              {/* Background progress bar */}
-              {showResults && (
-                <div 
-                  className={cn(
-                    "absolute inset-0 transition-all duration-500",
-                    isSelected ? "bg-primary/20" : "bg-muted/50"
-                  )}
-                  style={{ width: `${percentage}%` }}
-                />
-              )}
-
-              <div className={cn(
-                "relative flex items-center gap-3 p-3",
-                !showResults && "border border-border rounded-lg"
-              )}>
-                {/* Checkbox/Radio indicator */}
-                {!showResults && (
-                  pollData.allowMultiple ? (
-                    <Checkbox 
-                      checked={isSelected}
-                      className="pointer-events-none"
-                    />
-                  ) : (
-                    <div className={cn(
-                      "w-4 h-4 rounded-full border-2 flex items-center justify-center",
-                      isSelected ? "border-primary" : "border-muted-foreground"
-                    )}>
-                      {isSelected && (
-                        <div className="w-2 h-2 rounded-full bg-primary" />
-                      )}
-                    </div>
-                  )
-                )}
-
-                {/* Option text */}
-                <span className={cn(
-                  "flex-1 font-medium",
-                  showResults && isSelected && "text-primary"
-                )}>
-                  {option.text}
-                </span>
-
-                {/* Vote indicator for your selection */}
-                {showResults && isSelected && (
-                  <Check className="h-4 w-4 text-primary" />
-                )}
-
-                {/* Percentage */}
-                {showResults && (
-                  <span className={cn(
-                    "text-sm font-semibold min-w-[3rem] text-right",
-                    isSelected ? "text-primary" : "text-muted-foreground"
-                  )}>
+              {showResults ? (
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className={cn(
+                      'w-9 shrink-0 text-right text-[13px] font-semibold tabular-nums',
+                      isSelected ? 'text-foreground' : 'text-muted-foreground'
+                    )}
+                  >
                     {percentage}%
                   </span>
-                )}
-              </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className="min-w-0 flex-1 truncate text-[14px] text-foreground"
+                        style={{ overflowWrap: 'anywhere' }}
+                      >
+                        {option.text}
+                      </span>
+                      {isSelected && (
+                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-foreground/90">
+                          <Check className="h-2.5 w-2.5 text-background" />
+                        </span>
+                      )}
+                    </div>
+                    {/* Telegramdek ingichka progress chizig'i */}
+                    <div className="mt-1 h-[3px] w-full overflow-hidden rounded-full bg-muted">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${percentage}%` }}
+                        transition={{ type: 'spring', stiffness: 120, damping: 20 }}
+                        className={cn(
+                          'h-full rounded-full',
+                          isSelected ? 'bg-foreground/80' : 'bg-muted-foreground/40'
+                        )}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className={cn(
+                      'flex h-[18px] w-[18px] shrink-0 items-center justify-center border-2 transition-colors',
+                      pollData.allowMultiple ? 'rounded-[5px]' : 'rounded-full',
+                      isSelected ? 'border-foreground bg-foreground' : 'border-muted-foreground/50'
+                    )}
+                  >
+                    {isSelected && <Check className="h-2.5 w-2.5 text-background" />}
+                  </span>
+                  <span
+                    className="min-w-0 flex-1 text-[14px] text-foreground"
+                    style={{ overflowWrap: 'anywhere' }}
+                  >
+                    {option.text}
+                  </span>
+                </div>
+              )}
             </button>
           );
         })}
       </div>
 
-      {/* Vote button */}
-      {!hasVoted && !isExpired && (
-        <Button
-          onClick={handleVote}
+      {/* Bir nechta javobli so'rovda tasdiqlash tugmasi */}
+      {pollData.allowMultiple && !showResults && (
+        <button
+          type="button"
+          onClick={() => submitVote(selectedOptions)}
           disabled={selectedOptions.length === 0 || isVoting}
-          className="w-full"
+          className={cn(
+            'h-9 w-full rounded-xl text-[13px] font-medium transition-colors',
+            selectedOptions.length === 0 || isVoting
+              ? 'cursor-not-allowed bg-muted/50 text-muted-foreground'
+              : 'bg-muted text-foreground hover:bg-muted/70'
+          )}
         >
-          {isVoting ? 'Voting...' : 'Vote'}
-        </Button>
+          {isVoting ? 'Yuborilmoqda...' : 'Ovoz berish'}
+        </button>
       )}
 
-      {/* Info */}
-      {pollData.isAnonymous && (
-        <p className="text-xs text-muted-foreground text-center">
-          Voting is anonymous
-        </p>
-      )}
+      {/* Pastki qism */}
+      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+        <span className="flex items-center gap-1">
+          <Users className="h-3 w-3" />
+          {totalVotes === 0 ? 'Hali ovoz berilmagan' : `${totalVotes} ovoz`}
+        </span>
+        <span className="flex items-center gap-1">
+          <Clock className="h-3 w-3" />
+          {formatRemaining(expiryDate)}
+        </span>
+      </div>
     </div>
   );
 }
 
-// Helper function to parse poll from post content
-export function parsePollFromContent(content: string): { pollData: PollData | null; cleanContent: string } {
+// Post kontentidan so'rovni ajratish
+export function parsePollFromContent(content: string): {
+  pollData: PollData | null;
+  cleanContent: string;
+} {
   const pollMatch = content.match(/\[POLL\](.*?)\[\/POLL\]/s);
-  
+
   if (!pollMatch) {
     return { pollData: null, cleanContent: content };
   }
