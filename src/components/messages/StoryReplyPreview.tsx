@@ -34,6 +34,8 @@ export function StoryReplyPreview({ storyId, isMine }: StoryReplyPreviewProps) {
   const [showViewer, setShowViewer] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function fetchStory() {
       const { data, error } = await supabase
         .from('stories')
@@ -46,26 +48,26 @@ export function StoryReplyPreview({ storyId, isMine }: StoryReplyPreviewProps) {
         .eq('id', storyId)
         .single();
 
-      if (!error && data) {
-        setStory(data as Story);
-      }
+      if (cancelled) return;
+      if (!error && data) setStory(data as Story);
       setIsLoading(false);
     }
 
     fetchStory();
+    return () => {
+      cancelled = true;
+    };
   }, [storyId]);
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (story) {
-      setShowViewer(true);
-    }
+    if (story) setShowViewer(true);
   };
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 mb-2">
-        <Skeleton className="h-12 w-12 rounded-lg" />
+      <div className="mb-2 flex items-center gap-2">
+        <Skeleton className="h-12 w-12 rounded-xl" />
         <Skeleton className="h-4 w-24" />
       </div>
     );
@@ -73,54 +75,66 @@ export function StoryReplyPreview({ storyId, isMine }: StoryReplyPreviewProps) {
 
   if (!story) {
     return (
-      <div className={cn(
-        "text-xs mb-2 flex items-center gap-2",
-        isMine ? "text-white/50" : "text-muted-foreground"
-      )}>
-        <div className={cn(
-          "h-12 w-12 rounded-lg flex items-center justify-center",
-          isMine ? "bg-white/10" : "bg-muted"
-        )}>
-          <ImageIcon className="h-5 w-5 opacity-50" />
+      <div
+        className={cn(
+          'mb-2 flex items-center gap-2 rounded-xl p-2 text-xs',
+          isMine
+            ? 'bg-primary-foreground/10 text-primary-foreground/70'
+            : 'bg-muted/50 text-muted-foreground'
+        )}
+      >
+        <div
+          className={cn(
+            'flex h-12 w-12 items-center justify-center rounded-xl',
+            isMine ? 'bg-primary-foreground/15' : 'bg-muted'
+          )}
+        >
+          <ImageIcon className="h-5 w-5 opacity-60" />
         </div>
-        <span>Story no longer available</span>
+        <span>Stori endi mavjud emas</span>
       </div>
     );
   }
 
   const isVideo = story.media_type === 'video';
 
-  // Build story group for viewer
   const storyGroup = {
     user_id: story.user_id,
     username: story.profile?.username || null,
     display_name: story.profile?.display_name || null,
     avatar_url: story.profile?.avatar_url || null,
     is_verified: story.profile?.is_verified || false,
-    stories: [{
-      id: story.id,
-      user_id: story.user_id,
-      media_url: story.media_url,
-      media_type: story.media_type || 'image',
-      caption: story.caption,
-      views_count: story.views_count,
-      expires_at: story.expires_at,
-      created_at: story.created_at,
-    }],
+    stories: [
+      {
+        id: story.id,
+        user_id: story.user_id,
+        media_url: story.media_url,
+        media_type: story.media_type || 'image',
+        caption: story.caption,
+        views_count: story.views_count,
+        expires_at: story.expires_at,
+        created_at: story.created_at,
+      },
+    ],
     all_story_ids: [story.id],
   };
+
+  const authorName =
+    story.profile?.display_name || story.profile?.username || "Noma'lum foydalanuvchi";
 
   return (
     <>
       <button
         onClick={handleClick}
         className={cn(
-          "flex items-center gap-2 mb-2 p-2 rounded-lg w-full text-left transition-opacity hover:opacity-80",
-          isMine ? "bg-white/10" : "bg-muted/50"
+          'mb-2 flex w-full items-center gap-2 rounded-xl border-l-2 p-2 text-left transition-colors',
+          isMine
+            ? 'border-primary-foreground/50 bg-primary-foreground/10 hover:bg-primary-foreground/15'
+            : 'border-primary bg-muted/50 hover:bg-muted/70'
         )}
       >
-        {/* Story Thumbnail */}
-        <div className="relative h-12 w-12 rounded-lg overflow-hidden flex-shrink-0 bg-black/20">
+        {/* Stori rasmchasi */}
+        <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-black/20">
           {isVideo ? (
             <>
               <video
@@ -130,39 +144,36 @@ export function StoryReplyPreview({ storyId, isMine }: StoryReplyPreviewProps) {
                 playsInline
                 preload="metadata"
               />
-              <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                <Play className="h-4 w-4 text-white fill-white" />
-              </div>
+              <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+                <Play className="h-4 w-4 fill-white text-white" />
+              </span>
             </>
           ) : (
-            <img
-              src={story.media_url}
-              alt=""
-              className="h-full w-full object-cover"
-            />
+            <img src={story.media_url} alt="" className="h-full w-full object-cover" />
           )}
         </div>
 
-        {/* Story Info */}
-        <div className="flex-1 min-w-0">
-          <p className={cn(
-            "text-xs font-medium",
-            isMine ? "text-white/80" : "text-foreground"
-          )}>
-            Replied to story
+        {/* Ma'lumot */}
+        <div className="min-w-0 flex-1">
+          <p
+            className={cn(
+              'truncate text-xs font-medium',
+              isMine ? 'text-primary-foreground' : 'text-primary'
+            )}
+          >
+            {authorName} storisiga javob
           </p>
-          {story.caption && (
-            <p className={cn(
-              "text-xs truncate",
-              isMine ? "text-white/50" : "text-muted-foreground"
-            )}>
-              {story.caption}
-            </p>
-          )}
+          <p
+            className={cn(
+              'truncate text-xs',
+              isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'
+            )}
+          >
+            {story.caption || (isVideo ? 'Video stori' : 'Rasmli stori')}
+          </p>
         </div>
       </button>
 
-      {/* Story Viewer */}
       {showViewer && (
         <StoryViewer
           storyGroup={storyGroup}
