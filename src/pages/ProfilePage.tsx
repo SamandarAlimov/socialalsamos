@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { useUserReposts, Repost } from '@/hooks/useReposts';
@@ -16,22 +17,30 @@ import { supabase } from '@/integrations/supabase/client';
 import { uploadMedia } from '@/lib/mediaUpload';
 import { Edit3, Grid, Video, Bookmark, Repeat2, MapPin, LinkIcon, Calendar, ImageIcon, Archive, Megaphone, Camera, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
+import { uz as uzDateLocale, ru as ruDateLocale, enUS as enDateLocale } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PostViewModal } from '@/components/PostViewModal';
 
+const DATE_LOCALES = {
+  uz: uzDateLocale,
+  ru: ruDateLocale,
+  en: enDateLocale,
+} as const;
+
 export default function ProfilePage() {
+  const { t, i18n } = useTranslation();
   const isMobile = useIsMobile();
   const { user, profile: authProfile, updateProfile } = useAuth();
   const { toast } = useToast();
   const coverInputRef = useRef<HTMLInputElement>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
-  const { 
-    profile, 
-    posts, 
-    isLoading, 
-    followersCount, 
-    followingCount, 
+  const {
+    profile,
+    posts,
+    isLoading,
+    followersCount,
+    followingCount,
     postsCount,
     likePost,
     deletePost,
@@ -41,7 +50,10 @@ export default function ProfilePage() {
   } = useUserProfile();
   const navigate = useNavigate();
   const { reposts, isLoading: repostsLoading, refresh: refreshReposts } = useUserReposts(user?.id);
-  
+
+  const langKey = (i18n.language?.split('-')[0] ?? 'uz') as keyof typeof DATE_LOCALES;
+  const dateLocale = DATE_LOCALES[langKey] ?? uzDateLocale;
+
   const [activeTab, setActiveTab] = useState<'posts' | 'videos' | 'reposts' | 'saved'>('posts');
   const [followDialog, setFollowDialog] = useState<{ open: boolean; type: 'followers' | 'following' }>({
     open: false,
@@ -50,10 +62,10 @@ export default function ProfilePage() {
   const [selectedRepostPost, setSelectedRepostPost] = useState<Repost['post'] | null>(null);
 
   const tabs = [
-    { id: 'posts', icon: Grid, label: 'Posts' },
-    { id: 'videos', icon: Video, label: 'Videos' },
-    { id: 'reposts', icon: Repeat2, label: 'Reposts' },
-    { id: 'saved', icon: Bookmark, label: 'Saved' },
+    { id: 'posts', icon: Grid, label: t('profile.tabs.posts') },
+    { id: 'videos', icon: Video, label: t('profile.tabs.videos') },
+    { id: 'reposts', icon: Repeat2, label: t('profile.tabs.reposts') },
+    { id: 'saved', icon: Bookmark, label: t('profile.tabs.saved') },
   ];
 
   const formatCount = (count: number) => {
@@ -82,10 +94,14 @@ export default function ProfilePage() {
         .update({ cover_url: uploaded.url })
         .eq('id', user.id);
 
-      toast({ title: "Muvaffaqiyatli", description: "Cover rasm yangilandi" });
+      toast({ title: t('common.success'), description: t('profile.coverUpdated') });
       refresh?.();
     } catch (err: any) {
-      toast({ title: "Xato", description: err.message || "Rasm yuklashda xatolik", variant: "destructive" });
+      toast({
+        title: t('common.error'),
+        description: err?.message || t('profile.coverUploadFailed'),
+        variant: 'destructive',
+      });
     } finally {
       setUploadingCover(false);
     }
@@ -117,7 +133,7 @@ export default function ProfilePage() {
   if (!profile) {
     return (
       <div className="max-w-4xl mx-auto py-8 px-4 text-center">
-        <p className="text-muted-foreground">Profile not found</p>
+        <p className="text-muted-foreground">{t('profile.notFound')}</p>
       </div>
     );
   }
@@ -127,16 +143,16 @@ export default function ProfilePage() {
       {/* Cover Photo */}
       <div className="relative h-36 sm:h-48 md:h-64 rounded-xl md:rounded-2xl bg-gradient-to-r from-primary/20 to-primary/40 mb-12 md:mb-16 overflow-hidden group">
         {profile.cover_url ? (
-          <img 
-            src={profile.cover_url} 
-            alt="Cover" 
+          <img
+            src={profile.cover_url}
+            alt={t('settings.cover')}
             className="w-full h-full object-cover"
           />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-r from-alsamos-orange-light to-alsamos-orange-dark" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-background/50 to-transparent" />
-        
+
         {isOwnProfile && (
           <>
             <input
@@ -156,7 +172,7 @@ export default function ProfilePage() {
               ) : (
                 <Camera className="h-3.5 w-3.5" />
               )}
-              {uploadingCover ? "Yuklanmoqda..." : "Cover o'zgartirish"}
+              {uploadingCover ? t('common.uploading') : t('profile.changeCover')}
             </button>
           </>
         )}
@@ -184,7 +200,7 @@ export default function ProfilePage() {
               <div>
                 <div className="flex items-center gap-1.5 md:gap-2">
                   <h1 className="text-xl md:text-2xl font-bold">
-                    {profile.display_name || profile.username || 'User'}
+                    {profile.display_name || profile.username || t('profile.user')}
                   </h1>
                   {profile.is_verified && (
                     <VerifiedBadge size="sm" className="md:hidden" />
@@ -193,18 +209,18 @@ export default function ProfilePage() {
                     <VerifiedBadge size="md" className="hidden md:block" />
                   )}
                 </div>
-                <p className="text-sm md:text-base text-muted-foreground">@{profile.username || 'username'}</p>
+                <p className="text-sm md:text-base text-muted-foreground">@{profile.username || t('profile.usernameFallback')}</p>
               </div>
               {isOwnProfile && (
                 <div className="flex gap-2">
                   <Button variant="default" size="sm" className="md:h-10 md:px-4" onClick={() => navigate('/settings')}>
                     <Edit3 className="h-4 w-4 mr-1.5 md:mr-2" />
-                    <span className="text-sm">Edit Profile</span>
+                    <span className="text-sm">{t('profile.editProfile')}</span>
                   </Button>
-                  <Button variant="outline" size="icon" className="h-9 w-9 md:h-10 md:w-10" onClick={() => navigate('/ads')}>
+                  <Button variant="outline" size="icon" className="h-9 w-9 md:h-10 md:w-10" aria-label={t('nav.ads')} onClick={() => navigate('/ads')}>
                     <Megaphone className="h-4 w-4 md:h-5 md:w-5" />
                   </Button>
-                  <Button variant="outline" size="icon" className="h-9 w-9 md:h-10 md:w-10" onClick={() => navigate('/story-archive')}>
+                  <Button variant="outline" size="icon" className="h-9 w-9 md:h-10 md:w-10" aria-label={t('nav.storyArchive')} onClick={() => navigate('/story-archive')}>
                     <Archive className="h-4 w-4 md:h-5 md:w-5" />
                   </Button>
                 </div>
@@ -216,7 +232,7 @@ export default function ProfilePage() {
         {/* Bio */}
         <div className="mt-4 md:mt-6 max-w-2xl">
           <p className="text-sm md:text-base text-foreground leading-relaxed">
-            {profile.bio || 'No bio yet.'}
+            {profile.bio || t('profile.noBio')}
           </p>
           <div className="flex flex-wrap gap-3 md:gap-4 mt-3 md:mt-4 text-xs md:text-sm text-muted-foreground">
             {profile.location && (
@@ -228,9 +244,9 @@ export default function ProfilePage() {
             {profile.website && (
               <span className="flex items-center gap-1">
                 <LinkIcon className="h-4 w-4" />
-                <a 
-                  href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`} 
-                  target="_blank" 
+                <a
+                  href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`}
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary hover:underline"
                 >
@@ -241,7 +257,9 @@ export default function ProfilePage() {
             {profile.created_at && (
               <span className="flex items-center gap-1">
                 <Calendar className="h-4 w-4" />
-                Joined {format(new Date(profile.created_at), 'MMMM yyyy')}
+                {t('profile.joined', {
+                  date: format(new Date(profile.created_at), 'LLLL yyyy', { locale: dateLocale }),
+                })}
               </span>
             )}
           </div>
@@ -249,26 +267,26 @@ export default function ProfilePage() {
 
         {/* Stats */}
         <div className="flex justify-around sm:justify-start sm:gap-6 md:gap-8 mt-4 md:mt-6 py-3 md:py-4 border-y border-border">
-          <button 
+          <button
             className="text-center hover:opacity-80 transition-opacity flex flex-col sm:flex-row sm:items-baseline"
             onClick={() => {}}
           >
             <span className="text-lg md:text-xl font-bold">{formatCount(postsCount)}</span>
-            <span className="text-muted-foreground text-xs md:text-sm sm:ml-1">Posts</span>
+            <span className="text-muted-foreground text-xs md:text-sm sm:ml-1">{t('profile.stats.posts')}</span>
           </button>
-          <button 
+          <button
             className="text-center hover:opacity-80 transition-opacity flex flex-col sm:flex-row sm:items-baseline"
             onClick={() => setFollowDialog({ open: true, type: 'followers' })}
           >
             <span className="text-lg md:text-xl font-bold">{formatCount(followersCount)}</span>
-            <span className="text-muted-foreground text-xs md:text-sm sm:ml-1">Followers</span>
+            <span className="text-muted-foreground text-xs md:text-sm sm:ml-1">{t('profile.stats.followers')}</span>
           </button>
-          <button 
+          <button
             className="text-center hover:opacity-80 transition-opacity flex flex-col sm:flex-row sm:items-baseline"
             onClick={() => setFollowDialog({ open: true, type: 'following' })}
           >
             <span className="text-lg md:text-xl font-bold">{formatCount(followingCount)}</span>
-            <span className="text-muted-foreground text-xs md:text-sm sm:ml-1">Following</span>
+            <span className="text-muted-foreground text-xs md:text-sm sm:ml-1">{t('profile.stats.following')}</span>
           </button>
         </div>
 
@@ -283,9 +301,10 @@ export default function ProfilePage() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as typeof activeTab)}
+              aria-label={tab.label}
               className={`flex-1 sm:flex-none flex items-center justify-center sm:justify-start gap-1.5 md:gap-2 px-3 md:px-6 py-2.5 md:py-3 text-xs md:text-sm font-medium transition-colors ${
                 activeTab === tab.id
-                  ? 'text-primary border-b-2 border-primary' 
+                  ? 'text-primary border-b-2 border-primary'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
@@ -306,9 +325,9 @@ export default function ProfilePage() {
           ) : reposts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <Repeat2 className="h-16 w-16 mb-4 opacity-50" />
-              <p className="text-lg font-medium">No reposts yet</p>
+              <p className="text-lg font-medium">{t('profile.empty.noReposts')}</p>
               <p className="text-sm">
-                {isOwnProfile ? 'Repost content you like!' : 'This user hasn\'t reposted anything yet.'}
+                {isOwnProfile ? t('profile.empty.repostPrompt') : t('profile.empty.userNoReposts')}
               </p>
             </div>
           ) : (
@@ -324,7 +343,7 @@ export default function ProfilePage() {
                     <div className="absolute top-2 left-2 z-10 flex items-center gap-1 bg-black/60 rounded-full px-2 py-1">
                       <Repeat2 className="h-3 w-3 text-white" />
                     </div>
-                    
+
                     {/* Original author avatar */}
                     {repost.post.profile && (
                       <div className="absolute top-2 right-2 z-10">
@@ -336,7 +355,7 @@ export default function ProfilePage() {
                         </Avatar>
                       </div>
                     )}
-                    
+
                     {repost.post.media_urls && repost.post.media_urls.length > 0 ? (
                       repost.post.media_type === 'video' ? (
                         <video
@@ -347,18 +366,18 @@ export default function ProfilePage() {
                       ) : (
                         <img
                           src={repost.post.media_urls[0]}
-                          alt="Repost"
+                          alt={t('post.repost')}
                           className="w-full h-full object-cover"
                         />
                       )
                     ) : (
                       <div className="w-full h-full flex items-center justify-center p-3 bg-gradient-to-br from-muted to-muted/50">
                         <p className="text-xs text-center line-clamp-4">
-                          {repost.post.content || 'No content'}
+                          {repost.post.content || t('profile.noContent')}
                         </p>
                       </div>
                     )}
-                    
+
                     {/* Hover overlay with stats */}
                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
                       <span className="text-white text-sm font-medium">
@@ -376,9 +395,11 @@ export default function ProfilePage() {
         ) : filteredPosts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
             <ImageIcon className="h-16 w-16 mb-4 opacity-50" />
-            <p className="text-lg font-medium">No posts yet</p>
+            <p className="text-lg font-medium">
+              {activeTab === 'videos' ? t('profile.empty.noVideos') : t('profile.empty.noPosts')}
+            </p>
             <p className="text-sm">
-              {isOwnProfile ? 'Share your first post!' : 'This user hasn\'t posted anything yet.'}
+              {isOwnProfile ? t('profile.empty.shareFirst') : t('profile.empty.userNoPosts')}
             </p>
           </div>
         ) : (

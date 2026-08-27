@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -35,7 +36,10 @@ interface UserProfile {
   created_at: string | null;
 }
 
+type StatId = 'posts' | 'followers' | 'following';
+
 export default function UserProfilePage() {
+  const { t, i18n } = useTranslation();
   const { username: usernameParam } = useParams<{ username: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -47,12 +51,12 @@ export default function UserProfilePage() {
   const [activeTab, setActiveTab] = useState<'posts' | 'videos' | 'reposts'>('posts');
   const [selectedPost, setSelectedPost] = useState<UserPost | null>(null);
   const [selectedRepostPost, setSelectedRepostPost] = useState<Repost['post'] | null>(null);
-  const [followDialog, setFollowDialog] = useState<{ open: boolean; type: 'followers' | 'following' }>({ 
-    open: false, 
-    type: 'followers' 
+  const [followDialog, setFollowDialog] = useState<{ open: boolean; type: 'followers' | 'following' }>({
+    open: false,
+    type: 'followers'
   });
   const { createPrivateConversation } = useConversations();
-  
+
   // Get userId from profile after fetching by username
   const userId = profile?.id;
   const { posts, isLoading: postsLoading, likePost } = useUserPosts(userId);
@@ -67,25 +71,25 @@ export default function UserProfilePage() {
     try {
       // Check if it's a UUID (for backwards compatibility) or username
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(usernameParam);
-      
+
       let query = supabase.from('profiles').select(PROFILE_PUBLIC_COLUMNS);
-      
+
       if (isUUID) {
         query = query.eq('id', usernameParam);
       } else {
         query = query.eq('username', usernameParam);
       }
-      
+
       const { data, error } = await query.single();
 
       if (error) throw error;
-      
+
       // If accessed by UUID, redirect to username URL
       if (isUUID && data?.username) {
         navigate(`/user/${data.username}`, { replace: true });
         return;
       }
-      
+
       setProfile(data);
 
       // Check if following
@@ -96,17 +100,17 @@ export default function UserProfilePage() {
           .eq('follower_id', user.id)
           .eq('following_id', data.id)
           .single();
-        
+
         setIsFollowing(!!followData);
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
-      toast.error('User not found');
+      toast.error(t('profile.userNotFound'));
       navigate('/home');
     } finally {
       setLoading(false);
     }
-  }, [usernameParam, user, navigate]);
+  }, [usernameParam, user, navigate, t]);
 
   useEffect(() => {
     fetchProfile();
@@ -116,6 +120,8 @@ export default function UserProfilePage() {
     if (!user || !userId) return;
     setFollowLoading(true);
 
+    const name = profile?.display_name || profile?.username || t('profile.user');
+
     try {
       if (isFollowing) {
         await supabase
@@ -124,17 +130,17 @@ export default function UserProfilePage() {
           .eq('follower_id', user.id)
           .eq('following_id', userId);
         setIsFollowing(false);
-        toast.success(`Unfollowed ${profile?.display_name || profile?.username}`);
+        toast.success(t('profile.unfollowedUser', { name }));
       } else {
         await supabase
           .from('follows')
           .insert({ follower_id: user.id, following_id: userId });
         setIsFollowing(true);
-        toast.success(`Following ${profile?.display_name || profile?.username}`);
+        toast.success(t('profile.followedUser', { name }));
       }
     } catch (error) {
       console.error('Error toggling follow:', error);
-      toast.error('Failed to update follow status');
+      toast.error(t('profile.followFailed'));
     } finally {
       setFollowLoading(false);
     }
@@ -151,7 +157,7 @@ export default function UserProfilePage() {
       }
     } catch (error) {
       console.error('Error creating conversation:', error);
-      toast.error('Failed to start conversation');
+      toast.error(t('profile.messageFailed'));
     } finally {
       setMessageLoading(false);
     }
@@ -177,49 +183,49 @@ export default function UserProfilePage() {
   if (!profile) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <p className="text-muted-foreground">User not found</p>
+        <p className="text-muted-foreground">{t('profile.userNotFound')}</p>
       </div>
     );
   }
 
-  const stats = [
-    { label: 'Posts', value: posts.length || profile.posts_count || 0 },
-    { label: 'Followers', value: profile.followers_count || 0 },
-    { label: 'Following', value: profile.following_count || 0 },
+  const stats: Array<{ id: StatId; label: string; value: number }> = [
+    { id: 'posts', label: t('profile.stats.posts'), value: posts.length || profile.posts_count || 0 },
+    { id: 'followers', label: t('profile.stats.followers'), value: profile.followers_count || 0 },
+    { id: 'following', label: t('profile.stats.following'), value: profile.following_count || 0 },
   ];
 
   const videoPosts = posts.filter(p => p.media_type === 'video');
   const regularPosts = activeTab === 'videos' ? videoPosts : posts;
 
   const tabs = [
-    { id: 'posts' as const, icon: Grid, label: 'Posts', count: posts.length },
-    { id: 'videos' as const, icon: Video, label: 'Videos', count: videoPosts.length },
-    { id: 'reposts' as const, icon: Repeat2, label: 'Reposts', count: reposts.length },
+    { id: 'posts' as const, icon: Grid, label: t('profile.tabs.posts'), count: posts.length },
+    { id: 'videos' as const, icon: Video, label: t('profile.tabs.videos'), count: videoPosts.length },
+    { id: 'reposts' as const, icon: Repeat2, label: t('profile.tabs.reposts'), count: reposts.length },
   ];
 
-  const joinedDate = profile.created_at 
-    ? new Date(profile.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const joinedDate = profile.created_at
+    ? new Date(profile.created_at).toLocaleDateString(i18n.language || 'uz', { month: 'long', year: 'numeric' })
     : null;
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
       {/* Back button */}
-      <Button 
-        variant="ghost" 
-        size="sm" 
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={() => navigate(-1)}
         className="mb-4"
       >
         <ArrowLeft className="h-4 w-4 mr-2" />
-        Back
+        {t('common.back')}
       </Button>
 
       {/* Cover Photo */}
       <div className="relative h-48 md:h-64 rounded-2xl bg-gradient-to-r from-primary/20 to-primary/40 mb-16 overflow-hidden">
         {profile.cover_url && (
-          <img 
-            src={profile.cover_url} 
-            alt="Cover" 
+          <img
+            src={profile.cover_url}
+            alt={t('settings.cover')}
             className="w-full h-full object-cover"
           />
         )}
@@ -247,17 +253,17 @@ export default function UserProfilePage() {
               <div>
                 <div className="flex items-center gap-2">
                   <h1 className="text-2xl font-bold">
-                    {profile.display_name || profile.username || 'User'}
+                    {profile.display_name || profile.username || t('profile.user')}
                   </h1>
                   {profile.is_verified && (
                     <VerifiedBadge size="lg" />
                   )}
                 </div>
                 <p className="text-muted-foreground">
-                  @{profile.username || 'username'}
+                  @{profile.username || t('profile.usernameFallback')}
                 </p>
               </div>
-              
+
               {!isOwnProfile && (
                 <div className="flex gap-2">
                   <Button
@@ -268,12 +274,12 @@ export default function UserProfilePage() {
                     {isFollowing ? (
                       <>
                         <UserMinus className="h-4 w-4 mr-2" />
-                        Unfollow
+                        {t('profile.unfollow')}
                       </>
                     ) : (
                       <>
                         <UserPlus className="h-4 w-4 mr-2" />
-                        Follow
+                        {t('profile.follow')}
                       </>
                     )}
                   </Button>
@@ -283,14 +289,14 @@ export default function UserProfilePage() {
                     disabled={messageLoading}
                   >
                     <MessageCircle className="h-4 w-4 mr-2" />
-                    Message
+                    {t('profile.message')}
                   </Button>
                 </div>
               )}
 
               {isOwnProfile && (
                 <Button variant="hero" onClick={() => navigate('/profile')}>
-                  Edit Profile
+                  {t('profile.editProfile')}
                 </Button>
               )}
             </div>
@@ -312,9 +318,9 @@ export default function UserProfilePage() {
             {profile.website && (
               <span className="flex items-center gap-1">
                 <LinkIcon className="h-4 w-4" />
-                <a 
-                  href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`} 
-                  target="_blank" 
+                <a
+                  href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`}
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary hover:underline"
                 >
@@ -325,7 +331,7 @@ export default function UserProfilePage() {
             {joinedDate && (
               <span className="flex items-center gap-1">
                 <Calendar className="h-4 w-4" />
-                Joined {joinedDate}
+                {t('profile.joined', { date: joinedDate })}
               </span>
             )}
           </div>
@@ -335,15 +341,15 @@ export default function UserProfilePage() {
         <div className="flex gap-8 mt-6 py-4 border-y border-border">
           {stats.map((stat) => (
             <button
-              key={stat.label}
+              key={stat.id}
               onClick={() => {
-                if (stat.label === 'Followers') {
+                if (stat.id === 'followers') {
                   setFollowDialog({ open: true, type: 'followers' });
-                } else if (stat.label === 'Following') {
+                } else if (stat.id === 'following') {
                   setFollowDialog({ open: true, type: 'following' });
                 }
               }}
-              className={stat.label !== 'Posts' ? 'text-center hover:opacity-70 transition-opacity' : 'text-center cursor-default'}
+              className={stat.id !== 'posts' ? 'text-center hover:opacity-70 transition-opacity' : 'text-center cursor-default'}
             >
               <span className="text-xl font-bold">{stat.value}</span>
               <span className="text-muted-foreground text-sm ml-1">{stat.label}</span>
@@ -376,8 +382,8 @@ export default function UserProfilePage() {
               onClick={() => setActiveTab(tab.id)}
               className={cn(
                 "flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors",
-                activeTab === tab.id 
-                  ? 'text-primary border-b-2 border-primary' 
+                activeTab === tab.id
+                  ? 'text-primary border-b-2 border-primary'
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
@@ -401,7 +407,7 @@ export default function UserProfilePage() {
                 <div className="h-16 w-16 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
                   <Repeat2 className="h-8 w-8 text-muted-foreground" />
                 </div>
-                <p className="text-muted-foreground font-medium">No reposts yet</p>
+                <p className="text-muted-foreground font-medium">{t('profile.empty.noReposts')}</p>
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-1">
@@ -416,7 +422,7 @@ export default function UserProfilePage() {
                       <div className="absolute top-2 left-2 z-10 flex items-center gap-1 bg-black/60 rounded-full px-2 py-1">
                         <Repeat2 className="h-3 w-3 text-white" />
                       </div>
-                      
+
                       {/* Original author avatar */}
                       {repost.post.profile && (
                         <div className="absolute top-2 right-2 z-10">
@@ -428,7 +434,7 @@ export default function UserProfilePage() {
                           </Avatar>
                         </div>
                       )}
-                      
+
                       {repost.post.media_urls && repost.post.media_urls.length > 0 ? (
                         repost.post.media_type === 'video' ? (
                           <video
@@ -439,18 +445,18 @@ export default function UserProfilePage() {
                         ) : (
                           <img
                             src={repost.post.media_urls[0]}
-                            alt="Repost"
+                            alt={t('post.repost')}
                             className="w-full h-full object-cover"
                           />
                         )
                       ) : (
                         <div className="w-full h-full flex items-center justify-center p-3 bg-gradient-to-br from-muted to-muted/50">
                           <p className="text-xs text-center line-clamp-4">
-                            {repost.post.content || 'No content'}
+                            {repost.post.content || t('profile.noContent')}
                           </p>
                         </div>
                       )}
-                      
+
                       {/* Hover overlay with stats */}
                       <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
                         <div className="flex items-center gap-1 text-white">
@@ -483,7 +489,7 @@ export default function UserProfilePage() {
                 )}
               </div>
               <p className="text-muted-foreground font-medium">
-                {activeTab === 'videos' ? 'No videos yet' : 'No posts yet'}
+                {activeTab === 'videos' ? t('profile.empty.noVideos') : t('profile.empty.noPosts')}
               </p>
             </div>
           ) : (
@@ -529,7 +535,7 @@ export default function UserProfilePage() {
                       </p>
                     </div>
                   )}
-                  
+
                   {/* Hover overlay */}
                   <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
                     <div className="flex items-center gap-1 text-white">
