@@ -9,6 +9,7 @@ import {
   Archive,
   ArchiveRestore,
   Pin,
+  PinOff,
   BellOff,
   Bell,
   Trash2,
@@ -48,77 +49,80 @@ export function ChatListContextMenu({
   onMarkRead,
   onMarkUnread,
 }: ChatListContextMenuProps) {
+  const isChannel = conversation.type === 'channel';
+  const isGroup = conversation.type === 'group';
+  const deleteLabel = isChannel
+    ? 'Kanalni chatlardan olib tashlash'
+    : isGroup
+      ? 'Guruhni chatlardan olib tashlash'
+      : "Chatni o'chirish";
+
   return (
     <ContextMenu>
-      <ContextMenuTrigger asChild>
-        {children}
-      </ContextMenuTrigger>
-      <ContextMenuContent className="w-56">
-        {isArchived ? (
-          // Show unarchive option for archived conversations
-          onUnarchive && (
-            <ContextMenuItem onClick={onUnarchive} className="gap-2">
-              <ArchiveRestore className="h-4 w-4" />
-              Unarchive
-            </ContextMenuItem>
-          )
-        ) : (
-          // Show archive option for non-archived conversations
-          onArchive && (
-            <ContextMenuItem onClick={onArchive} className="gap-2">
-              <Archive className="h-4 w-4" />
-              Archive
-            </ContextMenuItem>
-          )
-        )}
-        
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent className="w-60 rounded-2xl">
+        {isArchived
+          ? onUnarchive && (
+              <ContextMenuItem onClick={onUnarchive} className="gap-2">
+                <ArchiveRestore className="h-4 w-4" />
+                Arxivdan chiqarish
+              </ContextMenuItem>
+            )
+          : onArchive && (
+              <ContextMenuItem onClick={onArchive} className="gap-2">
+                <Archive className="h-4 w-4" />
+                Arxivlash
+              </ContextMenuItem>
+            )}
+
         {isUnread && onMarkRead && (
           <ContextMenuItem onClick={onMarkRead} className="gap-2">
             <CheckCheck className="h-4 w-4" />
-            Mark as read
+            O'qilgan deb belgilash
           </ContextMenuItem>
         )}
-        
+
         {!isUnread && onMarkUnread && (
           <ContextMenuItem onClick={onMarkUnread} className="gap-2">
             <Circle className="h-4 w-4" />
-            Mark as unread
+            O'qilmagan deb belgilash
           </ContextMenuItem>
         )}
-        
+
         {onPin && !isArchived && (
           <ContextMenuItem onClick={onPin} className="gap-2">
-            <Pin className="h-4 w-4" />
-            {isPinned ? 'Unpin' : 'Pin'}
+            {isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+            {isPinned ? 'Qadashni bekor qilish' : 'Yuqoriga qadash'}
           </ContextMenuItem>
         )}
-        
+
         {onMute && !isArchived && (
           <ContextMenuItem onClick={onMute} className="gap-2">
             {isMuted ? (
               <>
                 <Bell className="h-4 w-4" />
-                Unmute
+                Ovozni yoqish
               </>
             ) : (
               <>
                 <BellOff className="h-4 w-4" />
-                Mute
+                Ovozsiz qilish
               </>
             )}
           </ContextMenuItem>
         )}
-        
-        <ContextMenuSeparator />
-        
+
         {onDelete && (
-          <ContextMenuItem 
-            onClick={onDelete} 
-            className="gap-2 text-destructive focus:text-destructive"
-          >
-            <Trash2 className="h-4 w-4" />
-            Delete chat
-          </ContextMenuItem>
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem
+              onClick={onDelete}
+              className="gap-2 text-destructive focus:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" />
+              {deleteLabel}
+            </ContextMenuItem>
+          </>
         )}
       </ContextMenuContent>
     </ContextMenu>
