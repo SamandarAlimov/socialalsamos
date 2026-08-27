@@ -40,6 +40,7 @@ import ActivityPage from "./pages/ActivityPage";
 import AdsPage from "./pages/AdsPage";
 import ChannelsPage from "./pages/ChannelsPage";
 import MiniAppsPage from "./pages/MiniAppsPage";
+import JoinInvitePage from "./pages/JoinInvitePage";
 import NotFound from "./pages/NotFound";
 
 // Layout
@@ -111,6 +112,7 @@ function AppRoutes() {
         <Route path="/search" element={<SearchPage />} />
         <Route path="/videos" element={<VideosPage />} />
         <Route path="/messages" element={<MessagesPage />} />
+        <Route path="/join/:slug" element={<JoinInvitePage />} />
         <Route path="/marketplace" element={<MarketplacePage />} />
         <Route path="/map" element={<MapPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
