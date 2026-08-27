@@ -15,7 +15,7 @@ import {
 import { FollowersFollowingDialog } from '@/components/FollowersFollowingDialog';
 import { ProfilePostsGrid } from '@/components/profile/ProfilePostsGrid';
 import { ProfileQrDialog } from '@/components/profile/ProfileQrDialog';
-import { AvatarViewerDialog } from '@/components/profile/AvatarViewerDialog';
+import { ProfilePhotosDialog } from '@/components/profile/ProfilePhotosDialog';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { StoryHighlights } from '@/components/stories/StoryHighlights';
@@ -45,7 +45,7 @@ import {
   Settings,
   Heart,
   MessageCircle,
-  Maximize2,
+  Images,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { uz as uzDateLocale, ru as ruDateLocale, enUS as enDateLocale } from 'date-fns/locale';
@@ -92,7 +92,7 @@ export default function ProfilePage() {
   });
   const [selectedRepostPost, setSelectedRepostPost] = useState<Repost['post'] | null>(null);
   const [showQrDialog, setShowQrDialog] = useState(false);
-  const [showAvatarViewer, setShowAvatarViewer] = useState(false);
+  const [showPhotos, setShowPhotos] = useState(false);
 
   const tabs = [
     { id: 'posts', icon: Grid3x3, label: t('profile.tabs.posts') },
@@ -228,14 +228,14 @@ export default function ProfilePage() {
               showRing
               className="h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28"
             />
-            {profile.avatar_url && (
+            {(profile.avatar_url || isOwnProfile) && (
               <button
                 type="button"
-                onClick={() => setShowAvatarViewer(true)}
-                aria-label={t('profile.viewPhoto', { defaultValue: "Rasmni ko'rish" })}
+                onClick={() => setShowPhotos(true)}
+                aria-label={t('profile.photos.title', { defaultValue: 'Profil rasmlari' })}
                 className="absolute -bottom-1 -right-1 rounded-full border border-border bg-background/90 p-1.5 shadow-sm backdrop-blur transition-colors hover:bg-accent"
               >
-                <Maximize2 className="h-3.5 w-3.5" />
+                <Images className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
@@ -283,6 +283,10 @@ export default function ProfilePage() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-52">
+                      <DropdownMenuItem onClick={() => setShowPhotos(true)}>
+                        <Images className="mr-2 h-4 w-4" />
+                        {t('profile.photos.title', { defaultValue: 'Profil rasmlari' })}
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => navigate('/story-archive')}>
                         <Archive className="mr-2 h-4 w-4" />
                         {t('nav.storyArchive')}
@@ -521,13 +525,16 @@ export default function ProfilePage() {
         avatarUrl={profile.avatar_url}
       />
 
-      {/* Full size profile picture */}
-      <AvatarViewerDialog
-        open={showAvatarViewer}
-        onOpenChange={setShowAvatarViewer}
-        src={profile.avatar_url}
-        name={profile.display_name || profile.username}
-        downloadName={profile.username || 'profile'}
+      {/* Telegram uslubidagi ko'p profil rasmlari */}
+      <ProfilePhotosDialog
+        open={showPhotos}
+        onOpenChange={setShowPhotos}
+        userId={profile.id}
+        isOwnProfile={isOwnProfile}
+        fallbackUrl={profile.avatar_url}
+        name={profile.display_name}
+        username={profile.username}
+        onChanged={() => refresh?.()}
       />
 
       {/* Repost Post View Modal */}

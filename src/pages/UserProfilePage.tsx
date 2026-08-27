@@ -17,7 +17,7 @@ import {
   Heart,
   Repeat2,
   QrCode,
-  Maximize2,
+  Images,
   ImageIcon,
 } from 'lucide-react';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
@@ -27,7 +27,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { FollowersFollowingDialog } from '@/components/FollowersFollowingDialog';
 import { ProfilePostsGrid } from '@/components/profile/ProfilePostsGrid';
 import { ProfileQrDialog } from '@/components/profile/ProfileQrDialog';
-import { AvatarViewerDialog } from '@/components/profile/AvatarViewerDialog';
+import { ProfilePhotosDialog } from '@/components/profile/ProfilePhotosDialog';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { StoryHighlights } from '@/components/stories/StoryHighlights';
 import { OnlineIndicator } from '@/components/OnlineIndicator';
@@ -71,7 +71,7 @@ export default function UserProfilePage() {
   const [activeTab, setActiveTab] = useState<'posts' | 'videos' | 'reposts'>('posts');
   const [selectedRepostPost, setSelectedRepostPost] = useState<Repost['post'] | null>(null);
   const [showQrDialog, setShowQrDialog] = useState(false);
-  const [showAvatarViewer, setShowAvatarViewer] = useState(false);
+  const [showPhotos, setShowPhotos] = useState(false);
   const [followDialog, setFollowDialog] = useState<{ open: boolean; type: 'followers' | 'following' }>({
     open: false,
     type: 'followers'
@@ -273,11 +273,11 @@ export default function UserProfilePage() {
             {profile.avatar_url && (
               <button
                 type="button"
-                onClick={() => setShowAvatarViewer(true)}
-                aria-label={t('profile.viewPhoto', { defaultValue: "Rasmni ko'rish" })}
+                onClick={() => setShowPhotos(true)}
+                aria-label={t('profile.photos.title', { defaultValue: 'Profil rasmlari' })}
                 className="absolute -bottom-1 -left-1 rounded-full border border-border bg-background/90 p-1.5 shadow-sm backdrop-blur transition-colors hover:bg-accent"
               >
-                <Maximize2 className="h-3.5 w-3.5" />
+                <Images className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
@@ -421,13 +421,16 @@ export default function UserProfilePage() {
           avatarUrl={profile.avatar_url}
         />
 
-        {/* Full size profile picture */}
-        <AvatarViewerDialog
-          open={showAvatarViewer}
-          onOpenChange={setShowAvatarViewer}
-          src={profile.avatar_url}
-          name={profile.display_name || profile.username}
-          downloadName={profile.username || 'profile'}
+        {/* Telegram uslubidagi ko'p profil rasmlari */}
+        <ProfilePhotosDialog
+          open={showPhotos}
+          onOpenChange={setShowPhotos}
+          userId={profile.id}
+          isOwnProfile={isOwnProfile}
+          fallbackUrl={profile.avatar_url}
+          name={profile.display_name}
+          username={profile.username}
+          onChanged={fetchProfile}
         />
 
         {/* Story Highlights */}
