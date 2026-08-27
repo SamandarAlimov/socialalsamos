@@ -47,7 +47,7 @@ export function jsonResponse(
 }
 
 /**
- * Generic auth error. Never reveal whether the email exists, whether the
+ * Generic auth error. Never reveal whether the identifier exists, whether the
  * password was wrong, or which account is linked to which email.
  */
 export function authError(req: Request, code: string, status = 400, message?: string) {
@@ -85,6 +85,74 @@ export function isUsernameValid(username: string): boolean {
 
 export function accountEmailFor(username: string): string {
   return `${username}@${ACCOUNT_DOMAIN}`;
+}
+
+// ---------------------------------------------------------------------
+// Login identifiers: email | username | phone
+// ---------------------------------------------------------------------
+
+/** Digits -> E.164, or null when the value cannot be a phone number. */
+export function normalizePhone(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const digits = value.replace(/[^0-9]/g, "");
+  if (!digits) return null;
+  const e164 = `+${digits}`;
+  return /^\+[1-9][0-9]{7,14}$/.test(e164) ? e164 : null;
+}
+
+export type IdentifierKind = "email" | "phone" | "username" | "invalid";
+
+export function classifyIdentifier(raw: string): IdentifierKind {
+  const value = raw.trim().toLowerCase();
+  if (!value) return "invalid";
+  if (value.includes("@")) return "email";
+  if (/^[+0-9][0-9\s().\-_]{6,}$/.test(value)) {
+    return normalizePhone(value) ? "phone" : "invalid";
+  }
+  return isUsernameValid(value) ? "username" : "invalid";
+}
+
+/** Canonical form used for rate-limit bucketing and audit hashing. */
+export function canonicalIdentifier(raw: string): string {
+  const kind = classifyIdentifier(raw);
+  const value = raw.trim().toLowerCase();
+  if (kind === "phone") return normalizePhone(value) ?? value;
+  return value;
+}
+
+export type ResolvedIdentity = {
+  identityId: string;
+  loginEmail: string;
+  migrationStatus: string;
+};
+
+/**
+ * Resolve an identifier (identity email, preserved legacy email, username or
+ * phone number) to the identity and to the login email that carries the
+ * password. Runs entirely inside the database with service_role rights, so
+ * nothing is exposed to the client.
+ */
+export async function resolveIdentityByIdentifier(
+  admin: SupabaseClient,
+  identifier: string,
+): Promise<ResolvedIdentity | null> {
+  const { data, error } = await admin.rpc("resolve_login_identity", {
+    _identifier: identifier,
+  });
+
+  if (error) {
+    console.error("resolve_login_identity failed", error.message);
+    return null;
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row?.identity_id || !row?.login_email) return null;
+
+  return {
+    identityId: row.identity_id as string,
+    loginEmail: row.login_email as string,
+    migrationStatus: (row.migration_status as string) ?? "migrated",
+  };
 }
 
 export function clientIp(req: Request): string | null {
