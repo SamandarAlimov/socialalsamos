@@ -1,8 +1,8 @@
 // POST /account-login
 //
-// Step 1 of the two-step Alsamos login.
-//   in : { identifier: "<email | username | phone>", password: "..." }
-//   out: { ticket, accounts[], identity: { email, used, max } }
+// Step 1 of the Alsamos login.
+//   in : { identifier: "<email | username | phone>", password, device_id? }
+//   out: { ticket, accounts[], identity } | { mfa_required: true, ticket }
 //
 // Accepted identifiers:
 //   * <name>@alsamos.com  - identity email
@@ -14,11 +14,14 @@
 //   * the identifier is resolved inside the database with service_role only;
 //   * the response is identical for "unknown identifier" and "wrong password";
 //   * failures are rate limited per identifier and per IP;
+//   * when 2FA is on, the account list is NOT returned yet and the ticket can
+//     only be used by /account-2fa (purpose = "mfa_pending");
 //   * no session is returned here - the caller must pick an account first;
 //   * every attempt is written to the audit log.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
+  activeTotpForIdentity,
   anonClient,
   audit,
   authError,
@@ -157,6 +160,42 @@ serve(async (req) => {
     return authError(req, "ACCOUNT_NOT_FOUND", 404);
   }
 
+  const identityPayload = {
+    email: (identity?.alsamos_email as string | null) ?? resolved.loginEmail,
+    phone: (identity?.phone as string | null) ?? null,
+    migration_status: identity?.migration_status ?? resolved.migrationStatus,
+    used: publicAccounts.length,
+    max: (identity?.max_accounts as number | null) ?? MAX_ACCOUNTS,
+  };
+
+  // ---- Second factor -------------------------------------------------
+  const totp = await activeTotpForIdentity(admin, resolved.identityId);
+
+  if (totp) {
+    // Password was correct but it is not enough: hand out a ticket that can
+    // ONLY be spent on /account-2fa. A few uses are allowed so that a mistyped
+    // code does not force the password to be entered again.
+    const mfaTicket = await issueTicket(admin, req, resolved.identityId, "mfa_pending", 5);
+
+    await recordAttempt(admin, identifierHash, ip, "success");
+    await audit(admin, req, {
+      eventType: "login",
+      outcome: "success",
+      reason: "mfa_required",
+      identityId: resolved.identityId,
+      userId,
+      metadata: { identifier_kind: kind },
+    });
+
+    return jsonResponse(req, {
+      mfa_required: true,
+      mfa_method: "totp",
+      ticket: mfaTicket,
+      accounts: [],
+      identity: identityPayload,
+    });
+  }
+
   // A ticket allows exactly "pick an account" (+1 spare use for creating one).
   const ticket = await issueTicket(admin, req, resolved.identityId, "account_select", 2);
 
@@ -170,14 +209,9 @@ serve(async (req) => {
   });
 
   return jsonResponse(req, {
+    mfa_required: false,
     ticket,
     accounts: publicAccounts,
-    identity: {
-      email: (identity?.alsamos_email as string | null) ?? resolved.loginEmail,
-      phone: (identity?.phone as string | null) ?? null,
-      migration_status: identity?.migration_status ?? resolved.migrationStatus,
-      used: publicAccounts.length,
-      max: (identity?.max_accounts as number | null) ?? MAX_ACCOUNTS,
-    },
+    identity: identityPayload,
   });
 });

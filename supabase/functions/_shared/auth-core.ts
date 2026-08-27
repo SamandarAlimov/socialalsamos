@@ -315,12 +315,14 @@ export async function listIdentityAccounts(
   };
 }
 
+export type TicketPurpose = "account_select" | "account_create" | "mfa_pending";
+
 /** Create a single-use, short-lived ticket bound to an identity. */
 export async function issueTicket(
   admin: SupabaseClient,
   req: Request,
   identityId: string,
-  purpose: "account_select" | "account_create" = "account_select",
+  purpose: TicketPurpose = "account_select",
   uses = 2,
 ): Promise<string> {
   const token = randomToken(32);
@@ -335,22 +337,33 @@ export async function issueTicket(
   return token;
 }
 
+/**
+ * Consume one use of a ticket.
+ *
+ * `expectedPurpose` must be passed by every caller that depends on the ticket
+ * meaning something specific: an "mfa_pending" ticket must never be usable to
+ * open a session, otherwise 2FA could be skipped entirely.
+ */
 export async function consumeTicket(
   admin: SupabaseClient,
   token: unknown,
-): Promise<{ identityId: string } | null> {
+  expectedPurpose?: TicketPurpose,
+): Promise<{ identityId: string; purpose: TicketPurpose } | null> {
   if (typeof token !== "string" || token.length < 32) return null;
 
   const hash = await sha256(token);
   const { data } = await admin
     .from("auth_login_tickets")
-    .select("id, identity_id, uses_left, expires_at")
+    .select("id, identity_id, purpose, uses_left, expires_at")
     .eq("token_hash", hash)
     .maybeSingle();
 
   if (!data) return null;
   if (new Date(data.expires_at as string).getTime() < Date.now()) return null;
   if ((data.uses_left as number) <= 0) return null;
+
+  const purpose = (data.purpose as TicketPurpose) ?? "account_select";
+  if (expectedPurpose && purpose !== expectedPurpose) return null;
 
   const remaining = (data.uses_left as number) - 1;
   await admin
@@ -361,7 +374,120 @@ export async function consumeTicket(
     })
     .eq("id", data.id);
 
-  return { identityId: data.identity_id as string };
+  return { identityId: data.identity_id as string, purpose };
+}
+
+/** Invalidate every remaining use of a ticket (e.g. after 2FA is satisfied). */
+export async function burnTicket(admin: SupabaseClient, token: unknown): Promise<void> {
+  if (typeof token !== "string" || token.length < 32) return;
+  await admin
+    .from("auth_login_tickets")
+    .update({ uses_left: 0, consumed_at: new Date().toISOString() })
+    .eq("token_hash", await sha256(token));
+}
+
+// ---------------------------------------------------------------------
+// Two-factor authentication state
+// ---------------------------------------------------------------------
+
+export type TotpRecord = {
+  user_id: string;
+  identity_id: string | null;
+  secret: string;
+  confirmed_at: string | null;
+  last_used_step: number | null;
+};
+
+/** The confirmed TOTP enrolment of an identity, if 2FA is switched on. */
+export async function activeTotpForIdentity(
+  admin: SupabaseClient,
+  identityId: string,
+): Promise<TotpRecord | null> {
+  const { data } = await admin
+    .from("user_totp")
+    .select("user_id, identity_id, secret, confirmed_at, last_used_step")
+    .eq("identity_id", identityId)
+    .not("confirmed_at", "is", null)
+    .maybeSingle();
+
+  return (data as TotpRecord | null) ?? null;
+}
+
+// ---------------------------------------------------------------------
+// Devices
+// ---------------------------------------------------------------------
+
+/**
+ * Stable-per-browser device fingerprint.
+ *
+ * The client sends a random id it keeps in localStorage; when it is missing we
+ * fall back to a hash of user-agent + IP so the device list is never empty.
+ * Only the hash is stored.
+ */
+export async function deviceHash(req: Request, clientDeviceId?: unknown): Promise<string> {
+  if (typeof clientDeviceId === "string" && clientDeviceId.trim().length >= 8) {
+    return sha256(`device:${clientDeviceId.trim().slice(0, 200)}`);
+  }
+  return sha256(`ua:${userAgent(req)}|ip:${clientIp(req) ?? "unknown"}`);
+}
+
+/** Human readable device label derived from the user agent. */
+export function deviceLabel(req: Request): string {
+  const ua = userAgent(req);
+  const os = /Windows/i.test(ua)
+    ? "Windows"
+    : /Android/i.test(ua)
+      ? "Android"
+      : /iPhone|iPad|iOS/i.test(ua)
+        ? "iOS"
+        : /Mac OS X|Macintosh/i.test(ua)
+          ? "macOS"
+          : /Linux/i.test(ua)
+            ? "Linux"
+            : "Noma'lum tizim";
+
+  const browser = /Edg\//i.test(ua)
+    ? "Edge"
+    : /OPR\/|Opera/i.test(ua)
+      ? "Opera"
+      : /Chrome\//i.test(ua)
+        ? "Chrome"
+        : /Safari\//i.test(ua)
+          ? "Safari"
+          : /Firefox\//i.test(ua)
+            ? "Firefox"
+            : "Brauzer";
+
+  return `${browser} - ${os}`;
+}
+
+/** Register (or refresh) the device row for a freshly minted session. */
+export async function touchDevice(
+  admin: SupabaseClient,
+  req: Request,
+  params: {
+    identityId: string;
+    userId: string;
+    slotNo: number;
+    clientDeviceId?: unknown;
+  },
+): Promise<string | null> {
+  const { data, error } = await admin.rpc("touch_auth_device", {
+    _identity_id: params.identityId,
+    _user_id: params.userId,
+    _slot_no: params.slotNo,
+    _device_hash: await deviceHash(req, params.clientDeviceId),
+    _user_agent: userAgent(req),
+    _ip: clientIp(req),
+    _label: deviceLabel(req),
+  });
+
+  if (error) {
+    console.error("touch_auth_device failed", error.message);
+    return null;
+  }
+
+  return (data as string | null) ?? null;
 }
 
 /**

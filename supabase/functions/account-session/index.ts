@@ -1,13 +1,16 @@
 // POST /account-session
 //
-// Step 2 of the two-step login: exchange a ticket for a session of one of the
+// Step 2 of the login: exchange a ticket for a session of one of the
 // identity's accounts.
-//   in : { ticket, account_id }
+//   in : { ticket, account_id, device_id? }
 //   out: { token_hash, slot_no, account }
 //
 // The client turns token_hash into a real session with
 //   supabase.auth.verifyOtp({ type: 'magiclink', token_hash })
 // so no password or refresh token ever travels through application code.
+//
+// Only tickets with purpose "account_select" are accepted here: an
+// "mfa_pending" ticket cannot be used to skip the second factor.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
@@ -19,6 +22,7 @@ import {
   listIdentityAccounts,
   mintSessionToken,
   serviceClient,
+  touchDevice,
 } from "../_shared/auth-core.ts";
 
 serve(async (req) => {
@@ -33,15 +37,17 @@ serve(async (req) => {
 
   let ticket: unknown;
   let accountId: unknown;
+  let clientDeviceId: unknown;
   try {
     const body = await req.json();
     ticket = body?.ticket;
     accountId = body?.account_id;
+    clientDeviceId = body?.device_id;
   } catch {
     return authError(req, "INVALID_REQUEST", 400);
   }
 
-  const consumed = await consumeTicket(admin, ticket);
+  const consumed = await consumeTicket(admin, ticket, "account_select");
   if (!consumed) {
     await audit(admin, req, {
       eventType: "account_session",
@@ -84,6 +90,14 @@ serve(async (req) => {
     .from("identity_accounts")
     .update({ last_used_at: new Date().toISOString() })
     .eq("id", target.id);
+
+  // Register the device so the user can see and revoke this session later.
+  await touchDevice(admin, req, {
+    identityId: consumed.identityId,
+    userId: target.user_id,
+    slotNo: target.slot_no,
+    clientDeviceId,
+  });
 
   await audit(admin, req, {
     eventType: "account_session",
