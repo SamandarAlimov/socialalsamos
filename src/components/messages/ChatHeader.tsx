@@ -1,7 +1,26 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Phone, Video, Search, MoreVertical, Users, Megaphone, ArrowLeft, Info, Bell, BellOff, Trash2, LogOut, Users2, Clock, Bookmark, Ban, Flag } from 'lucide-react';
+import {
+  Phone,
+  Video,
+  Search,
+  MoreVertical,
+  Users,
+  Megaphone,
+  ArrowLeft,
+  Info,
+  Bell,
+  BellOff,
+  Trash2,
+  LogOut,
+  Users2,
+  Clock,
+  Bookmark,
+  Ban,
+  Flag,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Conversation } from '@/hooks/useMessages';
 import { cn } from '@/lib/utils';
 import { formatLastSeen } from '@/utils/formatLastSeen';
@@ -60,194 +79,241 @@ export function ChatHeader({
   const [blockOpen, setBlockOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const { blockedIds, refresh: refreshBlocks } = useBlockedUsers();
-  
-  // Check if this is a self-chat (conversation with yourself)
+
   const isChannel = conversation.type === 'channel';
-  const isSelfChat = conversation.is_self_chat || 
+  const isSelfChat =
+    conversation.is_self_chat ||
     (conversation.type === 'private' && conversation.other_participant?.id === user?.id);
 
-  // Get real-time status for private chats (but not for self-chat)
-  const otherUserId = conversation.type === 'private' && !isSelfChat ? conversation.other_participant?.id : null;
+  const otherUserId =
+    conversation.type === 'private' && !isSelfChat ? conversation.other_participant?.id : null;
+  const otherUsername = conversation.other_participant?.username;
   const { isUserOnline } = useOnlinePresence();
   const realtimeIsOnline = otherUserId ? isUserOnline(otherUserId) : false;
   const realtimeLastSeen = conversation.other_participant?.last_seen || null;
   const isBlocked = otherUserId ? blockedIds.has(otherUserId) : false;
-  useEffect(() => { refreshBlocks(); }, [otherUserId, refreshBlocks]);
+
+  useEffect(() => {
+    refreshBlocks();
+  }, [otherUserId, refreshBlocks]);
 
   const getName = () => {
     if (isSelfChat) {
-      return conversation.other_participant?.display_name || 
-             conversation.other_participant?.username || 
-             'You';
+      return (
+        conversation.other_participant?.display_name ||
+        conversation.other_participant?.username ||
+        'Saqlangan xabarlar'
+      );
     }
     if (conversation.type === 'private') {
-      return conversation.other_participant?.display_name || 
-             conversation.other_participant?.username || 
-             'Unknown';
+      return (
+        conversation.other_participant?.display_name ||
+        conversation.other_participant?.username ||
+        "Noma'lum"
+      );
     }
-    return conversation.name || 'Unnamed';
+    return conversation.name || 'Nomsiz';
   };
 
-  const getAvatar = () => {
-    if (conversation.type === 'private') {
-      return conversation.other_participant?.avatar_url;
-    }
-    return conversation.avatar_url;
-  };
+  const getAvatar = () =>
+    conversation.type === 'private'
+      ? conversation.other_participant?.avatar_url
+      : conversation.avatar_url;
 
   const getStatus = () => {
     if (typingUsers.length > 0) {
-      return <span className="text-primary animate-pulse">typing...</span>;
+      return <span className="animate-pulse text-primary">yozmoqda...</span>;
     }
-    
+
     if (isSelfChat) {
-      return <span className="text-amber-500">save messages to yourself</span>;
+      return <span className="text-muted-foreground">o'zingizga xabar saqlash</span>;
     }
-    
+
     if (conversation.type === 'private') {
-      // Use real-time status - prioritize presence API result
       if (realtimeIsOnline) {
-        return <span className="text-green-500 font-medium">online</span>;
+        return <span className="font-medium text-green-500">onlayn</span>;
       }
-      
-      // Fall back to last seen time
       const lastSeenTime = realtimeLastSeen || conversation.other_participant?.last_seen;
       return formatLastSeen(lastSeenTime, false);
     }
-    
-    if (conversation.type === 'group') {
-      return 'group';
-    }
-    
-    if (conversation.type === 'channel') {
-      return 'channel';
-    }
-    
+
+    if (conversation.type === 'group') return 'guruh';
+    if (conversation.type === 'channel') return 'kanal';
     return null;
   };
 
-  // Use realtime status for online indicator (but not for self-chat)
   const isOnline = conversation.type === 'private' && !isSelfChat && realtimeIsOnline;
 
+  // Telegramdek: shaxsiy chatda sarlavha bosilganda profil ochiladi
+  const profilePath =
+    conversation.type === 'private' && !isSelfChat && (otherUsername || otherUserId)
+      ? `/user/${otherUsername || otherUserId}`
+      : null;
+
+  const headerInner = (
+    <>
+      <div className="relative">
+        <Avatar className="h-10 w-10">
+          <AvatarImage src={getAvatar() || ''} />
+          <AvatarFallback
+            className={cn(
+              'text-primary-foreground',
+              conversation.type === 'group' && 'bg-blue-500',
+              conversation.type === 'channel' && 'bg-violet-500',
+              isSelfChat && 'bg-muted text-foreground',
+              conversation.type === 'private' && !isSelfChat && 'bg-primary'
+            )}
+          >
+            {isSelfChat ? (
+              <Bookmark className="h-5 w-5" />
+            ) : conversation.type === 'group' ? (
+              <Users className="h-5 w-5" />
+            ) : conversation.type === 'channel' ? (
+              <Megaphone className="h-5 w-5" />
+            ) : (
+              getName()[0]?.toUpperCase()
+            )}
+          </AvatarFallback>
+        </Avatar>
+        {isOnline && !isSelfChat && (
+          <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-card bg-green-500" />
+        )}
+        {isSelfChat && (
+          <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-border bg-card">
+            <Bookmark className="h-2 w-2 fill-foreground text-foreground" />
+          </span>
+        )}
+      </div>
+
+      <div className="min-w-0 text-left">
+        <div className="flex items-center gap-1.5">
+          <h2 className="truncate text-sm font-semibold">{getName()}</h2>
+          {conversation.type === 'private' && conversation.other_participant?.is_verified && (
+            <VerifiedBadge size="xs" />
+          )}
+          {conversation.is_encrypted && <EncryptedIndicator />}
+        </div>
+        <p className="truncate text-xs text-muted-foreground">{getStatus()}</p>
+      </div>
+    </>
+  );
+
+  const headerClasses =
+    '-mx-2 flex min-w-0 items-center gap-3 rounded-xl px-2 py-1 transition-colors hover:bg-muted/60';
+
   return (
-    <div className="h-16 px-4 flex items-center justify-between border-b border-border bg-card/95 backdrop-blur">
-      <div className="flex items-center gap-3">
+    <div className="flex h-16 items-center justify-between border-b border-border bg-card/95 px-3 backdrop-blur md:px-4">
+      <div className="flex min-w-0 items-center gap-2">
         {onBack && (
-          <Button variant="ghost" size="icon" className="md:hidden" onClick={onBack}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0 md:hidden"
+            onClick={onBack}
+            aria-label="Orqaga"
+          >
             <ArrowLeft className="h-5 w-5" />
           </Button>
         )}
-        
-        <button 
-          onClick={onViewInfo}
-          className="flex items-center gap-3 hover:bg-accent/50 -mx-2 px-2 py-1 rounded-lg transition-colors"
-        >
-          <div className="relative">
-            <Avatar className="h-10 w-10">
-              <AvatarImage src={getAvatar() || ''} />
-              <AvatarFallback className={cn(
-                "text-primary-foreground",
-                conversation.type === 'group' && 'bg-blue-500',
-                conversation.type === 'channel' && 'bg-violet-500',
-                isSelfChat && 'bg-gradient-to-br from-amber-500 to-orange-500',
-                conversation.type === 'private' && !isSelfChat && 'bg-primary'
-              )}>
-                {isSelfChat ? (
-                  <Bookmark className="h-5 w-5" />
-                ) : conversation.type === 'group' ? (
-                  <Users className="h-5 w-5" />
-                ) : conversation.type === 'channel' ? (
-                  <Megaphone className="h-5 w-5" />
-                ) : (
-                  getName()[0]?.toUpperCase()
-                )}
-              </AvatarFallback>
-            </Avatar>
-            {isOnline && !isSelfChat && (
-              <span className="absolute bottom-0 right-0 h-3 w-3 bg-green-500 rounded-full border-2 border-card" />
-            )}
-            {isSelfChat && (
-              <span className="absolute -bottom-0.5 -right-0.5 h-4 w-4 bg-card rounded-full flex items-center justify-center border-2 border-amber-500">
-                <Bookmark className="h-2 w-2 text-amber-500 fill-amber-500" />
-              </span>
-            )}
-          </div>
-          
-          <div className="text-left">
-            <div className="flex items-center gap-1.5">
-              <h2 className="font-semibold text-sm">{getName()}</h2>
-              {conversation.type === 'private' && conversation.other_participant?.is_verified && (
-                <VerifiedBadge size="xs" />
-              )}
-              {conversation.is_encrypted && <EncryptedIndicator />}
-            </div>
-            <p className="text-xs text-muted-foreground">{getStatus()}</p>
-          </div>
-        </button>
+
+        {profilePath ? (
+          <Link to={profilePath} className={headerClasses}>
+            {headerInner}
+          </Link>
+        ) : (
+          <button onClick={onViewInfo} className={headerClasses}>
+            {headerInner}
+          </button>
+        )}
       </div>
-      
-      <div className="flex items-center gap-1">
-        {/* Channels broadcast (live stream), they never use mesh 1:1/group calls */}
+
+      <div className="flex shrink-0 items-center gap-0.5">
+        {/* Kanallar jonli eshittirish qiladi, 1:1 qo'ng'iroq ishlatmaydi */}
         {isChannel && isAdmin && <GoLiveButton />}
 
-        {/* Hide call buttons for self-chat and channel conversations */}
         {!isSelfChat && !isChannel && (
           <>
-            <Button variant="ghost" size="icon" onClick={onAudioCall}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onAudioCall}
+              aria-label="Audio qo'ng'iroq"
+              title="Audio qo'ng'iroq"
+              className="rounded-full hover:bg-muted"
+            >
               <Phone className="h-5 w-5 text-muted-foreground" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={onVideoCall}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onVideoCall}
+              aria-label="Video qo'ng'iroq"
+              title="Video qo'ng'iroq"
+              className="rounded-full hover:bg-muted"
+            >
               <Video className="h-5 w-5 text-muted-foreground" />
             </Button>
           </>
         )}
         {onSearch && (
-          <Button variant="ghost" size="icon" onClick={onSearch}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onSearch}
+            aria-label="Qidirish"
+            title="Xabarlar ichida qidirish"
+            className="hidden rounded-full hover:bg-muted sm:inline-flex"
+          >
             <Search className="h-5 w-5 text-muted-foreground" />
           </Button>
         )}
-        
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Boshqa amallar"
+              className="rounded-full hover:bg-muted"
+            >
               <MoreVertical className="h-5 w-5 text-muted-foreground" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuContent align="end" className="w-52 rounded-2xl">
             {onViewInfo && (
               <DropdownMenuItem onClick={onViewInfo}>
-                <Info className="h-4 w-4 mr-2" />
-                View Info
+                <Info className="mr-2 h-4 w-4" />
+                Ma'lumot
               </DropdownMenuItem>
             )}
             {onSearch && (
               <DropdownMenuItem onClick={onSearch}>
-                <Search className="h-4 w-4 mr-2" />
-                Search
+                <Search className="mr-2 h-4 w-4" />
+                Qidirish
               </DropdownMenuItem>
             )}
             {onViewScheduled && (
               <DropdownMenuItem onClick={onViewScheduled}>
-                <Clock className="h-4 w-4 mr-2" />
-                Scheduled Messages
-                {scheduledCount && scheduledCount > 0 && (
-                  <span className="ml-auto text-xs bg-primary text-primary-foreground rounded-full px-1.5">
+                <Clock className="mr-2 h-4 w-4" />
+                Rejalashtirilgan xabarlar
+                {scheduledCount && scheduledCount > 0 ? (
+                  <span className="ml-auto rounded-full bg-primary px-1.5 text-xs text-primary-foreground">
                     {scheduledCount}
                   </span>
-                )}
+                ) : null}
               </DropdownMenuItem>
             )}
             {onMute && (
               <DropdownMenuItem onClick={onMute}>
                 {isMuted ? (
                   <>
-                    <Bell className="h-4 w-4 mr-2" />
-                    Unmute
+                    <Bell className="mr-2 h-4 w-4" />
+                    Ovozni yoqish
                   </>
                 ) : (
                   <>
-                    <BellOff className="h-4 w-4 mr-2" />
-                    Mute
+                    <BellOff className="mr-2 h-4 w-4" />
+                    Ovozsiz qilish
                   </>
                 )}
               </DropdownMenuItem>
@@ -256,16 +322,16 @@ export function ChatHeader({
               <>
                 {onManageMembers && (
                   <DropdownMenuItem onClick={onManageMembers}>
-                    <Users2 className="h-4 w-4 mr-2" />
-                    Manage Members
+                    <Users2 className="mr-2 h-4 w-4" />
+                    A'zolarni boshqarish
                   </DropdownMenuItem>
                 )}
                 {onLeave && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={onLeave} className="text-destructive">
-                      <LogOut className="h-4 w-4 mr-2" />
-                      Leave {conversation.type === 'group' ? 'Group' : 'Channel'}
+                      <LogOut className="mr-2 h-4 w-4" />
+                      {conversation.type === 'group' ? 'Guruhdan chiqish' : 'Kanaldan chiqish'}
                     </DropdownMenuItem>
                   </>
                 )}
@@ -275,11 +341,14 @@ export function ChatHeader({
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setReportOpen(true)}>
-                  <Flag className="h-4 w-4 mr-2" />
+                  <Flag className="mr-2 h-4 w-4" />
                   Shikoyat qilish
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setBlockOpen(true)} className="text-destructive">
-                  <Ban className="h-4 w-4 mr-2" />
+                <DropdownMenuItem
+                  onClick={() => setBlockOpen(true)}
+                  className="text-destructive"
+                >
+                  <Ban className="mr-2 h-4 w-4" />
                   {isBlocked ? 'Blokdan chiqarish' : 'Bloklash'}
                 </DropdownMenuItem>
               </>
@@ -288,8 +357,8 @@ export function ChatHeader({
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onDelete} className="text-destructive">
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Chat
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Chatni o'chirish
                 </DropdownMenuItem>
               </>
             )}
