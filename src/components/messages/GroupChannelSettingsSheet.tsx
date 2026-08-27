@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Sheet,
   SheetContent,
@@ -36,17 +36,31 @@ import {
   Sparkles,
 } from 'lucide-react';
 
+export type SettingsTab =
+  | 'general'
+  | 'permissions'
+  | 'links'
+  | 'requests'
+  | 'topics'
+  | 'boost';
+
 interface GroupChannelSettingsSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   conversationId: string | null;
   conversationType: 'group' | 'channel';
   isAdmin: boolean;
+  /** Oyna ochilganda qaysi bo'lim faol bo'lsin */
+  initialTab?: SettingsTab;
 }
 
-type SettingsTab = 'general' | 'permissions' | 'links' | 'requests' | 'topics' | 'boost';
+const MIDDLE_DOT = '\u00b7';
 
-const PERMISSION_LABELS: Array<{ key: keyof ConversationPermissions; label: string; hint?: string }> = [
+const PERMISSION_LABELS: Array<{
+  key: keyof ConversationPermissions;
+  label: string;
+  hint?: string;
+}> = [
   { key: 'send_messages', label: 'Xabar yuborish' },
   { key: 'send_media', label: 'Rasm va video' },
   { key: 'send_stickers', label: 'Stiker va GIF' },
@@ -58,6 +72,14 @@ const PERMISSION_LABELS: Array<{ key: keyof ConversationPermissions; label: stri
   { key: 'pin_messages', label: 'Xabar qadash' },
   { key: 'change_info', label: "Ma'lumotni o'zgartirish" },
   { key: 'manage_topics', label: 'Topiklarni boshqarish' },
+];
+
+const BOOST_PERKS = [
+  '1-daraja: maxsus reaksiyalar va chat foni',
+  '2-daraja: emoji status va kengaytirilgan statistika',
+  "3-daraja: maxsus emoji to'plami",
+  '4-daraja: profil rangi va gradient',
+  "5-daraja: reklamasiz ko'rinish va maxsus nishon",
 ];
 
 function formatSlowMode(seconds: number): string {
@@ -83,13 +105,18 @@ export function GroupChannelSettingsSheet({
   conversationId,
   conversationType,
   isAdmin,
+  initialTab = 'general',
 }: GroupChannelSettingsSheetProps) {
   const { toast } = useToast();
-  const [tab, setTab] = useState<SettingsTab>('general');
+  const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [newTopicTitle, setNewTopicTitle] = useState('');
   const [linkTitle, setLinkTitle] = useState('');
   const [linkLimit, setLinkLimit] = useState('');
   const [linkApproval, setLinkApproval] = useState(false);
+
+  useEffect(() => {
+    if (open) setTab(initialTab);
+  }, [open, initialTab]);
 
   const {
     settings,
@@ -482,8 +509,8 @@ export function GroupChannelSettingsSheet({
                           <p className="mt-1 text-[11px] text-muted-foreground">
                             {link.used_count} marta ishlatilgan
                             {link.member_limit ? ` / ${link.member_limit}` : ''}
-                            {link.requires_approval ? ' \u00b7 tasdiq bilan' : ''}
-                            {link.is_revoked ? ' \u00b7 bekor qilingan' : ''}
+                            {link.requires_approval ? ` ${MIDDLE_DOT} tasdiq bilan` : ''}
+                            {link.is_revoked ? ` ${MIDDLE_DOT} bekor qilingan` : ''}
                           </p>
                         </div>
                         <div className="flex shrink-0 gap-1">
@@ -595,9 +622,7 @@ export function GroupChannelSettingsSheet({
                   </div>
                 )}
                 {topics.length === 0 ? (
-                  <p className="py-6 text-center text-sm text-muted-foreground">
-                    Topiklar yo'q
-                  </p>
+                  <p className="py-6 text-center text-sm text-muted-foreground">Topiklar yo'q</p>
                 ) : (
                   topics.map((topic) => (
                     <div
@@ -609,7 +634,7 @@ export function GroupChannelSettingsSheet({
                         <p className="truncate text-sm font-medium">{topic.title}</p>
                         <p className="text-[11px] text-muted-foreground">
                           {topic.is_closed ? 'Yopilgan' : 'Ochiq'}
-                          {topic.is_pinned ? ' \u00b7 qadalgan' : ''}
+                          {topic.is_pinned ? ` ${MIDDLE_DOT} qadalgan` : ''}
                         </p>
                       </div>
                       {isAdmin && (
@@ -650,14 +675,14 @@ export function GroupChannelSettingsSheet({
               <div className="space-y-4">
                 <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 text-center">
                   <Rocket className="mx-auto mb-2 h-8 w-8 text-primary" />
-                  <p className="text-lg font-semibold">
-                    {settings.boost_level}-daraja
-                  </p>
+                  <p className="text-lg font-semibold">{settings.boost_level}-daraja</p>
                   <p className="text-sm text-muted-foreground">
                     {settings.boosts_count} boost
                     {nextBoostGoal
-                      ? ` \u00b7 keyingi daraja uchun ${nextBoostGoal - settings.boosts_count} ta kerak`
-                      : ' \u00b7 maksimal daraja'}
+                      ? ` ${MIDDLE_DOT} keyingi daraja uchun ${
+                          nextBoostGoal - settings.boosts_count
+                        } ta kerak`
+                      : ` ${MIDDLE_DOT} maksimal daraja`}
                   </p>
                   <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
                     <div
@@ -684,11 +709,9 @@ export function GroupChannelSettingsSheet({
                 <div className="space-y-2 rounded-2xl border border-border p-3">
                   <p className="text-sm font-medium">Daraja imkoniyatlari</p>
                   <ul className="space-y-1 text-xs text-muted-foreground">
-                    <li>1-daraja \u00b7 maxsus reaksiyalar va fon</li>
-                    <li>2-daraja \u00b7 kanal uchun emoji status</li>
-                    <li>3-daraja \u00b7 maxsus emoji to'plami</li>
-                    <li>4-daraja \u00b7 profil rangi va gradient</li>
-                    <li>5-daraja \u00b7 reklamalarsiz ko'rinish</li>
+                    {BOOST_PERKS.map((perk) => (
+                      <li key={perk}>{perk}</li>
+                    ))}
                   </ul>
                 </div>
               </div>
