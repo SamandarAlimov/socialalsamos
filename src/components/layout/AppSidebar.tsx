@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, LogOut, ChevronLeft, ChevronRight, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UserPlus } from 'lucide-react';
+import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, ShieldCheck, LogOut, ChevronLeft, ChevronRight, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UserPlus } from 'lucide-react';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -204,6 +204,10 @@ export function AppSidebar() {
                       <Settings className="h-4 w-4 mr-3" />
                       {t('nav.settings')}
                     </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate('/settings/security')}>
+                      <ShieldCheck className="h-4 w-4 mr-3" />
+                      Xavfsizlik
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
                       {theme === 'dark' ? (
                         <Sun className="h-4 w-4 mr-3" />
@@ -243,6 +247,10 @@ export function AppSidebar() {
               <DropdownMenuItem onClick={() => navigate('/settings')}>
                 <Settings className="h-4 w-4 mr-3" />
                 Settings
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/settings/security')}>
+                <ShieldCheck className="h-4 w-4 mr-3" />
+                Xavfsizlik
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
                 {theme === 'dark' ? (
