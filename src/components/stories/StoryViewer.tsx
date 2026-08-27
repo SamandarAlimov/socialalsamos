@@ -12,6 +12,8 @@ import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
+import { EmojiText } from '@/components/emoji/EmojiText';
+import { EmojiPicker } from '@/components/EmojiPicker';
 import { toast } from 'sonner';
 import {
   DropdownMenu,
@@ -540,7 +542,10 @@ export function StoryViewer({
               <div>
                 <div className="flex items-center gap-1">
                   <p className="text-white font-semibold text-sm">
-                    {activeGroup.display_name || activeGroup.username}
+                    <EmojiText
+                      text={activeGroup.display_name || activeGroup.username || ''}
+                      size={15}
+                    />
                   </p>
                   {activeGroup.is_verified && <VerifiedBadge size="sm" />}
                 </div>
@@ -650,8 +655,11 @@ export function StoryViewer({
               "absolute left-4 right-4 text-white text-center z-10",
               isMobile ? "bottom-28" : "bottom-24"
             )}>
-              <p className="bg-black/50 rounded-lg px-4 py-2 text-sm backdrop-blur-sm">
-                {currentStory.caption}
+              <p
+                className="bg-black/50 rounded-lg px-4 py-2 text-sm backdrop-blur-sm"
+                style={{ overflowWrap: 'anywhere' }}
+              >
+                <EmojiText text={currentStory.caption} size={20} />
               </p>
             </div>
           )}
@@ -689,9 +697,20 @@ export function StoryViewer({
                     className="bg-white/10 border-white/20 text-white placeholder:text-white/50 pr-10 backdrop-blur-sm h-11"
                     onKeyDown={(e) => e.key === 'Enter' && handleStoryReply()}
                   />
-                  <button className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white">
-                    <Smile className="h-5 w-5" />
-                  </button>
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                    <EmojiPicker
+                      onSelect={(emoji) => setStoryReply((prev) => prev + emoji)}
+                      trigger={
+                        <button
+                          type="button"
+                          title="Emoji"
+                          className="p-1 text-white/60 hover:text-white"
+                        >
+                          <Smile className="h-5 w-5" />
+                        </button>
+                      }
+                    />
+                  </div>
                 </div>
                 <button
                   onClick={handleLike}
