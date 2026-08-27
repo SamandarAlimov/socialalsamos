@@ -15,6 +15,11 @@
  *
  * When 2FA is on, step 1 returns `mfa_required` and the ticket can only be
  * spent on verifyMfaLogin().
+ *
+ * RESILIENCE: the multi-account flow lives in edge functions. When those are
+ * not deployed / unreachable (CORS, 404, cold start), the client falls back to
+ * plain Supabase email+password sign-in via directPasswordLogin(), so users can
+ * always get in. See isRecoverableAuthFailure().
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -24,6 +29,7 @@ import {
   MAX_ACCOUNTS_PER_IDENTITY,
   TOS_VERSION,
 } from '@/lib/authConstants';
+import { setActiveSlot } from '@/lib/accountSlots';
 import { getDeviceId } from '@/lib/deviceId';
 
 export {
@@ -258,6 +264,9 @@ async function invokeAuthFunction<T>(
       }
     }
 
+    // No response body at all: the function is unreachable (CORS / not deployed).
+    if (code === 'UNKNOWN' && !ctx) code = 'NETWORK';
+
     throw new AlsamosAuthError(code, authErrorMessage(code));
   }
 
@@ -329,6 +338,136 @@ export function requestAccountRevoke(
     account_id: accountId,
     mode,
   });
+}
+
+// ---------------------------------------------------------------------
+// Direct sign-in fallback
+// ---------------------------------------------------------------------
+
+/**
+ * Ticket value used when the session was opened directly by Supabase auth
+ * instead of the account-session edge function. completeLogin() recognises it
+ * and simply keeps the session that already exists.
+ */
+export const DIRECT_SESSION_TICKET = 'direct-session';
+
+/**
+ * Failures that mean "the multi-account server flow is unavailable", not
+ * "these credentials are wrong". Only these may trigger the direct fallback,
+ * so a genuinely wrong password never silently takes another path.
+ */
+const RECOVERABLE_CODES: AuthErrorCode[] = [
+  'NETWORK',
+  'UNKNOWN',
+  'INVALID_REQUEST',
+  'METHOD_NOT_ALLOWED',
+  'IDENTITY_UNAVAILABLE',
+  'SESSION_MINT_FAILED',
+  'ACCOUNT_NOT_FOUND',
+  'TICKET_INVALID',
+];
+
+export function isRecoverableAuthFailure(error: unknown): boolean {
+  if (error instanceof AlsamosAuthError) return RECOVERABLE_CODES.includes(error.code);
+  // Anything that is not one of our coded errors is an infrastructure problem.
+  return true;
+}
+
+/** Email addresses worth trying for a given login identifier. */
+function loginEmailCandidates(identifier: string): string[] {
+  const value = normalizeEmail(identifier);
+  const kind = classifyIdentifier(value);
+
+  if (kind === 'email') {
+    const candidates = [value];
+    const local = value.split('@')[0];
+    if (!isAlsamosEmail(value) && local) {
+      candidates.push(`${local}@${ALSAMOS_MAIL_DOMAIN}`);
+    }
+    return candidates;
+  }
+
+  if (kind === 'username') {
+    return [`${value}@${ALSAMOS_MAIL_DOMAIN}`, `${value}@${ALSAMOS_ACCOUNT_DOMAIN}`];
+  }
+
+  return [];
+}
+
+/**
+ * Plain Supabase email/phone + password sign-in. Used as a fallback so login
+ * keeps working when the account-* edge functions are unavailable.
+ */
+export async function directPasswordLogin(
+  identifier: string,
+  password: string,
+): Promise<LoginStepResult> {
+  const kind = classifyIdentifier(identifier);
+
+  if (kind === 'invalid') {
+    throw new AlsamosAuthError('INVALID_CREDENTIALS', authErrorMessage('INVALID_CREDENTIALS'));
+  }
+
+  // The direct session always lives in the primary slot.
+  setActiveSlot(1);
+
+  const attempts: Array<{ email?: string; phone?: string }> =
+    kind === 'phone'
+      ? [{ phone: normalizePhoneInput(identifier) ?? identifier }]
+      : loginEmailCandidates(identifier).map((email) => ({ email }));
+
+  let notConfirmed = false;
+  let rateLimited = false;
+
+  for (const attempt of attempts) {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      ...attempt,
+      password,
+    } as Parameters<typeof supabase.auth.signInWithPassword>[0]);
+
+    if (!error && data?.session && data?.user) {
+      const { data: profileRow } = await supabase
+        .from('profiles')
+        .select('id, username, display_name, avatar_url')
+        .eq('id', data.user.id)
+        .maybeSingle();
+
+      return {
+        ticket: DIRECT_SESSION_TICKET,
+        accounts: [
+          {
+            id: data.user.id,
+            slot_no: 1,
+            is_primary: true,
+            username: profileRow?.username ?? null,
+            display_name: profileRow?.display_name ?? null,
+            avatar_url: profileRow?.avatar_url ?? null,
+          },
+        ],
+        identity: {
+          email: data.user.email ?? toIdentityEmail(identifier),
+          phone: data.user.phone ?? null,
+          migration_status: 'legacy',
+          used: 1,
+          max: MAX_ACCOUNTS_PER_IDENTITY,
+        },
+        mfa_required: false,
+      };
+    }
+
+    const message = error?.message ?? '';
+    if (/not\s*confirmed|confirm/i.test(message)) notConfirmed = true;
+    if (/rate|too many/i.test(message)) rateLimited = true;
+  }
+
+  if (rateLimited) {
+    throw new AlsamosAuthError('TOO_MANY_ATTEMPTS', authErrorMessage('TOO_MANY_ATTEMPTS'));
+  }
+  if (notConfirmed) {
+    throw new AlsamosAuthError('EMAIL_NOT_CONFIRMED', authErrorMessage('EMAIL_NOT_CONFIRMED'));
+  }
+
+  throw new AlsamosAuthError('INVALID_CREDENTIALS', authErrorMessage('INVALID_CREDENTIALS'));
 }
 
 // ---------------------------------------------------------------------

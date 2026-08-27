@@ -6,7 +6,10 @@ import { PROFILE_PUBLIC_COLUMNS } from '@/lib/profileFields';
 import {
   AlsamosAuthError,
   authErrorMessage,
+  DIRECT_SESSION_TICKET,
+  directPasswordLogin,
   isAlsamosEmail,
+  isRecoverableAuthFailure,
   isUsernameValid,
   LoginStepResult,
   normalizePhoneInput,
@@ -157,14 +160,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ---------------------------------------------------------------------
   // Login (two steps: credentials -> choose account)
+  //
+  // The multi-account flow runs in the account-* edge functions. When those
+  // are unreachable (not deployed, CORS, cold start) we do NOT leave the user
+  // locked out: plain Supabase email/phone + password sign-in takes over.
   // ---------------------------------------------------------------------
   const beginLogin = async (identifier: string, password: string): Promise<LoginStepResult> => {
-    // Credentials are verified server side: identical response for unknown
-    // identifier and wrong password, rate limited, audited.
-    return requestLoginTicket(identifier, password);
+    try {
+      // Credentials are verified server side: identical response for unknown
+      // identifier and wrong password, rate limited, audited.
+      return await requestLoginTicket(identifier, password);
+    } catch (e) {
+      if (!isRecoverableAuthFailure(e)) throw e;
+
+      console.warn('account-login unavailable, using direct sign-in fallback', e);
+      return directPasswordLogin(identifier, password);
+    }
   };
 
   const completeLogin = async (ticket: string, accountId?: string): Promise<AuthResult> => {
+    // Fallback path: the session already exists, nothing to exchange.
+    if (ticket === DIRECT_SESSION_TICKET) {
+      const { data } = await supabase.auth.getSession();
+
+      if (!data.session) {
+        const error = new AlsamosAuthError('SESSION_MINT_FAILED');
+        toast({
+          title: 'Kirish amalga oshmadi',
+          description: authErrorMessage('SESSION_MINT_FAILED'),
+          variant: 'destructive',
+        });
+        return { error };
+      }
+
+      setActiveSlot(1);
+      setActiveSlotState(1);
+      return { error: null };
+    }
+
     setIsLoading(true);
     try {
       const result = await requestAccountSession(ticket, accountId);
