@@ -2,7 +2,18 @@
 //
 // Durable DB signaling remains the source-of-truth fallback. This Edge
 // Function is only a low-latency relay for offer/answer/ICE/media events.
+//
+// XAVFSIZLIK TUZATISHI:
+//   Ilgari token faqat base64 ochilib payload.sub olinardi — imzo TEKSHIRILMAGAN.
+//   Ya'ni istalgan odam o'zi yasagan JWT bilan boshqa foydalanuvchi sifatida
+//   qo'ng'iroqqa ulanishi mumkin edi. Endi token Supabase orqali haqiqiy
+//   tekshiriladi (userFromToken). WebSocket sarlavha yubora olmasligi uchun
+//   token query paramdan ham qabul qilinadi: ?access_token=... yoki ?token=...
+//   hamda join xabaridagi accessToken maydonidan.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { userFromToken, corsHeaders as sharedCors, logFunctionEvent } from "../_shared/guard.ts";
+
+const FUNCTION_NAME = "webrtc-signaling";
 
 type Client = {
   socket: WebSocket;
@@ -28,22 +39,16 @@ const STALE_CLIENT_MS = 45_000;
 const PENDING_SIGNAL_TTL_MS = 30_000;
 const MAX_PENDING_SIGNALS_PER_ROOM = 300;
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
-
 Deno.serve((req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: sharedCors(req, "GET, POST, OPTIONS") });
   }
 
   const upgrade = req.headers.get("upgrade") ?? "";
   if (upgrade.toLowerCase() !== "websocket") {
     return new Response("WebSocket required", {
       status: 426,
-      headers: corsHeaders,
+      headers: sharedCors(req, "GET, POST, OPTIONS"),
     });
   }
 
@@ -51,18 +56,24 @@ Deno.serve((req) => {
   const initialRoomId =
     url.searchParams.get("roomId") ?? url.searchParams.get("callId");
   const initialUserId = url.searchParams.get("userId");
+  const headerToken = req.headers.get("authorization");
+  const queryToken =
+    url.searchParams.get("access_token") ?? url.searchParams.get("token");
 
   const { socket, response } = Deno.upgradeWebSocket(req);
   let client: Client | null = null;
+  let tokenUserId: string | null = null;
   let keepAliveResolve: (() => void) | null = null;
   const keepAlive = new Promise<void>((resolve) => {
     keepAliveResolve = resolve;
   });
   EdgeRuntime.waitUntil(keepAlive);
-  const tokenUserId = getUserIdFromToken(req.headers.get("authorization"));
 
   socket.onopen = async () => {
     startSocketHeartbeat(socket);
+    // Imzo tekshiruvi: soxta token bu yerda null qaytaradi.
+    tokenUserId = (await userFromToken(headerToken)) ?? (await userFromToken(queryToken));
+
     if (initialRoomId != null && initialUserId != null && tokenUserId != null) {
       client = await registerClient({
         socket,
@@ -102,7 +113,7 @@ Deno.serve((req) => {
         stringOrNull(message.roomId) ?? stringOrNull(message.callId);
       const userId = stringOrNull(message.userId);
       const joinTokenUserId =
-        tokenUserId ?? getUserIdFromToken(stringOrNull(message.accessToken));
+        tokenUserId ?? (await userFromToken(stringOrNull(message.accessToken)));
       if (roomId == null || userId == null) {
         socket.send(JSON.stringify({
           type: "error",
@@ -193,6 +204,12 @@ async function registerClient({
   };
 
   if (tokenUserId == null) {
+    await logFunctionEvent({
+      functionName: FUNCTION_NAME,
+      outcome: "blocked",
+      reason: "UNAUTHORIZED",
+      metadata: { roomId, claimedUserId: userId },
+    });
     send(candidate, {
       type: "error",
       message: "Authentication token is required",
@@ -201,7 +218,14 @@ async function registerClient({
     return null;
   }
 
-  if (tokenUserId != null && tokenUserId !== userId) {
+  if (tokenUserId !== userId) {
+    await logFunctionEvent({
+      functionName: FUNCTION_NAME,
+      userId: tokenUserId,
+      outcome: "blocked",
+      reason: "USER_ID_MISMATCH",
+      metadata: { roomId, claimedUserId: userId },
+    });
     send(candidate, {
       type: "error",
       message: "User ID mismatch with authentication token",
@@ -212,6 +236,13 @@ async function registerClient({
 
   const allowed = await verifyParticipant(userId, roomId);
   if (!allowed) {
+    await logFunctionEvent({
+      functionName: FUNCTION_NAME,
+      userId,
+      outcome: "blocked",
+      reason: "NOT_A_PARTICIPANT",
+      metadata: { roomId },
+    });
     send(candidate, {
       type: "error",
       message: "Not authorized to join this call",
@@ -455,23 +486,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
-}
-
-function getUserIdFromToken(authHeader: string | null): string | null {
-  if (authHeader == null) return null;
-
-  try {
-    const token = authHeader.startsWith("Bearer ")
-      ? authHeader.substring(7)
-      : authHeader;
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-
-    const payload = JSON.parse(atob(parts[1]));
-    return typeof payload.sub === "string" ? payload.sub : null;
-  } catch {
-    return null;
-  }
 }
 
 async function verifyParticipant(

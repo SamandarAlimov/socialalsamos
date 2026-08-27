@@ -126,16 +126,16 @@ export function bearerToken(req: Request): string | null {
 
 const anonKey = () => Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 
-// JWT ni tekshirib, foydalanuvchi id sini qaytaradi. Anon key bilan chaqirilgan
-// (ya'ni login qilinmagan) holatda null qaytadi.
-export async function userFromRequest(req: Request): Promise<string | null> {
-  const token = bearerToken(req);
+// JWT IMZOSINI haqiqiy tekshiradi (payload'ni shunchaki base64 ochish emas!).
+// Soxta token yuborilsa null qaytadi.
+export async function userFromToken(token: string | null): Promise<string | null> {
   if (!token) return null;
-  if (token === anonKey()) return null;
+  const clean = token.startsWith("Bearer ") ? token.slice(7).trim() : token.trim();
+  if (!clean || clean === anonKey()) return null;
   try {
     const client = createClient(Deno.env.get("SUPABASE_URL")!, anonKey(), {
       auth: { persistSession: false, autoRefreshToken: false },
-      global: { headers: { Authorization: `Bearer ${token}` } },
+      global: { headers: { Authorization: `Bearer ${clean}` } },
     });
     const { data, error } = await client.auth.getUser();
     if (error || !data?.user) return null;
@@ -143,6 +143,12 @@ export async function userFromRequest(req: Request): Promise<string | null> {
   } catch (_) {
     return null;
   }
+}
+
+// JWT ni tekshirib, foydalanuvchi id sini qaytaradi. Anon key bilan chaqirilgan
+// (ya'ni login qilinmagan) holatda null qaytadi.
+export async function userFromRequest(req: Request): Promise<string | null> {
+  return await userFromToken(bearerToken(req));
 }
 
 // ---------------------------------------------------------------- jurnal
@@ -173,6 +179,29 @@ async function log(
     // Jurnal yozilmasa ham asosiy ish to'xtamasligi kerak.
     console.error("function_usage log failed", error);
   }
+}
+
+// Funksiya ichidan jurnalga yozish uchun ochiq yordamchi (WebSocket kabi
+// guard() ishlatib bo'lmaydigan joylar uchun).
+export async function logFunctionEvent(entry: {
+  functionName: string;
+  userId?: string | null;
+  ipHash?: string | null;
+  outcome: "allowed" | "blocked" | "would_block";
+  reason?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<void> {
+  const mode = enforceMode();
+  if (mode === "off") return;
+  await log(serviceClient(), {
+    functionName: entry.functionName,
+    userId: entry.userId ?? null,
+    ipHash: entry.ipHash ?? null,
+    outcome: entry.outcome,
+    reason: entry.reason,
+    mode,
+    metadata: entry.metadata,
+  });
 }
 
 // ---------------------------------------------------------------- guard
