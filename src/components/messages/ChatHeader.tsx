@@ -30,7 +30,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBlockedUsers } from '@/hooks/useMessageSafety';
 import { BlockConfirmDialog } from './BlockConfirmDialog';
 import { ReportDialog } from './ReportDialog';
-import { EncryptedIndicator } from './EncryptedIndicator';
 import { GoLiveButton } from '@/components/live/GoLiveButton';
 import {
   DropdownMenu,
@@ -152,8 +151,8 @@ export function ChatHeader({
 
   const headerInner = (
     <>
-      <div className="relative">
-        <Avatar className="h-10 w-10">
+      <div className="relative shrink-0">
+        <Avatar className="h-9 w-9 sm:h-10 sm:w-10">
           <AvatarImage src={getAvatar() || ''} />
           <AvatarFallback
             className={cn(
@@ -185,13 +184,12 @@ export function ChatHeader({
         )}
       </div>
 
-      <div className="min-w-0 text-left">
-        <div className="flex items-center gap-1.5">
-          <h2 className="truncate text-sm font-semibold">{getName()}</h2>
+      <div className="min-w-0 flex-1 text-left">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <h2 className="truncate text-sm font-semibold sm:text-[15px]">{getName()}</h2>
           {conversation.type === 'private' && conversation.other_participant?.is_verified && (
             <VerifiedBadge size="xs" />
           )}
-          {conversation.is_encrypted && <EncryptedIndicator />}
         </div>
         <p className="truncate text-xs text-muted-foreground">{getStatus()}</p>
       </div>
@@ -199,16 +197,16 @@ export function ChatHeader({
   );
 
   const headerClasses =
-    '-mx-2 flex min-w-0 items-center gap-3 rounded-xl px-2 py-1 transition-colors hover:bg-muted/60';
+    '-mx-2 flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2 py-1 tg-transition hover:bg-muted/60 sm:gap-3';
 
   return (
-    <div className="flex h-16 items-center justify-between border-b border-border bg-card/95 px-3 backdrop-blur md:px-4">
-      <div className="flex min-w-0 items-center gap-2">
+    <div className="flex h-14 min-w-0 items-center gap-1 border-b border-border bg-card/95 px-2 backdrop-blur sm:h-16 sm:px-4">
+      <div className="flex min-w-0 flex-1 items-center gap-1 sm:gap-2">
         {onBack && (
           <Button
             variant="ghost"
             size="icon"
-            className="shrink-0 md:hidden"
+            className="h-9 w-9 shrink-0 rounded-full md:hidden"
             onClick={onBack}
             aria-label="Orqaga"
           >
@@ -227,7 +225,7 @@ export function ChatHeader({
         )}
       </div>
 
-      <div className="flex shrink-0 items-center gap-0.5">
+      <div className="flex shrink-0 items-center">
         {/* Kanallar jonli eshittirish qiladi, 1:1 qo'ng'iroq ishlatmaydi */}
         {isChannel && isAdmin && <GoLiveButton />}
 
@@ -239,9 +237,9 @@ export function ChatHeader({
               onClick={onAudioCall}
               aria-label="Audio qo'ng'iroq"
               title="Audio qo'ng'iroq"
-              className="rounded-full hover:bg-muted"
+              className="h-9 w-9 rounded-full hover:bg-muted sm:h-10 sm:w-10"
             >
-              <Phone className="h-5 w-5 text-muted-foreground" />
+              <Phone className="h-[18px] w-[18px] text-muted-foreground sm:h-5 sm:w-5" />
             </Button>
             <Button
               variant="ghost"
@@ -249,9 +247,9 @@ export function ChatHeader({
               onClick={onVideoCall}
               aria-label="Video qo'ng'iroq"
               title="Video qo'ng'iroq"
-              className="rounded-full hover:bg-muted"
+              className="h-9 w-9 rounded-full hover:bg-muted sm:h-10 sm:w-10"
             >
-              <Video className="h-5 w-5 text-muted-foreground" />
+              <Video className="h-[18px] w-[18px] text-muted-foreground sm:h-5 sm:w-5" />
             </Button>
           </>
         )}
@@ -262,9 +260,9 @@ export function ChatHeader({
             onClick={onSearch}
             aria-label="Qidirish"
             title="Xabarlar ichida qidirish"
-            className="hidden rounded-full hover:bg-muted sm:inline-flex"
+            className="hidden h-9 w-9 rounded-full hover:bg-muted sm:inline-flex sm:h-10 sm:w-10"
           >
-            <Search className="h-5 w-5 text-muted-foreground" />
+            <Search className="h-[18px] w-[18px] text-muted-foreground sm:h-5 sm:w-5" />
           </Button>
         )}
 
@@ -274,12 +272,12 @@ export function ChatHeader({
               variant="ghost"
               size="icon"
               aria-label="Boshqa amallar"
-              className="rounded-full hover:bg-muted"
+              className="h-9 w-9 rounded-full hover:bg-muted sm:h-10 sm:w-10"
             >
-              <MoreVertical className="h-5 w-5 text-muted-foreground" />
+              <MoreVertical className="h-[18px] w-[18px] text-muted-foreground sm:h-5 sm:w-5" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52 rounded-2xl">
+          <DropdownMenuContent align="end" className="w-56 rounded-2xl">
             {onViewInfo && (
               <DropdownMenuItem onClick={onViewInfo}>
                 <Info className="mr-2 h-4 w-4" />

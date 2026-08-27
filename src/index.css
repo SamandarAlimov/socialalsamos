@@ -19,52 +19,52 @@
     --alsamos-orange: 24 95% 53%;
     --alsamos-orange-light: 28 100% 60%;
     --alsamos-orange-dark: 20 90% 45%;
-    
+
     /* Light theme */
     --background: 0 0% 100%;
     --foreground: 220 20% 10%;
-    
+
     --card: 0 0% 99%;
     --card-foreground: 220 20% 10%;
-    
+
     --popover: 0 0% 100%;
     --popover-foreground: 220 20% 10%;
-    
+
     --primary: 24 95% 53%;
     --primary-foreground: 0 0% 100%;
-    
+
     --secondary: 220 14% 96%;
     --secondary-foreground: 220 20% 20%;
-    
+
     --muted: 220 14% 96%;
     --muted-foreground: 220 10% 46%;
-    
+
     --accent: 24 95% 53%;
     --accent-foreground: 0 0% 100%;
-    
+
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    
+
     --success: 142 76% 36%;
     --success-foreground: 0 0% 100%;
-    
+
     --border: 220 13% 91%;
     --input: 220 13% 91%;
     --ring: 24 95% 53%;
-    
+
     --radius: 0.75rem;
-    
+
     /* Gradients */
     --gradient-primary: linear-gradient(135deg, hsl(28, 100%, 60%) 0%, hsl(20, 90%, 45%) 100%);
     --gradient-subtle: linear-gradient(180deg, hsl(220, 14%, 98%) 0%, hsl(220, 14%, 96%) 100%);
     --gradient-glow: radial-gradient(circle at 50% 50%, hsl(24, 95%, 53%, 0.15) 0%, transparent 70%);
-    
+
     /* Shadows */
     --shadow-sm: 0 1px 2px 0 hsl(220, 20%, 10%, 0.05);
     --shadow-md: 0 4px 6px -1px hsl(220, 20%, 10%, 0.1), 0 2px 4px -2px hsl(220, 20%, 10%, 0.1);
     --shadow-lg: 0 10px 15px -3px hsl(220, 20%, 10%, 0.1), 0 4px 6px -4px hsl(220, 20%, 10%, 0.1);
     --shadow-glow: 0 0 40px hsl(24, 95%, 53%, 0.2);
-    
+
     /* Sidebar */
     --sidebar-background: 220 14% 98%;
     --sidebar-foreground: 220 20% 20%;
@@ -79,46 +79,46 @@
   .dark {
     --background: 222 47% 6%;
     --foreground: 210 40% 98%;
-    
+
     --card: 222 47% 8%;
     --card-foreground: 210 40% 98%;
-    
+
     --popover: 222 47% 8%;
     --popover-foreground: 210 40% 98%;
-    
+
     --primary: 24 95% 53%;
     --primary-foreground: 0 0% 100%;
-    
+
     --secondary: 222 47% 12%;
     --secondary-foreground: 210 40% 98%;
-    
+
     --muted: 222 47% 12%;
     --muted-foreground: 215 20% 65%;
-    
+
     --accent: 24 95% 53%;
     --accent-foreground: 0 0% 100%;
-    
+
     --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 100%;
-    
+
     --success: 142 76% 42%;
     --success-foreground: 0 0% 100%;
-    
+
     --border: 222 47% 14%;
     --input: 222 47% 14%;
     --ring: 24 95% 53%;
-    
+
     /* Dark gradients */
     --gradient-primary: linear-gradient(135deg, hsl(28, 100%, 55%) 0%, hsl(20, 90%, 40%) 100%);
     --gradient-subtle: linear-gradient(180deg, hsl(222, 47%, 10%) 0%, hsl(222, 47%, 6%) 100%);
     --gradient-glow: radial-gradient(circle at 50% 50%, hsl(24, 95%, 53%, 0.1) 0%, transparent 70%);
-    
+
     /* Dark shadows */
     --shadow-sm: 0 1px 2px 0 hsl(0, 0%, 0%, 0.2);
     --shadow-md: 0 4px 6px -1px hsl(0, 0%, 0%, 0.3), 0 2px 4px -2px hsl(0, 0%, 0%, 0.2);
     --shadow-lg: 0 10px 15px -3px hsl(0, 0%, 0%, 0.3), 0 4px 6px -4px hsl(0, 0%, 0%, 0.2);
     --shadow-glow: 0 0 60px hsl(24, 95%, 53%, 0.15);
-    
+
     /* Sidebar dark */
     --sidebar-background: 222 47% 8%;
     --sidebar-foreground: 210 40% 98%;
@@ -135,11 +135,11 @@
   * {
     @apply border-border;
   }
-  
+
   html {
     @apply scroll-smooth;
   }
-  
+
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
@@ -151,106 +151,106 @@
   .glass {
     @apply backdrop-blur-xl bg-card/80 border border-border/50;
   }
-  
+
   .glass-strong {
     @apply backdrop-blur-2xl bg-card/90 border border-border/60;
   }
-  
+
   /* Alsamos Glow Effects */
   .glow-primary {
     box-shadow: var(--shadow-glow);
   }
-  
+
   .glow-text {
     text-shadow: 0 0 20px hsl(var(--primary) / 0.5);
   }
-  
+
   /* Gradient Text */
   .gradient-text {
     @apply bg-clip-text text-transparent;
     background-image: var(--gradient-primary);
   }
-  
+
   /* Premium Button Styles */
   .btn-premium {
     @apply relative overflow-hidden transition-all duration-300;
     background: var(--gradient-primary);
   }
-  
+
   .btn-premium::before {
     content: '';
     @apply absolute inset-0 opacity-0 transition-opacity duration-300;
     background: linear-gradient(135deg, hsl(0, 0%, 100%, 0.2) 0%, transparent 50%);
   }
-  
+
   .btn-premium:hover::before {
     @apply opacity-100;
   }
-  
+
   /* Scrollbar Styling */
   .scrollbar-custom::-webkit-scrollbar {
     @apply w-2;
   }
-  
+
   .scrollbar-custom::-webkit-scrollbar-track {
     @apply bg-transparent;
   }
-  
+
   .scrollbar-custom::-webkit-scrollbar-thumb {
     @apply bg-muted-foreground/20 rounded-full;
   }
-  
+
   .scrollbar-custom::-webkit-scrollbar-thumb:hover {
     @apply bg-muted-foreground/40;
   }
-  
+
   .scrollbar-hidden::-webkit-scrollbar {
     display: none;
   }
-  
+
   .scrollbar-hidden {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
-  
+
   /* Animation Utilities */
   .animate-fade-up {
     animation: fadeUp 0.5s ease-out forwards;
   }
-  
+
   .animate-scale-in {
     animation: scaleIn 0.3s ease-out forwards;
   }
-  
+
   .animate-slide-in-left {
     animation: slideInLeft 0.3s ease-out forwards;
   }
-  
+
   .animate-slide-in-right {
     animation: slideInRight 0.3s ease-out forwards;
   }
-  
+
   .animate-pulse-soft {
     animation: pulseSoft 2s ease-in-out infinite;
   }
-  
+
   .animate-float {
     animation: float 6s ease-in-out infinite;
   }
-  
+
   /* Hover Effects */
   .hover-lift {
     @apply transition-transform duration-300 hover:-translate-y-1;
   }
-  
+
   .hover-scale {
     @apply transition-transform duration-200 hover:scale-105;
   }
-  
+
   .hover-glow {
     @apply transition-shadow duration-300;
   }
-  
+
   .hover-glow:hover {
     box-shadow: var(--shadow-glow);
   }
@@ -260,6 +260,64 @@
   .text-balance {
     text-wrap: balance;
   }
+
+  /* ===== Telegram uslubidagi chat interaksiyalari ===== */
+
+  /* Telegramda bubble'ni uzoq bosganda brauzerning "matn tanlash / nusxalash"
+     oynasi chiqmaydi - kontekst menyu chiqadi. Shu sabab bubble tanlanmaydi,
+     faqat matn qismi .chat-selectable bilan tanlanadi. */
+  .chat-no-select {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .chat-selectable {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+  }
+
+  /* Mobil qurilmalarda uzoq bosishda matn ajralib qolmasligi uchun */
+  @media (hover: none) and (pointer: coarse) {
+    .chat-selectable {
+      -webkit-user-select: none;
+      user-select: none;
+    }
+  }
+
+  /* Telegram animatsiya egri chizig'i (spring'ga yaqin ease) */
+  .tg-ease {
+    transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .tg-transition {
+    transition-property: transform, opacity, background-color, color;
+    transition-duration: 200ms;
+    transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  /* Swipe-to-reply paytida silliq siljish */
+  .tg-swipe {
+    touch-action: pan-y;
+    will-change: transform;
+  }
+
+  /* Media va avatarlarni tasodifan sudrab yuborishning oldini olish */
+  .no-drag {
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+}
+
+/* Chat oynasidagi rasm/video/avatarlar sudralmaydi */
+.chat-shell img,
+.chat-shell video {
+  -webkit-user-drag: none;
 }
 
 @keyframes fadeUp {
@@ -367,6 +425,22 @@
 
 .animate-slide-up {
   animation: slideUp 0.3s ease-out forwards;
+}
+
+/* Telegramdek xabar paydo bo'lish animatsiyasi */
+@keyframes tgMessageIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-tg-message-in {
+  animation: tgMessageIn 0.22s cubic-bezier(0.32, 0.72, 0, 1) forwards;
 }
 
 /* Video mirror effect for local video */
