@@ -8,13 +8,17 @@
  *     and have no usable password: their sessions are minted by the server
  *     only after the identity password has been verified.
  *
- * Logging in accepts THREE kinds of identifier (resolved server side only):
+ * Logging in accepts THREE kinds of identifier:
  *   - email    : <name>@alsamos.com or a preserved legacy address
  *   - username : of any account owned by the identity
  *   - phone    : the identity phone number, in any human formatting
  *
- * When 2FA is on, step 1 returns `mfa_required` and the ticket can only be
- * spent on verifyMfaLogin().
+ * IMPORTANT (login availability):
+ * The primary sign-in path is `directPasswordLogin()`, which talks straight to
+ * Supabase Auth (`/auth/v1/token`). That endpoint is always reachable, so an
+ * undeployed or misconfigured `account-login` edge function can never lock
+ * users out. The edge function flow (`requestLoginTicket`) stays as a
+ * secondary path, used for linked accounts in slots 2..10 and for 2FA.
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -24,6 +28,7 @@ import {
   MAX_ACCOUNTS_PER_IDENTITY,
   TOS_VERSION,
 } from '@/lib/authConstants';
+import { setActiveSlot } from '@/lib/accountSlots';
 import { getDeviceId } from '@/lib/deviceId';
 
 export {
@@ -39,13 +44,16 @@ export const LEGAL_ROUTES = {
   help: '/help',
 } as const;
 
+/** Ticket value used when the session was already opened by Supabase Auth. */
+export const DIRECT_SESSION_TICKET = 'direct-session';
+
 export function normalizeEmail(value: string): string {
   return (value ?? '').trim().toLowerCase();
 }
 
 /** True only for real identity emails (<name>@alsamos.com). */
 export function isAlsamosEmail(value: string): boolean {
-  return /^[a-z0-9._%+-]{1,64}@alsamos\\.com$/.test(normalizeEmail(value));
+  return /^[a-z0-9._%+-]{1,64}@alsamos\.com$/.test(normalizeEmail(value));
 }
 
 /** Internal address of a linked account - never shown as a login option. */
@@ -65,7 +73,7 @@ export function normalizePhoneInput(value: string): string | null {
   const digits = (value ?? '').replace(/[^0-9]/g, '');
   if (!digits) return null;
   const e164 = `+${digits}`;
-  return /^\\+[1-9][0-9]{7,14}$/.test(e164) ? e164 : null;
+  return /^\+[1-9][0-9]{7,14}$/.test(e164) ? e164 : null;
 }
 
 export type IdentifierKind = 'email' | 'phone' | 'username' | 'invalid';
@@ -75,7 +83,7 @@ export function classifyIdentifier(raw: string): IdentifierKind {
   const value = (raw ?? '').trim().toLowerCase();
   if (!value) return 'invalid';
   if (value.includes('@')) return 'email';
-  if (/^[+0-9][0-9\\s().\\-_]{6,}$/.test(value)) {
+  if (/^[+0-9][0-9\s().\-_]{6,}$/.test(value)) {
     return normalizePhoneInput(value) ? 'phone' : 'invalid';
   }
   return isUsernameValid(value) ? 'username' : 'invalid';
@@ -100,7 +108,7 @@ export function toIdentityEmail(input: string): string {
 
 /** TOTP codes are 6 digits; recovery codes are "xxxx-xxxx-xxxx" base32. */
 export function isTotpCode(value: string): boolean {
-  return /^[0-9]{6}$/.test((value ?? '').replace(/\\s/g, ''));
+  return /^[0-9]{6}$/.test((value ?? '').replace(/\s/g, ''));
 }
 
 export function isRecoveryCode(value: string): boolean {
@@ -230,6 +238,108 @@ export function authErrorMessage(code: AuthErrorCode): string {
   }
 }
 
+// ---------------------------------------------------------------------
+// Primary login path: Supabase Auth password grant
+// ---------------------------------------------------------------------
+
+/** Every email address a given identifier may correspond to. */
+function loginEmailCandidates(identifier: string): string[] {
+  const value = (identifier ?? '').trim().toLowerCase();
+  const kind = classifyIdentifier(value);
+
+  if (kind === 'email') {
+    const candidates = [value];
+    const local = value.split('@')[0];
+    if (local && !value.endsWith(`@${ALSAMOS_MAIL_DOMAIN}`)) {
+      candidates.push(`${local}@${ALSAMOS_MAIL_DOMAIN}`);
+    }
+    return candidates;
+  }
+
+  if (kind === 'username') {
+    return [
+      `${value}@${ALSAMOS_MAIL_DOMAIN}`,
+      `${value}@${ALSAMOS_ACCOUNT_DOMAIN}`,
+    ];
+  }
+
+  return [];
+}
+
+/**
+ * Sign in straight against Supabase Auth. Works with email, username or phone
+ * and opens the session in slot 1, exactly like the pre-multi-account flow.
+ */
+export async function directPasswordLogin(
+  identifier: string,
+  password: string,
+): Promise<LoginStepResult> {
+  const kind = classifyIdentifier(identifier);
+  const phone = kind === 'phone' ? normalizePhoneInput(identifier) : null;
+  const emails = kind === 'phone' ? [] : loginEmailCandidates(identifier);
+
+  if (!phone && emails.length === 0) {
+    throw new AlsamosAuthError('INVALID_CREDENTIALS', authErrorMessage('INVALID_CREDENTIALS'));
+  }
+
+  // The primary account always lives in slot 1.
+  setActiveSlot(1);
+
+  const attempts: Array<() => ReturnType<typeof supabase.auth.signInWithPassword>> = phone
+    ? [() => supabase.auth.signInWithPassword({ phone, password })]
+    : emails.map((email) => () => supabase.auth.signInWithPassword({ email, password }));
+
+  for (const attempt of attempts) {
+    const { data, error } = await attempt();
+
+    if (!error && data?.user) {
+      const authUser = data.user;
+
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('id, username, display_name, avatar_url')
+        .eq('id', authUser.id)
+        .maybeSingle();
+
+      return {
+        ticket: DIRECT_SESSION_TICKET,
+        accounts: [
+          {
+            id: authUser.id,
+            slot_no: 1,
+            is_primary: true,
+            username: (prof?.username as string | null) ?? null,
+            display_name: (prof?.display_name as string | null) ?? null,
+            avatar_url: (prof?.avatar_url as string | null) ?? null,
+          },
+        ],
+        identity: {
+          email: authUser.email ?? '',
+          phone: authUser.phone ?? null,
+          migration_status: 'legacy',
+          used: 1,
+          max: MAX_ACCOUNTS_PER_IDENTITY,
+        },
+        mfa_required: false,
+      };
+    }
+
+    const message = error?.message ?? '';
+    if (/not confirmed/i.test(message)) {
+      throw new AlsamosAuthError('EMAIL_NOT_CONFIRMED', authErrorMessage('EMAIL_NOT_CONFIRMED'));
+    }
+    if (/too many|rate limit/i.test(message)) {
+      throw new AlsamosAuthError('TOO_MANY_ATTEMPTS', authErrorMessage('TOO_MANY_ATTEMPTS'));
+    }
+  }
+
+  throw new AlsamosAuthError('INVALID_CREDENTIALS', authErrorMessage('INVALID_CREDENTIALS'));
+}
+
+// ---------------------------------------------------------------------
+// Secondary login path: identity/account edge functions
+// ---------------------------------------------------------------------
+
 type AuthFunctionName =
   | 'account-login'
   | 'account-session'
@@ -254,8 +364,11 @@ async function invokeAuthFunction<T>(
         const payload = await ctx.json();
         if (typeof payload?.error === 'string') code = payload.error as AuthErrorCode;
       } catch {
-        code = 'UNKNOWN';
+        // No JSON body at all: the function is unreachable (CORS, 404, 5xx).
+        code = 'NETWORK';
       }
+    } else {
+      code = 'NETWORK';
     }
 
     throw new AlsamosAuthError(code, authErrorMessage(code));

@@ -6,6 +6,8 @@ import { PROFILE_PUBLIC_COLUMNS } from '@/lib/profileFields';
 import {
   AlsamosAuthError,
   authErrorMessage,
+  DIRECT_SESSION_TICKET,
+  directPasswordLogin,
   isAlsamosEmail,
   isUsernameValid,
   LoginStepResult,
@@ -46,7 +48,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   /**
-   * Step 1: verify the identity password, get the account list + ticket.
+   * Step 1: verify the password and get the account list + ticket.
    * `identifier` may be an email, a username or a phone number.
    */
   beginLogin: (identifier: string, password: string) => Promise<LoginStepResult>;
@@ -156,15 +158,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ---------------------------------------------------------------------
-  // Login (two steps: credentials -> choose account)
+  // Login
+  //
+  // Primary path: Supabase Auth password grant (always reachable).
+  // Secondary path: the account-login edge function, which is only needed for
+  // linked accounts (slots 2..10) and 2FA. If the edge function is not
+  // deployed or blocked by CORS, logging in still works.
   // ---------------------------------------------------------------------
   const beginLogin = async (identifier: string, password: string): Promise<LoginStepResult> => {
-    // Credentials are verified server side: identical response for unknown
-    // identifier and wrong password, rate limited, audited.
-    return requestLoginTicket(identifier, password);
+    try {
+      return await directPasswordLogin(identifier, password);
+    } catch (directError) {
+      if (
+        directError instanceof AlsamosAuthError &&
+        (directError.code === 'EMAIL_NOT_CONFIRMED' || directError.code === 'TOO_MANY_ATTEMPTS')
+      ) {
+        throw directError;
+      }
+
+      try {
+        return await requestLoginTicket(identifier, password);
+      } catch (edgeError) {
+        console.warn('account-login unavailable, using direct sign-in result', edgeError);
+        throw directError;
+      }
+    }
   };
 
   const completeLogin = async (ticket: string, accountId?: string): Promise<AuthResult> => {
+    // The direct path already opened the session; nothing left to exchange.
+    if (ticket === DIRECT_SESSION_TICKET) {
+      const { data } = await supabase.auth.getSession();
+
+      if (!data.session) {
+        const err = new AlsamosAuthError('SESSION_MINT_FAILED');
+        toast({
+          title: 'Kirish amalga oshmadi',
+          description: authErrorMessage('SESSION_MINT_FAILED'),
+          variant: 'destructive',
+        });
+        return { error: err };
+      }
+
+      setActiveSlot(1);
+      setActiveSlotState(1);
+      return { error: null };
+    }
+
     setIsLoading(true);
     try {
       const result = await requestAccountSession(ticket, accountId);

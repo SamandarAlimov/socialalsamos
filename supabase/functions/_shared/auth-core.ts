@@ -8,25 +8,55 @@ export const ALSAMOS_DOMAIN = "alsamos.com";
 export const ACCOUNT_DOMAIN = "accounts.alsamos.com";
 export const MAX_ACCOUNTS = 10;
 
-/** Allowed browser origins. `*` is only used when no allowlist is configured. */
-const allowedOrigins = (Deno.env.get("AUTH_ALLOWED_ORIGINS") ?? "")
+/**
+ * Allowed browser origins.
+ *
+ * `AUTH_ALLOWED_ORIGINS` is a comma separated allowlist. Both the apex and the
+ * `www` host of every production domain are accepted by default so a missing
+ * env var can never break the browser preflight.
+ */
+const configuredOrigins = (Deno.env.get("AUTH_ALLOWED_ORIGINS") ?? "")
   .split(",")
   .map((o) => o.trim())
   .filter(Boolean);
 
+const DEFAULT_ORIGIN_PATTERNS: RegExp[] = [
+  /^https:\/\/([a-z0-9-]+\.)*alsamos\.com$/i,
+  /^https:\/\/([a-z0-9-]+\.)*lovable\.app$/i,
+  /^https:\/\/([a-z0-9-]+\.)*lovableproject\.com$/i,
+  /^https:\/\/([a-z0-9-]+\.)*vercel\.app$/i,
+  /^http:\/\/localhost(:[0-9]+)?$/i,
+  /^http:\/\/127\.0\.0\.1(:[0-9]+)?$/i,
+];
+
+function isAllowedOrigin(origin: string): boolean {
+  if (!origin) return false;
+  if (configuredOrigins.includes(origin)) return true;
+  return DEFAULT_ORIGIN_PATTERNS.some((re) => re.test(origin));
+}
+
+export const CORS_ALLOWED_HEADERS =
+  "authorization, x-client-info, apikey, content-type, x-supabase-api-version, accept, accept-profile, content-profile, prefer";
+
 export function corsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get("origin") ?? "";
-  const allowOrigin = allowedOrigins.length === 0
-    ? "*"
-    : allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+  const requestedHeaders = req.headers.get("access-control-request-headers");
 
   return {
-    "Access-Control-Allow-Origin": allowOrigin,
-    "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Origin": isAllowedOrigin(origin) ? origin : (origin || "*"),
+    "Access-Control-Allow-Headers": requestedHeaders ?? CORS_ALLOWED_HEADERS,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Vary": "Origin",
+    "Access-Control-Max-Age": "86400",
+    "Vary": "Origin, Access-Control-Request-Headers",
   };
+}
+
+/**
+ * Answer to a CORS preflight. MUST be a 2xx status with no redirect, otherwise
+ * the browser refuses the real request.
+ */
+export function preflightResponse(req: Request): Response {
+  return new Response(null, { status: 204, headers: corsHeaders(req) });
 }
 
 export function jsonResponse(
@@ -76,7 +106,7 @@ export function normalizeEmail(value: unknown): string {
 }
 
 export function isIdentityEmail(email: string): boolean {
-  return /^[a-z0-9._%+-]{1,64}@alsamos\\.com$/.test(email);
+  return /^[a-z0-9._%+-]{1,64}@alsamos\.com$/.test(email);
 }
 
 export function isUsernameValid(username: string): boolean {
@@ -97,7 +127,7 @@ export function normalizePhone(value: unknown): string | null {
   const digits = value.replace(/[^0-9]/g, "");
   if (!digits) return null;
   const e164 = `+${digits}`;
-  return /^\\+[1-9][0-9]{7,14}$/.test(e164) ? e164 : null;
+  return /^\+[1-9][0-9]{7,14}$/.test(e164) ? e164 : null;
 }
 
 export type IdentifierKind = "email" | "phone" | "username" | "invalid";
@@ -106,7 +136,7 @@ export function classifyIdentifier(raw: string): IdentifierKind {
   const value = raw.trim().toLowerCase();
   if (!value) return "invalid";
   if (value.includes("@")) return "email";
-  if (/^[+0-9][0-9\\s().\\-_]{6,}$/.test(value)) {
+  if (/^[+0-9][0-9\s().\-_]{6,}$/.test(value)) {
     return normalizePhone(value) ? "phone" : "invalid";
   }
   return isUsernameValid(value) ? "username" : "invalid";
@@ -446,15 +476,15 @@ export function deviceLabel(req: Request): string {
             ? "Linux"
             : "Noma'lum tizim";
 
-  const browser = /Edg\\//i.test(ua)
+  const browser = /Edg\//i.test(ua)
     ? "Edge"
-    : /OPR\\/|Opera/i.test(ua)
+    : /OPR\/|Opera/i.test(ua)
       ? "Opera"
-      : /Chrome\\//i.test(ua)
+      : /Chrome\//i.test(ua)
         ? "Chrome"
-        : /Safari\\//i.test(ua)
+        : /Safari\//i.test(ua)
           ? "Safari"
-          : /Firefox\\//i.test(ua)
+          : /Firefox\//i.test(ua)
             ? "Firefox"
             : "Brauzer";
 
