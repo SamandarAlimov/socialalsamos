@@ -10,14 +10,19 @@
  * Only non-sensitive metadata (slot, username, avatar) is cached for the UI.
  */
 
-import { MAX_ACCOUNTS_PER_IDENTITY } from '@/lib/alsamosAuth';
+import {
+  ACCOUNT_META_KEY,
+  ACTIVE_SLOT_COOKIE,
+  AUTH_STORAGE_KEY,
+  LEGACY_TOKEN_KEYS,
+  MAX_ACCOUNTS_PER_IDENTITY,
+} from '@/lib/authConstants';
 
-export const AUTH_STORAGE_KEY = 'alsamos-auth';
-export const ACTIVE_SLOT_COOKIE = 'alsamos_active_slot';
-export const ACCOUNT_META_KEY = 'alsamos_account_meta';
+export { ACCOUNT_META_KEY, ACTIVE_SLOT_COOKIE, AUTH_STORAGE_KEY };
 
 export const COOKIE_DOMAIN = '.alsamos.com';
 const SLOT_COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
+const MAX_CHUNKS = 8;
 
 export type AccountMeta = {
   slot: number;
@@ -39,16 +44,19 @@ function useCookieDomain(): boolean {
 
 function readCookie(name: string): string | null {
   if (!hasWindow()) return null;
-  const match = document.cookie.match(
-    new RegExp(`(?:^|; )${name.replace(/[.$?*|{}()[\]\\/+^]/g, '\\$&')}=([^;]*)`),
-  );
-  return match ? decodeURIComponent(match[1]) : null;
+  const encodedName = `${encodeURIComponent(name)}=`;
+  const raw = document.cookie
+    .split(';')
+    .map((cookie) => cookie.trim())
+    .find((cookie) => cookie.startsWith(encodedName))
+    ?.slice(encodedName.length);
+  return raw === undefined ? null : decodeURIComponent(raw);
 }
 
 function writeCookie(name: string, value: string, maxAge = SLOT_COOKIE_MAX_AGE): void {
   if (!hasWindow()) return;
   const parts = [
-    `${name}=${encodeURIComponent(value)}`,
+    `${encodeURIComponent(name)}=${encodeURIComponent(value)}`,
     'path=/',
     `max-age=${maxAge}`,
     'SameSite=Lax',
@@ -59,10 +67,7 @@ function writeCookie(name: string, value: string, maxAge = SLOT_COOKIE_MAX_AGE):
 }
 
 function deleteCookie(name: string): void {
-  if (!hasWindow()) return;
-  const parts = [`${name}=`, 'path=/', 'max-age=0'];
-  if (useCookieDomain()) parts.push(`domain=${COOKIE_DOMAIN}`);
-  document.cookie = parts.join('; ');
+  writeCookie(name, '', 0);
 }
 
 export function isValidSlot(slot: unknown): slot is number {
@@ -96,8 +101,7 @@ export function occupiedSlots(baseKey = AUTH_STORAGE_KEY): number[] {
   const slots: number[] = [];
   for (let slot = 1; slot <= MAX_ACCOUNTS_PER_IDENTITY; slot++) {
     const key = storageKeyForSlot(slot, baseKey);
-    const inCookie =
-      readCookie(key) !== null || readCookie(`${key}.chunks`) !== null || readCookie(`${key}.0`) !== null;
+    const inCookie = readCookie(`${key}.chunks`) !== null;
 
     let inLocal = false;
     try {
@@ -117,6 +121,14 @@ export function hasSessionForSlot(slot: number): boolean {
   return occupiedSlots().includes(slot);
 }
 
+/** Lowest slot number that is free on this device (or null when full). */
+export function firstFreeSlot(taken: number[] = occupiedSlots()): number | null {
+  for (let slot = 1; slot <= MAX_ACCOUNTS_PER_IDENTITY; slot++) {
+    if (!taken.includes(slot)) return slot;
+  }
+  return null;
+}
+
 /** Remove one slot's stored session (cookie chunks + localStorage fallback). */
 export function clearSlot(slot: number, baseKey = AUTH_STORAGE_KEY): void {
   if (!hasWindow() || !isValidSlot(slot)) return;
@@ -124,12 +136,12 @@ export function clearSlot(slot: number, baseKey = AUTH_STORAGE_KEY): void {
   const key = storageKeyForSlot(slot, baseKey);
   deleteCookie(key);
   deleteCookie(`${key}.chunks`);
-  for (let i = 0; i < 8; i++) deleteCookie(`${key}.${i}`);
+  for (let i = 0; i < MAX_CHUNKS; i++) deleteCookie(`${key}.${i}`);
 
   try {
     window.localStorage.removeItem(key);
     window.localStorage.removeItem(`${key}.chunks`);
-    for (let i = 0; i < 8; i++) window.localStorage.removeItem(`${key}.${i}`);
+    for (let i = 0; i < MAX_CHUNKS; i++) window.localStorage.removeItem(`${key}.${i}`);
   } catch {
     /* storage unavailable - nothing to clean */
   }
@@ -141,12 +153,11 @@ export function clearAllSlots(baseKey = AUTH_STORAGE_KEY): void {
     clearSlot(slot, baseKey);
   }
   deleteCookie(ACTIVE_SLOT_COOKIE);
+
+  if (!hasWindow()) return;
   try {
     window.localStorage.removeItem(ACCOUNT_META_KEY);
-    // Legacy keys from the previous multi-account implementation:
-    // they used to contain plaintext access/refresh tokens.
-    window.localStorage.removeItem('alsamos_accounts');
-    window.localStorage.removeItem('alsamos_active_account');
+    LEGACY_TOKEN_KEYS.forEach((legacyKey) => window.localStorage.removeItem(legacyKey));
   } catch {
     /* ignore */
   }
@@ -159,8 +170,7 @@ export function clearAllSlots(baseKey = AUTH_STORAGE_KEY): void {
 export function purgeLegacyTokenStore(): void {
   if (!hasWindow()) return;
   try {
-    window.localStorage.removeItem('alsamos_accounts');
-    window.localStorage.removeItem('alsamos_active_account');
+    LEGACY_TOKEN_KEYS.forEach((legacyKey) => window.localStorage.removeItem(legacyKey));
   } catch {
     /* ignore */
   }
@@ -174,7 +184,7 @@ export function readAccountMeta(): AccountMeta[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item) => isValidSlot(item?.slot));
+    return parsed.filter((item) => isValidSlot(item?.slot)) as AccountMeta[];
   } catch {
     return [];
   }

@@ -5,19 +5,25 @@
  *   - You log in with ONE identity email: <name>@alsamos.com
  *   - That identity may own up to 10 superapp accounts (slots 1..10)
  *   - Slot 1 is the primary account and carries the identity password
- *   - Slots 2..10 have a technical login email <username>@accounts.alsamos.com
- *     and no usable password: their sessions are minted by the server only
- *     after the identity password has been verified.
+ *   - Slots 2..10 use a technical login email <username>@accounts.alsamos.com
+ *     and have no usable password: their sessions are minted by the server
+ *     only after the identity password has been verified.
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import {
+  ALSAMOS_ACCOUNT_DOMAIN,
+  ALSAMOS_MAIL_DOMAIN,
+  MAX_ACCOUNTS_PER_IDENTITY,
+  TOS_VERSION,
+} from '@/lib/authConstants';
 
-export const ALSAMOS_MAIL_DOMAIN = 'alsamos.com';
-export const ALSAMOS_ACCOUNT_DOMAIN = 'accounts.alsamos.com';
-export const MAX_ACCOUNTS_PER_IDENTITY = 10;
-
-/** Bump this whenever Terms / Privacy change; stored with the consent. */
-export const TOS_VERSION = '2026-08-27';
+export {
+  ALSAMOS_ACCOUNT_DOMAIN,
+  ALSAMOS_MAIL_DOMAIN,
+  MAX_ACCOUNTS_PER_IDENTITY,
+  TOS_VERSION,
+};
 
 export const LEGAL_ROUTES = {
   privacy: '/legal/privacy',
@@ -80,9 +86,11 @@ export type AuthErrorCode =
   | 'TICKET_INVALID'
   | 'ACCOUNT_NOT_FOUND'
   | 'ACCOUNT_LIMIT_REACHED'
+  | 'ACCOUNT_CREATE_FAILED'
   | 'USERNAME_INVALID'
   | 'USERNAME_TAKEN'
   | 'PRIMARY_ACCOUNT_PROTECTED'
+  | 'SESSION_MINT_FAILED'
   | 'UNAUTHORIZED'
   | 'NETWORK'
   | 'UNKNOWN';
@@ -136,7 +144,7 @@ async function invokeAuthFunction<T>(
   const { data, error } = await supabase.functions.invoke(name, { body });
 
   if (error) {
-    // supabase-js wraps non-2xx responses; try to recover our error code.
+    // supabase-js wraps non-2xx responses; recover our own error code.
     let code: AuthErrorCode = 'UNKNOWN';
     const ctx = (error as { context?: Response }).context;
 
@@ -195,7 +203,10 @@ export function requestAccountCreate(params: {
 }
 
 /** Revoke an account's sessions server side (and optionally free its slot). */
-export function requestAccountRevoke(accountId: string, mode: 'signout' | 'unlink' = 'signout') {
+export function requestAccountRevoke(
+  accountId: string,
+  mode: 'signout' | 'unlink' = 'signout',
+) {
   return invokeAuthFunction<{ ok: true; revoked_tokens: number }>('account-revoke', {
     account_id: accountId,
     mode,
