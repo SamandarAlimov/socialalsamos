@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { animatedEmojiCandidates, staticEmojiCandidates } from '@/lib/emojiAssets';
 
@@ -17,15 +17,27 @@ interface AnimatedEmojiProps {
   /** Align with surrounding text (used inside message bubbles). */
   inline?: boolean;
   title?: string;
+  /** Skip the lazy IntersectionObserver (for a handful of always-visible emojis). */
+  eager?: boolean;
 }
 
 /**
- * Renders a Telegram-style emoji.
- *
- * Assets are resolved through `src/lib/emojiAssets.ts`:
- * local Telegram pack -> Noto animated -> Apple static -> native glyph.
+ * Global caches so the whole app never re-requests an asset that already
+ * failed, and never waits again for one that is already in the browser cache.
+ * This is the main reason emoji grids used to feel heavy: every mount fired
+ * a fresh waterfall of CDN requests.
  */
-export function AnimatedEmoji({
+const failedSrc = new Set<string>();
+const loadedSrc = new Set<string>();
+
+function firstUsable(candidates: string[]): number {
+  for (let i = 0; i < candidates.length; i++) {
+    if (!failedSrc.has(candidates[i])) return i;
+  }
+  return -1;
+}
+
+function AnimatedEmojiImpl({
   emoji,
   size = 24,
   className,
@@ -33,55 +45,97 @@ export function AnimatedEmoji({
   animated = true,
   inline = false,
   title,
+  eager = false,
 }: AnimatedEmojiProps) {
   const candidates = useMemo(
     () => (animated ? animatedEmojiCandidates(emoji) : staticEmojiCandidates(emoji)),
     [emoji, animated]
   );
-  const [index, setIndex] = useState(0);
-  const [failed, setFailed] = useState(false);
+
+  const [index, setIndex] = useState(() => firstUsable(candidates));
+  const [visible, setVisible] = useState(eager);
+  const holderRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
-    setIndex(0);
-    setFailed(false);
-  }, [emoji, animated]);
+    setIndex(firstUsable(candidates));
+  }, [candidates]);
 
-  if (failed) {
-    return (
-      <span
-        className={cn(
-          'inline-flex items-center justify-center leading-none select-none',
-          inline && 'align-[-0.15em]',
-          className
-        )}
-        style={{ fontSize: size * 0.92, width: size, height: size }}
-        title={title}
-      >
-        {emoji}
-      </span>
+  // Ko'rinmagan emojilar hech qanday so'rov yubormaydi (scroll-performance)
+  useEffect(() => {
+    if (eager || visible) return;
+    const node = holderRef.current;
+    if (!node) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '120px' }
     );
-  }
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [eager, visible]);
+
+  const nativeGlyph = (
+    <span
+      className="leading-none"
+      style={{ fontSize: size * 0.92, lineHeight: 1 }}
+      aria-hidden={false}
+    >
+      {emoji}
+    </span>
+  );
+
+  const src = index >= 0 ? candidates[index] : undefined;
+  const showImage = Boolean(src) && visible;
 
   return (
-    <img
-      src={candidates[index]}
-      alt={emoji}
-      title={title}
-      loading="lazy"
-      draggable={false}
-      width={size}
-      height={size}
-      onError={() => {
-        if (index < candidates.length - 1) setIndex(index + 1);
-        else setFailed(true);
-      }}
+    <span
+      ref={holderRef}
       className={cn(
-        'inline-block object-contain select-none',
+        'inline-flex select-none items-center justify-center leading-none',
         inline && 'align-[-0.15em]',
         playOnHover && 'transition-transform duration-150 hover:scale-110',
         className
       )}
       style={{ width: size, height: size }}
-    />
+      title={title}
+    >
+      {showImage ? (
+        <img
+          src={src}
+          alt={emoji}
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+          width={size}
+          height={size}
+          onLoad={() => {
+            if (src) loadedSrc.add(src);
+          }}
+          onError={() => {
+            if (src) failedSrc.add(src);
+            setIndex((prev) => {
+              for (let i = prev + 1; i < candidates.length; i++) {
+                if (!failedSrc.has(candidates[i])) return i;
+              }
+              return -1;
+            });
+          }}
+          className="inline-block select-none object-contain"
+          style={{ width: size, height: size }}
+        />
+      ) : (
+        nativeGlyph
+      )}
+    </span>
   );
 }
+
+export const AnimatedEmoji = memo(AnimatedEmojiImpl);

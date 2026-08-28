@@ -4,7 +4,6 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Input } from '@/components/ui/input';
 import { Smile, Search, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { TelegramEmoji } from '@/components/emoji/TelegramEmoji';
 import {
   EMOJI_CATEGORIES,
   getRecentEmojis,
@@ -18,6 +17,15 @@ interface EmojiPickerProps {
   className?: string;
 }
 
+/**
+ * Telegram uslubidagi emoji tanlagich.
+ *
+ * MUHIM (performance): to'r ichida CDN'dan rasm YUKLANMAYDI - tizim (native)
+ * emoji glifi ishlatiladi. Animatsiyali Telegram emojilar faqat xabar
+ * pufakchalari va reaksiyalarda ko'rsatiladi. Avval bu yerda har bir katak
+ * uchun alohida rasm so'rovi ketardi (bir ochilishda 300+ so'rov) va shu
+ * sababli tanlagich juda og'ir ochilardi.
+ */
 export function EmojiPicker({ onSelect, trigger, className }: EmojiPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -54,22 +62,22 @@ export function EmojiPicker({ onSelect, trigger, className }: EmojiPickerProps) 
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Emoji qidirish..."
+              placeholder="Qidirish"
               className="h-9 pl-8"
             />
           </div>
         </div>
 
-        {/* Emojilar to'ri */}
+        {/* Emojilar to'ri - native gliflar, so'rovsiz va tez */}
         <div className="grid h-56 grid-cols-8 gap-0.5 overflow-y-auto overscroll-contain p-2">
           {visible.map((emoji, i) => (
             <button
-              key={`${emoji}-${i}`}
+              key={emoji + '-' + i}
               onClick={() => handleSelect(emoji)}
-              className="tg-transition flex h-9 w-9 items-center justify-center rounded-lg hover:bg-accent active:scale-90"
+              className="tg-transition flex h-9 w-9 items-center justify-center rounded-lg text-[26px] leading-none hover:bg-accent active:scale-90"
               title={emoji}
             >
-              <TelegramEmoji emoji={emoji} size={28} playOnHover />
+              <span className="select-none leading-none">{emoji}</span>
             </button>
           ))}
           {visible.length === 0 && (
@@ -100,11 +108,11 @@ export function EmojiPicker({ onSelect, trigger, className }: EmojiPickerProps) 
                 onClick={() => setActiveKey(cat.key)}
                 title={cat.label}
                 className={cn(
-                  'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-colors',
+                  'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[18px] leading-none transition-colors',
                   activeKey === cat.key ? 'bg-primary/15' : 'hover:bg-accent'
                 )}
               >
-                <TelegramEmoji emoji={cat.icon} size={20} animated={false} />
+                <span className="select-none leading-none">{cat.icon}</span>
               </button>
             ))}
           </div>

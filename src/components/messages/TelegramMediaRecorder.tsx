@@ -1,18 +1,20 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { 
-  Mic, 
-  Video, 
-  X, 
-  Send, 
-  Play, 
+import {
+  Mic,
+  Video,
+  X,
+  Send,
+  Play,
   Pause,
   Square,
   Trash2,
-  SwitchCamera
+  SwitchCamera,
+  Lock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { uploadMedia } from '@/lib/mediaUpload';
+import { useToast } from '@/hooks/use-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface TelegramMediaRecorderProps {
@@ -20,111 +22,205 @@ interface TelegramMediaRecorderProps {
   onCancel?: () => void;
 }
 
-type RecordingState = 'idle' | 'recording' | 'preview';
+type RecordingState = 'idle' | 'recording' | 'preview' | 'sending';
 type RecordingMode = 'voice' | 'video';
 
-/** Telegram switches between mic and video with a quick tap, and records on press-and-hold. */
-const HOLD_TO_RECORD_MS = 320;
+/** Telegram: bir marta bosish mikrofon/video almashadi, bosib turish yozib oladi. */
+const HOLD_TO_RECORD_MS = 260;
+/** Shundan qisqa yozuvlar bekor qilinadi (Telegramdek). */
+const MIN_DURATION_MS = 700;
 
 export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorderProps) {
+  const { toast } = useToast();
+
   const [state, setState] = useState<RecordingState>('idle');
   const [mode, setMode] = useState<RecordingMode>('voice');
   const [duration, setDuration] = useState(0);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [mediaBlob, setMediaBlob] = useState<Blob | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [audioLevels, setAudioLevels] = useState<number[]>(Array(32).fill(4));
   const [isHolding, setIsHolding] = useState(false);
-  
+  const [isLocked, setIsLocked] = useState(false);
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
   const videoPlaybackRef = useRef<HTMLVideoElement>(null);
   const audioPlaybackRef = useRef<HTMLAudioElement>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
-  const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdTriggeredRef = useRef(false);
+  const mediaUrlRef = useRef<string | null>(null);
+  const mimeTypeRef = useRef<string>('audio/webm');
+  const modeRef = useRef<RecordingMode>('voice');
+  const startedAtRef = useRef<number>(0);
+  const autoSendRef = useRef(false);
+  const lockedRef = useRef(false);
+  const cancelledRef = useRef(false);
+
+  const stopVisualization = useCallback(() => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    analyserRef.current = null;
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      void audioContextRef.current.close();
+    }
+    audioContextRef.current = null;
+  }, []);
+
+  const stopTracks = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+  }, []);
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const revokeUrl = useCallback(() => {
+    if (mediaUrlRef.current) {
+      URL.revokeObjectURL(mediaUrlRef.current);
+      mediaUrlRef.current = null;
+    }
+  }, []);
+
+  const cleanup = useCallback(() => {
+    stopTracks();
+    clearTimer();
+    stopVisualization();
+    revokeUrl();
+    mediaRecorderRef.current = null;
+    chunksRef.current = [];
+    setAudioLevels(Array(32).fill(4));
+  }, [stopTracks, clearTimer, stopVisualization, revokeUrl]);
 
   useEffect(() => {
     return () => {
       cleanup();
       if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const cleanup = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-    if (mediaUrl) {
-      URL.revokeObjectURL(mediaUrl);
-    }
-    mediaRecorderRef.current = null;
-    chunksRef.current = [];
-    analyserRef.current = null;
-    setAudioLevels(Array(32).fill(4));
-  }, [mediaUrl]);
+  const resetAll = useCallback(() => {
+    cleanup();
+    setState('idle');
+    setMediaUrl(null);
+    setMediaBlob(null);
+    setDuration(0);
+    setIsPlaying(false);
+    setIsLocked(false);
+    lockedRef.current = false;
+    autoSendRef.current = false;
+    cancelledRef.current = false;
+  }, [cleanup]);
 
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    return mins + ':' + secs.toString().padStart(2, '0');
   };
 
   const getSupportedMimeType = (isVideo: boolean): string => {
     if (isVideo) {
-      const videoTypes = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
-      return videoTypes.find(type => MediaRecorder.isTypeSupported(type)) || 'video/webm';
+      const videoTypes = [
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
+        'video/webm',
+        'video/mp4',
+      ];
+      return videoTypes.find((type) => MediaRecorder.isTypeSupported(type)) || 'video/webm';
     }
-    const audioTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
-    return audioTypes.find(type => MediaRecorder.isTypeSupported(type)) || 'audio/webm';
+    const audioTypes = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/ogg;codecs=opus',
+      'audio/mp4',
+    ];
+    return audioTypes.find((type) => MediaRecorder.isTypeSupported(type)) || 'audio/webm';
   };
 
-  // Real-time audio visualization
+  const extensionFor = (mimeType: string): string => {
+    if (mimeType.includes('mp4')) return 'mp4';
+    if (mimeType.includes('ogg')) return 'ogg';
+    return 'webm';
+  };
+
+  /** Yuklab, chatga jo'natish. Xatolik bo'lsa foydalanuvchi ko'radi va qayta urinishi mumkin. */
+  const uploadAndSend = useCallback(
+    async (blob: Blob, seconds: number, recordMode: RecordingMode) => {
+      if (!blob || blob.size === 0) {
+        toast({
+          variant: 'destructive',
+          title: 'Yozuv bo\u2019sh',
+          description: 'Mikrofon ovoz yozib olmadi. Yana bir marta urinib ko\u2019ring.',
+        });
+        resetAll();
+        return;
+      }
+
+      setState('sending');
+      try {
+        const ext = extensionFor(mimeTypeRef.current);
+        const uploaded = await uploadMedia(blob, {
+          filename: recordMode + '_' + Date.now() + '.' + ext,
+          type: 'chat',
+          visibility: 'public',
+        });
+        onSend(uploaded.url, Math.max(1, seconds), recordMode === 'video' ? 'video' : 'audio');
+        resetAll();
+      } catch (error) {
+        console.error('Media message upload failed:', error);
+        toast({
+          variant: 'destructive',
+          title: 'Jo\u2019natilmadi',
+          description:
+            'Yuklashda xatolik yuz berdi. Internetni tekshirib, qayta jo\u2019natishga urinib ko\u2019ring.',
+        });
+        // Yozuv saqlanadi - foydalanuvchi qayta jo'natishi mumkin
+        setState('preview');
+      }
+    },
+    [onSend, resetAll, toast]
+  );
+
+  // Real vaqtli ovoz vizualizatsiyasi
   const startAudioVisualization = useCallback((stream: MediaStream) => {
     try {
       const audioContext = new AudioContext();
       audioContextRef.current = audioContext;
-      
+
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 64;
       analyser.smoothingTimeConstant = 0.5;
       analyserRef.current = analyser;
-      
+
       const source = audioContext.createMediaStreamSource(stream);
       source.connect(analyser);
-      
+
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      
+
       const updateLevels = () => {
         if (!analyserRef.current) return;
-        
         analyserRef.current.getByteFrequencyData(dataArray);
-        
-        // Map frequency data to waveform bars
+
         const bars = 32;
         const newLevels: number[] = [];
-        const step = Math.floor(dataArray.length / bars);
-        
+        const step = Math.max(1, Math.floor(dataArray.length / bars));
+
         for (let i = 0; i < bars; i++) {
           const startIdx = i * step;
           let sum = 0;
@@ -132,195 +228,232 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
             sum += dataArray[startIdx + j] || 0;
           }
           const avg = sum / step;
-          // Scale to 4-100% height
-          const height = Math.max(4, (avg / 255) * 100);
-          newLevels.push(height);
+          newLevels.push(Math.max(4, (avg / 255) * 100));
         }
-        
+
         setAudioLevels(newLevels);
         animationFrameRef.current = requestAnimationFrame(updateLevels);
       };
-      
+
       updateLevels();
     } catch (error) {
       console.error('Failed to start audio visualization:', error);
     }
   }, []);
 
-  const startRecording = async (recordMode: RecordingMode) => {
-    try {
-      cleanup();
-      setMode(recordMode);
-      setDuration(0);
-      chunksRef.current = [];
-      
-      const isVideo = recordMode === 'video';
-      const constraints: MediaStreamConstraints = isVideo
-        ? { 
-            video: { 
-              facingMode: facingMode, 
-              width: { ideal: 720 }, 
-              height: { ideal: 720 } 
-            }, 
-            audio: { echoCancellation: true, noiseSuppression: true } 
-          }
-        : { audio: { echoCancellation: true, noiseSuppression: true } };
-      
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      streamRef.current = stream;
-      
-      // Start audio visualization for voice recording
-      if (!isVideo) {
-        startAudioVisualization(stream);
-      }
-      
-      // For video, set state first so the video element renders, then attach stream
-      if (isVideo) {
-        setState('recording');
-        // Wait for next frame to ensure video element is mounted
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        
-        if (videoPreviewRef.current) {
-          videoPreviewRef.current.srcObject = stream;
-          videoPreviewRef.current.muted = true;
-          try {
-            await videoPreviewRef.current.play();
-          } catch (playError) {
-            console.warn('Video preview autoplay failed:', playError);
-          }
-        }
-      }
-      
-      const mimeType = getSupportedMimeType(isVideo);
-      const recorder = new MediaRecorder(stream, { mimeType });
-      mediaRecorderRef.current = recorder;
-      
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
-        }
-      };
-      
-      recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        setMediaBlob(blob);
-        setMediaUrl(url);
-        setState('preview');
-        
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach(track => track.stop());
-        }
-        
-        // Stop audio visualization
-        if (animationFrameRef.current) {
-          cancelAnimationFrame(animationFrameRef.current);
-          animationFrameRef.current = null;
-        }
-      };
-      
-      recorder.start(100);
-      
-      // For voice, set state after recorder starts
-      if (!isVideo) {
-        setState('recording');
-      }
-      
-      timerRef.current = setInterval(() => {
-        setDuration(d => d + 1);
-      }, 1000);
-      
-    } catch (error) {
-      console.error('Failed to start recording:', error);
-      cleanup();
-      setState('idle');
-    }
-  };
+  const startRecording = useCallback(
+    async (recordMode: RecordingMode) => {
+      try {
+        cleanup();
+        cancelledRef.current = false;
+        autoSendRef.current = false;
+        modeRef.current = recordMode;
+        setMode(recordMode);
+        setDuration(0);
+        setMediaBlob(null);
+        setMediaUrl(null);
+        chunksRef.current = [];
 
-  const stopRecording = () => {
+        const isVideo = recordMode === 'video';
+        const constraints: MediaStreamConstraints = isVideo
+          ? {
+              video: {
+                facingMode: facingMode,
+                width: { ideal: 720 },
+                height: { ideal: 720 },
+              },
+              audio: { echoCancellation: true, noiseSuppression: true },
+            }
+          : { audio: { echoCancellation: true, noiseSuppression: true } };
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        streamRef.current = stream;
+
+        if (!isVideo) {
+          startAudioVisualization(stream);
+        }
+
+        if (isVideo) {
+          // Video xabar to'liq ekranda - qulflangan holatda yozadi
+          lockedRef.current = true;
+          setIsLocked(true);
+          setState('recording');
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+
+          if (videoPreviewRef.current) {
+            videoPreviewRef.current.srcObject = stream;
+            videoPreviewRef.current.muted = true;
+            try {
+              await videoPreviewRef.current.play();
+            } catch (playError) {
+              console.warn('Video preview autoplay failed:', playError);
+            }
+          }
+        }
+
+        const mimeType = getSupportedMimeType(isVideo);
+        mimeTypeRef.current = mimeType;
+        const recorder = new MediaRecorder(stream, { mimeType });
+        mediaRecorderRef.current = recorder;
+
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) chunksRef.current.push(e.data);
+        };
+
+        recorder.onstop = () => {
+          stopTracks();
+          stopVisualization();
+
+          if (cancelledRef.current) {
+            chunksRef.current = [];
+            return;
+          }
+
+          const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current });
+          const seconds = Math.max(
+            1,
+            Math.round((Date.now() - startedAtRef.current) / 1000)
+          );
+
+          if (autoSendRef.current) {
+            autoSendRef.current = false;
+            setDuration(seconds);
+            void uploadAndSend(blob, seconds, modeRef.current);
+            return;
+          }
+
+          const url = URL.createObjectURL(blob);
+          mediaUrlRef.current = url;
+          setMediaBlob(blob);
+          setMediaUrl(url);
+          setDuration(seconds);
+          setState('preview');
+        };
+
+        recorder.start(100);
+        startedAtRef.current = Date.now();
+
+        if (!isVideo) setState('recording');
+
+        clearTimer();
+        timerRef.current = setInterval(() => {
+          setDuration(Math.round((Date.now() - startedAtRef.current) / 1000));
+        }, 250);
+      } catch (error) {
+        console.error('Failed to start recording:', error);
+        cleanup();
+        setState('idle');
+        setIsLocked(false);
+        lockedRef.current = false;
+        const name = (error as { name?: string } | null)?.name;
+        toast({
+          variant: 'destructive',
+          title:
+            recordMode === 'video'
+              ? 'Kameraga ruxsat yo\u2019q'
+              : 'Mikrofonga ruxsat yo\u2019q',
+          description:
+            name === 'NotAllowedError'
+              ? 'Brauzer sozlamalarida ruxsat berib, qayta urinib ko\u2019ring.'
+              : 'Qurilma topilmadi yoki band. Boshqa ilovalarni yopib ko\u2019ring.',
+        });
+      }
+    },
+    [
+      cleanup,
+      clearTimer,
+      facingMode,
+      startAudioVisualization,
+      stopTracks,
+      stopVisualization,
+      toast,
+      uploadAndSend,
+    ]
+  );
+
+  const stopRecorder = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-  };
+    clearTimer();
+  }, [clearTimer]);
 
-  const cancelRecording = () => {
-    stopRecording();
-    cleanup();
-    setState('idle');
-    setMediaUrl(null);
-    setMediaBlob(null);
-    setDuration(0);
-    onCancel?.();
-  };
-
-  const handleSend = async () => {
-    if (!mediaBlob) return;
-    
-    setIsUploading(true);
-    try {
-      const uploaded = await uploadMedia(mediaBlob, {
-        filename: `${mode}_${Date.now()}.webm`,
-        type: 'chat',
-        visibility: 'public',
+  /** Yozuvni to'xtatib, darhol jo'natish (Telegramdek qo'yib yuborilganda). */
+  const finishAndSend = useCallback(() => {
+    const elapsed = Date.now() - startedAtRef.current;
+    if (elapsed < MIN_DURATION_MS) {
+      cancelledRef.current = true;
+      stopRecorder();
+      resetAll();
+      toast({
+        title: 'Juda qisqa',
+        description: 'Yozish uchun tugmani bosib turing.',
       });
-      onSend(uploaded.url, duration, mode === 'video' ? 'video' : 'audio');
-      
-      cleanup();
-      setState('idle');
-      setMediaUrl(null);
-      setMediaBlob(null);
-      setDuration(0);
-    } catch (error) {
-      console.error('Upload failed:', error);
-    } finally {
-      setIsUploading(false);
+      return;
     }
-  };
+    autoSendRef.current = true;
+    stopRecorder();
+  }, [resetAll, stopRecorder, toast]);
+
+  /** Yozuvni to'xtatib, ko'rib chiqish (preview) holatiga o'tish. */
+  const stopToPreview = useCallback(() => {
+    autoSendRef.current = false;
+    stopRecorder();
+  }, [stopRecorder]);
+
+  const cancelRecording = useCallback(() => {
+    cancelledRef.current = true;
+    stopRecorder();
+    resetAll();
+    onCancel?.();
+  }, [onCancel, resetAll, stopRecorder]);
+
+  const handleSendFromPreview = useCallback(() => {
+    if (!mediaBlob) return;
+    void uploadAndSend(mediaBlob, duration, mode);
+  }, [duration, mediaBlob, mode, uploadAndSend]);
 
   const togglePlayback = () => {
     const element = mode === 'video' ? videoPlaybackRef.current : audioPlaybackRef.current;
     if (!element) return;
-    
+
     if (isPlaying) {
       element.pause();
       element.currentTime = 0;
     } else {
-      element.play();
+      void element.play();
     }
     setIsPlaying(!isPlaying);
   };
 
   const switchCamera = async () => {
     if (state !== 'recording') return;
-    
+
     const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
     setFacingMode(newFacingMode);
-    
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-    }
-    
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: newFacingMode, width: { ideal: 720 }, height: { ideal: 720 } },
-        audio: { echoCancellation: true, noiseSuppression: true }
+        audio: { echoCancellation: true, noiseSuppression: true },
       });
-      
+
+      if (streamRef.current) {
+        streamRef.current.getVideoTracks().forEach((track) => track.stop());
+      }
       streamRef.current = stream;
-      
+
       if (videoPreviewRef.current) {
         videoPreviewRef.current.srcObject = stream;
+        void videoPreviewRef.current.play();
       }
     } catch (error) {
       console.error('Failed to switch camera:', error);
+      toast({ variant: 'destructive', title: 'Kamera almashtirilmadi' });
     }
   };
 
-  /* ---------- Idle button interaction (Telegram behaviour) ---------- */
+  /* ---------- Idle tugma bilan ishlash (Telegram xatti-harakati) ---------- */
 
   const clearHoldTimer = () => {
     if (holdTimerRef.current) {
@@ -330,12 +463,13 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
   };
 
   const handleHoldStart = () => {
+    if (state !== 'idle') return;
     holdTriggeredRef.current = false;
     setIsHolding(true);
     clearHoldTimer();
     holdTimerRef.current = setTimeout(() => {
       holdTriggeredRef.current = true;
-      startRecording(mode);
+      void startRecording(mode);
     }, HOLD_TO_RECORD_MS);
   };
 
@@ -343,8 +477,8 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     setIsHolding(false);
     clearHoldTimer();
     if (!holdTriggeredRef.current) {
-      // Quick tap swaps the mode, exactly like Telegram's mic <-> round-video swap
-      setMode(prev => (prev === 'voice' ? 'video' : 'voice'));
+      // Bir marta bosish rejimni almashtiradi (mikrofon <-> video xabar)
+      setMode((prev) => (prev === 'voice' ? 'video' : 'voice'));
     }
     holdTriggeredRef.current = false;
   };
@@ -355,13 +489,39 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     holdTriggeredRef.current = false;
   };
 
-  // Video Preview Screen
+  /* ---------- Ovoz yozish paytidagi pointer (qo'yib yuborilsa jo'natiladi) ---------- */
+
+  const handleRecordingPointerUp = () => {
+    if (state !== 'recording' || modeRef.current !== 'voice' || lockedRef.current) return;
+    finishAndSend();
+  };
+
+  const lockRecording = () => {
+    lockedRef.current = true;
+    setIsLocked(true);
+  };
+
+  /* ---------------------------- Yuborilmoqda ---------------------------- */
+
+  if (state === 'sending') {
+    return (
+      <div className="flex items-center gap-2 rounded-full bg-muted px-3 py-1.5">
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <span className="text-xs text-muted-foreground">
+          {mode === 'video' ? 'Video xabar' : 'Ovozli xabar'} jo{'\u2019'}natilmoqda...
+        </span>
+      </div>
+    );
+  }
+
+  /* ------------------------- Video: ko'rib chiqish ------------------------- */
+
   if (state === 'preview' && mode === 'video' && mediaUrl) {
     return (
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="fixed inset-0 z-50 bg-black flex flex-col"
+        className="fixed inset-0 z-50 flex flex-col bg-black"
       >
         <video
           ref={videoPlaybackRef}
@@ -371,55 +531,58 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
           loop
           onEnded={() => setIsPlaying(false)}
         />
-        
-        <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 to-transparent safe-area-bottom">
+
+        <div className="safe-area-bottom absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-6">
           <div className="flex items-center justify-center gap-6">
             <Button
               variant="ghost"
               size="icon"
-              className="h-14 w-14 rounded-full bg-destructive/20 text-destructive hover:bg-destructive/30"
+              className="h-14 w-14 rounded-full bg-white/10 text-white hover:bg-white/20"
               onClick={cancelRecording}
+              aria-label="O'chirish"
             >
               <Trash2 className="h-6 w-6" />
             </Button>
-            
+
             <Button
               variant="ghost"
               size="icon"
-              className="h-16 w-16 rounded-full bg-white/10 border-2 border-white/30"
+              className="h-16 w-16 rounded-full border-2 border-white/30 bg-white/10"
               onClick={togglePlayback}
+              aria-label="Ko'rish"
             >
-              {isPlaying ? <Pause className="h-7 w-7 text-white" /> : <Play className="h-7 w-7 text-white ml-1" />}
+              {isPlaying ? (
+                <Pause className="h-7 w-7 text-white" />
+              ) : (
+                <Play className="ml-1 h-7 w-7 text-white" />
+              )}
             </Button>
-            
+
             <Button
               variant="default"
               size="icon"
               className="h-14 w-14 rounded-full bg-primary hover:bg-primary/90"
-              onClick={handleSend}
-              disabled={isUploading}
+              onClick={handleSendFromPreview}
+              aria-label="Jo'natish"
             >
-              {isUploading ? (
-                <div className="h-6 w-6 border-2 border-current border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <Send className="h-6 w-6" />
-              )}
+              <Send className="h-6 w-6" />
             </Button>
           </div>
-          
-          <p className="text-center text-white/60 text-sm mt-4">{formatDuration(duration)}</p>
+
+          <p className="mt-4 text-center text-sm text-white/60">{formatDuration(duration)}</p>
         </div>
       </motion.div>
     );
   }
 
-  // Video Recording Screen
+  /* --------------------------- Video: yozilmoqda --------------------------- */
+
   if (state === 'recording' && mode === 'video') {
     return (
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="fixed inset-0 z-50 bg-black flex flex-col"
+        className="fixed inset-0 z-50 flex flex-col bg-black"
       >
         <video
           ref={videoPreviewRef}
@@ -429,46 +592,59 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
           muted
           autoPlay
         />
-        
-        {/* Recording indicator */}
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-4 py-2 rounded-full safe-area-top">
+
+        {/* Yozish indikatori */}
+        <div className="safe-area-top absolute left-1/2 top-4 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/60 px-4 py-2 backdrop-blur-sm">
           <motion.div
             animate={{ opacity: [1, 0.3, 1] }}
             transition={{ duration: 1, repeat: Infinity }}
             className="h-3 w-3 rounded-full bg-destructive"
           />
-          <span className="text-white font-medium tabular-nums">{formatDuration(duration)}</span>
+          <span className="font-medium tabular-nums text-white">{formatDuration(duration)}</span>
         </div>
-        
-        {/* Camera switch */}
+
+        {/* Kamerani almashtirish */}
         <Button
           variant="ghost"
           size="icon"
-          className="absolute top-4 right-4 h-11 w-11 rounded-full bg-black/60 text-white safe-area-top"
+          className="safe-area-top absolute right-4 top-4 h-11 w-11 rounded-full bg-black/60 text-white"
           onClick={switchCamera}
+          aria-label="Kamerani almashtirish"
         >
           <SwitchCamera className="h-5 w-5" />
         </Button>
-        
-        {/* Controls */}
-        <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 to-transparent safe-area-bottom">
+
+        {/* Boshqaruv */}
+        <div className="safe-area-bottom absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-6">
           <div className="flex items-center justify-center gap-6">
             <Button
               variant="ghost"
               size="icon"
               className="h-14 w-14 rounded-full bg-white/10 text-white hover:bg-white/20"
               onClick={cancelRecording}
+              aria-label="Bekor qilish"
             >
               <X className="h-6 w-6" />
             </Button>
-            
+
             <Button
               variant="default"
               size="icon"
               className="h-16 w-16 rounded-full bg-destructive hover:bg-destructive/90"
-              onClick={stopRecording}
+              onClick={stopToPreview}
+              aria-label="To'xtatish"
             >
               <Square className="h-6 w-6 fill-current" />
+            </Button>
+
+            <Button
+              variant="default"
+              size="icon"
+              className="h-14 w-14 rounded-full bg-primary hover:bg-primary/90"
+              onClick={finishAndSend}
+              aria-label="Darhol jo'natish"
+            >
+              <Send className="h-6 w-6" />
             </Button>
           </div>
         </div>
@@ -476,142 +652,165 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     );
   }
 
-  // Voice Preview
+  /* ------------------------- Ovoz: ko'rib chiqish ------------------------- */
+
   if (state === 'preview' && mode === 'voice' && mediaUrl) {
     return (
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         className="flex items-center gap-2"
       >
-        <audio
-          ref={audioPlaybackRef}
-          src={mediaUrl}
-          onEnded={() => setIsPlaying(false)}
-        />
-        
+        <audio ref={audioPlaybackRef} src={mediaUrl} onEnded={() => setIsPlaying(false)} />
+
         <Button
           variant="ghost"
           size="icon"
           className="h-10 w-10 rounded-full text-destructive hover:bg-destructive/10"
           onClick={cancelRecording}
+          aria-label="O'chirish"
         >
           <Trash2 className="h-5 w-5" />
         </Button>
-        
-        <div className="flex items-center gap-2 bg-muted rounded-full px-3 py-1.5">
+
+        <div className="flex items-center gap-2 rounded-full bg-muted px-3 py-1.5">
           <Button
             variant="ghost"
             size="icon"
             className="h-8 w-8 rounded-full"
             onClick={togglePlayback}
+            aria-label="Eshitish"
           >
-            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
+            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="ml-0.5 h-4 w-4" />}
           </Button>
-          
-          {/* Waveform */}
-          <div className="flex items-center gap-0.5 h-6 w-24">
+
+          {/* To'lqin shakli */}
+          <div className="flex h-6 w-24 items-center gap-0.5">
             {Array.from({ length: 20 }).map((_, i) => (
               <motion.div
                 key={i}
-                className="w-1 bg-primary rounded-full"
-                animate={isPlaying ? {
-                  height: [4, 12 + Math.random() * 10, 4],
-                } : { height: 4 + Math.sin(i * 0.6) * 8 }}
-                transition={isPlaying ? {
-                  duration: 0.3,
-                  repeat: Infinity,
-                  delay: i * 0.03,
-                } : {}}
+                className="w-1 rounded-full bg-primary"
+                animate={
+                  isPlaying
+                    ? { height: [4, 12 + ((i * 7) % 11), 4] }
+                    : { height: 4 + Math.abs(Math.sin(i * 0.6)) * 8 }
+                }
+                transition={
+                  isPlaying ? { duration: 0.4, repeat: Infinity, delay: i * 0.03 } : {}
+                }
               />
             ))}
           </div>
-          
-          <span className="text-xs text-muted-foreground tabular-nums w-10">
+
+          <span className="w-10 text-xs tabular-nums text-muted-foreground">
             {formatDuration(duration)}
           </span>
         </div>
-        
+
         <Button
           variant="default"
           size="icon"
           className="h-10 w-10 rounded-full bg-primary"
-          onClick={handleSend}
-          disabled={isUploading}
+          onClick={handleSendFromPreview}
+          aria-label="Jo'natish"
         >
-          {isUploading ? (
-            <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <Send className="h-4 w-4" />
-          )}
+          <Send className="h-4 w-4" />
         </Button>
       </motion.div>
     );
   }
 
-  // Voice Recording with real-time waveform
+  /* --------------------------- Ovoz: yozilmoqda --------------------------- */
+
   if (state === 'recording' && mode === 'voice') {
     return (
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         className="flex items-center gap-2"
+        onPointerUp={handleRecordingPointerUp}
       >
         <Button
           variant="ghost"
           size="icon"
           className="h-10 w-10 rounded-full text-destructive hover:bg-destructive/10"
           onClick={cancelRecording}
+          aria-label="Bekor qilish"
         >
           <X className="h-5 w-5" />
         </Button>
-        
-        <div className="flex items-center gap-2 bg-muted rounded-full px-3 py-1.5">
+
+        <div className="flex items-center gap-2 rounded-full bg-muted px-3 py-1.5">
           <motion.div
             animate={{ opacity: [1, 0.3, 1] }}
             transition={{ duration: 1, repeat: Infinity }}
-            className="h-3 w-3 rounded-full bg-destructive flex-shrink-0"
+            className="h-3 w-3 flex-shrink-0 rounded-full bg-destructive"
           />
-          
-          {/* Real-time waveform visualization */}
-          <div className="flex items-center gap-[2px] h-8 w-32">
+
+          {/* Real vaqtli to'lqin */}
+          <div className="flex h-8 w-32 items-center gap-[2px]">
             {audioLevels.map((level, i) => (
               <motion.div
                 key={i}
-                className="w-[3px] bg-primary rounded-full"
-                animate={{ height: `${level}%` }}
+                className="w-[3px] rounded-full bg-primary"
+                animate={{ height: level + '%' }}
                 transition={{ duration: 0.05, ease: 'linear' }}
               />
             ))}
           </div>
-          
-          <span className="text-xs text-foreground tabular-nums w-10 flex-shrink-0">
+
+          <span className="w-10 flex-shrink-0 text-xs tabular-nums text-foreground">
             {formatDuration(duration)}
           </span>
+
+          {!isLocked && (
+            <button
+              onClick={lockRecording}
+              title="Qulflash (qo'lni qo'yib yuborsangiz ham yozilishda davom etadi)"
+              aria-label="Qulflash"
+              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-background/70 text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <Lock className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
-        
-        <Button
-          variant="default"
-          size="icon"
-          className="h-10 w-10 rounded-full bg-primary"
-          onClick={handleSend ? stopRecording : stopRecording}
-        >
-          <Square className="h-4 w-4 fill-current" />
-        </Button>
+
+        {isLocked ? (
+          <Button
+            variant="default"
+            size="icon"
+            className="h-10 w-10 rounded-full bg-primary"
+            onClick={finishAndSend}
+            aria-label="Jo'natish"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        ) : (
+          <Button
+            variant="default"
+            size="icon"
+            className="h-10 w-10 rounded-full bg-primary"
+            onClick={stopToPreview}
+            aria-label="To'xtatish"
+          >
+            <Square className="h-4 w-4 fill-current" />
+          </Button>
+        )}
       </motion.div>
     );
   }
 
-  // Idle State - ONE Telegram-style button that swaps between mic and video
+  /* ------------------ Idle: bitta Telegram uslubidagi tugma ------------------ */
+
   return (
     <div className="relative flex items-center">
       <button
         type="button"
-        aria-label={mode === 'voice' ? "Ovozli xabar (bosib turing)" : "Video xabar (bosib turing)"}
+        aria-label={mode === 'voice' ? 'Ovozli xabar (bosib turing)' : 'Video xabar (bosib turing)'}
         title={
           mode === 'voice'
-            ? "Yozish uchun bosib turing \u00b7 video xabarga o'tish uchun bir marta bosing"
-            : "Yozish uchun bosib turing \u00b7 ovozli xabarga o'tish uchun bir marta bosing"
+            ? 'Yozish uchun bosib turing \u00b7 video xabarga o\u2019tish uchun bir marta bosing'
+            : 'Yozish uchun bosib turing \u00b7 ovozli xabarga o\u2019tish uchun bir marta bosing'
         }
         onPointerDown={handleHoldStart}
         onPointerUp={handleHoldEnd}
@@ -637,7 +836,6 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
           </motion.span>
         </AnimatePresence>
 
-        {/* Hold ripple */}
         {isHolding && (
           <motion.span
             initial={{ scale: 0.6, opacity: 0.45 }}
@@ -648,7 +846,6 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         )}
       </button>
 
-      {/* Slide-to-cancel style hint while holding */}
       <AnimatePresence>
         {isHolding && (
           <motion.span
@@ -657,7 +854,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
             exit={{ opacity: 0, x: 6 }}
             className="pointer-events-none absolute right-full mr-2 whitespace-nowrap rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground"
           >
-            Bekor qilish uchun qo'yib yuboring
+            Yozish uchun bosib turing
           </motion.span>
         )}
       </AnimatePresence>
