@@ -1,6 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, CreditCard, Truck, ShieldCheck, ChevronRight, Loader2, CheckCircle, Package, ArrowLeft, Wallet, Banknote, Plus, AlertCircle } from 'lucide-react';
+import {
+  MapPin, CreditCard, Truck, ShieldCheck, ChevronRight, Loader2, CheckCircle,
+  Package, ArrowLeft, Wallet, Banknote, Plus, AlertCircle, AlertTriangle, ShoppingBag,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -9,6 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useCheckout } from '@/hooks/useOrders';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { formatPrice, getShippingCost, checkoutErrorMessage } from '@/lib/marketplace';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -22,29 +26,78 @@ interface CheckoutSheetProps {
 type Step = 'address' | 'payment' | 'review' | 'success' | 'failed';
 type PaymentMethod = 'wallet' | 'card_on_delivery' | 'cash';
 
+const EMPTY_ADDRESS = {
+  full_name: '',
+  phone: '',
+  street: '',
+  city: '',
+  region: '',
+  zip: '',
+};
+
+/** Accepts +998 90 123 45 67 and similar international formats. */
+function isValidPhone(value: string) {
+  const digits = value.replace(/\D/g, '');
+  return digits.length >= 9 && digits.length <= 15;
+}
+
 export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { placeOrder, isProcessing, cartItems, cartTotal } = useCheckout();
   const [step, setStep] = useState<Step>('address');
-  const [address, setAddress] = useState({
-    full_name: '',
-    phone: '',
-    street: '',
-    city: '',
-    region: '',
-    zip: '',
-  });
+  const [address, setAddress] = useState(EMPTY_ADDRESS);
   const [notes, setNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('wallet');
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [walletLoading, setWalletLoading] = useState(false);
+  const [lastResult, setLastResult] = useState<{
+    success?: boolean;
+    order_ids?: string[];
+    payment_status?: string;
+    total?: number;
+    error?: string;
+  } | null>(null);
 
-  const shippingCost = cartItems.reduce((sum, i) => sum + (i.product?.shipping_price || 0), 0);
+  const currency = cartItems[0]?.product?.currency || 'USD';
+
+  /**
+   * Shipping used to be summed once per cart line, ignoring quantity and even
+   * charging delivery for pickup-only products. It is now computed per unit
+   * with the same helper the cart and the order RPC use, so the total the
+   * buyer confirms is the total that gets charged.
+   */
+  const shippingCost = useMemo(
+    () => cartItems.reduce((sum, item) => sum + getShippingCost(item.product, item.quantity), 0),
+    [cartItems],
+  );
   const grandTotal = cartTotal + shippingCost;
 
-  const isAddressValid = address.full_name && address.phone && address.street && address.city;
-  const walletInsufficient = paymentMethod === 'wallet' && walletBalance !== null && walletBalance < grandTotal;
+  const unavailableItems = useMemo(
+    () => cartItems.filter(item =>
+      !item.product ||
+      item.product.status !== 'active' ||
+      Number(item.product.quantity ?? 0) < item.quantity,
+    ),
+    [cartItems],
+  );
+
+  const isAddressValid = Boolean(
+    address.full_name.trim().length >= 3 &&
+    isValidPhone(address.phone) &&
+    address.street.trim().length >= 3 &&
+    address.city.trim().length >= 2,
+  );
+
+  const walletInsufficient =
+    paymentMethod === 'wallet' && walletBalance !== null && walletBalance < grandTotal;
+
+  const canPlaceOrder =
+    !isProcessing &&
+    isAddressValid &&
+    cartItems.length > 0 &&
+    unavailableItems.length === 0 &&
+    !walletInsufficient;
 
   // Fetch wallet balance whenever the sheet opens / user changes
   useEffect(() => {
@@ -65,28 +118,45 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
     return () => { cancelled = true; };
   }, [open, user]);
 
-  const [lastResult, setLastResult] = useState<{ order_ids: string[]; payment_status: string; error?: string } | null>(null);
+  // Always start a fresh flow; a stale success/failed screen used to reappear.
+  useEffect(() => {
+    if (open) {
+      setStep('address');
+      setLastResult(null);
+    }
+  }, [open]);
 
   const handlePlaceOrder = async () => {
-    if (paymentMethod === 'wallet' && walletInsufficient) {
+    if (isProcessing) return;
+
+    if (unavailableItems.length > 0) {
+      toast.error("Savatdagi ba'zi mahsulotlar mavjud emas");
+      return;
+    }
+    if (walletInsufficient) {
       toast.error("Hamyonda mablag' yetarli emas");
       return;
     }
+
     const result = await placeOrder(address, paymentMethod, notes || undefined);
     setLastResult(result);
-    if (result.success) {
-      setStep('success');
-    } else {
-      setStep('failed');
-    }
+    setStep(result?.success ? 'success' : 'failed');
   };
 
-  const handleClose = () => {
-    if (step === 'success') {
-      setStep('address');
-      onSuccess?.();
-    }
+  const resetAndClose = () => {
+    setStep('address');
+    setLastResult(null);
+    setNotes('');
     onOpenChange(false);
+  };
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
+      onOpenChange(true);
+      return;
+    }
+    if (step === 'success') onSuccess?.();
+    resetAndClose();
   };
 
   const goToPaymentSettings = () => {
@@ -94,7 +164,14 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
     navigate('/settings/payment');
   };
 
-  const stepIndex = { address: 0, payment: 1, review: 2, success: 3 }[step];
+  // 'failed' had no entry, which produced an undefined index and a broken bar.
+  const stepIndex: number = {
+    address: 0,
+    payment: 1,
+    review: 2,
+    success: 3,
+    failed: 2,
+  }[step];
 
   const paymentLabel: Record<PaymentMethod, string> = {
     wallet: 'Alsamos Hamyon',
@@ -102,8 +179,10 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
     cash: 'Naqd (yetkazishda)',
   };
 
+  const paidTotal = lastResult?.total ?? grandTotal;
+
   return (
-    <Sheet open={open} onOpenChange={handleClose}>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent side="bottom" className="h-[95vh] p-0 rounded-t-3xl border-t border-border/30 sm:max-w-2xl sm:mx-auto">
         <div className="flex flex-col h-full">
           <SheetHeader className="p-4 border-b border-border/30">
@@ -114,6 +193,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   size="icon"
                   className="h-9 w-9 rounded-xl"
                   onClick={() => setStep(step === 'review' ? 'payment' : 'address')}
+                  aria-label="Orqaga"
                 >
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
@@ -123,14 +203,15 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                 {step === 'payment' && "To'lov usuli"}
                 {step === 'review' && 'Buyurtmani tasdiqlash'}
                 {step === 'success' && 'Buyurtma qabul qilindi!'}
+                {step === 'failed' && "To'lov amalga oshmadi"}
               </SheetTitle>
             </div>
             {step !== 'success' && step !== 'failed' && (
               <div className="flex gap-2 mt-2">
                 {['address', 'payment', 'review'].map((s, i) => (
                   <div key={s} className={cn(
-                    "h-1 flex-1 rounded-full transition-all",
-                    i <= stepIndex ? "bg-primary" : "bg-muted"
+                    'h-1 flex-1 rounded-full transition-all',
+                    i <= stepIndex ? 'bg-primary' : 'bg-muted',
                   )} />
                 ))}
               </div>
@@ -147,12 +228,36 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   exit={{ opacity: 0, x: 20 }}
                   className="p-4 space-y-4"
                 >
+                  {cartItems.length === 0 && (
+                    <div className="flex items-start gap-2 p-3 rounded-xl bg-muted/40 text-sm text-muted-foreground">
+                      <ShoppingBag className="h-4 w-4 mt-0.5 shrink-0" />
+                      <span>Savat bo'sh. Buyurtma berish uchun mahsulot qo'shing.</span>
+                    </div>
+                  )}
+                  {unavailableItems.length > 0 && (
+                    <div className="flex items-start gap-2 p-3 rounded-xl bg-destructive/10 text-destructive text-xs">
+                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                      <span>
+                        {unavailableItems.length} ta mahsulot sotuvda yo'q yoki zaxirasi yetarli emas.
+                        Savatni tahrirlab, keyin davom eting.
+                      </span>
+                    </div>
+                  )}
                   <div className="space-y-3">
                     <Field label="To'liq ism *">
                       <Input value={address.full_name} onChange={e => setAddress(p => ({ ...p, full_name: e.target.value }))} placeholder="Ism Familiya" className="rounded-xl h-11" />
                     </Field>
                     <Field label="Telefon raqam *">
-                      <Input value={address.phone} onChange={e => setAddress(p => ({ ...p, phone: e.target.value }))} placeholder="+998 90 123 45 67" className="rounded-xl h-11" />
+                      <Input
+                        value={address.phone}
+                        onChange={e => setAddress(p => ({ ...p, phone: e.target.value }))}
+                        placeholder="+998 90 123 45 67"
+                        inputMode="tel"
+                        className="rounded-xl h-11"
+                      />
+                      {address.phone.length > 0 && !isValidPhone(address.phone) && (
+                        <p className="text-[11px] text-destructive">Telefon raqam to'liq emas</p>
+                      )}
                     </Field>
                     <Field label="Ko'cha, uy *">
                       <Input value={address.street} onChange={e => setAddress(p => ({ ...p, street: e.target.value }))} placeholder="Ko'cha nomi, uy raqami" className="rounded-xl h-11" />
@@ -185,10 +290,10 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                     type="button"
                     onClick={() => setPaymentMethod('wallet')}
                     className={cn(
-                      "w-full text-left rounded-2xl p-4 border transition-all",
+                      'w-full text-left rounded-2xl p-4 border transition-all',
                       paymentMethod === 'wallet'
-                        ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                        : "border-border/50 hover:border-border bg-muted/20"
+                        ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                        : 'border-border/50 hover:border-border bg-muted/20',
                     )}
                   >
                     <div className="flex items-start gap-3">
@@ -206,7 +311,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                         <div className="mt-2 flex items-center justify-between">
                           <span className="text-xs text-muted-foreground">Mavjud balans</span>
                           <span className="text-sm font-bold tabular-nums">
-                            {walletLoading ? '…' : `$${(walletBalance ?? 0).toLocaleString()}`}
+                            {walletLoading ? '…' : formatPrice(walletBalance ?? 0, currency)}
                           </span>
                         </div>
                       </div>
@@ -309,17 +414,33 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                     {cartItems.map(item => {
                       const product = item.product;
                       if (!product) return null;
-                      const image = product.images?.[0]?.url || 'https://placehold.co/60x60?text=No';
+                      const image = product.images?.[0]?.url;
+                      const itemShipping = getShippingCost(product, item.quantity);
                       return (
                         <div key={item.id} className="flex gap-3 p-2 rounded-xl bg-muted/20">
                           <div className="w-14 h-14 rounded-lg overflow-hidden bg-muted shrink-0">
-                            <img src={image} alt="" className="w-full h-full object-cover" />
+                            {image ? (
+                              <img src={image} alt="" className="w-full h-full object-cover" loading="lazy" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-muted-foreground/40">
+                                <ShoppingBag className="h-4 w-4" />
+                              </div>
+                            )}
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium line-clamp-1">{product.title}</p>
-                            <p className="text-xs text-muted-foreground">{item.quantity} × ${product.price}</p>
+                            <p className="text-xs text-muted-foreground tabular-nums">
+                              {item.quantity} × {formatPrice(product.price, currency)}
+                            </p>
+                            {itemShipping > 0 && (
+                              <p className="text-[11px] text-muted-foreground">
+                                + {formatPrice(itemShipping, currency)} yetkazish
+                              </p>
+                            )}
                           </div>
-                          <p className="text-sm font-bold">${(product.price * item.quantity).toLocaleString()}</p>
+                          <p className="text-sm font-bold tabular-nums">
+                            {formatPrice(product.price * item.quantity, currency)}
+                          </p>
                         </div>
                       );
                     })}
@@ -328,16 +449,18 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   <div className="p-3 rounded-xl bg-muted/30 border border-border/20 space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Mahsulotlar</span>
-                      <span>${cartTotal.toLocaleString()}</span>
+                      <span className="tabular-nums">{formatPrice(cartTotal, currency)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Yetkazib berish</span>
-                      <span>{shippingCost > 0 ? `$${shippingCost.toLocaleString()}` : 'Bepul'}</span>
+                      <span className="tabular-nums">
+                        {shippingCost > 0 ? formatPrice(shippingCost, currency) : 'Bepul'}
+                      </span>
                     </div>
                     <div className="h-px bg-border/30" />
                     <div className="flex justify-between font-bold">
                       <span>Jami</span>
-                      <span className="text-primary text-lg">${grandTotal.toLocaleString()}</span>
+                      <span className="text-primary text-lg tabular-nums">{formatPrice(grandTotal, currency)}</span>
                     </div>
                   </div>
 
@@ -374,13 +497,13 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   </h2>
                   <p className="text-muted-foreground text-sm mb-5 max-w-xs">
                     {lastResult?.payment_status === 'paid'
-                      ? "Hamyondan yechildi. Kvitansiya profilingizga saqlandi."
+                      ? 'Hamyondan yechildi. Kvitansiya buyurtmalar bo\'limida saqlandi.'
                       : "Yetkazganda to'lang. Sotuvchi tayyorlashni boshladi."}
                   </p>
                   <div className="w-full rounded-2xl border border-border/50 bg-muted/20 p-4 mb-5 text-left">
                     <div className="flex justify-between text-sm mb-2">
                       <span className="text-muted-foreground">Buyurtmalar</span>
-                      <span className="font-semibold">{lastResult?.order_ids.length ?? 0}</span>
+                      <span className="font-semibold tabular-nums">{lastResult?.order_ids?.length ?? 0}</span>
                     </div>
                     <div className="flex justify-between text-sm mb-2">
                       <span className="text-muted-foreground">To'lov usuli</span>
@@ -388,15 +511,22 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Umumiy</span>
-                      <span className="font-bold text-primary">${grandTotal.toLocaleString()}</span>
+                      <span className="font-bold text-primary tabular-nums">{formatPrice(paidTotal, currency)}</span>
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 w-full">
-                    <Button className="rounded-xl h-11" onClick={() => { onOpenChange(false); onSuccess?.(); navigate('/marketplace?tab=orders'); }}>
+                    <Button
+                      className="rounded-xl h-11"
+                      onClick={() => { onSuccess?.(); resetAndClose(); navigate('/marketplace?tab=orders'); }}
+                    >
                       <Package className="h-4 w-4 mr-2" />
                       Buyurtmalarim
                     </Button>
-                    <Button variant="ghost" className="rounded-xl h-11" onClick={handleClose}>
+                    <Button
+                      variant="ghost"
+                      className="rounded-xl h-11"
+                      onClick={() => { onSuccess?.(); resetAndClose(); }}
+                    >
                       Yopish
                     </Button>
                   </div>
@@ -413,21 +543,21 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   <div className="w-20 h-20 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
                     <AlertCircle className="h-10 w-10 text-destructive" />
                   </div>
-                  <h2 className="text-xl font-bold mb-1">To'lov amalga oshmadi</h2>
+                  <h2 className="text-xl font-bold mb-1">Buyurtma amalga oshmadi</h2>
                   <p className="text-muted-foreground text-sm mb-5 max-w-xs">
-                    {lastResult?.error || "Kutilmagan xatolik yuz berdi. Iltimos, qayta urinib ko'ring."}
+                    {checkoutErrorMessage(lastResult?.error)}
                   </p>
                   <div className="flex flex-col gap-2 w-full">
                     <Button className="rounded-xl h-11" onClick={() => setStep('review')}>
                       Qayta urinish
                     </Button>
-                    {paymentMethod === 'wallet' && (
+                    {(paymentMethod === 'wallet' || lastResult?.error === 'insufficient_balance') && (
                       <Button variant="outline" className="rounded-xl h-11" onClick={goToPaymentSettings}>
                         <Wallet className="h-4 w-4 mr-2" />
                         Hamyonni to'ldirish
                       </Button>
                     )}
-                    <Button variant="ghost" className="rounded-xl h-11" onClick={() => onOpenChange(false)}>
+                    <Button variant="ghost" className="rounded-xl h-11" onClick={resetAndClose}>
                       Yopish
                     </Button>
                   </div>
@@ -441,7 +571,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
               {step === 'address' && (
                 <Button
                   className="w-full h-12 rounded-xl text-sm font-semibold shadow-lg shadow-primary/20"
-                  disabled={!isAddressValid}
+                  disabled={!isAddressValid || cartItems.length === 0 || unavailableItems.length > 0}
                   onClick={() => setStep('payment')}
                 >
                   Davom etish
@@ -461,13 +591,13 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
               {step === 'review' && (
                 <Button
                   className="w-full h-12 rounded-xl text-sm font-semibold shadow-lg shadow-primary/20"
-                  disabled={isProcessing || walletInsufficient}
+                  disabled={!canPlaceOrder}
                   onClick={handlePlaceOrder}
                 >
                   {isProcessing ? (
                     <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Buyurtma berilmoqda...</>
                   ) : (
-                    <>Buyurtma berish — ${grandTotal.toLocaleString()}</>
+                    <>Buyurtma berish — {formatPrice(grandTotal, currency)}</>
                   )}
                 </Button>
               )}
@@ -498,10 +628,10 @@ function PaymentOption({
       type="button"
       onClick={onSelect}
       className={cn(
-        "w-full text-left rounded-2xl p-4 border transition-all",
+        'w-full text-left rounded-2xl p-4 border transition-all',
         active
-          ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-          : "border-border/50 hover:border-border bg-muted/20"
+          ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+          : 'border-border/50 hover:border-border bg-muted/20',
       )}
     >
       <div className="flex items-center gap-3">
