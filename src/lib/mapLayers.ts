@@ -1,96 +1,72 @@
-/** Xarita qatlamlari va ustama qatlamlar (Yandex/Google uslubidagi almashtirgich uchun). */
+/**
+ * Xarita qatlamlari (Yandexdagi "Xarita / Sputnik / Gibrid" almashtirgichi).
+ * Diqqat: URL manzillar bo'laklardan yig'iladi - platsholderlar ({s}, {z})
+ * bilan aralashib ketmasligi uchun.
+ */
 
-// Diqqat: tile manzillari `{z}/{x}/{y}` shablonlarini o'z ichiga oladi, shu
-// sababli ular bo'laklardan yig'iladi - hech qanday shablon almashtirilmasin.
-const HTTPS = 'https' + '://';
+const H = 'https://';
+
+const OSM_URL = H + '{s}' + '.tile.openstreetmap.org/{z}/{x}/{y}.png';
+const ESRI_URL =
+  H + 'server.arcgisonline.com' + '/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+const CARTO_LABELS_URL = H + '{s}' + '.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png';
+const CARTO_DARK_URL = H + '{s}' + '.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+const TRANSIT_URL = H + 'tileserver.memomaps.de' + '/tilegen/{z}/{x}/{y}.png';
+const CYCLE_URL = H + '{s}' + '.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png';
+
+const OSM_ATTR = 'OpenStreetMap';
+const ESRI_ATTR = 'Esri, Maxar, Earthstar Geographics';
+const CARTO_ATTR = 'OpenStreetMap, CARTO';
+
+export type MapLayerId = 'map' | 'satellite' | 'hybrid' | 'night';
 
 export interface MapLayerDef {
-  id: 'map' | 'satellite' | 'hybrid' | 'night';
+  id: MapLayerId;
   label: string;
-  emoji: string;
   url: string;
   attribution: string;
   maxZoom: number;
-  /** Gibrid rejim uchun yozuvlar (label) qatlami. */
+  /** Sputnik ustiga yozuvlar qatlami (gibrid rejim uchun). */
   labelsUrl?: string;
+  /** Tungi rejim - UI ni qorayadi. */
   dark?: boolean;
 }
 
-const OSM_URL = HTTPS + '{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-const ESRI_URL =
-  HTTPS + 'server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-const CARTO_LABELS = HTTPS + '{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png';
-const CARTO_DARK = HTTPS + '{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-const TRANSIT_URL = HTTPS + 'tileserver.memomaps.de/tilegen/{z}/{x}/{y}.png';
-const CYCLE_URL = HTTPS + '{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png';
-
 export const MAP_LAYERS: MapLayerDef[] = [
-  {
-    id: 'map',
-    label: 'Xarita',
-    emoji: '\ud83d\uddfa\ufe0f',
-    url: OSM_URL,
-    attribution: '\u00a9 OpenStreetMap',
-    maxZoom: 19,
-  },
-  {
-    id: 'satellite',
-    label: 'Sputnik',
-    emoji: '\ud83d\udef0\ufe0f',
-    url: ESRI_URL,
-    attribution: 'Esri, Maxar, Earthstar Geographics',
-    maxZoom: 19,
-  },
+  { id: 'map', label: 'Xarita', url: OSM_URL, attribution: OSM_ATTR, maxZoom: 19 },
+  { id: 'satellite', label: 'Sputnik', url: ESRI_URL, attribution: ESRI_ATTR, maxZoom: 19 },
   {
     id: 'hybrid',
     label: 'Gibrid',
-    emoji: '\ud83c\udf10',
     url: ESRI_URL,
-    attribution: 'Esri, \u00a9 OpenStreetMap',
+    attribution: ESRI_ATTR,
     maxZoom: 19,
-    labelsUrl: CARTO_LABELS,
+    labelsUrl: CARTO_LABELS_URL,
   },
-  {
-    id: 'night',
-    label: 'Tungi',
-    emoji: '\ud83c\udf19',
-    url: CARTO_DARK,
-    attribution: '\u00a9 OpenStreetMap, \u00a9 CARTO',
-    maxZoom: 20,
-    dark: true,
-  },
+  { id: 'night', label: 'Tungi', url: CARTO_DARK_URL, attribution: CARTO_ATTR, maxZoom: 19, dark: true },
 ];
 
+export type MapOverlayId = 'transit' | 'cycle' | 'stops';
+
 export interface MapOverlayDef {
-  id: 'transit' | 'cycle' | 'stops';
+  id: MapOverlayId;
   label: string;
-  hint?: string;
+  /** Tile qatlami bo'lmagan ustamalar (masalan bekatlar) uchun bo'sh. */
   url?: string;
   attribution?: string;
+  opacity?: number;
 }
 
 export const MAP_OVERLAYS: MapOverlayDef[] = [
-  {
-    id: 'transit',
-    label: 'Jamoat transporti',
-    hint: 'Avtobus, trolleybus va metro liniyalari',
-    url: TRANSIT_URL,
-    attribution: '\u00a9 memomaps.de, OpenStreetMap',
-  },
-  {
-    id: 'cycle',
-    label: 'Velosiped yo\u2018llari',
-    hint: 'Velosiped infratuzilmasi',
-    url: CYCLE_URL,
-    attribution: 'CyclOSM, OpenStreetMap',
-  },
-  {
-    id: 'stops',
-    label: 'Bekatlar',
-    hint: 'Atrofdagi bekatlarni xaritada ko\u2018rsatish',
-  },
+  { id: 'transit', label: 'Jamoat transporti', url: TRANSIT_URL, attribution: OSM_ATTR, opacity: 0.9 },
+  { id: 'cycle', label: 'Velosiped yo\u2018llari', url: CYCLE_URL, attribution: OSM_ATTR, opacity: 0.8 },
+  { id: 'stops', label: 'Bekatlar' },
 ];
 
-export function getLayer(id: string): MapLayerDef {
+export function getLayer(id: MapLayerId | string | null | undefined): MapLayerDef {
   return MAP_LAYERS.find((layer) => layer.id === id) ?? MAP_LAYERS[0];
+}
+
+export function getOverlay(id: string): MapOverlayDef | undefined {
+  return MAP_OVERLAYS.find((overlay) => overlay.id === id);
 }
