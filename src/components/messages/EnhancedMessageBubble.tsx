@@ -25,6 +25,8 @@ import { MessageContent } from './MessageContent';
 import { SharedPostPreview } from './SharedPostPreview';
 import { StoryReplyPreview } from './StoryReplyPreview';
 import { CallHistoryMessage, CallHistoryData } from './CallHistoryMessage';
+import { BubbleTail } from './BubbleTail';
+import { StickerMessage } from './StickerMessage';
 import { getEmojiOnlyInfo } from '@/lib/emojiOnly';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -374,6 +376,12 @@ export function EnhancedMessageBubble({
 
   const isVoiceMessage = message.media_type === 'audio' && message.media_url;
 
+  /** Stiker va GIF - alohida media turlari, fonsiz ko'rinadi (Telegramdek) */
+  const stickerKind: 'sticker' | 'gif' | null =
+    message.media_url && (message.media_type === 'sticker' || message.media_type === 'gif')
+      ? (message.media_type as 'sticker' | 'gif')
+      : null;
+
   const isCallHistoryMessage = message.media_type === 'call_history';
   const parseCallHistory = (): CallHistoryData | null => {
     if (!isCallHistoryMessage || !message.content) return null;
@@ -465,6 +473,13 @@ export function EnhancedMessageBubble({
       ? getEmojiOnlyInfo(message.content)
       : null;
 
+  /**
+   * Dumcha (tail) Telegramdagidek faqat ketma-ket xabarlarning ENG OXIRGISIDA
+   * chiziladi: kelgan xabarlarda avatar ko'rinadigan qatorga, o'z xabarlarimda
+   * har doim (chunki ular guruhda ham o'ng chekkada turadi).
+   */
+  const showTail = isMine || showAvatar;
+
   const renderStatusRow = (transparent = false) => (
     <div
       className={cn(
@@ -515,99 +530,119 @@ export function EnhancedMessageBubble({
       );
     }
 
+    // Stiker / GIF - karta va dumchasiz, faqat mediasi ko'rinadi
+    if (stickerKind && message.media_url) {
+      return (
+        <div className={cn('flex flex-col', isMine ? 'items-end' : 'items-start')}>
+          <StickerMessage url={message.media_url} kind={stickerKind} />
+          {renderStatusRow(true)}
+        </div>
+      );
+    }
+
     return (
-      <div
-        className={cn(
-          'relative min-w-0 max-w-full overflow-hidden rounded-2xl px-3.5 py-2',
-          isMine
-            ? 'rounded-br-md bg-primary text-primary-foreground'
-            : 'rounded-bl-md border border-border bg-card text-card-foreground',
-          message.status === 'failed' && 'border-destructive bg-destructive/20'
-        )}
-        style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
-      >
-        {message.forwarded_from && (
-          <div className="mb-1 flex items-center gap-1 text-xs opacity-70">
-            <Forward className="h-3 w-3 shrink-0" />
-            <span className="truncate">
-              Yo'naltirilgan: {message.forwarded_from.sender_name}
-            </span>
-          </div>
+      <div className="relative min-w-0 max-w-full">
+        {/* Telegramdek dumcha: jo'natuvchi tomonda, karta fonining aynan rangida */}
+        {showTail && (
+          <BubbleTail isMine={isMine} failed={message.status === 'failed'} />
         )}
 
-        {(isGroup || showSender) &&
-          !isMine &&
-          message.sender &&
-          (senderProfilePath && !isPreview ? (
-            <Link
-              to={senderProfilePath}
-              onClick={(e) => e.stopPropagation()}
-              className="mb-1 block truncate text-xs font-semibold text-primary hover:underline"
-            >
-              {senderLabel}
-            </Link>
-          ) : (
-            <p className="mb-1 truncate text-xs font-semibold text-primary">{senderLabel}</p>
-          ))}
+        <div
+          className={cn(
+            'relative z-[1] min-w-0 max-w-full overflow-hidden rounded-2xl px-3.5 py-2',
+            isMine
+              ? 'rounded-br-[6px] bg-primary text-primary-foreground'
+              : 'rounded-bl-[6px] border border-border bg-card text-card-foreground',
+            !showTail && (isMine ? 'rounded-br-2xl' : 'rounded-bl-2xl'),
+            message.status === 'failed' && 'border-destructive bg-destructive/20'
+          )}
+          style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
+        >
+          {message.forwarded_from && (
+            <div className="mb-1 flex items-center gap-1 text-xs opacity-70">
+              <Forward className="h-3 w-3 shrink-0" />
+              <span className="truncate">
+                Yo'naltirilgan: {message.forwarded_from.sender_name}
+              </span>
+            </div>
+          )}
 
-        {message.is_deleted ? (
-          <p className="text-sm italic opacity-50">Xabar o'chirilgan</p>
-        ) : isLocationMessage && locationData ? (
-          <LocationMessage
-            latitude={locationData.latitude}
-            longitude={locationData.longitude}
-            address={locationData.address}
-            isMine={isMine}
-            senderName={message.sender?.display_name || undefined}
-          />
-        ) : (
-          <>
-            {message.story_id && <StoryReplyPreview storyId={message.story_id} isMine={isMine} />}
-            {message.shared_post_id && (
-              <SharedPostPreview postId={message.shared_post_id} isMine={isMine} />
-            )}
-            {isVoiceMessage ? (
-              <VoiceMessagePlayer
-                url={message.media_url!}
-                isMine={isMine}
-                autoPlay={false}
-                messageId={message.id}
-                senderName={
-                  message.sender?.display_name || message.sender?.username || undefined
-                }
-                allMediaTracks={isPreview ? [] : allMediaTracks}
-              />
+          {(isGroup || showSender) &&
+            !isMine &&
+            message.sender &&
+            (senderProfilePath && !isPreview ? (
+              <Link
+                to={senderProfilePath}
+                onClick={(e) => e.stopPropagation()}
+                className="mb-1 block truncate text-xs font-semibold text-primary hover:underline"
+              >
+                {senderLabel}
+              </Link>
             ) : (
-              <>
-                {message.content && !message.content.startsWith('[') && !message.shared_post_id && (
-                  <div className="chat-selectable">
-                    <MessageContent content={message.content} isMine={isMine} />
-                  </div>
-                )}
-                {message.media_url && message.media_type && (
-                  <div
-                    className={cn(
-                      'min-w-0 max-w-full',
-                      message.content ? 'mt-2' : '-mx-1.5 -mt-0.5'
-                    )}
-                  >
-                    <MessageAttachment
-                      url={message.media_url}
-                      type={message.media_type as 'image' | 'video' | 'audio' | 'document'}
-                      isMine={isMine}
-                      autoPlay={false}
-                      senderName={
-                        message.sender?.display_name || message.sender?.username || undefined
-                      }
-                    />
-                  </div>
-                )}
-              </>
-            )}
-          </>
-        )}
+              <p className="mb-1 truncate text-xs font-semibold text-primary">{senderLabel}</p>
+            ))}
 
-        {renderStatusRow()}
+          {message.is_deleted ? (
+            <p className="text-sm italic opacity-50">Xabar o'chirilgan</p>
+          ) : isLocationMessage && locationData ? (
+            <LocationMessage
+              latitude={locationData.latitude}
+              longitude={locationData.longitude}
+              address={locationData.address}
+              isMine={isMine}
+              senderName={message.sender?.display_name || undefined}
+            />
+          ) : (
+            <>
+              {message.story_id && <StoryReplyPreview storyId={message.story_id} isMine={isMine} />}
+              {message.shared_post_id && (
+                <SharedPostPreview postId={message.shared_post_id} isMine={isMine} />
+              )}
+              {isVoiceMessage ? (
+                <VoiceMessagePlayer
+                  url={message.media_url!}
+                  isMine={isMine}
+                  autoPlay={false}
+                  messageId={message.id}
+                  senderName={
+                    message.sender?.display_name || message.sender?.username || undefined
+                  }
+                  allMediaTracks={isPreview ? [] : allMediaTracks}
+                />
+              ) : (
+                <>
+                  {message.content &&
+                    !message.content.startsWith('[') &&
+                    !message.shared_post_id && (
+                      <div className="chat-selectable">
+                        <MessageContent content={message.content} isMine={isMine} />
+                      </div>
+                    )}
+                  {message.media_url && message.media_type && (
+                    <div
+                      className={cn(
+                        'min-w-0 max-w-full',
+                        message.content ? 'mt-2' : '-mx-1.5 -mt-0.5'
+                      )}
+                    >
+                      <MessageAttachment
+                        url={message.media_url}
+                        type={message.media_type as 'image' | 'video' | 'audio' | 'document'}
+                        isMine={isMine}
+                        autoPlay={false}
+                        senderName={
+                          message.sender?.display_name || message.sender?.username || undefined
+                        }
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
+
+          {renderStatusRow()}
+        </div>
       </div>
     );
   };
@@ -668,7 +703,7 @@ export function EnhancedMessageBubble({
       <div
         ref={bubbleRef}
         className={cn(
-          'chat-no-select tg-swipe animate-tg-message-in group relative -mx-2 flex overflow-hidden rounded-lg px-2 py-0.5',
+          'chat-no-select tg-swipe animate-tg-message-in group relative -mx-2 flex rounded-lg px-2 py-0.5',
           isMine ? 'justify-end' : 'justify-start',
           isSelectionMode && 'cursor-pointer hover:bg-primary/5',
           isSelected && 'bg-primary/10'
@@ -720,7 +755,7 @@ export function EnhancedMessageBubble({
         {/* Surib javob berish belgisi */}
         <div
           className={cn(
-            'absolute top-1/2 flex -translate-y-1/2 items-center justify-center',
+            'absolute top-1/2 flex -translate-y-1/2 items-center justify-center overflow-hidden',
             isMine ? 'right-0' : 'left-0'
           )}
           style={{
