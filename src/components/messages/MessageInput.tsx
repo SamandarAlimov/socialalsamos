@@ -7,7 +7,6 @@ import {
   FileText,
   Film,
   Loader2,
-  Type,
   ShieldAlert,
   Music2,
   BookOpen,
@@ -18,7 +17,7 @@ import { TelegramMediaRecorder } from './TelegramMediaRecorder';
 import { TelegramAttachSheet } from './TelegramAttachSheet';
 import { ScheduleMessageDialog } from './ScheduleMessageDialog';
 import { MentionAutocomplete } from '@/components/MentionAutocomplete';
-import { FormatToolbar } from '@/components/chat/FormatToolbar';
+import { SelectionFormatMenu } from '@/components/chat/SelectionFormatMenu';
 import { ArticleComposer } from '@/components/chat/ArticleComposer';
 import { useMentionInput } from '@/hooks/useMentionInput';
 import { wrapSelection } from '@/lib/messageFormat';
@@ -113,7 +112,6 @@ export function MessageInput({
   const [message, setMessage] = useState('');
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
   const [pendingAlbum, setPendingAlbum] = useState<AlbumItem[] | null>(null);
-  const [showFormatting, setShowFormatting] = useState(false);
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const [showArticleComposer, setShowArticleComposer] = useState(false);
   const [attachmentOpen, setAttachmentOpen] = useState(false);
@@ -213,7 +211,7 @@ export function MessageInput({
     resetInputHeight();
   };
 
-  /** Telegramdek klaviatura qisqartmalari: Ctrl/Cmd + B / I / U / K */
+  /** Telegramdek klaviatura qisqartmalari */
   const applyShortcut = (marker: string, markerEnd?: string) => {
     const el = inputRef.current;
     if (!el) return;
@@ -234,6 +232,26 @@ export function MessageInput({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.ctrlKey || e.metaKey) {
       const key = e.key.toLowerCase();
+
+      // Ctrl+Shift+... - Telegram Desktopdagi qo'shimcha formatlar
+      if (e.shiftKey) {
+        if (key === 'x') {
+          e.preventDefault();
+          applyShortcut('~~');
+          return;
+        }
+        if (key === 'm') {
+          e.preventDefault();
+          applyShortcut('`');
+          return;
+        }
+        if (key === 'p') {
+          e.preventDefault();
+          applyShortcut('||');
+          return;
+        }
+      }
+
       if (key === 'b') {
         e.preventDefault();
         applyShortcut('**');
@@ -719,7 +737,7 @@ export function MessageInput({
             rows={1}
             className={cn(
               'chat-selectable block w-full resize-none rounded-[20px] border border-border bg-muted/50',
-              'px-3.5 py-[9px] pr-[70px] text-[15px] leading-[22px]',
+              'px-3.5 py-[9px] pr-11 text-[15px] leading-[22px]',
               'focus:outline-none focus:ring-2 focus:ring-primary/40',
               'min-h-[40px] max-h-[140px] scrollbar-hide',
               disabled && 'cursor-not-allowed opacity-50'
@@ -737,22 +755,11 @@ export function MessageInput({
             />
           )}
 
-          {/* Formatlash va emoji - matn o'sganda ham pastda, bir chiziqda qoladi */}
-          <div className="absolute bottom-1 right-1.5 flex items-center gap-0.5">
-            <button
-              type="button"
-              onClick={() => setShowFormatting((v) => !v)}
-              aria-label="Matnni formatlash"
-              title="Matnni formatlash (Ctrl+B / Ctrl+I / Ctrl+U / Ctrl+K)"
-              className={cn(
-                'flex h-8 w-8 items-center justify-center rounded-full tg-transition',
-                showFormatting
-                  ? 'bg-muted text-foreground'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              )}
-            >
-              <Type className="h-[18px] w-[18px]" />
-            </button>
+          {/* Telegramdek: matn TANLANGANDA suzuvchi formatlash menyusi chiqadi */}
+          <SelectionFormatMenu targetRef={inputRef} value={message} onChange={setMessage} />
+
+          {/* Emoji - matn o'sganda ham pastda, bir chiziqda qoladi */}
+          <div className="absolute bottom-1 right-1.5 flex items-center">
             <EmojiPicker
               onSelect={(emoji) => setMessage((prev) => prev + emoji)}
               className="h-8 w-8 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -832,16 +839,6 @@ export function MessageInput({
           void handleSendArticle(payload);
         }}
       />
-
-      {/* Formatlash paneli */}
-      {showFormatting && (
-        <FormatToolbar
-          targetRef={inputRef}
-          value={message}
-          onChange={setMessage}
-          className="mt-2 px-1"
-        />
-      )}
     </div>
   );
 }
