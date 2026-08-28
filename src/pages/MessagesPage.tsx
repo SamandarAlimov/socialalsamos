@@ -57,7 +57,6 @@ import { MessageRequestBanner } from '@/components/messages/MessageRequestBanner
 import { useChannels, Channel } from '@/hooks/useChannels';
 import { ChannelView } from '@/components/channels/ChannelView';
 import { CreateChannelDialog } from '@/components/channels/CreateChannelDialog';
-import { ChannelCard } from '@/components/channels/ChannelCard';
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -149,32 +148,50 @@ export default function MessagesPage() {
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [unreadIncomingCount, setUnreadIncomingCount] = useState(0);
   const lastMessageIdRef = useRef<string | null>(null);
+  const markedReadRef = useRef<Set<string>>(new Set());
 
   const isArchivedTab = activeTab === 'archived';
   const isSearching = searchQuery.trim().length > 0;
 
+  // Chat ro'yxati bir marta yuklanadi: bo'limlar almashganda qayta so'rov ketmaydi
   const {
-    conversations,
-    isLoading: conversationsLoading,
+    conversations: activeConversations,
+    isLoading: activeLoading,
     createPrivateConversation,
     createGroup,
-    refresh: refreshConversations,
-  } = useConversations(
-    activeTab === 'private'
-      ? 'private'
-      : activeTab === 'groups'
-        ? 'group'
-        : activeTab === 'channels'
-          ? 'channel'
-          : undefined,
-    isArchivedTab
-  );
+    refresh: refreshActive,
+  } = useConversations(undefined, false);
 
-  const { conversations: allConversations } = useConversations(undefined, false);
+  const {
+    conversations: archivedConversations,
+    isLoading: archivedLoading,
+    refresh: refreshArchived,
+  } = useConversations(undefined, true);
+
+  const allConversations = activeConversations;
+
+  const refreshConversations = useCallback(() => {
+    void refreshActive();
+    void refreshArchived();
+  }, [refreshActive, refreshArchived]);
+
+  const conversationsLoading = isArchivedTab ? archivedLoading : activeLoading;
+
+  // Bo'lim filtri mijoz tomonida bajariladi (tez almashish uchun)
+  const tabConversations = useMemo<Conversation[]>(() => {
+    const source = isArchivedTab ? archivedConversations : activeConversations;
+    if (activeTab === 'private') return source.filter((c) => c.type === 'private');
+    if (activeTab === 'groups') return source.filter((c) => c.type === 'group');
+    if (activeTab === 'channels') return source.filter((c) => c.type === 'channel');
+    return source;
+  }, [activeTab, isArchivedTab, activeConversations, archivedConversations]);
 
   const {
     messages,
     isLoading: messagesLoading,
+    isLoadingMore: messagesLoadingMore,
+    hasMore: hasMoreMessages,
+    loadOlder: loadOlderMessages,
     typingUsers,
     sendMessage,
     editMessage,
@@ -194,13 +211,7 @@ export default function MessagesPage() {
 
   const { getOrCreateSelfChat, isCreating: isCreatingSelfChat } = useSelfChat();
 
-  const {
-    channels: channelsList,
-    isLoading: channelsLoading,
-    createChannel,
-    joinChannel,
-    leaveChannel,
-  } = useChannels();
+  const { createChannel } = useChannels();
 
   const {
     currentCall,
@@ -263,7 +274,7 @@ export default function MessagesPage() {
   useEffect(() => {
     const conversationId = searchParams.get('conversation');
     if (conversationId && !selectedConversation) {
-      const conv = conversations.find((c) => c.id === conversationId);
+      const conv = allConversations.find((c) => c.id === conversationId);
       if (conv) {
         setSelectedConversation(conv);
         setSearchParams({}, { replace: true });
@@ -272,7 +283,7 @@ export default function MessagesPage() {
         fetchConversationById(conversationId);
       }
     }
-  }, [searchParams, conversations, selectedConversation, conversationsLoading]);
+  }, [searchParams, allConversations, selectedConversation, conversationsLoading]);
 
   const fetchConversationById = async (conversationId: string) => {
     try {
@@ -331,7 +342,6 @@ export default function MessagesPage() {
       doScroll();
       requestAnimationFrame(doScroll);
       setTimeout(doScroll, 120);
-      setTimeout(doScroll, 350);
     });
   }, []);
 
@@ -343,6 +353,7 @@ export default function MessagesPage() {
       setUnreadIncomingCount(0);
       setShowScrollToBottom(false);
       lastMessageIdRef.current = null;
+      markedReadRef.current = new Set();
       scrollToBottom(false);
     }
   }, [selectedConversation?.id, scrollToBottom]);
@@ -360,12 +371,14 @@ export default function MessagesPage() {
       setUnreadIncomingCount((c) => c + 1);
     }
 
+    // Faqat hali belgilanmagan xabarlar uchun so'rov yuboriladi
     if (user) {
-      const otherUserMessages = messages
-        .filter((m) => m.sender_id !== user.id)
+      const fresh = messages
+        .filter((m) => m.sender_id !== user.id && !markedReadRef.current.has(m.id))
         .map((m) => m.id);
-      if (otherUserMessages.length > 0) {
-        markAsRead(otherUserMessages);
+      if (fresh.length > 0) {
+        for (const id of fresh) markedReadRef.current.add(id);
+        markAsRead(fresh);
       }
     }
   }, [messages, markAsRead, user, scrollToBottom]);
@@ -390,7 +403,20 @@ export default function MessagesPage() {
     isAtBottomRef.current = atBottom;
     setShowScrollToBottom(distanceFromBottom > 240);
     if (atBottom) setUnreadIncomingCount(0);
-  }, []);
+
+    // Telegramdek: yuqoriga yetganda eski xabarlar sahifasi yuklanadi
+    if (el.scrollTop < 160 && hasMoreMessages && !messagesLoadingMore) {
+      const prevHeight = el.scrollHeight;
+      const prevTop = el.scrollTop;
+      void loadOlderMessages().then(() => {
+        requestAnimationFrame(() => {
+          const next = messagesScrollRef.current;
+          if (!next) return;
+          next.scrollTop = next.scrollHeight - prevHeight + prevTop;
+        });
+      });
+    }
+  }, [hasMoreMessages, messagesLoadingMore, loadOlderMessages]);
 
   const handleScrollToBottomClick = useCallback(() => {
     isAtBottomRef.current = true;
@@ -454,28 +480,32 @@ export default function MessagesPage() {
     [allConversations]
   );
 
-  const filteredConversations = conversations.filter((conv) => {
-    const isReq = Boolean((conv as any).is_request);
-    if (activeTab === 'requests') {
-      if (!isReq) return false;
-    } else if (isReq) {
-      return false;
-    }
+  const filteredConversations = useMemo(
+    () =>
+      tabConversations.filter((conv) => {
+        const isReq = Boolean((conv as any).is_request);
+        if (activeTab === 'requests') {
+          if (!isReq) return false;
+        } else if (isReq) {
+          return false;
+        }
 
-    // Papka filtri (arxiv va so'rovlar bo'limiga ta'sir qilmaydi)
-    if (folderFilter && activeTab !== 'requests' && activeTab !== 'archived') {
-      const matches = folderFilter({
-        id: conv.id,
-        type: conv.type,
-        unreadCount: conv.unread_count ?? 0,
-        isMuted: Boolean(conv.is_muted),
-        isPinned: Boolean(conv.is_pinned),
-      });
-      if (!matches) return false;
-    }
+        // Papka filtri (arxiv va so'rovlar bo'limiga ta'sir qilmaydi)
+        if (folderFilter && activeTab !== 'requests' && activeTab !== 'archived') {
+          const matches = folderFilter({
+            id: conv.id,
+            type: conv.type,
+            unreadCount: conv.unread_count ?? 0,
+            isMuted: Boolean(conv.is_muted),
+            isPinned: Boolean(conv.is_pinned),
+          });
+          if (!matches) return false;
+        }
 
-    return true;
-  });
+        return true;
+      }),
+    [tabConversations, activeTab, folderFilter]
+  );
 
   /** Papkadagi barcha chatlarni ovozsiz qilish */
   const handleMuteFolderChats = async (chatIds: string[]) => {
@@ -538,7 +568,7 @@ export default function MessagesPage() {
     setSelectedChannel(null);
     const known =
       allConversations.find((c) => c.id === conversationId) ||
-      conversations.find((c) => c.id === conversationId);
+      archivedConversations.find((c) => c.id === conversationId);
 
     if (known) {
       handleSelectConversation(known);
@@ -794,7 +824,7 @@ export default function MessagesPage() {
       if (!found) {
         toast({
           title: 'Xabar topilmadi',
-          description: 'Xabar eskirgan bo\u2018lishi mumkin',
+          description: 'Eski xabarlar uchun yuqoriga surib yuklang',
         });
       }
       setPendingJumpMessageId(null);
@@ -925,7 +955,9 @@ export default function MessagesPage() {
         .from('messages')
         .select('id')
         .eq('conversation_id', conversationId)
-        .neq('sender_id', user?.id);
+        .neq('sender_id', user?.id)
+        .order('created_at', { ascending: false })
+        .limit(200);
 
       if (unreadMessages && unreadMessages.length > 0) {
         const readReceipts = unreadMessages.map((m) => ({
@@ -1227,6 +1259,9 @@ export default function MessagesPage() {
     [messageGroups, highlightMessage, toast]
   );
 
+  // 1:1 chatda suhbatdoshning avatar ikonkasi ko'rsatilmaydi (Telegramdek)
+  const showBubbleAvatars = selectedConversation?.type !== 'private';
+
   type FlatItem =
     | { kind: 'date'; key: string; date: string }
     | {
@@ -1262,7 +1297,7 @@ export default function MessagesPage() {
     count: flatItems.length,
     getScrollElement: () => messagesScrollRef.current,
     estimateSize: (index) => (flatItems[index]?.kind === 'date' ? 44 : 72),
-    overscan: 12,
+    overscan: 8,
     measureElement: (el) => el?.getBoundingClientRect().height ?? 72,
     getItemKey: (index) => flatItems[index]?.key ?? index,
   });
@@ -1524,7 +1559,7 @@ export default function MessagesPage() {
         </>
       )}
 
-      {/* Natijalar / suhbatlar / kanallar */}
+      {/* Natijalar / suhbatlar - guruh, kanal va shaxsiy chatlar bitta ko'rinishda */}
       <ScrollArea className="min-h-0 flex-1 [&_[data-radix-scroll-area-viewport]>div]:!block [&_[data-radix-scroll-area-viewport]>div]:!w-full [&_[data-radix-scroll-area-viewport]>div]:!min-w-0">
         {isSearching ? (
           <GlobalSearchResults
@@ -1533,42 +1568,7 @@ export default function MessagesPage() {
             onSelectConversation={handleGlobalSelectConversation}
             onSelectUser={handleGlobalSelectUser}
           />
-        ) : activeTab === 'channels' ? (
-          channelsLoading ? (
-            <div className="flex h-32 items-center justify-center">
-              <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
-            </div>
-          ) : channelsList.filter((c) => c.is_member || c.channel_type === 'public').length ===
-            0 ? (
-            <div className="flex h-48 flex-col items-center justify-center px-6 text-center text-muted-foreground">
-              <Megaphone className="mb-3 h-10 w-10 opacity-50" />
-              <p className="text-sm">Hozircha kanallar yo'q</p>
-              <Button
-                variant="link"
-                className="mt-2"
-                onClick={() => setShowCreateChannelDialog(true)}
-              >
-                Kanal yaratish
-              </Button>
-            </div>
-          ) : (
-            channelsList
-              .filter((c) => c.is_member || c.channel_type === 'public')
-              .map((channel) => (
-                <ChannelCard
-                  key={channel.id}
-                  channel={channel}
-                  onSelect={(ch) => {
-                    setSelectedChannel(ch);
-                    setSelectedConversation(null);
-                    setShowMobileChat(true);
-                  }}
-                  onJoin={joinChannel}
-                  onLeave={leaveChannel}
-                />
-              ))
-          )
-        ) : conversationsLoading ? (
+        ) : conversationsLoading && filteredConversations.length === 0 ? (
           <div className="flex h-32 items-center justify-center">
             <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
           </div>
@@ -1583,6 +1583,18 @@ export default function MessagesPage() {
               <>
                 <Archive className="mb-3 h-10 w-10 opacity-50" />
                 <p className="text-sm">Arxivda hech nima yo'q</p>
+              </>
+            ) : activeTab === 'channels' ? (
+              <>
+                <Megaphone className="mb-3 h-10 w-10 opacity-50" />
+                <p className="text-sm">Kanallar yo'q</p>
+                <Button
+                  variant="link"
+                  className="mt-2"
+                  onClick={() => setShowCreateChannelDialog(true)}
+                >
+                  Kanal yaratish
+                </Button>
               </>
             ) : (
               <>
@@ -1766,84 +1778,96 @@ export default function MessagesPage() {
                   <p className="text-sm">Suhbatni boshlang!</p>
                 </div>
               ) : useVirtualization ? (
-                <div
-                  className="relative min-w-0 max-w-full px-2 pb-2 pt-4 sm:px-4"
-                  style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
-                >
-                  {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                    const item = flatItems[virtualRow.index];
-                    if (!item) return null;
-                    return (
-                      <div
-                        key={virtualRow.key}
-                        data-index={virtualRow.index}
-                        ref={rowVirtualizer.measureElement}
-                        className="absolute left-0 right-0 min-w-0 px-2 sm:px-4"
-                        style={{ transform: `translateY(${virtualRow.start}px)` }}
-                      >
-                        {item.kind === 'date' ? (
-                          renderDatePill(item.date, 'my-3')
-                        ) : (
-                          (() => {
-                            const message = item.message;
-                            const senderId = message.sender_id || '';
-                            const readByOther =
-                              item.isMine && senderId
-                                ? isMessageRead(message.id, senderId)
-                                : false;
-                            const readAt =
-                              item.isMine && senderId
-                                ? getMessageReadAt(message.id, senderId)
-                                : null;
-                            return (
-                              <div
-                                id={`message-${message.id}`}
-                                data-message-id={message.id}
-                                className={cn(
-                                  'min-w-0 py-1',
-                                  highlightedMessageId === message.id &&
-                                    'animate-pulse rounded-lg bg-primary/10'
-                                )}
-                              >
-                                <EnhancedMessageBubble
-                                  message={{
-                                    ...message,
-                                    is_read: readByOther,
-                                    status: readByOther ? 'read' : message.status,
-                                    read_at: readAt || undefined,
-                                  }}
-                                  isMine={item.isMine}
-                                  isGroup={selectedConversation.type === 'group'}
-                                  canDeleteForEveryone={
-                                    selectedConversation.type === 'private' ||
-                                    selectedConversation.owner_id === user?.id
-                                  }
-                                  onReply={handleReply}
-                                  onForward={handleForward}
-                                  onEdit={handleEdit}
-                                  onDelete={handleDelete}
-                                  onPin={handlePin}
-                                  onSelect={handleSelectMessage}
-                                  onLongPress={handleEnterSelectionMode}
-                                  isPinned={isMessagePinned(message.id)}
-                                  isSelected={selectedMessages.has(message.id)}
-                                  isSelectionMode={isSelectionMode}
-                                  showAvatar={item.showAvatar}
-                                  showSender={
-                                    selectedConversation.type === 'group' && item.showAvatar
-                                  }
-                                  allMediaTracks={mediaTracksForPlaylist}
-                                />
-                              </div>
-                            );
-                          })()
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                <>
+                  {messagesLoadingMore && (
+                    <div className="flex justify-center py-2">
+                      <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-primary" />
+                    </div>
+                  )}
+                  <div
+                    className="relative min-w-0 max-w-full px-2 pb-2 pt-4 sm:px-4"
+                    style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+                  >
+                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                      const item = flatItems[virtualRow.index];
+                      if (!item) return null;
+                      return (
+                        <div
+                          key={virtualRow.key}
+                          data-index={virtualRow.index}
+                          ref={rowVirtualizer.measureElement}
+                          className="absolute left-0 right-0 min-w-0 px-2 sm:px-4"
+                          style={{ transform: `translateY(${virtualRow.start}px)` }}
+                        >
+                          {item.kind === 'date' ? (
+                            renderDatePill(item.date, 'my-3')
+                          ) : (
+                            (() => {
+                              const message = item.message;
+                              const senderId = message.sender_id || '';
+                              const readByOther =
+                                item.isMine && senderId
+                                  ? isMessageRead(message.id, senderId)
+                                  : false;
+                              const readAt =
+                                item.isMine && senderId
+                                  ? getMessageReadAt(message.id, senderId)
+                                  : null;
+                              return (
+                                <div
+                                  id={`message-${message.id}`}
+                                  data-message-id={message.id}
+                                  className={cn(
+                                    'min-w-0 py-1',
+                                    highlightedMessageId === message.id &&
+                                      'animate-pulse rounded-lg bg-primary/10'
+                                  )}
+                                >
+                                  <EnhancedMessageBubble
+                                    message={{
+                                      ...message,
+                                      is_read: readByOther,
+                                      status: readByOther ? 'read' : message.status,
+                                      read_at: readAt || undefined,
+                                    }}
+                                    isMine={item.isMine}
+                                    isGroup={selectedConversation.type === 'group'}
+                                    canDeleteForEveryone={
+                                      selectedConversation.type === 'private' ||
+                                      selectedConversation.owner_id === user?.id
+                                    }
+                                    onReply={handleReply}
+                                    onForward={handleForward}
+                                    onEdit={handleEdit}
+                                    onDelete={handleDelete}
+                                    onPin={handlePin}
+                                    onSelect={handleSelectMessage}
+                                    onLongPress={handleEnterSelectionMode}
+                                    isPinned={isMessagePinned(message.id)}
+                                    isSelected={selectedMessages.has(message.id)}
+                                    isSelectionMode={isSelectionMode}
+                                    showAvatar={showBubbleAvatars && item.showAvatar}
+                                    showSender={
+                                      selectedConversation.type === 'group' && item.showAvatar
+                                    }
+                                    allMediaTracks={mediaTracksForPlaylist}
+                                  />
+                                </div>
+                              );
+                            })()
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
               ) : (
                 <div className="min-w-0 max-w-full space-y-4 p-2 sm:p-4">
+                  {messagesLoadingMore && (
+                    <div className="flex justify-center py-1">
+                      <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-primary" />
+                    </div>
+                  )}
                   {messageGroups.map((group) => (
                     <div key={group.date} className="min-w-0">
                       {renderDatePill(group.date, 'my-4')}
@@ -1892,7 +1916,7 @@ export default function MessagesPage() {
                                 isPinned={isMessagePinned(message.id)}
                                 isSelected={selectedMessages.has(message.id)}
                                 isSelectionMode={isSelectionMode}
-                                showAvatar={showAvatar}
+                                showAvatar={showBubbleAvatars && showAvatar}
                                 showSender={
                                   selectedConversation.type === 'group' && showAvatar
                                 }
