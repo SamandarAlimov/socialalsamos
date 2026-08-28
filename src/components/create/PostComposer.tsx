@@ -8,6 +8,7 @@ import {
   MapPin,
   Paperclip,
   Send,
+  Sticker as StickerIcon,
   Trash2,
   Users,
   UsersRound,
@@ -20,11 +21,13 @@ import { usePostAttachments } from '@/hooks/usePostAttachments';
 import { ACCEPT_ANY_FILE, MAX_COLLABORATORS, MAX_FILES_PER_POST } from '@/lib/postComposer';
 import type { PollInput } from '@/lib/polls';
 import type { PostLocationInput } from '@/lib/postMeta';
+import type { StickerPlacement } from '@/lib/stickers';
 import { AttachmentGrid } from '@/components/create/AttachmentGrid';
 import { FormatToolbar } from '@/components/create/FormatToolbar';
 import { PollComposer } from '@/components/create/PollComposer';
 import { LocationPicker } from '@/components/create/LocationPicker';
 import { MentionCollaborator } from '@/components/create/MentionCollaborator';
+import { StickerMediaEditor } from '@/components/create/StickerMediaEditor';
 import { HashtagSuggestions } from '@/components/HashtagSuggestions';
 
 /** MentionCollaborator ichidagi Profile bilan bir xil shakl. */
@@ -65,6 +68,8 @@ function hashtagQueryAt(text: string, cursor: number): string | null {
  *    → endi alohida jadvallarga yoziladi
  *  - maxfiylik tanlovi saqlanmasdi → endi saqlanadi
  *  - hammuallif 5 ta bilan cheklangandi → endi 10 ta
+ *  - stikerlar matnga emoji sifatida qo‘shilardi → endi media ustiga
+ *    haqiqiy qatlam sifatida qo‘yiladi
  */
 export function PostComposer() {
   const navigate = useNavigate();
@@ -86,6 +91,11 @@ export function PostComposer() {
   const [showLocation, setShowLocation] = useState(false);
   const [showCollaborators, setShowCollaborators] = useState(false);
 
+  /** Stiker tahriri: qaysi fayl ustida ishlanmoqda. */
+  const [stickerTargetId, setStickerTargetId] = useState<string | null>(null);
+  /** Fayl id -> stiker joylashuvlari. */
+  const [stickerDrafts, setStickerDrafts] = useState<Record<string, StickerPlacement[]>>({});
+
   const {
     attachments,
     isUploading,
@@ -96,6 +106,7 @@ export function PostComposer() {
     clearAttachments,
     reorderAttachments,
     retryAttachment,
+    setEditState,
     uploadAll,
   } = usePostAttachments();
 
@@ -105,6 +116,26 @@ export function PostComposer() {
       !isUploading &&
       (content.trim().length > 0 || attachments.length > 0 || Boolean(poll) || Boolean(location)),
     [isPosting, isUploading, content, attachments.length, poll, location],
+  );
+
+  /** Stiker qo‘yish mumkin bo‘lgan fayllar (faqat rasm va video). */
+  const stickerableAttachments = useMemo(
+    () => attachments.filter((item) => item.kind === 'image' || item.kind === 'video'),
+    [attachments],
+  );
+
+  const stickerTarget = useMemo(
+    () => attachments.find((item) => item.id === stickerTargetId) ?? null,
+    [attachments, stickerTargetId],
+  );
+
+  const totalStickers = useMemo(
+    () =>
+      Object.entries(stickerDrafts).reduce(
+        (sum, [id, list]) => (attachments.some((item) => item.id === id) ? sum + list.length : sum),
+        0,
+      ),
+    [stickerDrafts, attachments],
   );
 
   const handleContentChange = useCallback((value: string) => {
@@ -143,6 +174,59 @@ export function PostComposer() {
     [addFiles],
   );
 
+  /** Stiker tahririni ochish. Media bo‘lmasa tushunarli ogohlantirish. */
+  const openStickerEditor = useCallback(
+    (attachmentId?: string) => {
+      const target = attachmentId
+        ? attachments.find((item) => item.id === attachmentId)
+        : stickerableAttachments[0];
+
+      if (!target) {
+        toast({
+          title: 'Avval rasm yoki video qo‘shing',
+          description: 'Stikerlar media ustiga qo‘yiladi.',
+        });
+        return;
+      }
+
+      if (target.kind !== 'image' && target.kind !== 'video') {
+        toast({
+          title: 'Bu faylga stiker qo‘yilmaydi',
+          description: 'Stiker faqat rasm va videoga qo‘yiladi.',
+        });
+        return;
+      }
+
+      setStickerTargetId(target.id);
+    },
+    [attachments, stickerableAttachments, toast],
+  );
+
+  /** Stikerlarni faylning tahrir holatiga yozamiz — keyin post_media ga tushadi. */
+  const handleStickersSaved = useCallback(
+    (placements: StickerPlacement[]) => {
+      const targetId = stickerTargetId;
+      if (!targetId) return;
+
+      setStickerDrafts((current) => ({ ...current, [targetId]: placements }));
+
+      const target = attachments.find((item) => item.id === targetId);
+      const nextEditState = { ...(target?.editState ?? {}) } as Record<string, unknown>;
+
+      if (placements.length > 0) {
+        nextEditState.stickers = placements;
+      } else {
+        delete nextEditState.stickers;
+      }
+
+      setEditState(
+        targetId,
+        Object.keys(nextEditState).length > 0 ? nextEditState : undefined,
+      );
+    },
+    [attachments, setEditState, stickerTargetId],
+  );
+
   const handleSubmit = useCallback(async () => {
     if (!canSubmit) return;
 
@@ -167,7 +251,7 @@ export function PostComposer() {
 
       const created = await createPost(content.trim(), mediaUrls, primaryKind, collaborators.map((item) => item.id), {
         visibility,
-        postKind: poll ? 'poll' : media.length > 0 ? 'post' : 'post',
+        postKind: poll ? 'poll' : 'post',
         media,
         poll,
         location,
@@ -181,6 +265,7 @@ export function PostComposer() {
       setPoll(null);
       setLocation(null);
       setCollaborators([]);
+      setStickerDrafts({});
       navigate('/home');
     } finally {
       setIsPosting(false);
@@ -244,13 +329,35 @@ export function PostComposer() {
         )}
       </div>
 
-      {/* Fayllar */}
+      {/* Fayllar — rasm/videoni bosib stiker qo‘yish mumkin */}
       <AttachmentGrid
         attachments={attachments}
         onRemove={removeAttachment}
         onRetry={retryAttachment}
         onReorder={reorderAttachments}
+        onEditImage={openStickerEditor}
+        onEditVideo={openStickerEditor}
       />
+
+      {/* Stiker xulosasi */}
+      {totalStickers > 0 && (
+        <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/20 p-3">
+          <StickerIcon className="h-5 w-5 shrink-0 text-primary" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">{totalStickers} stiker qo‘yildi</p>
+            <p className="text-xs text-muted-foreground">
+              Media ustidagi joylashuv postda ham aynan shunday ko‘rinadi
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => openStickerEditor()}
+            className="shrink-0 text-xs font-medium text-primary"
+          >
+            Tahrirlash
+          </button>
+        </div>
+      )}
 
       {/* So‘rovnoma xulosasi */}
       {poll && (
@@ -355,6 +462,14 @@ export function PostComposer() {
 
         <button
           type="button"
+          onClick={() => openStickerEditor()}
+          className="flex items-center gap-1.5 rounded-xl border border-border/60 px-3 py-2 text-xs font-medium transition hover:bg-muted"
+        >
+          <StickerIcon className="h-4 w-4" /> Stiker
+        </button>
+
+        <button
+          type="button"
           onClick={() => setShowPoll(true)}
           className="flex items-center gap-1.5 rounded-xl border border-border/60 px-3 py-2 text-xs font-medium transition hover:bg-muted"
         >
@@ -423,6 +538,16 @@ export function PostComposer() {
         open={showLocation}
         onClose={() => setShowLocation(false)}
         onSelect={setLocation}
+      />
+
+      <StickerMediaEditor
+        open={Boolean(stickerTarget)}
+        onOpenChange={(next) => {
+          if (!next) setStickerTargetId(null);
+        }}
+        attachment={stickerTarget}
+        initialPlacements={stickerTargetId ? (stickerDrafts[stickerTargetId] ?? []) : []}
+        onSave={handleStickersSaved}
       />
 
       <MentionCollaborator
