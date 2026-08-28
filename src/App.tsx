@@ -31,6 +31,7 @@ import PaymentSettingsPage from "./pages/PaymentSettingsPage";
 import CreatePage from "./pages/CreatePage";
 import ComposePage from "./pages/ComposePage";
 import StickerPacksPage from "./pages/StickerPacksPage";
+import StickerModerationPage from "./pages/StickerModerationPage";
 import MapPage from "./pages/MapPage";
 import VideosPage from "./pages/VideosPage";
 import DiscoveryPage from "./pages/DiscoveryPage";
@@ -124,8 +125,11 @@ function AppRoutes() {
         <Route path="/create" element={<CreatePage />} />
         {/* Yangi modulli post yaratish oqimi (sinov bosqichida) */}
         <Route path="/compose" element={<ComposePage />} />
-        {/* Stiker paketlari: o'z paketi va havola orqali kelgan paket */}
+        {/* Stiker paketlari: o'z paketi va havola orqali kelgan paket.
+            Diqqat: "moderation" marshruti ":slug" dan OLDIN turishi shart,
+            aks holda slug marshruti uni yutib yuboradi. */}
         <Route path="/stickers" element={<StickerPacksPage />} />
+        <Route path="/stickers/moderation" element={<StickerModerationPage />} />
         <Route path="/stickers/:slug" element={<StickerPacksPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/user/:username" element={<UserProfilePage />} />
