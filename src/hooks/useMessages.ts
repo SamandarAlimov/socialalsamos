@@ -67,6 +67,25 @@ export interface Message {
   tempId?: string;
 }
 
+/** Telegramdek: chat oynasi faqat oxirgi sahifani yuklaydi, qolgani surilganda keladi */
+const MESSAGE_PAGE_SIZE = 60;
+/** Oxirgi xabarlarni bitta so'rovda olish uchun chegara */
+const LAST_MESSAGE_SCAN_LIMIT = 400;
+/** O'qilmagan xabarlarni bitta so'rovda hisoblash chegarasi */
+const UNREAD_SCAN_LIMIT = 1000;
+/** Realtime hodisalar ketma-ket kelganda ro'yxatni bir marta yangilash */
+const LIST_REFRESH_DEBOUNCE = 500;
+
+const MESSAGE_SELECT = `
+  *,
+  sender:profiles!messages_sender_id_fkey (
+    id,
+    username,
+    display_name,
+    avatar_url
+  )
+`;
+
 export function useConversations(
   type?: 'private' | 'group' | 'channel',
   showArchived: boolean = false
@@ -76,20 +95,25 @@ export function useConversations(
   const { user } = useAuth();
   const { toast } = useToast();
   const channelRef = useRef<RealtimeChannel | null>(null);
-  // Faqat birinchi yuklashda skeleton ko'rsatiladi - keyingi yangilanishlarda
-  // ro'yxat "loading" holatiga tushib ko'z oldida o'chib-yonmaydi.
+  const refreshTimerRef = useRef<number | null>(null);
+  const inFlightRef = useRef(false);
+  // Faqat birinchi yuklashda skeleton ko'rsatiladi
   const hasLoadedRef = useRef(false);
 
+  /**
+   * Chat ro'yxati bitta necha so'rovda yuklanadi (avvalgi N+1 emas):
+   * a'zolar, profillar, oxirgi xabarlar va o'qilmaganlar - har biri bitta so'rov.
+   */
   const fetchConversations = useCallback(async () => {
     if (!user) return;
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     if (!hasLoadedRef.current) setIsLoading(true);
 
     try {
       const { data: participations, error: partError } = await supabase
         .from('conversation_participants')
-        .select(
-          'conversation_id, is_pinned, is_muted, is_archived, is_request, last_read_at'
-        )
+        .select('conversation_id, is_pinned, is_muted, is_archived, is_request, last_read_at')
         .eq('user_id', user.id)
         .eq('is_archived', showArchived);
 
@@ -110,7 +134,7 @@ export function useConversations(
             is_muted: p.is_muted ?? false,
             is_archived: p.is_archived ?? false,
             is_request: (p as any).is_request ?? false,
-            last_read_at: p.last_read_at,
+            last_read_at: p.last_read_at as string | null,
           },
         ])
       );
@@ -126,104 +150,133 @@ export function useConversations(
       const { data: convos, error } = await query;
       if (error) throw error;
 
-      const conversationsWithDetails = await Promise.all(
-        (convos || []).map(async (conv) => {
-          let otherParticipant = null;
-          let lastMessage: string | null = null;
-          let lastMessageMeta: LastMessageMeta | undefined = undefined;
-          let unreadCount = 0;
-          let isSelfChat = false;
+      const list = convos || [];
+      if (list.length === 0) {
+        setConversations([]);
+        return;
+      }
 
-          const participantSettings = participationMap.get(conv.id);
+      const ids = list.map((c) => c.id);
+      const privateIds = list.filter((c) => c.type === 'private').map((c) => c.id);
 
-          if (conv.type === 'private') {
-            const { count: participantCount } = await supabase
-              .from('conversation_participants')
-              .select('*', { count: 'exact', head: true })
-              .eq('conversation_id', conv.id);
+      // 1) 1:1 chatlarning a'zolari - bitta so'rov
+      const membersByConv = new Map<string, string[]>();
+      if (privateIds.length > 0) {
+        const { data: members } = await supabase
+          .from('conversation_participants')
+          .select('conversation_id, user_id')
+          .in('conversation_id', privateIds);
 
-            if (participantCount === 1) {
-              isSelfChat = true;
-              const { data: profile } = await supabase
-                .from('profiles')
-                .select(
-                  'id, username, display_name, avatar_url, is_online, last_seen, is_verified'
-                )
-                .eq('id', user.id)
-                .single();
-              otherParticipant = profile;
-            } else {
-              const { data: participants } = await supabase
-                .from('conversation_participants')
-                .select('user_id')
-                .eq('conversation_id', conv.id)
-                .neq('user_id', user.id)
-                .limit(1);
+        for (const m of members || []) {
+          const arr = membersByConv.get(m.conversation_id) || [];
+          arr.push(m.user_id);
+          membersByConv.set(m.conversation_id, arr);
+        }
+      }
 
-              if (participants && participants.length > 0) {
-                const { data: profile } = await supabase
-                  .from('profiles')
-                  .select(
-                    'id, username, display_name, avatar_url, is_online, last_seen, is_verified'
-                  )
-                  .eq('id', participants[0].user_id)
-                  .single();
+      const otherIdByConv = new Map<string, string>();
+      const selfChatIds = new Set<string>();
+      const profileIds = new Set<string>();
 
-                otherParticipant = profile;
-              }
-            }
-          }
+      for (const cid of privateIds) {
+        const members = membersByConv.get(cid) || [];
+        const others = members.filter((id) => id !== user.id);
+        if (others.length === 0) {
+          selfChatIds.add(cid);
+          profileIds.add(user.id);
+        } else {
+          otherIdByConv.set(cid, others[0]);
+          profileIds.add(others[0]);
+        }
+      }
 
-          const { data: messages } = await supabase
-            .from('messages')
-            .select('content, media_type, media_url, media_file_name, sender_id')
-            .eq('conversation_id', conv.id)
-            .eq('is_deleted', false)
-            .order('created_at', { ascending: false })
-            .limit(1);
+      // 2) Profillar - bitta so'rov
+      const profileMap = new Map<string, any>();
+      if (profileIds.size > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, username, display_name, avatar_url, is_online, last_seen, is_verified')
+          .in('id', Array.from(profileIds));
 
-          if (messages && messages.length > 0) {
-            const msg = messages[0];
-            lastMessage = msg.content;
-            lastMessageMeta = {
-              content: msg.content,
-              media_type: msg.media_type,
-              media_url: msg.media_url,
-              media_file_name: msg.media_file_name,
-              sender_id: msg.sender_id,
-            };
-          }
+        for (const p of profiles || []) profileMap.set(p.id, p);
+      }
 
-          if (!isSelfChat) {
-            let unreadQuery = supabase
-              .from('messages')
-              .select('id', { count: 'exact', head: true })
-              .eq('conversation_id', conv.id)
-              .neq('sender_id', user.id)
-              .eq('is_deleted', false);
+      // 3) Oxirgi xabarlar - bitta so'rov
+      const lastMessageMap = new Map<string, LastMessageMeta>();
+      const { data: recentMessages } = await supabase
+        .from('messages')
+        .select('conversation_id, content, media_type, media_url, media_file_name, sender_id, created_at')
+        .in('conversation_id', ids)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: false })
+        .limit(LAST_MESSAGE_SCAN_LIMIT);
 
-            if (participantSettings?.last_read_at) {
-              unreadQuery = unreadQuery.gt('created_at', participantSettings.last_read_at);
-            }
+      for (const msg of recentMessages || []) {
+        if (lastMessageMap.has(msg.conversation_id)) continue;
+        lastMessageMap.set(msg.conversation_id, {
+          content: msg.content,
+          media_type: msg.media_type,
+          media_url: msg.media_url,
+          media_file_name: (msg as any).media_file_name ?? null,
+          sender_id: msg.sender_id,
+        });
+      }
 
-            const { count } = await unreadQuery;
-            unreadCount = count || 0;
-          }
+      // 4) O'qilmagan xabarlar - bitta so'rov
+      const unreadMap = new Map<string, number>();
+      const readTimes = ids
+        .map((id) => participationMap.get(id)?.last_read_at)
+        .filter((value): value is string => Boolean(value));
+      const earliestRead =
+        readTimes.length === ids.length && readTimes.length > 0
+          ? readTimes.reduce((min, value) => (value < min ? value : min))
+          : null;
 
-          return {
-            ...conv,
-            other_participant: otherParticipant,
-            last_message: lastMessage,
-            last_message_meta: lastMessageMeta,
-            unread_count: unreadCount,
-            is_pinned: participantSettings?.is_pinned ?? false,
-            is_muted: participantSettings?.is_muted ?? false,
-            is_archived: participantSettings?.is_archived ?? false,
-            is_request: participantSettings?.is_request ?? false,
-            is_self_chat: isSelfChat,
-          } as Conversation;
-        })
-      );
+      let unreadQuery = supabase
+        .from('messages')
+        .select('conversation_id, created_at')
+        .in('conversation_id', ids)
+        .neq('sender_id', user.id)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: false })
+        .limit(UNREAD_SCAN_LIMIT);
+
+      if (earliestRead) unreadQuery = unreadQuery.gt('created_at', earliestRead);
+
+      const { data: unreadRows } = await unreadQuery;
+      for (const row of unreadRows || []) {
+        const lastRead = participationMap.get(row.conversation_id)?.last_read_at;
+        if (lastRead && new Date(row.created_at).getTime() <= new Date(lastRead).getTime()) {
+          continue;
+        }
+        unreadMap.set(row.conversation_id, (unreadMap.get(row.conversation_id) || 0) + 1);
+      }
+
+      const conversationsWithDetails = list.map((conv) => {
+        const settings = participationMap.get(conv.id);
+        const isSelfChat = selfChatIds.has(conv.id);
+        const otherId = otherIdByConv.get(conv.id);
+        const otherParticipant = isSelfChat
+          ? profileMap.get(user.id) || null
+          : otherId
+            ? profileMap.get(otherId) || null
+            : null;
+        const meta = lastMessageMap.get(conv.id);
+
+        return {
+          ...conv,
+          type: conv.type as 'private' | 'group' | 'channel',
+          other_participant: otherParticipant,
+          last_message: meta?.content ?? null,
+          last_message_meta: meta,
+          unread_count: isSelfChat ? 0 : unreadMap.get(conv.id) || 0,
+          is_pinned: settings?.is_pinned ?? false,
+          is_muted: settings?.is_muted ?? false,
+          is_archived: settings?.is_archived ?? false,
+          is_request: settings?.is_request ?? false,
+          is_self_chat: isSelfChat,
+        } as Conversation;
+      });
 
       conversationsWithDetails.sort((a, b) => {
         if (a.is_pinned && !b.is_pinned) return -1;
@@ -246,10 +299,20 @@ export function useConversations(
         variant: 'destructive',
       });
     } finally {
+      inFlightRef.current = false;
       hasLoadedRef.current = true;
       setIsLoading(false);
     }
   }, [user, type, showArchived, toast]);
+
+  /** Realtime hodisalar to'planganda ro'yxatni bir marta yangilash */
+  const scheduleRefresh = useCallback(() => {
+    if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
+    refreshTimerRef.current = window.setTimeout(() => {
+      refreshTimerRef.current = null;
+      void fetchConversations();
+    }, LIST_REFRESH_DEBOUNCE);
+  }, [fetchConversations]);
 
   const createPrivateConversation = useCallback(
     async (otherUserId: string): Promise<Conversation | null> => {
@@ -271,32 +334,34 @@ export function useConversations(
           .select('conversation_id')
           .eq('user_id', user.id);
 
-        if (myParticipations && myParticipations.length > 0) {
-          for (const p of myParticipations) {
-            const { data: otherParticipant } = await supabase
-              .from('conversation_participants')
-              .select('conversation_id')
-              .eq('conversation_id', p.conversation_id)
-              .eq('user_id', otherUserId)
+        const myIds = (myParticipations || []).map((p) => p.conversation_id);
+
+        if (myIds.length > 0) {
+          // Bitta so'rov: umumiy chatni topamiz
+          const { data: shared } = await supabase
+            .from('conversation_participants')
+            .select('conversation_id')
+            .eq('user_id', otherUserId)
+            .in('conversation_id', myIds);
+
+          const sharedIds = (shared || []).map((p) => p.conversation_id);
+          if (sharedIds.length > 0) {
+            const { data: existingConv } = await supabase
+              .from('conversations')
+              .select('*')
+              .in('id', sharedIds)
+              .eq('type', 'private')
+              .limit(1)
               .maybeSingle();
 
-            if (otherParticipant) {
-              const { data: existingConv } = await supabase
-                .from('conversations')
-                .select('*')
-                .eq('id', p.conversation_id)
-                .eq('type', 'private')
-                .maybeSingle();
-
-              if (existingConv) {
-                return {
-                  ...existingConv,
-                  type: existingConv.type as 'private' | 'group' | 'channel',
-                  other_participant: otherUserProfile,
-                  last_message: undefined,
-                  unread_count: 0,
-                } as Conversation;
-              }
+            if (existingConv) {
+              return {
+                ...existingConv,
+                type: existingConv.type as 'private' | 'group' | 'channel',
+                other_participant: otherUserProfile,
+                last_message: undefined,
+                unread_count: 0,
+              } as Conversation;
             }
           }
         }
@@ -338,7 +403,7 @@ export function useConversations(
           unread_count: 0,
         };
 
-        fetchConversations();
+        scheduleRefresh();
         return fullConversation;
       } catch (error: any) {
         console.error('Error creating conversation:', error);
@@ -350,7 +415,7 @@ export function useConversations(
         return null;
       }
     },
-    [user, toast, fetchConversations]
+    [user, toast, scheduleRefresh]
   );
 
   /** Guruh yoki kanal yaratish uchun umumiy funksiya */
@@ -390,7 +455,6 @@ export function useConversations(
 
         if (convError) throw convError;
 
-        // Takrorlanmas a'zolar ro'yxati (o'zini ikki marta qo'shib yubormaslik uchun)
         const uniqueMembers = Array.from(new Set(memberIds.filter((id) => id && id !== user.id)));
 
         const participants = [
@@ -407,7 +471,6 @@ export function useConversations(
           .insert(participants);
 
         if (partError) {
-          // A'zolarni qo'shib bo'lmasa, yarim yaratilgan suhbat qolmasligi kerak
           await supabase.from('conversations').delete().eq('id', newConv.id);
           throw partError;
         }
@@ -449,23 +512,23 @@ export function useConversations(
     if (!user) return;
 
     const unsubscribeEmitter = unreadMessagesEmitter.subscribe(() => {
-      fetchConversations();
+      scheduleRefresh();
     });
 
     channelRef.current = supabase
-      .channel(`conversations-list-${user.id}`)
+      .channel(`conversations-list-${user.id}-${showArchived ? 'arch' : 'live'}-${type || 'all'}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => {
-        fetchConversations();
+        scheduleRefresh();
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => {
-        fetchConversations();
+        scheduleRefresh();
       })
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'conversation_participants' },
         (payload) => {
           const updated = payload.new as { user_id: string };
-          if (updated.user_id === user.id) fetchConversations();
+          if (updated.user_id === user.id) scheduleRefresh();
         }
       )
       .on(
@@ -473,19 +536,20 @@ export function useConversations(
         { event: 'INSERT', schema: 'public', table: 'message_reads' },
         (payload) => {
           const newRead = payload.new as { user_id: string };
-          if (newRead.user_id === user.id) fetchConversations();
+          if (newRead.user_id === user.id) scheduleRefresh();
         }
       )
       .subscribe();
 
     return () => {
       unsubscribeEmitter();
+      if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
       if (channelRef.current) supabase.removeChannel(channelRef.current);
     };
-  }, [user, fetchConversations]);
+  }, [user, scheduleRefresh, showArchived, type]);
 
   useEffect(() => {
-    if (user) fetchConversations();
+    if (user) void fetchConversations();
   }, [user, fetchConversations]);
 
   return {
@@ -501,6 +565,8 @@ export function useConversations(
 export function useMessages(conversationId: string | null) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const { user } = useAuth();
   const { toast } = useToast();
@@ -508,14 +574,33 @@ export function useMessages(conversationId: string | null) {
   const typingChannelRef = useRef<RealtimeChannel | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const processedMessageIds = useRef<Set<string>>(new Set());
-  // Qaysi suhbat allaqachon yuklanганini eslab qolamiz: har bir refresh'da
-  // butun oyna "loading" holatiga tushmasligi uchun.
+  const markedReadRef = useRef<Set<string>>(new Set());
   const loadedConversationRef = useRef<string | null>(null);
+  const oldestLoadedRef = useRef<string | null>(null);
+
+  /** O'qilgan deb belgilash - faqat hali belgilanmagan xabarlar uchun */
+  const markRead = useCallback(
+    (ids: string[]) => {
+      if (!user || ids.length === 0) return;
+      const fresh = ids.filter((id) => !markedReadRef.current.has(id) && !id.startsWith('temp-'));
+      if (fresh.length === 0) return;
+      for (const id of fresh) markedReadRef.current.add(id);
+      void supabase
+        .from('message_reads')
+        .upsert(
+          fresh.map((messageId) => ({ message_id: messageId, user_id: user.id })),
+          { onConflict: 'message_id,user_id' }
+        )
+        .then(() => {});
+    },
+    [user]
+  );
 
   const fetchMessages = useCallback(async () => {
     if (!conversationId) {
       setMessages([]);
       setIsLoading(false);
+      setHasMore(false);
       return;
     }
 
@@ -523,34 +608,36 @@ export function useMessages(conversationId: string | null) {
     if (isFirstLoad) setIsLoading(true);
 
     try {
+      // Telegramdek: butun tarix emas, oxirgi sahifa yuklanadi
       const { data, error } = await supabase
         .from('messages')
-        .select(`
-          *,
-          sender:profiles!messages_sender_id_fkey (
-            id,
-            username,
-            display_name,
-            avatar_url
-          )
-        `)
+        .select(MESSAGE_SELECT)
         .eq('conversation_id', conversationId)
         .eq('is_deleted', false)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: false })
+        .limit(MESSAGE_PAGE_SIZE);
 
       if (error) throw error;
 
+      const page = (data || []) as any[];
+      setHasMore(page.length === MESSAGE_PAGE_SIZE);
+      const rows = page.slice().reverse();
+
       let deletedForMeIds: Set<string> = new Set();
-      if (user) {
+      if (user && rows.length > 0) {
         const { data: deletions } = await supabase
           .from('message_deletions')
           .select('message_id')
-          .eq('user_id', user.id);
+          .eq('user_id', user.id)
+          .in(
+            'message_id',
+            rows.map((m) => m.id)
+          );
 
         deletedForMeIds = new Set((deletions || []).map((d) => d.message_id));
       }
 
-      const filteredMessages = (data || []).filter((m) => !deletedForMeIds.has(m.id));
+      const filteredMessages = rows.filter((m) => !deletedForMeIds.has(m.id));
 
       const messagesWithStatus = filteredMessages.map((m) => ({
         ...m,
@@ -559,21 +646,12 @@ export function useMessages(conversationId: string | null) {
 
       setMessages(messagesWithStatus as Message[]);
       processedMessageIds.current = new Set(filteredMessages.map((m) => m.id));
+      oldestLoadedRef.current = filteredMessages[0]?.created_at ?? null;
 
-      if (user && filteredMessages.length > 0) {
-        const unreadMessageIds = filteredMessages
-          .filter((m) => m.sender_id !== user.id)
-          .map((m) => m.id);
-
-        if (unreadMessageIds.length > 0) {
-          await supabase.from('message_reads').upsert(
-            unreadMessageIds.map((messageId) => ({
-              message_id: messageId,
-              user_id: user.id,
-            })),
-            { onConflict: 'message_id,user_id' }
-          );
-        }
+      if (user) {
+        markRead(
+          filteredMessages.filter((m) => m.sender_id !== user.id).map((m) => m.id)
+        );
       }
     } catch (error: any) {
       console.error('Error fetching messages:', error);
@@ -581,7 +659,63 @@ export function useMessages(conversationId: string | null) {
       loadedConversationRef.current = conversationId;
       setIsLoading(false);
     }
-  }, [conversationId, user]);
+  }, [conversationId, user, markRead]);
+
+  /** Yuqoriga surilganda eski xabarlarni yuklash */
+  const loadOlder = useCallback(async () => {
+    if (!conversationId || isLoadingMore || !hasMore) return;
+    const before = oldestLoadedRef.current;
+    if (!before) return;
+
+    setIsLoadingMore(true);
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select(MESSAGE_SELECT)
+        .eq('conversation_id', conversationId)
+        .eq('is_deleted', false)
+        .lt('created_at', before)
+        .order('created_at', { ascending: false })
+        .limit(MESSAGE_PAGE_SIZE);
+
+      if (error) throw error;
+
+      const page = (data || []) as any[];
+      setHasMore(page.length === MESSAGE_PAGE_SIZE);
+      if (page.length === 0) return;
+
+      const rows = page.slice().reverse();
+
+      let deletedForMeIds: Set<string> = new Set();
+      if (user) {
+        const { data: deletions } = await supabase
+          .from('message_deletions')
+          .select('message_id')
+          .eq('user_id', user.id)
+          .in(
+            'message_id',
+            rows.map((m) => m.id)
+          );
+        deletedForMeIds = new Set((deletions || []).map((d) => d.message_id));
+      }
+
+      const older = rows
+        .filter((m) => !deletedForMeIds.has(m.id))
+        .map((m) => ({ ...m, status: 'delivered' as const })) as Message[];
+
+      for (const m of older) processedMessageIds.current.add(m.id);
+      oldestLoadedRef.current = older[0]?.created_at ?? before;
+
+      setMessages((prev) => {
+        const known = new Set(prev.map((m) => m.id));
+        return [...older.filter((m) => !known.has(m.id)), ...prev];
+      });
+    } catch (error: any) {
+      console.error('Error loading older messages:', error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [conversationId, hasMore, isLoadingMore, user]);
 
   const sendMessage = useCallback(
     async (content: string, mediaUrl?: string, mediaType?: string) => {
@@ -625,15 +759,7 @@ export function useMessages(conversationId: string | null) {
             media_url: mediaUrl,
             media_type: mediaType,
           })
-          .select(`
-            *,
-            sender:profiles!messages_sender_id_fkey (
-              id,
-              username,
-              display_name,
-              avatar_url
-            )
-          `)
+          .select(MESSAGE_SELECT)
           .single();
 
         if (error) throw error;
@@ -646,10 +772,11 @@ export function useMessages(conversationId: string | null) {
           )
         );
 
-        await supabase
+        void supabase
           .from('conversations')
           .update({ last_message_at: new Date().toISOString() })
-          .eq('id', conversationId);
+          .eq('id', conversationId)
+          .then(() => {});
 
         return data;
       } catch (error: any) {
@@ -723,13 +850,7 @@ export function useMessages(conversationId: string | null) {
     [user, toast]
   );
 
-  /**
-   * Xabarni hamma uchun o'chirish.
-   * Telegramda 1:1 chatda ikki tomon ham bir-birining xabarini o'chira oladi,
-   * shuning uchun bu funksiya o'z xabari bilan cheklanmaydi. Agar server
-   * ruxsat bermasa (RLS), xabar hech bo'lmaganda joriy foydalanuvchida
-   * o'chiriladi va sabab tushunarli qilib aytiladi.
-   */
+  /** Xabarni hamma uchun o'chirish (1:1 chatda ikki tomon ham o'chira oladi) */
   const deleteMessage = useCallback(
     async (messageId: string) => {
       try {
@@ -741,7 +862,6 @@ export function useMessages(conversationId: string | null) {
 
         if (error) throw error;
 
-        // RLS tufayli hech bir qator yangilanmagan bo'lsa, kamida o'zimizda o'chiramiz
         if (!data || data.length === 0) {
           const ok = await deleteMessageForMe(messageId);
           if (ok) {
@@ -809,11 +929,14 @@ export function useMessages(conversationId: string | null) {
 
   useEffect(() => {
     processedMessageIds.current.clear();
+    markedReadRef.current.clear();
+    oldestLoadedRef.current = null;
     if (conversationId) {
-      fetchMessages();
+      void fetchMessages();
     } else {
       setMessages([]);
       setIsLoading(false);
+      setHasMore(false);
     }
   }, [conversationId, fetchMessages]);
 
@@ -836,15 +959,7 @@ export function useMessages(conversationId: string | null) {
 
           const { data } = await supabase
             .from('messages')
-            .select(`
-              *,
-              sender:profiles!messages_sender_id_fkey (
-                id,
-                username,
-                display_name,
-                avatar_url
-              )
-            `)
+            .select(MESSAGE_SELECT)
             .eq('id', payload.new.id)
             .single();
 
@@ -854,12 +969,7 @@ export function useMessages(conversationId: string | null) {
               return [...prev, { ...data, status: 'delivered' as const } as Message];
             });
 
-            if (user && data.sender_id !== user.id) {
-              await supabase.from('message_reads').upsert(
-                { message_id: data.id, user_id: user.id },
-                { onConflict: 'message_id,user_id' }
-              );
-            }
+            if (user && data.sender_id !== user.id) markRead([data.id]);
           }
         }
       )
@@ -888,7 +998,7 @@ export function useMessages(conversationId: string | null) {
     return () => {
       if (messageChannelRef.current) supabase.removeChannel(messageChannelRef.current);
     };
-  }, [conversationId, user]);
+  }, [conversationId, user, markRead]);
 
   useEffect(() => {
     if (!conversationId || !user) return;
@@ -911,7 +1021,7 @@ export function useMessages(conversationId: string | null) {
       setTypingUsers(names);
     };
 
-    fetchTyping();
+    void fetchTyping();
 
     typingChannelRef.current = supabase
       .channel(`typing-realtime-${conversationId}`)
@@ -927,7 +1037,8 @@ export function useMessages(conversationId: string | null) {
       )
       .subscribe();
 
-    const poll = setInterval(fetchTyping, 2500);
+    // Realtime ishlaganda tez-tez so'rov yubormaslik uchun poll oralig'i kattaroq
+    const poll = setInterval(fetchTyping, 6000);
 
     return () => {
       clearInterval(poll);
@@ -945,6 +1056,9 @@ export function useMessages(conversationId: string | null) {
   return {
     messages,
     isLoading,
+    isLoadingMore,
+    hasMore,
+    loadOlder,
     typingUsers,
     sendMessage,
     editMessage,
