@@ -15,6 +15,7 @@ import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { PostViewsDialog } from '@/components/PostViewsDialog';
 import { usePostViews } from '@/hooks/usePostViews';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
+import { StoryStickerOverlay } from '@/components/stickers/StoryStickerOverlay';
 import { useTranslation } from 'react-i18next';
 
 function formatNumber(num: number): string {
@@ -332,6 +333,20 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
 
         {/* Gradient overlay for text readability */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/70 pointer-events-none" />
+
+        {/*
+          Story/reel stikerlari.
+          Diqqat: gradientdan KEYIN turishi shart, aks holda stikerlar
+          qorayib ketadi. Bosish faqat interaktiv elementlarda ochiq,
+          shu sabab videoni bosib to'xtatish ishlashda davom etadi.
+        */}
+        <div className="pointer-events-none absolute inset-0 z-[15] [&_button]:pointer-events-auto [&_input]:pointer-events-auto [&_textarea]:pointer-events-auto">
+          <StoryStickerOverlay
+            postId={video.id}
+            currentTime={currentTime}
+            className="h-full w-full"
+          />
+        </div>
 
         {/* Full player controls (YouTube-style) */}
         <div
