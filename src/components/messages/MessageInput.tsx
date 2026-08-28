@@ -725,9 +725,10 @@ export function MessageInput({
                 if (composerRef.current) composerRef.current.insertText(emoji);
                 else setMessage((prev) => prev + emoji);
               }}
-              onSendMedia={(url) => {
-                // GIF va stiker matnsiz, alohida xabar bo'lib ketadi
-                void onSend('', url, 'image');
+              onSendMedia={(url, kind) => {
+                // GIF va stiker matnsiz, ALOHIDA message_type bilan ketadi:
+                // 'gif' yoki 'sticker' - endi ular oddiy rasm sifatida saqlanmaydi.
+                void onSend('', url, kind);
               }}
               className="h-8 w-8 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
             />
