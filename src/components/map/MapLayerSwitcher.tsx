@@ -1,18 +1,30 @@
-import { Check, Layers, X } from 'lucide-react';
+import { Bike, Bus, Check, Layers, MapPin, Moon, Map as MapIcon, Satellite, X } from 'lucide-react';
+import { MAP_LAYERS, MAP_OVERLAYS, type MapLayerId } from '@/lib/mapLayers';
 import { cn } from '@/lib/utils';
-import { MAP_LAYERS, MAP_OVERLAYS, type MapLayerDef, type MapOverlayDef } from '@/lib/mapLayers';
 
 interface MapLayerSwitcherProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  layerId: MapLayerDef['id'];
-  onLayerChange: (id: MapLayerDef['id']) => void;
-  overlays: Record<MapOverlayDef['id'], boolean>;
-  onToggleOverlay: (id: MapOverlayDef['id']) => void;
+  layerId: MapLayerId;
+  onLayerChange: (id: MapLayerId) => void;
+  overlays: string[];
+  onToggleOverlay: (id: string) => void;
   className?: string;
 }
 
-/** Yandex Mapsdagidek qatlam menyusi: Xarita / Sputnik / Gibrid + ustama qatlamlar. */
+const LAYER_ICON: Record<string, typeof MapIcon> = {
+  map: MapIcon,
+  satellite: Satellite,
+  hybrid: Layers,
+  night: Moon,
+};
+
+const OVERLAY_ICON: Record<string, typeof MapIcon> = {
+  transit: Bus,
+  cycle: Bike,
+  stops: MapPin,
+};
+
 export function MapLayerSwitcher({
   open,
   onOpenChange,
@@ -27,82 +39,79 @@ export function MapLayerSwitcher({
       <button
         type="button"
         onClick={() => onOpenChange(!open)}
-        className={cn(
-          'flex h-11 w-11 items-center justify-center rounded-2xl bg-background/95 text-foreground shadow-lg ring-1 ring-border backdrop-blur transition-colors hover:bg-muted',
-          open && 'bg-primary text-primary-foreground ring-primary',
-        )}
+        className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/95 text-foreground shadow-md ring-1 ring-border/60 backdrop-blur"
         aria-label="Qatlamlar"
       >
         <Layers className="h-5 w-5" />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-0 z-[1200] w-[268px] origin-top-right overflow-hidden rounded-3xl bg-background/98 shadow-2xl ring-1 ring-border backdrop-blur">
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <p className="text-[14px] font-bold">Qatlamlar</p>
+        <div className="absolute right-0 top-12 z-[1200] w-64 rounded-2xl border border-border/60 bg-background/98 p-3 shadow-xl backdrop-blur">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm font-semibold">Qatlamlar</p>
             <button
               type="button"
               onClick={() => onOpenChange(false)}
-              className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground"
               aria-label="Yopish"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 p-3">
-            {MAP_LAYERS.map((layer) => (
-              <button
-                key={layer.id}
-                type="button"
-                onClick={() => {
-                  onLayerChange(layer.id);
-                  onOpenChange(false);
-                }}
-                className={cn(
-                  'flex flex-col items-start gap-1 rounded-2xl p-2.5 text-left ring-1 transition-all',
-                  layerId === layer.id
-                    ? 'bg-primary/10 ring-2 ring-primary'
-                    : 'bg-muted/40 ring-border hover:bg-muted',
-                )}
-              >
-                <span className="text-lg">{layer.emoji}</span>
-                <span className="text-[12px] font-semibold">{layer.label}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="border-t border-border p-2">
-            {MAP_OVERLAYS.map((overlay) => (
-              <button
-                key={overlay.id}
-                type="button"
-                onClick={() => onToggleOverlay(overlay.id)}
-                className="flex w-full items-start gap-2 rounded-xl px-2 py-2 text-left transition-colors hover:bg-muted"
-              >
-                <span
+          <div className="grid grid-cols-2 gap-2">
+            {MAP_LAYERS.map((layer) => {
+              const Icon = LAYER_ICON[layer.id] ?? MapIcon;
+              const active = layer.id === layerId;
+              return (
+                <button
+                  key={layer.id}
+                  type="button"
+                  onClick={() => onLayerChange(layer.id)}
                   className={cn(
-                    'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border',
-                    overlays[overlay.id]
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : 'border-border',
+                    'flex flex-col items-center gap-1 rounded-xl border p-2 text-xs font-medium transition-colors',
+                    active
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border/60 text-muted-foreground hover:text-foreground',
                   )}
                 >
-                  {overlays[overlay.id] && <Check className="h-3 w-3" />}
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-[13px] font-medium">{overlay.label}</span>
-                  {overlay.hint && (
-                    <span className="block text-[11px] leading-snug text-muted-foreground">
-                      {overlay.hint}
-                    </span>
-                  )}
-                </span>
-              </button>
-            ))}
+                  <Icon className="h-5 w-5" />
+                  {layer.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-3 border-t border-border/60 pt-2">
+            <p className="mb-1 text-xs font-medium text-muted-foreground">Ustama qatlamlar</p>
+            {MAP_OVERLAYS.map((overlay) => {
+              const Icon = OVERLAY_ICON[overlay.id] ?? Layers;
+              const active = overlays.includes(overlay.id);
+              return (
+                <button
+                  key={overlay.id}
+                  type="button"
+                  onClick={() => onToggleOverlay(overlay.id)}
+                  className="flex w-full items-center gap-2 rounded-lg px-1.5 py-2 text-sm hover:bg-muted"
+                >
+                  <Icon className="h-4 w-4 text-muted-foreground" />
+                  <span className="flex-1 text-left">{overlay.label}</span>
+                  <span
+                    className={cn(
+                      'flex h-4 w-4 items-center justify-center rounded border',
+                      active ? 'border-primary bg-primary text-primary-foreground' : 'border-border',
+                    )}
+                  >
+                    {active && <Check className="h-3 w-3" />}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
     </div>
   );
 }
+
+export default MapLayerSwitcher;

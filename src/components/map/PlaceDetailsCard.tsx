@@ -1,10 +1,14 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Bookmark,
+  BookmarkCheck,
   Clock,
+  Copy,
   Globe,
+  ImagePlus,
   MapPin,
   Navigation,
+  PersonStanding,
   Phone,
   Send,
   Share2,
@@ -12,9 +16,15 @@ import {
   Star,
   X,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import type { MapPlace } from '@/lib/mapPlaces';
+import { isProbablyOpen } from '@/lib/mapPlaces';
 import { formatDistance } from '@/lib/geocoding';
-import { isProbablyOpen, type MapPlace } from '@/lib/mapPlaces';
+import { categoryUi } from '@/lib/placeIcons';
+import { usePlaceReviews } from '@/hooks/usePlaceReviews';
+import { PlaceReviews } from '@/components/map/PlaceReviews';
+import { NearbyListingsCard } from '@/components/map/NearbyListingsCard';
+import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface PlaceDetailsCardProps {
   place: MapPlace;
@@ -24,20 +34,41 @@ interface PlaceDetailsCardProps {
   onSendToChat: (place: MapPlace) => void;
   onToggleSave: (place: MapPlace) => void;
   onShare: (place: MapPlace) => void;
-  onNearbyListings?: (place: MapPlace) => void;
   onCreatePost?: (place: MapPlace) => void;
   className?: string;
 }
 
-type TabId = 'overview' | 'details' | 'links';
+type TabId = 'overview' | 'reviews' | 'details';
 
-const TABS: Array<{ id: TabId; label: string }> = [
+const TABS: { id: TabId; label: string }[] = [
   { id: 'overview', label: 'Umumiy' },
+  { id: 'reviews', label: 'Izohlar' },
   { id: 'details', label: "Ma'lumot" },
-  { id: 'links', label: 'Bog\u2018lash' },
 ];
 
-/** POI batafsil kartasi - Yandex Mapsdagi joy kartasi uslubida. */
+function Row({
+  icon,
+  children,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  onClick?: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        'flex items-start gap-3 py-2 text-sm',
+        onClick && 'cursor-pointer hover:text-primary',
+      )}
+      onClick={onClick}
+    >
+      <span className="mt-0.5 text-muted-foreground">{icon}</span>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
+  );
+}
+
 export function PlaceDetailsCard({
   place,
   saved,
@@ -46,248 +77,238 @@ export function PlaceDetailsCard({
   onSendToChat,
   onToggleSave,
   onShare,
-  onNearbyListings,
   onCreatePost,
   className,
 }: PlaceDetailsCardProps) {
   const [tab, setTab] = useState<TabId>('overview');
+  const ui = categoryUi(place.categoryId);
   const open = isProbablyOpen(place.openingHours);
-  const image = place.tags?.image || place.tags?.['image:0'] || null;
+
+  const placeRef = useMemo(
+    () => ({
+      id: place.id,
+      source: place.source,
+      name: place.name,
+      latitude: place.latitude,
+      longitude: place.longitude,
+    }),
+    [place],
+  );
+
+  const { summary } = usePlaceReviews(placeRef);
+  const heroImage = typeof place.tags?.image === 'string' ? place.tags.image : null;
+
+  const copyAddress = async () => {
+    const text = place.address || place.latitude.toFixed(5) + ', ' + place.longitude.toFixed(5);
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Manzil nusxalandi');
+    } catch {
+      toast.error('Nusxalanmadi');
+    }
+  };
 
   return (
-    <div className={cn('overflow-hidden rounded-3xl bg-card ring-1 ring-border', className)}>
-      <div className="relative h-32 w-full overflow-hidden bg-gradient-to-br from-primary/25 via-primary/10 to-transparent">
-        {image ? (
-          <img src={image} alt={place.name} className="h-full w-full object-cover" loading="lazy" />
+    <div className={cn('flex flex-col overflow-hidden bg-background', className)}>
+      <div className="relative">
+        {heroImage ? (
+          <img src={heroImage} alt={place.name} className="h-36 w-full object-cover" />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-5xl opacity-70">
-            {place.categoryId ? categoryEmoji(place.categoryId) : '\ud83d\udccd'}
+          <div
+            className="flex h-24 w-full items-center justify-center"
+            style={{ backgroundColor: ui.color + '1a' }}
+          >
+            <ui.Icon className="h-9 w-9" style={{ color: ui.color }} />
           </div>
         )}
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-background/90 text-foreground shadow ring-1 ring-border"
+          className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm"
           aria-label="Yopish"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="p-4">
-        <h2 className="text-[19px] font-bold leading-tight text-foreground">{place.name}</h2>
-        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-muted-foreground">
-          {place.categoryLabel && <span>{place.categoryLabel}</span>}
-          {typeof place.distanceM === 'number' && (
-            <span className="font-medium text-foreground/70">{formatDistance(place.distanceM)}</span>
-          )}
-          {open !== null && (
-            <span
-              className={cn(
-                'inline-flex items-center gap-1 font-semibold',
-                open ? 'text-emerald-600' : 'text-destructive',
-              )}
-            >
-              <Clock className="h-3.5 w-3.5" />
-              {open ? 'Hozir ochiq' : 'Yopiq'}
+      <div className="px-4 pt-3">
+        <h2 className="text-lg font-semibold leading-tight">{place.name}</h2>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          <span className="font-medium" style={{ color: ui.color }}>
+            {place.categoryLabel || ui.label}
+          </span>
+          {summary.total > 0 && (
+            <span className="flex items-center gap-1 font-medium text-amber-500">
+              <Star className="h-3.5 w-3.5 fill-current" />
+              {summary.average.toFixed(1)}
+              <span className="text-muted-foreground">({summary.total})</span>
             </span>
           )}
+          {open !== null && (
+            <span className={open ? 'font-medium text-emerald-600' : 'font-medium text-destructive'}>
+              {open ? 'Ochiq' : 'Yopiq'}
+            </span>
+          )}
+          {place.distanceM != null && <span>{formatDistance(place.distanceM)}</span>}
         </div>
 
-        <div className="mt-3 flex items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => onDirections(place)}
-            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-[13.5px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+            className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-3 text-sm font-semibold text-primary-foreground"
           >
             <Navigation className="h-4 w-4" />
-            Yo\u2018nalish
+            Marshrut
+          </button>
+          <button
+            type="button"
+            onClick={() => onSendToChat(place)}
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/70 text-muted-foreground hover:text-foreground"
+            aria-label="Chatga yuborish"
+          >
+            <Send className="h-4 w-4" />
           </button>
           <button
             type="button"
             onClick={() => onToggleSave(place)}
             className={cn(
-              'flex h-11 w-11 items-center justify-center rounded-full ring-1 transition-colors',
-              saved
-                ? 'bg-primary/10 text-primary ring-primary'
-                : 'bg-muted text-foreground ring-border hover:bg-muted/70',
+              'flex h-10 w-10 items-center justify-center rounded-xl border border-border/70',
+              saved ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
             )}
             aria-label="Saqlash"
           >
-            <Bookmark className={cn('h-4.5 w-4.5', saved && 'fill-current')} />
+            {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
           </button>
           <button
             type="button"
             onClick={() => onShare(place)}
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-muted text-foreground ring-1 ring-border transition-colors hover:bg-muted/70"
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/70 text-muted-foreground hover:text-foreground"
             aria-label="Ulashish"
           >
-            <Share2 className="h-4.5 w-4.5" />
+            <Share2 className="h-4 w-4" />
           </button>
         </div>
+      </div>
 
-        <div className="mt-4 flex items-center gap-1 border-b border-border">
-          {TABS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setTab(item.id)}
-              className={cn(
-                '-mb-px border-b-2 px-3 py-2 text-[13px] font-semibold transition-colors',
-                tab === item.id
-                  ? 'border-primary text-foreground'
-                  : 'border-transparent text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
+      <div className="mt-3 flex border-b border-border/60 px-4">
+        {TABS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setTab(item.id)}
+            className={cn(
+              'relative flex-1 pb-2 text-sm font-medium transition-colors',
+              tab === item.id ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {item.label}
+            {tab === item.id && (
+              <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary" />
+            )}
+          </button>
+        ))}
+      </div>
 
-        <div className="pt-3">
-          {tab === 'overview' && (
-            <div className="flex flex-col gap-2.5 text-[13px]">
+      <div className="flex-1 overflow-y-auto px-4 py-3">
+        {tab === 'overview' && (
+          <div className="space-y-3">
+            <div className="divide-y divide-border/50">
               {place.address && (
-                <Row icon={<MapPin className="h-4 w-4" />} text={place.address} />
+                <Row icon={<MapPin className="h-4 w-4" />} onClick={copyAddress}>
+                  <p>{place.address}</p>
+                  <p className="text-xs text-muted-foreground">Nusxalash uchun bosing</p>
+                </Row>
               )}
               {place.openingHours && (
-                <Row icon={<Clock className="h-4 w-4" />} text={place.openingHours} />
+                <Row icon={<Clock className="h-4 w-4" />}>
+                  <p className="whitespace-pre-wrap">{place.openingHours}</p>
+                </Row>
               )}
               {place.phone && (
-                <a href={'tel:' + place.phone} className="block">
-                  <Row icon={<Phone className="h-4 w-4" />} text={place.phone} link />
-                </a>
+                <Row
+                  icon={<Phone className="h-4 w-4" />}
+                  onClick={() => window.open('tel:' + place.phone, '_self')}
+                >
+                  <p>{place.phone}</p>
+                </Row>
               )}
               {place.website && (
-                <a href={place.website} target="_blank" rel="noopener noreferrer" className="block">
-                  <Row icon={<Globe className="h-4 w-4" />} text={place.website} link />
-                </a>
-              )}
-              {!place.address && !place.phone && !place.openingHours && (
-                <p className="text-[13px] text-muted-foreground">
-                  Bu joy uchun qo\u2018shimcha ma\u2018lumot hozircha yo\u2018q.
-                </p>
+                <Row
+                  icon={<Globe className="h-4 w-4" />}
+                  onClick={() => window.open(place.website as string, '_blank', 'noopener')}
+                >
+                  <p className="truncate">{place.website}</p>
+                </Row>
               )}
             </div>
-          )}
 
-          {tab === 'details' && (
-            <div className="flex flex-col gap-1.5 text-[12.5px]">
-              <Detail label="Koordinata" value={place.latitude.toFixed(5) + ', ' + place.longitude.toFixed(5)} />
-              {place.brand && <Detail label="Brend / operator" value={place.brand} />}
-              {place.cuisine && <Detail label="Taomlar" value={place.cuisine.replace(/;/g, ', ')} />}
-              {place.wheelchair && (
-                <Detail
-                  label="Nogironlar uchun"
-                  value={place.wheelchair === 'yes' ? 'Qulay' : place.wheelchair === 'limited' ? 'Cheklangan' : 'Qulay emas'}
-                />
-              )}
-              {place.tags?.['payment:cards'] && <Detail label="Karta to\u2018lovi" value="Qabul qilinadi" />}
-              {place.tags?.internet_access && <Detail label="Internet" value={place.tags.internet_access} />}
-              <Detail label="Manba" value={place.source === 'overpass' ? 'OpenStreetMap' : place.source} />
-            </div>
-          )}
+            <NearbyListingsCard
+              latitude={place.latitude}
+              longitude={place.longitude}
+              areaName={place.address}
+            />
 
-          {tab === 'links' && (
-            <div className="flex flex-col gap-2">
-              <LinkAction
-                icon={<Send className="h-4 w-4" />}
-                title="Chatga yuborish"
-                hint="Lokatsiya xabari sifatida do\u2018stlaringizga"
-                onClick={() => onSendToChat(place)}
-              />
-              {onNearbyListings && (
-                <LinkAction
-                  icon={<ShoppingBag className="h-4 w-4" />}
-                  title="Yaqin e\u2018lonlar"
-                  hint="Bozorda shu atrofdagi mahsulotlar"
-                  onClick={() => onNearbyListings(place)}
-                />
-              )}
+            <div className="flex flex-wrap gap-2">
               {onCreatePost && (
-                <LinkAction
-                  icon={<Star className="h-4 w-4" />}
-                  title="Joy bilan post yaratish"
-                  hint="Postga shu manzilni belgilash"
+                <button
+                  type="button"
                   onClick={() => onCreatePost(place)}
-                />
+                  className="flex h-9 items-center gap-1.5 rounded-lg border border-border/70 px-3 text-sm"
+                >
+                  <ImagePlus className="h-4 w-4" />
+                  Shu joy haqida post
+                </button>
               )}
+              <button
+                type="button"
+                onClick={copyAddress}
+                className="flex h-9 items-center gap-1.5 rounded-lg border border-border/70 px-3 text-sm"
+              >
+                <Copy className="h-4 w-4" />
+                Manzilni nusxalash
+              </button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {tab === 'reviews' && <PlaceReviews place={placeRef} />}
+
+        {tab === 'details' && (
+          <div className="divide-y divide-border/50">
+            {place.brand && (
+              <Row icon={<ShoppingBag className="h-4 w-4" />}>
+                <p className="text-xs text-muted-foreground">Brend</p>
+                <p>{place.brand}</p>
+              </Row>
+            )}
+            {place.cuisine && (
+              <Row icon={<ui.Icon className="h-4 w-4" />}>
+                <p className="text-xs text-muted-foreground">Taomlar</p>
+                <p>{place.cuisine}</p>
+              </Row>
+            )}
+            {place.wheelchair && (
+              <Row icon={<PersonStanding className="h-4 w-4" />}>
+                <p className="text-xs text-muted-foreground">Nogironlar aravachasi</p>
+                <p>{place.wheelchair === 'yes' ? 'Mavjud' : place.wheelchair}</p>
+              </Row>
+            )}
+            <Row icon={<MapPin className="h-4 w-4" />}>
+              <p className="text-xs text-muted-foreground">Koordinata</p>
+              <p>
+                {place.latitude.toFixed(5)}, {place.longitude.toFixed(5)}
+              </p>
+            </Row>
+            <Row icon={<Globe className="h-4 w-4" />}>
+              <p className="text-xs text-muted-foreground">Manba</p>
+              <p className="uppercase">{place.source}</p>
+            </Row>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function Row({ icon, text, link }: { icon: React.ReactNode; text: string; link?: boolean }) {
-  return (
-    <div className="flex items-start gap-2.5">
-      <span className="mt-0.5 text-muted-foreground">{icon}</span>
-      <span className={cn('min-w-0 break-words', link ? 'text-primary underline-offset-2 hover:underline' : 'text-foreground')}>
-        {text}
-      </span>
-    </div>
-  );
-}
-
-function Detail({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-start justify-between gap-3 rounded-xl bg-muted/40 px-3 py-2">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="min-w-0 break-words text-right font-medium text-foreground">{value}</span>
-    </div>
-  );
-}
-
-function LinkAction({
-  icon,
-  title,
-  hint,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  hint: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-2xl bg-muted/50 p-3 text-left ring-1 ring-border/60 transition-colors hover:bg-muted"
-    >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-        {icon}
-      </span>
-      <span className="min-w-0">
-        <span className="block text-[13.5px] font-semibold text-foreground">{title}</span>
-        <span className="block text-[11.5px] leading-snug text-muted-foreground">{hint}</span>
-      </span>
-    </button>
-  );
-}
-
-function categoryEmoji(categoryId: string): string {
-  const map: Record<string, string> = {
-    restaurant: '\ud83c\udf7d\ufe0f',
-    cafe: '\u2615',
-    fast_food: '\ud83c\udf54',
-    bakery: '\ud83e\udd50',
-    fuel: '\u26fd',
-    parking: '\ud83c\udd7f\ufe0f',
-    pharmacy: '\ud83d\udc8a',
-    hospital: '\ud83c\udfe5',
-    atm: '\ud83c\udfe7',
-    bank: '\ud83c\udfe6',
-    market: '\ud83e\uded1',
-    supermarket: '\ud83d\uded2',
-    mosque: '\ud83d\udd4c',
-    hotel: '\ud83c\udfe8',
-    school: '\ud83c\udfeb',
-    gym: '\ud83c\udfcb\ufe0f',
-    car_wash: '\ud83e\uddfd',
-    bus_stop: '\ud83d\ude8f',
-  };
-  return map[categoryId] ?? '\ud83d\udccd';
-}
+export default PlaceDetailsCard;

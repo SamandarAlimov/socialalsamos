@@ -11,7 +11,6 @@ interface PlaceResultsListProps {
   error?: string | null;
   activeId?: string | null;
   emptyText?: string;
-  ratings?: Record<string, { average: number; total: number }>;
   onSelect: (place: MapPlace) => void;
   onDirections?: (place: MapPlace) => void;
   onSendToChat?: (place: MapPlace) => void;
@@ -25,7 +24,6 @@ export function PlaceResultsList({
   error,
   activeId,
   emptyText,
-  ratings,
   onSelect,
   onDirections,
   onSendToChat,
@@ -48,7 +46,7 @@ export function PlaceResultsList({
   if (!places.length) {
     return (
       <p className="px-4 py-10 text-center text-sm text-muted-foreground">
-        {emptyText ?? 'Hech narsa topilmadi. Boshqa so\u2019z bilan qidirib ko\u2019ring.'}
+        {emptyText ?? "Hech narsa topilmadi. Boshqa so'z bilan qidirib ko'ring."}
       </p>
     );
   }
@@ -58,7 +56,6 @@ export function PlaceResultsList({
       {places.map((place) => {
         const ui = categoryUi(place.categoryId);
         const open = isProbablyOpen(place.openingHours);
-        const rating = ratings?.[place.id];
         return (
           <div
             key={place.id}
@@ -95,26 +92,17 @@ export function PlaceResultsList({
                 {place.address ? ' \u00b7 ' + place.address : ''}
               </p>
 
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                {rating && rating.total > 0 && (
-                  <span className="flex items-center gap-1 text-xs font-medium text-amber-500">
-                    <Star className="h-3.5 w-3.5 fill-current" />
-                    {rating.average.toFixed(1)}
-                    <span className="text-muted-foreground">({rating.total})</span>
-                  </span>
-                )}
-                {open !== null && (
-                  <span
-                    className={cn(
-                      'flex items-center gap-1 text-xs font-medium',
-                      open ? 'text-emerald-600' : 'text-destructive',
-                    )}
-                  >
-                    <Clock className="h-3.5 w-3.5" />
-                    {open ? 'Ochiq' : 'Yopiq'}
-                  </span>
-                )}
-              </div>
+              {open !== null && (
+                <span
+                  className={cn(
+                    'mt-1 flex items-center gap-1 text-xs font-medium',
+                    open ? 'text-emerald-600' : 'text-destructive',
+                  )}
+                >
+                  <Clock className="h-3.5 w-3.5" />
+                  {open ? 'Ochiq' : 'Yopiq'}
+                </span>
+              )}
 
               <div className="mt-2 flex items-center gap-1.5">
                 {onDirections && (
@@ -127,7 +115,7 @@ export function PlaceResultsList({
                     className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-2.5 text-xs font-medium text-primary-foreground"
                   >
                     <Navigation className="h-3.5 w-3.5" />
-                    Yo\u2019nalish
+                    Marshrut
                   </button>
                 )}
                 {onSendToChat && (

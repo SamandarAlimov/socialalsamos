@@ -65,13 +65,15 @@ export function PlaceReviews({ place, className }: PlaceReviewsProps) {
             {summary.total ? summary.average.toFixed(1) : '-'}
           </p>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            {summary.total ? summary.total + ' izoh' : 'Izoh yo\u2019q'}
+            {summary.total ? summary.total + ' izoh' : "Izoh yo'q"}
           </p>
         </div>
         <div className="flex-1">
           <Stars value={Math.round(summary.average)} size="sm" />
           <p className="mt-1 text-xs text-muted-foreground">
-            Bu joyni birinchi bo\u2019lib baholaganlar orasida bo\u2019ling.
+            {summary.total
+              ? 'Foydalanuvchilar bahosi'
+              : "Bu joyni birinchi bo'lib baholaganlar orasida bo'ling."}
           </p>
         </div>
       </div>
@@ -96,7 +98,11 @@ export function PlaceReviews({ place, className }: PlaceReviewsProps) {
             onClick={handleSubmit}
             className="flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50"
           >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquare className="h-4 w-4" />}
+            {saving ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <MessageSquare className="h-4 w-4" />
+            )}
             {myReview ? 'Yangilash' : 'Yuborish'}
           </button>
           {myReview && (
@@ -106,7 +112,7 @@ export function PlaceReviews({ place, className }: PlaceReviewsProps) {
               className="flex h-9 items-center gap-1.5 rounded-lg border border-border/70 px-3 text-sm text-muted-foreground hover:text-destructive"
             >
               <Trash2 className="h-4 w-4" />
-              O\u2019chirish
+              O'chirish
             </button>
           )}
         </div>
