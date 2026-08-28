@@ -1,0 +1,148 @@
+import { Download, FileArchive, FileText, Music2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { formatBytes, mediaKindLabel } from '@/lib/postComposer';
+import { formatDuration } from '@/lib/mediaMetadata';
+import { usePostMedia, type PostMediaItem } from '@/hooks/usePostMedia';
+import { usePostLocation } from '@/hooks/usePostLocation';
+import { PollCard } from '@/components/PollCard';
+import { PostLocationCard } from '@/components/PostLocationCard';
+
+interface PostExtrasProps {
+  postId: string;
+  /** `posts.has_poll` — keraksiz so'rovlarni oldini oladi. */
+  hasPoll?: boolean;
+  /** Post egasi bo'lsa live joylashuvni to'xtatish tugmasi chiqadi. */
+  isOwner?: boolean;
+  className?: string;
+}
+
+function DocumentCard({ item }: { item: PostMediaItem }) {
+  const Icon = item.kind === 'archive' ? FileArchive : FileText;
+
+  return (
+    <a
+      href={item.storage_url}
+      target="_blank"
+      rel="noreferrer"
+      onClick={(event) => event.stopPropagation()}
+      className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/30 p-3 transition hover:border-border"
+    >
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <Icon className="h-5 w-5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium">
+          {item.file_name ?? mediaKindLabel(item.kind)}
+        </span>
+        <span className="block text-xs text-muted-foreground">
+          {mediaKindLabel(item.kind)}
+          {item.file_size ? ' · ' + formatBytes(item.file_size) : ''}
+        </span>
+      </span>
+      <Download className="h-4 w-4 shrink-0 text-muted-foreground" />
+    </a>
+  );
+}
+
+function AudioCard({ item }: { item: PostMediaItem }) {
+  return (
+    <div
+      className="rounded-2xl border border-border/60 bg-muted/30 p-3"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <div className="flex items-center gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <Music2 className="h-5 w-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">
+            {item.file_name ?? 'Audio'}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {item.duration_seconds ? formatDuration(item.duration_seconds) : 'Audio'}
+            {item.file_size ? ' · ' + formatBytes(item.file_size) : ''}
+          </p>
+        </div>
+      </div>
+      <audio src={item.storage_url} controls preload="metadata" className="mt-2 w-full" />
+    </div>
+  );
+}
+
+/**
+ * Lentadagi post ostiga qo'shiladigan strukturali kontent bloki:
+ * fayllar galereyasi (har qanday tur), so'rovnoma va joylashuv.
+ *
+ * Bu blok postning matnidan mustaqil — shuning uchun eski postlar ham
+ * buzilmaydi: `post_media` bo'sh bo'lsa hech narsa chizilmaydi.
+ */
+export function PostExtras({ postId, hasPoll, isOwner, className }: PostExtrasProps) {
+  const { media } = usePostMedia(postId);
+  const { location } = usePostLocation(postId);
+
+  const visuals = media.filter((item) => item.kind === 'image' || item.kind === 'video');
+  const others = media.filter((item) => item.kind !== 'image' && item.kind !== 'video');
+
+  const hasAnything = media.length > 0 || Boolean(location) || Boolean(hasPoll);
+  if (!hasAnything) return null;
+
+  return (
+    <div className={cn('space-y-3', className)}>
+      {/* Rasm va videolar — gorizontal galereya (scroll mobil qurilmada ishlaydi) */}
+      {visuals.length > 0 && (
+        <div
+          className={cn(
+            visuals.length === 1
+              ? 'overflow-hidden rounded-2xl border border-border/60'
+              : 'flex snap-x snap-mandatory gap-2 overflow-x-auto overscroll-x-contain pb-1 [-webkit-overflow-scrolling:touch]',
+          )}
+        >
+          {visuals.map((item) => (
+            <div
+              key={item.id}
+              className={cn(
+                visuals.length === 1
+                  ? 'w-full'
+                  : 'w-64 shrink-0 snap-start overflow-hidden rounded-2xl border border-border/60',
+              )}
+            >
+              {item.kind === 'image' ? (
+                <img
+                  src={item.storage_url}
+                  alt={item.alt_text ?? item.file_name ?? 'Rasm'}
+                  loading="lazy"
+                  className="h-full max-h-[520px] w-full object-cover"
+                />
+              ) : (
+                <video
+                  src={item.storage_url}
+                  poster={item.thumbnail_url ?? undefined}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  onClick={(event) => event.stopPropagation()}
+                  className="h-full max-h-[520px] w-full bg-black object-contain"
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Audio, hujjat, arxiv va boshqa turlar */}
+      {others.map((item) =>
+        item.kind === 'audio' ? (
+          <AudioCard key={item.id} item={item} />
+        ) : (
+          <DocumentCard key={item.id} item={item} />
+        ),
+      )}
+
+      {/* So'rovnoma */}
+      {hasPoll && <PollCard postId={postId} />}
+
+      {/* Joylashuv */}
+      {location && <PostLocationCard location={location} isOwner={isOwner} />}
+    </div>
+  );
+}
