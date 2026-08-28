@@ -20,6 +20,12 @@ const MUSIC_ID_REGEX = /\[MUSIC:([^\]]+)\]/g;
 // Joylashuv qatori: "\ud83d\udccd Joy nomi"
 const LOCATION_REGEX = new RegExp('^[ \\t]*\\ud83d\\udccd[ \\t]*(.+)$', 'gm');
 
+/**
+ * Telegramdagi standart o'lchamlar: bitta emoji eng katta, ikkitasi o'rtacha,
+ * uchta va undan ko'pi kichikroq bo'ladi (aks holda pufakcha juda kattalashadi).
+ */
+const EMOJI_ONLY_SIZES = { one: 64, two: 52, many: 40 };
+
 // Havolani chiroyli ko'rsatish - asosan domen
 function formatLinkDisplay(url: string): string {
   try {
@@ -131,7 +137,14 @@ export function RichTextContent({ content, className, emojiSize = 19 }: RichText
             <AnimatedEmoji
               key={`big-${index}`}
               emoji={emoji}
-              size={emojiOnly.emojis.length === 1 ? 72 : emojiOnly.emojis.length === 2 ? 56 : 44}
+              size={
+                emojiOnly.emojis.length === 1
+                  ? EMOJI_ONLY_SIZES.one
+                  : emojiOnly.emojis.length === 2
+                    ? EMOJI_ONLY_SIZES.two
+                    : EMOJI_ONLY_SIZES.many
+              }
+              hq
               title={emoji}
             />
           ))}

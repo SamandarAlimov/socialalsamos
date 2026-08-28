@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Users, Megaphone, Pin, PinOff, VolumeX, Volume2, Bookmark, Phone, Video, PhoneMissed, PhoneOff, PhoneIncoming, PhoneOutgoing, VideoOff, Mic, Image, Images, FileText, MapPin, BarChart3, Sticker, Music, BookOpen, Archive, ArchiveRestore, MailOpen, Mail } from 'lucide-react';
+import { Users, Megaphone, Pin, PinOff, VolumeX, Volume2, Bookmark, Phone, Video, PhoneMissed, PhoneOff, PhoneIncoming, PhoneOutgoing, VideoOff, Mic, Image, Images, FileText, MapPin, BarChart3, Sticker, Music, BookOpen, Archive, ArchiveRestore, MailOpen, Mail, Check, CheckCheck, AtSign, Link2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
 import { Conversation } from '@/hooks/useMessages';
@@ -56,6 +56,86 @@ const OPEN_THRESHOLD = 46;
 const FULL_SWIPE_RATIO = 0.92;
 const LEFT_ACTION_WIDTH = 84;
 
+/* ------------------------------------------------------------------ *
+ * Preview tozalash (Telegramdek)
+ *
+ * Chat ro'yxatida foydalanuvchi hech qachon xom texnik matnni ko'rmasligi
+ * kerak: ichki fayl nomlari ([285B8E71-....png]), markdown/plugin havolalari
+ * (plugin://...) va uzun yalang'och URLlar tushunarli yorliqqa aylantiriladi.
+ * ------------------------------------------------------------------ */
+
+const MD_LINK_ANY = /\[([^\]\n]+)\]\(([^)\s]*)\)/g;
+const FILE_TOKEN_REGEX = /^\[?\s*([^\[\]\/\\]+?)\.([a-z0-9]{2,5})\s*\]?$/i;
+const HTTP_URL_REGEX = /https?:\/\/[^\s]+/gi;
+const SCHEME_TOKEN_REGEX = /\b[a-z][a-z0-9+.-]*:\/\/[^\s]+/gi;
+const OPAQUE_NAME_REGEX = /^[0-9a-f][0-9a-f-]{7,}$/i;
+
+const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'heic', 'heif', 'avif', 'bmp', 'svg'];
+const VIDEO_EXTS = ['mp4', 'mov', 'webm', 'mkv', 'm4v', '3gp', 'avi'];
+const AUDIO_EXTS = ['mp3', 'm4a', 'ogg', 'oga', 'wav', 'opus', 'aac', 'flac'];
+
+type PreviewKind = 'text' | 'image' | 'video' | 'audio' | 'file' | 'link';
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./i, '');
+  } catch {
+    return url;
+  }
+}
+
+function cleanPreview(raw: string): { text: string; kind: PreviewKind } {
+  let text = (raw || '').trim();
+  if (!text) return { text: '', kind: 'text' };
+
+  // Markdown yoki plugin havolasi -> faqat ko'rinadigan nomi qoladi
+  text = text.replace(MD_LINK_ANY, '$1').trim();
+
+  const fileMatch = FILE_TOKEN_REGEX.exec(text);
+  if (fileMatch) {
+    const name = fileMatch[1].trim();
+    const ext = fileMatch[2].toLowerCase();
+
+    if (IMAGE_EXTS.includes(ext)) return { text: 'Rasm', kind: 'image' };
+    if (VIDEO_EXTS.includes(ext)) return { text: 'Video', kind: 'video' };
+    if (AUDIO_EXTS.includes(ext)) return { text: 'Ovozli xabar', kind: 'audio' };
+
+    // Ichki (UUID kabi) nom foydalanuvchiga hech narsa bermaydi
+    const isOpaque = OPAQUE_NAME_REGEX.test(name) || name.length > 28;
+    return { text: isOpaque ? 'Fayl' : name + '.' + ext, kind: 'file' };
+  }
+
+  const urls = text.match(HTTP_URL_REGEX);
+  if (urls && urls.length === 1 && text === urls[0]) {
+    return { text: hostOf(urls[0]), kind: 'link' };
+  }
+  if (urls) {
+    text = text.replace(HTTP_URL_REGEX, (match) => hostOf(match));
+  }
+
+  // Qolgan texnik sxemalar (plugin://, notion://, ...) ko'rinmasligi kerak
+  text = text.replace(SCHEME_TOKEN_REGEX, '').replace(/\s+/g, ' ').trim();
+
+  return { text, kind: 'text' };
+}
+
+function previewIconFor(kind: PreviewKind): React.ReactNode | undefined {
+  switch (kind) {
+    case 'image':
+      return <Image className={PREVIEW_ICON} />;
+    case 'video':
+      return <Video className={PREVIEW_ICON} />;
+    case 'audio':
+      return <Mic className={PREVIEW_ICON} />;
+    case 'file':
+      return <FileText className={PREVIEW_ICON} />;
+    case 'link':
+      return <Link2 className={PREVIEW_ICON} />;
+    default:
+      return undefined;
+  }
+}
+
 type SwipeAction = {
   key: string;
   label: string;
@@ -93,12 +173,15 @@ export function ChatListItem({
   // Trigger pulse animation when unread count increases
   useEffect(() => {
     const currentCount = conversation.unread_count ?? 0;
-    if (currentCount > prevUnreadCount.current) {
-      setIsPulsing(true);
-      const timer = setTimeout(() => setIsPulsing(false), 600);
-      return () => clearTimeout(timer);
-    }
+    const grew = currentCount > prevUnreadCount.current;
+    // MUHIM: oldingi qiymat HAR safar yangilanishi kerak, aks holda hisob
+    // kamayganda keyingi o'sish aniqlanmay qoladi.
     prevUnreadCount.current = currentCount;
+
+    if (!grew) return;
+    setIsPulsing(true);
+    const timer = setTimeout(() => setIsPulsing(false), 600);
+    return () => clearTimeout(timer);
   }, [conversation.unread_count]);
 
   const otherUserId = conversation.type === 'private' ? conversation.other_participant?.id : null;
@@ -241,7 +324,9 @@ export function ChatListItem({
   const formatLastMessage = (message: string | null, meta?: Conversation['last_message_meta']): { text: string; icon?: React.ReactNode } => {
     const mediaType = meta?.media_type;
     const hasRealContent = message && message.trim().length > 0;
-    const caption = hasRealContent && !message.startsWith('{') ? message : null;
+    const rawCaption = hasRealContent && !message.startsWith('{') ? message : null;
+    // Caption ham tozalanadi: ichki fayl nomi caption sifatida kelib qolmasin
+    const caption = rawCaption ? cleanPreview(stripFormatting(rawCaption) || rawCaption).text || null : null;
 
     // Maqola (article) xabari - Telegramdek alohida yorliq bilan
     if (hasRealContent) {
@@ -270,6 +355,8 @@ export function ChatListItem({
           return { text: caption || 'Albom', icon: <Images className={PREVIEW_ICON} /> };
         case 'video':
           return { text: caption || 'Video', icon: <Video className={PREVIEW_ICON} /> };
+        case 'video_note':
+          return { text: caption || 'Videoxabar', icon: <Video className={PREVIEW_ICON} /> };
         case 'file':
         case 'document':
           return { text: caption || meta?.media_file_name || 'Fayl', icon: <FileText className={PREVIEW_ICON} /> };
@@ -309,11 +396,41 @@ export function ChatListItem({
       return { text: message.replace(CALL_PREFIX, '').trim() || "Qo'ng'iroq", icon: <Phone className={PREVIEW_ICON} /> };
     }
 
-    // Oddiy xabar - formatlash belgilari (**, __, ||, `) preview'da ko'rinmaydi
-    return { text: stripFormatting(message).replace(/\s+/g, ' ').trim() || message.replace(/\s+/g, ' ').trim() };
+    // Oddiy xabar: formatlash belgilari (**, __, ||, `) va texnik matnlar
+    // (fayl nomlari, plugin havolalari, uzun URLlar) preview'da ko'rinmaydi
+    const cleaned = cleanPreview(stripFormatting(message) || message);
+    return {
+      text: cleaned.text || message.replace(/\s+/g, ' ').trim(),
+      icon: previewIconFor(cleaned.kind),
+    };
   };
 
   const isUnread = (conversation.unread_count ?? 0) > 0;
+
+  /* ------------------------------------------------------------------ *
+   * Telegramdek o'qilganlik belgilari va @ mention indikatori
+   * ------------------------------------------------------------------ */
+  const lastMeta = conversation.last_message_meta as unknown as
+    | {
+        sender_id?: string;
+        is_read?: boolean;
+        read_at?: string | null;
+        seen?: boolean;
+      }
+    | undefined;
+
+  // Faqat O'ZIMIZ yuborgan oxirgi xabar uchun ptichkalar ko'rsatiladi
+  const isOwnLastMessage = Boolean(user?.id && lastMeta?.sender_id && lastMeta.sender_id === user.id);
+  const lastMessageRead = Boolean(lastMeta?.is_read || lastMeta?.read_at || lastMeta?.seen);
+
+  const myUsername = (
+    (user as unknown as { user_metadata?: { username?: string } })?.user_metadata?.username || ''
+  ).toLowerCase();
+  const hasMention =
+    isUnread &&
+    myUsername.length > 0 &&
+    typeof conversation.last_message === 'string' &&
+    conversation.last_message.toLowerCase().includes('@' + myUsername);
 
   /* ------------------------------------------------------------------ *
    * Telegram-style swipe actions
@@ -502,6 +619,11 @@ export function ChatListItem({
                 {(conversation.unread_count ?? 0) > 99 ? '99+' : conversation.unread_count}
               </Badge>
             )}
+            {hasMention && (
+              <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                <AtSign className="h-2.5 w-2.5" />
+              </span>
+            )}
           </div>
         </button>
       </ChatListContextMenu>
@@ -628,6 +750,14 @@ export function ChatListItem({
                 )}
               </div>
               <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                {/* Telegramdek: o'zimiz yuborgan oxirgi xabarda bitta/ikkita ptichka */}
+                {isOwnLastMessage && (
+                  lastMessageRead ? (
+                    <CheckCheck className="h-4 w-4 md:h-3.5 md:w-3.5 shrink-0 text-sky-500" />
+                  ) : (
+                    <Check className="h-4 w-4 md:h-3.5 md:w-3.5 shrink-0 text-muted-foreground" />
+                  )
+                )}
                 <span className="text-sm md:text-xs text-muted-foreground">
                   {conversation.last_message_at && formatTime(conversation.last_message_at)}
                 </span>
@@ -654,6 +784,15 @@ export function ChatListItem({
               </p>
 
               <div className="flex items-center gap-1.5 flex-shrink-0">
+                {/* @ mention - Telegramda o'qilmagan hisobdan alohida ko'rsatiladi */}
+                {hasMention && (
+                  <span
+                    className="flex h-6 w-6 md:h-5 md:w-5 items-center justify-center rounded-full bg-primary text-primary-foreground"
+                    title="Sizni eslab o'tgan"
+                  >
+                    <AtSign className="h-3.5 w-3.5 md:h-3 md:w-3" />
+                  </span>
+                )}
                 <AnimatePresence>
                   {isUnread && (
                     <motion.div
