@@ -26,6 +26,7 @@ import UserProfilePage from "./pages/UserProfilePage";
 import SettingsPage from "./pages/SettingsPage";
 import SecurityPage from "./pages/SecurityPage";
 import ChatWallpaperPage from "./pages/ChatWallpaperPage";
+import DataStoragePage from "./pages/DataStoragePage";
 import PaymentSettingsPage from "./pages/PaymentSettingsPage";
 import CreatePage from "./pages/CreatePage";
 import MapPage from "./pages/MapPage";
@@ -124,6 +125,7 @@ function AppRoutes() {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/security" element={<SecurityPage />} />
         <Route path="/settings/chat-wallpaper" element={<ChatWallpaperPage />} />
+        <Route path="/settings/data" element={<DataStoragePage />} />
         <Route path="/payment" element={<PaymentSettingsPage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/story-archive" element={<StoryArchivePage />} />
