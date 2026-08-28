@@ -1,12 +1,11 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Users, Megaphone, Pin, VolumeX, Reply, Bookmark, Phone, Video, PhoneMissed, PhoneOff, PhoneIncoming, PhoneOutgoing, VideoOff, Mic, Image, Images, FileText, MapPin, BarChart3, Sticker, Music, BookOpen } from 'lucide-react';
+import { Users, Megaphone, Pin, PinOff, VolumeX, Volume2, Bookmark, Phone, Video, PhoneMissed, PhoneOff, PhoneIncoming, PhoneOutgoing, VideoOff, Mic, Image, Images, FileText, MapPin, BarChart3, Sticker, Music, BookOpen, Archive, ArchiveRestore, MailOpen, Mail } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
 import { Conversation } from '@/hooks/useMessages';
 import { ChatListContextMenu } from './ChatListContextMenu';
-import { useSwipeToReply } from '@/hooks/useSwipeToReply';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useOnlinePresence } from '@/contexts/OnlinePresenceContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -44,6 +43,20 @@ const PREVIEW_ICON = 'h-3.5 w-3.5 shrink-0 text-muted-foreground';
 const LOCATION_PREFIX = '\ud83d\udccd LOCATION:';
 const CALL_PREFIX = '\ud83d\udcde';
 const DOT = '\u00b7';
+
+/** Telegram swipe geometry: each revealed action is a fixed-width column. */
+const ACTION_WIDTH = 76;
+const OPEN_THRESHOLD = 46;
+const FULL_SWIPE_RATIO = 0.92;
+const LEFT_ACTION_WIDTH = 84;
+
+type SwipeAction = {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  className: string;
+  run: () => void;
+};
 
 export function ChatListItem({ 
   conversation, 
@@ -87,15 +100,6 @@ export function ChatListItem({
   // Use the global presence context for online status
   const { isUserOnline } = useOnlinePresence();
   const isOnline = otherUserId ? isUserOnline(otherUserId) : false;
-  
-  // Swipe to archive functionality
-  const { offset, isReadyToReply, swipeHandlers } = useSwipeToReply({
-    threshold: 80,
-    maxSwipe: 120,
-    onReply: () => {
-      if (onArchive) onArchive();
-    },
-  });
 
   // Subscribe to profile changes for verification status
   useEffect(() => {
@@ -156,7 +160,7 @@ export function ChatListItem({
       return format(date, 'HH:mm');
     }
     if (isYesterday(date)) {
-      return 'Yesterday';
+      return 'Kecha';
     }
     if (isThisWeek(date)) {
       return format(date, 'EEE');
@@ -276,11 +280,11 @@ export function ChatListItem({
           // fall through to call JSON parser below
           break;
         default:
-          if (!hasRealContent) return { text: 'No messages yet' };
+          if (!hasRealContent) return { text: 'Hozircha xabar yo\u2018q' };
       }
     }
 
-    if (!message) return { text: 'No messages yet' };
+    if (!message) return { text: 'Hozircha xabar yo\u2018q' };
 
     // Location payload format used elsewhere in the app
     if (message.startsWith(LOCATION_PREFIX)) {
@@ -310,9 +314,152 @@ export function ChatListItem({
 
   const isUnread = (conversation.unread_count ?? 0) > 0;
 
+  /* ------------------------------------------------------------------ *
+   * Telegram-style swipe actions
+   * - swipe left  -> reveals O'qildi / Sukut / Arxiv columns
+   * - swipe right -> quick pin toggle
+   * A long full swipe left runs the last (destructive-most) action.
+   * ------------------------------------------------------------------ */
+  const rightActions: SwipeAction[] = [];
+
+  if (isUnread && onMarkRead) {
+    rightActions.push({
+      key: 'read',
+      label: "O'qildi",
+      icon: <MailOpen className="h-5 w-5" />,
+      className: 'bg-sky-500 text-white',
+      run: onMarkRead,
+    });
+  } else if (!isUnread && onMarkUnread) {
+    rightActions.push({
+      key: 'unread',
+      label: "O'qilmagan",
+      icon: <Mail className="h-5 w-5" />,
+      className: 'bg-sky-500 text-white',
+      run: onMarkUnread,
+    });
+  }
+
+  if (onMute) {
+    rightActions.push({
+      key: 'mute',
+      label: isMuted ? 'Ovoz' : 'Sukut',
+      icon: isMuted ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />,
+      className: 'bg-indigo-500 text-white',
+      run: onMute,
+    });
+  }
+
+  if (isArchived && onUnarchive) {
+    rightActions.push({
+      key: 'unarchive',
+      label: 'Chiqarish',
+      icon: <ArchiveRestore className="h-5 w-5" />,
+      className: 'bg-amber-500 text-white',
+      run: onUnarchive,
+    });
+  } else if (!isArchived && onArchive) {
+    rightActions.push({
+      key: 'archive',
+      label: 'Arxiv',
+      icon: <Archive className="h-5 w-5" />,
+      className: 'bg-amber-500 text-white',
+      run: onArchive,
+    });
+  }
+
+  const maxLeftDrag = rightActions.length * ACTION_WIDTH;
+  const maxRightDrag = onPin ? LEFT_ACTION_WIDTH : 0;
+
+  const [swipeX, setSwipeX] = useState(0);
+  const swipeRef = useRef(0);
+  const dragRef = useRef<{ x: number; y: number; base: number; axis: 'none' | 'h' | 'v' }>({
+    x: 0,
+    y: 0,
+    base: 0,
+    axis: 'none',
+  });
+
+  const setSwipe = useCallback((value: number) => {
+    swipeRef.current = value;
+    setSwipeX(value);
+  }, []);
+
+  const closeSwipe = useCallback(() => setSwipe(0), [setSwipe]);
+
+  // Reset the row whenever the chat itself changes position / state
+  useEffect(() => {
+    closeSwipe();
+  }, [isArchived, isPinned, isMuted, closeSwipe]);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (maxLeftDrag === 0 && maxRightDrag === 0) return;
+    const touch = e.touches[0];
+    dragRef.current = { x: touch.clientX, y: touch.clientY, base: swipeRef.current, axis: 'none' };
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (maxLeftDrag === 0 && maxRightDrag === 0) return;
+    const touch = e.touches[0];
+    const dx = touch.clientX - dragRef.current.x;
+    const dy = touch.clientY - dragRef.current.y;
+
+    if (dragRef.current.axis === 'none') {
+      if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
+        dragRef.current.axis = 'h';
+      } else if (Math.abs(dy) > 10) {
+        dragRef.current.axis = 'v';
+      }
+    }
+    if (dragRef.current.axis !== 'h') return;
+
+    let next = dragRef.current.base + dx;
+    // Rubber-band beyond the limits, exactly like Telegram
+    if (next > maxRightDrag) next = maxRightDrag + (next - maxRightDrag) * 0.25;
+    if (next < -maxLeftDrag) next = -maxLeftDrag + (next + maxLeftDrag) * 0.35;
+    setSwipe(next);
+  };
+
+  const handleTouchEnd = () => {
+    if (dragRef.current.axis !== 'h') return;
+    const value = swipeRef.current;
+    dragRef.current.axis = 'none';
+
+    // Full swipe left runs the last action straight away
+    if (maxLeftDrag > 0 && value <= -(maxLeftDrag + ACTION_WIDTH * FULL_SWIPE_RATIO)) {
+      lightTap();
+      closeSwipe();
+      rightActions[rightActions.length - 1]?.run();
+      return;
+    }
+    if (maxLeftDrag > 0 && value <= -OPEN_THRESHOLD) {
+      lightTap();
+      setSwipe(-maxLeftDrag);
+      return;
+    }
+    if (maxRightDrag > 0 && value >= OPEN_THRESHOLD) {
+      lightTap();
+      closeSwipe();
+      onPin?.();
+      return;
+    }
+    closeSwipe();
+  };
+
   const handleClick = () => {
+    // A swiped-open row swallows the tap and closes instead (Telegram behaviour)
+    if (Math.abs(swipeRef.current) > 4) {
+      closeSwipe();
+      return;
+    }
     lightTap();
     onClick();
+  };
+
+  const runAction = (action: SwipeAction) => {
+    lightTap();
+    closeSwipe();
+    action.run();
   };
 
   if (compact) {
@@ -351,7 +498,10 @@ export function ChatListItem({
               <span className="absolute bottom-0 right-0 h-3 w-3 bg-green-500 rounded-full border-2 border-card" />
             )}
             {isUnread && (
-              <Badge className="absolute -top-1 -right-1 h-5 min-w-[20px] rounded-full px-1 text-[10px] flex items-center justify-center">
+              <Badge className={cn(
+                "absolute -top-1 -right-1 h-5 min-w-[20px] rounded-full px-1 text-[10px] flex items-center justify-center",
+                isMuted && "bg-muted-foreground/70 text-background hover:bg-muted-foreground/70"
+              )}>
                 {(conversation.unread_count ?? 0) > 99 ? '99+' : conversation.unread_count}
               </Badge>
             )}
@@ -377,27 +527,56 @@ export function ChatListItem({
       onMarkUnread={onMarkUnread}
     >
       <div className="relative overflow-hidden">
-        {/* Swipe action indicator (neutral, Telegram-like) */}
-        <div 
-          className={cn(
-            "absolute left-0 top-0 bottom-0 flex items-center justify-center bg-muted-foreground/25 transition-opacity",
-            isReadyToReply ? "opacity-100" : "opacity-60"
-          )}
-          style={{ width: Math.max(offset, 0) }}
-        >
-          <Reply className="h-5 w-5 text-foreground" />
-        </div>
+        {/* Right-hand swipe actions (revealed by swiping left) */}
+        {maxLeftDrag > 0 && swipeX < 0 && (
+          <div className="absolute inset-y-0 right-0 flex" style={{ width: Math.min(Math.max(-swipeX, 0), maxLeftDrag + ACTION_WIDTH) }}>
+            {rightActions.map((action) => (
+              <button
+                key={action.key}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  runAction(action);
+                }}
+                className={cn(
+                  'flex flex-1 min-w-0 flex-col items-center justify-center gap-1 text-[11px] font-medium',
+                  action.className
+                )}
+              >
+                {action.icon}
+                <span className="truncate px-1">{action.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Left-hand quick pin (revealed by swiping right) */}
+        {maxRightDrag > 0 && swipeX > 0 && (
+          <div
+            className="absolute inset-y-0 left-0 flex items-center justify-center bg-emerald-500 text-white"
+            style={{ width: Math.max(swipeX, 0) }}
+          >
+            <div className="flex flex-col items-center gap-1 text-[11px] font-medium">
+              {isPinned ? <PinOff className="h-5 w-5" /> : <Pin className="h-5 w-5" />}
+              <span>{isPinned ? 'Yechish' : 'Qadash'}</span>
+            </div>
+          </div>
+        )}
 
         <button
           onClick={handleClick}
-          {...swipeHandlers}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={closeSwipe}
           className={cn(
-            "w-full px-4 py-3 md:px-3 md:py-2.5 flex items-center gap-3 transition-colors duration-150 border-b border-border/30",
+            "relative w-full px-4 py-3 md:px-3 md:py-2.5 flex items-center gap-3 border-b border-border/30",
             HOVER_ROW,
             "min-h-[72px] md:min-h-0", // Larger touch target on mobile
-            isSelected && SELECTED_ROW
+            isSelected && SELECTED_ROW,
+            swipeX === 0 ? "bg-card transition-[transform,background-color] duration-200" : "bg-card"
           )}
-          style={{ transform: `translateX(${offset}px)` }}
+          style={{ transform: `translateX(${swipeX}px)` }}
         >
           <div className="relative flex-shrink-0">
             <Avatar className="h-14 w-14 md:h-12 md:w-12">
@@ -444,9 +623,6 @@ export function ChatListItem({
                 )}
                 {conversation.type === 'channel' && (
                   <Megaphone className="h-4 w-4 md:h-3.5 md:w-3.5 text-muted-foreground flex-shrink-0" />
-                )}
-                {isPinned && (
-                  <Pin className="h-3.5 w-3.5 md:h-3 md:w-3 text-muted-foreground flex-shrink-0" />
                 )}
                 {isMuted && (
                   <VolumeX className="h-3.5 w-3.5 md:h-3 md:w-3 text-muted-foreground flex-shrink-0" />
@@ -497,7 +673,9 @@ export function ChatListItem({
                         variant="default" 
                         className={cn(
                           "h-6 min-w-[24px] md:h-5 md:min-w-[20px] rounded-full px-2 md:px-1.5 text-sm md:text-xs",
-                          isPulsing && "shadow-lg shadow-primary/40"
+                          isPulsing && "shadow-lg shadow-primary/40",
+                          // Telegram shows a gray counter for muted chats
+                          isMuted && "bg-muted-foreground/70 text-background hover:bg-muted-foreground/70 shadow-none"
                         )}
                       >
                         {(conversation.unread_count ?? 0) > 99 ? '99+' : conversation.unread_count}
@@ -505,6 +683,10 @@ export function ChatListItem({
                     </motion.div>
                   )}
                 </AnimatePresence>
+                {/* Pinned chats without unread messages show the pin on the right, like Telegram */}
+                {isPinned && !isUnread && (
+                  <Pin className="h-3.5 w-3.5 md:h-3 md:w-3 text-muted-foreground/70 rotate-45" />
+                )}
               </div>
             </div>
           </div>
