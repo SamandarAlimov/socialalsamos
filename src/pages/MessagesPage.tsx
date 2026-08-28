@@ -34,7 +34,7 @@ import { FolderChat } from '@/lib/chatFolders';
 
 // Komponentlar
 import { ChatListItem } from '@/components/messages/ChatListItem';
-import { ChatFolderBar, FolderBarChat } from '@/components/messages/ChatFolderBar';
+import { ChatFolderBar, FolderBarChat, SystemTab } from '@/components/messages/ChatFolderBar';
 import { ChatHeader } from '@/components/messages/ChatHeader';
 import { EnhancedMessageBubble } from '@/components/messages/EnhancedMessageBubble';
 import { MessageInput } from '@/components/messages/MessageInput';
@@ -65,7 +65,7 @@ import {
 } from '@/components/ui/resizable';
 import { useIsMobile } from '@/hooks/use-mobile';
 
-type MessageTab = 'private' | 'groups' | 'channels' | 'requests' | 'archived';
+type MessageTab = 'all' | 'private' | 'groups' | 'channels' | 'requests' | 'archived';
 
 const LOCATION_PREFIX = '\ud83d\udccd LOCATION:';
 
@@ -104,7 +104,7 @@ export default function MessagesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Interfeys holati
-  const [activeTab, setActiveTab] = useState<MessageTab>('private');
+  const [activeTab, setActiveTab] = useState<MessageTab>('all');
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -399,8 +399,9 @@ export default function MessagesPage() {
     scrollToBottom(true);
   }, [scrollToBottom]);
 
-  // Bo'limlar (o'zbekcha)
+  // Bo'limlar (o'zbekcha) - papkalar bilan bitta panelda ko'rinadi
   const tabsBase: { id: MessageTab; label: string }[] = [
+    { id: 'all', label: 'Barchasi' },
     { id: 'private', label: 'Shaxsiy' },
     { id: 'groups', label: 'Guruhlar' },
     { id: 'channels', label: 'Kanallar' },
@@ -410,6 +411,7 @@ export default function MessagesPage() {
 
   const tabUnreadCounts = useMemo(() => {
     const counts: Record<MessageTab, number> = {
+      all: 0,
       private: 0,
       groups: 0,
       channels: 0,
@@ -419,15 +421,23 @@ export default function MessagesPage() {
     for (const conv of allConversations) {
       const isReq = Boolean((conv as any).is_request);
       const unread = conv.unread_count ?? 0;
-      if (isReq) counts.requests += unread;
-      else if (conv.type === 'private') counts.private += unread;
+      if (conv.is_muted) continue; // Telegram ovozsiz chatlarni umumiy hisobga qo'shmaydi
+      if (isReq) {
+        counts.requests += unread;
+        continue;
+      }
+      counts.all += unread;
+      if (conv.type === 'private') counts.private += unread;
       else if (conv.type === 'group') counts.groups += unread;
       else if (conv.type === 'channel') counts.channels += unread;
     }
     return counts;
   }, [allConversations]);
 
-  const tabs = tabsBase.map((tab) => ({ ...tab, unread: tabUnreadCounts[tab.id] }));
+  const systemTabs = useMemo<SystemTab[]>(
+    () => tabsBase.map((tab) => ({ id: tab.id, label: tab.label, count: tabUnreadCounts[tab.id] })),
+    [tabUnreadCounts]
+  );
 
   // Papka paneli uchun chatlar
   const folderChats = useMemo<FolderBarChat[]>(
@@ -828,6 +838,19 @@ export default function MessagesPage() {
         .maybeSingle();
 
       const newPinnedStatus = !(participant?.is_pinned ?? false);
+
+      // Telegramdek: bir vaqtda 5 tagacha chatni qadash mumkin
+      if (newPinnedStatus) {
+        const pinnedCount = allConversations.filter((conv) => conv.is_pinned).length;
+        if (pinnedCount >= 5) {
+          toast({
+            title: 'Chegaraga yetdingiz',
+            description: 'Eng ko\u2018pi bilan 5 ta chatni qadash mumkin',
+            variant: 'destructive',
+          });
+          return;
+        }
+      }
 
       await supabase
         .from('conversation_participants')
@@ -1444,7 +1467,7 @@ export default function MessagesPage() {
               <div className="relative min-w-0 flex-1">
                 <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground md:h-4 md:w-4" />
                 <Input
-                  placeholder="Chat, foydalanuvchi yoki xabar qidirish..."
+                  placeholder="Qidirish"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="h-11 bg-muted/50 pl-11 pr-10 text-base sm:h-12 md:h-10 md:pl-10 md:text-sm"
@@ -1485,47 +1508,18 @@ export default function MessagesPage() {
             </div>
           </div>
 
-          {/* Bo'limlar va papkalar (qidiruv paytida yashiriladi) */}
+          {/* YAKKA varaq paneli: bo'limlar + papkalar (qidiruv paytida yashiriladi) */}
           {!isSearching && (
-            <>
-              <div
-                className="scrollbar-hide relative isolate flex flex-shrink-0 overflow-x-auto border-b border-border"
-                style={{ zIndex: 0 }}
-              >
-                {tabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={cn(
-                      'tg-transition relative flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap px-3 py-3 text-sm font-medium active:bg-accent/50 md:py-2.5 md:text-xs',
-                      activeTab === tab.id
-                        ? 'text-primary'
-                        : 'text-muted-foreground hover:text-foreground'
-                    )}
-                  >
-                    {tab.label}
-                    {tab.unread > 0 && (
-                      <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
-                        {tab.unread > 99 ? '99+' : tab.unread}
-                      </span>
-                    )}
-                    {activeTab === tab.id && (
-                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-                    )}
-                  </button>
-                ))}
-              </div>
-
-              {activeTab !== 'requests' && activeTab !== 'archived' && (
-                <div className="flex-shrink-0 border-b border-border">
-                  <ChatFolderBar
-                    chats={folderChats}
-                    onFilterChange={(predicate) => setFolderFilter(() => predicate)}
-                    onMuteChats={handleMuteFolderChats}
-                  />
-                </div>
-              )}
-            </>
+            <div className="flex-shrink-0 border-b border-border">
+              <ChatFolderBar
+                chats={folderChats}
+                systemTabs={systemTabs}
+                activeSystemTabId={activeTab}
+                onSelectSystemTab={(id) => setActiveTab(id as MessageTab)}
+                onFilterChange={(predicate) => setFolderFilter(() => predicate)}
+                onMuteChats={handleMuteFolderChats}
+              />
+            </div>
           )}
         </>
       )}
