@@ -12,6 +12,9 @@ import {
   TONE_ORDER,
 } from '@/lib/notificationSettings';
 
+/** Escape'lar JSX matn ichida emas, ifoda ichida bo'lishi kerak. */
+const QUIET_HINT = 'Hozir tungi jimlik vaqti \u2014 tovushlar o\u2018chirilgan.';
+
 type ToneRowProps = {
   title: string;
   description: string;
@@ -111,7 +114,7 @@ export function NotificationToneEditor({ className }: { className?: string }) {
       {inQuietHours && (
         <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
           <BellOff className="h-3.5 w-3.5" />
-          Hozir tungi jimlik vaqti \u2014 tovushlar o\u2018chirilgan.
+          <span>{QUIET_HINT}</span>
         </div>
       )}
 
