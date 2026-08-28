@@ -56,6 +56,14 @@ interface MessageInputProps {
 
 const MAX_FILE_MB = 50;
 
+/**
+ * Telegram kompozitor geometriyasi: barcha element (biriktirish, matn maydoni,
+ * mikrofon/yuborish) bir xil 40px balandlikda va BITTA chiziqda turadi.
+ */
+const ROW_CONTROL = 'h-10 w-10 shrink-0 rounded-full';
+const INPUT_MIN_HEIGHT = 40;
+const INPUT_MAX_HEIGHT = 140;
+
 type MediaKind = 'image' | 'video' | 'audio' | 'document';
 
 function detectKind(mimeType: string, fileName?: string): MediaKind {
@@ -74,9 +82,9 @@ function detectKind(mimeType: string, fileName?: string): MediaKind {
 
 function formatSize(bytes: number) {
   if (!bytes) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
 interface PendingAttachment {
@@ -135,6 +143,17 @@ export function MessageInput({
     };
   }, [onTyping]);
 
+  /** Matn maydoni balandligini kontentga moslash (bitta joyda) */
+  const autoResize = (el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(Math.max(el.scrollHeight, INPUT_MIN_HEIGHT), INPUT_MAX_HEIGHT) + 'px';
+  };
+
+  const resetInputHeight = () => {
+    if (inputRef.current) inputRef.current.style.height = INPUT_MIN_HEIGHT + 'px';
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     const cursorPosition = e.target.selectionStart || 0;
@@ -183,7 +202,7 @@ export function MessageInput({
     onTyping(false);
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    if (inputRef.current) inputRef.current.style.height = 'auto';
+    resetInputHeight();
   };
 
   /** Maqola (article) xabarini yuborish */
@@ -191,6 +210,7 @@ export function MessageInput({
     await onSend(payload);
     setMessage('');
     onTyping(false);
+    resetInputHeight();
   };
 
   /** Telegramdek klaviatura qisqartmalari: Ctrl/Cmd + B / I / U / K */
@@ -248,7 +268,7 @@ export function MessageInput({
    */
   const uploadAndAttach = async (file: File, asDocument = false) => {
     if (file.size > MAX_FILE_MB * 1024 * 1024) {
-      toast.error(`Fayl hajmi ${MAX_FILE_MB} MB dan kichik bo'lishi kerak`);
+      toast.error('Fayl hajmi ' + MAX_FILE_MB + " MB dan kichik bo'lishi kerak");
       return;
     }
 
@@ -278,7 +298,7 @@ export function MessageInput({
     } catch (err) {
       // Aniq sababni ko'rsatamiz - "xatolik" degan umumiy matn foydasiz
       const reason = err instanceof Error ? err.message : 'Kutilmagan xatolik';
-      toast.error(`Yuklab bo'lmadi: ${reason}`);
+      toast.error("Yuklab bo'lmadi: " + reason);
       if (localPreview) {
         URL.revokeObjectURL(localPreview);
         localPreviewRef.current = null;
@@ -291,7 +311,7 @@ export function MessageInput({
   /** Qo'shimcha fayllarni darhol alohida xabar sifatida yuborish */
   const uploadAndSendNow = async (file: File, asDocument: boolean) => {
     if (file.size > MAX_FILE_MB * 1024 * 1024) {
-      toast.error(`"${file.name}" ${MAX_FILE_MB} MB dan katta`);
+      toast.error('"' + file.name + '" ' + MAX_FILE_MB + ' MB dan katta');
       return;
     }
     const kind = detectKind(file.type, file.name);
@@ -300,18 +320,17 @@ export function MessageInput({
       await onSend('', uploaded.url, asDocument ? 'document' : kind);
     } catch (err) {
       const reason = err instanceof Error ? err.message : 'Kutilmagan xatolik';
-      toast.error(`"${file.name}" yuborilmadi: ${reason}`);
+      toast.error('"' + file.name + '" yuborilmadi: ' + reason);
     }
   };
 
   /**
    * Bir nechta rasm/videoni yuklab, albom (media group) sifatida tayyorlaydi.
-   * Yuborishdan oldin caption yozish mumkin - Telegramdagi bilan bir xil.
    */
   const uploadAlbum = async (files: File[]) => {
     const accepted = files.slice(0, ALBUM_MAX_ITEMS).filter((file) => {
       if (file.size > MAX_FILE_MB * 1024 * 1024) {
-        toast.error(`"${file.name}" ${MAX_FILE_MB} MB dan katta`);
+        toast.error('"' + file.name + '" ' + MAX_FILE_MB + ' MB dan katta');
         return false;
       }
       return true;
@@ -319,7 +338,7 @@ export function MessageInput({
 
     if (accepted.length === 0) return;
     if (files.length > ALBUM_MAX_ITEMS) {
-      toast.info(`Bitta albomga ${ALBUM_MAX_ITEMS} tagacha media sig'adi`);
+      toast.info('Bitta albomga ' + ALBUM_MAX_ITEMS + " tagacha media sig'adi");
     }
 
     setUploading(true);
@@ -337,7 +356,7 @@ export function MessageInput({
         });
       } catch (err) {
         const reason = err instanceof Error ? err.message : 'Kutilmagan xatolik';
-        toast.error(`"${file.name}" yuklanmadi: ${reason}`);
+        toast.error('"' + file.name + '" yuklanmadi: ' + reason);
       }
     }
 
@@ -369,11 +388,13 @@ export function MessageInput({
       return;
     }
 
-    const mediaFiles = files.filter((file) => {
+    const mediaSet = new Set<File>();
+    files.forEach((file) => {
       const kind = detectKind(file.type, file.name);
-      return kind === 'image' || kind === 'video';
+      if (kind === 'image' || kind === 'video') mediaSet.add(file);
     });
-    const otherFiles = files.filter((file) => !mediaFiles.includes(file));
+    const mediaFiles = files.filter((file) => mediaSet.has(file));
+    const otherFiles = files.filter((file) => !mediaSet.has(file));
 
     if (mediaFiles.length > 1) {
       await uploadAlbum(mediaFiles);
@@ -443,7 +464,7 @@ export function MessageInput({
   return (
     <div
       className={cn(
-        'relative z-10 border-t border-border bg-card p-3 tg-transition',
+        'relative z-10 border-t border-border bg-card px-3 py-2 tg-transition',
         isDragging && 'bg-muted/60'
       )}
       onDragOver={(e) => {
@@ -541,7 +562,7 @@ export function MessageInput({
           <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
             {pendingAlbum.map((item, index) => (
               <div
-                key={`${item.url}-${index}`}
+                key={item.url + '-' + index}
                 className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-muted"
               >
                 {item.type === 'video' ? (
@@ -651,12 +672,16 @@ export function MessageInput({
         </div>
       )}
 
-      <div className="flex items-end gap-2">
+      {/* Kompozitor qatori - hammasi bitta 40px chiziqda */}
+      <div className="flex items-end gap-1.5">
         {/* Fayl qo'shish - Telegram mobil uslubidagi panel */}
         <Button
           variant="ghost"
           size="icon"
-          className="h-10 w-10 shrink-0 rounded-full text-muted-foreground tg-transition hover:bg-muted hover:text-foreground"
+          className={cn(
+            ROW_CONTROL,
+            'text-muted-foreground tg-transition hover:bg-muted hover:text-foreground'
+          )}
           disabled={uploading}
           aria-label="Fayl qo'shish"
           onClick={() => setAttachmentOpen(true)}
@@ -669,7 +694,7 @@ export function MessageInput({
         </Button>
 
         {/* Matn maydoni */}
-        <div className="relative flex-1">
+        <div className="relative min-w-0 flex-1">
           <textarea
             ref={inputRef}
             value={message}
@@ -693,17 +718,14 @@ export function MessageInput({
             disabled={disabled}
             rows={1}
             className={cn(
-              'chat-selectable w-full resize-none rounded-2xl border border-border bg-muted/50 px-4 py-2.5 pr-20 text-sm',
+              'chat-selectable block w-full resize-none rounded-[20px] border border-border bg-muted/50',
+              'px-3.5 py-[9px] pr-[70px] text-[15px] leading-[22px]',
               'focus:outline-none focus:ring-2 focus:ring-primary/40',
-              'min-h-[44px] max-h-[120px]',
+              'min-h-[40px] max-h-[140px] scrollbar-hide',
               disabled && 'cursor-not-allowed opacity-50'
             )}
-            style={{ height: 'auto' }}
-            onInput={(e) => {
-              const target = e.target as HTMLTextAreaElement;
-              target.style.height = 'auto';
-              target.style.height = Math.min(target.scrollHeight, 120) + 'px';
-            }}
+            style={{ height: INPUT_MIN_HEIGHT }}
+            onInput={(e) => autoResize(e.target as HTMLTextAreaElement)}
           />
 
           {mentionState.isActive && (
@@ -715,8 +737,8 @@ export function MessageInput({
             />
           )}
 
-          {/* Formatlash va emoji */}
-          <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
+          {/* Formatlash va emoji - matn o'sganda ham pastda, bir chiziqda qoladi */}
+          <div className="absolute bottom-1 right-1.5 flex items-center gap-0.5">
             <button
               type="button"
               onClick={() => setShowFormatting((v) => !v)}
@@ -729,11 +751,11 @@ export function MessageInput({
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground'
               )}
             >
-              <Type className="h-4 w-4" />
+              <Type className="h-[18px] w-[18px]" />
             </button>
             <EmojiPicker
               onSelect={(emoji) => setMessage((prev) => prev + emoji)}
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              className="h-8 w-8 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
             />
           </div>
         </div>
@@ -743,7 +765,7 @@ export function MessageInput({
           <Button
             variant="default"
             size="icon"
-            className="h-10 w-10 shrink-0 rounded-full tg-transition active:scale-95"
+            className={cn(ROW_CONTROL, 'tg-transition active:scale-95')}
             onClick={handleSend}
             onMouseDown={startLongPress}
             onMouseUp={cancelLongPress}
@@ -757,13 +779,15 @@ export function MessageInput({
             <Send className="h-5 w-5" />
           </Button>
         ) : (
-          <TelegramMediaRecorder
-            onSend={(url, _duration, type) => {
-              // Telegram ovozli / doiraviy video xabarlarni matnsiz yuboradi:
-              // bubble o'zi pleyerni chizadi, shuning uchun placeholder matn saqlanmaydi.
-              onSend('', url, type);
-            }}
-          />
+          <div className="flex h-10 shrink-0 items-center">
+            <TelegramMediaRecorder
+              onSend={(url, _duration, type) => {
+                // Telegram ovozli / doiraviy video xabarlarni matnsiz yuboradi:
+                // bubble o'zi pleyerni chizadi, shuning uchun placeholder matn saqlanmaydi.
+                onSend('', url, type);
+              }}
+            />
+          </div>
         )}
       </div>
 
@@ -794,6 +818,7 @@ export function MessageInput({
             );
             setMessage('');
             clearAttachment();
+            resetInputHeight();
           }}
         />
       )}
