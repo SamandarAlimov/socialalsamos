@@ -6,13 +6,21 @@ import { usePostMedia, type PostMediaItem } from '@/hooks/usePostMedia';
 import { usePostLocation } from '@/hooks/usePostLocation';
 import { PollCard } from '@/components/PollCard';
 import { PostLocationCard } from '@/components/PostLocationCard';
+import { PostMediaCarousel } from '@/components/PostMediaCarousel';
 
 interface PostExtrasProps {
   postId: string;
-  /** `posts.has_poll` — keraksiz so'rovlarni oldini oladi. */
+  /** `posts.has_poll` — keraksiz so‘rovlarni oldini oladi. */
   hasPoll?: boolean;
-  /** Post egasi bo'lsa live joylashuvni to'xtatish tugmasi chiqadi. */
+  /** Post egasi bo‘lsa live joylashuvni to‘xtatish tugmasi chiqadi. */
   isOwner?: boolean;
+  /**
+   * Eski sxemadagi fayllar (`posts.media_urls`).
+   * `post_media` bo‘sh bo‘lganda faqat shu ishlatiladi — shu tariqa eski
+   * postlar ham ko‘rinadi, yangi postlar esa ikki marta chizilmaydi.
+   */
+  legacyMediaUrls?: string[] | null;
+  legacyMediaType?: string | null;
   className?: string;
 }
 
@@ -70,24 +78,40 @@ function AudioCard({ item }: { item: PostMediaItem }) {
 }
 
 /**
- * Lentadagi post ostiga qo'shiladigan strukturali kontent bloki:
- * fayllar galereyasi (har qanday tur), so'rovnoma va joylashuv.
+ * Lentadagi post ostiga qo‘shiladigan strukturali kontent bloki:
+ * fayllar galereyasi (har qanday tur), so‘rovnoma va joylashuv.
  *
  * Bu blok postning matnidan mustaqil — shuning uchun eski postlar ham
- * buzilmaydi: `post_media` bo'sh bo'lsa hech narsa chizilmaydi.
+ * buzilmaydi: `post_media` bo‘sh bo‘lsa eski `media_urls` ishlatiladi.
  */
-export function PostExtras({ postId, hasPoll, isOwner, className }: PostExtrasProps) {
+export function PostExtras({
+  postId,
+  hasPoll,
+  isOwner,
+  legacyMediaUrls,
+  legacyMediaType,
+  className,
+}: PostExtrasProps) {
   const { media } = usePostMedia(postId);
   const { location } = usePostLocation(postId);
 
   const visuals = media.filter((item) => item.kind === 'image' || item.kind === 'video');
   const others = media.filter((item) => item.kind !== 'image' && item.kind !== 'video');
 
-  const hasAnything = media.length > 0 || Boolean(location) || Boolean(hasPoll);
+  // Yangi sxemada fayl bo‘lmasa — eski massivga qaytamiz.
+  const legacy = media.length === 0 ? (legacyMediaUrls ?? []) : [];
+
+  const hasAnything =
+    media.length > 0 || legacy.length > 0 || Boolean(location) || Boolean(hasPoll);
   if (!hasAnything) return null;
 
   return (
     <div className={cn('space-y-3', className)}>
+      {/* Eski postlar uchun mavjud karusel */}
+      {legacy.length > 0 && (
+        <PostMediaCarousel mediaUrls={legacy} mediaType={legacyMediaType || 'image'} />
+      )}
+
       {/* Rasm va videolar — gorizontal galereya (scroll mobil qurilmada ishlaydi) */}
       {visuals.length > 0 && (
         <div
@@ -138,7 +162,7 @@ export function PostExtras({ postId, hasPoll, isOwner, className }: PostExtrasPr
         ),
       )}
 
-      {/* So'rovnoma */}
+      {/* So‘rovnoma */}
       {hasPoll && <PollCard postId={postId} />}
 
       {/* Joylashuv */}
