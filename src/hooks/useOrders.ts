@@ -21,12 +21,17 @@ export interface Order {
   order_number: string;
   buyer_id: string;
   seller_id: string;
-  status: string;
+  status: OrderStatus;
   payment_status: string;
   payment_method: string | null;
   receipt_number: string | null;
   paid_at: string | null;
   failure_reason: string | null;
+  cancel_reason?: string | null;
+  cancelled_at?: string | null;
+  shipped_at?: string | null;
+  delivered_at?: string | null;
+  refunded_at?: string | null;
   subtotal: number;
   shipping_cost: number;
   total: number;
@@ -41,12 +46,30 @@ export interface Order {
     logo_url: string | null;
     is_verified: boolean;
   };
+  buyer?: {
+    username: string | null;
+    display_name: string | null;
+    avatar_url: string | null;
+  };
 }
 
+export type OrderStatus = 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+
+const ORDER_SELECT = `
+  *,
+  seller:sellers(business_name, logo_url, is_verified),
+  items:order_items(
+    id, product_id, title, quantity, price, total,
+    product:products(images:product_images(url))
+  )
+`;
+
+/** Orders placed by the signed-in user. */
 export function useOrders() {
   const { user } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchOrders = useCallback(async () => {
     if (!user) {
@@ -56,26 +79,22 @@ export function useOrders() {
     }
 
     setIsLoading(true);
+    setError(null);
 
-    const { data, error } = await supabase
+    const { data, error: queryError } = await supabase
       .from('orders')
-      .select(`
-        *,
-        seller:sellers(business_name, logo_url, is_verified),
-        items:order_items(
-          id, product_id, title, quantity, price, total,
-          product:products(images:product_images(url))
-        )
-      `)
+      .select(ORDER_SELECT)
       .eq('buyer_id', user.id)
       .order('created_at', { ascending: false });
 
-    if (!error && data) {
+    if (queryError) {
+      setError(queryError.message);
+    } else if (data) {
       setOrders(data.map(o => ({
         ...o,
         seller: o.seller as any,
         items: (o.items as any[]) || [],
-      })));
+      })) as Order[]);
     }
 
     setIsLoading(false);
@@ -85,9 +104,178 @@ export function useOrders() {
     fetchOrders();
   }, [fetchOrders]);
 
-  return { orders, isLoading, refresh: fetchOrders };
+  return { orders, isLoading, error, refresh: fetchOrders };
 }
 
+/**
+ * Orders received by the signed-in seller.
+ * The seller side previously had no way to see or advance incoming orders.
+ */
+export function useSellerOrders() {
+  const { user } = useAuth();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [sellerId, setSellerId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchOrders = useCallback(async () => {
+    if (!user) {
+      setOrders([]);
+      setSellerId(null);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    const { data: seller } = await supabase
+      .from('sellers')
+      .select('id')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (!seller?.id) {
+      setSellerId(null);
+      setOrders([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setSellerId(seller.id);
+
+    const { data, error: queryError } = await supabase
+      .from('orders')
+      .select(`
+        *,
+        buyer:profiles!orders_buyer_id_fkey(username, display_name, avatar_url),
+        items:order_items(
+          id, product_id, title, quantity, price, total,
+          product:products(images:product_images(url))
+        )
+      `)
+      .eq('seller_id', seller.id)
+      .order('created_at', { ascending: false });
+
+    if (queryError) {
+      setError(queryError.message);
+    } else if (data) {
+      setOrders(data.map(o => ({
+        ...o,
+        buyer: o.buyer as any,
+        items: (o.items as any[]) || [],
+      })) as Order[]);
+    }
+
+    setIsLoading(false);
+  }, [user]);
+
+  useEffect(() => {
+    fetchOrders();
+  }, [fetchOrders]);
+
+  return { orders, sellerId, isLoading, error, refresh: fetchOrders };
+}
+
+/** Status codes raised by the SQL state machine, mapped to Uzbek copy. */
+const LIFECYCLE_MESSAGES: Record<string, string> = {
+  not_authenticated: 'Iltimos, tizimga kiring',
+  invalid_status: "Noto'g'ri holat",
+  order_not_found: 'Buyurtma topilmadi',
+  not_authorized: 'Bu buyurtmani o\u2018zgartirishga ruxsatingiz yo\u2018q',
+  seller_only: 'Faqat sotuvchi bu amalni bajara oladi',
+  cancel_window_closed: 'Buyurtma yo\u2018lga chiqqan \u2014 bekor qilish uchun sotuvchiga murojaat qiling',
+  status_unchanged: 'Buyurtma allaqachon shu holatda',
+  order_finalized: 'Buyurtma yakunlangan',
+  invalid_transition: "Bu holatga o'tish mumkin emas",
+};
+
+function extractCode(message?: string | null) {
+  if (!message) return '';
+  return message.replace(/^.*:\s*/, '').trim();
+}
+
+const STATUS_TOASTS: Record<OrderStatus, string> = {
+  pending: 'Buyurtma kutilmoqda',
+  processing: 'Buyurtma qabul qilindi va tayyorlanmoqda',
+  shipped: "Buyurtma yo'lga chiqdi",
+  delivered: 'Buyurtma yetkazildi',
+  cancelled: 'Buyurtma bekor qilindi',
+};
+
+export interface OrderStatusResult {
+  success: boolean;
+  status?: OrderStatus;
+  refunded?: number;
+  receipt_number?: string | null;
+  error?: string;
+}
+
+/**
+ * Advance or cancel an order through the guarded database state machine.
+ * All authorization, stock restoration and wallet refunding happens inside
+ * `marketplace_update_order_status`, so the client cannot skip a step.
+ */
+export function useOrderActions() {
+  const { toast } = useToast();
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  const updateStatus = useCallback(async (
+    orderId: string,
+    status: OrderStatus,
+    reason?: string,
+  ): Promise<OrderStatusResult> => {
+    setUpdatingId(orderId);
+    try {
+      const { data, error } = await supabase.rpc('marketplace_update_order_status', {
+        _order_id: orderId,
+        _status: status,
+        _reason: reason ?? null,
+      });
+
+      if (error) {
+        const code = extractCode(error.message);
+        const friendly = LIFECYCLE_MESSAGES[code] || error.message || 'Amal bajarilmadi';
+        toast({ title: 'Amal bajarilmadi', description: friendly, variant: 'destructive' });
+        return { success: false, error: friendly };
+      }
+
+      const payload = (data ?? {}) as {
+        status?: OrderStatus;
+        refunded?: number;
+        receipt_number?: string | null;
+      };
+      const refunded = Number(payload.refunded ?? 0);
+
+      toast({
+        title: STATUS_TOASTS[status],
+        description: refunded > 0
+          ? 'Mablag\u2018 hamyoningizga qaytarildi'
+          : undefined,
+      });
+
+      return {
+        success: true,
+        status: payload.status ?? status,
+        refunded,
+        receipt_number: payload.receipt_number ?? null,
+      };
+    } catch (err: any) {
+      const msg = err?.message || 'Kutilmagan xatolik';
+      toast({ title: 'Xatolik', description: msg, variant: 'destructive' });
+      return { success: false, error: msg };
+    } finally {
+      setUpdatingId(null);
+    }
+  }, [toast]);
+
+  const cancelOrder = useCallback(
+    (orderId: string, reason?: string) => updateStatus(orderId, 'cancelled', reason),
+    [updateStatus],
+  );
+
+  return { updateStatus, cancelOrder, updatingId, isUpdating: updatingId !== null };
+}
 
 export type CheckoutPaymentMethod = 'wallet' | 'card_on_delivery' | 'cash';
 
@@ -102,7 +290,11 @@ export interface CheckoutResult {
 const FAILURE_MESSAGES: Record<string, string> = {
   not_authenticated: 'Iltimos, tizimga kiring',
   invalid_payment_method: "To'lov usuli noto'g'ri",
+  invalid_shipping_address: "Yetkazib berish manzili to'liq emas",
   empty_cart: "Savat bo'sh",
+  invalid_quantity: "Mahsulot soni noto'g'ri",
+  product_unavailable: "Mahsulot sotuvda yo'q",
+  insufficient_stock: 'Omborda yetarli mahsulot qolmagan',
   insufficient_balance: "Hamyonda mablag' yetarli emas. To'ldiring yoki boshqa usul tanlang.",
 };
 
@@ -130,10 +322,11 @@ export function useCheckout() {
       });
 
       if (error) {
-        const code = (error.message || '').replace(/^.*:\s*/, '').trim();
-        const friendly = FAILURE_MESSAGES[code] || error.message || "Buyurtma amalga oshmadi";
+        const code = extractCode(error.message);
+        const friendly = FAILURE_MESSAGES[code] || error.message || 'Buyurtma amalga oshmadi';
         toast({ title: "To'lov amalga oshmadi", description: friendly, variant: 'destructive' });
-        return { success: false, order_ids: [], payment_status: 'failed', total: 0, error: friendly };
+        // the raw code is returned so the UI can offer a targeted recovery action
+        return { success: false, order_ids: [], payment_status: 'failed', total: 0, error: code || friendly };
       }
 
       const payload = (data ?? {}) as {
