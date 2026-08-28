@@ -29,6 +29,7 @@ import { CartSheet } from '@/components/marketplace/CartSheet';
 import { CheckoutSheet } from '@/components/marketplace/CheckoutSheet';
 import { SellerDashboard } from '@/components/marketplace/SellerDashboard';
 import { OrdersView } from '@/components/marketplace/OrdersView';
+import { SellerOrdersView } from '@/components/marketplace/SellerOrdersView';
 import { SellerStorefront } from '@/components/marketplace/SellerStorefront';
 import { VideoCommerceSection } from '@/components/marketplace/VideoCommerceSection';
 import { CategoryIcon } from '@/components/marketplace/CategoryIcon';
@@ -79,6 +80,8 @@ export default function MarketplacePage() {
   const [priceRange, setPriceRange] = useState<[number, number] | null>(null);
   const [searchFocused, setSearchFocused] = useState(false);
   const [selectedSellerId, setSelectedSellerId] = useState<string | null>(null);
+  /** Seller area sub-view: own catalogue vs incoming order queue. */
+  const [sellingView, setSellingView] = useState<'products' | 'orders'>('products');
 
   // Debounced search: one query per pause, not one per keystroke.
   useEffect(() => {
@@ -172,6 +175,11 @@ export default function MarketplacePage() {
     { id: 'orders', label: 'Buyurtmalar', icon: ClipboardList },
     { id: 'selling', label: 'Sotish', icon: Package },
     { id: 'saved', label: 'Saqlangan', icon: Heart },
+  ];
+
+  const sellerViews = [
+    { id: 'products' as const, label: 'Mahsulotlar', icon: Package },
+    { id: 'orders' as const, label: 'Buyurtmalar', icon: ClipboardList },
   ];
 
   const pageContent = (
@@ -573,7 +581,7 @@ export default function MarketplacePage() {
                   description="Buyurtmalarni ko'rish uchun tizimga kiring"
                 />
               ) : (
-                <OrdersView />
+                <OrdersView onProductSelect={handleProductSelect} />
               )}
             </motion.div>
           )}
@@ -600,7 +608,7 @@ export default function MarketplacePage() {
                   <Button variant="outline" onClick={() => setShowDashboard(false)} className="rounded-xl">
                     ← Orqaga
                   </Button>
-                  <SellerDashboard />
+                  <SellerDashboard onClose={() => setShowDashboard(false)} />
                 </div>
               ) : (
                 <div className="space-y-5">
@@ -621,41 +629,76 @@ export default function MarketplacePage() {
                     ))}
                   </div>
 
-                  <Button
-                    variant="outline"
-                    className="w-full rounded-xl h-11"
-                    onClick={() => setShowDashboard(true)}
-                  >
-                    <LayoutDashboard className="h-4 w-4 mr-2" />
-                    Sotuvchi paneli
-                  </Button>
+                  {/*
+                    Seller sub-navigation. The incoming order queue used to be
+                    buried inside the analytics dashboard, so sellers had no
+                    obvious place to accept or ship an order.
+                  */}
+                  <div className="flex gap-1 p-1 rounded-xl bg-muted/40" role="tablist">
+                    {sellerViews.map((view) => {
+                      const Icon = view.icon;
+                      const isActive = sellingView === view.id;
+                      return (
+                        <button
+                          key={view.id}
+                          role="tab"
+                          aria-selected={isActive}
+                          onClick={() => { triggerHaptic('light'); setSellingView(view.id); }}
+                          className={cn(
+                            'flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium transition-all',
+                            isActive
+                              ? 'bg-background text-foreground shadow-sm'
+                              : 'text-muted-foreground hover:text-foreground',
+                          )}
+                        >
+                          <Icon className="h-4 w-4" />
+                          {view.label}
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                  <Button
-                    className="w-full rounded-xl h-12 shadow-lg shadow-primary/20"
-                    onClick={() => setShowCreateProduct(true)}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Yangi mahsulot qo'shish
-                  </Button>
-
-                  {sellerLoading ? (
-                    <div className="grid grid-cols-2 gap-3">
-                      {[...Array(4)].map((_, i) => (
-                        <div key={i} className="aspect-[3/4] rounded-2xl bg-muted/50 animate-pulse" />
-                      ))}
-                    </div>
-                  ) : sellerProducts.length > 0 ? (
-                    <div className="grid grid-cols-2 gap-3">
-                      {sellerProducts.map((product) => (
-                        <ProductCard key={product.id} product={product} onSelect={handleProductSelect} />
-                      ))}
-                    </div>
+                  {sellingView === 'orders' ? (
+                    <SellerOrdersView />
                   ) : (
-                    <EmptyState
-                      icon={<Package className="h-12 w-12" />}
-                      title="Mahsulotlar yo'q"
-                      description="Birinchi mahsulotingizni joylashtiring!"
-                    />
+                    <>
+                      <Button
+                        variant="outline"
+                        className="w-full rounded-xl h-11"
+                        onClick={() => setShowDashboard(true)}
+                      >
+                        <LayoutDashboard className="h-4 w-4 mr-2" />
+                        Sotuvchi paneli
+                      </Button>
+
+                      <Button
+                        className="w-full rounded-xl h-12 shadow-lg shadow-primary/20"
+                        onClick={() => setShowCreateProduct(true)}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Yangi mahsulot qo'shish
+                      </Button>
+
+                      {sellerLoading ? (
+                        <div className="grid grid-cols-2 gap-3">
+                          {[...Array(4)].map((_, i) => (
+                            <div key={i} className="aspect-[3/4] rounded-2xl bg-muted/50 animate-pulse" />
+                          ))}
+                        </div>
+                      ) : sellerProducts.length > 0 ? (
+                        <div className="grid grid-cols-2 gap-3">
+                          {sellerProducts.map((product) => (
+                            <ProductCard key={product.id} product={product} onSelect={handleProductSelect} />
+                          ))}
+                        </div>
+                      ) : (
+                        <EmptyState
+                          icon={<Package className="h-12 w-12" />}
+                          title="Mahsulotlar yo'q"
+                          description="Birinchi mahsulotingizni joylashtiring!"
+                        />
+                      )}
+                    </>
                   )}
                 </div>
               )}
