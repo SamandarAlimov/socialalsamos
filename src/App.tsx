@@ -29,6 +29,7 @@ import ChatWallpaperPage from "./pages/ChatWallpaperPage";
 import DataStoragePage from "./pages/DataStoragePage";
 import PaymentSettingsPage from "./pages/PaymentSettingsPage";
 import CreatePage from "./pages/CreatePage";
+import ComposePage from "./pages/ComposePage";
 import MapPage from "./pages/MapPage";
 import VideosPage from "./pages/VideosPage";
 import DiscoveryPage from "./pages/DiscoveryPage";
@@ -120,6 +121,8 @@ function AppRoutes() {
         <Route path="/map" element={<MapPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/create" element={<CreatePage />} />
+        {/* Yangi modulli post yaratish oqimi (sinov bosqichida) */}
+        <Route path="/compose" element={<ComposePage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/user/:username" element={<UserProfilePage />} />
         <Route path="/settings" element={<SettingsPage />} />
