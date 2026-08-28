@@ -13,13 +13,13 @@ import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
 import { CreatePostForm } from '@/components/CreatePostForm';
 import { CommentsSection } from '@/components/CommentsSection';
-import { PostMediaCarousel } from '@/components/PostMediaCarousel';
 import { PostActionsMenu } from '@/components/PostActionsMenu';
 import { PostLikesDialog } from '@/components/PostLikesDialog';
 import { SharePostDialog } from '@/components/SharePostDialog';
 import { PostViewModal } from '@/components/PostViewModal';
 import { PollDisplay, parsePollFromContent } from '@/components/PollDisplay';
-import { RichTextContent } from '@/components/RichTextContent';
+import { RichText } from '@/components/RichText';
+import { PostExtras } from '@/components/PostExtras';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
@@ -34,6 +34,15 @@ import { useActiveAds } from '@/hooks/useAds';
 import { FeedAd } from '@/components/ads/FeedAd';
 import { PostViewsDialog } from '@/components/PostViewsDialog';
 import { usePostViews } from '@/hooks/usePostViews';
+
+/**
+ * Yangi sxemadagi qo‘shimcha maydonlar. `posts` jadvalidan `*` bilan
+ * o‘qilgani uchun ular mavjud, lekin generatsiya qilingan tiplarda hali yo‘q.
+ */
+type FeedPost = Post & {
+  post_kind?: string | null;
+  has_poll?: boolean | null;
+};
 
 export default function HomePage() {
   const { user, profile } = useAuth();
@@ -280,7 +289,7 @@ export default function HomePage() {
       {/* Create Post - Mobile optimized */}
       <div className="mb-4 md:mb-6">
         <div 
-          onClick={() => navigate('/create')}
+          onClick={() => navigate('/compose')}
           className="cursor-pointer"
         >
           <div className="bg-card rounded-2xl border border-border p-4">
@@ -304,12 +313,13 @@ export default function HomePage() {
         {posts.map((post, index) => (
           <div key={post.id}>
             <PostCard 
-              post={post} 
+              post={post as FeedPost} 
               onLike={() => likePost(post.id)}
               formatTime={formatPostTime}
               isMobile={isMobile}
               realtimeCounts={getPostCounts(post.id)}
               onDelete={refreshPosts}
+              isOwner={post.user_id === user?.id}
             />
             
             {/* Show ad after every 5th post */}
@@ -368,14 +378,16 @@ function PostCard({
   formatTime,
   isMobile,
   realtimeCounts,
-  onDelete
+  onDelete,
+  isOwner
 }: { 
-  post: Post; 
+  post: FeedPost; 
   onLike: () => void;
   formatTime: (date: string) => string;
   isMobile: boolean;
   realtimeCounts: RealtimePostCounts;
   onDelete?: () => void;
+  isOwner?: boolean;
 }) {
   const navigate = useNavigate();
   const [isBookmarked, setIsBookmarked] = useState(false);
@@ -393,6 +405,9 @@ function PostCard({
   const likesCount = realtimeCounts.likes_count;
   const commentsCount = realtimeCounts.comments_count;
   const isLiked = realtimeCounts.is_liked ?? post.is_liked;
+
+  // Yangi so‘rovnoma tizimi: `has_poll` bo‘lmasa `post_kind` ga qaraymiz.
+  const hasStructuredPoll = Boolean(post.has_poll) || post.post_kind === 'poll';
 
   const handleUserClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -449,17 +464,18 @@ function PostCard({
         />
       </div>
 
-      {/* Post Content with Poll Support */}
+      {/* Post matni — formatlash bilan (qalin, qiya, chizilgan, rangli, sarlavha) */}
       {post.content && (() => {
         const { pollData, cleanContent } = parsePollFromContent(post.content);
         return (
           <>
             {cleanContent && (
               <div className="px-3 md:px-4 pb-2 md:pb-3">
-                <RichTextContent content={cleanContent} className="text-sm leading-relaxed" />
+                <RichText content={cleanContent} className="text-sm leading-relaxed" />
               </div>
             )}
-            {pollData && (
+            {/* Eski markerli so‘rovnomalar (migratsiyagacha) */}
+            {pollData && !hasStructuredPoll && (
               <div className="px-3 md:px-4 pb-2 md:pb-3">
                 <PollDisplay postId={post.id} pollData={pollData} />
               </div>
@@ -468,10 +484,18 @@ function PostCard({
         );
       })()}
 
-      {/* Post Media Carousel */}
-      {post.media_urls && post.media_urls.length > 0 && (
-        <PostMediaCarousel mediaUrls={post.media_urls} mediaType={post.media_type || 'image'} />
-      )}
+      {/*
+        Fayllar (har qanday tur), so‘rovnoma va joylashuv.
+        Yangi `post_media` bo‘sh bo‘lsa eski `media_urls` karuseli ko‘rsatiladi.
+      */}
+      <PostExtras
+        postId={post.id}
+        hasPoll={hasStructuredPoll}
+        isOwner={isOwner}
+        legacyMediaUrls={post.media_urls}
+        legacyMediaType={post.media_type}
+        className="px-3 pb-3 md:px-4"
+      />
 
       {/* Post Actions - Mobile optimized */}
       <div className="flex items-center justify-between p-3 md:p-4 border-t border-border">
