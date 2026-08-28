@@ -19,6 +19,9 @@ const URL_REGEX = /https?:\/\/[^\s<]+[^<.,:;"')\]\s]/g;
  * Xabar matni: Telegram uslubidagi formatlash (qalin, kursiv, spoiler, kod,
  * iqtibos, ro'yxat, kod bloki), mention/hashtag/havolalar, animatsion emojilar,
  * albom (bir nechta rasm/video) va "maqola" (article) xabarlari.
+ *
+ * Havolalar Telegramdek to'liq ko'rinadi (qisqartirilmaydi) va birinchi havola
+ * uchun preview kartasi chiziladi.
  */
 export function MessageContent({ content, isMine, className }: MessageContentProps) {
   const article = useMemo(() => parseArticlePayload(content), [content]);
@@ -48,22 +51,18 @@ export function MessageContent({ content, isMine, className }: MessageContentPro
     );
   }
 
-  // Faqat bitta havoladan iborat xabarda matn takrorlanmaydi (Telegramdek)
-  const isOnlyLink = links.length === 1 && content.trim() === links[0];
-
   return (
     <div className={cn('min-w-0 max-w-full space-y-1.5', className)}>
-      {!isOnlyLink && (
-        <div
-          className={cn(
-            'min-w-0 max-w-full space-y-2 text-[15px] leading-[1.35]',
-            isMine ? '[&_blockquote]:border-primary-foreground/60' : ''
-          )}
-          style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
-        >
-          <FormattedBlocks text={content} emojiSize={20} className="space-y-2" />
-        </div>
-      )}
+      {/* Matn har doim ko'rinadi: havola ham to'liq holda, bosiladigan ko'k link sifatida */}
+      <div
+        className={cn(
+          'min-w-0 max-w-full space-y-2 text-[15px] leading-[1.35]',
+          isMine ? '[&_blockquote]:border-primary-foreground/60' : ''
+        )}
+        style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
+      >
+        <FormattedBlocks text={content} emojiSize={20} className="space-y-2" />
+      </div>
 
       {/* Telegramdagidek faqat birinchi havola uchun karta */}
       {links.slice(0, 1).map((url, index) => (

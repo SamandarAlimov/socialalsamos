@@ -1,8 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TelegramEmoji } from '@/components/emoji/TelegramEmoji';
-import { EmojiPicker } from '@/components/EmojiPicker';
 
 export interface ReactionGroup {
   emoji: string;
@@ -15,28 +13,28 @@ interface TelegramReactionsProps {
   reactions: ReactionGroup[];
   isMine: boolean;
   onToggle: (emoji: string) => void;
-  onAdd: (emoji: string) => void;
+  /** Eskirgan: reaksiya qo'shish uchun xabarni bosib turish menyusidan foydalaniladi */
+  onAdd?: (emoji: string) => void;
   className?: string;
 }
 
 /**
- * Telegram uslubidagi reaksiya chiplari: ixcham pill'lar, Telegramning haqiqiy
- * animatsion emojisi, tabular hisob va bosilgan holatda to'ldirilgan ko'rinish.
+ * Telegram uslubidagi reaksiya chiplari.
+ * Reaksiya qo'shish faqat xabarni bosib turish (long-press) menyusi orqali -
+ * xabar tagida alohida "+" tugmasi yo'q (Telegramda ham yo'q).
  */
 export function TelegramReactions({
   reactions,
   isMine,
   onToggle,
-  onAdd,
   className,
 }: TelegramReactionsProps) {
-  const total = reactions.reduce((sum, r) => sum + r.count, 0);
+  if (!reactions.length) return null;
 
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center gap-1',
-        total > 0 && 'mt-1',
+        'mt-1 flex flex-wrap items-center gap-1',
         isMine ? 'justify-end' : 'justify-start',
         className
       )}
@@ -54,7 +52,7 @@ export function TelegramReactions({
               e.stopPropagation();
               onToggle(reaction.emoji);
             }}
-            title={`${reaction.count} ta reaksiya`}
+            title={reaction.count + ' ta reaksiya'}
             className={cn(
               'inline-flex items-center gap-1 h-[26px] pl-1 pr-2 rounded-full',
               'text-xs font-medium transition-colors active:scale-95',
@@ -68,24 +66,6 @@ export function TelegramReactions({
           </motion.button>
         ))}
       </AnimatePresence>
-
-      <EmojiPicker
-        onSelect={onAdd}
-        trigger={
-          <button
-            onClick={(e) => e.stopPropagation()}
-            title="Reaksiya qo'shish"
-            className={cn(
-              'inline-flex items-center justify-center h-[26px] w-[26px] rounded-full',
-              'bg-muted/60 text-muted-foreground transition-opacity active:scale-95',
-              'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
-              total > 0 && 'md:opacity-0'
-            )}
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </button>
-        }
-      />
     </div>
   );
 }

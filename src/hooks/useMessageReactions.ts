@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { toast } from '@/hooks/use-toast';
 
 interface Reaction {
   id: string;
@@ -10,12 +11,15 @@ interface Reaction {
   created_at: string;
 }
 
-interface ReactionGroup {
+export interface ReactionGroup {
   emoji: string;
   count: number;
   users: string[];
   hasReacted: boolean;
 }
+
+/** Bitta foydalanuvchi bitta xabarga qo'yishi mumkin bo'lgan maksimal reaksiya soni */
+export const MAX_USER_REACTIONS = 3;
 
 export function useMessageReactions(messageId: string | null) {
   const { user } = useAuth();
@@ -23,8 +27,8 @@ export function useMessageReactions(messageId: string | null) {
   const [isLoading, setIsLoading] = useState(false);
 
   const fetchReactions = useCallback(async () => {
-    if (!messageId) return;
-    
+    if (!messageId || messageId.startsWith('temp-')) return;
+
     setIsLoading(true);
     const { data, error } = await supabase
       .from('message_reactions')
@@ -41,19 +45,19 @@ export function useMessageReactions(messageId: string | null) {
     fetchReactions();
   }, [fetchReactions]);
 
-  // Subscribe to real-time changes
+  // Realtime o'zgarishlar
   useEffect(() => {
-    if (!messageId) return;
+    if (!messageId || messageId.startsWith('temp-')) return;
 
     const channel = supabase
-      .channel(`reactions-${messageId}`)
+      .channel('reactions-' + messageId)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'message_reactions',
-          filter: `message_id=eq.${messageId}`,
+          filter: 'message_id=eq.' + messageId,
         },
         () => {
           fetchReactions();
@@ -66,69 +70,116 @@ export function useMessageReactions(messageId: string | null) {
     };
   }, [messageId, fetchReactions]);
 
-  const addReaction = useCallback(async (emoji: string) => {
-    if (!messageId || !user) return;
+  /** Foydalanuvchining ushbu xabardagi reaksiyalari */
+  const myReactions = useMemo(
+    () => (user ? reactions.filter((r) => r.user_id === user.id).map((r) => r.emoji) : []),
+    [reactions, user]
+  );
 
-    const { error } = await supabase
-      .from('message_reactions')
-      .insert({
+  const canAddMore = myReactions.length < MAX_USER_REACTIONS;
+
+  const removeReaction = useCallback(
+    async (emoji: string) => {
+      if (!messageId || !user) return;
+
+      // Optimistik: darhol UI'dan olib tashlaymiz
+      setReactions((prev) => prev.filter((r) => !(r.user_id === user.id && r.emoji === emoji)));
+
+      const { error } = await supabase
+        .from('message_reactions')
+        .delete()
+        .eq('message_id', messageId)
+        .eq('user_id', user.id)
+        .eq('emoji', emoji);
+
+      if (error) {
+        fetchReactions();
+      }
+    },
+    [messageId, user, fetchReactions]
+  );
+
+  const addReaction = useCallback(
+    async (emoji: string) => {
+      if (!messageId || !user) return;
+      if (messageId.startsWith('temp-')) return;
+
+      const mine = reactions.filter((r) => r.user_id === user.id);
+
+      // Allaqachon qo'yilgan bo'lsa - hech narsa qilmaymiz
+      if (mine.some((r) => r.emoji === emoji)) return;
+
+      if (mine.length >= MAX_USER_REACTIONS) {
+        toast({
+          title: 'Reaksiya chegarasi',
+          description:
+            'Bitta xabarga maksimal ' + MAX_USER_REACTIONS + ' ta reaksiya qo\u2019yish mumkin.',
+        });
+        return;
+      }
+
+      // Optimistik qo'shish
+      const optimistic: Reaction = {
+        id: 'temp-' + emoji + '-' + user.id,
+        message_id: messageId,
+        user_id: user.id,
+        emoji,
+        created_at: new Date().toISOString(),
+      };
+      setReactions((prev) => [...prev, optimistic]);
+
+      const { error } = await supabase.from('message_reactions').insert({
         message_id: messageId,
         user_id: user.id,
         emoji,
       });
 
-    if (error && error.code !== '23505') { // Ignore unique constraint violation
-      console.error('Error adding reaction:', error);
-    }
-  }, [messageId, user]);
-
-  const removeReaction = useCallback(async (emoji: string) => {
-    if (!messageId || !user) return;
-
-    const { error } = await supabase
-      .from('message_reactions')
-      .delete()
-      .eq('message_id', messageId)
-      .eq('user_id', user.id)
-      .eq('emoji', emoji);
-
-    if (error) {
-      console.error('Error removing reaction:', error);
-    }
-  }, [messageId, user]);
-
-  const toggleReaction = useCallback(async (emoji: string) => {
-    const hasReacted = reactions.some(r => r.user_id === user?.id && r.emoji === emoji);
-    if (hasReacted) {
-      await removeReaction(emoji);
-    } else {
-      await addReaction(emoji);
-    }
-  }, [reactions, user?.id, addReaction, removeReaction]);
-
-  // Group reactions by emoji
-  const groupedReactions: ReactionGroup[] = reactions.reduce((groups, reaction) => {
-    const existing = groups.find(g => g.emoji === reaction.emoji);
-    if (existing) {
-      existing.count++;
-      existing.users.push(reaction.user_id);
-      if (reaction.user_id === user?.id) {
-        existing.hasReacted = true;
+      if (error && error.code !== '23505') {
+        fetchReactions();
       }
-    } else {
-      groups.push({
-        emoji: reaction.emoji,
-        count: 1,
-        users: [reaction.user_id],
-        hasReacted: reaction.user_id === user?.id,
-      });
-    }
-    return groups;
-  }, [] as ReactionGroup[]);
+    },
+    [messageId, user, reactions, fetchReactions]
+  );
+
+  const toggleReaction = useCallback(
+    async (emoji: string) => {
+      if (!user) return;
+      const hasReacted = reactions.some((r) => r.user_id === user.id && r.emoji === emoji);
+      if (hasReacted) {
+        await removeReaction(emoji);
+      } else {
+        await addReaction(emoji);
+      }
+    },
+    [reactions, user, addReaction, removeReaction]
+  );
+
+  // Emoji bo'yicha guruhlash (qo'yilgan vaqt tartibida)
+  const groupedReactions: ReactionGroup[] = useMemo(() => {
+    return reactions.reduce((groups, reaction) => {
+      const existing = groups.find((g) => g.emoji === reaction.emoji);
+      if (existing) {
+        existing.count++;
+        existing.users.push(reaction.user_id);
+        if (reaction.user_id === user?.id) existing.hasReacted = true;
+      } else {
+        groups.push({
+          emoji: reaction.emoji,
+          count: 1,
+          users: [reaction.user_id],
+          hasReacted: reaction.user_id === user?.id,
+        });
+      }
+      return groups;
+    }, [] as ReactionGroup[]);
+  }, [reactions, user?.id]);
 
   return {
     reactions: groupedReactions,
     isLoading,
+    myReactions,
+    canAddMore,
+    maxReactions: MAX_USER_REACTIONS,
     addReaction,
     removeReaction,
     toggleReaction,

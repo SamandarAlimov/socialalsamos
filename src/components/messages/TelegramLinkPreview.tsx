@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ExternalLink, Play } from 'lucide-react';
+import { Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface LinkMeta {
@@ -8,7 +8,7 @@ interface LinkMeta {
   description?: string;
   image?: string;
   isVideo?: boolean;
-  embedUrl?: string;
+  large?: boolean;
 }
 
 interface TelegramLinkPreviewProps {
@@ -16,6 +16,30 @@ interface TelegramLinkPreviewProps {
   isMine?: boolean;
   className?: string;
 }
+
+const YT_THUMB_BASE = 'https://' + 'img.youtube.com/vi/';
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif|bmp|svg)(\?|#|$)/i;
+
+/** Mashhur saytlar uchun chiroyli nom */
+const SITE_NAMES: Record<string, string> = {
+  'youtube.com': 'YouTube',
+  'youtu.be': 'YouTube',
+  'github.com': 'GitHub',
+  't.me': 'Telegram',
+  'telegram.org': 'Telegram',
+  'instagram.com': 'Instagram',
+  'x.com': 'X',
+  'twitter.com': 'X',
+  'facebook.com': 'Facebook',
+  'tiktok.com': 'TikTok',
+  'linkedin.com': 'LinkedIn',
+  'wikipedia.org': 'Wikipedia',
+  'alsamos.com': 'Alsamos',
+  'vercel.com': 'Vercel',
+  'medium.com': 'Medium',
+  'reddit.com': 'Reddit',
+  'spotify.com': 'Spotify',
+};
 
 function youtubeId(url: string): string | null {
   const patterns = [
@@ -31,7 +55,7 @@ function youtubeId(url: string): string | null {
   return null;
 }
 
-function prettyHost(url: string): string {
+function hostOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, '');
   } catch {
@@ -39,22 +63,44 @@ function prettyHost(url: string): string {
   }
 }
 
-function prettyPath(url: string): string {
+function siteNameOf(url: string): string {
+  const host = hostOf(url);
+  const key = Object.keys(SITE_NAMES).find((k) => host === k || host.endsWith('.' + k));
+  return key ? SITE_NAMES[key] : host;
+}
+
+function titleOf(url: string): string {
   try {
     const parsed = new URL(url);
-    const path = decodeURIComponent(parsed.pathname).replace(/\/$/, '');
-    if (!path || path === '') return prettyHost(url);
-    const last = path.split('/').filter(Boolean).pop() || '';
-    return last.replace(/[-_]+/g, ' ').replace(/\.\w{2,5}$/, '') || prettyHost(url);
+    const segments = decodeURIComponent(parsed.pathname).split('/').filter(Boolean);
+    if (!segments.length) return hostOf(url);
+    const last = segments[segments.length - 1];
+    const cleaned = last.replace(/\.\w{2,5}$/, '').replace(/[-_+]+/g, ' ').trim();
+    if (!cleaned) return hostOf(url);
+    // GitHub: "owner/repo" ko'rinishida
+    if (hostOf(url) === 'github.com' && segments.length >= 2) {
+      return segments[0] + '/' + segments[1];
+    }
+    return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
   } catch {
     return url;
   }
 }
 
+function pathOf(url: string): string | undefined {
+  try {
+    const parsed = new URL(url);
+    const path = decodeURIComponent(parsed.pathname + parsed.search).replace(/\/$/, '');
+    return path && path !== '' ? path : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
- * Telegram-style link preview card:
- * a colored left accent bar, site name, title, description and optional thumbnail.
- * Metadata is derived locally (no server round-trip) so it never blocks the bubble.
+ * Telegram uslubidagi havola kartasi: chapda rangli chiziq, sayt nomi, sarlavha,
+ * tavsif va (mavjud bo'lsa) katta rasm. Metama'lumot mahalliy hisoblanadi,
+ * shuning uchun karta xabarni hech qachon kutib turmaydi.
  */
 export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPreviewProps) {
   const [meta, setMeta] = useState<LinkMeta | null>(null);
@@ -68,17 +114,28 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
       setMeta({
         siteName: 'YouTube',
         title: 'YouTube video',
-        description: prettyPath(url),
-        image: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+        description: hostOf(url),
+        image: YT_THUMB_BASE + videoId + '/hqdefault.jpg',
         isVideo: true,
+        large: true,
+      });
+      return;
+    }
+
+    if (IMAGE_EXT.test(url)) {
+      setMeta({
+        siteName: siteNameOf(url),
+        title: titleOf(url),
+        image: url,
+        large: true,
       });
       return;
     }
 
     setMeta({
-      siteName: prettyHost(url),
-      title: prettyPath(url),
-      description: undefined,
+      siteName: siteNameOf(url),
+      title: titleOf(url),
+      description: pathOf(url),
     });
   }, [url]);
 
@@ -102,20 +159,19 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
         borderLeftColor: isMine ? 'rgba(255,255,255,0.7)' : 'hsl(var(--primary))',
       }}
     >
-      <div className="flex flex-col gap-1.5 py-2 pr-2.5">
+      <div className="flex flex-col gap-1 py-2 pr-2.5">
         <p
           className={cn(
-            'flex items-center gap-1 text-[12px] font-semibold',
+            'truncate text-[12px] font-semibold',
             isMine ? 'text-primary-foreground/90' : 'text-primary'
           )}
         >
-          <span className="truncate">{meta.siteName}</span>
-          <ExternalLink className="h-3 w-3 shrink-0 opacity-70" />
+          {meta.siteName}
         </p>
 
         <p
           className={cn(
-            'line-clamp-2 break-words text-[13px] font-medium leading-snug',
+            'line-clamp-2 break-words text-[13px] font-semibold leading-snug',
             isMine ? 'text-primary-foreground' : 'text-foreground'
           )}
         >
@@ -125,7 +181,7 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
         {meta.description && (
           <p
             className={cn(
-              'line-clamp-2 break-words text-[12px] leading-snug',
+              'line-clamp-2 break-all text-[12px] leading-snug',
               isMine ? 'text-primary-foreground/75' : 'text-muted-foreground'
             )}
           >
@@ -140,7 +196,7 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
               alt={meta.title}
               loading="lazy"
               onError={() => setImageFailed(true)}
-              className="max-h-[180px] w-full object-cover"
+              className={cn('w-full object-cover', meta.large ? 'max-h-[220px]' : 'max-h-[160px]')}
             />
             {meta.isVideo && (
               <span className="absolute inset-0 flex items-center justify-center">
