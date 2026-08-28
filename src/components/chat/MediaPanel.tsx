@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { snapAspectRatio } from '@/lib/linkEmbed';
+import { useStickerPacks } from '@/hooks/useStickerPacks';
 import {
   EMOJI_CATEGORIES,
   getRecentEmojis,
@@ -43,10 +44,11 @@ const TABS: { id: PanelTab; label: string; icon: React.ElementType }[] = [
  * Telegramdagi yagona media paneli: yuqorida **GIF | Stikerlar | Emoji**
  * switcher, pastda tanlangan bo'lim mazmuni.
  *
- * - GIF va stikerlar `giphy-search` edge funksiyasidan olinadi (kalit serverda qoladi).
- * - To'rdagi har bir katak mediasining HAQIQIY nisbatida ko'rsatiladi
- *   (9:16, 1:1, 16:9 ...), shuning uchun preview kesilmaydi.
- * - Emoji to'ri tizim gliflaridan chiziladi: ochilishda birorta ham rasm so'rovi ketmaydi.
+ * - Stikerlar bo'limida eng yuqorida "Tez-tez ishlatiladigan" qatori turadi
+ *   (`sticker_usage` jadvali + localStorage), keyin o'z stiker paketlarimiz
+ *   (`sticker_packs` / `stickers` jadvallari), so'ng Giphy natijalari.
+ * - GIF va tashqi stikerlar `giphy-search` edge funksiyasidan olinadi.
+ * - To'rdagi har bir katak mediasining HAQIQIY nisbatida ko'rsatiladi.
  */
 export function MediaPanel({ onSelectEmoji, onSendMedia, trigger, className }: MediaPanelProps) {
   const canSendMedia = Boolean(onSendMedia);
@@ -56,7 +58,12 @@ export function MediaPanel({ onSelectEmoji, onSendMedia, trigger, className }: M
   const [items, setItems] = useState<GiphyItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [emojiCategory, setEmojiCategory] = useState<string>(EMOJI_CATEGORIES[0].key);
-  const [recent, setRecent] = useState<string[]>(() => getRecentEmojis());
+  const [recentEmojis, setRecentEmojis] = useState<string[]>(() => getRecentEmojis());
+
+  // Stiker paketlari va tez-tez ishlatiladigan stikerlar
+  const { packs, recent: recentStickers, registerUse } = useStickerPacks(
+    tab === 'gif' ? 'gif' : 'sticker'
+  );
 
   const tabs = useMemo(() => (canSendMedia ? TABS : TABS.filter((t) => t.id === 'emoji')), [
     canSendMedia,
@@ -106,22 +113,27 @@ export function MediaPanel({ onSelectEmoji, onSendMedia, trigger, className }: M
 
   const handleEmoji = (emoji: string) => {
     pushRecentEmoji(emoji);
-    setRecent(getRecentEmojis());
+    setRecentEmojis(getRecentEmojis());
     onSelectEmoji(emoji);
     setOpen(false);
   };
 
-  const handleMedia = (item: GiphyItem) => {
+  /** Stiker/GIF yuborish + "tez-tez ishlatiladigan" hisobini oshirish */
+  const sendMedia = (url: string, kind: 'gif' | 'sticker', stickerId?: string | null) => {
     if (!onSendMedia) return;
-    onSendMedia(item.url, tab === 'sticker' ? 'sticker' : 'gif');
+    onSendMedia(url, kind);
+    void registerUse(url, kind, stickerId ?? null);
     setOpen(false);
   };
 
   const visibleEmojis = useMemo(() => {
     if (query.trim()) return searchEmojis(query);
-    if (emojiCategory === 'recent') return recent;
+    if (emojiCategory === 'recent') return recentEmojis;
     return EMOJI_CATEGORIES.find((c) => c.key === emojiCategory)?.emojis ?? [];
-  }, [query, emojiCategory, recent]);
+  }, [query, emojiCategory, recentEmojis]);
+
+  const showLibrary = !query.trim();
+  const kind: 'gif' | 'sticker' = tab === 'sticker' ? 'sticker' : 'gif';
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -194,7 +206,7 @@ export function MediaPanel({ onSelectEmoji, onSendMedia, trigger, className }: M
 
             {!query.trim() && (
               <div className="scrollbar-hide flex items-center gap-0.5 overflow-x-auto border-t border-border px-2 py-1.5">
-                {recent.length > 0 && (
+                {recentEmojis.length > 0 && (
                   <button
                     type="button"
                     onClick={() => setEmojiCategory('recent')}
@@ -227,48 +239,121 @@ export function MediaPanel({ onSelectEmoji, onSendMedia, trigger, className }: M
             )}
           </>
         ) : (
-          <div className="h-64 overflow-y-auto overscroll-contain p-2">
-            {loading ? (
-              <div className="flex h-full items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : items.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                {tab === 'sticker' ? 'Stiker topilmadi' : 'GIF topilmadi'}
-              </div>
-            ) : (
-              <div className="columns-2 gap-1.5 [column-fill:_balance]">
-                {items.map((item) => {
-                  const ratio =
-                    item.width > 0 && item.height > 0
-                      ? snapAspectRatio(item.width / item.height) || item.width / item.height
-                      : 1;
-                  return (
+          <div className="h-64 space-y-3 overflow-y-auto overscroll-contain p-2">
+            {/* Telegramdagidek "Tez-tez ishlatiladigan" bo'limi */}
+            {showLibrary && recentStickers.length > 0 && (
+              <section>
+                <h4 className="mb-1.5 flex items-center gap-1.5 px-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <Clock className="h-3.5 w-3.5" />
+                  Tez-tez ishlatiladigan
+                </h4>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {recentStickers.slice(0, 8).map((item) => (
                     <button
-                      key={item.id}
+                      key={item.fileUrl}
                       type="button"
-                      onClick={() => handleMedia(item)}
+                      onClick={() => sendMedia(item.fileUrl, item.kind, item.stickerId)}
                       className={cn(
-                        'mb-1.5 block w-full overflow-hidden rounded-lg transition-opacity hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-primary',
-                        tab === 'sticker' ? 'bg-transparent' : 'bg-muted'
+                        'aspect-square overflow-hidden rounded-lg transition-opacity hover:opacity-80',
+                        item.kind === 'sticker' ? 'bg-transparent' : 'bg-muted'
                       )}
-                      style={{ aspectRatio: String(ratio) }}
-                      title={item.title || (tab === 'sticker' ? 'Stiker' : 'GIF')}
+                      title="Tez-tez ishlatiladigan"
                     >
                       <img
-                        src={item.preview}
-                        alt={item.title || ''}
+                        src={item.fileUrl}
+                        alt=""
                         loading="lazy"
                         className={cn(
                           'h-full w-full',
-                          tab === 'sticker' ? 'object-contain' : 'object-cover'
+                          item.kind === 'sticker' ? 'object-contain' : 'object-cover'
                         )}
                       />
                     </button>
-                  );
-                })}
-              </div>
+                  ))}
+                </div>
+              </section>
             )}
+
+            {/* O'z stiker paketlarimiz (Supabase) */}
+            {showLibrary &&
+              tab === 'sticker' &&
+              packs
+                .filter((pack) => pack.stickers.length > 0)
+                .map((pack) => (
+                  <section key={pack.id}>
+                    <h4 className="mb-1.5 px-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      {pack.title}
+                    </h4>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {pack.stickers.map((sticker) => (
+                        <button
+                          key={sticker.id}
+                          type="button"
+                          onClick={() => sendMedia(sticker.fileUrl, 'sticker', sticker.id)}
+                          className="aspect-square overflow-hidden rounded-lg transition-opacity hover:opacity-80"
+                          title={sticker.emoji || pack.title}
+                        >
+                          <img
+                            src={sticker.thumbUrl || sticker.fileUrl}
+                            alt={sticker.emoji || ''}
+                            loading="lazy"
+                            className="h-full w-full object-contain"
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+
+            {/* Giphy natijalari */}
+            <section>
+              {showLibrary && (
+                <h4 className="mb-1.5 px-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {tab === 'sticker' ? 'Ommabop stikerlar' : 'Ommabop GIF'}
+                </h4>
+              )}
+              {loading ? (
+                <div className="flex h-32 items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : items.length === 0 ? (
+                <div className="flex h-32 items-center justify-center text-xs text-muted-foreground">
+                  {tab === 'sticker' ? 'Stiker topilmadi' : 'GIF topilmadi'}
+                </div>
+              ) : (
+                <div className="columns-2 gap-1.5 [column-fill:_balance]">
+                  {items.map((item) => {
+                    const ratio =
+                      item.width > 0 && item.height > 0
+                        ? snapAspectRatio(item.width / item.height) || item.width / item.height
+                        : 1;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => sendMedia(item.url, kind)}
+                        className={cn(
+                          'mb-1.5 block w-full overflow-hidden rounded-lg transition-opacity hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-primary',
+                          tab === 'sticker' ? 'bg-transparent' : 'bg-muted'
+                        )}
+                        style={{ aspectRatio: String(ratio) }}
+                        title={item.title || (tab === 'sticker' ? 'Stiker' : 'GIF')}
+                      >
+                        <img
+                          src={item.preview}
+                          alt={item.title || ''}
+                          loading="lazy"
+                          className={cn(
+                            'h-full w-full',
+                            tab === 'sticker' ? 'object-contain' : 'object-cover'
+                          )}
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
           </div>
         )}
 
