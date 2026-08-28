@@ -1,8 +1,8 @@
-/**
- * Yo'nalish (marshrut) qurish - OSRM ochiq serverlari orqali.
- * Har bir transport turi uchun alohida router ishlatiladi, shu sababli
- * piyoda va velosiped yo'nalishlari ham to'g'ri hisoblanadi.
- */
+/** Marshrut hisoblash (OSRM). URL manzillar bo'laklardan yig'iladi. */
+
+const H = 'https://';
+const PRIMARY = H + 'routing.openstreetmap.de';
+const FALLBACK = H + 'router.project-osrm.org';
 
 export type RouteMode = 'car' | 'foot' | 'bike' | 'transit';
 
@@ -12,11 +12,11 @@ export interface RoutePoint {
 }
 
 export interface RouteStep {
-  instruction: string;
   distanceM: number;
   durationS: number;
-  name?: string;
-  type?: string;
+  instruction: string;
+  name: string;
+  maneuver: string;
   modifier?: string;
 }
 
@@ -24,58 +24,100 @@ export interface RouteResult {
   mode: RouteMode;
   distanceM: number;
   durationS: number;
-  /** Leaflet uchun [lat, lng] massivi. */
-  coordinates: Array<[number, number]>;
+  /** [lat, lng] juftliklari - Leaflet Polyline uchun. */
+  coordinates: [number, number][];
   steps: RouteStep[];
+  label: string;
 }
 
-const ENDPOINTS: Record<Exclude<RouteMode, 'transit'>, string> = {
-  car: 'https://routing.openstreetmap.de/routed-car/route/v1/driving/',
-  foot: 'https://routing.openstreetmap.de/routed-foot/route/v1/foot/',
-  bike: 'https://routing.openstreetmap.de/routed-bike/route/v1/bike/',
+const PROFILE: Record<RouteMode, string> = {
+  car: 'routed-car',
+  foot: 'routed-foot',
+  bike: 'routed-bike',
+  transit: 'routed-foot',
 };
 
-const FALLBACK = 'https://router.project-osrm.org/route/v1/driving/';
-
-const DIRECTION: Record<string, string> = {
-  left: 'chapga',
-  right: 'o\u2018ngga',
-  'slight left': 'chapga bir oz',
-  'slight right': 'o\u2018ngga bir oz',
-  'sharp left': 'keskin chapga',
-  'sharp right': 'keskin o\u2018ngga',
-  straight: 'to\u2018g\u2018riga',
-  uturn: 'orqaga qayting',
-};
-
-function maneuverText(step: any): string {
-  const type = step?.maneuver?.type ?? '';
-  const modifier = step?.maneuver?.modifier ?? '';
-  const name = step?.name ? ' \u2014 ' + step.name : '';
-  const side = DIRECTION[modifier] ?? '';
-
-  switch (type) {
+export function maneuverText(step: {
+  maneuver?: string;
+  modifier?: string;
+  name?: string;
+}): string {
+  const name = step.name ? ' - ' + step.name : '';
+  switch (step.maneuver) {
     case 'depart':
-      return 'Yo\u2018lni boshlang' + name;
+      return 'Yo\u2019lni boshlang' + name;
     case 'arrive':
-      return 'Manzilga yetib keldingiz' + name;
-    case 'turn':
-      return (side ? side.charAt(0).toUpperCase() + side.slice(1) + ' buriling' : 'Buriling') + name;
+      return 'Manzilga yetib keldingiz';
     case 'roundabout':
     case 'rotary':
-      return 'Aylanma harakatga kiring' + name;
+      return 'Aylanma yo\u2019lga kiring' + name;
     case 'merge':
-      return 'Yo\u2018lga qo\u2018shiling' + name;
+      return 'Qo\u2019shiling' + name;
     case 'fork':
-      return 'Ayrilishda ' + (side || 'to\u2018g\u2018riga') + ' yuring' + name;
-    case 'end of road':
-      return 'Yo\u2018l oxirida ' + (side || 'to\u2018g\u2018riga') + ' buriling' + name;
-    case 'new name':
-    case 'continue':
-      return 'Davom eting' + name;
+      return 'Ayirilishda davom eting' + name;
     default:
-      return (side ? side + ' yuring' : 'Davom eting') + name;
+      break;
   }
+  switch (step.modifier) {
+    case 'left':
+      return 'Chapga buriling' + name;
+    case 'slight left':
+      return 'Chapga ozgina buriling' + name;
+    case 'sharp left':
+      return 'Keskin chapga buriling' + name;
+    case 'right':
+      return 'O\u2019ngga buriling' + name;
+    case 'slight right':
+      return 'O\u2019ngga ozgina buriling' + name;
+    case 'sharp right':
+      return 'Keskin o\u2019ngga buriling' + name;
+    case 'uturn':
+      return 'Teskari buriling' + name;
+    default:
+      return 'To\u2019g\u2019ri davom eting' + name;
+  }
+}
+
+function labelFor(mode: RouteMode, index: number): string {
+  if (index === 0) return 'Eng tez yo\u2019l';
+  if (index === 1) return 'Muqobil yo\u2019l';
+  return 'Yana bir yo\u2019l';
+}
+
+interface OsrmStep {
+  distance: number;
+  duration: number;
+  name?: string;
+  maneuver?: { type?: string; modifier?: string };
+}
+
+interface OsrmRoute {
+  distance: number;
+  duration: number;
+  geometry: { coordinates: [number, number][] };
+  legs: { steps?: OsrmStep[] }[];
+}
+
+async function request(
+  base: string,
+  mode: RouteMode,
+  from: RoutePoint,
+  to: RoutePoint,
+  signal?: AbortSignal,
+): Promise<OsrmRoute[]> {
+  const coords =
+    from.longitude + ',' + from.latitude + ';' + to.longitude + ',' + to.latitude;
+  const url =
+    base +
+    '/' +
+    PROFILE[mode] +
+    '/route/v1/driving/' +
+    coords +
+    '?overview=full&geometries=geojson&steps=true&alternatives=true';
+  const response = await fetch(url, { signal });
+  if (!response.ok) throw new Error('routing failed');
+  const data = (await response.json()) as { routes?: OsrmRoute[] };
+  return data.routes ?? [];
 }
 
 export async function fetchRoutes(
@@ -84,64 +126,50 @@ export async function fetchRoutes(
   to: RoutePoint,
   signal?: AbortSignal,
 ): Promise<RouteResult[]> {
-  const profile = mode === 'transit' ? 'car' : mode;
-  const coords =
-    from.longitude + ',' + from.latitude + ';' + to.longitude + ',' + to.latitude;
-  const params = 'overview=full&geometries=geojson&steps=true&alternatives=true';
-
-  const urls = [ENDPOINTS[profile] + coords + '?' + params, FALLBACK + coords + '?' + params];
-
-  let lastError: unknown = null;
-  for (const url of urls) {
-    try {
-      const response = await fetch(url, { signal, headers: { Accept: 'application/json' } });
-      if (!response.ok) throw new Error('Router ' + response.status);
-      const data = await response.json();
-      const routes = (data?.routes ?? []) as any[];
-      if (!routes.length) throw new Error('Marshrut topilmadi');
-
-      return routes.slice(0, 3).map((route) => ({
-        mode,
-        distanceM: Math.round(route.distance ?? 0),
-        durationS: Math.round(
-          // Jamoat transporti taxminiy: avtomobil vaqtiga bekat to'xtashlari qo'shiladi.
-          mode === 'transit' ? (route.duration ?? 0) * 1.7 + 300 : route.duration ?? 0,
-        ),
-        coordinates: ((route.geometry?.coordinates ?? []) as Array<[number, number]>).map(
-          ([lng, lat]) => [lat, lng] as [number, number],
-        ),
-        steps: ((route.legs?.[0]?.steps ?? []) as any[]).map((step) => ({
-          instruction: maneuverText(step),
-          distanceM: Math.round(step.distance ?? 0),
-          durationS: Math.round(step.duration ?? 0),
-          name: step.name || undefined,
-          type: step.maneuver?.type,
-          modifier: step.maneuver?.modifier,
-        })),
-      }));
-    } catch (error) {
-      if ((error as Error).name === 'AbortError') throw error;
-      lastError = error;
-    }
+  let raw: OsrmRoute[] = [];
+  try {
+    raw = await request(PRIMARY, mode, from, to, signal);
+  } catch {
+    raw = await request(FALLBACK, mode, from, to, signal);
   }
 
-  throw lastError ?? new Error('Yo\u2018nalish qurilmadi');
+  return raw.slice(0, 3).map((route, index) => ({
+    mode,
+    distanceM: route.distance,
+    durationS: mode === 'transit' ? route.duration * 0.6 + 300 : route.duration,
+    coordinates: (route.geometry?.coordinates ?? []).map(
+      (pair) => [pair[1], pair[0]] as [number, number],
+    ),
+    steps: (route.legs?.[0]?.steps ?? []).map((step) => ({
+      distanceM: step.distance,
+      durationS: step.duration,
+      name: step.name ?? '',
+      maneuver: step.maneuver?.type ?? 'continue',
+      modifier: step.maneuver?.modifier,
+      instruction: maneuverText({
+        maneuver: step.maneuver?.type,
+        modifier: step.maneuver?.modifier,
+        name: step.name,
+      }),
+    })),
+    label: labelFor(mode, index),
+  }));
 }
 
-export function formatKm(meters: number): string {
-  if (meters < 1000) return meters + ' m';
-  return (meters / 1000).toFixed(meters < 10000 ? 1 : 0) + ' km';
+export function formatKm(distanceM: number): string {
+  if (distanceM < 1000) return Math.round(distanceM) + ' m';
+  return (distanceM / 1000).toFixed(distanceM < 10000 ? 1 : 0) + ' km';
 }
 
-export function formatMinutes(seconds: number): string {
-  const minutes = Math.max(1, Math.round(seconds / 60));
+export function formatMinutes(durationS: number): string {
+  const minutes = Math.round(durationS / 60);
   if (minutes < 60) return minutes + ' daq';
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  return hours + ' soat' + (rest ? ' ' + rest + ' daq' : '');
+  return rest ? hours + ' soat ' + rest + ' daq' : hours + ' soat';
 }
 
-export function arrivalTime(seconds: number): string {
-  const date = new Date(Date.now() + seconds * 1000);
+export function arrivalTime(durationS: number): string {
+  const date = new Date(Date.now() + durationS * 1000);
   return date.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
 }
