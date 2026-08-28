@@ -14,6 +14,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { EmojiText } from '@/components/emoji/EmojiText';
 import { EmojiPicker } from '@/components/EmojiPicker';
+import { StoryStickerOverlay } from '@/components/stickers/StoryStickerOverlay';
 import { toast } from 'sonner';
 import {
   DropdownMenu,
@@ -95,6 +96,8 @@ export function StoryViewer({
   const [isMuted, setIsMuted] = useState(false);
   const [isHolding, setIsHolding] = useState(false);
   const [progressWidth, setProgressWidth] = useState(0);
+  // Stikerning ko'rinish oynasi (startSeconds/endSeconds) uchun kerak
+  const [mediaTime, setMediaTime] = useState(0);
   
   // Touch/Gesture refs
   const storyTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -152,6 +155,9 @@ export function StoryViewer({
   // Reset progress when story changes
   useEffect(() => {
     setProgressWidth(0);
+    // Rasmli storyda ham vaqt 0 dan boshlanadi, aks holda oldingi
+    // videoning vaqti stikerlarni noto'g'ri yashiradi.
+    setMediaTime(0);
   }, [activeIndex, activeGroup.user_id]);
 
   const markAsViewed = async (storyId: string) => {
@@ -168,6 +174,18 @@ export function StoryViewer({
       console.error('Error marking story as viewed:', error);
     }
   };
+
+  // Rasmli storyda taymer bilan birga soniyalarni ham sanaymiz.
+  useEffect(() => {
+    if (currentStory?.media_type === 'video') return;
+    if (isPaused || isHolding || showViewers) return;
+
+    const ticker = setInterval(() => {
+      setMediaTime((prev) => prev + 0.25);
+    }, 250);
+
+    return () => clearInterval(ticker);
+  }, [currentStory?.id, currentStory?.media_type, isPaused, isHolding, showViewers]);
 
   // No longer need local fetchViewers - using useStoryViewers hook
   const nextStory = useCallback(() => {
@@ -627,6 +645,7 @@ export function StoryViewer({
                   autoPlay
                   playsInline
                   muted={isMuted}
+                  onTimeUpdate={(event) => setMediaTime(event.currentTarget.currentTime)}
                   onEnded={nextStory}
                 />
               ) : (
@@ -637,6 +656,20 @@ export function StoryViewer({
                   draggable={false}
                 />
               )}
+
+              {/*
+                Interaktiv story stikerlari.
+                pointer-events-none — shu bilan tap orqali navigatsiya
+                ishlashda davom etadi; faqat tugma/input/slayder bosiladi.
+              */}
+              <div className="pointer-events-none absolute inset-0 z-[6] [&_button]:pointer-events-auto [&_input]:pointer-events-auto [&_textarea]:pointer-events-auto">
+                <StoryStickerOverlay
+                  postId={currentStory.id}
+                  currentTime={mediaTime}
+                  readOnly={isOwnStory}
+                  className="h-full w-full"
+                />
+              </div>
               
               {/* Pause Indicator */}
               {(isPaused || isHolding) && (
