@@ -6,11 +6,18 @@ import { RealtimeChannel } from '@supabase/supabase-js';
 import { unreadMessagesEmitter } from './useUnreadMessages';
 
 export interface LastMessageMeta {
+  /** Oxirgi xabar id - o'qilganlik holatini aniqlash uchun kerak */
+  id: string | null;
   content: string | null;
   media_type: string | null;
   media_url: string | null;
   media_file_name: string | null;
   sender_id: string | null;
+  /**
+   * Telegramdek ptichkalar uchun: o'zimiz yuborgan oxirgi xabarni suhbatdagi
+   * boshqa a'zo o'qiganmi (ikkita ko'k ptichka) yoki hali yo'qmi (bitta).
+   */
+  is_read?: boolean;
 }
 
 export interface Conversation {
@@ -205,7 +212,7 @@ export function useConversations(
       const lastMessageMap = new Map<string, LastMessageMeta>();
       const { data: recentMessages } = await supabase
         .from('messages')
-        .select('conversation_id, content, media_type, media_url, media_file_name, sender_id, created_at')
+        .select('id, conversation_id, content, media_type, media_url, media_file_name, sender_id, created_at')
         .in('conversation_id', ids)
         .eq('is_deleted', false)
         .order('created_at', { ascending: false })
@@ -214,11 +221,33 @@ export function useConversations(
       for (const msg of recentMessages || []) {
         if (lastMessageMap.has(msg.conversation_id)) continue;
         lastMessageMap.set(msg.conversation_id, {
+          id: msg.id,
           content: msg.content,
           media_type: msg.media_type,
           media_url: msg.media_url,
           media_file_name: (msg as any).media_file_name ?? null,
           sender_id: msg.sender_id,
+          is_read: false,
+        });
+      }
+
+      // 3b) O'zimiz yuborgan oxirgi xabarlar o'qilganmi - bitta so'rov.
+      // Telegramdek: bitta ptichka = yuborildi, ikkita ko'k = o'qildi.
+      const ownLastMessageIds: string[] = [];
+      lastMessageMap.forEach((meta) => {
+        if (meta.id && meta.sender_id === user.id) ownLastMessageIds.push(meta.id);
+      });
+
+      if (ownLastMessageIds.length > 0) {
+        const { data: reads } = await supabase
+          .from('message_reads')
+          .select('message_id, user_id')
+          .in('message_id', ownLastMessageIds)
+          .neq('user_id', user.id);
+
+        const readIds = new Set((reads || []).map((r) => r.message_id));
+        lastMessageMap.forEach((meta) => {
+          if (meta.id && readIds.has(meta.id)) meta.is_read = true;
         });
       }
 
@@ -534,9 +563,10 @@ export function useConversations(
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'message_reads' },
-        (payload) => {
-          const newRead = payload.new as { user_id: string };
-          if (newRead.user_id === user.id) scheduleRefresh();
+        () => {
+          // Har qanday o'qish hodisasi ptichkalarni yangilashi kerak:
+          // o'zimizning xabarimizni suhbatdosh o'qiganda ham ro'yxat yangilanadi.
+          scheduleRefresh();
         }
       )
       .subscribe();
