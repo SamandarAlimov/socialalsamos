@@ -2,6 +2,16 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { createPollForPost, type PollInput } from '@/lib/polls';
+import {
+  savePostLocation,
+  savePostMedia,
+  savePostMusic,
+  type PostLocationInput,
+  type PostMediaInput,
+  type PostMusicInput,
+} from '@/lib/postMeta';
+import { MAX_COLLABORATORS } from '@/lib/postComposer';
 
 export interface Post {
   id: string;
@@ -28,6 +38,23 @@ export interface Post {
   };
   is_liked?: boolean;
   is_bookmarked?: boolean;
+}
+
+export type PostVisibility = 'public' | 'friends' | 'private';
+
+/** Post yaratishda qo'shimcha strukturali ma'lumotlar. */
+export interface CreatePostOptions {
+  /** MUHIM: ilgari bu qiymat saqlanmasdan tushib qolar edi (maxfiylik bug'i). */
+  visibility?: PostVisibility;
+  postKind?: 'post' | 'reel' | 'story' | 'location' | 'poll' | 'file';
+  /** Rejalashtirilgan vaqt — berilsa post 'scheduled' holatda saqlanadi. */
+  scheduledAt?: string | null;
+  media?: PostMediaInput[];
+  poll?: PollInput | null;
+  location?: PostLocationInput | null;
+  music?: PostMusicInput | null;
+  /** Tahrir holati (filtr, aspect ratio, overlaylar) — reproduksiya uchun. */
+  editState?: Record<string, unknown> | null;
 }
 
 export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') {
@@ -142,7 +169,8 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
     content: string, 
     mediaUrls: string[] = [], 
     mediaType = 'text',
-    collaboratorIds: string[] = []
+    collaboratorIds: string[] = [],
+    options: CreatePostOptions = {}
   ) => {
     if (!user) {
       toast({
@@ -153,6 +181,11 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
       return null;
     }
 
+    const visibility = options.visibility ?? 'public';
+    const isScheduled = Boolean(options.scheduledAt);
+    // 10 nafardan ortiq hammuallif qabul qilinmaydi (baza ham trigger bilan tekshiradi)
+    const collaborators = Array.from(new Set(collaboratorIds)).slice(0, MAX_COLLABORATORS);
+
     try {
       const { data, error } = await supabase
         .from('posts')
@@ -161,7 +194,14 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
           content,
           media_urls: mediaUrls,
           media_type: mediaType,
-        })
+          // Maxfiylik tanlovi endi haqiqatda saqlanadi
+          visibility,
+          post_kind: options.postKind ?? 'post',
+          status: isScheduled ? 'scheduled' : 'published',
+          scheduled_at: options.scheduledAt ?? null,
+          published_at: isScheduled ? null : new Date().toISOString(),
+          edit_state: options.editState ?? null,
+        } as any)
         .select(`
           *,
           profile:profiles!posts_user_id_fkey (
@@ -176,9 +216,50 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
 
       if (error) throw error;
 
+      // --- Strukturali meta-ma'lumotlar ---
+      // Bittasi xato bo'lsa ham post o'chib ketmasligi kerak, shuning uchun
+      // har biri alohida try/catch bilan yoziladi va xatosi ogohlantiriladi.
+      const metaErrors: string[] = [];
+
+      if (options.media?.length) {
+        try {
+          await savePostMedia(data.id, options.media);
+        } catch (metaError) {
+          console.error('post_media saqlanmadi:', metaError);
+          metaErrors.push('fayllar');
+        }
+      }
+
+      if (options.poll) {
+        try {
+          await createPollForPost(data.id, options.poll);
+        } catch (metaError) {
+          console.error('So\u2018rovnoma saqlanmadi:', metaError);
+          metaErrors.push('so\u2018rovnoma');
+        }
+      }
+
+      if (options.location) {
+        try {
+          await savePostLocation(data.id, options.location, user.id);
+        } catch (metaError) {
+          console.error('Joylashuv saqlanmadi:', metaError);
+          metaErrors.push('joylashuv');
+        }
+      }
+
+      if (options.music) {
+        try {
+          await savePostMusic(data.id, options.music);
+        } catch (metaError) {
+          console.error('Musiqa saqlanmadi:', metaError);
+          metaErrors.push('musiqa');
+        }
+      }
+
       // Send collaboration requests if collaborators are specified
-      if (collaboratorIds.length > 0 && data) {
-        const collaborationInserts = collaboratorIds.map(collaboratorId => ({
+      if (collaborators.length > 0 && data) {
+        const collaborationInserts = collaborators.map(collaboratorId => ({
           post_id: data.id,
           user_id: collaboratorId,
           invited_by: user.id,
@@ -195,20 +276,34 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
         }
       }
 
-      setPosts(prev => [data as Post, ...prev]);
-      toast({
-        title: 'Posted!',
-        description: collaboratorIds.length > 0 
-          ? 'Your post has been published and collaboration requests sent.'
-          : 'Your post has been published.',
-      });
+      // Rejalashtirilgan yoki maxfiy postlar umumiy lentaga qo'shilmaydi
+      if (!isScheduled && visibility === 'public') {
+        setPosts(prev => [data as Post, ...prev]);
+      }
+
+      if (metaErrors.length > 0) {
+        toast({
+          title: 'Post joylandi, lekin...',
+          description: `${metaErrors.join(', ')} saqlanmadi. Postni tahrirlab qayta qo\u2018shing.`,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: isScheduled ? 'Rejalashtirildi' : 'Posted!',
+          description: isScheduled
+            ? 'Post belgilangan vaqtda e\u2018lon qilinadi.'
+            : collaborators.length > 0
+              ? 'Your post has been published and collaboration requests sent.'
+              : 'Your post has been published.',
+        });
+      }
 
       return data;
     } catch (error: any) {
       console.error('Error creating post:', error);
       toast({
         title: 'Error',
-        description: 'Failed to create post',
+        description: error?.message ?? 'Failed to create post',
         variant: 'destructive',
       });
       return null;
