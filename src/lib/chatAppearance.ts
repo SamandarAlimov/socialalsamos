@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react';
+
 /**
  * Chat ko'rinishi sozlamalari (Telegramdagi "Message text size" va
  * "Message corners" kabi). Qiymatlar shu qurilmada localStorage'da saqlanadi.
@@ -88,7 +90,7 @@ export function appearanceCssVars(value: ChatAppearance): Record<string, string>
 }
 
 /** Preview uchun bitta puffak uslubi */
-export function bubblePreviewStyle(value: ChatAppearance): React.CSSProperties {
+export function bubblePreviewStyle(value: ChatAppearance): CSSProperties {
   return {
     fontSize: value.fontSize + 'px',
     lineHeight: Math.round(value.fontSize * 1.35) + 'px',
