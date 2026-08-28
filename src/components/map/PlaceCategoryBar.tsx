@@ -1,21 +1,16 @@
 import { useRef } from 'react';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, X } from 'lucide-react';
+import { CATEGORY_BAR_ORDER, categoryUi } from '@/lib/placeIcons';
 import { cn } from '@/lib/utils';
-import { PLACE_CATEGORIES, type PlaceCategoryId } from '@/lib/mapPlaces';
 
 interface PlaceCategoryBarProps {
-  active: PlaceCategoryId | null;
-  onSelect: (id: PlaceCategoryId | null) => void;
-  /** Har bir kategoriya uchun topilgan joylar soni (ixtiyoriy). */
-  counts?: Partial<Record<PlaceCategoryId, number>>;
+  active: string | null;
+  onSelect: (id: string | null) => void;
+  counts?: Record<string, number>;
   loading?: boolean;
   className?: string;
 }
 
-/**
- * Premium filtr paneli: Restoranlar, Kafe, Zaprovka, Parkovka, Dorixona...
- * Yandex/Google Mapsdagidek gorizontal "pill" tugmalar.
- */
 export function PlaceCategoryBar({
   active,
   onSelect,
@@ -30,11 +25,11 @@ export function PlaceCategoryBar({
   };
 
   return (
-    <div className={cn('relative flex items-center gap-1', className)}>
+    <div className={cn('relative flex items-center', className)}>
       <button
         type="button"
         onClick={() => scrollBy(-220)}
-        className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-full bg-background/90 text-muted-foreground shadow-sm ring-1 ring-border transition-colors hover:text-foreground md:flex"
+        className="hidden md:flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-background/90 text-muted-foreground shadow-sm hover:text-foreground"
         aria-label="Chapga"
       >
         <ChevronLeft className="h-4 w-4" />
@@ -42,46 +37,44 @@ export function PlaceCategoryBar({
 
       <div
         ref={scrollRef}
-        className="scrollbar-hide flex flex-1 items-center gap-2 overflow-x-auto scroll-smooth py-1"
+        className="flex flex-1 items-center gap-2 overflow-x-auto scrollbar-hide px-1 py-1"
       >
         {active && (
           <button
             type="button"
             onClick={() => onSelect(null)}
-            className="inline-flex shrink-0 items-center gap-1 rounded-full bg-foreground px-3 py-1.5 text-[13px] font-semibold text-background shadow-sm"
+            className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-foreground px-3 text-sm font-medium text-background"
           >
             <X className="h-3.5 w-3.5" />
             Tozalash
           </button>
         )}
 
-        {PLACE_CATEGORIES.map((category) => {
-          const isActive = active === category.id;
-          const count = counts?.[category.id];
+        {CATEGORY_BAR_ORDER.map((id) => {
+          const ui = categoryUi(id);
+          const isActive = active === id;
+          const count = counts?.[id];
           return (
             <button
-              key={category.id}
+              key={id}
               type="button"
-              onClick={() => onSelect(isActive ? null : category.id)}
+              onClick={() => onSelect(isActive ? null : id)}
               className={cn(
-                'inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-medium shadow-sm ring-1 transition-all duration-150',
+                'flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors',
                 isActive
-                  ? 'bg-primary text-primary-foreground ring-primary'
-                  : 'bg-background/95 text-foreground ring-border hover:bg-muted',
-                loading && isActive && 'animate-pulse',
+                  ? 'border-transparent text-white shadow-sm'
+                  : 'border-border/70 bg-background/95 text-foreground hover:bg-muted',
               )}
+              style={isActive ? { backgroundColor: ui.color } : undefined}
             >
-              <span aria-hidden>{category.emoji}</span>
-              {category.label}
-              {typeof count === 'number' && count > 0 && (
-                <span
-                  className={cn(
-                    'rounded-full px-1.5 text-[11px] font-semibold tabular-nums',
-                    isActive ? 'bg-primary-foreground/20' : 'bg-muted',
-                  )}
-                >
-                  {count}
-                </span>
+              <ui.Icon
+                className="h-4 w-4"
+                style={isActive ? undefined : { color: ui.color }}
+              />
+              <span className="whitespace-nowrap">{ui.label}</span>
+              {isActive && loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {isActive && !loading && typeof count === 'number' && (
+                <span className="rounded-full bg-white/25 px-1.5 text-xs">{count}</span>
               )}
             </button>
           );
@@ -91,7 +84,7 @@ export function PlaceCategoryBar({
       <button
         type="button"
         onClick={() => scrollBy(220)}
-        className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-full bg-background/90 text-muted-foreground shadow-sm ring-1 ring-border transition-colors hover:text-foreground md:flex"
+        className="hidden md:flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-background/90 text-muted-foreground shadow-sm hover:text-foreground"
         aria-label="O'ngga"
       >
         <ChevronRight className="h-4 w-4" />
@@ -99,3 +92,5 @@ export function PlaceCategoryBar({
     </div>
   );
 }
+
+export default PlaceCategoryBar;
