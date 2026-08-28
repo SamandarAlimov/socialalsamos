@@ -11,6 +11,7 @@ import {
   ShieldAlert,
   Music2,
   BookOpen,
+  Images,
 } from 'lucide-react';
 import { EmojiPicker } from '@/components/EmojiPicker';
 import { TelegramMediaRecorder } from './TelegramMediaRecorder';
@@ -21,6 +22,7 @@ import { FormatToolbar } from '@/components/chat/FormatToolbar';
 import { ArticleComposer } from '@/components/chat/ArticleComposer';
 import { useMentionInput } from '@/hooks/useMentionInput';
 import { wrapSelection } from '@/lib/messageFormat';
+import { ALBUM_MAX_ITEMS, AlbumItem, buildAlbumPayload } from '@/lib/mediaAlbum';
 import { uploadMedia } from '@/lib/mediaUpload';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -102,6 +104,7 @@ export function MessageInput({
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
+  const [pendingAlbum, setPendingAlbum] = useState<AlbumItem[] | null>(null);
   const [showFormatting, setShowFormatting] = useState(false);
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const [showArticleComposer, setShowArticleComposer] = useState(false);
@@ -155,14 +158,28 @@ export function MessageInput({
     setPendingAttachment(null);
   };
 
-  const handleSend = async () => {
-    if (!message.trim() && !pendingAttachment) return;
+  const clearAlbum = () => setPendingAlbum(null);
 
-    // Telegramda media caption bo'sh bo'lishi mumkin - sun'iy "[fayl nomi]" matni yozilmaydi
-    await onSend(message.trim(), pendingAttachment?.url, pendingAttachment?.type);
+  const handleSend = async () => {
+    if (!message.trim() && !pendingAttachment && !pendingAlbum) return;
+
+    // Albom: bir nechta rasm/video Telegramdek BITTA xabar bo'lib ketadi
+    if (pendingAlbum && pendingAlbum.length > 0) {
+      const payload = buildAlbumPayload({
+        items: pendingAlbum,
+        caption: message.trim() || undefined,
+      });
+      await onSend(payload);
+      clearAlbum();
+    }
+
+    // Bitta biriktirma yoki oddiy matn
+    if (pendingAttachment || (!pendingAlbum && message.trim())) {
+      await onSend(message.trim(), pendingAttachment?.url, pendingAttachment?.type);
+      clearAttachment();
+    }
 
     setMessage('');
-    clearAttachment();
     onTyping(false);
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -271,7 +288,7 @@ export function MessageInput({
     }
   };
 
-  /** Qo'shimcha fayllarni darhol alohida xabar sifatida yuborish (albom kabi) */
+  /** Qo'shimcha fayllarni darhol alohida xabar sifatida yuborish */
   const uploadAndSendNow = async (file: File, asDocument: boolean) => {
     if (file.size > MAX_FILE_MB * 1024 * 1024) {
       toast.error(`"${file.name}" ${MAX_FILE_MB} MB dan katta`);
@@ -288,21 +305,100 @@ export function MessageInput({
   };
 
   /**
+   * Bir nechta rasm/videoni yuklab, albom (media group) sifatida tayyorlaydi.
+   * Yuborishdan oldin caption yozish mumkin - Telegramdagi bilan bir xil.
+   */
+  const uploadAlbum = async (files: File[]) => {
+    const accepted = files.slice(0, ALBUM_MAX_ITEMS).filter((file) => {
+      if (file.size > MAX_FILE_MB * 1024 * 1024) {
+        toast.error(`"${file.name}" ${MAX_FILE_MB} MB dan katta`);
+        return false;
+      }
+      return true;
+    });
+
+    if (accepted.length === 0) return;
+    if (files.length > ALBUM_MAX_ITEMS) {
+      toast.info(`Bitta albomga ${ALBUM_MAX_ITEMS} tagacha media sig'adi`);
+    }
+
+    setUploading(true);
+    setAttachmentOpen(false);
+
+    const items: AlbumItem[] = [];
+    for (const file of accepted) {
+      try {
+        const uploaded = await uploadMedia(file, { type: 'chat', visibility: 'public' });
+        items.push({
+          url: uploaded.url,
+          type: detectKind(file.type, file.name) === 'video' ? 'video' : 'image',
+          name: file.name,
+          size: file.size,
+        });
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : 'Kutilmagan xatolik';
+        toast.error(`"${file.name}" yuklanmadi: ${reason}`);
+      }
+    }
+
+    setUploading(false);
+
+    if (items.length === 0) return;
+    setPendingAlbum((prev) =>
+      prev ? [...prev, ...items].slice(0, ALBUM_MAX_ITEMS) : items
+    );
+  };
+
+  /**
    * Biriktirish panelidan kelgan fayllar.
-   * Birinchi fayl caption yozish uchun "tanlangan" holatda qoladi,
-   * qolganlari Telegramdagi albomdek ketma-ket yuboriladi.
+   * Bir nechta rasm/video tanlansa - albom, aks holda bitta biriktirma.
    */
   const handlePickedFiles = async (files: File[], asDocument: boolean) => {
     if (files.length === 0) return;
-    const [first, ...rest] = files;
-    await uploadAndAttach(first, asDocument);
 
-    if (rest.length === 0) return;
+    if (asDocument) {
+      const [first, ...rest] = files;
+      await uploadAndAttach(first, true);
+      if (rest.length === 0) return;
+      setUploading(true);
+      try {
+        for (const file of rest) await uploadAndSendNow(file, true);
+      } finally {
+        setUploading(false);
+      }
+      return;
+    }
+
+    const mediaFiles = files.filter((file) => {
+      const kind = detectKind(file.type, file.name);
+      return kind === 'image' || kind === 'video';
+    });
+    const otherFiles = files.filter((file) => !mediaFiles.includes(file));
+
+    if (mediaFiles.length > 1) {
+      await uploadAlbum(mediaFiles);
+    } else if (mediaFiles.length === 1) {
+      await uploadAndAttach(mediaFiles[0], false);
+    }
+
+    if (otherFiles.length === 0) return;
+
+    if (mediaFiles.length === 0) {
+      const [first, ...rest] = otherFiles;
+      await uploadAndAttach(first, false);
+      if (rest.length === 0) return;
+      setUploading(true);
+      try {
+        for (const file of rest) await uploadAndSendNow(file, false);
+      } finally {
+        setUploading(false);
+      }
+      return;
+    }
+
     setUploading(true);
     try {
-      for (const file of rest) {
-        await uploadAndSendNow(file, asDocument);
-      }
+      for (const file of otherFiles) await uploadAndSendNow(file, false);
     } finally {
       setUploading(false);
     }
@@ -342,6 +438,7 @@ export function MessageInput({
     pendingAttachment && (pendingAttachment.kind === 'image' || pendingAttachment.kind === 'video');
   // Uzun matn yozilsa Telegramdek "maqola sifatida yuborish" taklif qilinadi
   const suggestArticle = message.trim().length > 600;
+  const hasContent = Boolean(message.trim() || pendingAttachment || pendingAlbum);
 
   return (
     <div
@@ -415,10 +512,66 @@ export function MessageInput({
       )}
 
       {/* Yuklanmoqda holati */}
-      {uploading && !pendingAttachment && (
+      {uploading && !pendingAttachment && !pendingAlbum && (
         <div className="mb-2 flex items-center gap-2 rounded-xl bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           Yuklanmoqda...
+        </div>
+      )}
+
+      {/* Albom preview - bitta xabar bo'lib ketadi */}
+      {pendingAlbum && pendingAlbum.length > 0 && (
+        <div className="mb-2 rounded-2xl border border-border bg-muted/40 p-2">
+          <div className="mb-2 flex items-center gap-2 px-1">
+            <Images className="h-4 w-4 shrink-0 text-primary" />
+            <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+              {pendingAlbum.length} ta media bitta albom bo'lib yuboriladi
+              {uploading ? ' \u00b7 yuklanmoqda...' : ''}
+            </p>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 shrink-0 rounded-full"
+              onClick={clearAlbum}
+              aria-label="Albomni bekor qilish"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
+            {pendingAlbum.map((item, index) => (
+              <div
+                key={`${item.url}-${index}`}
+                className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-muted"
+              >
+                {item.type === 'video' ? (
+                  <video
+                    src={item.url}
+                    className="h-full w-full object-cover"
+                    muted
+                    playsInline
+                    preload="metadata"
+                  />
+                ) : (
+                  <img src={item.url} alt="" className="h-full w-full object-cover no-drag" />
+                )}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPendingAlbum((prev) => {
+                      if (!prev) return prev;
+                      const next = prev.filter((_, i) => i !== index);
+                      return next.length > 0 ? next : null;
+                    })
+                  }
+                  className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white"
+                  aria-label="O'chirish"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -532,7 +685,11 @@ export function MessageInput({
               }
               handleKeyDown(e);
             }}
-            placeholder={t('messages.writeMessage')}
+            placeholder={
+              pendingAlbum && pendingAlbum.length > 0
+                ? 'Albomga izoh (caption) yozing...'
+                : t('messages.writeMessage')
+            }
             disabled={disabled}
             rows={1}
             className={cn(
@@ -582,7 +739,7 @@ export function MessageInput({
         </div>
 
         {/* Yuborish yoki bitta mic/video tugmasi */}
-        {message.trim() || pendingAttachment ? (
+        {hasContent ? (
           <Button
             variant="default"
             size="icon"
