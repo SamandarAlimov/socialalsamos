@@ -4,6 +4,7 @@ import { TrendingUp, Play, Heart, MessageCircle, Eye } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
+import { PostThumbnailStickers } from '@/components/stickers/PostThumbnailStickers';
 
 interface TrendingVideo {
   id: string;
@@ -182,6 +183,9 @@ export function TrendingVideos() {
             
             {/* Gradient overlay */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+
+            {/* Stikerlar — gradient ustida ko‘rinadi, bosishni to‘smaydi */}
+            <PostThumbnailStickers postId={video.id} />
             
             {/* Play icon */}
             <div className={`absolute inset-0 flex items-center justify-center transition-opacity ${
