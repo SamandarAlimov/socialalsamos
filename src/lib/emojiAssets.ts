@@ -1,70 +1,84 @@
 /**
- * Telegram-grade emoji asset resolution.
+ * Emoji asset resolution.
  *
- * Resolution order (each step falls back to the next on load error):
- *  1. Local override folder  -> `public/emoji/animated/<cp>.webp|gif`
- *     Drop Telegram's open-source animated emoji here (converted TGS -> webp/gif)
- *     and they are used automatically, no code change needed.
- *  2. Noto Animated Emoji CDN (full animated coverage).
- *  3. Apple emoji set (the exact glyph style Telegram Desktop / Web use).
- *  4. Native system glyph (handled by <AnimatedEmoji />).
+ * MUHIM: bu yerda LOKAL fayllar (`/emoji/animated/...`, `/emoji/static/...`)
+ * so'ralmaydi. Sabab: SPA hostingda (Vercel) mavjud bo'lmagan static path
+ * `index.html` qaytaradi -> `<img>` "yuklandi" deb hisoblab, buzilgan rasm
+ * ko'rsatishi yoki keraksiz 404/HTML javoblar oqimi paydo bo'lishi mumkin.
+ * Shu sababli faqat kod-nuqta (codepoint) bo'yicha ishlaydigan CDN'lar:
+ *
+ *  1. Noto Animated Emoji (`512.webp`) - HAR BIR emoji uchun animatsiya,
+ *     nom xaritasi kerak emas.
+ *  2. Noto Animated Emoji (`512.gif`) - webp qo'llab-quvvatlanmasa.
+ *  3. Apple emoji to'plami (statik) - Telegram Web/Desktop ko'rinishi.
+ *  4. Tizim glifi (`<AnimatedEmoji />` ichida).
  */
 
-const NOTO_CDN = 'https://fonts.gstatic.com/s/e/notoemoji/latest';
-const APPLE_CDN = 'https://cdn.jsdelivr.net/npm/emoji-datasource-apple@15.1.2/img/apple/64';
+const NOTO_BASE = 'https://' + 'fonts.gstatic.com/s/e/notoemoji/latest';
+const APPLE_BASE =
+  'https://' + 'cdn.jsdelivr.net/npm/emoji-datasource-apple@15.1.2/img/apple/64';
 
-const LOCAL_ANIMATED = '/emoji/animated';
-const LOCAL_STATIC = '/emoji/static';
-
-/** Raw codepoints of an emoji cluster, lowercase hex. */
+/** Emoji klasterining xom kod-nuqtalari, kichik harfli hex. */
 export function codepoints(emoji: string): string[] {
   return Array.from(emoji).map((c) => c.codePointAt(0)!.toString(16));
 }
 
-/** Noto uses `_` separated codepoints, both with and without FE0F. */
+/** Noto `_` bilan ajratadi; FE0F bilan va FE0F'siz variantlar. */
 export function notoSlugs(emoji: string): string[] {
   const points = codepoints(emoji);
   const full = points.join('_');
   const stripped = points.filter((p) => p !== 'fe0f').join('_');
-  return full === stripped ? [full] : [full, stripped];
+  const slugs = [full];
+  if (stripped && stripped !== full) slugs.push(stripped);
+  return slugs;
 }
 
-/** emoji-datasource (Apple / Telegram look) uses `-` separated codepoints. */
+/** emoji-datasource (Apple / Telegram ko'rinishi) `-` bilan ajratadi. */
 export function appleSlugs(emoji: string): string[] {
   const points = codepoints(emoji);
   const stripped = points.filter((p) => p !== 'fe0f').join('-');
   const full = points.join('-');
-  return Array.from(new Set([stripped, full]));
+  return Array.from(new Set([stripped, full].filter(Boolean)));
 }
 
-/** Ordered candidate URLs for an animated emoji. */
+/** Noto animatsion `.webp` manzillari (asosiy animatsiya manbasi). */
+export function notoAnimatedWebpUrls(emoji: string): string[] {
+  return notoSlugs(emoji).map((cp) => NOTO_BASE + '/' + cp + '/512.webp');
+}
+
+/** Noto animatsion `.gif` manzillari (webp ishlamasa). */
+export function notoAnimatedGifUrls(emoji: string): string[] {
+  return notoSlugs(emoji).map((cp) => NOTO_BASE + '/' + cp + '/512.gif');
+}
+
+/** Apple statik `.png` manzillari. */
+export function appleStaticUrls(emoji: string): string[] {
+  return appleSlugs(emoji).map((cp) => APPLE_BASE + '/' + cp + '.png');
+}
+
+/** Animatsion emoji uchun tartiblangan manzillar ro'yxati. */
 export function animatedEmojiCandidates(emoji: string): string[] {
-  const noto = notoSlugs(emoji);
-  const apple = appleSlugs(emoji);
   return [
-    ...noto.map((cp) => `${LOCAL_ANIMATED}/${cp}.webp`),
-    ...noto.map((cp) => `${LOCAL_ANIMATED}/${cp}.gif`),
-    ...noto.map((cp) => `${NOTO_CDN}/${cp}/512.gif`),
-    ...apple.map((cp) => `${APPLE_CDN}/${cp}.png`),
-    ...apple.map((cp) => `${LOCAL_STATIC}/${cp}.png`),
+    ...notoAnimatedWebpUrls(emoji),
+    ...notoAnimatedGifUrls(emoji),
+    ...appleStaticUrls(emoji),
   ];
 }
 
 /**
- * Ordered candidate URLs for a static emoji glyph.
- * Apple set first: this is what Telegram renders inside message text.
+ * Statik glif uchun tartiblangan manzillar.
+ * Apple to'plami birinchi: Telegram xabar matnida shu ko'rinish ishlatiladi.
  */
 export function staticEmojiCandidates(emoji: string): string[] {
-  const apple = appleSlugs(emoji);
-  const noto = notoSlugs(emoji);
-  return [
-    ...apple.map((cp) => `${LOCAL_STATIC}/${cp}.png`),
-    ...apple.map((cp) => `${APPLE_CDN}/${cp}.png`),
-    ...noto.map((cp) => `${NOTO_CDN}/${cp}/512.gif`),
-  ];
+  return [...appleStaticUrls(emoji), ...notoAnimatedWebpUrls(emoji)];
 }
 
-/** Lottie JSON url (high fidelity playback for large single emoji). */
+/** Lottie JSON manzili (katta yakka emoji uchun yuqori sifatli o'ynatish). */
 export function lottieEmojiUrl(emoji: string): string {
-  return `${NOTO_CDN}/${notoSlugs(emoji)[0]}/lottie.json`;
+  return NOTO_BASE + '/' + notoSlugs(emoji)[0] + '/lottie.json';
+}
+
+/** Lottie JSON uchun barcha ehtimoliy manzillar. */
+export function lottieEmojiUrls(emoji: string): string[] {
+  return notoSlugs(emoji).map((cp) => NOTO_BASE + '/' + cp + '/lottie.json');
 }

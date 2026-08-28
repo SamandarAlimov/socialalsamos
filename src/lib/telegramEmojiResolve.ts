@@ -1,5 +1,6 @@
 import { normalizeEmojiKey, telegramAnimatedEmojiUrl } from './telegramEmojiCdn';
 import { EXTRA_TELEGRAM_EMOJI_PATHS } from './telegramEmojiExtra';
+import { notoAnimatedGifUrls, notoAnimatedWebpUrls } from './emojiAssets';
 
 // URL bo'laklab yig'iladi
 const CDN_BASE =
@@ -16,19 +17,44 @@ function toUrl(path: string): string {
 }
 
 /**
- * Telegramning haqiqiy animatsion emoji faylini qaytaradi.
- * Avval asosiy xarita (Smileys/People/Symbols), keyin qo'shimcha xarita
- * (Animals/Food/Activity/Travel) tekshiriladi. Topilmasa `null`.
+ * Emoji uchun animatsion fayl manzillari, sifat tartibida:
+ *  1. Telegramning o'z animatsion to'plami (nom xaritasi bo'yicha)
+ *  2. Noto Animated Emoji `512.webp` - kod-nuqta bo'yicha, deyarli barcha emoji
+ *  3. Noto Animated Emoji `512.gif`
+ *
+ * Shu sababli ro'yxat HECH QACHON bo'sh bo'lmaydi va animatsiya har doim bor.
  */
-export function resolveTelegramEmojiUrl(emoji: string): string | null {
-  const primary = telegramAnimatedEmojiUrl(emoji);
-  if (primary) return primary;
+export function telegramEmojiUrlCandidates(emoji: string): string[] {
+  const urls: string[] = [];
 
-  const path = EXTRA_TELEGRAM_EMOJI_PATHS[normalizeEmojiKey(emoji)];
-  return path ? toUrl(path) : null;
+  const primary = telegramAnimatedEmojiUrl(emoji);
+  if (primary) urls.push(primary);
+
+  const extra = EXTRA_TELEGRAM_EMOJI_PATHS[normalizeEmojiKey(emoji)];
+  if (extra) urls.push(toUrl(extra));
+
+  urls.push(...notoAnimatedWebpUrls(emoji));
+  urls.push(...notoAnimatedGifUrls(emoji));
+
+  return Array.from(new Set(urls));
 }
 
-/** Shu emoji Telegram to'plamida bormi? */
+/**
+ * Eng yaxshi animatsion emoji manzili.
+ * Avval Telegram to'plami, topilmasa Noto animatsion emojisi.
+ */
+export function resolveTelegramEmojiUrl(emoji: string): string | null {
+  const [first] = telegramEmojiUrlCandidates(emoji);
+  return first || null;
+}
+
+/** Faqat Telegramning o'z to'plamida bormi? */
+export function hasNativeTelegramEmoji(emoji: string): boolean {
+  if (telegramAnimatedEmojiUrl(emoji)) return true;
+  return Boolean(EXTRA_TELEGRAM_EMOJI_PATHS[normalizeEmojiKey(emoji)]);
+}
+
+/** Animatsion emoji mavjudmi (Telegram yoki Noto). */
 export function hasTelegramAnimatedEmoji(emoji: string): boolean {
-  return resolveTelegramEmojiUrl(emoji) !== null;
+  return telegramEmojiUrlCandidates(emoji).length > 0;
 }
