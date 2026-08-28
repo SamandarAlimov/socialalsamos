@@ -42,10 +42,16 @@ const SITE_NAMES: Record<string, string> = {
   'vimeo.com': 'Vimeo',
 };
 
-/** Vertikal media uchun maksimal balandlik (Telegramdek ixcham). */
-const MAX_PORTRAIT_HEIGHT = 420;
+/** Vertikal media uchun maksimal balandlik (Telegramdek yirik va aniq). */
+const MAX_PORTRAIT_HEIGHT = 480;
 /** Gorizontal / kvadrat media uchun maksimal balandlik. */
-const MAX_LANDSCAPE_HEIGHT = 320;
+const MAX_LANDSCAPE_HEIGHT = 340;
+/** Vertikal media uchun maqsadli kenglik (Telegram Desktopdagidek). */
+const PORTRAIT_WIDTH = 300;
+/** Gorizontal media uchun maqsadli kenglik. */
+const LANDSCAPE_WIDTH = 420;
+/** Mediasi yo'q oddiy karta kengligi. */
+const TEXT_CARD_WIDTH = 360;
 
 function hostOf(url: string): string {
   try {
@@ -106,7 +112,7 @@ function localMeta(url: string, embed: EmbedInfo): LinkMeta {
 }
 
 /**
- * Telegram uslubidagi havola kartasi.
+ * Telegram uslubidagi havola kartasi (premium ko'rinish).
  *
  * Telegramdek ishlaydi: foydalanuvchi shunchaki link tashlaydi, video/rasm
  * platformaga o'tmasdan XUDDI SHU CHAT ICHIDA ochiladi va yuklab olinadi.
@@ -116,9 +122,10 @@ function localMeta(url: string, embed: EmbedInfo): LinkMeta {
  *  - to'g'ridan-to'g'ri .mp4/.webm havolalari -> `<video>`
  *  - qolganlari -> klassik sarlavha/tavsif/rasm kartasi
  *
- * Media ramkasi HAR DOIM mediasining haqiqiy nisbatiga moslashadi
- * (9:16, 3:4, 4:5, 1:1, 4:3, 16:9 ...), shuning uchun ichida scroll ham,
- * kesilgan joy ham qolmaydi.
+ * MUHIM: karta kengligi mediasining haqiqiy kengligiga moslashadi, ya'ni
+ * vertikal (9:16) video atrofida bo'sh, keng joy qolmaydi va media kichkina
+ * "ingichka" ko'rinmaydi. Nisbat esa har doim mediasining o'zidan olinadi
+ * (9:16, 3:4, 4:5, 1:1, 4:3, 16:9 ...).
  */
 export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPreviewProps) {
   const embed = useMemo(() => detectEmbed(url), [url]);
@@ -172,8 +179,19 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
     [embed, meta, naturalRatio]
   );
   const isPortrait = ratio < 0.95;
-  const maxMediaHeight = isPortrait ? MAX_PORTRAIT_HEIGHT : MAX_LANDSCAPE_HEIGHT;
-  const maxMediaWidth = Math.round(maxMediaHeight * ratio);
+
+  /**
+   * Media kengligi: nisbat va maksimal balandlikdan kelib chiqadi.
+   * Vertikal videoda kenglik ~300px, balandligi 480px gacha - Telegramdagidek
+   * yirik, "premium" ko'rinish. Karta ham xuddi shu kenglikka qisqaradi.
+   */
+  const mediaWidth = isPortrait
+    ? Math.min(PORTRAIT_WIDTH, Math.round(MAX_PORTRAIT_HEIGHT * ratio))
+    : Math.min(LANDSCAPE_WIDTH, Math.round(MAX_LANDSCAPE_HEIGHT * ratio));
+
+  const hasMedia = canPlayInline || Boolean(poster);
+  /** Karta ichidagi ustun kengligi - media bo'lsa aynan media kengligi. */
+  const contentWidth = hasMedia ? Math.max(mediaWidth, 220) : TEXT_CARD_WIDTH;
 
   /**
    * iframe ichidagi platforma UI'si (Instagram profil satri, TikTok izohi...)
@@ -197,15 +215,16 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
   };
 
   const frameStyle: React.CSSProperties = {
+    width: mediaWidth + 'px',
+    maxWidth: '100%',
     aspectRatio: String(ratio),
-    maxWidth: maxMediaWidth + 'px',
     boxSizing: chrome ? 'content-box' : 'border-box',
     paddingBottom: chrome ? chrome + 'px' : undefined,
   };
 
   const mediaFrame = (
     <div
-      className="relative mx-auto w-full overflow-hidden rounded-lg bg-black/90"
+      className="relative overflow-hidden rounded-xl bg-black shadow-[0_2px_12px_rgba(0,0,0,0.18)] ring-1 ring-black/10"
       style={frameStyle}
     >
       {playing && directVideo ? (
@@ -266,14 +285,17 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
             <span className="absolute inset-0 bg-gradient-to-br from-neutral-700 to-neutral-900" />
           )}
 
+          {/* Premium yorug'lik: pastdan yumshoq qoraytirish */}
+          <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/45 to-transparent" />
+
           <span className="absolute inset-0 flex items-center justify-center">
-            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-black/55 backdrop-blur-sm transition-transform duration-150 group-hover:scale-110">
-              <Play className="h-6 w-6 translate-x-[1px] fill-white text-white" />
+            <span className="flex h-16 w-16 items-center justify-center rounded-full bg-black/45 ring-1 ring-white/25 backdrop-blur-md transition-transform duration-150 group-hover:scale-110">
+              <Play className="h-7 w-7 translate-x-[1px] fill-white text-white" />
             </span>
           </span>
 
           {duration && (
-            <span className="absolute bottom-2 left-2 rounded bg-black/65 px-1.5 py-0.5 text-[11px] font-medium text-white">
+            <span className="absolute bottom-2.5 left-2.5 inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur-md">
               {duration}
             </span>
           )}
@@ -286,16 +308,21 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
     <div
       onClick={(e) => e.stopPropagation()}
       className={cn(
-        'block max-w-full overflow-hidden rounded-lg pl-2.5',
+        'block overflow-hidden rounded-xl pl-2.5',
         isMine ? 'bg-primary-foreground/10' : 'bg-muted/70',
         className
       )}
       style={{
+        width: 'fit-content',
+        maxWidth: '100%',
         borderLeft: '3px solid',
         borderLeftColor: isMine ? 'rgba(255,255,255,0.7)' : 'hsl(var(--primary))',
       }}
     >
-      <div className="flex flex-col gap-1 py-2 pr-2.5">
+      <div
+        className="flex flex-col gap-1 py-2 pr-2.5"
+        style={{ width: contentWidth + 'px', maxWidth: '100%' }}
+      >
         <a
           href={url}
           target="_blank"
@@ -347,7 +374,7 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
                   onClick={handleDownload}
                   disabled={downloading}
                   className={cn(
-                    'inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium transition-colors',
+                    'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors',
                     isMine
                       ? 'bg-primary-foreground/15 text-primary-foreground hover:bg-primary-foreground/25'
                       : 'bg-background/80 text-foreground hover:bg-background'
@@ -368,7 +395,7 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
                 className={cn(
-                  'inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium transition-colors',
+                  'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors',
                   isMine
                     ? 'bg-primary-foreground/15 text-primary-foreground hover:bg-primary-foreground/25'
                     : 'bg-background/80 text-foreground hover:bg-background'
@@ -386,10 +413,11 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="relative mx-auto mt-1 block w-full overflow-hidden rounded-md bg-black/80"
+              className="relative mt-1 block overflow-hidden rounded-xl bg-black shadow-[0_2px_12px_rgba(0,0,0,0.18)] ring-1 ring-black/10"
               style={{
+                width: mediaWidth + 'px',
+                maxWidth: '100%',
                 aspectRatio: String(ratio),
-                maxWidth: maxMediaWidth + 'px',
               }}
             >
               <img
