@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import {
   Heart,
@@ -26,6 +26,9 @@ import { usePostViews } from '@/hooks/usePostViews';
 import { EditPostDialog } from '@/components/EditPostDialog';
 import { useToast } from '@/hooks/use-toast';
 import { formatCompactCount, parseMusicFromContent } from '@/lib/postMarkers';
+import { usePostMedia } from '@/hooks/usePostMedia';
+import { MediaStickerOverlay } from '@/components/stickers/MediaStickerOverlay';
+import type { WithEditState } from '@/lib/stickerPlacements';
 
 interface PostViewModalProps {
   post: {
@@ -68,9 +71,26 @@ export function PostViewModal({
 
   const counts = useRealtimeCounts(post.id);
 
+  // Modal eski `media_urls` bilan ishlaydi, stikerlar esa yangi
+  // `post_media.edit_state` da saqlanadi — shuning uchun ikkisini
+  // bog‘lab, joriy kadrning tahrir holatini topamiz.
+  const { media } = usePostMedia(open ? post.id : undefined);
+
   const mediaUrls = post.media_urls || [];
   const hasMedia = mediaUrls.length > 0;
   const hasMultipleMedia = mediaUrls.length > 1;
+  const currentUrl = mediaUrls[currentMediaIndex];
+
+  const currentEditState = useMemo(() => {
+    if (!currentUrl || media.length === 0) return null;
+
+    // Avval URL bo‘yicha aniq moslik — tartib o‘zgargan bo‘lsa ham to‘g‘ri.
+    const byUrl = media.find((item) => item.storage_url === currentUrl);
+    const fallback = media[currentMediaIndex];
+    const match = byUrl ?? fallback;
+
+    return (match as (typeof media)[number] & WithEditState | undefined)?.edit_state ?? null;
+  }, [currentUrl, media, currentMediaIndex]);
 
   useEffect(() => {
     if (open) {
@@ -137,23 +157,35 @@ export function PostViewModal({
             {/* Media */}
             {hasMedia && (
               <div className="group relative flex flex-1 items-center justify-center bg-gradient-to-b from-neutral-950 to-black min-h-[46vh] md:min-h-[560px]">
-                {post.media_type === 'video' ? (
-                  <video
-                    key={mediaUrls[currentMediaIndex]}
-                    src={mediaUrls[currentMediaIndex]}
-                    controls
-                    autoPlay
-                    playsInline
-                    className="max-h-[92vh] max-w-full object-contain"
+                {/*
+                  Stiker qatlami media bilan bir xil o‘lchamda bo‘lishi shart.
+                  `object-contain` konteynerni to‘liq egallamaydi, shuning uchun
+                  media’ni o‘z o‘lchamiga moslashuvchi `relative` o‘ramga olamiz.
+                */}
+                <div className="relative inline-block max-h-[92vh]">
+                  {post.media_type === 'video' ? (
+                    <video
+                      key={currentUrl}
+                      src={currentUrl}
+                      controls
+                      autoPlay
+                      playsInline
+                      className="max-h-[92vh] max-w-full object-contain"
+                    />
+                  ) : (
+                    <img
+                      key={currentUrl}
+                      src={currentUrl}
+                      alt=""
+                      className="max-h-[92vh] max-w-full animate-in fade-in duration-200 object-contain"
+                    />
+                  )}
+
+                  <MediaStickerOverlay
+                    editState={currentEditState}
+                    idPrefix={`${post.id}-${currentMediaIndex}`}
                   />
-                ) : (
-                  <img
-                    key={mediaUrls[currentMediaIndex]}
-                    src={mediaUrls[currentMediaIndex]}
-                    alt=""
-                    className="max-h-[92vh] max-w-full animate-in fade-in duration-200 object-contain"
-                  />
-                )}
+                </div>
 
                 {post.is_pinned && (
                   <span className="absolute left-3 top-3 flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white backdrop-blur">

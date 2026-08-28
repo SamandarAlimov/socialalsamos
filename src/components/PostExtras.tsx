@@ -7,8 +7,8 @@ import { usePostLocation } from '@/hooks/usePostLocation';
 import { PollCard } from '@/components/PollCard';
 import { PostLocationCard } from '@/components/PostLocationCard';
 import { PostMediaCarousel } from '@/components/PostMediaCarousel';
-import { StickerLayer } from '@/components/create/StickerLayer';
-import type { StickerItem, StickerPlacement } from '@/lib/stickers';
+import { MediaStickerOverlay } from '@/components/stickers/MediaStickerOverlay';
+import type { WithEditState } from '@/lib/stickerPlacements';
 
 interface PostExtrasProps {
   postId: string;
@@ -24,72 +24,6 @@ interface PostExtrasProps {
   legacyMediaUrls?: string[] | null;
   legacyMediaType?: string | null;
   className?: string;
-}
-
-/**
- * `post_media` qatorida `edit_state` ustuni mavjud, lekin generatsiya qilingan
- * tiplarda hali yo‘q — shu sababli mahalliy kengaytirilgan tip.
- */
-type MediaWithEditState = PostMediaItem & {
-  edit_state?: Record<string, unknown> | null;
-};
-
-/**
- * Saqlangan stiker joylashuvlarini o‘qiydi va tekshiradi.
- *
- * Ma’lumot foydalanuvchi qurilmasidan kelgani uchun ishonchsiz deb qaraladi:
- * har bir maydon tekshiriladi, buzuq element jimgina tashlab yuboriladi —
- * bitta noto‘g‘ri yozuv butun postni yiqitmasligi kerak.
- */
-function readStickerPlacements(item: MediaWithEditState): StickerPlacement[] {
-  const raw = item.edit_state?.stickers;
-  if (!Array.isArray(raw)) return [];
-
-  const placements: StickerPlacement[] = [];
-
-  raw.forEach((entry, index) => {
-    if (!entry || typeof entry !== 'object') return;
-    const record = entry as Record<string, unknown>;
-    const stickerRecord = record.sticker as Record<string, unknown> | undefined;
-    if (!stickerRecord || typeof stickerRecord !== 'object') return;
-
-    const key = typeof stickerRecord.key === 'string' ? stickerRecord.key : null;
-    if (!key) return;
-
-    const emoji = typeof stickerRecord.emoji === 'string' ? stickerRecord.emoji : null;
-    const previewUrl =
-      typeof stickerRecord.previewUrl === 'string' ? stickerRecord.previewUrl : null;
-    const fullUrl = typeof stickerRecord.fullUrl === 'string' ? stickerRecord.fullUrl : null;
-    if (!emoji && !previewUrl && !fullUrl) return;
-
-    const number = (value: unknown, fallback: number): number =>
-      typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-
-    const sticker: StickerItem = {
-      key,
-      kind: (typeof stickerRecord.kind === 'string'
-        ? stickerRecord.kind
-        : 'image') as StickerItem['kind'],
-      emoji,
-      previewUrl,
-      fullUrl,
-      name: typeof stickerRecord.name === 'string' ? stickerRecord.name : 'Stiker',
-      packId: typeof stickerRecord.packId === 'string' ? stickerRecord.packId : 'post',
-    };
-
-    placements.push({
-      id: typeof record.id === 'string' ? record.id : `${item.id}-sticker-${index}`,
-      sticker,
-      x: number(record.x, 0.5),
-      y: number(record.y, 0.5),
-      scale: number(record.scale, 0.28),
-      rotation: number(record.rotation, 0),
-      opacity: number(record.opacity, 1),
-      z: number(record.z, index + 1),
-    });
-  });
-
-  return placements;
 }
 
 function DocumentCard({ item }: { item: PostMediaItem }) {
@@ -189,46 +123,42 @@ export function PostExtras({
               : 'flex snap-x snap-mandatory gap-2 overflow-x-auto overscroll-x-contain pb-1 [-webkit-overflow-scrolling:touch]',
           )}
         >
-          {visuals.map((item) => {
-            const stickers = readStickerPlacements(item as MediaWithEditState);
+          {visuals.map((item) => (
+            <div
+              key={item.id}
+              className={cn(
+                'relative',
+                visuals.length === 1
+                  ? 'w-full'
+                  : 'w-64 shrink-0 snap-start overflow-hidden rounded-2xl border border-border/60',
+              )}
+            >
+              {item.kind === 'image' ? (
+                <img
+                  src={item.storage_url}
+                  alt={item.alt_text ?? item.file_name ?? 'Rasm'}
+                  loading="lazy"
+                  className="h-full max-h-[520px] w-full object-cover"
+                />
+              ) : (
+                <video
+                  src={item.storage_url}
+                  poster={item.thumbnail_url ?? undefined}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  onClick={(event) => event.stopPropagation()}
+                  className="h-full max-h-[520px] w-full bg-black object-contain"
+                />
+              )}
 
-            return (
-              <div
-                key={item.id}
-                className={cn(
-                  'relative',
-                  visuals.length === 1
-                    ? 'w-full'
-                    : 'w-64 shrink-0 snap-start overflow-hidden rounded-2xl border border-border/60',
-                )}
-              >
-                {item.kind === 'image' ? (
-                  <img
-                    src={item.storage_url}
-                    alt={item.alt_text ?? item.file_name ?? 'Rasm'}
-                    loading="lazy"
-                    className="h-full max-h-[520px] w-full object-cover"
-                  />
-                ) : (
-                  <video
-                    src={item.storage_url}
-                    poster={item.thumbnail_url ?? undefined}
-                    controls
-                    playsInline
-                    preload="metadata"
-                    onClick={(event) => event.stopPropagation()}
-                    className="h-full max-h-[520px] w-full bg-black object-contain"
-                  />
-                )}
-
-                {/* Media ustidagi stikerlar — faqat ko‘rish rejimi.
-                    Bosishni to‘smaydi, shuning uchun video boshqaruvi ishlaydi. */}
-                {stickers.length > 0 && (
-                  <StickerLayer placements={stickers} onChange={() => {}} editable={false} />
-                )}
-              </div>
-            );
-          })}
+              {/* Media ustidagi stikerlar — faqat ko‘rish rejimi */}
+              <MediaStickerOverlay
+                editState={(item as PostMediaItem & WithEditState).edit_state}
+                idPrefix={item.id}
+              />
+            </div>
+          ))}
         </div>
       )}
 
