@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ChatFolderTabs } from './ChatFolderTabs';
+import { ChatFolderTabs, SystemTab } from './ChatFolderTabs';
 import { ChatFolderManager } from './ChatFolderManager';
 import { ChatFolderChatPicker, FolderPickerChat } from './ChatFolderChatPicker';
 import { useChatFolders } from '@/hooks/useChatFolders';
@@ -10,9 +10,15 @@ export interface FolderBarChat extends FolderChat {
   avatarUrl?: string;
 }
 
+export type { SystemTab } from './ChatFolderTabs';
+
 interface ChatFolderBarProps {
   /** Barcha chatlar (papka hisoblari va chat tanlash uchun) */
   chats: FolderBarChat[];
+  /** Asosiy varaqlar - papkalar bilan bitta panelda ko'rinadi */
+  systemTabs?: SystemTab[];
+  activeSystemTabId?: string;
+  onSelectSystemTab?: (id: string) => void;
   /** Aktiv papka o'zgarganda chat ro'yxatini filtrlash funksiyasi qaytariladi */
   onFilterChange: (predicate: ((chat: FolderChat) => boolean) | null) => void;
   /** "Hammasini sukut qilish" bosilganda papkadagi chat id'lari */
@@ -21,11 +27,13 @@ interface ChatFolderBarProps {
 }
 
 /**
- * Papka paneli - butun mantiq shu komponent ichida.
- * Sahifaga faqat bitta qator qo'shish kifoya.
+ * Yakka varaq paneli - asosiy varaqlar + papkalar, butun mantiq shu komponentda.
  */
 export function ChatFolderBar({
   chats,
+  systemTabs,
+  activeSystemTabId,
+  onSelectSystemTab,
   onFilterChange,
   onMuteChats,
   className,
@@ -82,6 +90,9 @@ export function ChatFolderBar({
     <>
       <ChatFolderTabs
         className={className}
+        systemTabs={systemTabs}
+        activeSystemTabId={activeSystemTabId}
+        onSelectSystemTab={onSelectSystemTab}
         folders={allFolders}
         activeFolderId={activeFolderId}
         chats={chats}

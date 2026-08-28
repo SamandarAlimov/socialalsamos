@@ -37,7 +37,18 @@ const ICONS: Record<ChatFolderIcon, typeof Folder> = {
   custom: Folder,
 };
 
+/** Sahifaning asosiy varaqlari (Barchasi, Shaxsiy, Guruhlar, ...) */
+export type SystemTab = {
+  id: string;
+  label: string;
+  count?: number;
+};
+
 interface ChatFolderTabsProps {
+  /** Asosiy varaqlar - papkalar bilan bitta qatorda ko'rinadi */
+  systemTabs?: SystemTab[];
+  activeSystemTabId?: string;
+  onSelectSystemTab?: (id: string) => void;
   folders: ChatFolder[];
   activeFolderId: string;
   chats: FolderChat[];
@@ -53,13 +64,17 @@ interface ChatFolderTabsProps {
 }
 
 /**
- * Telegramdek papka paneli.
+ * Telegramdek YAKKA varaq paneli.
  *
- * - Aktiv papka yumshoq kulrang "pill" ichida ko'rinadi (to'q sariq emas).
- * - O'ng tugma yoki uzoq bosish orqali papka menyusi ochiladi:
- *   tahrirlash, chat qo'shish, hammasini sukut qilish, olib tashlash, tartiblash.
+ * - Asosiy varaqlar va papkalar bitta gorizontal qatorda (ikkita panel yo'q).
+ * - Aktiv varaq yumshoq oq "pill" ichida (to'q sariq rang emas).
+ * - Papka qo'shish faqat uzoq bosish menyusi va sozlamalar orqali -
+ *   panelda ortiqcha "+" tugmasi yo'q.
  */
 export function ChatFolderTabs({
+  systemTabs,
+  activeSystemTabId,
+  onSelectSystemTab,
   folders,
   activeFolderId,
   chats,
@@ -73,39 +88,158 @@ export function ChatFolderTabs({
   showIcons = false,
   className,
 }: ChatFolderTabsProps) {
+  const hasSystemTabs = !!systemTabs && systemTabs.length > 0;
+  // Asosiy varaqlar bo'lsa, "Barchasi" papkasi takrorlanmasligi uchun chiqarib tashlanadi
+  const visibleFolders = hasSystemTabs
+    ? folders.filter((folder) => folder.id !== ALL_FOLDER_ID)
+    : folders;
+  const folderSelected = activeFolderId !== ALL_FOLDER_ID;
+
   return (
     <div className={cn('px-2 py-1.5', className)}>
-      <div className="flex items-center gap-1 rounded-full bg-muted/60 p-1">
-        <div className="scrollbar-hide flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
-          {folders.map((folder) => (
-            <FolderTab
-              key={folder.id}
-              folder={folder}
-              isActive={folder.id === activeFolderId}
-              unread={folderUnreadCount(chats, folder)}
-              showIcon={showIcons}
-              onSelect={() => onSelect(folder.id)}
-              onEdit={() => onEditFolder(folder.id)}
-              onAddChats={() => onAddChats(folder.id)}
-              onMute={() => onMuteFolder(folder.id)}
-              onRemove={() => onRemoveFolder(folder.id)}
-              onReorder={onReorderFolders}
-              onCreate={onCreateFolder}
-            />
-          ))}
-        </div>
+      <div className="scrollbar-hide flex items-center gap-0.5 overflow-x-auto rounded-full bg-muted/60 p-1">
+        {hasSystemTabs &&
+          systemTabs!.map((tab) => {
+            const isActive = !folderSelected && tab.id === activeSystemTabId;
+            return (
+              <SystemTabButton
+                key={tab.id}
+                tab={tab}
+                isActive={isActive}
+                onSelect={() => {
+                  onSelectSystemTab?.(tab.id);
+                  // Asosiy varaq tanlanganda papka filtri bekor qilinadi
+                  if (folderSelected) onSelect(ALL_FOLDER_ID);
+                }}
+                onCreate={onCreateFolder}
+                onReorder={onReorderFolders}
+              />
+            );
+          })}
 
-        <button
-          type="button"
-          onClick={onCreateFolder}
-          aria-label="Papka qo'shish"
-          title="Papka qo'shish"
-          className="tg-transition flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground"
-        >
-          <Plus className="h-4 w-4" />
-        </button>
+        {visibleFolders.map((folder) => (
+          <FolderTab
+            key={folder.id}
+            folder={folder}
+            isActive={folder.id === activeFolderId}
+            unread={folderUnreadCount(chats, folder)}
+            showIcon={showIcons}
+            onSelect={() => onSelect(folder.id)}
+            onEdit={() => onEditFolder(folder.id)}
+            onAddChats={() => onAddChats(folder.id)}
+            onMute={() => onMuteFolder(folder.id)}
+            onRemove={() => onRemoveFolder(folder.id)}
+            onReorder={onReorderFolders}
+            onCreate={onCreateFolder}
+          />
+        ))}
       </div>
     </div>
+  );
+}
+
+/** Uzoq bosishni kontekst menyusiga aylantiruvchi umumiy yordamchi */
+function useLongPressContextMenu() {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const firedRef = useRef(false);
+
+  const open = (target: HTMLElement) => {
+    firedRef.current = true;
+    const rect = target.getBoundingClientRect();
+    target.dispatchEvent(
+      new MouseEvent('contextmenu', {
+        bubbles: true,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.bottom,
+      })
+    );
+  };
+
+  const start = (event: React.TouchEvent<HTMLButtonElement>) => {
+    const target = event.currentTarget;
+    firedRef.current = false;
+    timerRef.current = setTimeout(() => open(target), 420);
+  };
+
+  const cancel = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
+  };
+
+  /** Uzoq bosishdan keyin oddiy "click" bajarilmasligi kerak */
+  const consumedClick = () => {
+    if (firedRef.current) {
+      firedRef.current = false;
+      return true;
+    }
+    return false;
+  };
+
+  return { start, cancel, consumedClick };
+}
+
+const TAB_BASE =
+  'tg-transition relative flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm chat-no-select';
+const TAB_ACTIVE = 'bg-background font-semibold text-foreground shadow-sm';
+const TAB_IDLE = 'font-medium text-muted-foreground hover:text-foreground';
+
+function TabBadge({ value, isActive }: { value: number; isActive: boolean }) {
+  if (value <= 0) return null;
+  return (
+    <span
+      className={cn(
+        'flex h-[20px] min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold',
+        isActive ? 'bg-muted-foreground/25 text-foreground' : 'bg-muted-foreground/20 text-muted-foreground'
+      )}
+    >
+      {value > 99 ? '99+' : value}
+    </span>
+  );
+}
+
+interface SystemTabButtonProps {
+  tab: SystemTab;
+  isActive: boolean;
+  onSelect: () => void;
+  onCreate: () => void;
+  onReorder: () => void;
+}
+
+function SystemTabButton({ tab, isActive, onSelect, onCreate, onReorder }: SystemTabButtonProps) {
+  const longPress = useLongPressContextMenu();
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <button
+          type="button"
+          onClick={() => {
+            if (longPress.consumedClick()) return;
+            onSelect();
+          }}
+          onTouchStart={longPress.start}
+          onTouchEnd={longPress.cancel}
+          onTouchMove={longPress.cancel}
+          onTouchCancel={longPress.cancel}
+          title={tab.label}
+          className={cn(TAB_BASE, isActive ? TAB_ACTIVE : TAB_IDLE)}
+        >
+          <span className="max-w-[140px] truncate">{tab.label}</span>
+          <TabBadge value={tab.count ?? 0} isActive={isActive} />
+        </button>
+      </ContextMenuTrigger>
+
+      <ContextMenuContent className="w-56 rounded-2xl">
+        <ContextMenuItem onClick={onCreate} className="gap-2">
+          <Plus className="h-4 w-4" />
+          Papka qo'shish
+        </ContextMenuItem>
+        <ContextMenuItem onClick={onReorder} className="gap-2">
+          <ListOrdered className="h-4 w-4" />
+          Papkalarni qayta tartiblash
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
@@ -138,32 +272,7 @@ function FolderTab({
 }: FolderTabProps) {
   const Icon = ICONS[folder.icon] || Folder;
   const isAll = folder.id === ALL_FOLDER_ID;
-  const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressFiredRef = useRef(false);
-
-  /** Mobil qurilmada uzoq bosish kontekst menyusini ochadi */
-  const openContextMenu = (target: HTMLElement) => {
-    longPressFiredRef.current = true;
-    const rect = target.getBoundingClientRect();
-    target.dispatchEvent(
-      new MouseEvent('contextmenu', {
-        bubbles: true,
-        clientX: rect.left + rect.width / 2,
-        clientY: rect.bottom,
-      })
-    );
-  };
-
-  const startLongPress = (event: React.TouchEvent<HTMLButtonElement>) => {
-    const target = event.currentTarget;
-    longPressFiredRef.current = false;
-    longPressRef.current = setTimeout(() => openContextMenu(target), 420);
-  };
-
-  const cancelLongPress = () => {
-    if (longPressRef.current) clearTimeout(longPressRef.current);
-    longPressRef.current = null;
-  };
+  const longPress = useLongPressContextMenu();
 
   return (
     <ContextMenu>
@@ -171,38 +280,19 @@ function FolderTab({
         <button
           type="button"
           onClick={() => {
-            if (longPressFiredRef.current) {
-              longPressFiredRef.current = false;
-              return;
-            }
+            if (longPress.consumedClick()) return;
             onSelect();
           }}
-          onTouchStart={startLongPress}
-          onTouchEnd={cancelLongPress}
-          onTouchMove={cancelLongPress}
-          onTouchCancel={cancelLongPress}
+          onTouchStart={longPress.start}
+          onTouchEnd={longPress.cancel}
+          onTouchMove={longPress.cancel}
+          onTouchCancel={longPress.cancel}
           title={folder.name}
-          className={cn(
-            'tg-transition relative flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm chat-no-select',
-            isActive
-              ? 'bg-background font-semibold text-foreground shadow-sm'
-              : 'font-medium text-muted-foreground hover:text-foreground'
-          )}
+          className={cn(TAB_BASE, isActive ? TAB_ACTIVE : TAB_IDLE)}
         >
           {showIcon && <Icon className="h-4 w-4 shrink-0" />}
           <span className="max-w-[140px] truncate">{folder.name}</span>
-          {unread > 0 && (
-            <span
-              className={cn(
-                'flex h-[20px] min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold',
-                isActive
-                  ? 'bg-muted-foreground/25 text-foreground'
-                  : 'bg-muted-foreground/20 text-muted-foreground'
-              )}
-            >
-              {unread > 99 ? '99+' : unread}
-            </span>
-          )}
+          <TabBadge value={unread} isActive={isActive} />
         </button>
       </ContextMenuTrigger>
 
