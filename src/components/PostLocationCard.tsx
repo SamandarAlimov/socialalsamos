@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Navigation, Radio } from 'lucide-react';
+import { MapPin, Navigation, Radio, Square } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isLiveActive, type PostLocation } from '@/hooks/usePostLocation';
+import { useLiveLocationSharing } from '@/hooks/useLiveLocationSharing';
 
 interface PostLocationCardProps {
   location: PostLocation;
   className?: string;
-  /** Kompakt ko'rinish — faqat chip. */
+  /** Kompakt ko‘rinish — faqat chip. */
   compact?: boolean;
+  /** Post egasi bo‘lsa: live joylashuv avtomatik yangilanadi va to‘xtatish mumkin. */
+  isOwner?: boolean;
+  onStopped?: () => void;
 }
 
 const STATIC_MAP_BASE = 'https://staticmap.openstreetmap.de/staticmap.php';
@@ -36,14 +40,26 @@ function staticMapUrl(latitude: number, longitude: number): string {
   return STATIC_MAP_BASE + '?' + params.toString();
 }
 
-/** Lentada post joylashuvini ko'rsatish. */
-export function PostLocationCard({ location, className, compact }: PostLocationCardProps) {
+/** Lentada post joylashuvini ko‘rsatish. */
+export function PostLocationCard({
+  location,
+  className,
+  compact,
+  isOwner = false,
+  onStopped,
+}: PostLocationCardProps) {
   const [live, setLive] = useState(() => isLiveActive(location));
   const [remaining, setRemaining] = useState(() =>
     location.live_until ? remainingLabel(location.live_until) : '',
   );
 
-  // Qolgan vaqt sanog'i
+  const { endSharing } = useLiveLocationSharing({
+    locationId: location.id,
+    liveUntil: location.live_until,
+    enabled: isOwner && live,
+  });
+
+  // Qolgan vaqt sanog‘i
   useEffect(() => {
     if (!location.live_until || location.mode !== 'live') return;
 
@@ -66,6 +82,14 @@ export function PostLocationCard({ location, className, compact }: PostLocationC
     location.longitude +
     '&label=' +
     encodeURIComponent(title);
+
+  const handleStop = async (event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    await endSharing();
+    setLive(false);
+    onStopped?.();
+  };
 
   if (compact) {
     return (
@@ -122,10 +146,19 @@ export function PostLocationCard({ location, className, compact }: PostLocationC
           <p className="truncate text-xs text-muted-foreground">
             {live
               ? remaining
-              : (subtitle ??
-                location.latitude.toFixed(4) + ', ' + location.longitude.toFixed(4))}
+              : (subtitle ?? location.latitude.toFixed(4) + ', ' + location.longitude.toFixed(4))}
           </p>
         </div>
+
+        {live && isOwner && (
+          <button
+            type="button"
+            onClick={handleStop}
+            className="flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-destructive/50 px-2.5 text-xs font-medium text-destructive transition hover:bg-destructive/10"
+          >
+            <Square className="h-3 w-3" /> To‘xtatish
+          </button>
+        )}
       </div>
     </Link>
   );

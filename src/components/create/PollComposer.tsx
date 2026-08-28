@@ -36,13 +36,13 @@ interface DraftOption {
 
 const EMOJIS = ['👍', '👎', '❤️', '🔥', '😂', '😮', '😢', '🎉', '✅', '❌', '⭐', '🎯'];
 
-const DURATIONS = [
+const DURATIONS: Array<{ label: string; minutes: number | null }> = [
   { label: '1 soat', minutes: 60 },
   { label: '6 soat', minutes: 360 },
   { label: '1 kun', minutes: 1440 },
   { label: '3 kun', minutes: 4320 },
   { label: '1 hafta', minutes: 10080 },
-  { label: 'Cheksiz', minutes: null as number | null },
+  { label: 'Cheksiz', minutes: null },
 ];
 
 function newOption(): DraftOption {
@@ -54,7 +54,7 @@ function newOption(): DraftOption {
 }
 
 /**
- * So'rovnoma yaratish oynasi.
+ * So‘rovnoma yaratish oynasi.
  *
  * Eski `EnhancedPollCreator` natijani post matniga JSON qilib yozardi.
  * Bu komponent esa `PollInput` qaytaradi — u `polls` jadvaliga yoziladi.
@@ -97,27 +97,24 @@ export function PollComposer({ open, onClose, onSave, initialPoll }: PollCompose
     );
   }, []);
 
-  const removeOption = useCallback(
-    (id: string) => {
-      setOptions((current) => {
-        if (current.length <= POLL_MIN_OPTIONS) return current;
-        const index = current.findIndex((option) => option.id === id);
-        const next = current.filter((option) => option.id !== id);
+  const removeOption = useCallback((id: string) => {
+    setOptions((current) => {
+      if (current.length <= POLL_MIN_OPTIONS) return current;
 
-        // To'g'ri javob indeksini moslashtiramiz
-        setCorrectIndex((currentIndex) => {
-          if (currentIndex === null) return null;
-          if (currentIndex === index) return null;
-          return currentIndex > index ? currentIndex - 1 : currentIndex;
-        });
+      const index = current.findIndex((option) => option.id === id);
 
-        return next;
+      // To‘g‘ri javob indeksini moslashtiramiz
+      setCorrectIndex((currentIndex) => {
+        if (currentIndex === null) return null;
+        if (currentIndex === index) return null;
+        return currentIndex > index ? currentIndex - 1 : currentIndex;
       });
-    },
-    [],
-  );
 
-  /** Tartibni almashtirish (drag-and-drop o'rniga ishonchli tugmalar). */
+      return current.filter((option) => option.id !== id);
+    });
+  }, []);
+
+  /** Tartibni almashtirish (mobil qurilmada ishonchsiz drag-and-drop o‘rniga). */
   const moveOption = useCallback((index: number, direction: -1 | 1) => {
     setOptions((current) => {
       const target = index + direction;
@@ -219,7 +216,7 @@ export function PollComposer({ open, onClose, onSave, initialPoll }: PollCompose
       <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
         <div className="flex items-center gap-2">
           <BarChart3 className="h-5 w-5 text-primary" />
-          <h2 className="text-base font-semibold">So\u2018rovnoma</h2>
+          <h2 className="text-base font-semibold">So‘rovnoma</h2>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -240,7 +237,7 @@ export function PollComposer({ open, onClose, onSave, initialPoll }: PollCompose
         </div>
       </div>
 
-      {/* Tarkib — scroll ishlaydi, klaviatura ostida ham */}
+      {/* Tarkib — scroll klaviatura ostida ham ishlaydi */}
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 pb-24 [-webkit-overflow-scrolling:touch]">
         {errors.length > 0 && (
           <ul className="space-y-1 rounded-xl border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
@@ -263,9 +260,7 @@ export function PollComposer({ open, onClose, onSave, initialPoll }: PollCompose
             maxLength={300}
             className="mt-1.5 w-full resize-none rounded-xl border border-border/60 bg-muted/30 p-3 text-sm outline-none focus:border-primary"
           />
-          <p className="mt-1 text-right text-[11px] text-muted-foreground">
-            {question.length}/300
-          </p>
+          <p className="mt-1 text-right text-[11px] text-muted-foreground">{question.length}/300</p>
         </div>
 
         {/* Variantlar */}
@@ -282,7 +277,7 @@ export function PollComposer({ open, onClose, onSave, initialPoll }: PollCompose
                     <button
                       type="button"
                       onClick={() => setCorrectIndex(index)}
-                      aria-label="To'g'ri javob"
+                      aria-label="To‘g‘ri javob"
                       className={cn(
                         'flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition',
                         correctIndex === index
@@ -339,7 +334,7 @@ export function PollComposer({ open, onClose, onSave, initialPoll }: PollCompose
                     type="button"
                     onClick={() => removeOption(option.id)}
                     disabled={options.length <= POLL_MIN_OPTIONS}
-                    aria-label="O'chirish"
+                    aria-label="O‘chirish"
                     className="flex h-8 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground disabled:opacity-30"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -386,7 +381,7 @@ export function PollComposer({ open, onClose, onSave, initialPoll }: PollCompose
               onClick={addOption}
               className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border text-sm font-medium text-muted-foreground transition hover:bg-muted/50"
             >
-              <Plus className="h-4 w-4" /> Variant qo\u2018shish
+              <Plus className="h-4 w-4" /> Variant qo‘shish
             </button>
           )}
         </div>
@@ -419,7 +414,7 @@ export function PollComposer({ open, onClose, onSave, initialPoll }: PollCompose
         <div className="space-y-2">
           {toggleRow(
             'Viktorina rejimi',
-            "To'g'ri javob belgilanadi, ovoz berilgach ko'rsatiladi",
+            'To‘g‘ri javob belgilanadi, ovoz berilgach ko‘rsatiladi',
             quizMode,
             (value) => {
               setQuizMode(value);
@@ -430,7 +425,7 @@ export function PollComposer({ open, onClose, onSave, initialPoll }: PollCompose
 
           {!quizMode &&
             toggleRow(
-              "Ko'p tanlov",
+              'Ko‘p tanlov',
               'Bir necha variantni tanlash mumkin',
               allowMultiple,
               setAllowMultiple,
@@ -439,7 +434,7 @@ export function PollComposer({ open, onClose, onSave, initialPoll }: PollCompose
 
           {toggleRow(
             'Anonim ovoz berish',
-            'Kim ovoz berganini boshqalar ko\u2018rmaydi',
+            'Kim ovoz berganini boshqalar ko‘rmaydi',
             isAnonymous,
             setIsAnonymous,
             <Lock className="h-4 w-4" />,
@@ -447,8 +442,8 @@ export function PollComposer({ open, onClose, onSave, initialPoll }: PollCompose
 
           {!quizMode &&
             toggleRow(
-              'Natijalarni oldin ko\u2018rsatish',
-              'Ovoz bermasdan ham natijalar ko\u2018rinadi',
+              'Natijalarni oldin ko‘rsatish',
+              'Ovoz bermasdan ham natijalar ko‘rinadi',
               showResultsBeforeVote,
               setShowResultsBeforeVote,
               <BarChart3 className="h-4 w-4" />,
@@ -464,7 +459,7 @@ export function PollComposer({ open, onClose, onSave, initialPoll }: PollCompose
             <textarea
               value={explanation}
               onChange={(event) => setExplanation(event.target.value)}
-              placeholder="To\u2018g\u2018ri javob nima uchun to\u2018g\u2018ri?"
+              placeholder="To‘g‘ri javob nima uchun to‘g‘ri?"
               rows={2}
               maxLength={300}
               className="mt-1.5 w-full resize-none rounded-xl border border-border/60 bg-muted/30 p-3 text-sm outline-none focus:border-primary"
