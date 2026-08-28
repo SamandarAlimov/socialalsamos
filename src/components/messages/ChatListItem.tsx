@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Users, Megaphone, Pin, VolumeX, Reply, Bookmark, Phone, Video, PhoneMissed, PhoneOff, PhoneIncoming, PhoneOutgoing, VideoOff, Mic, Image, FileText, MapPin, BarChart3, Sticker, Music } from 'lucide-react';
+import { Users, Megaphone, Pin, VolumeX, Reply, Bookmark, Phone, Video, PhoneMissed, PhoneOff, PhoneIncoming, PhoneOutgoing, VideoOff, Mic, Image, FileText, MapPin, BarChart3, Sticker, Music, BookOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
 import { Conversation } from '@/hooks/useMessages';
@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
+import { parseArticlePayload, stripFormatting } from '@/lib/messageFormat';
 
 interface ChatListItemProps {
   conversation: Conversation & { is_self_chat?: boolean };
@@ -37,6 +38,11 @@ const HOVER_ROW = 'hover:bg-muted/60 active:bg-muted/80';
 
 /** Telegram renders media hints in the same muted tone as the preview text. */
 const PREVIEW_ICON = 'h-3.5 w-3.5 shrink-0 text-muted-foreground';
+
+/** Joylashuv va qo'ng'iroq payloadlari (emoji literal o'rniga escape) */
+const LOCATION_PREFIX = '\ud83d\udccd LOCATION:';
+const CALL_PREFIX = '\ud83d\udcde';
+const DOT = '\u00b7';
 
 export function ChatListItem({ 
   conversation, 
@@ -181,27 +187,27 @@ export function ChatListItem({
     switch (callData.status) {
       case 'missed':
         return {
-          text: isOutgoing ? `${label} · javobsiz` : `O'tkazib yuborilgan ${label.toLowerCase()}`,
+          text: isOutgoing ? `${label} ${DOT} javobsiz` : `O'tkazib yuborilgan ${label.toLowerCase()}`,
           icon: isVideo
             ? <VideoOff className={cn(PREVIEW_ICON, 'text-red-500')} />
             : <PhoneMissed className={cn(PREVIEW_ICON, 'text-red-500')} />,
         };
       case 'declined':
         return {
-          text: `${label} · rad etildi`,
+          text: `${label} ${DOT} rad etildi`,
           icon: isVideo
             ? <VideoOff className={cn(PREVIEW_ICON, 'text-red-500')} />
             : <PhoneOff className={cn(PREVIEW_ICON, 'text-red-500')} />,
         };
       case 'cancelled':
         return {
-          text: `${label} · bekor qilindi`,
+          text: `${label} ${DOT} bekor qilindi`,
           icon: isVideo
             ? <VideoOff className={PREVIEW_ICON} />
             : <PhoneOff className={PREVIEW_ICON} />,
         };
       case 'ended': {
-        const duration = callData.duration ? ` · ${formatCallDuration(callData.duration)}` : '';
+        const duration = callData.duration ? ` ${DOT} ${formatCallDuration(callData.duration)}` : '';
         return {
           text: `${isOutgoing ? 'Chiquvchi' : 'Kiruvchi'} ${label.toLowerCase()}${duration}`,
           icon: isVideo
@@ -224,6 +230,14 @@ export function ChatListItem({
     const mediaType = meta?.media_type;
     const hasRealContent = message && message.trim().length > 0;
     const caption = hasRealContent && !message.startsWith('{') ? message : null;
+
+    // Maqola (article) xabari - Telegramdek alohida yorliq bilan
+    if (hasRealContent) {
+      const article = parseArticlePayload(message as string);
+      if (article) {
+        return { text: article.title || 'Maqola', icon: <BookOpen className={PREVIEW_ICON} /> };
+      }
+    }
 
     // Media-only or media-enriched messages: content may be empty, so describe the attachment.
     // Telegram keeps the caption visible next to the media label when there is one.
@@ -262,7 +276,7 @@ export function ChatListItem({
     if (!message) return { text: 'No messages yet' };
 
     // Location payload format used elsewhere in the app
-    if (message.startsWith('📍 LOCATION:')) {
+    if (message.startsWith(LOCATION_PREFIX)) {
       return { text: 'Joylashuv', icon: <MapPin className={PREVIEW_ICON} /> };
     }
 
@@ -279,12 +293,12 @@ export function ChatListItem({
     }
 
     // Legacy plain-text call fallback
-    if (message.startsWith('📞')) {
-      return { text: message.replace('📞', '').trim() || "Qo'ng'iroq", icon: <Phone className={PREVIEW_ICON} /> };
+    if (message.startsWith(CALL_PREFIX)) {
+      return { text: message.replace(CALL_PREFIX, '').trim() || "Qo'ng'iroq", icon: <Phone className={PREVIEW_ICON} /> };
     }
     
-    // Regular message - rely on CSS truncation to adapt to panel width
-    return { text: message.replace(/\s+/g, ' ').trim() };
+    // Oddiy xabar - formatlash belgilari (**, __, ||, `) preview'da ko'rinmaydi
+    return { text: stripFormatting(message).replace(/\s+/g, ' ').trim() || message.replace(/\s+/g, ' ').trim() };
   };
 
   const isUnread = (conversation.unread_count ?? 0) > 0;
