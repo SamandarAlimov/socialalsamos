@@ -1,7 +1,7 @@
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Phone, PhoneOff, Video, Volume2, VolumeX } from 'lucide-react';
+import { CallControlButton } from '@/components/calls/CallControlButton';
+import { Mic, MicOff, Phone, PhoneOff, Video } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface IncomingCallDialogProps {
@@ -41,6 +41,13 @@ function createRingtone(audioContext: AudioContext, volume: number): OscillatorN
   return oscillators;
 }
 
+/**
+ * Telegram Desktopdagi "kelayotgan qo'ng'iroq" oynasi.
+ *
+ * Qora shaffof panel, katta yumaloq avatar, ism va "sizga qo'ng'iroq
+ * qilmoqda..." holati, pastda esa izohli yumaloq tugmalar:
+ * **Video | Rad etish | Javob berish | Ovoz**.
+ */
 export function IncomingCallDialog({
   isOpen,
   callerName,
@@ -186,96 +193,69 @@ export function IncomingCallDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  const callLabel =
-    callType === 'video' ? "Video qo'ng'iroq kelmoqda..." : "Audio qo'ng'iroq kelmoqda...";
-
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleDecline()}>
-      <DialogContent className="w-[calc(100vw-1.5rem)] max-w-sm rounded-3xl border-border/50 bg-card/95 backdrop-blur-xl sm:max-w-md">
-        <div className="flex flex-col items-center space-y-5 py-4 sm:space-y-6 sm:py-6">
-          {/* Qo'ng'iroq qiluvchining rasmi - pulsatsiya bilan */}
-          <div className="relative">
-            <div
-              className={`absolute inset-0 rounded-full bg-primary/20 ${
+      <DialogContent className="w-[calc(100vw-1.5rem)] max-w-sm overflow-hidden rounded-3xl border-white/10 bg-neutral-900/95 p-0 text-white backdrop-blur-2xl sm:max-w-md">
+        {/* Yuqoridagi yumshoq nur - Telegramdagi qo'ng'iroq oynasi kayfiyati */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-[#4DA6FF]/20 to-transparent" />
+
+        <div className="relative flex flex-col items-center px-6 pb-6 pt-9">
+          {/* Avatar - jiringlash paytida ikki qatlamli pulsatsiya */}
+          <div className="relative mb-5">
+            <span
+              className={`absolute -inset-3 rounded-full bg-white/10 ${
                 isRinging ? 'animate-ping' : ''
               }`}
-              style={{ animationDuration: '1.6s' }}
+              style={{ animationDuration: '2s' }}
             />
-            <div
-              className={`absolute -inset-2 rounded-full border-2 border-primary/40 ${
+            <span
+              className={`absolute -inset-1.5 rounded-full border border-white/25 ${
                 isRinging ? 'animate-pulse' : ''
               }`}
             />
-            <Avatar className="relative h-20 w-20 border-4 border-primary/30 sm:h-24 sm:w-24">
+            <Avatar className="relative h-28 w-28 border-4 border-white/10 shadow-2xl sm:h-32 sm:w-32">
               <AvatarImage src={callerAvatar} alt={callerName} />
-              <AvatarFallback className="bg-primary/20 text-xl text-primary sm:text-2xl">
+              <AvatarFallback className="bg-white/10 text-3xl font-semibold text-white">
                 {callerName.slice(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
           </div>
 
-          <div className="space-y-1 px-2 text-center">
-            <h3 className="truncate text-lg font-semibold text-foreground sm:text-xl">
-              {callerName}
-            </h3>
-            <p className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-              {callType === 'video' ? (
-                <Video className="h-4 w-4" />
-              ) : (
-                <Phone className="h-4 w-4" />
-              )}
-              {callLabel}
-            </p>
-          </div>
+          <h3 className="max-w-full truncate text-center text-2xl font-semibold">{callerName}</h3>
+          <p className="mt-1 text-center text-sm text-white/60">
+            {callType === 'video'
+              ? "sizga video qo'ng'iroq qilmoqda..."
+              : "sizga qo'ng'iroq qilmoqda..."}
+          </p>
 
-          {/* Jiringlashni o'chirish */}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="tg-transition h-8 rounded-full text-xs text-muted-foreground"
-            onClick={() => setMuted((m) => !m)}
-          >
-            {muted ? (
-              <>
-                <VolumeX className="mr-1.5 h-4 w-4" />
-                Ovoz o'chirilgan
-              </>
-            ) : (
-              <>
-                <Volume2 className="mr-1.5 h-4 w-4" />
-                Ovozni o'chirish
-              </>
-            )}
-          </Button>
-
-          <div className="flex items-center gap-10 sm:gap-12">
-            <div className="flex flex-col items-center gap-2">
-              <Button
-                size="lg"
-                variant="destructive"
-                className="tg-transition h-14 w-14 rounded-full shadow-lg hover:scale-105 active:scale-95 sm:h-16 sm:w-16"
-                onClick={handleDecline}
-                aria-label="Rad etish"
-              >
-                <PhoneOff className="h-6 w-6" />
-              </Button>
-              <span className="text-xs text-muted-foreground">Rad etish</span>
-            </div>
-            <div className="flex flex-col items-center gap-2">
-              <Button
-                size="lg"
-                className="tg-transition h-14 w-14 rounded-full bg-green-500 shadow-lg hover:scale-105 hover:bg-green-600 active:scale-95 sm:h-16 sm:w-16"
-                onClick={handleAccept}
-                aria-label="Javob berish"
-              >
-                {callType === 'video' ? (
-                  <Video className="h-6 w-6" />
-                ) : (
-                  <Phone className="h-6 w-6" />
-                )}
-              </Button>
-              <span className="text-xs text-muted-foreground">Javob berish</span>
-            </div>
+          {/* Telegram Desktopdagidek izohli yumaloq tugmalar qatori */}
+          <div className="mt-8 flex items-start justify-center gap-1.5 sm:gap-3">
+            <CallControlButton
+              icon={Video}
+              label="Video"
+              tone="neutral"
+              hasMenu
+              onClick={handleAccept}
+            />
+            <CallControlButton
+              icon={PhoneOff}
+              label="Rad etish"
+              tone="decline"
+              onClick={handleDecline}
+            />
+            <CallControlButton
+              icon={callType === 'video' ? Video : Phone}
+              label="Javob berish"
+              tone="accept"
+              onClick={handleAccept}
+            />
+            <CallControlButton
+              icon={muted ? MicOff : Mic}
+              label={muted ? "Ovoz o'chirilgan" : 'Ovoz'}
+              tone={muted ? 'active' : 'neutral'}
+              hasMenu
+              onClick={() => setMuted((prev) => !prev)}
+            />
           </div>
         </div>
       </DialogContent>
