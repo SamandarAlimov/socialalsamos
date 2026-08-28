@@ -4,7 +4,6 @@ import {
   Send,
   Paperclip,
   X,
-  ImageIcon,
   FileText,
   Film,
   Loader2,
@@ -15,16 +14,16 @@ import {
 } from 'lucide-react';
 import { EmojiPicker } from '@/components/EmojiPicker';
 import { TelegramMediaRecorder } from './TelegramMediaRecorder';
-import { LocationShareButton } from './LocationShareButton';
+import { TelegramAttachSheet } from './TelegramAttachSheet';
 import { ScheduleMessageDialog } from './ScheduleMessageDialog';
 import { MentionAutocomplete } from '@/components/MentionAutocomplete';
 import { FormatToolbar } from '@/components/chat/FormatToolbar';
 import { ArticleComposer } from '@/components/chat/ArticleComposer';
 import { useMentionInput } from '@/hooks/useMentionInput';
+import { wrapSelection } from '@/lib/messageFormat';
 import { uploadMedia } from '@/lib/mediaUpload';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useTranslation } from 'react-i18next';
 import { detectPII } from '@/hooks/useMessageSafety';
 
@@ -109,8 +108,6 @@ export function MessageInput({
   const [attachmentOpen, setAttachmentOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const imageVideoInputRef = useRef<HTMLInputElement>(null);
-  const documentInputRef = useRef<HTMLInputElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const localPreviewRef = useRef<string | null>(null);
@@ -179,7 +176,49 @@ export function MessageInput({
     onTyping(false);
   };
 
+  /** Telegramdek klaviatura qisqartmalari: Ctrl/Cmd + B / I / U / K */
+  const applyShortcut = (marker: string, markerEnd?: string) => {
+    const el = inputRef.current;
+    if (!el) return;
+    const result = wrapSelection(
+      message,
+      el.selectionStart ?? message.length,
+      el.selectionEnd ?? message.length,
+      marker,
+      markerEnd
+    );
+    setMessage(result.value);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(result.selectionStart, result.selectionEnd);
+    });
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      const key = e.key.toLowerCase();
+      if (key === 'b') {
+        e.preventDefault();
+        applyShortcut('**');
+        return;
+      }
+      if (key === 'i') {
+        e.preventDefault();
+        applyShortcut('__');
+        return;
+      }
+      if (key === 'u') {
+        e.preventDefault();
+        applyShortcut('++');
+        return;
+      }
+      if (key === 'k') {
+        e.preventDefault();
+        applyShortcut('[', '](https://)');
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void handleSend();
@@ -232,13 +271,42 @@ export function MessageInput({
     }
   };
 
-  const handleFileSelect =
-    (asDocument: boolean) => async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      const input = e.target;
-      if (file) await uploadAndAttach(file, asDocument);
-      input.value = '';
-    };
+  /** Qo'shimcha fayllarni darhol alohida xabar sifatida yuborish (albom kabi) */
+  const uploadAndSendNow = async (file: File, asDocument: boolean) => {
+    if (file.size > MAX_FILE_MB * 1024 * 1024) {
+      toast.error(`"${file.name}" ${MAX_FILE_MB} MB dan katta`);
+      return;
+    }
+    const kind = detectKind(file.type, file.name);
+    try {
+      const uploaded = await uploadMedia(file, { type: 'chat', visibility: 'public' });
+      await onSend('', uploaded.url, asDocument ? 'document' : kind);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : 'Kutilmagan xatolik';
+      toast.error(`"${file.name}" yuborilmadi: ${reason}`);
+    }
+  };
+
+  /**
+   * Biriktirish panelidan kelgan fayllar.
+   * Birinchi fayl caption yozish uchun "tanlangan" holatda qoladi,
+   * qolganlari Telegramdagi albomdek ketma-ket yuboriladi.
+   */
+  const handlePickedFiles = async (files: File[], asDocument: boolean) => {
+    if (files.length === 0) return;
+    const [first, ...rest] = files;
+    await uploadAndAttach(first, asDocument);
+
+    if (rest.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of rest) {
+        await uploadAndSendNow(file, asDocument);
+      }
+    } finally {
+      setUploading(false);
+    }
+  };
 
   // Telegramdek: rasmni to'g'ridan-to'g'ri paste qilish
   const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -252,12 +320,12 @@ export function MessageInput({
     await uploadAndAttach(file);
   };
 
-  // Drag & drop bilan fayl yuborish
+  // Drag & drop bilan fayl yuborish (bir nechta fayl ham qo'llab-quvvatlanadi)
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const file = e.dataTransfer?.files?.[0];
-    if (file) await uploadAndAttach(file);
+    const files = Array.from(e.dataTransfer?.files || []);
+    if (files.length > 0) await handlePickedFiles(files, false);
   };
 
   const startLongPress = () => {
@@ -288,22 +356,6 @@ export function MessageInput({
       onDragLeave={() => setIsDragging(false)}
       onDrop={handleDrop}
     >
-      {/* Yashirin fayl inputlari */}
-      <input
-        ref={imageVideoInputRef}
-        type="file"
-        accept="image/*,video/*"
-        className="hidden"
-        onChange={handleFileSelect(false)}
-      />
-      {/* Har qanday fayl - rasm/video ham fayl sifatida yuborilishi mumkin */}
-      <input
-        ref={documentInputRef}
-        type="file"
-        className="hidden"
-        onChange={handleFileSelect(true)}
-      />
-
       {isDragging && (
         <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-2xl border-2 border-dashed border-border bg-card/80 text-sm text-muted-foreground">
           Faylni yuborish uchun qo'yib yuboring
@@ -447,51 +499,21 @@ export function MessageInput({
       )}
 
       <div className="flex items-end gap-2">
-        {/* Fayl qo'shish */}
-        <Popover open={attachmentOpen} onOpenChange={setAttachmentOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10 shrink-0 rounded-full text-muted-foreground tg-transition hover:bg-muted hover:text-foreground"
-              disabled={uploading}
-              aria-label="Fayl qo'shish"
-            >
-              {uploading ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <Paperclip className="h-5 w-5" />
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-60 rounded-2xl p-2" align="start">
-            <button
-              onClick={() => imageVideoInputRef.current?.click()}
-              className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left tg-transition hover:bg-muted"
-            >
-              <ImageIcon className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">Rasm yoki video</span>
-            </button>
-            <button
-              onClick={() => documentInputRef.current?.click()}
-              className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left tg-transition hover:bg-muted"
-            >
-              <FileText className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">Fayl sifatida yuborish</span>
-            </button>
-            <button
-              onClick={() => {
-                setAttachmentOpen(false);
-                setShowArticleComposer(true);
-              }}
-              className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left tg-transition hover:bg-muted"
-            >
-              <BookOpen className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">Maqola yozish</span>
-            </button>
-            {onShareLocation && <LocationShareButton onShareLocation={onShareLocation} />}
-          </PopoverContent>
-        </Popover>
+        {/* Fayl qo'shish - Telegram mobil uslubidagi panel */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-10 w-10 shrink-0 rounded-full text-muted-foreground tg-transition hover:bg-muted hover:text-foreground"
+          disabled={uploading}
+          aria-label="Fayl qo'shish"
+          onClick={() => setAttachmentOpen(true)}
+        >
+          {uploading ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : (
+            <Paperclip className="h-5 w-5" />
+          )}
+        </Button>
 
         {/* Matn maydoni */}
         <div className="relative flex-1">
@@ -542,7 +564,7 @@ export function MessageInput({
               type="button"
               onClick={() => setShowFormatting((v) => !v)}
               aria-label="Matnni formatlash"
-              title="Matnni formatlash"
+              title="Matnni formatlash (Ctrl+B / Ctrl+I / Ctrl+U / Ctrl+K)"
               className={cn(
                 'flex h-8 w-8 items-center justify-center rounded-full tg-transition',
                 showFormatting
@@ -587,6 +609,18 @@ export function MessageInput({
           />
         )}
       </div>
+
+      {/* Telegram mobil uslubidagi biriktirish paneli */}
+      <TelegramAttachSheet
+        open={attachmentOpen}
+        onOpenChange={setAttachmentOpen}
+        maxFileMb={MAX_FILE_MB}
+        onPickFiles={(files, asDocument) => {
+          void handlePickedFiles(files, asDocument);
+        }}
+        onArticle={() => setShowArticleComposer(true)}
+        onShareLocation={onShareLocation}
+      />
 
       {/* Rejalashtirish dialogi */}
       {onSchedule && (
