@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Users, Megaphone, Pin, VolumeX, Reply, Bookmark, Phone, Video, PhoneMissed, PhoneOff, PhoneIncoming, PhoneOutgoing, VideoOff, Mic, Image, FileText, MapPin, BarChart3, Sticker, Music, BookOpen } from 'lucide-react';
+import { Users, Megaphone, Pin, VolumeX, Reply, Bookmark, Phone, Video, PhoneMissed, PhoneOff, PhoneIncoming, PhoneOutgoing, VideoOff, Mic, Image, Images, FileText, MapPin, BarChart3, Sticker, Music, BookOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
 import { Conversation } from '@/hooks/useMessages';
@@ -14,6 +14,7 @@ import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { parseArticlePayload, stripFormatting } from '@/lib/messageFormat';
+import { albumPreviewText, parseAlbumPayload } from '@/lib/mediaAlbum';
 
 interface ChatListItemProps {
   conversation: Conversation & { is_self_chat?: boolean };
@@ -237,6 +238,12 @@ export function ChatListItem({
       if (article) {
         return { text: article.title || 'Maqola', icon: <BookOpen className={PREVIEW_ICON} /> };
       }
+
+      // Albom (media group) - "3 ta rasm" yoki caption ko'rinadi
+      const album = parseAlbumPayload(message as string);
+      if (album) {
+        return { text: albumPreviewText(album), icon: <Images className={PREVIEW_ICON} /> };
+      }
     }
 
     // Media-only or media-enriched messages: content may be empty, so describe the attachment.
@@ -251,7 +258,7 @@ export function ChatListItem({
         case 'photo':
           return { text: caption || 'Rasm', icon: <Image className={PREVIEW_ICON} /> };
         case 'album':
-          return { text: caption || 'Albom', icon: <Image className={PREVIEW_ICON} /> };
+          return { text: caption || 'Albom', icon: <Images className={PREVIEW_ICON} /> };
         case 'video':
           return { text: caption || 'Video', icon: <Video className={PREVIEW_ICON} /> };
         case 'file':
