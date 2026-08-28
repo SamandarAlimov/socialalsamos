@@ -12,7 +12,7 @@ import {
   BookOpen,
   Images,
 } from 'lucide-react';
-import { EmojiPicker } from '@/components/EmojiPicker';
+import { MediaPanel } from '@/components/chat/MediaPanel';
 import { TelegramMediaRecorder } from './TelegramMediaRecorder';
 import { TelegramAttachSheet } from './TelegramAttachSheet';
 import { ScheduleMessageDialog } from './ScheduleMessageDialog';
@@ -718,12 +718,16 @@ export function MessageInput({
             />
           )}
 
-          {/* Emoji - matn o'sganda ham pastda, bir chiziqda qoladi */}
+          {/* Telegramdek yagona media paneli: GIF | Stikerlar | Emoji */}
           <div className="absolute bottom-1 right-1.5 flex items-center">
-            <EmojiPicker
-              onSelect={(emoji) => {
+            <MediaPanel
+              onSelectEmoji={(emoji) => {
                 if (composerRef.current) composerRef.current.insertText(emoji);
                 else setMessage((prev) => prev + emoji);
+              }}
+              onSendMedia={(url) => {
+                // GIF va stiker matnsiz, alohida xabar bo'lib ketadi
+                void onSend('', url, 'image');
               }}
               className="h-8 w-8 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
             />
