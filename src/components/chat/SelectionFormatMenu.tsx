@@ -1,298 +1,166 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Bold,
-  Code2,
-  Eraser,
-  EyeOff,
   Italic,
-  Link2,
-  Quote,
-  Strikethrough,
   Underline,
+  Strikethrough,
+  Code2,
+  EyeOff,
+  Quote,
+  Link2,
+  RemoveFormatting,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { prefixLine, stripFormatting, wrapSelection } from '@/lib/messageFormat';
-
-interface SelectionFormatMenuProps {
-  targetRef: React.RefObject<HTMLTextAreaElement>;
-  value: string;
-  onChange: (value: string) => void;
-  className?: string;
-}
-
-interface Tool {
-  key: string;
-  label: string;
-  hint?: string;
-  icon: React.ElementType;
-  marker?: string;
-  markerEnd?: string;
-  prefix?: string;
-  clear?: boolean;
-}
-
-const TOOLS: Tool[] = [
-  { key: 'bold', label: 'Qalin', hint: 'Ctrl+B', icon: Bold, marker: '**' },
-  { key: 'italic', label: 'Kursiv', hint: 'Ctrl+I', icon: Italic, marker: '__' },
-  { key: 'underline', label: 'Tagi chizilgan', hint: 'Ctrl+U', icon: Underline, marker: '++' },
-  {
-    key: 'strike',
-    label: 'Ustidan chizilgan',
-    hint: 'Ctrl+Shift+X',
-    icon: Strikethrough,
-    marker: '~~',
-  },
-  { key: 'mono', label: 'Monospace', hint: 'Ctrl+Shift+M', icon: Code2, marker: '`' },
-  { key: 'spoiler', label: 'Spoiler', hint: 'Ctrl+Shift+P', icon: EyeOff, marker: '||' },
-  { key: 'quote', label: 'Iqtibos', icon: Quote, prefix: '> ' },
-  {
-    key: 'link',
-    label: 'Havola qo\u2018shish',
-    hint: 'Ctrl+K',
-    icon: Link2,
-    marker: '[',
-    markerEnd: '](https://)',
-  },
-  { key: 'clear', label: 'Formatlashni tozalash', hint: 'Ctrl+Shift+N', icon: Eraser, clear: true },
-];
-
-/** Ko'zgu (mirror) uchun ko'chiriladigan uslublar. */
-const MIRROR_PROPS = [
-  'fontFamily',
-  'fontSize',
-  'fontWeight',
-  'fontStyle',
-  'letterSpacing',
-  'lineHeight',
-  'textTransform',
-  'textIndent',
-  'paddingTop',
-  'paddingRight',
-  'paddingBottom',
-  'paddingLeft',
-  'borderTopWidth',
-  'borderRightWidth',
-  'borderLeftWidth',
-  'boxSizing',
-];
-
-interface CaretRect {
-  top: number;
-  left: number;
-  height: number;
-}
+import type { FormatToolId } from './RichComposer';
 
 /**
- * Textarea ichidagi belgilangan indeks koordinatasini hisoblaydi.
- * Textarea'da Range API ishlamaydi, shuning uchun bir xil uslubdagi yashirin
- * "ko'zgu" div yaratib, marker span'ning o'rni o'lchanadi (standart usul).
+ * Telegramdek suzuvchi formatlash menyusi.
+ *
+ * - matn TANLANGANDA chiqadi va aynan tanlovning USTIDA turadi
+ *   (avvalgi variant pastda, ekran chetida qolib ketardi);
+ * - o'lchov brauzerning haqiqiy Range koordinatalari bilan olinadi,
+ *   shuning uchun ko'p qatorli matnda ham to'g'ri joyda turadi;
+ * - portal orqali <body>ga chiziladi, ya'ni chat oynasi tomonidan kesilmaydi.
  */
-function caretRect(el: HTMLTextAreaElement, index: number): CaretRect {
-  const styles = window.getComputedStyle(el);
-  const mirror = document.createElement('div');
-  const mirrorStyle = mirror.style as unknown as Record<string, string>;
-  const computed = styles as unknown as Record<string, string>;
 
-  MIRROR_PROPS.forEach((prop) => {
-    mirrorStyle[prop] = computed[prop];
-  });
-
-  mirrorStyle.position = 'absolute';
-  mirrorStyle.visibility = 'hidden';
-  mirrorStyle.whiteSpace = 'pre-wrap';
-  mirrorStyle.wordBreak = 'break-word';
-  mirrorStyle.overflowWrap = 'anywhere';
-  mirrorStyle.top = '0px';
-  mirrorStyle.left = '-9999px';
-  mirrorStyle.width = el.clientWidth + 'px';
-
-  mirror.textContent = el.value.slice(0, index);
-  const marker = document.createElement('span');
-  marker.textContent = '\u200b';
-  mirror.appendChild(marker);
-  document.body.appendChild(mirror);
-
-  const lineHeight = parseFloat(styles.lineHeight) || 20;
-  const rect: CaretRect = {
-    top: marker.offsetTop - el.scrollTop,
-    left: marker.offsetLeft,
-    height: marker.offsetHeight || lineHeight,
-  };
-
-  mirror.remove();
-  return rect;
+interface SelectionFormatMenuProps {
+  /** Formatlash faqat shu element ichidagi tanlov uchun ishlaydi */
+  containerRef: React.RefObject<HTMLElement>;
+  onApply: (tool: FormatToolId) => void;
 }
 
-interface MenuState {
-  start: number;
-  end: number;
+const TOOLS: Array<{
+  id: FormatToolId;
+  label: string;
+  hint: string;
+  Icon: typeof Bold;
+}> = [
+  { id: 'bold', label: 'Qalin', hint: 'Ctrl+B', Icon: Bold },
+  { id: 'italic', label: 'Kursiv', hint: 'Ctrl+I', Icon: Italic },
+  { id: 'underline', label: 'Tagi chizilgan', hint: 'Ctrl+U', Icon: Underline },
+  { id: 'strike', label: 'Ustidan chizilgan', hint: 'Ctrl+Shift+X', Icon: Strikethrough },
+  { id: 'mono', label: 'Monospace', hint: 'Ctrl+Shift+M', Icon: Code2 },
+  { id: 'spoiler', label: 'Spoiler', hint: 'Ctrl+Shift+P', Icon: EyeOff },
+  { id: 'quote', label: 'Iqtibos', hint: '', Icon: Quote },
+  { id: 'link', label: 'Havola', hint: 'Ctrl+K', Icon: Link2 },
+  { id: 'clear', label: 'Formatni tozalash', hint: '', Icon: RemoveFormatting },
+];
+
+/** 9 tugma x 32px + ichki bo'shliq */
+const MENU_WIDTH = 316;
+const MENU_HEIGHT = 40;
+const GAP = 8;
+const EDGE = 8;
+
+interface MenuPosition {
   top: number;
   left: number;
   below: boolean;
 }
 
-/**
- * Telegramdek: matn TANLANGANDA uning ustida suzuvchi formatlash menyusi
- * paydo bo'ladi (Qalin / Kursiv / Tagi chizilgan / Ustidan chizilgan /
- * Monospace / Spoiler / Iqtibos / Havola / Tozalash).
- *
- * Doimiy tugmalar qatori kerak emas - shuning uchun kompozitor ham baland
- * bo'lib qolmaydi.
- */
-export function SelectionFormatMenu({
-  targetRef,
-  value,
-  onChange,
-  className,
-}: SelectionFormatMenuProps) {
-  const [menu, setMenu] = useState<MenuState | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
+export function SelectionFormatMenu({ containerRef, onApply }: SelectionFormatMenuProps) {
+  const [position, setPosition] = useState<MenuPosition | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const update = useCallback(() => {
-    const el = targetRef.current;
-    if (!el) {
-      setMenu(null);
+    const container = containerRef.current;
+    const selection = window.getSelection();
+
+    if (!container || !selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      setPosition(null);
       return;
     }
 
-    const start = el.selectionStart ?? 0;
-    const end = el.selectionEnd ?? 0;
-
-    if (end <= start) {
-      setMenu(null);
+    const range = selection.getRangeAt(0);
+    if (!container.contains(range.commonAncestorContainer)) {
+      setPosition(null);
       return;
     }
 
-    const startRect = caretRect(el, start);
-    const endRect = caretRect(el, end);
-    const sameLine = Math.abs(endRect.top - startRect.top) < 2;
+    const rects = Array.from(range.getClientRects());
+    const rect = rects.length > 0 ? rects[0] : range.getBoundingClientRect();
+    if (!rect || (rect.width === 0 && rect.height === 0)) {
+      setPosition(null);
+      return;
+    }
 
-    const rawLeft = sameLine ? (startRect.left + endRect.left) / 2 : el.clientWidth / 2;
-    const limit = Math.max(el.clientWidth - 150, 150);
-    const left = Math.min(Math.max(rawLeft, 150), limit);
+    const half = MENU_WIDTH / 2;
+    const centerX = rect.left + rect.width / 2;
+    const left = Math.min(
+      Math.max(centerX, half + EDGE),
+      window.innerWidth - half - EDGE
+    );
 
-    setMenu({
-      start,
-      end,
-      top: startRect.top,
-      left,
-      // Yuqorida joy bo'lmasa menyu tanlovning ostida chiziladi
-      below: startRect.top < 34,
-    });
-  }, [targetRef]);
+    // Odatda tanlov ustida; joy bo'lmasa - pastida.
+    const fitsAbove = rect.top - MENU_HEIGHT - GAP > EDGE;
+    const top = fitsAbove ? rect.top - GAP : rect.bottom + GAP;
 
-  // Tanlov o'zgarishini kuzatish
+    setPosition({ top, left, below: !fitsAbove });
+  }, [containerRef]);
+
   useEffect(() => {
-    const el = targetRef.current;
-    if (!el) return;
-
-    const handler = () => update();
-
-    el.addEventListener('select', handler);
-    el.addEventListener('keyup', handler);
-    el.addEventListener('pointerup', handler);
-    el.addEventListener('scroll', handler);
-    document.addEventListener('selectionchange', handler);
-
-    return () => {
-      el.removeEventListener('select', handler);
-      el.removeEventListener('keyup', handler);
-      el.removeEventListener('pointerup', handler);
-      el.removeEventListener('scroll', handler);
-      document.removeEventListener('selectionchange', handler);
+    const onSelectionChange = () => update();
+    const onPointerDown = (e: PointerEvent) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      if (containerRef.current?.contains(e.target as Node)) return;
+      setPosition(null);
     };
-  }, [targetRef, update]);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPosition(null);
+    };
 
-  // Tashqariga bosilganda yopish
-  useEffect(() => {
-    if (!menu) return;
-    const onPointerDown = (event: PointerEvent) => {
-      const node = event.target as Node;
-      if (menuRef.current?.contains(node)) return;
-      if (targetRef.current?.contains(node)) return;
-      setMenu(null);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMenu(null);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('selectionchange', onSelectionChange);
+    document.addEventListener('pointerdown', onPointerDown, true);
     document.addEventListener('keydown', onKeyDown);
+    window.addEventListener('resize', onSelectionChange);
+    window.addEventListener('scroll', onSelectionChange, true);
+
     return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('selectionchange', onSelectionChange);
+      document.removeEventListener('pointerdown', onPointerDown, true);
       document.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('resize', onSelectionChange);
+      window.removeEventListener('scroll', onSelectionChange, true);
     };
-  }, [menu, targetRef]);
+  }, [containerRef, update]);
 
-  // Matn tashqaridan o'zgarsa (yuborilsa) menyu yopiladi
-  useEffect(() => {
-    if (!value) setMenu(null);
-  }, [value]);
+  if (!position) return null;
 
-  const apply = (tool: Tool) => {
-    const el = targetRef.current;
-    if (!el || !menu) return;
-
-    let result: { value: string; selectionStart: number; selectionEnd: number };
-
-    if (tool.clear) {
-      const selected = value.slice(menu.start, menu.end);
-      const cleaned = stripFormatting(selected) || selected;
-      result = {
-        value: value.slice(0, menu.start) + cleaned + value.slice(menu.end),
-        selectionStart: menu.start,
-        selectionEnd: menu.start + cleaned.length,
-      };
-    } else if (tool.prefix) {
-      result = prefixLine(value, menu.start, tool.prefix);
-    } else {
-      result = wrapSelection(value, menu.start, menu.end, tool.marker || '', tool.markerEnd);
-    }
-
-    onChange(result.value);
-
-    requestAnimationFrame(() => {
-      const target = targetRef.current;
-      if (!target) return;
-      target.focus();
-      target.setSelectionRange(result.selectionStart, result.selectionEnd);
-      update();
-    });
-  };
-
-  if (!menu) return null;
-
-  return (
+  return createPortal(
     <div
       ref={menuRef}
+      role="toolbar"
+      aria-label="Formatlash"
+      // Tanlov yo'qolmasligi uchun menyu fokusni o'ziga olmaydi
+      onMouseDown={(e) => e.preventDefault()}
+      onPointerDown={(e) => e.preventDefault()}
       className={cn(
-        'absolute z-50 flex items-center gap-0.5 rounded-xl border border-border bg-popover p-1 shadow-lg',
-        'animate-in fade-in-0 zoom-in-95 duration-100',
-        className
+        'fixed z-[60] flex items-center gap-0.5 rounded-2xl border border-border bg-popover p-1 shadow-xl',
+        'animate-in fade-in-0 zoom-in-95 duration-100'
       )}
       style={{
-        top: menu.top,
-        left: menu.left,
-        transform: menu.below
-          ? 'translate(-50%, 26px)'
-          : 'translate(-50%, calc(-100% - 8px))',
+        top: position.top,
+        left: position.left,
+        transform: position.below
+          ? 'translate(-50%, 0)'
+          : 'translate(-50%, -100%)',
       }}
-      // Menyu bosilganda tanlov saqlanib qolishi kerak
-      onMouseDown={(event) => event.preventDefault()}
-      onPointerDown={(event) => event.preventDefault()}
     >
-      {TOOLS.map((tool) => (
+      {TOOLS.map(({ id, label, hint, Icon }) => (
         <button
-          key={tool.key}
+          key={id}
           type="button"
-          onClick={() => apply(tool)}
-          title={tool.hint ? tool.label + ' (' + tool.hint + ')' : tool.label}
-          aria-label={tool.label}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          title={hint ? label + ' (' + hint + ')' : label}
+          aria-label={label}
+          onClick={() => onApply(id)}
+          className="flex h-8 w-8 items-center justify-center rounded-xl text-muted-foreground tg-transition hover:bg-muted hover:text-foreground active:scale-95"
         >
-          <tool.icon className="h-4 w-4" />
+          <Icon className="h-4 w-4" />
         </button>
       ))}
-    </div>
+    </div>,
+    document.body
   );
 }
 

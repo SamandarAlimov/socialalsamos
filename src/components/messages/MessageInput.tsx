@@ -18,9 +18,9 @@ import { TelegramAttachSheet } from './TelegramAttachSheet';
 import { ScheduleMessageDialog } from './ScheduleMessageDialog';
 import { MentionAutocomplete } from '@/components/MentionAutocomplete';
 import { SelectionFormatMenu } from '@/components/chat/SelectionFormatMenu';
+import { RichComposer, RichComposerHandle, FormatToolId } from '@/components/chat/RichComposer';
 import { ArticleComposer } from '@/components/chat/ArticleComposer';
 import { useMentionInput } from '@/hooks/useMentionInput';
-import { wrapSelection } from '@/lib/messageFormat';
 import { ALBUM_MAX_ITEMS, AlbumItem, buildAlbumPayload } from '@/lib/mediaAlbum';
 import { uploadMedia } from '@/lib/mediaUpload';
 import { cn } from '@/lib/utils';
@@ -60,8 +60,6 @@ const MAX_FILE_MB = 50;
  * mikrofon/yuborish) bir xil 40px balandlikda va BITTA chiziqda turadi.
  */
 const ROW_CONTROL = 'h-10 w-10 shrink-0 rounded-full';
-const INPUT_MIN_HEIGHT = 40;
-const INPUT_MAX_HEIGHT = 140;
 
 type MediaKind = 'image' | 'video' | 'audio' | 'document';
 
@@ -116,19 +114,19 @@ export function MessageInput({
   const [showArticleComposer, setShowArticleComposer] = useState(false);
   const [attachmentOpen, setAttachmentOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const composerRef = useRef<RichComposerHandle>(null);
+  const composerBoxRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const localPreviewRef = useRef<string | null>(null);
   const {
     mentionState,
     handleInputChange: handleMentionChange,
-    insertMention,
     closeMention,
   } = useMentionInput();
 
   useEffect(() => {
-    if (replyTo) inputRef.current?.focus();
+    if (replyTo) composerRef.current?.focus();
   }, [replyTo]);
 
   useEffect(() => {
@@ -141,22 +139,8 @@ export function MessageInput({
     };
   }, [onTyping]);
 
-  /** Matn maydoni balandligini kontentga moslash (bitta joyda) */
-  const autoResize = (el: HTMLTextAreaElement | null) => {
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = Math.min(Math.max(el.scrollHeight, INPUT_MIN_HEIGHT), INPUT_MAX_HEIGHT) + 'px';
-  };
-
-  const resetInputHeight = () => {
-    if (inputRef.current) inputRef.current.style.height = INPUT_MIN_HEIGHT + 'px';
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const value = e.target.value;
-    const cursorPosition = e.target.selectionStart || 0;
-
-    handleMentionChange(value, cursorPosition, setMessage);
+  const handleComposerChange = (value: string, caretIndex: number) => {
+    handleMentionChange(value, caretIndex, setMessage);
     onTyping(true);
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -164,7 +148,16 @@ export function MessageInput({
   };
 
   const handleMentionSelect = (username: string) => {
-    setMessage(insertMention(message, username, inputRef));
+    const start = mentionState.startIndex;
+    if (start < 0) {
+      closeMention();
+      return;
+    }
+    const caret = Math.max(composerRef.current?.getCaretIndex() ?? message.length, start);
+    const next = message.slice(0, start) + '@' + username + ' ' + message.slice(caret);
+    setMessage(next);
+    closeMention();
+    requestAnimationFrame(() => composerRef.current?.focus());
   };
 
   const clearAttachment = () => {
@@ -200,7 +193,6 @@ export function MessageInput({
     onTyping(false);
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    resetInputHeight();
   };
 
   /** Maqola (article) xabarini yuborish */
@@ -208,25 +200,11 @@ export function MessageInput({
     await onSend(payload);
     setMessage('');
     onTyping(false);
-    resetInputHeight();
   };
 
-  /** Telegramdek klaviatura qisqartmalari */
-  const applyShortcut = (marker: string, markerEnd?: string) => {
-    const el = inputRef.current;
-    if (!el) return;
-    const result = wrapSelection(
-      message,
-      el.selectionStart ?? message.length,
-      el.selectionEnd ?? message.length,
-      marker,
-      markerEnd
-    );
-    setMessage(result.value);
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(result.selectionStart, result.selectionEnd);
-    });
+  /** Formatlash - belgilar emas, haqiqiy ko'rinish (WYSIWYG) */
+  const applyFormat = (tool: FormatToolId) => {
+    composerRef.current?.applyFormat(tool);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -237,39 +215,44 @@ export function MessageInput({
       if (e.shiftKey) {
         if (key === 'x') {
           e.preventDefault();
-          applyShortcut('~~');
+          applyFormat('strike');
           return;
         }
         if (key === 'm') {
           e.preventDefault();
-          applyShortcut('`');
+          applyFormat('mono');
           return;
         }
         if (key === 'p') {
           e.preventDefault();
-          applyShortcut('||');
+          applyFormat('spoiler');
+          return;
+        }
+        if (key === 'n') {
+          e.preventDefault();
+          applyFormat('clear');
           return;
         }
       }
 
       if (key === 'b') {
         e.preventDefault();
-        applyShortcut('**');
+        applyFormat('bold');
         return;
       }
       if (key === 'i') {
         e.preventDefault();
-        applyShortcut('__');
+        applyFormat('italic');
         return;
       }
       if (key === 'u') {
         e.preventDefault();
-        applyShortcut('++');
+        applyFormat('underline');
         return;
       }
       if (key === 'k') {
         e.preventDefault();
-        applyShortcut('[', '](https://)');
+        applyFormat('link');
         return;
       }
     }
@@ -441,18 +424,6 @@ export function MessageInput({
     } finally {
       setUploading(false);
     }
-  };
-
-  // Telegramdek: rasmni to'g'ridan-to'g'ri paste qilish
-  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const item = Array.from(e.clipboardData?.items || []).find((i) =>
-      i.type.startsWith('image/')
-    );
-    if (!item) return;
-    const file = item.getAsFile();
-    if (!file) return;
-    e.preventDefault();
-    await uploadAndAttach(file);
   };
 
   // Drag & drop bilan fayl yuborish (bir nechta fayl ham qo'llab-quvvatlanadi)
@@ -711,13 +682,15 @@ export function MessageInput({
           )}
         </Button>
 
-        {/* Matn maydoni */}
-        <div className="relative min-w-0 flex-1">
-          <textarea
-            ref={inputRef}
+        {/* Matn maydoni - Telegramdek WYSIWYG (formatlash belgilari ko'rinmaydi) */}
+        <div className="relative min-w-0 flex-1" ref={composerBoxRef}>
+          <RichComposer
+            ref={composerRef}
             value={message}
-            onChange={handleInputChange}
-            onPaste={handlePaste}
+            onChange={handleComposerChange}
+            onImagePaste={(file) => {
+              void uploadAndAttach(file);
+            }}
             onKeyDown={(e) => {
               // Mention autocomplete ochiq bo'lsa navigatsiya klavishalari unga tegishli
               if (
@@ -734,16 +707,6 @@ export function MessageInput({
                 : t('messages.writeMessage')
             }
             disabled={disabled}
-            rows={1}
-            className={cn(
-              'chat-selectable block w-full resize-none rounded-[20px] border border-border bg-muted/50',
-              'px-3.5 py-[9px] pr-11 text-[15px] leading-[22px]',
-              'focus:outline-none focus:ring-2 focus:ring-primary/40',
-              'min-h-[40px] max-h-[140px] scrollbar-hide',
-              disabled && 'cursor-not-allowed opacity-50'
-            )}
-            style={{ height: INPUT_MIN_HEIGHT }}
-            onInput={(e) => autoResize(e.target as HTMLTextAreaElement)}
           />
 
           {mentionState.isActive && (
@@ -755,13 +718,13 @@ export function MessageInput({
             />
           )}
 
-          {/* Telegramdek: matn TANLANGANDA suzuvchi formatlash menyusi chiqadi */}
-          <SelectionFormatMenu targetRef={inputRef} value={message} onChange={setMessage} />
-
           {/* Emoji - matn o'sganda ham pastda, bir chiziqda qoladi */}
           <div className="absolute bottom-1 right-1.5 flex items-center">
             <EmojiPicker
-              onSelect={(emoji) => setMessage((prev) => prev + emoji)}
+              onSelect={(emoji) => {
+                if (composerRef.current) composerRef.current.insertText(emoji);
+                else setMessage((prev) => prev + emoji);
+              }}
               className="h-8 w-8 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
             />
           </div>
@@ -798,6 +761,9 @@ export function MessageInput({
         )}
       </div>
 
+      {/* Telegramdek: matn TANLANGANDA suzuvchi formatlash menyusi tanlov ustida chiqadi */}
+      <SelectionFormatMenu containerRef={composerBoxRef} onApply={applyFormat} />
+
       {/* Telegram mobil uslubidagi biriktirish paneli */}
       <TelegramAttachSheet
         open={attachmentOpen}
@@ -825,7 +791,6 @@ export function MessageInput({
             );
             setMessage('');
             clearAttachment();
-            resetInputHeight();
           }}
         />
       )}
