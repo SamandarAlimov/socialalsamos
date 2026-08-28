@@ -25,15 +25,22 @@ interface LocationPickerProps {
   initialCenter?: { latitude: number; longitude: number } | null;
 }
 
+/**
+ * OSM tile shabloni. Leaflet o'zi {s}/{z}/{x}/{y} ni almashtiradi, shu sababli
+ * shablonni qismlardan yig'amiz (bundler yoki formatter buzmasligi uchun).
+ */
+const TILE_URL = ['https://', '{s}', '.tile.openstreetmap.org/', '{z}/{x}/{y}', '.png'].join('');
+
 /** Leaflet ning standart marker rasmi Vite build da yo'qoladi — divIcon ishlatamiz. */
 const PIN_ICON = L.divIcon({
   className: 'alsamos-map-pin',
-  html: `<span style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;transform:translate(-50%,-100%)">
-    <svg viewBox="0 0 24 24" width="34" height="34" fill="#ef4444" stroke="#ffffff" stroke-width="1.5">
-      <path d="M12 2c-3.9 0-7 3.1-7 7 0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7z"/>
-      <circle cx="12" cy="9" r="2.4" fill="#ffffff" stroke="none"/>
-    </svg>
-  </span>`,
+  html: [
+    '<span style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;transform:translate(-50%,-100%)">',
+    '<svg viewBox="0 0 24 24" width="34" height="34" fill="#ef4444" stroke="#ffffff" stroke-width="1.5">',
+    '<path d="M12 2c-3.9 0-7 3.1-7 7 0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7z"/>',
+    '<circle cx="12" cy="9" r="2.4" fill="#ffffff" stroke="none"/>',
+    '</svg></span>',
+  ].join(''),
   iconSize: [34, 34],
   iconAnchor: [0, 0],
 });
@@ -56,20 +63,19 @@ function MapClickHandler({ onPick }: { onPick: (lat: number, lng: number) => voi
 function MapCenterSync({ latitude, longitude }: { latitude: number; longitude: number }) {
   const map = useMap();
   useEffect(() => {
-    map.setView([latitude, longitude], map.getZoom() < 14 ? 15 : map.getZoom(), {
-      animate: true,
-    });
+    const zoom = map.getZoom();
+    map.setView([latitude, longitude], zoom < 14 ? 15 : zoom, { animate: true });
   }, [latitude, longitude, map]);
   return null;
 }
 
 /**
  * Joylashuv tanlash — ikki rejim:
- *  1) "Joy"        — xaritadan pin tanlash, qidiruv, atrofdagi joylar ro'yxati
+ *  1) "Joy"         — xaritadan pin tanlash, qidiruv, atrofdagi joylar ro'yxati
  *  2) "Real vaqtli" — live location, belgilangan muddat davomida yangilanadi
  *
- * Telegramdagi joylashuv oynasi asos qilib olingan, lekin bizda joy sahifasi,
- * masofa, kategoriya va xaritada erkin pin surish ham bor.
+ * Telegramdagi joylashuv oynasi asos qilib olingan, lekin bizda masofa,
+ * kategoriya, erkin pin surish va joy sahifasiga o'tish ham bor.
  */
 export function LocationPicker({
   open,
@@ -198,12 +204,15 @@ export function LocationPicker({
       longitude: myCoords.longitude,
       label: 'Real vaqtli joylashuv',
       accuracyM: accuracy,
-      liveUntil: new Date(Date.now() + liveMinutes * 60_000).toISOString(),
+      liveUntil: new Date(Date.now() + liveMinutes * 60000).toISOString(),
     });
     onClose();
   }, [myCoords, accuracy, liveMinutes, onSelect, onClose, locateMe]);
 
-  const list = useMemo(() => (query.trim().length >= 2 ? results : nearby), [query, results, nearby]);
+  const list = useMemo(
+    () => (query.trim().length >= 2 ? results : nearby),
+    [query, results, nearby],
+  );
 
   if (!open) return null;
 
@@ -259,10 +268,7 @@ export function LocationPicker({
           className="h-full w-full"
           attributionControl={false}
         >
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            maxZoom={19}
-          />
+          <TileLayer url={TILE_URL} maxZoom={19} />
           <MapCenterSync latitude={center.latitude} longitude={center.longitude} />
           {mode === 'place' && <MapClickHandler onPick={handlePin} />}
           {pin && mode === 'place' && (
@@ -293,9 +299,7 @@ export function LocationPicker({
         )}
       </div>
 
-      {locationError && (
-        <p className="px-4 pt-3 text-xs text-destructive">{locationError}</p>
-      )}
+      {locationError && <p className="px-4 pt-3 text-xs text-destructive">{locationError}</p>}
 
       {/* Tanlangan pin */}
       {mode === 'place' && pin && (
@@ -303,13 +307,10 @@ export function LocationPicker({
           <MapPin className="h-5 w-5 shrink-0 text-primary" />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">
-              {isResolvingPin
-                ? 'Manzil aniqlanmoqda...'
-                : (pinPlace?.name ?? 'Xaritadagi nuqta')}
+              {isResolvingPin ? 'Manzil aniqlanmoqda...' : (pinPlace?.name ?? 'Xaritadagi nuqta')}
             </p>
             <p className="truncate text-xs text-muted-foreground">
-              {pinPlace?.address ??
-                `${pin.latitude.toFixed(5)}, ${pin.longitude.toFixed(5)}`}
+              {pinPlace?.address ?? pin.latitude.toFixed(5) + ', ' + pin.longitude.toFixed(5)}
             </p>
           </div>
           <button
@@ -374,7 +375,7 @@ export function LocationPicker({
 
             <ul className="space-y-1">
               {list.map((place) => (
-                <li key={`${place.externalSource}-${place.externalId}`}>
+                <li key={place.externalSource + '-' + place.externalId}>
                   <button
                     type="button"
                     onClick={() => handleSelectPlace(place)}
@@ -410,13 +411,13 @@ export function LocationPicker({
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold">Real vaqtli joylashuv</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Belgilangan muddat davomida joylashuvingiz avtomatik yangilanadi.
-                  Istalgan payt to\u2018xtatishingiz mumkin.
+                  Belgilangan muddat davomida joylashuvingiz avtomatik yangilanadi. Istalgan
+                  payt to\u2018xtatishingiz mumkin.
                 </p>
                 {myCoords && (
                   <p className="mt-2 text-xs text-muted-foreground">
                     {myCoords.latitude.toFixed(5)}, {myCoords.longitude.toFixed(5)}
-                    {accuracy ? ` · ±${Math.round(accuracy)} m` : ''}
+                    {accuracy ? ' · ±' + Math.round(accuracy) + ' m' : ''}
                   </p>
                 )}
               </div>

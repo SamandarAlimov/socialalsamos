@@ -11,19 +11,29 @@ interface PostLocationCardProps {
   compact?: boolean;
 }
 
+const STATIC_MAP_BASE = 'https://staticmap.openstreetmap.de/staticmap.php';
+
 function remainingLabel(liveUntil: string): string {
   const diff = new Date(liveUntil).getTime() - Date.now();
   if (diff <= 0) return 'Tugadi';
 
   const minutes = Math.floor(diff / 60000);
-  if (minutes < 60) return `${minutes} daq qoldi`;
+  if (minutes < 60) return minutes + ' daq qoldi';
+
   const hours = Math.floor(minutes / 60);
-  return `${hours} soat ${minutes % 60} daq qoldi`;
+  return hours + ' soat ' + (minutes % 60) + ' daq qoldi';
 }
 
-/** Statik xarita rasmi kalitsiz — OSM staticmap xizmati. */
+/** Kalitsiz statik xarita rasmi (OSM). */
 function staticMapUrl(latitude: number, longitude: number): string {
-  return `https://staticmap.openstreetmap.de/staticmap.php?center=${latitude},${longitude}&zoom=15&size=600x220&markers=${latitude},${longitude},red-pushpin`;
+  const point = latitude + ',' + longitude;
+  const params = new URLSearchParams({
+    center: point,
+    zoom: '15',
+    size: '600x220',
+    markers: point + ',red-pushpin',
+  });
+  return STATIC_MAP_BASE + '?' + params.toString();
 }
 
 /** Lentada post joylashuvini ko'rsatish. */
@@ -49,7 +59,13 @@ export function PostLocationCard({ location, className, compact }: PostLocationC
 
   const title = location.place?.name ?? location.label ?? 'Joylashuv';
   const subtitle = location.place?.address ?? null;
-  const mapHref = `/map?lat=${location.latitude}&lng=${location.longitude}&label=${encodeURIComponent(title)}`;
+  const mapHref =
+    '/map?lat=' +
+    location.latitude +
+    '&lng=' +
+    location.longitude +
+    '&label=' +
+    encodeURIComponent(title);
 
   if (compact) {
     return (
@@ -107,7 +123,7 @@ export function PostLocationCard({ location, className, compact }: PostLocationC
             {live
               ? remaining
               : (subtitle ??
-                `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`)}
+                location.latitude.toFixed(4) + ', ' + location.longitude.toFixed(4))}
           </p>
         </div>
       </div>
