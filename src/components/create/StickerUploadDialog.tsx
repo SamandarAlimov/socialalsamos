@@ -34,19 +34,20 @@ interface StickerUploadDialogProps {
 /** Bosqich nomlari — foydalanuvchi nima kutayotganini bilishi kerak. */
 const STAGE_LABELS: Record<UploadStage, string> = {
   idle: '',
-  reading: 'Rasm o\u2018qilmoqda...',
+  reading: 'Rasm o‘qilmoqda...',
   segmenting: 'Fon ajratilmoqda...',
   trimming: 'Chekkalar kesilmoqda...',
-  encoding: '512\u00d7512 WebP tayyorlanmoqda...',
+  encoding: '512×512 WebP tayyorlanmoqda...',
   uploading: 'Yuklanmoqda...',
-  saving: 'Paketga qo\u2018shilmoqda...',
+  saving: 'Paketga qo‘shilmoqda...',
 };
 
 /**
  * Rasmni shaxsiy stikerga aylantirish oynasi (Bosqich C).
  *
- * Og‘ir ishlar (segmentatsiya, kodlash) `src/lib/stickerUpload.ts` da; bu
- * komponent faqat tanlash, sozlash va holatni ko‘rsatish bilan shug‘ullanadi.
+ * Og‘ir ishlar (segmentatsiya, kesish, kodlash) `src/lib/stickerUpload.ts` da;
+ * bu komponent faqat tanlash, sozlash va holatni ko‘rsatish bilan
+ * shug‘ullanadi.
  */
 export function StickerUploadDialog({
   open,
@@ -99,7 +100,7 @@ export function StickerUploadDialog({
           title:
             error instanceof StickerUploadError
               ? error.message
-              : 'Rasmni tanlab bo\u2018lmadi',
+              : 'Rasmni tanlab bo‘lmadi',
           variant: 'destructive',
         });
       }
@@ -113,14 +114,14 @@ export function StickerUploadDialog({
     try {
       const created = await upload(file, { removeBackground, name });
       onUploaded?.(created);
-      toast({ title: 'Stiker paketingizga qo\u2018shildi' });
+      toast({ title: 'Stiker paketingizga qo‘shildi' });
       onOpenChange(false);
     } catch (error) {
       toast({
         title:
           error instanceof StickerUploadError
             ? error.message
-            : 'Stikerni yuklab bo\u2018lmadi',
+            : 'Stikerni yuklab bo‘lmadi',
         variant: 'destructive',
       });
     }
@@ -139,7 +140,7 @@ export function StickerUploadDialog({
             Stiker yaratish
           </DialogTitle>
           <p className="text-xs text-muted-foreground">
-            Rasm 512\u00d7512 o\u2018lchamga keltiriladi. Bugun {remainingToday} / {dailyLimit} ta
+            Rasm 512×512 o‘lchamga keltiriladi. Bugun {remainingToday} / {dailyLimit} ta
             imkoniyat qoldi.
           </p>
         </DialogHeader>
@@ -168,7 +169,7 @@ export function StickerUploadDialog({
           >
             {previewUrl ? (
               <>
-                {/* Shaffoflik ko\u2018rinishi uchun shaxmat fon */}
+                {/* Shaxmat fon — shaffof joylar ko‘rinib turishi uchun */}
                 <span
                   aria-hidden
                   className="absolute inset-0 bg-[linear-gradient(45deg,hsl(var(--muted))_25%,transparent_25%,transparent_75%,hsl(var(--muted))_75%),linear-gradient(45deg,hsl(var(--muted))_25%,transparent_25%,transparent_75%,hsl(var(--muted))_75%)] bg-[length:16px_16px] bg-[position:0_0,8px_8px]"
@@ -183,7 +184,7 @@ export function StickerUploadDialog({
               <span className="flex flex-col items-center gap-2 text-muted-foreground">
                 <Upload className="h-6 w-6" />
                 <span className="text-sm font-medium text-foreground">Rasm tanlang</span>
-                <span className="text-xs">PNG, JPEG, WebP, GIF \u00b7 12 MB gacha</span>
+                <span className="text-xs">PNG, JPEG, WebP, GIF · 12 MB gacha</span>
               </span>
             )}
           </button>
@@ -199,12 +200,11 @@ export function StickerUploadDialog({
             }}
           />
 
-          {/* Fonni o\u2018chirish tugmasi */}
+          {/* Fonni o‘chirish tugmasi */}
           <button
             type="button"
             disabled={isBusy}
-            onClick={() => setRemoveBackground((prev) => !prev)
-            }
+            onClick={() => setRemoveBackground((prev) => !prev)}
             className="flex w-full items-center gap-3 rounded-2xl border border-border bg-muted/30 p-3 text-left transition hover:border-primary/50"
           >
             <span
@@ -218,9 +218,9 @@ export function StickerUploadDialog({
               {removeBackground ? <Check className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
             </span>
             <span className="min-w-0">
-              <span className="block text-sm font-medium">Fonni avtomatik o\u2018chirish</span>
+              <span className="block text-sm font-medium">Fonni avtomatik o‘chirish</span>
               <span className="block text-xs text-muted-foreground">
-                Odam va buyum chetlari ajratiladi \u00b7 qurilmada bajariladi
+                Odam va buyum chetlari ajratiladi · qurilmaning o‘zida bajariladi
               </span>
             </span>
           </button>
@@ -243,7 +243,7 @@ export function StickerUploadDialog({
 
           {quotaExhausted && (
             <p className="rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              Kunlik chegara tugadi. Ertaga yana stiker qo\u2018shishingiz mumkin.
+              Kunlik chegara tugadi. Ertaga yana stiker qo‘shishingiz mumkin.
             </p>
           )}
         </div>
@@ -268,7 +268,7 @@ export function StickerUploadDialog({
             ) : (
               <ImagePlus className="mr-1.5 h-4 w-4" />
             )}
-            Qo\u2018shish
+            Qo‘shish
           </Button>
         </div>
       </DialogContent>

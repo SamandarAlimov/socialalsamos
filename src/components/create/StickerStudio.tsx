@@ -4,6 +4,7 @@ import {
   Hand,
   Heart,
   History,
+  ImagePlus,
   Leaf,
   Loader2,
   PartyPopper,
@@ -13,6 +14,8 @@ import {
   Sparkles,
   Star,
   ThumbsUp,
+  Trash2,
+  UserRound,
   UtensilsCrossed,
   X,
   type LucideIcon,
@@ -26,8 +29,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 import { StickerView } from '@/components/stickers/StickerView';
+import { StickerUploadDialog } from '@/components/create/StickerUploadDialog';
 import { useStickers } from '@/hooks/useStickers';
+import { useUserStickers } from '@/hooks/useUserStickers';
 import type { StickerItem } from '@/lib/stickers';
 
 interface StickerStudioProps {
@@ -54,6 +60,7 @@ type SectionId = string;
 
 const RECENT_SECTION = '__recent__';
 const FAVORITE_SECTION = '__favorite__';
+const MINE_SECTION = '__mine__';
 const GIF_SECTION = '__gif__';
 const LONG_PRESS_MS = 450;
 
@@ -75,11 +82,17 @@ export function StickerStudio({
     toggleFavorite,
   } = useStickers();
 
+  // Shaxsiy paket holati studiya bilan yuklash oynasi o'rtasida bo'lishiladi,
+  // shu sababli hook shu yerda chaqiriladi va funksiyalari pastga uzatiladi.
+  const userStickers = useUserStickers();
+  const { toast } = useToast();
+
   const [query, setQuery] = useState('');
   const [section, setSection] = useState<SectionId>(packs[0]?.id ?? RECENT_SECTION);
   const [searchResults, setSearchResults] = useState<StickerItem[]>([]);
   const [giphyResults, setGiphyResults] = useState<StickerItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const longPressTimer = useRef<number | null>(null);
@@ -153,10 +166,16 @@ export function StickerStudio({
     };
   }, [open, section, trimmedQuery, searchGiphy]);
 
+  const myStickerItems = useMemo<StickerItem[]>(
+    () => userStickers.stickers.map((entry) => entry.stickerItem),
+    [userStickers.stickers],
+  );
+
   const visibleStickers = useMemo<StickerItem[]>(() => {
     if (isSearching) return searchResults;
     if (section === RECENT_SECTION) return recents;
     if (section === FAVORITE_SECTION) return favorites;
+    if (section === MINE_SECTION) return myStickerItems;
     if (section === GIF_SECTION) return giphyResults;
     return stickersForPack(section);
   }, [
@@ -165,6 +184,7 @@ export function StickerStudio({
     section,
     recents,
     favorites,
+    myStickerItems,
     giphyResults,
     stickersForPack,
   ]);
@@ -211,163 +231,257 @@ export function StickerStudio({
     [clearLongPress, markUsed, onSelect, onOpenChange],
   );
 
+  // O'z stikerini o'chirish — jadval va fayl birga tozalanadi.
+  const handleDeleteMine = useCallback(
+    async (stickerKey: string) => {
+      const entry = userStickers.stickers.find((item) => item.stickerItem.key === stickerKey);
+      if (!entry) return;
+
+      try {
+        await userStickers.remove(entry);
+        toast({ title: 'Stiker o‘chirildi' });
+      } catch {
+        toast({ title: 'Stikerni o‘chirib bo‘lmadi', variant: 'destructive' });
+      }
+    },
+    [userStickers, toast],
+  );
+
   const sectionTitle = useMemo(() => {
     if (isSearching) return 'Qidiruv natijalari';
     if (section === RECENT_SECTION) return 'Oxirgi ishlatilgan';
     if (section === FAVORITE_SECTION) return 'Sevimlilar';
+    if (section === MINE_SECTION) return 'Mening stikerlarim';
     if (section === GIF_SECTION) return 'Trenddagi GIF lar';
     return packs.find((p) => p.id === section)?.name ?? 'Stikerlar';
   }, [isSearching, section, packs]);
 
+  const isMineSection = !isSearching && section === MINE_SECTION;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[86vh] max-h-[680px] w-[calc(100vw-1.5rem)] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:w-full">
-        {/* Sarlavha — nozik gradient bilan premium ko'rinish */}
-        <DialogHeader className="shrink-0 space-y-3 border-b border-border bg-gradient-to-b from-primary/[0.07] to-transparent px-4 pb-3 pt-4">
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <Sparkles className="h-4 w-4" />
-            </span>
-            Stiker studiyasi
-          </DialogTitle>
-
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Stiker, emoji yoki GIF qidirish..."
-              className="h-10 rounded-xl pl-9 pr-9"
-            />
-            {query.length > 0 && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label="Qidiruvni tozalash"
-                onClick={() => setQuery('')}
-                className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 rounded-lg"
-              >
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            )}
-          </div>
-        </DialogHeader>
-
-        <div className="flex min-h-0 flex-1">
-          {/* Chap rels: professional vektor ikonkalar */}
-          <nav
-            aria-label="Stiker to‘plamlari"
-            className="flex w-14 shrink-0 flex-col items-center gap-1 overflow-y-auto overscroll-contain border-r border-border bg-muted/30 py-3"
-          >
-            <RailButton
-              icon={History}
-              label="Oxirgi ishlatilgan"
-              active={!isSearching && section === RECENT_SECTION}
-              badge={recents.length}
-              onClick={() => setSection(RECENT_SECTION)}
-            />
-            <RailButton
-              icon={Star}
-              label="Sevimlilar"
-              active={!isSearching && section === FAVORITE_SECTION}
-              badge={favorites.length}
-              onClick={() => setSection(FAVORITE_SECTION)}
-            />
-
-            <span className="my-1 h-px w-6 bg-border" aria-hidden />
-
-            {packs.map((pack) => (
-              <RailButton
-                key={pack.id}
-                icon={PACK_ICONS[pack.id] ?? Smile}
-                label={pack.name}
-                active={!isSearching && section === pack.id}
-                onClick={() => setSection(pack.id)}
-              />
-            ))}
-
-            {allowGif && (
-              <>
-                <span className="my-1 h-px w-6 bg-border" aria-hidden />
-                <RailButton
-                  icon={Film}
-                  label="GIF"
-                  active={!isSearching && section === GIF_SECTION}
-                  onClick={() => setSection(GIF_SECTION)}
-                />
-              </>
-            )}
-          </nav>
-
-          {/* O'ng panel: yagona, to'g'ri ishlaydigan scroll konteyneri */}
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <div className="flex shrink-0 items-center justify-between px-4 py-2">
-              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {sectionTitle}
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="flex h-[86vh] max-h-[680px] w-[calc(100vw-1.5rem)] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:w-full">
+          {/* Sarlavha — nozik gradient bilan premium ko'rinish */}
+          <DialogHeader className="shrink-0 space-y-3 border-b border-border bg-gradient-to-b from-primary/[0.07] to-transparent px-4 pb-3 pt-4">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Sparkles className="h-4 w-4" />
               </span>
-              {visibleStickers.length > 0 && (
-                <span className="text-xs text-muted-foreground">{visibleStickers.length}</span>
+              Stiker studiyasi
+            </DialogTitle>
+
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Stiker, emoji yoki GIF qidirish..."
+                className="h-10 rounded-xl pl-9 pr-9"
+              />
+              {query.length > 0 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Qidiruvni tozalash"
+                  onClick={() => setQuery('')}
+                  className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 rounded-lg"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
               )}
             </div>
+          </DialogHeader>
 
-            <div
-              ref={scrollRef}
-              className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-[max(1rem,env(safe-area-inset-bottom))] [-webkit-overflow-scrolling:touch]"
+          <div className="flex min-h-0 flex-1">
+            {/* Chap rels: professional vektor ikonkalar */}
+            <nav
+              aria-label="Stiker to‘plamlari"
+              className="flex w-14 shrink-0 flex-col items-center gap-1 overflow-y-auto overscroll-contain border-r border-border bg-muted/30 py-3"
             >
-              {isLoading && visibleStickers.length === 0 ? (
-                <StickerSkeletonGrid />
-              ) : visibleStickers.length === 0 ? (
-                <EmptyState section={section} isSearching={isSearching} />
-              ) : (
-                <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
-                  {visibleStickers.map((sticker, index) => {
-                    const favorite = isFavorite(sticker);
-                    return (
-                      <button
-                        key={`${sticker.key}-${index}`}
-                        type="button"
-                        title={sticker.name}
-                        onClick={() => handleSelect(sticker)}
-                        onPointerDown={() => handlePressStart(sticker)}
-                        onPointerUp={clearLongPress}
-                        onPointerLeave={clearLongPress}
-                        onPointerCancel={clearLongPress}
-                        onContextMenu={(event) => event.preventDefault()}
-                        className={cn(
-                          'group relative flex aspect-square items-center justify-center rounded-2xl',
-                          'bg-muted/40 transition-all duration-150',
-                          'hover:bg-primary/10 hover:shadow-sm active:scale-90',
-                          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-                        )}
-                      >
-                        <StickerView sticker={sticker} size={56} />
-                        {favorite && (
-                          <Star
-                            className="absolute right-1 top-1 h-3 w-3 fill-amber-400 text-amber-400"
-                            aria-hidden
-                          />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+              <RailButton
+                icon={History}
+                label="Oxirgi ishlatilgan"
+                active={!isSearching && section === RECENT_SECTION}
+                badge={recents.length}
+                onClick={() => setSection(RECENT_SECTION)}
+              />
+              <RailButton
+                icon={Star}
+                label="Sevimlilar"
+                active={!isSearching && section === FAVORITE_SECTION}
+                badge={favorites.length}
+                onClick={() => setSection(FAVORITE_SECTION)}
+              />
+              <RailButton
+                icon={UserRound}
+                label="Mening stikerlarim"
+                active={isMineSection}
+                badge={myStickerItems.length}
+                onClick={() => setSection(MINE_SECTION)}
+              />
 
-              {isLoading && visibleStickers.length > 0 && (
-                <div className="flex justify-center py-3">
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                </div>
+              <span className="my-1 h-px w-6 bg-border" aria-hidden />
+
+              {packs.map((pack) => (
+                <RailButton
+                  key={pack.id}
+                  icon={PACK_ICONS[pack.id] ?? Smile}
+                  label={pack.name}
+                  active={!isSearching && section === pack.id}
+                  onClick={() => setSection(pack.id)}
+                />
+              ))}
+
+              {allowGif && (
+                <>
+                  <span className="my-1 h-px w-6 bg-border" aria-hidden />
+                  <RailButton
+                    icon={Film}
+                    label="GIF"
+                    active={!isSearching && section === GIF_SECTION}
+                    onClick={() => setSection(GIF_SECTION)}
+                  />
+                </>
               )}
+            </nav>
+
+            {/* O'ng panel: yagona, to'g'ri ishlaydigan scroll konteyneri */}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <div className="flex shrink-0 items-center justify-between gap-2 px-4 py-2">
+                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {sectionTitle}
+                </span>
+
+                {isMineSection ? (
+                  <span className="text-xs text-muted-foreground">
+                    Bugun {userStickers.remainingToday} / {userStickers.dailyLimit}
+                  </span>
+                ) : (
+                  visibleStickers.length > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      {visibleStickers.length}
+                    </span>
+                  )
+                )}
+              </div>
+
+              <div
+                ref={scrollRef}
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-[max(1rem,env(safe-area-inset-bottom))] [-webkit-overflow-scrolling:touch]"
+              >
+                {isMineSection ? (
+                  /* Shaxsiy paket: qo'shish plitkasi doim birinchi o'rinda */
+                  <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+                    <button
+                      type="button"
+                      onClick={() => setShowUpload(true)}
+                      title="Rasmdan stiker yasash"
+                      className="flex aspect-square flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-primary/60 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    >
+                      <ImagePlus className="h-5 w-5" />
+                      <span className="text-[10px] font-medium">Yangi</span>
+                    </button>
+
+                    {userStickers.isLoading && myStickerItems.length === 0 ? (
+                      <div className="col-span-3 flex items-center justify-center py-6 sm:col-span-4">
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : (
+                      userStickers.stickers.map((entry) => (
+                        <div key={entry.id} className="group relative">
+                          <button
+                            type="button"
+                            title={entry.stickerItem.name}
+                            onClick={() => handleSelect(entry.stickerItem)}
+                            className={cn(
+                              'flex aspect-square w-full items-center justify-center rounded-2xl',
+                              'bg-muted/40 transition-all duration-150',
+                              'hover:bg-primary/10 hover:shadow-sm active:scale-90',
+                              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                            )}
+                          >
+                            <StickerView sticker={entry.stickerItem} size={56} />
+                          </button>
+
+                          <button
+                            type="button"
+                            aria-label="Stikerni o‘chirish"
+                            onClick={() => void handleDeleteMine(entry.stickerItem.key)}
+                            className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 shadow transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                ) : isLoading && visibleStickers.length === 0 ? (
+                  <StickerSkeletonGrid />
+                ) : visibleStickers.length === 0 ? (
+                  <EmptyState section={section} isSearching={isSearching} />
+                ) : (
+                  <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+                    {visibleStickers.map((sticker, index) => {
+                      const favorite = isFavorite(sticker);
+                      return (
+                        <button
+                          key={`${sticker.key}-${index}`}
+                          type="button"
+                          title={sticker.name}
+                          onClick={() => handleSelect(sticker)}
+                          onPointerDown={() => handlePressStart(sticker)}
+                          onPointerUp={clearLongPress}
+                          onPointerLeave={clearLongPress}
+                          onPointerCancel={clearLongPress}
+                          onContextMenu={(event) => event.preventDefault()}
+                          className={cn(
+                            'group relative flex aspect-square items-center justify-center rounded-2xl',
+                            'bg-muted/40 transition-all duration-150',
+                            'hover:bg-primary/10 hover:shadow-sm active:scale-90',
+                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                          )}
+                        >
+                          <StickerView sticker={sticker} size={56} />
+                          {favorite && (
+                            <Star
+                              className="absolute right-1 top-1 h-3 w-3 fill-amber-400 text-amber-400"
+                              aria-hidden
+                            />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {!isMineSection && isLoading && visibleStickers.length > 0 && (
+                  <div className="flex justify-center py-3">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+              </div>
+
+              <p className="shrink-0 border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+                {isMineSection
+                  ? 'Rasm yuklang — fon avtomatik o‘chiriladi va 512×512 stiker tayyorlanadi'
+                  : 'Sevimliga qo‘shish uchun stikerni bosib turing'}
+              </p>
             </div>
-
-            <p className="shrink-0 border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
-              Sevimliga qo‘shish uchun stikerni bosib turing
-            </p>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      <StickerUploadDialog
+        open={showUpload}
+        onOpenChange={setShowUpload}
+        upload={userStickers.upload}
+        stage={userStickers.stage}
+        remainingToday={userStickers.remainingToday}
+        dailyLimit={userStickers.dailyLimit}
+      />
+    </>
   );
 }
 
