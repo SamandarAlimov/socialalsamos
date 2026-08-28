@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { animatedEmojiCandidates, staticEmojiCandidates } from '@/lib/emojiAssets';
+import { LottieEmoji } from './LottieEmoji';
 
 interface AnimatedEmojiProps {
   emoji: string;
@@ -19,7 +20,15 @@ interface AnimatedEmojiProps {
   title?: string;
   /** Skip the lazy IntersectionObserver (for a handful of always-visible emojis). */
   eager?: boolean;
+  /**
+   * Vektor (Lottie) sifatida o'ynatish. Katta o'lchamlarda avtomatik yoqiladi:
+   * emoji-only xabarlar va reaksiya animatsiyalari Telegramdek silliq bo'ladi.
+   */
+  hq?: boolean;
 }
+
+/** Bu o'lchamdan boshlab WebP piksellari ko'rinadi -> Lottie ishlatiladi. */
+const LOTTIE_MIN_SIZE = 40;
 
 /**
  * Global caches so the whole app never re-requests an asset that already
@@ -46,6 +55,7 @@ function AnimatedEmojiImpl({
   inline = false,
   title,
   eager = false,
+  hq,
 }: AnimatedEmojiProps) {
   const candidates = useMemo(
     () => (animated ? animatedEmojiCandidates(emoji) : staticEmojiCandidates(emoji)),
@@ -81,6 +91,21 @@ function AnimatedEmojiImpl({
     observer.observe(node);
     return () => observer.disconnect();
   }, [eager, visible]);
+
+  // Katta emojilar - haqiqiy vektor animatsiya (Telegram TGS = Lottie)
+  const useLottie = animated && !playOnHover && (hq === true || size >= LOTTIE_MIN_SIZE);
+  if (useLottie) {
+    return (
+      <LottieEmoji
+        emoji={emoji}
+        size={size}
+        className={className}
+        inline={inline}
+        title={title}
+        eager={eager}
+      />
+    );
+  }
 
   const nativeGlyph = (
     <span
