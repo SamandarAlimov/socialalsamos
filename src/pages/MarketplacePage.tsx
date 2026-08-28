@@ -1,67 +1,101 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Filter, ShoppingBag, Plus, Store, Package, Heart, TrendingUp, Sparkles, LayoutDashboard, MapPin, Star, Flame, Crown, ChevronRight, Video, Zap, SlidersHorizontal, Grid3X3, LayoutList, ArrowUpDown, ClipboardList } from 'lucide-react';
+import {
+  Search, ShoppingBag, Plus, Store, Package, Heart, TrendingUp, Sparkles,
+  LayoutDashboard, Flame, Crown, ChevronRight, SlidersHorizontal, Grid3X3,
+  LayoutList, ClipboardList, AlertTriangle, RotateCcw, X,
+} from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  useCategories, 
-  useProducts, 
-  useSellerProducts, 
+import {
+  useCategories,
+  useProducts,
+  useSellerProducts,
   useSavedProducts,
   useCart,
-  Product 
+  Product,
 } from '@/hooks/useMarketplace';
 import { ProductCard } from '@/components/marketplace/ProductCard';
 import { ProductDetail } from '@/components/marketplace/ProductDetail';
 import { BecomeSeller } from '@/components/marketplace/BecomeSeller';
 import { CreateProductDialog } from '@/components/marketplace/CreateProductDialog';
 import { CartSheet } from '@/components/marketplace/CartSheet';
+import { CheckoutSheet } from '@/components/marketplace/CheckoutSheet';
 import { SellerDashboard } from '@/components/marketplace/SellerDashboard';
 import { OrdersView } from '@/components/marketplace/OrdersView';
 import { SellerStorefront } from '@/components/marketplace/SellerStorefront';
 import { VideoCommerceSection } from '@/components/marketplace/VideoCommerceSection';
+import { CategoryIcon } from '@/components/marketplace/CategoryIcon';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Slider } from '@/components/ui/slider';
+import { formatPrice } from '@/lib/marketplace';
 import { cn } from '@/lib/utils';
+
+const SEARCH_DEBOUNCE_MS = 350;
 
 export default function MarketplacePage() {
   const isMobile = useIsMobile();
   const { user } = useAuth();
   const { triggerHaptic } = useHapticFeedback();
-  
+
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'browse');
 
+  // URL is the source of truth for the tab, so links like ?tab=orders work
+  // and the tab is preserved on refresh / share / back navigation.
   useEffect(() => {
-    const t = searchParams.get('tab');
-    if (t && t !== activeTab) setActiveTab(t);
+    const t = searchParams.get('tab') || 'browse';
+    if (t !== activeTab) setActiveTab(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
+
+  const selectTab = useCallback((tab: string) => {
+    triggerHaptic('light');
+    setActiveTab(tab);
+    const next = new URLSearchParams(searchParams);
+    if (tab === 'browse') next.delete('tab');
+    else next.set('tab', tab);
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, triggerHaptic]);
+
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showCreateProduct, setShowCreateProduct] = useState(false);
   const [showCart, setShowCart] = useState(false);
+  const [showCheckout, setShowCheckout] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [gridLayout, setGridLayout] = useState<'grid' | 'list'>('grid');
   const [sortBy, setSortBy] = useState('newest');
-  const [priceRange, setPriceRange] = useState([0, 10000]);
+  /** null = no price filter applied (previously a hardcoded 0–10 000 window silently hid every expensive listing). */
+  const [priceRange, setPriceRange] = useState<[number, number] | null>(null);
   const [searchFocused, setSearchFocused] = useState(false);
   const [selectedSellerId, setSelectedSellerId] = useState<string | null>(null);
-  
+
+  // Debounced search: one query per pause, not one per keystroke.
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchQuery(searchInput.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
   const { categories } = useCategories();
-  const { products, isLoading: productsLoading, refresh: refreshProducts } = useProducts(selectedCategory, searchQuery);
+  const {
+    products,
+    isLoading: productsLoading,
+    error: productsError,
+    refresh: refreshProducts,
+  } = useProducts(selectedCategory, searchQuery);
   const { products: sellerProducts, seller, isLoading: sellerLoading, refresh: refreshSeller } = useSellerProducts();
   const { products: savedProducts, isLoading: savedLoading, refresh: refreshSaved } = useSavedProducts();
-  const { items: cartItems } = useCart();
+  const { itemCount, refresh: refreshCart } = useCart();
 
   const handleRefresh = useCallback(async () => {
     if (activeTab === 'browse') await refreshProducts();
@@ -79,17 +113,59 @@ export default function MarketplacePage() {
     setSelectedProduct(product);
   };
 
-  const featuredProducts = products.filter(p => p.is_featured);
-  const trendingProducts = [...products].sort((a, b) => b.views_count - a.views_count).slice(0, 6);
+  /** Real "Sotib olish": the item is in the cart, so go straight to checkout. */
+  const handleBuyNow = useCallback(async () => {
+    setSelectedProduct(null);
+    await refreshCart();
+    setShowCheckout(true);
+  }, [refreshCart]);
 
-  const sortedProducts = [...products].sort((a, b) => {
-    switch (sortBy) {
-      case 'price_low': return a.price - b.price;
-      case 'price_high': return b.price - a.price;
-      case 'popular': return b.likes_count - a.likes_count;
-      default: return 0;
-    }
-  }).filter(p => p.price >= priceRange[0] && p.price <= priceRange[1]);
+  const maxProductPrice = useMemo(
+    () => products.reduce((max, p) => Math.max(max, Number(p.price) || 0), 0),
+    [products],
+  );
+
+  /** Slider bounds follow the catalogue instead of a fixed $10 000 ceiling. */
+  const sliderMax = useMemo(() => {
+    if (maxProductPrice <= 0) return 1000;
+    const step = Math.pow(10, Math.max(1, String(Math.round(maxProductPrice)).length - 2));
+    return Math.ceil(maxProductPrice / step) * step;
+  }, [maxProductPrice]);
+
+  const activeRange = priceRange ?? [0, sliderMax];
+  const priceFilterActive = priceRange !== null;
+
+  const featuredProducts = useMemo(() => products.filter(p => p.is_featured), [products]);
+
+  const trendingProducts = useMemo(
+    () => [...products].sort((a, b) => (b.views_count ?? 0) - (a.views_count ?? 0)).slice(0, 6),
+    [products],
+  );
+
+  const sortedProducts = useMemo(() => {
+    const filtered = priceFilterActive
+      ? products.filter(p => p.price >= activeRange[0] && p.price <= activeRange[1])
+      : products;
+
+    return [...filtered].sort((a, b) => {
+      switch (sortBy) {
+        case 'price_low': return a.price - b.price;
+        case 'price_high': return b.price - a.price;
+        case 'popular': return (b.likes_count ?? 0) - (a.likes_count ?? 0);
+        case 'newest':
+        default:
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, sortBy, priceFilterActive, activeRange[0], activeRange[1]]);
+
+  const hiddenByPriceFilter = priceFilterActive ? products.length - sortedProducts.length : 0;
+
+  const resetFilters = () => {
+    setPriceRange(null);
+    setSortBy('newest');
+  };
 
   const tabs = [
     { id: 'browse', label: 'Barchasi', icon: TrendingUp },
@@ -128,70 +204,90 @@ export default function MarketplacePage() {
                   size="icon"
                   className="relative h-10 w-10 rounded-xl bg-muted/50 hover:bg-muted"
                   onClick={() => setShowCart(true)}
+                  aria-label={itemCount > 0 ? `Savat, ${itemCount} dona mahsulot` : 'Savat'}
                 >
                   <ShoppingBag className="h-5 w-5" />
-                  {cartItems.length > 0 && (
-                    <motion.span 
+                  {itemCount > 0 && (
+                    <motion.span
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
-                      className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-bold shadow-lg shadow-primary/30"
+                      className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-bold shadow-lg shadow-primary/30 tabular-nums"
                     >
-                      {cartItems.length}
+                      {itemCount > 99 ? '99+' : itemCount}
                     </motion.span>
                   )}
                 </Button>
               </div>
             </div>
-            
+
             {/* Premium Search */}
             <div className="flex gap-2">
               <div className={cn(
-                "relative flex-1 transition-all duration-300",
-                searchFocused && "scale-[1.01]"
+                'relative flex-1 transition-all duration-300',
+                searchFocused && 'scale-[1.01]',
               )}>
                 <div className="absolute left-3.5 top-1/2 -translate-y-1/2 z-10">
                   <Search className={cn(
-                    "h-4 w-4 transition-colors",
-                    searchFocused ? "text-primary" : "text-muted-foreground"
+                    'h-4 w-4 transition-colors',
+                    searchFocused ? 'text-primary' : 'text-muted-foreground',
                   )} />
                 </div>
                 <Input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
                   onFocus={() => setSearchFocused(true)}
                   onBlur={() => setSearchFocused(false)}
                   placeholder="Mahsulot, do'kon izlash..."
+                  aria-label="Mahsulot izlash"
                   className={cn(
-                    "pl-10 h-11 rounded-xl border-border/50 bg-muted/40 backdrop-blur-sm",
-                    "focus:bg-background focus:border-primary/30 focus:ring-2 focus:ring-primary/10",
-                    "placeholder:text-muted-foreground/60 transition-all duration-300"
+                    'pl-10 pr-9 h-11 rounded-xl border-border/50 bg-muted/40 backdrop-blur-sm',
+                    'focus:bg-background focus:border-primary/30 focus:ring-2 focus:ring-primary/10',
+                    'placeholder:text-muted-foreground/60 transition-all duration-300',
                   )}
                 />
+                {searchInput && (
+                  <button
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    onClick={() => setSearchInput('')}
+                    aria-label="Qidiruvni tozalash"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
               </div>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="icon"
-                className="h-11 w-11 rounded-xl border-border/50 bg-muted/40 hover:bg-muted shrink-0"
+                className={cn(
+                  'h-11 w-11 rounded-xl border-border/50 bg-muted/40 hover:bg-muted shrink-0 relative',
+                  priceFilterActive && 'border-primary/50 text-primary',
+                )}
                 onClick={() => setShowFilters(true)}
+                aria-label="Filtrlar"
               >
                 <SlidersHorizontal className="h-4 w-4" />
+                {priceFilterActive && (
+                  <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-primary" />
+                )}
               </Button>
             </div>
 
             {/* Premium Tab Navigation */}
-            <div className="flex gap-1 p-1 rounded-xl bg-muted/40 backdrop-blur-sm">
+            <div className="flex gap-1 p-1 rounded-xl bg-muted/40 backdrop-blur-sm" role="tablist">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
                 return (
                   <button
                     key={tab.id}
-                    onClick={() => { setActiveTab(tab.id); triggerHaptic('light'); }}
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => selectTab(tab.id)}
                     className={cn(
-                      "flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium transition-all duration-300",
-                      isActive 
-                        ? "bg-background text-foreground shadow-sm" 
-                        : "text-muted-foreground hover:text-foreground"
+                      'flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium transition-all duration-300',
+                      isActive
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground',
                     )}
                   >
                     <Icon className="h-4 w-4" />
@@ -222,16 +318,17 @@ export default function MarketplacePage() {
               transition={{ duration: 0.2 }}
               className="space-y-5 p-4"
             >
-              {/* Category Chips */}
+              {/* Category Chips — professional Lucide icons, no emoji stickers */}
               <ScrollArea className="w-full">
                 <div className="flex gap-2 pb-1">
                   <button
                     onClick={() => handleCategorySelect('all')}
+                    aria-pressed={selectedCategory === 'all'}
                     className={cn(
-                      "flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-300",
+                      'flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-300',
                       selectedCategory === 'all'
-                        ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
-                        : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+                        ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25'
+                        : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground',
                     )}
                   >
                     <Sparkles className="h-3.5 w-3.5" />
@@ -241,14 +338,15 @@ export default function MarketplacePage() {
                     <button
                       key={cat.id}
                       onClick={() => handleCategorySelect(cat.slug)}
+                      aria-pressed={selectedCategory === cat.slug}
                       className={cn(
-                        "flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-300",
+                        'flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-300',
                         selectedCategory === cat.slug
-                          ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
-                          : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+                          ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25'
+                          : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground',
                       )}
                     >
-                      {cat.icon && <span>{cat.icon}</span>}
+                      <CategoryIcon slug={cat.slug} name={cat.name} />
                       {cat.name}
                     </button>
                   ))}
@@ -263,7 +361,7 @@ export default function MarketplacePage() {
                     <div className="flex-1 space-y-2">
                       <div className="flex items-center gap-2">
                         <Crown className="h-4 w-4 text-primary" />
-                        <span className="text-xs font-semibold text-primary uppercase tracking-wider">Featured</span>
+                        <span className="text-xs font-semibold text-primary uppercase tracking-wider">Tanlangan</span>
                       </div>
                       <h2 className="text-lg font-bold leading-tight">
                         Premium mahsulotlarni kashf eting
@@ -271,19 +369,28 @@ export default function MarketplacePage() {
                       <p className="text-sm text-muted-foreground">
                         Eng yaxshi sotuvchilardan tanlangan mahsulotlar
                       </p>
-                      <Button size="sm" className="mt-2 rounded-lg shadow-lg shadow-primary/20">
+                      <Button
+                        size="sm"
+                        className="mt-2 rounded-lg shadow-lg shadow-primary/20"
+                        onClick={() => handleProductSelect(featuredProducts[0])}
+                      >
                         Ko'rish
                         <ChevronRight className="h-3.5 w-3.5 ml-1" />
                       </Button>
                     </div>
                     {featuredProducts[0]?.images?.[0]?.url && (
-                      <div className="w-28 h-28 rounded-xl overflow-hidden ring-2 ring-primary/20 shadow-xl shrink-0">
-                        <img 
-                          src={featuredProducts[0].images[0].url} 
-                          alt="" 
+                      <button
+                        className="w-28 h-28 rounded-xl overflow-hidden ring-2 ring-primary/20 shadow-xl shrink-0"
+                        onClick={() => handleProductSelect(featuredProducts[0])}
+                        aria-label={featuredProducts[0].title}
+                      >
+                        <img
+                          src={featuredProducts[0].images[0].url}
+                          alt={featuredProducts[0].title}
                           className="w-full h-full object-cover"
+                          loading="lazy"
                         />
-                      </div>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -299,29 +406,42 @@ export default function MarketplacePage() {
                       </div>
                       <h3 className="font-bold">Trendda</h3>
                     </div>
-                    <Button variant="ghost" size="sm" className="text-xs text-muted-foreground">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs text-muted-foreground"
+                      onClick={() => { setSortBy('popular'); setPriceRange(null); }}
+                    >
                       Barchasi <ChevronRight className="h-3 w-3 ml-0.5" />
                     </Button>
                   </div>
                   <ScrollArea className="w-full">
                     <div className="flex gap-3 pb-2">
-                      {trendingProducts.slice(0, 6).map((product) => (
-                        <div 
-                          key={product.id} 
-                          className="w-36 shrink-0 cursor-pointer group"
+                      {trendingProducts.map((product) => (
+                        <button
+                          key={product.id}
+                          className="w-36 shrink-0 text-left cursor-pointer group"
                           onClick={() => handleProductSelect(product)}
                         >
                           <div className="aspect-square rounded-xl overflow-hidden bg-muted mb-2 ring-1 ring-border/30 group-hover:ring-primary/30 transition-all">
-                            <img
-                              src={product.images?.[0]?.url || 'https://placehold.co/200x200?text=No+Image'}
-                              alt={product.title}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                              loading="lazy"
-                            />
+                            {product.images?.[0]?.url ? (
+                              <img
+                                src={product.images[0].url}
+                                alt={product.title}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-muted-foreground/40">
+                                <CategoryIcon slug={product.category?.slug} name={product.category?.name} className="h-6 w-6" />
+                              </div>
+                            )}
                           </div>
                           <p className="text-xs font-medium line-clamp-1">{product.title}</p>
-                          <p className="text-sm font-bold text-primary">${product.price.toLocaleString()}</p>
-                        </div>
+                          <p className="text-sm font-bold text-primary tabular-nums">
+                            {formatPrice(product.price, product.currency)}
+                          </p>
+                        </button>
                       ))}
                     </div>
                   </ScrollArea>
@@ -335,23 +455,35 @@ export default function MarketplacePage() {
 
               {/* Sort & Layout Controls */}
               <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">
-                  <span className="font-semibold text-foreground">{sortedProducts.length}</span> mahsulot
-                </p>
+                <div className="text-sm text-muted-foreground">
+                  <span className="font-semibold text-foreground tabular-nums">{sortedProducts.length}</span> mahsulot
+                  {hiddenByPriceFilter > 0 && (
+                    <button
+                      className="ml-2 text-xs text-primary font-medium hover:underline"
+                      onClick={resetFilters}
+                    >
+                      ({hiddenByPriceFilter} ta filtr bilan yashirilgan — tozalash)
+                    </button>
+                  )}
+                </div>
                 <div className="flex items-center gap-1.5">
                   <Button
                     variant="ghost"
                     size="icon"
-                    className={cn("h-8 w-8 rounded-lg", gridLayout === 'grid' && "bg-muted")}
+                    className={cn('h-8 w-8 rounded-lg', gridLayout === 'grid' && 'bg-muted')}
                     onClick={() => setGridLayout('grid')}
+                    aria-label="Katakcha ko'rinish"
+                    aria-pressed={gridLayout === 'grid'}
                   >
                     <Grid3X3 className="h-3.5 w-3.5" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className={cn("h-8 w-8 rounded-lg", gridLayout === 'list' && "bg-muted")}
+                    className={cn('h-8 w-8 rounded-lg', gridLayout === 'list' && 'bg-muted')}
                     onClick={() => setGridLayout('list')}
+                    aria-label="Ro'yxat ko'rinish"
+                    aria-pressed={gridLayout === 'list'}
                   >
                     <LayoutList className="h-3.5 w-3.5" />
                   </Button>
@@ -359,33 +491,46 @@ export default function MarketplacePage() {
               </div>
 
               {/* Products Grid */}
-              {productsLoading ? (
+              {productsError ? (
+                <div className="flex flex-col items-center justify-center py-14 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-destructive/10 flex items-center justify-center mb-4">
+                    <AlertTriangle className="h-8 w-8 text-destructive" />
+                  </div>
+                  <h3 className="font-semibold text-lg mb-1">Mahsulotlar yuklanmadi</h3>
+                  <p className="text-sm text-muted-foreground max-w-xs mb-4">{productsError}</p>
+                  <Button variant="outline" className="rounded-xl" onClick={() => refreshProducts()}>
+                    <RotateCcw className="h-4 w-4 mr-2" />
+                    Qayta urinish
+                  </Button>
+                </div>
+              ) : productsLoading ? (
                 <div className={cn(
-                  "gap-3",
-                  gridLayout === 'grid' 
-                    ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" 
-                    : "space-y-3"
+                  'gap-3',
+                  gridLayout === 'grid'
+                    ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'
+                    : 'space-y-3',
                 )}>
                   {[...Array(8)].map((_, i) => (
                     <div key={i} className={cn(
-                      "rounded-2xl bg-muted/50 animate-pulse",
-                      gridLayout === 'grid' ? "aspect-[3/4]" : "h-32"
+                      'rounded-2xl bg-muted/50 animate-pulse',
+                      gridLayout === 'grid' ? 'aspect-[3/4]' : 'h-32',
                     )} />
                   ))}
                 </div>
               ) : sortedProducts.length > 0 ? (
                 <div className={cn(
-                  "gap-3",
-                  gridLayout === 'grid' 
-                    ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" 
-                    : "space-y-3"
+                  'gap-3',
+                  gridLayout === 'grid'
+                    ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'
+                    : 'space-y-3',
                 )}>
                   {sortedProducts.map((product, i) => (
                     <motion.div
                       key={product.id}
                       initial={{ opacity: 0, y: 12 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.03, duration: 0.3 }}
+                      // Stagger is capped so large result sets don't feel laggy
+                      transition={{ delay: Math.min(i, 8) * 0.03, duration: 0.3 }}
                     >
                       <ProductCard
                         product={product}
@@ -400,7 +545,13 @@ export default function MarketplacePage() {
                 <EmptyState
                   icon={<Package className="h-16 w-16" />}
                   title="Mahsulot topilmadi"
-                  description={searchQuery ? "Boshqa so'z bilan izlab ko'ring" : "Birinchi bo'lib mahsulot joylashtiring!"}
+                  description={
+                    searchQuery
+                      ? "Boshqa so'z bilan izlab ko'ring"
+                      : priceFilterActive
+                        ? "Narx filtri juda tor — filtrni tozalab ko'ring"
+                        : "Birinchi bo'lib mahsulot joylashtiring!"
+                  }
                 />
               )}
             </motion.div>
@@ -456,31 +607,31 @@ export default function MarketplacePage() {
                   {/* Seller Stats Glass Cards */}
                   <div className="grid grid-cols-3 gap-3">
                     {[
-                      { value: sellerProducts.length, label: "Mahsulotlar", color: "from-blue-500/10 to-blue-500/5" },
-                      { value: seller.total_sales, label: "Sotuvlar", color: "from-green-500/10 to-green-500/5" },
-                      { value: seller.rating > 0 ? seller.rating.toFixed(1) : '—', label: "Reyting", color: "from-amber-500/10 to-amber-500/5" },
+                      { value: sellerProducts.length, label: 'Mahsulotlar', color: 'from-blue-500/10 to-blue-500/5' },
+                      { value: seller.total_sales ?? 0, label: 'Sotuvlar', color: 'from-green-500/10 to-green-500/5' },
+                      { value: (seller.rating ?? 0) > 0 ? seller.rating.toFixed(1) : '—', label: 'Reyting', color: 'from-amber-500/10 to-amber-500/5' },
                     ].map((stat, i) => (
                       <div key={i} className={cn(
-                        "rounded-2xl p-4 text-center border border-border/30",
-                        `bg-gradient-to-br ${stat.color}`
+                        'rounded-2xl p-4 text-center border border-border/30',
+                        `bg-gradient-to-br ${stat.color}`,
                       )}>
-                        <p className="text-2xl font-bold">{stat.value}</p>
+                        <p className="text-2xl font-bold tabular-nums">{stat.value}</p>
                         <p className="text-[11px] text-muted-foreground mt-0.5">{stat.label}</p>
                       </div>
                     ))}
                   </div>
 
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     className="w-full rounded-xl h-11"
                     onClick={() => setShowDashboard(true)}
                   >
                     <LayoutDashboard className="h-4 w-4 mr-2" />
-                    Seller Dashboard
+                    Sotuvchi paneli
                   </Button>
 
-                  <Button 
-                    className="w-full rounded-xl h-12 shadow-lg shadow-primary/20" 
+                  <Button
+                    className="w-full rounded-xl h-12 shadow-lg shadow-primary/20"
                     onClick={() => setShowCreateProduct(true)}
                   >
                     <Plus className="h-4 w-4 mr-2" />
@@ -520,7 +671,13 @@ export default function MarketplacePage() {
               exit={{ opacity: 0, y: -8 }}
               className="p-4"
             >
-              {savedLoading ? (
+              {!user ? (
+                <EmptyState
+                  icon={<Heart className="h-16 w-16" />}
+                  title="Tizimga kiring"
+                  description="Saqlangan mahsulotlarni ko'rish uchun tizimga kiring"
+                />
+              ) : savedLoading ? (
                 <div className="grid grid-cols-2 gap-3">
                   {[...Array(4)].map((_, i) => (
                     <div key={i} className="aspect-[3/4] rounded-2xl bg-muted/50 animate-pulse" />
@@ -550,16 +707,27 @@ export default function MarketplacePage() {
       </div>
 
       {/* Product Detail */}
-      <ProductDetail 
-        product={selectedProduct} 
-        onClose={() => setSelectedProduct(null)} 
+      <ProductDetail
+        product={selectedProduct}
+        onClose={() => setSelectedProduct(null)}
         onSellerClick={(id) => { setSelectedProduct(null); setSelectedSellerId(id); }}
+        onBuyNow={handleBuyNow}
+        onCartChange={refreshCart}
       />
-      <CreateProductDialog open={showCreateProduct} onOpenChange={setShowCreateProduct} onSuccess={() => { refreshSeller(); refreshProducts(); }} />
+      <CreateProductDialog
+        open={showCreateProduct}
+        onOpenChange={setShowCreateProduct}
+        onSuccess={() => { refreshSeller(); refreshProducts(); }}
+      />
       <CartSheet open={showCart} onOpenChange={setShowCart} />
-      <SellerStorefront 
-        sellerId={selectedSellerId} 
-        onClose={() => setSelectedSellerId(null)} 
+      <CheckoutSheet
+        open={showCheckout}
+        onOpenChange={setShowCheckout}
+        onSuccess={() => { setShowCheckout(false); refreshCart(); refreshProducts(); }}
+      />
+      <SellerStorefront
+        sellerId={selectedSellerId}
+        onClose={() => setSelectedSellerId(null)}
         onProductSelect={handleProductSelect}
       />
 
@@ -574,19 +742,19 @@ export default function MarketplacePage() {
               <label className="text-sm font-medium">Saralash</label>
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { id: 'newest', label: "Eng yangi" },
-                  { id: 'popular', label: "Mashhur" },
-                  { id: 'price_low', label: "Arzon → Qimmat" },
-                  { id: 'price_high', label: "Qimmat → Arzon" },
+                  { id: 'newest', label: 'Eng yangi' },
+                  { id: 'popular', label: 'Mashhur' },
+                  { id: 'price_low', label: 'Arzon → Qimmat' },
+                  { id: 'price_high', label: 'Qimmat → Arzon' },
                 ].map(s => (
                   <button
                     key={s.id}
                     onClick={() => setSortBy(s.id)}
                     className={cn(
-                      "py-2.5 px-3 rounded-xl text-sm font-medium transition-all border",
-                      sortBy === s.id 
-                        ? "bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20" 
-                        : "bg-muted/50 border-border/30 text-muted-foreground hover:bg-muted"
+                      'py-2.5 px-3 rounded-xl text-sm font-medium transition-all border',
+                      sortBy === s.id
+                        ? 'bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20'
+                        : 'bg-muted/50 border-border/30 text-muted-foreground hover:bg-muted',
                     )}
                   >
                     {s.label}
@@ -595,19 +763,39 @@ export default function MarketplacePage() {
               </div>
             </div>
             <div className="space-y-3">
-              <label className="text-sm font-medium">Narx oralig'i: ${priceRange[0]} — ${priceRange[1]}</label>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">
+                  Narx: {formatPrice(activeRange[0])} — {formatPrice(activeRange[1])}
+                </label>
+                {priceFilterActive && (
+                  <button
+                    className="text-xs text-primary font-semibold"
+                    onClick={() => setPriceRange(null)}
+                  >
+                    Tozalash
+                  </button>
+                )}
+              </div>
               <Slider
-                value={priceRange}
+                value={activeRange}
                 min={0}
-                max={10000}
-                step={100}
-                onValueChange={setPriceRange}
+                max={sliderMax}
+                step={Math.max(1, Math.round(sliderMax / 100))}
+                onValueChange={(value) => setPriceRange([value[0], value[1]])}
                 className="py-2"
               />
+              <p className="text-[11px] text-muted-foreground">
+                Katalogdagi eng yuqori narx: {formatPrice(maxProductPrice)}
+              </p>
             </div>
-            <Button className="w-full rounded-xl h-11" onClick={() => setShowFilters(false)}>
-              Qo'llash
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1 rounded-xl h-11" onClick={resetFilters}>
+                Tiklash
+              </Button>
+              <Button className="flex-1 rounded-xl h-11" onClick={() => setShowFilters(false)}>
+                Qo'llash
+              </Button>
+            </div>
           </div>
         </SheetContent>
       </Sheet>
