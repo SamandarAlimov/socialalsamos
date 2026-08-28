@@ -474,11 +474,11 @@ export function EnhancedMessageBubble({
       : null;
 
   /**
-   * Dumcha (tail) Telegramdagidek faqat ketma-ket xabarlarning ENG OXIRGISIDA
-   * chiziladi: kelgan xabarlarda avatar ko'rinadigan qatorga, o'z xabarlarimda
-   * har doim (chunki ular guruhda ham o'ng chekkada turadi).
+   * Dumcha (tail) HAR IKKI TOMONDA ham chiziladi - Telegramdek:
+   * kelgan xabarlarda kartaning chap-pastida, o'z xabarlarimda o'ng-pastida.
+   * Shu tarzda kartaning pastki qismi har doim jo'natuvchi tomonga qaraydi.
    */
-  const showTail = isMine || showAvatar;
+  const showTail = true;
 
   const renderStatusRow = (transparent = false) => (
     <div
