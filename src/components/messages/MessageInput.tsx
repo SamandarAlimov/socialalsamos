@@ -8,22 +8,18 @@ import {
   FileText,
   Film,
   Loader2,
-  Bold,
-  Italic,
-  Underline,
-  Strikethrough,
-  Code,
-  Quote,
-  EyeOff,
   Type,
   ShieldAlert,
   Music2,
+  BookOpen,
 } from 'lucide-react';
 import { EmojiPicker } from '@/components/EmojiPicker';
 import { TelegramMediaRecorder } from './TelegramMediaRecorder';
 import { LocationShareButton } from './LocationShareButton';
 import { ScheduleMessageDialog } from './ScheduleMessageDialog';
 import { MentionAutocomplete } from '@/components/MentionAutocomplete';
+import { FormatToolbar } from '@/components/chat/FormatToolbar';
+import { ArticleComposer } from '@/components/chat/ArticleComposer';
 import { useMentionInput } from '@/hooks/useMentionInput';
 import { uploadMedia } from '@/lib/mediaUpload';
 import { cn } from '@/lib/utils';
@@ -109,6 +105,7 @@ export function MessageInput({
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
   const [showFormatting, setShowFormatting] = useState(false);
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
+  const [showArticleComposer, setShowArticleComposer] = useState(false);
   const [attachmentOpen, setAttachmentOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -173,6 +170,13 @@ export function MessageInput({
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     if (inputRef.current) inputRef.current.style.height = 'auto';
+  };
+
+  /** Maqola (article) xabarini yuborish */
+  const handleSendArticle = async (payload: string) => {
+    await onSend(payload);
+    setMessage('');
+    onTyping(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -256,51 +260,6 @@ export function MessageInput({
     if (file) await uploadAndAttach(file);
   };
 
-  const insertFormatting = (format: string) => {
-    const textarea = inputRef.current;
-    if (!textarea) return;
-
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selectedText = message.substring(start, end);
-
-    let formattedText = '';
-    switch (format) {
-      case 'bold':
-        formattedText = `**${selectedText || 'matn'}**`;
-        break;
-      case 'italic':
-        formattedText = `_${selectedText || 'matn'}_`;
-        break;
-      case 'underline':
-        formattedText = `__${selectedText || 'matn'}__`;
-        break;
-      case 'strikethrough':
-        formattedText = `~~${selectedText || 'matn'}~~`;
-        break;
-      case 'code':
-        formattedText = `\`${selectedText || 'kod'}\``;
-        break;
-      case 'quote':
-        formattedText = `> ${selectedText || 'iqtibos'}`;
-        break;
-      case 'spoiler':
-        formattedText = `||${selectedText || 'spoyler'}||`;
-        break;
-      default:
-        formattedText = selectedText;
-    }
-
-    const newMessage = message.substring(0, start) + formattedText + message.substring(end);
-    setMessage(newMessage);
-
-    setTimeout(() => {
-      textarea.focus();
-      textarea.selectionStart = start + formattedText.length;
-      textarea.selectionEnd = start + formattedText.length;
-    }, 0);
-  };
-
   const startLongPress = () => {
     if (!onSchedule) return;
     longPressTimeoutRef.current = setTimeout(() => setShowScheduleDialog(true), 500);
@@ -313,6 +272,8 @@ export function MessageInput({
   const previewSrc = pendingAttachment?.localPreview || pendingAttachment?.url;
   const canToggleAsDocument =
     pendingAttachment && (pendingAttachment.kind === 'image' || pendingAttachment.kind === 'video');
+  // Uzun matn yozilsa Telegramdek "maqola sifatida yuborish" taklif qilinadi
+  const suggestArticle = message.trim().length > 600;
 
   return (
     <div
@@ -364,6 +325,25 @@ export function MessageInput({
             aria-label="Javobni bekor qilish"
           >
             <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
+      {/* Uzun matn uchun maqola taklifi */}
+      {suggestArticle && (
+        <div className="mb-2 flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
+          <BookOpen className="h-4 w-4 shrink-0 text-primary" />
+          <p className="min-w-0 flex-1 text-muted-foreground">
+            Matn ancha uzun. Uni maqola ko'rinishida chiroyli formatlab yuborishingiz mumkin.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 shrink-0"
+            onClick={() => setShowArticleComposer(true)}
+          >
+            Maqola qilish
           </Button>
         </div>
       )}
@@ -499,6 +479,16 @@ export function MessageInput({
               <FileText className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm">Fayl sifatida yuborish</span>
             </button>
+            <button
+              onClick={() => {
+                setAttachmentOpen(false);
+                setShowArticleComposer(true);
+              }}
+              className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left tg-transition hover:bg-muted"
+            >
+              <BookOpen className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm">Maqola yozish</span>
+            </button>
             {onShareLocation && <LocationShareButton onShareLocation={onShareLocation} />}
           </PopoverContent>
         </Popover>
@@ -617,30 +607,24 @@ export function MessageInput({
         />
       )}
 
+      {/* Maqola yozish oynasi */}
+      <ArticleComposer
+        open={showArticleComposer}
+        onOpenChange={setShowArticleComposer}
+        initialBody={message}
+        onSubmit={(payload) => {
+          void handleSendArticle(payload);
+        }}
+      />
+
       {/* Formatlash paneli */}
       {showFormatting && (
-        <div className="mt-2 flex items-center gap-1 px-1">
-          {[
-            { key: 'bold', icon: Bold, label: 'Qalin' },
-            { key: 'italic', icon: Italic, label: 'Qiya' },
-            { key: 'underline', icon: Underline, label: 'Tagi chizilgan' },
-            { key: 'strikethrough', icon: Strikethrough, label: "O'chirilgan" },
-            { key: 'code', icon: Code, label: 'Kod' },
-            { key: 'quote', icon: Quote, label: 'Iqtibos' },
-            { key: 'spoiler', icon: EyeOff, label: 'Spoyler' },
-          ].map(({ key, icon: Icon, label }) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => insertFormatting(key)}
-              aria-label={label}
-              title={label}
-              className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground tg-transition hover:bg-muted hover:text-foreground"
-            >
-              <Icon className="h-4 w-4" />
-            </button>
-          ))}
-        </div>
+        <FormatToolbar
+          targetRef={inputRef}
+          value={message}
+          onChange={setMessage}
+          className="mt-2 px-1"
+        />
       )}
     </div>
   );
