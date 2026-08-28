@@ -14,19 +14,18 @@ function remainingLabel(closesAt: string): string {
   if (diff <= 0) return 'Yakunlandi';
 
   const minutes = Math.floor(diff / 60000);
-  if (minutes < 60) return `${minutes} daqiqa qoldi`;
+  if (minutes < 60) return minutes + ' daqiqa qoldi';
 
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} soat qoldi`;
+  if (hours < 24) return hours + ' soat qoldi';
 
-  const days = Math.floor(hours / 24);
-  return `${days} kun qoldi`;
+  return Math.floor(hours / 24) + ' kun qoldi';
 }
 
 /**
- * So'rovnoma kartochkasi — real ovozlar bilan.
+ * So‘rovnoma kartochkasi — real ovozlar bilan.
  *
- * Ilgari so'rovnoma post matnida [POLL]{json}[/POLL] ko'rinishida saqlanardi
+ * Ilgari so‘rovnoma post matnida [POLL]{json}[/POLL] ko‘rinishida saqlanardi
  * va ovozlar hech qayerga yozilmasdi (har doim 0% edi). Endi `polls`,
  * `poll_options`, `poll_votes` jadvallari ishlatiladi.
  */
@@ -69,7 +68,11 @@ export function PollCard({ postId, className }: PollCardProps) {
       {/* Savol */}
       <div className="flex items-start gap-2">
         <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-          {poll.quiz_mode ? <Trophy className="h-3.5 w-3.5" /> : <BarChart3 className="h-3.5 w-3.5" />}
+          {poll.quiz_mode ? (
+            <Trophy className="h-3.5 w-3.5" />
+          ) : (
+            <BarChart3 className="h-3.5 w-3.5" />
+          )}
         </span>
         <div className="min-w-0 flex-1">
           <p className="break-words text-sm font-semibold leading-snug">{poll.question}</p>
@@ -78,7 +81,7 @@ export function PollCard({ postId, className }: PollCardProps) {
               {poll.quiz_mode
                 ? 'Viktorina'
                 : poll.allow_multiple
-                  ? "Ko'p tanlovli"
+                  ? 'Ko‘p tanlovli'
                   : 'Bitta javob'}
             </span>
             {poll.is_anonymous && (
@@ -88,8 +91,8 @@ export function PollCard({ postId, className }: PollCardProps) {
             )}
             <span>
               {poll.allow_multiple
-                ? `${poll.total_voters} ishtirokchi`
-                : `${poll.total_votes} ovoz`}
+                ? poll.total_voters + ' ishtirokchi'
+                : poll.total_votes + ' ovoz'}
             </span>
             {poll.closes_at && <span>{remainingLabel(poll.closes_at)}</span>}
           </p>
@@ -120,7 +123,7 @@ export function PollCard({ postId, className }: PollCardProps) {
                 revealQuiz && isWrongPick && 'border-destructive',
               )}
             >
-              {/* Natija to'ldirmasi */}
+              {/* Natija to‘ldirmasi */}
               {showResults && (
                 <span
                   aria-hidden
@@ -134,7 +137,7 @@ export function PollCard({ postId, className }: PollCardProps) {
                           ? 'bg-primary/15'
                           : 'bg-muted/70',
                   )}
-                  style={{ width: `${percent}%` }}
+                  style={{ width: percent + '%' }}
                 />
               )}
 
@@ -188,13 +191,13 @@ export function PollCard({ postId, className }: PollCardProps) {
 
       {closed && (
         <p className="mt-2.5 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <CircleSlash className="h-3.5 w-3.5" /> So\u2018rovnoma yakunlangan
+          <CircleSlash className="h-3.5 w-3.5" /> So‘rovnoma yakunlangan
         </p>
       )}
 
       {!closed && !showResults && (
         <p className="mt-2.5 text-xs text-muted-foreground">
-          Natijalarni ko\u2018rish uchun ovoz bering
+          Natijalarni ko‘rish uchun ovoz bering
         </p>
       )}
     </div>
