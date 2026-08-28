@@ -30,9 +30,11 @@ import { useScheduledMessages } from '@/hooks/useScheduledMessages';
 import { useSelfChat } from '@/hooks/useSelfChat';
 import { useLiveLocation } from '@/hooks/useLiveLocation';
 import { useToast } from '@/hooks/use-toast';
+import { FolderChat } from '@/lib/chatFolders';
 
 // Komponentlar
 import { ChatListItem } from '@/components/messages/ChatListItem';
+import { ChatFolderBar, FolderBarChat } from '@/components/messages/ChatFolderBar';
 import { ChatHeader } from '@/components/messages/ChatHeader';
 import { EnhancedMessageBubble } from '@/components/messages/EnhancedMessageBubble';
 import { MessageInput } from '@/components/messages/MessageInput';
@@ -89,6 +91,13 @@ function formatDateLabel(dateString: string): string {
   }
 }
 
+/** Suhbat nomini aniqlash (papka tanlash oynasi uchun) */
+function conversationTitle(conv: Conversation): string {
+  if (conv.name) return conv.name;
+  const other = conv.other_participant;
+  return other?.display_name || other?.username || 'Foydalanuvchi';
+}
+
 export default function MessagesPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -100,6 +109,9 @@ export default function MessagesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showMobileChat, setShowMobileChat] = useState(false);
+  const [folderFilter, setFolderFilter] = useState<((chat: FolderChat) => boolean) | null>(
+    null
+  );
 
   // Xabar holati
   const [replyTo, setReplyTo] = useState<{
@@ -417,6 +429,21 @@ export default function MessagesPage() {
 
   const tabs = tabsBase.map((tab) => ({ ...tab, unread: tabUnreadCounts[tab.id] }));
 
+  // Papka paneli uchun chatlar
+  const folderChats = useMemo<FolderBarChat[]>(
+    () =>
+      allConversations.map((conv) => ({
+        id: conv.id,
+        type: conv.type,
+        unreadCount: conv.unread_count ?? 0,
+        isMuted: Boolean(conv.is_muted),
+        isPinned: Boolean(conv.is_pinned),
+        name: conversationTitle(conv),
+        avatarUrl: conv.avatar_url || conv.other_participant?.avatar_url || undefined,
+      })),
+    [allConversations]
+  );
+
   const filteredConversations = conversations.filter((conv) => {
     const isReq = Boolean((conv as any).is_request);
     if (activeTab === 'requests') {
@@ -424,8 +451,48 @@ export default function MessagesPage() {
     } else if (isReq) {
       return false;
     }
+
+    // Papka filtri (arxiv va so'rovlar bo'limiga ta'sir qilmaydi)
+    if (folderFilter && activeTab !== 'requests' && activeTab !== 'archived') {
+      const matches = folderFilter({
+        id: conv.id,
+        type: conv.type,
+        unreadCount: conv.unread_count ?? 0,
+        isMuted: Boolean(conv.is_muted),
+        isPinned: Boolean(conv.is_pinned),
+      });
+      if (!matches) return false;
+    }
+
     return true;
   });
+
+  /** Papkadagi barcha chatlarni ovozsiz qilish */
+  const handleMuteFolderChats = async (chatIds: string[]) => {
+    if (chatIds.length === 0) {
+      toast({ title: 'Barcha chatlar allaqachon ovozsiz' });
+      return;
+    }
+    try {
+      await supabase
+        .from('conversation_participants')
+        .update({ is_muted: true })
+        .in('conversation_id', chatIds)
+        .eq('user_id', user?.id);
+
+      refreshConversations();
+      toast({
+        title: 'Sukut qilindi',
+        description: `${chatIds.length} ta chat ovozsiz qilindi`,
+      });
+    } catch {
+      toast({
+        title: 'Xatolik',
+        description: 'Amalni bajarib bo\u2018lmadi',
+        variant: 'destructive',
+      });
+    }
+  };
 
   const handleUnarchiveConversation = async (conversationId: string) => {
     try {
@@ -1418,35 +1485,47 @@ export default function MessagesPage() {
             </div>
           </div>
 
-          {/* Bo'limlar (qidiruv paytida yashiriladi) */}
+          {/* Bo'limlar va papkalar (qidiruv paytida yashiriladi) */}
           {!isSearching && (
-            <div
-              className="scrollbar-hide relative isolate flex flex-shrink-0 overflow-x-auto border-b border-border"
-              style={{ zIndex: 0 }}
-            >
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={cn(
-                    'tg-transition relative flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap px-3 py-3 text-sm font-medium active:bg-accent/50 md:py-2.5 md:text-xs',
-                    activeTab === tab.id
-                      ? 'text-primary'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  {tab.label}
-                  {tab.unread > 0 && (
-                    <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
-                      {tab.unread > 99 ? '99+' : tab.unread}
-                    </span>
-                  )}
-                  {activeTab === tab.id && (
-                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-                  )}
-                </button>
-              ))}
-            </div>
+            <>
+              <div
+                className="scrollbar-hide relative isolate flex flex-shrink-0 overflow-x-auto border-b border-border"
+                style={{ zIndex: 0 }}
+              >
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={cn(
+                      'tg-transition relative flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap px-3 py-3 text-sm font-medium active:bg-accent/50 md:py-2.5 md:text-xs',
+                      activeTab === tab.id
+                        ? 'text-primary'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    {tab.label}
+                    {tab.unread > 0 && (
+                      <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+                        {tab.unread > 99 ? '99+' : tab.unread}
+                      </span>
+                    )}
+                    {activeTab === tab.id && (
+                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {activeTab !== 'requests' && activeTab !== 'archived' && (
+                <div className="flex-shrink-0 border-b border-border">
+                  <ChatFolderBar
+                    chats={folderChats}
+                    onFilterChange={(predicate) => setFolderFilter(() => predicate)}
+                    onMuteChats={handleMuteFolderChats}
+                  />
+                </div>
+              )}
+            </>
           )}
         </>
       )}
@@ -1514,7 +1593,7 @@ export default function MessagesPage() {
             ) : (
               <>
                 <MessageCircle className="mb-3 h-10 w-10 opacity-50" />
-                <p className="text-sm">Hozircha suhbatlar yo'q</p>
+                <p className="text-sm">Bu papkada suhbat yo'q</p>
                 <Button variant="link" className="mt-2" onClick={() => setShowCreateDialog(true)}>
                   Yangi suhbat boshlash
                 </Button>
