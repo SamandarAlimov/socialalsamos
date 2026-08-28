@@ -45,6 +45,17 @@ export interface EmbedInfo {
   thumbnail?: string;
   /** Vertikal (Reels/Shorts/TikTok) yoki gorizontal. */
   portrait?: boolean;
+  /**
+   * Media nisbati = width / height.
+   * 16/9 = 1.777, 4/3 = 1.333, 1/1 = 1, 4/5 = 0.8, 3/4 = 0.75, 9/16 = 0.5625.
+   */
+  aspectRatio?: number;
+  /**
+   * iframe ichidagi platformaga tegishli qo'shimcha UI (sarlavha, profil,
+   * like/comment tugmalari) balandligi - px. Shu joy hisobga olinmasa
+   * iframe ichida scroll paydo bo'ladi.
+   */
+  embedChrome?: number;
   siteName?: string;
 }
 
@@ -53,6 +64,8 @@ export interface LinkMeta {
   title?: string;
   description?: string;
   image?: string;
+  imageWidth?: number;
+  imageHeight?: number;
   video?: string;
   videoWidth?: number;
   videoHeight?: number;
@@ -104,24 +117,33 @@ export function detectEmbed(url: string): EmbedInfo {
 
   const ytId = youtubeId(url);
   if (ytId) {
+    const shorts = /shorts/.test(url);
     return {
       provider: 'youtube',
       id: ytId,
       // `playsinline` - iOS'da to'liq ekranga o'tib ketmasligi uchun.
       embedUrl: YT_EMBED + ytId + '?autoplay=1&playsinline=1&rel=0&modestbranding=1',
       thumbnail: YT_THUMB + ytId + '/hqdefault.jpg',
-      portrait: /shorts/.test(url),
+      portrait: shorts,
+      aspectRatio: shorts ? 9 / 16 : 16 / 9,
       siteName: 'YouTube',
     };
   }
 
   const ig = instagramShortcode(url);
   if (ig) {
+    const portrait = ig.kind !== 'p';
     return {
       provider: 'instagram',
       id: ig.id,
-      embedUrl: IG_BASE + ig.kind + '/' + ig.id + '/embed/captioned/',
-      portrait: ig.kind !== 'p',
+      // `captioned` emas: izoh matni balandligi oldindan noma'lum bo'lgani
+      // uchun iframe ichida scroll paydo bo'ladi.
+      embedUrl: IG_BASE + ig.kind + '/' + ig.id + '/embed/',
+      portrait,
+      // Reels/IGTV - 9:16, oddiy post - 4:5 (Instagram'ning asosiy nisbati).
+      aspectRatio: portrait ? 9 / 16 : 4 / 5,
+      // Instagram embed'da yuqorida profil satri, pastda harakatlar satri bor.
+      embedChrome: 108,
       siteName: 'Instagram',
     };
   }
@@ -134,6 +156,9 @@ export function detectEmbed(url: string): EmbedInfo {
         id: match[1],
         embedUrl: TT_EMBED + match[1],
         portrait: true,
+        aspectRatio: 9 / 16,
+        // TikTok embed'da sarlavha va musiqa satri.
+        embedChrome: 132,
         siteName: 'TikTok',
       };
     }
@@ -146,6 +171,9 @@ export function detectEmbed(url: string): EmbedInfo {
         provider: 'telegram',
         id: match[1] + '/' + match[2],
         embedUrl: TG_BASE + match[1] + '/' + match[2] + '?embed=1&userpic=true&dark=1',
+        // Telegram post balandligi matnga bog'liq - 3:4 eng xolis tanlov.
+        aspectRatio: 3 / 4,
+        embedChrome: 72,
         siteName: 'Telegram',
       };
     }
@@ -158,6 +186,7 @@ export function detectEmbed(url: string): EmbedInfo {
         provider: 'vimeo',
         id: match[1],
         embedUrl: VIMEO_EMBED + match[1] + '?autoplay=1',
+        aspectRatio: 16 / 9,
         siteName: 'Vimeo',
       };
     }
@@ -174,6 +203,92 @@ export function detectEmbed(url: string): EmbedInfo {
   }
 
   return { provider: 'none' };
+}
+
+/* ------------------------------------------------------------------ */
+/* Nisbat (aspect ratio) hisobi                                        */
+/* ------------------------------------------------------------------ */
+
+/** Ijtimoiy tarmoqlarda uchraydigan standart nisbatlar (width / height). */
+export const STANDARD_ASPECT_RATIOS = [
+  9 / 16, // 0.5625 - Reels / Shorts / TikTok
+  3 / 4, // 0.75
+  4 / 5, // 0.8 - Instagram post
+  1, // 1:1
+  5 / 4, // 1.25
+  4 / 3, // 1.333
+  3 / 2, // 1.5
+  16 / 9, // 1.777
+  1.85,
+  2.35, // kinoskop
+];
+
+/** Juda cho'zilgan yoki juda baland mediani ham xavfsiz chegarada saqlaymiz. */
+const MIN_RATIO = 0.45;
+const MAX_RATIO = 2.5;
+
+/**
+ * Haqiqiy nisbatni eng yaqin standart nisbatga "yopishtiradi" (4% farq ichida),
+ * aks holda o'zini qaytaradi. Shu sababli 1080x1920 -> aniq 9:16,
+ * 1080x1350 -> aniq 4:5 bo'ladi va bir piksellik qiyshiqlik ko'rinmaydi.
+ */
+export function snapAspectRatio(ratio?: number | null): number | undefined {
+  if (!ratio || !Number.isFinite(ratio) || ratio <= 0) return undefined;
+  const clamped = Math.min(Math.max(ratio, MIN_RATIO), MAX_RATIO);
+
+  let best = clamped;
+  let bestDiff = Number.POSITIVE_INFINITY;
+  for (const candidate of STANDARD_ASPECT_RATIOS) {
+    const diff = Math.abs(Math.log(clamped / candidate));
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = candidate;
+    }
+  }
+  return bestDiff <= 0.04 ? best : clamped;
+}
+
+function ratioFrom(width?: number, height?: number): number | undefined {
+  if (!width || !height || !Number.isFinite(width) || !Number.isFinite(height)) {
+    return undefined;
+  }
+  if (width <= 0 || height <= 0) return undefined;
+  return width / height;
+}
+
+/**
+ * Media uchun eng ishonchli nisbatni tanlaydi.
+ *
+ * Ustuvorlik:
+ *  1. `og:video:width/height` (server metama'lumoti)
+ *  2. brauzer o'qigan haqiqiy o'lcham (video/rasm yuklangandan keyin)
+ *  3. `og:image:width/height`
+ *  4. provider bo'yicha standart nisbat (Reels -> 9:16, YouTube -> 16:9 ...)
+ *  5. 16:9
+ */
+export function resolveAspectRatio(input: {
+  embed?: EmbedInfo;
+  meta?: LinkMeta;
+  /** Brauzer o'qigan haqiqiy nisbat (videoWidth/videoHeight yoki naturalWidth/naturalHeight). */
+  natural?: number;
+  fallback?: number;
+}): number {
+  const { embed, meta, natural, fallback } = input;
+
+  const candidates: Array<number | undefined> = [
+    ratioFrom(meta?.videoWidth, meta?.videoHeight),
+    natural,
+    ratioFrom(meta?.imageWidth, meta?.imageHeight),
+    embed?.aspectRatio,
+    embed?.portrait ? 9 / 16 : undefined,
+    fallback,
+  ];
+
+  for (const candidate of candidates) {
+    const snapped = snapAspectRatio(candidate);
+    if (snapped) return snapped;
+  }
+  return 16 / 9;
 }
 
 /* ------------------------------------------------------------------ */
