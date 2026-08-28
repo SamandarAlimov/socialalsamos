@@ -1,9 +1,11 @@
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { TelegramLinkPreview } from './TelegramLinkPreview';
+import { MediaAlbum } from './MediaAlbum';
 import { FormattedBlocks } from '@/components/chat/FormattedBlocks';
 import { ArticleMessage } from '@/components/chat/ArticleMessage';
 import { parseArticlePayload } from '@/lib/messageFormat';
+import { parseAlbumPayload } from '@/lib/mediaAlbum';
 
 interface MessageContentProps {
   content: string;
@@ -15,23 +17,33 @@ const URL_REGEX = /https?:\/\/[^\s<]+[^<.,:;"')\]\s]/g;
 
 /**
  * Xabar matni: Telegram uslubidagi formatlash (qalin, kursiv, spoiler, kod,
- * iqtibos, ro'yxat, kod bloki), mention/hashtag/havolalar, animatsion emojilar
- * va "maqola" (article) xabarlari.
+ * iqtibos, ro'yxat, kod bloki), mention/hashtag/havolalar, animatsion emojilar,
+ * albom (bir nechta rasm/video) va "maqola" (article) xabarlari.
  */
 export function MessageContent({ content, isMine, className }: MessageContentProps) {
   const article = useMemo(() => parseArticlePayload(content), [content]);
+  const album = useMemo(() => (article ? null : parseAlbumPayload(content)), [content, article]);
 
   const links = useMemo(() => {
-    if (article) return [];
+    if (article || album) return [];
     const found = content.match(URL_REGEX) || [];
     return Array.from(new Set(found));
-  }, [content, article]);
+  }, [content, article, album]);
 
   // Maqola xabari - alohida karta va to'liq o'qish oynasi
   if (article) {
     return (
       <div className={cn('min-w-0 max-w-full', className)}>
         <ArticleMessage article={article} isMine={isMine} />
+      </div>
+    );
+  }
+
+  // Albom - bir nechta rasm/video bitta xabarda (Telegramdek mozaik to'r)
+  if (album) {
+    return (
+      <div className={cn('min-w-0 max-w-full', className)}>
+        <MediaAlbum album={album} isMine={isMine} />
       </div>
     );
   }
