@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { toast } from '@/hooks/use-toast';
 
 interface Reaction {
   id: string;
@@ -109,13 +108,12 @@ export function useMessageReactions(messageId: string | null) {
       // Allaqachon qo'yilgan bo'lsa - hech narsa qilmaymiz
       if (mine.some((r) => r.emoji === emoji)) return;
 
+      // Chegara: maksimal 3 ta. Telegramdek jimgina eng eskisini almashtiramiz.
       if (mine.length >= MAX_USER_REACTIONS) {
-        toast({
-          title: 'Reaksiya chegarasi',
-          description:
-            'Bitta xabarga maksimal ' + MAX_USER_REACTIONS + ' ta reaksiya qo\u2019yish mumkin.',
-        });
-        return;
+        const oldest = mine
+          .slice()
+          .sort((a, b) => a.created_at.localeCompare(b.created_at))[0];
+        if (oldest) await removeReaction(oldest.emoji);
       }
 
       // Optimistik qo'shish
@@ -138,7 +136,7 @@ export function useMessageReactions(messageId: string | null) {
         fetchReactions();
       }
     },
-    [messageId, user, reactions, fetchReactions]
+    [messageId, user, reactions, fetchReactions, removeReaction]
   );
 
   const toggleReaction = useCallback(
@@ -154,7 +152,7 @@ export function useMessageReactions(messageId: string | null) {
     [reactions, user, addReaction, removeReaction]
   );
 
-  // Emoji bo'yicha guruhlash (qo'yilgan vaqt tartibida)
+  // Emoji bo'yicha guruhlash
   const groupedReactions: ReactionGroup[] = useMemo(() => {
     return reactions.reduce((groups, reaction) => {
       const existing = groups.find((g) => g.emoji === reaction.emoji);

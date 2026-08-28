@@ -1,15 +1,90 @@
 import { useEffect, useRef, useCallback, useState, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Reply, Forward, Edit, Pin, PinOff, Trash2, CheckSquare, Copy, Download, CheckCheck, Link } from 'lucide-react';
+import {
+  Reply,
+  Forward,
+  Edit,
+  Pin,
+  PinOff,
+  Trash2,
+  CheckSquare,
+  Copy,
+  Download,
+  CheckCheck,
+  Link,
+  ChevronDown,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AnimatedEmoji } from '@/components/emoji/AnimatedEmoji';
-import { EmojiPicker } from '@/components/EmojiPicker';
 import { QUICK_REACTIONS } from '@/lib/animatedEmoji';
 
-const QUICK_EMOJIS = QUICK_REACTIONS;
+/** Bosib turishda darhol ko'rinadigan 7 ta reaksiya (Telegramdek) */
+const QUICK_EMOJIS = QUICK_REACTIONS.slice(0, 7);
 
+/** "Ko'proq" bosilganda ochiladigan to'liq reaksiya to'plami (Telegram tartibida) */
+const ALL_REACTIONS = [
+  '\u{1F44D}',
+  '\u{1F44E}',
+  '\u2764\uFE0F',
+  '\u{1F525}',
+  '\u{1F970}',
+  '\u{1F44F}',
+  '\u{1F601}',
+  '\u{1F914}',
+  '\u{1F92F}',
+  '\u{1F631}',
+  '\u{1F92C}',
+  '\u{1F622}',
+  '\u{1F389}',
+  '\u{1F929}',
+  '\u{1F92E}',
+  '\u{1F4A9}',
+  '\u{1F64F}',
+  '\u{1F44C}',
+  '\u{1F54A}\uFE0F',
+  '\u{1F921}',
+  '\u{1F971}',
+  '\u{1F974}',
+  '\u{1F60D}',
+  '\u{1F433}',
+  '\u{1F31A}',
+  '\u{1F32D}',
+  '\u{1F4AF}',
+  '\u{1F923}',
+  '\u26A1\uFE0F',
+  '\u{1F34C}',
+  '\u{1F3C6}',
+  '\u{1F494}',
+  '\u{1F928}',
+  '\u{1F610}',
+  '\u{1F353}',
+  '\u{1F37E}',
+  '\u{1F48B}',
+  '\u{1F608}',
+  '\u{1F634}',
+  '\u{1F62D}',
+  '\u{1F913}',
+  '\u{1F47B}',
+  '\u{1F440}',
+  '\u{1F648}',
+  '\u{1F607}',
+  '\u{1F628}',
+  '\u{1F91D}',
+  '\u270D\uFE0F',
+  '\u{1F917}',
+  '\u{1F385}',
+  '\u2603\uFE0F',
+  '\u{1F485}',
+  '\u{1F92A}',
+  '\u{1F5FF}',
+  '\u{1F192}',
+  '\u{1F498}',
+  '\u{1F649}',
+  '\u{1F984}',
+  '\u{1F618}',
+];
 
 interface TelegramStyleContextMenuProps {
   isOpen: boolean;
@@ -34,7 +109,7 @@ interface TelegramStyleContextMenuProps {
   anchorRect?: DOMRect | null;
 }
 
-const MENU_WIDTH = 240;
+const MENU_WIDTH = 244;
 const MENU_GAP = 8;
 const VIEWPORT_PADDING = 12;
 
@@ -61,11 +136,20 @@ export function TelegramStyleContextMenu({
 }: TelegramStyleContextMenuProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
-  const handleAction = useCallback((action?: () => void) => {
-    if (action) action();
-    onClose();
-  }, [onClose]);
+  const handleAction = useCallback(
+    (action?: () => void) => {
+      if (action) action();
+      onClose();
+    },
+    [onClose]
+  );
+
+  // Har ochilishda yopilgan holatdan boshlanadi
+  useEffect(() => {
+    if (!isOpen) setExpanded(false);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -76,7 +160,7 @@ export function TelegramStyleContextMenu({
     return () => document.removeEventListener('keydown', handleEsc);
   }, [isOpen, onClose]);
 
-  // Anchored positioning (Android / Telegram Desktop style)
+  // Anchored positioning (Android / Telegram Desktop uslubi)
   useLayoutEffect(() => {
     if (!isOpen) return;
     const compute = () => {
@@ -94,13 +178,11 @@ export function TelegramStyleContextMenu({
         return;
       }
 
-      // Horizontal: align to bubble side, clamp to viewport
-      let left = isMine
-        ? anchorRect.right - measuredWidth
-        : anchorRect.left;
+      // Gorizontal: pufakning tomoniga tekislanadi, ekrandan chiqmaydi
+      let left = isMine ? anchorRect.right - measuredWidth : anchorRect.left;
       left = Math.min(Math.max(left, VIEWPORT_PADDING), vw - measuredWidth - VIEWPORT_PADDING);
 
-      // Vertical: prefer below bubble, otherwise above, otherwise clamp
+      // Vertikal: avval pastga, joy bo'lmasa yuqoriga, aks holda ekranga sig'diriladi
       const spaceBelow = vh - anchorRect.bottom - VIEWPORT_PADDING;
       const spaceAbove = anchorRect.top - VIEWPORT_PADDING;
       let top: number;
@@ -114,7 +196,7 @@ export function TelegramStyleContextMenu({
       setPosition({ top, left });
     };
     compute();
-    // Re-measure after content paints
+    // Kontent chizilgandan keyin qayta o'lchash
     const id = requestAnimationFrame(compute);
     window.addEventListener('resize', compute);
     window.addEventListener('scroll', compute, true);
@@ -123,7 +205,7 @@ export function TelegramStyleContextMenu({
       window.removeEventListener('resize', compute);
       window.removeEventListener('scroll', compute, true);
     };
-  }, [isOpen, anchorRect, isMine]);
+  }, [isOpen, anchorRect, isMine, expanded]);
 
   const menuItems: {
     icon: typeof Reply;
@@ -135,23 +217,41 @@ export function TelegramStyleContextMenu({
 
   if (onReply) menuItems.push({ icon: Reply, label: 'Javob yozish', action: onReply });
   if (onCopy) menuItems.push({ icon: Copy, label: 'Nusxalash', action: onCopy });
-  if (hasMedia && onDownload) menuItems.push({ icon: Download, label: 'Saqlash', action: onDownload });
+  if (hasMedia && onDownload)
+    menuItems.push({ icon: Download, label: 'Saqlash', action: onDownload });
   if (isMine && onEdit) menuItems.push({ icon: Edit, label: 'Tahrirlash', action: onEdit });
-  if (onPin) menuItems.push({ icon: isPinned ? PinOff : Pin, label: isPinned ? 'Olib tashlash' : 'Qadash', action: onPin });
-  if (onCopyLink) menuItems.push({ icon: Link, label: 'Havolani nusxalash', action: onCopyLink });
+  if (onPin)
+    menuItems.push({
+      icon: isPinned ? PinOff : Pin,
+      label: isPinned ? 'Olib tashlash' : 'Qadash',
+      action: onPin,
+    });
+  if (onCopyLink)
+    menuItems.push({ icon: Link, label: 'Havolani nusxalash', action: onCopyLink });
   if (onForward) menuItems.push({ icon: Forward, label: 'Uzatish', action: onForward });
-  if (isMine && onDelete) menuItems.push({ icon: Trash2, label: "O'chirish", action: onDelete, destructive: true, separator: 'top' });
-  if (onSelect) menuItems.push({ icon: CheckSquare, label: 'Tanlash', action: onSelect, separator: 'top' });
+  if (isMine && onDelete)
+    menuItems.push({
+      icon: Trash2,
+      label: "O'chirish",
+      action: onDelete,
+      destructive: true,
+      separator: 'top',
+    });
+  if (onSelect)
+    menuItems.push({ icon: CheckSquare, label: 'Tanlash', action: onSelect, separator: 'top' });
 
   return createPortal(
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Transparent click-catcher — no blur, no darken (Android style) */}
+          {/* Shaffof bosish tutuvchisi - blur yoki qoraytirish yo'q */}
           <motion.div
             className="fixed inset-0 z-[100]"
             onClick={onClose}
-            onContextMenu={(e) => { e.preventDefault(); onClose(); }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              onClose();
+            }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -173,50 +273,86 @@ export function TelegramStyleContextMenu({
             exit={{ opacity: 0, scale: 0.94, y: -6 }}
             transition={{ type: 'spring', stiffness: 480, damping: 32, mass: 0.6 }}
           >
-            {/* Quick reactions bar — Telegram: scrollable full set + picker */}
+            {/* Tez reaksiyalar paneli - Telegramdek: 7 ta emoji + "ko'proq" tugmasi */}
             {onAddReaction && (
               <motion.div
-                className="flex items-center gap-0.5 pl-2 pr-1 py-1.5 rounded-2xl bg-popover border border-border shadow-lg"
+                className="rounded-2xl border border-border bg-popover shadow-lg"
                 initial={{ opacity: 0, scale: 0.7, y: -10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.85, y: -6 }}
                 transition={{ type: 'spring', stiffness: 520, damping: 26, mass: 0.5 }}
               >
-                <div className="flex items-center gap-0.5 overflow-x-auto overscroll-contain scrollbar-hide flex-1">
-                  {QUICK_EMOJIS.map((emoji, i) => (
-                    <motion.button
-                      key={emoji}
-                      className="p-1 rounded-full hover:scale-125 active:scale-90 transition-transform flex-shrink-0"
-                      onClick={() => handleAction(() => onAddReaction(emoji))}
-                      initial={{ opacity: 0, scale: 0.5, y: -6 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      transition={{
-                        delay: 0.04 + Math.min(i, 8) * 0.025,
-                        type: 'spring',
-                        stiffness: 600,
-                        damping: 20,
-                      }}
-                    >
-                      <AnimatedEmoji emoji={emoji} size={24} />
-                    </motion.button>
-                  ))}
+                <div className="flex items-center gap-0.5 py-1.5 pl-2 pr-1">
+                  <div className="flex flex-1 items-center gap-0.5 overflow-hidden">
+                    {QUICK_EMOJIS.map((emoji, i) => (
+                      <motion.button
+                        key={emoji}
+                        className="flex-shrink-0 rounded-full p-1 transition-transform hover:scale-125 active:scale-90"
+                        onClick={() => handleAction(() => onAddReaction(emoji))}
+                        initial={{ opacity: 0, scale: 0.5, y: -6 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        transition={{
+                          delay: 0.04 + Math.min(i, 8) * 0.025,
+                          type: 'spring',
+                          stiffness: 600,
+                          damping: 20,
+                        }}
+                      >
+                        <AnimatedEmoji emoji={emoji} size={24} />
+                      </motion.button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExpanded((prev) => !prev);
+                    }}
+                    aria-label={expanded ? 'Yopish' : "Ko'proq reaksiya"}
+                    className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-muted transition-colors hover:bg-accent"
+                  >
+                    <ChevronDown
+                      className={cn(
+                        'h-4 w-4 text-muted-foreground transition-transform',
+                        expanded && 'rotate-180'
+                      )}
+                    />
+                  </button>
                 </div>
-                <EmojiPicker
-                  onSelect={(emoji) => handleAction(() => onAddReaction(emoji))}
-                  trigger={
-                    <button className="flex-shrink-0 h-7 w-7 flex items-center justify-center rounded-full bg-muted hover:bg-accent transition-colors">
-                      <span className="text-sm leading-none text-muted-foreground">+</span>
-                    </button>
-                  }
-                />
+
+                {/* To'liq to'plam - panel ichida ochiladi, ekrandan chiqib ketmaydi */}
+                <AnimatePresence initial={false}>
+                  {expanded && (
+                    <motion.div
+                      key="all-reactions"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
+                      className="overflow-hidden"
+                    >
+                      <div className="border-t border-border" />
+                      <div className="scrollbar-hide max-h-[196px] overflow-y-auto overscroll-contain px-1.5 py-1.5">
+                        <div className="grid grid-cols-7 gap-0.5">
+                          {ALL_REACTIONS.map((emoji) => (
+                            <button
+                              key={emoji}
+                              onClick={() => handleAction(() => onAddReaction(emoji))}
+                              className="flex items-center justify-center rounded-lg p-1 transition-transform hover:scale-110 active:scale-95"
+                            >
+                              <AnimatedEmoji emoji={emoji} size={24} />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             )}
 
-
-
-            {/* Action menu — solid surface, no blur */}
+            {/* Amallar menyusi */}
             <motion.div
-              className="rounded-2xl overflow-hidden bg-popover border border-border shadow-xl"
+              className="overflow-hidden rounded-2xl border border-border bg-popover shadow-xl"
               initial={{ opacity: 0, scale: 0.94, y: -8 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: -4 }}
@@ -225,14 +361,16 @@ export function TelegramStyleContextMenu({
               {readInfo && (
                 <>
                   <motion.button
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-accent active:bg-accent/80 transition-colors"
-                    onClick={() => { if (onViewInfo) handleAction(onViewInfo); }}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-accent active:bg-accent/80"
+                    onClick={() => {
+                      if (onViewInfo) handleAction(onViewInfo);
+                    }}
                     initial={{ opacity: 0, x: -6 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.08, duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
                   >
-                    <CheckCheck className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <span className="text-[14px] font-medium text-foreground/90 flex-1 truncate">
+                    <CheckCheck className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                    <span className="flex-1 truncate text-[14px] font-medium text-foreground/90">
                       {readInfo}
                     </span>
                     {readAvatars && readAvatars.length > 0 && (
@@ -240,7 +378,7 @@ export function TelegramStyleContextMenu({
                         {readAvatars.slice(0, 3).map((avatar, i) => (
                           <Avatar key={i} className="h-5 w-5 border-2 border-popover">
                             <AvatarImage src={avatar.url} alt={avatar.name} />
-                            <AvatarFallback className="text-[9px] font-medium bg-muted text-muted-foreground">
+                            <AvatarFallback className="bg-muted text-[9px] font-medium text-muted-foreground">
                               {avatar.name?.[0] || '?'}
                             </AvatarFallback>
                           </Avatar>
@@ -255,13 +393,13 @@ export function TelegramStyleContextMenu({
               {menuItems.map((item, index) => {
                 const Icon = item.icon;
                 return (
-                  <div key={`${item.label}-${index}`}>
+                  <div key={item.label + '-' + index}>
                     {item.separator === 'top' && <div className="border-t border-border" />}
                     <motion.button
                       className={cn(
-                        "w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors",
-                        "hover:bg-accent active:bg-accent/80",
-                        item.destructive && "text-destructive"
+                        'flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors',
+                        'hover:bg-accent active:bg-accent/80',
+                        item.destructive && 'text-destructive'
                       )}
                       onClick={() => handleAction(item.action)}
                       initial={{ opacity: 0, x: isMine ? 8 : -8 }}
@@ -274,15 +412,15 @@ export function TelegramStyleContextMenu({
                     >
                       <Icon
                         className={cn(
-                          "h-[18px] w-[18px] flex-shrink-0",
-                          item.destructive ? "text-destructive" : "text-foreground/70"
+                          'h-[18px] w-[18px] flex-shrink-0',
+                          item.destructive ? 'text-destructive' : 'text-foreground/70'
                         )}
                         strokeWidth={2}
                       />
                       <span
                         className={cn(
-                          "text-[14px] font-medium flex-1",
-                          item.destructive ? "text-destructive" : "text-foreground/90"
+                          'flex-1 text-[14px] font-medium',
+                          item.destructive ? 'text-destructive' : 'text-foreground/90'
                         )}
                       >
                         {item.label}
