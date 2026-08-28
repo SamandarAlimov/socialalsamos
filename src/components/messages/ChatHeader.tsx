@@ -21,9 +21,10 @@ import {
   Settings2,
   Rocket,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Conversation } from '@/hooks/useMessages';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { formatLastSeen } from '@/utils/formatLastSeen';
 import { useOnlinePresence } from '@/contexts/OnlinePresenceContext';
@@ -60,6 +61,57 @@ interface ChatHeaderProps {
   isAdmin?: boolean;
 }
 
+/** Guruh/kanal a'zolari (id'lar bilan) - onlayn sonini hisoblash uchun */
+function useConversationMembers(conversationId: string, enabled: boolean) {
+  const [memberIds, setMemberIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!enabled || !conversationId) {
+      setMemberIds([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const load = async () => {
+      const { data, error } = await supabase
+        .from('conversation_participants')
+        .select('user_id')
+        .eq('conversation_id', conversationId)
+        .limit(2000);
+
+      if (!cancelled && !error && data) {
+        setMemberIds(data.map((row) => row.user_id as string));
+      }
+    };
+
+    load();
+
+    const channel = supabase
+      .channel('conv-members-' + conversationId)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversation_participants',
+          filter: 'conversation_id=eq.' + conversationId,
+        },
+        () => {
+          load();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [conversationId, enabled]);
+
+  return memberIds;
+}
+
 export function ChatHeader({
   conversation,
   typingUsers,
@@ -85,7 +137,8 @@ export function ChatHeader({
   const { blockedIds, refresh: refreshBlocks } = useBlockedUsers();
 
   const isChannel = conversation.type === 'channel';
-  const isGroupOrChannel = conversation.type === 'group' || conversation.type === 'channel';
+  const isGroup = conversation.type === 'group';
+  const isGroupOrChannel = isGroup || isChannel;
   const isSelfChat =
     conversation.is_self_chat ||
     (conversation.type === 'private' && conversation.other_participant?.id === user?.id);
@@ -97,6 +150,13 @@ export function ChatHeader({
   const realtimeIsOnline = otherUserId ? isUserOnline(otherUserId) : false;
   const realtimeLastSeen = conversation.other_participant?.last_seen || null;
   const isBlocked = otherUserId ? blockedIds.has(otherUserId) : false;
+
+  const memberIds = useConversationMembers(conversation.id, isGroupOrChannel);
+  const memberCount = memberIds.length;
+  const onlineCount = useMemo(
+    () => memberIds.filter((id) => id !== user?.id && isUserOnline(id)).length,
+    [memberIds, isUserOnline, user?.id]
+  );
 
   useEffect(() => {
     refreshBlocks();
@@ -125,9 +185,24 @@ export function ChatHeader({
       ? conversation.other_participant?.avatar_url
       : conversation.avatar_url;
 
+  /** Telegramdek: "124 obunachi", "12 a'zo, 3 onlayn" */
+  const groupSubtitle = () => {
+    if (isChannel) {
+      if (!memberCount) return 'kanal';
+      return memberCount + ' obunachi';
+    }
+    if (!memberCount) return 'guruh';
+    const base = memberCount + " a'zo";
+    return onlineCount > 0 ? base + ', ' + onlineCount + ' onlayn' : base;
+  };
+
   const getStatus = () => {
     if (typingUsers.length > 0) {
-      return <span className="animate-pulse text-primary">yozmoqda...</span>;
+      const label =
+        isGroupOrChannel && typingUsers.length > 1
+          ? typingUsers.length + ' kishi yozmoqda...'
+          : 'yozmoqda...';
+      return <span className="animate-pulse text-primary">{label}</span>;
     }
 
     if (isSelfChat) {
@@ -142,8 +217,7 @@ export function ChatHeader({
       return formatLastSeen(lastSeenTime, false);
     }
 
-    if (conversation.type === 'group') return 'guruh';
-    if (conversation.type === 'channel') return 'kanal';
+    if (isGroupOrChannel) return groupSubtitle();
     return null;
   };
 
@@ -153,7 +227,7 @@ export function ChatHeader({
   // Guruh/kanalda sarlavha bosilganda sozlamalar (ma'lumot) oynasi ochiladi.
   const profilePath =
     conversation.type === 'private' && !isSelfChat && (otherUsername || otherUserId)
-      ? `/user/${otherUsername || otherUserId}`
+      ? '/user/' + (otherUsername || otherUserId)
       : null;
 
   const handleHeaderClick = () => {
@@ -173,17 +247,17 @@ export function ChatHeader({
           <AvatarFallback
             className={cn(
               'text-primary-foreground',
-              conversation.type === 'group' && 'bg-blue-500',
-              conversation.type === 'channel' && 'bg-violet-500',
+              isGroup && 'bg-blue-500',
+              isChannel && 'bg-violet-500',
               isSelfChat && 'bg-muted text-foreground',
               conversation.type === 'private' && !isSelfChat && 'bg-primary'
             )}
           >
             {isSelfChat ? (
               <Bookmark className="h-5 w-5" />
-            ) : conversation.type === 'group' ? (
+            ) : isGroup ? (
               <Users className="h-5 w-5" />
-            ) : conversation.type === 'channel' ? (
+            ) : isChannel ? (
               <Megaphone className="h-5 w-5" />
             ) : (
               getName()[0]?.toUpperCase()
@@ -205,6 +279,16 @@ export function ChatHeader({
           <h2 className="truncate text-sm font-semibold sm:text-[15px]">{getName()}</h2>
           {conversation.type === 'private' && conversation.other_participant?.is_verified && (
             <VerifiedBadge size="xs" />
+          )}
+          {isChannel && (
+            <span className="hidden shrink-0 rounded-full bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-medium text-violet-500 sm:inline">
+              Kanal
+            </span>
+          )}
+          {isGroup && (
+            <span className="hidden shrink-0 rounded-full bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-medium text-blue-500 sm:inline">
+              Guruh
+            </span>
           )}
         </div>
         <p className="truncate text-xs text-muted-foreground">{getStatus()}</p>
@@ -252,21 +336,23 @@ export function ChatHeader({
               size="icon"
               onClick={onAudioCall}
               aria-label="Audio qo'ng'iroq"
-              title="Audio qo'ng'iroq"
+              title={isGroup ? "Guruh qo'ng'irog'i" : "Audio qo'ng'iroq"}
               className="h-9 w-9 rounded-full hover:bg-muted sm:h-10 sm:w-10"
             >
               <Phone className="h-[18px] w-[18px] text-muted-foreground sm:h-5 sm:w-5" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onVideoCall}
-              aria-label="Video qo'ng'iroq"
-              title="Video qo'ng'iroq"
-              className="h-9 w-9 rounded-full hover:bg-muted sm:h-10 sm:w-10"
-            >
-              <Video className="h-[18px] w-[18px] text-muted-foreground sm:h-5 sm:w-5" />
-            </Button>
+            {!isGroup && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onVideoCall}
+                aria-label="Video qo'ng'iroq"
+                title="Video qo'ng'iroq"
+                className="h-9 w-9 rounded-full hover:bg-muted sm:h-10 sm:w-10"
+              >
+                <Video className="h-[18px] w-[18px] text-muted-foreground sm:h-5 sm:w-5" />
+              </Button>
+            )}
           </>
         )}
         {onSearch && (
@@ -355,7 +441,10 @@ export function ChatHeader({
                 {onManageMembers && (
                   <DropdownMenuItem onClick={onManageMembers}>
                     <Users2 className="mr-2 h-4 w-4" />
-                    A'zolarni boshqarish
+                    {isChannel ? 'Obunachilarni boshqarish' : "A'zolarni boshqarish"}
+                    {memberCount > 0 && (
+                      <span className="ml-auto text-xs text-muted-foreground">{memberCount}</span>
+                    )}
                   </DropdownMenuItem>
                 )}
                 {onLeave && (
@@ -363,7 +452,7 @@ export function ChatHeader({
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={onLeave} className="text-destructive">
                       <LogOut className="mr-2 h-4 w-4" />
-                      {conversation.type === 'group' ? 'Guruhdan chiqish' : 'Kanaldan chiqish'}
+                      {isGroup ? 'Guruhdan chiqish' : 'Kanaldan chiqish'}
                     </DropdownMenuItem>
                   </>
                 )}
@@ -403,7 +492,7 @@ export function ChatHeader({
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
           conversationId={conversation.id}
-          conversationType={conversation.type === 'channel' ? 'channel' : 'group'}
+          conversationType={isChannel ? 'channel' : 'group'}
           isAdmin={Boolean(isAdmin)}
           initialTab={settingsTabBoost ? 'boost' : 'general'}
         />
