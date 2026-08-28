@@ -12,6 +12,7 @@ import {
   albumLayout,
   formatAlbumDuration,
 } from '@/lib/mediaAlbum';
+import { snapAspectRatio } from '@/lib/linkEmbed';
 import { FormattedText } from '@/components/chat/FormattedText';
 import { useMediaAutoDownload } from '@/hooks/useMediaAutoDownload';
 import { cn } from '@/lib/utils';
@@ -22,20 +23,31 @@ interface MediaAlbumProps {
   className?: string;
 }
 
+/** Vertikal (portret) media uchun maksimal balandlik */
+const MAX_PORTRAIT_HEIGHT = 420;
+/** Gorizontal (landshaft) media uchun maksimal balandlik */
+const MAX_LANDSCAPE_HEIGHT = 320;
+
 /**
  * Telegramdagi albom ko'rinishi: mozaik to'r, "+N" belgisi,
  * to'liq ekranli ko'rish oynasi (chap/o'ng strelkalar bilan) va yuklab olish.
  *
  * Media avtomatik yuklab olish sozlamasi o'chirilgan bo'lsa,
  * rasm faqat bosilgandan keyin yuklanadi.
+ *
+ * Albomda BITTA media bo'lsa, mozaik katak ishlatilmaydi: ramka mediasining
+ * haqiqiy nisbatiga moslashadi (9:16, 3:4, 4:5, 1:1, 16:9 ...), shuning uchun
+ * vertikal video/rasm kesilmaydi va ichida scroll paydo bo'lmaydi.
  */
 export function MediaAlbum({ album, isMine, className }: MediaAlbumProps) {
   const { shouldAutoDownload } = useMediaAutoDownload();
   const layout = useMemo(() => albumLayout(album.items.length), [album.items.length]);
   const visibleItems = album.items.slice(0, layout.cells.length);
+  const single = album.items.length === 1 ? album.items[0] : null;
 
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [manuallyLoaded, setManuallyLoaded] = useState<Record<number, boolean>>({});
+  const [naturalRatio, setNaturalRatio] = useState<number | null>(null);
 
   const isLoadable = useCallback(
     (item: AlbumItem, index: number) => {
@@ -80,96 +92,192 @@ export function MediaAlbum({ album, isMine, className }: MediaAlbumProps) {
     };
   }, [viewerIndex, close, step]);
 
+  /** Media yuklanganda haqiqiy nisbat aniqlanadi va standart nisbatga tekislanadi */
+  const handleNatural = (width: number, height: number) => {
+    if (!width || !height) return;
+    const raw = width / height;
+    setNaturalRatio(snapAspectRatio(raw) || raw);
+  };
+
+  const singleRatio = naturalRatio ?? 1;
+  const singleMaxHeight = singleRatio < 1 ? MAX_PORTRAIT_HEIGHT : MAX_LANDSCAPE_HEIGHT;
+  const singleFrameStyle: React.CSSProperties = {
+    aspectRatio: String(singleRatio),
+    maxHeight: singleMaxHeight,
+    maxWidth: Math.round(singleMaxHeight * singleRatio),
+    width: '100%',
+  };
+
   const activeItem = viewerIndex === null ? null : album.items[viewerIndex];
 
   return (
     <div className={cn('w-full', className)}>
-      <div
-        className="grid gap-[2px] overflow-hidden rounded-2xl"
-        style={{
-          gridTemplateColumns: `repeat(${layout.columns}, minmax(0, 1fr))`,
-          gridAutoRows: layout.columns > 2 ? '80px' : '108px',
-          maxWidth: 360,
-        }}
-      >
-        {visibleItems.map((item, index) => {
-          const cell = layout.cells[index];
-          const loadable = isLoadable(item, index);
-          const isLast = index === visibleItems.length - 1;
-          const showHidden = isLast && layout.hiddenCount > 0;
-
-          return (
-            <button
-              key={`${item.url}-${index}`}
-              type="button"
-              onClick={() => {
-                if (!loadable) {
-                  setManuallyLoaded((prev) => ({ ...prev, [index]: true }));
-                  return;
-                }
-                setViewerIndex(index);
-              }}
-              className="relative overflow-hidden bg-muted no-drag"
-              style={{
-                gridColumn: `span ${cell.colSpan} / span ${cell.colSpan}`,
-                gridRow: `span ${cell.rowSpan} / span ${cell.rowSpan}`,
-              }}
-              title={item.name || (item.type === 'video' ? 'Video' : 'Rasm')}
-            >
-              {loadable ? (
-                item.type === 'video' ? (
-                  <>
-                    {item.thumb ? (
-                      <img
-                        src={item.thumb}
-                        alt={item.name || 'Video'}
-                        loading="lazy"
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <video
-                        src={item.url}
-                        muted
-                        playsInline
-                        preload="metadata"
-                        className="h-full w-full object-cover"
-                      />
-                    )}
-                    <span className="absolute inset-0 flex items-center justify-center bg-black/25">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/55">
-                        <Play className="h-4 w-4 translate-x-[1px] text-white" fill="white" />
-                      </span>
-                    </span>
-                    {item.duration ? (
-                      <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
-                        {formatAlbumDuration(item.duration)}
-                      </span>
-                    ) : null}
-                  </>
-                ) : (
+      {single ? (
+        /* Yolg'iz media - haqiqiy nisbatdagi ramka, kesilmaydi */
+        <button
+          type="button"
+          onClick={() => {
+            if (!isLoadable(single, 0)) {
+              setManuallyLoaded((prev) => ({ ...prev, 0: true }));
+              return;
+            }
+            setViewerIndex(0);
+          }}
+          className="relative block overflow-hidden rounded-2xl bg-muted no-drag"
+          style={singleFrameStyle}
+          title={single.name || (single.type === 'video' ? 'Video' : 'Rasm')}
+        >
+          {isLoadable(single, 0) ? (
+            single.type === 'video' ? (
+              <>
+                {single.thumb ? (
                   <img
-                    src={item.url}
-                    alt={item.name || 'Rasm'}
+                    src={single.thumb}
+                    alt={single.name || 'Video'}
                     loading="lazy"
+                    onLoad={(event) =>
+                      handleNatural(
+                        event.currentTarget.naturalWidth,
+                        event.currentTarget.naturalHeight
+                      )
+                    }
                     className="h-full w-full object-cover"
                   />
-                )
-              ) : (
-                <span className="flex h-full w-full flex-col items-center justify-center gap-1 bg-muted text-muted-foreground">
-                  <Download className="h-4 w-4" />
-                  <span className="text-[10px]">Yuklash</span>
+                ) : (
+                  <video
+                    src={single.url}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    onLoadedMetadata={(event) =>
+                      handleNatural(
+                        event.currentTarget.videoWidth,
+                        event.currentTarget.videoHeight
+                      )
+                    }
+                    className="h-full w-full object-cover"
+                  />
+                )}
+                <span className="absolute inset-0 flex items-center justify-center bg-black/20">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-black/55">
+                    <Play className="h-6 w-6 translate-x-[1px] text-white" fill="white" />
+                  </span>
                 </span>
-              )}
+                {single.duration ? (
+                  <span className="absolute bottom-2 left-2 rounded bg-black/60 px-1.5 py-0.5 text-[11px] font-medium text-white">
+                    {formatAlbumDuration(single.duration)}
+                  </span>
+                ) : null}
+              </>
+            ) : (
+              <img
+                src={single.url}
+                alt={single.name || 'Rasm'}
+                loading="lazy"
+                onLoad={(event) =>
+                  handleNatural(
+                    event.currentTarget.naturalWidth,
+                    event.currentTarget.naturalHeight
+                  )
+                }
+                className="h-full w-full object-cover"
+              />
+            )
+          ) : (
+            <span className="flex h-full w-full flex-col items-center justify-center gap-1 bg-muted text-muted-foreground">
+              <Download className="h-5 w-5" />
+              <span className="text-[11px]">Yuklash</span>
+            </span>
+          )}
+        </button>
+      ) : (
+        <div
+          className="grid gap-[2px] overflow-hidden rounded-2xl"
+          style={{
+            gridTemplateColumns: `repeat(${layout.columns}, minmax(0, 1fr))`,
+            gridAutoRows: layout.columns > 2 ? '80px' : '108px',
+            maxWidth: 360,
+          }}
+        >
+          {visibleItems.map((item, index) => {
+            const cell = layout.cells[index];
+            const loadable = isLoadable(item, index);
+            const isLast = index === visibleItems.length - 1;
+            const showHidden = isLast && layout.hiddenCount > 0;
 
-              {showHidden && (
-                <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-lg font-semibold text-white">
-                  +{layout.hiddenCount}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+            return (
+              <button
+                key={`${item.url}-${index}`}
+                type="button"
+                onClick={() => {
+                  if (!loadable) {
+                    setManuallyLoaded((prev) => ({ ...prev, [index]: true }));
+                    return;
+                  }
+                  setViewerIndex(index);
+                }}
+                className="relative overflow-hidden bg-muted no-drag"
+                style={{
+                  gridColumn: `span ${cell.colSpan} / span ${cell.colSpan}`,
+                  gridRow: `span ${cell.rowSpan} / span ${cell.rowSpan}`,
+                }}
+                title={item.name || (item.type === 'video' ? 'Video' : 'Rasm')}
+              >
+                {loadable ? (
+                  item.type === 'video' ? (
+                    <>
+                      {item.thumb ? (
+                        <img
+                          src={item.thumb}
+                          alt={item.name || 'Video'}
+                          loading="lazy"
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <video
+                          src={item.url}
+                          muted
+                          playsInline
+                          preload="metadata"
+                          className="h-full w-full object-cover"
+                        />
+                      )}
+                      <span className="absolute inset-0 flex items-center justify-center bg-black/25">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/55">
+                          <Play className="h-4 w-4 translate-x-[1px] text-white" fill="white" />
+                        </span>
+                      </span>
+                      {item.duration ? (
+                        <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                          {formatAlbumDuration(item.duration)}
+                        </span>
+                      ) : null}
+                    </>
+                  ) : (
+                    <img
+                      src={item.url}
+                      alt={item.name || 'Rasm'}
+                      loading="lazy"
+                      className="h-full w-full object-cover"
+                    />
+                  )
+                ) : (
+                  <span className="flex h-full w-full flex-col items-center justify-center gap-1 bg-muted text-muted-foreground">
+                    <Download className="h-4 w-4" />
+                    <span className="text-[10px]">Yuklash</span>
+                  </span>
+                )}
+
+                {showHidden && (
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-lg font-semibold text-white">
+                    +{layout.hiddenCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {album.caption && (
         <div

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ChatFolderTabs, SystemTab } from './ChatFolderTabs';
 import { ChatFolderManager } from './ChatFolderManager';
 import { ChatFolderChatPicker, FolderPickerChat } from './ChatFolderChatPicker';
+import { ArchivedChatsRow } from './ArchivedChatsRow';
 import { useChatFolders } from '@/hooks/useChatFolders';
 import { FolderChat, matchesChatFolder } from '@/lib/chatFolders';
 
@@ -28,6 +29,9 @@ interface ChatFolderBarProps {
 
 /**
  * Yakka varaq paneli - asosiy varaqlar + papkalar, butun mantiq shu komponentda.
+ *
+ * Panel ostida Telegramdek "Arxivlangan chatlar" qatori turadi: u chat
+ * ro'yxatining eng boshida ko'rinadi va arxiv bo'sh bo'lsa avtomatik yashiriladi.
  */
 export function ChatFolderBar({
   chats,
@@ -113,6 +117,16 @@ export function ChatFolderBar({
           setManagerOpen(true);
         }}
       />
+
+      {/* Telegramdek: ro'yxat boshidagi "Arxivlangan chatlar" qatori */}
+      {onSelectSystemTab && (
+        <ArchivedChatsRow
+          active={activeSystemTabId === 'archived'}
+          onOpen={() =>
+            onSelectSystemTab(activeSystemTabId === 'archived' ? 'all' : 'archived')
+          }
+        />
+      )}
 
       <ChatFolderManager
         open={managerOpen}

@@ -16,6 +16,7 @@ import { useFileUpload } from '@/hooks/useFileUpload';
 import { buildArticlePayload, estimateReadingMinutes } from '@/lib/messageFormat';
 import { FormatToolbar } from './FormatToolbar';
 import { FormattedBlocks } from './FormattedBlocks';
+import { TextareaFormatMenu } from './TextareaFormatMenu';
 
 interface ArticleComposerProps {
   open: boolean;
@@ -76,8 +77,9 @@ export function ArticleComposer({
         <DialogHeader className="px-4 pt-4 text-left">
           <DialogTitle>Maqola yozish</DialogTitle>
           <DialogDescription>
-            Uzun matnni formatlab, maqola ko'rinishida yuboring. Sarlavha, iqtibos, ro'yxat va kod
-            bloklari qo'llab-quvvatlanadi.
+            Uzun matnni formatlab, maqola ko'rinishida yuboring. Matnni tanlasangiz, tanlov ustida
+            suzuvchi formatlash menyusi chiqadi. Sarlavha, iqtibos, ro'yxat va kod bloklari
+            qo'llab-quvvatlanadi.
           </DialogDescription>
         </DialogHeader>
 
@@ -181,6 +183,11 @@ export function ArticleComposer({
             )}
           </div>
         </ScrollArea>
+
+        {/* Telegramdek: matn TANLANGANDA tanlov ustida suzuvchi menyu chiqadi */}
+        {!preview && (
+          <TextareaFormatMenu targetRef={bodyRef} value={body} onChange={setBody} extended />
+        )}
 
         <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>

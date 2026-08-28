@@ -7,6 +7,8 @@ import {
   downloadRemoteMedia,
   fetchLinkMeta,
   formatDuration,
+  resolveAspectRatio,
+  snapAspectRatio,
   suggestedFilename,
   type EmbedInfo,
   type LinkMeta,
@@ -39,6 +41,11 @@ const SITE_NAMES: Record<string, string> = {
   'spotify.com': 'Spotify',
   'vimeo.com': 'Vimeo',
 };
+
+/** Vertikal media uchun maksimal balandlik (Telegramdek ixcham). */
+const MAX_PORTRAIT_HEIGHT = 420;
+/** Gorizontal / kvadrat media uchun maksimal balandlik. */
+const MAX_LANDSCAPE_HEIGHT = 320;
 
 function hostOf(url: string): string {
   try {
@@ -108,6 +115,10 @@ function localMeta(url: string, embed: EmbedInfo): LinkMeta {
  *  - `og:video` topilsa -> haqiqiy `<video>` (to'liq boshqaruv + yuklab olish)
  *  - to'g'ridan-to'g'ri .mp4/.webm havolalari -> `<video>`
  *  - qolganlari -> klassik sarlavha/tavsif/rasm kartasi
+ *
+ * Media ramkasi HAR DOIM mediasining haqiqiy nisbatiga moslashadi
+ * (9:16, 3:4, 4:5, 1:1, 4:3, 16:9 ...), shuning uchun ichida scroll ham,
+ * kesilgan joy ham qolmaydi.
  */
 export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPreviewProps) {
   const embed = useMemo(() => detectEmbed(url), [url]);
@@ -115,11 +126,14 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
   const [playing, setPlaying] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  /** Brauzer o'qigan haqiqiy nisbat (video yoki poster yuklangandan keyin). */
+  const [naturalRatio, setNaturalRatio] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     setMeta(localMeta(url, embed));
     setPlaying(false);
     setImageFailed(false);
+    setNaturalRatio(undefined);
 
     let cancelled = false;
     fetchLinkMeta(url).then((remote) => {
@@ -135,6 +149,8 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
         if (remote.duration) next.duration = remote.duration;
         if (remote.videoWidth) next.videoWidth = remote.videoWidth;
         if (remote.videoHeight) next.videoHeight = remote.videoHeight;
+        if (remote.imageWidth) next.imageWidth = remote.imageWidth;
+        if (remote.imageHeight) next.imageHeight = remote.imageHeight;
         return next;
       });
     });
@@ -150,11 +166,22 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
   const poster = imageFailed ? undefined : meta.image || embed.thumbnail;
   const duration = formatDuration(meta.duration);
 
-  // Vertikal video (Reels / Shorts / TikTok) yoki gorizontal
-  const portrait =
-    embed.portrait ||
-    (Boolean(meta.videoWidth && meta.videoHeight) &&
-      (meta.videoHeight as number) > (meta.videoWidth as number));
+  /** Media nisbati: og:video -> haqiqiy o'lcham -> og:image -> provider -> 16:9 */
+  const ratio = useMemo(
+    () => resolveAspectRatio({ embed, meta, natural: naturalRatio }),
+    [embed, meta, naturalRatio]
+  );
+  const isPortrait = ratio < 0.95;
+  const maxMediaHeight = isPortrait ? MAX_PORTRAIT_HEIGHT : MAX_LANDSCAPE_HEIGHT;
+  const maxMediaWidth = Math.round(maxMediaHeight * ratio);
+
+  /**
+   * iframe ichidagi platforma UI'si (Instagram profil satri, TikTok izohi...)
+   * uchun qo'shimcha joy. `content-box` + `padding-bottom` bilan nisbat
+   * mediaga tegishli qismda saqlanadi, chrome esa pastdan qo'shiladi -
+   * natijada iframe ichida scroll bo'lmaydi.
+   */
+  const chrome = playing && !directVideo && embed.embedUrl ? embed.embedChrome || 0 : 0;
 
   const handleDownload = async () => {
     if (!directVideo || downloading) return;
@@ -169,12 +196,17 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
     }
   };
 
+  const frameStyle: React.CSSProperties = {
+    aspectRatio: String(ratio),
+    maxWidth: maxMediaWidth + 'px',
+    boxSizing: chrome ? 'content-box' : 'border-box',
+    paddingBottom: chrome ? chrome + 'px' : undefined,
+  };
+
   const mediaFrame = (
     <div
-      className={cn(
-        'relative w-full overflow-hidden rounded-lg bg-black/90',
-        portrait ? 'aspect-[9/16] max-h-[430px]' : 'aspect-video'
-      )}
+      className="relative mx-auto w-full overflow-hidden rounded-lg bg-black/90"
+      style={frameStyle}
     >
       {playing && directVideo ? (
         <video
@@ -185,6 +217,11 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
           playsInline
           preload="metadata"
           className="absolute inset-0 h-full w-full bg-black object-contain"
+          onLoadedMetadata={(e) => {
+            const el = e.currentTarget;
+            const next = snapAspectRatio(el.videoWidth / el.videoHeight);
+            if (next) setNaturalRatio(next);
+          }}
           onClick={(e) => e.stopPropagation()}
         />
       ) : playing && embed.embedUrl ? (
@@ -192,10 +229,11 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
           src={embed.embedUrl}
           title={meta.title || 'video'}
           loading="lazy"
+          scrolling="no"
           allow="autoplay; encrypted-media; picture-in-picture; clipboard-write; fullscreen"
           allowFullScreen
           referrerPolicy="strict-origin-when-cross-origin"
-          className="absolute inset-0 h-full w-full border-0 bg-black"
+          className="absolute inset-0 h-full w-full overflow-hidden border-0 bg-black"
           onClick={(e) => e.stopPropagation()}
         />
       ) : (
@@ -215,6 +253,12 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
               alt={meta.title || ''}
               loading="lazy"
               decoding="async"
+              onLoad={(e) => {
+                if (meta.videoWidth && meta.videoHeight) return;
+                const el = e.currentTarget;
+                const next = snapAspectRatio(el.naturalWidth / el.naturalHeight);
+                if (next) setNaturalRatio((prev) => prev ?? next);
+              }}
               onError={() => setImageFailed(true)}
               className="absolute inset-0 h-full w-full object-cover"
             />
@@ -342,15 +386,24 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="relative mt-1 block overflow-hidden rounded-md"
+              className="relative mx-auto mt-1 block w-full overflow-hidden rounded-md bg-black/80"
+              style={{
+                aspectRatio: String(ratio),
+                maxWidth: maxMediaWidth + 'px',
+              }}
             >
               <img
                 src={poster}
                 alt={meta.title || ''}
                 loading="lazy"
                 decoding="async"
+                onLoad={(e) => {
+                  const el = e.currentTarget;
+                  const next = snapAspectRatio(el.naturalWidth / el.naturalHeight);
+                  if (next) setNaturalRatio((prev) => prev ?? next);
+                }}
                 onError={() => setImageFailed(true)}
-                className="max-h-[240px] w-full object-cover"
+                className="absolute inset-0 h-full w-full object-cover"
               />
             </a>
           )
