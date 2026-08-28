@@ -2,17 +2,19 @@ import { useRef } from 'react';
 import { Check, ImagePlus, Loader2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
+import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { useFileUpload } from '@/hooks/useFileUpload';
 import { useChatWallpaper } from '@/hooks/useChatWallpaper';
 import { CHAT_WALLPAPER_PRESETS, wallpaperPreviewStyle } from '@/lib/chatWallpaper';
+import { ChatAppearanceEditor } from './ChatAppearanceEditor';
 
 interface ChatWallpaperEditorProps {
   className?: string;
 }
 
 /**
- * Chat foni tanlash UI (Telegramdagi "Chat Background" kabi).
+ * Chat foni va chat ko'rinishi sozlamalari (Telegramdagi "Chat Settings").
  * Sozlamalar sahifasida ham, Sheet ichida ham ishlatiladi.
  */
 export function ChatWallpaperEditor({ className }: ChatWallpaperEditorProps) {
@@ -131,7 +133,7 @@ export function ChatWallpaperEditor({ className }: ChatWallpaperEditorProps) {
         </Button>
       </div>
 
-      {/* Sozlashlar */}
+      {/* Fon sozlashlari */}
       <div className="space-y-5">
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
@@ -166,6 +168,19 @@ export function ChatWallpaperEditor({ className }: ChatWallpaperEditorProps) {
         <RotateCcw className="h-4 w-4" />
         Standart fonga qaytarish
       </Button>
+
+      <Separator />
+
+      {/* Chat ko'rinishi */}
+      <div className="space-y-4">
+        <div>
+          <p className="font-semibold text-foreground">Chat ko'rinishi</p>
+          <p className="text-sm text-muted-foreground">
+            Xabar matni o'lchami, puffak burchaklari va energiya tejash rejimi
+          </p>
+        </div>
+        <ChatAppearanceEditor />
+      </div>
     </div>
   );
 }

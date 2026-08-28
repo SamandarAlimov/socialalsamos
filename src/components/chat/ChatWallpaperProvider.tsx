@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useChatWallpaper } from '@/hooks/useChatWallpaper';
 import { wallpaperCssVars } from '@/lib/chatWallpaper';
+import { ChatAppearanceProvider } from './ChatAppearanceProvider';
 
 /**
  * Tanlangan chat fonini haqiqiy chat oynasiga qo'llaydi.
@@ -14,6 +15,9 @@ import { wallpaperCssVars } from '@/lib/chatWallpaper';
  *
  * Fon `background-attachment: fixed` bilan chiziladi — Telegramdagidek scroll
  * paytida joyida turadi. Xabar puffaklari o'z ranglarini saqlaydi.
+ *
+ * Shu komponent chat ko'rinishi sozlamalarini (matn o'lchami, burchaklar,
+ * energiya tejash) qo'llovchi ChatAppearanceProvider'ni ham ishga tushiradi.
  */
 
 const STYLE_ID = 'chat-wallpaper-style';
@@ -134,7 +138,7 @@ export function ChatWallpaperProvider() {
     };
   }, [isActive, wallpaper.id]);
 
-  return null;
+  return <ChatAppearanceProvider />;
 }
 
 export default ChatWallpaperProvider;
