@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Archive,
   Briefcase,
@@ -50,11 +50,14 @@ interface ChatFolderManagerProps {
   onOpenChange: (open: boolean) => void;
   folders: ChatFolder[];
   canAddFolder: boolean;
+  /** Oyna ochilganda darhol ochiladigan papka */
+  initialFolderId?: string | null;
   onAddPreset: (presetKey: string) => void;
   onAddEmpty: () => void;
   onUpdate: (id: string, patch: Partial<ChatFolder>) => void;
   onRemove: (id: string) => void;
   onReorder: (id: string, direction: -1 | 1) => void;
+  onAddChats?: (id: string) => void;
 }
 
 /**
@@ -66,13 +69,19 @@ export function ChatFolderManager({
   onOpenChange,
   folders,
   canAddFolder,
+  initialFolderId,
   onAddPreset,
   onAddEmpty,
   onUpdate,
   onRemove,
   onReorder,
+  onAddChats,
 }: ChatFolderManagerProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) setExpandedId(initialFolderId ?? null);
+  }, [open, initialFolderId]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -211,7 +220,7 @@ export function ChatFolderManager({
                                 type="button"
                                 onClick={() => onUpdate(folder.id, { icon: iconKey })}
                                 className={cn(
-                                  'flex h-8 w-8 items-center justify-center rounded-full border tg-transition',
+                                  'tg-transition flex h-8 w-8 items-center justify-center rounded-full border',
                                   folder.icon === iconKey
                                     ? 'border-primary bg-primary/10 text-primary'
                                     : 'border-border text-muted-foreground hover:bg-muted'
@@ -268,10 +277,25 @@ export function ChatFolderManager({
                         }
                       />
 
+                      {onAddChats && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="w-full gap-1.5"
+                          onClick={() => onAddChats(folder.id)}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Chatlarni qo'shish
+                        </Button>
+                      )}
+
                       {(folder.filters.includedIds.length > 0 ||
                         folder.filters.excludedIds.length > 0) && (
                         <p className="text-xs text-muted-foreground">
-                          Qo'lda qo'shilgan: {folder.filters.includedIds.length} \u00b7 chiqarilgan:{' '}
+                          {"Qo'lda qo'shilgan: "}
+                          {folder.filters.includedIds.length}
+                          {' \u00b7 chiqarilgan: '}
                           {folder.filters.excludedIds.length}
                         </p>
                       )}
