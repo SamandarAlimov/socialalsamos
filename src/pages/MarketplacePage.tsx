@@ -119,9 +119,12 @@ export default function MarketplacePage() {
     refresh: refreshCatalogue,
   } = useProducts(selectedCategory, searchQuery);
 
-  const nearLat = Number(searchParams.get('lat'));
-  const nearLng = Number(searchParams.get('lng'));
-  const nearRadiusRaw = Number(searchParams.get('near'));
+  const nearLatParam = searchParams.get('lat');
+  const nearLngParam = searchParams.get('lng');
+  const nearRadiusParam = searchParams.get('near');
+  const nearLat = nearLatParam == null ? Number.NaN : Number(nearLatParam);
+  const nearLng = nearLngParam == null ? Number.NaN : Number(nearLngParam);
+  const nearRadiusRaw = nearRadiusParam == null ? Number.NaN : Number(nearRadiusParam);
   const nearCenter =
     Number.isFinite(nearLat) &&
     Number.isFinite(nearLng) &&
