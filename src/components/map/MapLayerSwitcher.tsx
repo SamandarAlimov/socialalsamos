@@ -1,4 +1,4 @@
-import { Bike, Bus, Check, Layers, MapPin, Moon, Map as MapIcon, Satellite, X } from 'lucide-react';
+import { Bike, Bus, Car, Check, Layers, MapPin, Moon, Map as MapIcon, Satellite, X } from 'lucide-react';
 import { MAP_LAYERS, MAP_OVERLAYS, type MapLayerId } from '@/lib/mapLayers';
 import { cn } from '@/lib/utils';
 
@@ -20,6 +20,7 @@ const LAYER_ICON: Record<string, typeof MapIcon> = {
 };
 
 const OVERLAY_ICON: Record<string, typeof MapIcon> = {
+  traffic: Car,
   transit: Bus,
   cycle: Bike,
   stops: MapPin,
