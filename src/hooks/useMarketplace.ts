@@ -291,6 +291,7 @@ export function useNearbyMarketplaceProducts(center?: MarketplaceCenter | null, 
     } finally {
       setIsLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [center?.latitude, center?.longitude, radiusKm, user?.id]);
 
   useEffect(() => {
