@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/supabaseAny';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { getShippingCost } from '@/lib/marketplace';
@@ -43,6 +44,8 @@ export interface Product {
   quantity: number;
   condition: string;
   location: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   shipping_available: boolean;
   shipping_price: number;
   is_negotiable: boolean;
@@ -180,6 +183,143 @@ export function useProducts(categorySlug?: string, searchQuery?: string) {
   }, [fetchProducts]);
 
   return { products, isLoading, error, refresh: fetchProducts };
+}
+
+
+interface MarketplaceCenter {
+  latitude: number;
+  longitude: number;
+}
+
+function mapMarketplaceProduct(row: any, likedProductIds: string[] = []): Product {
+  return {
+    ...row,
+    seller: row.seller as Seller | undefined,
+    category: row.category as Category | undefined,
+    images: ((row.images ?? []) as { id: string; url: string; position: number }[])
+      .slice()
+      .sort((a, b) => a.position - b.position),
+    is_liked: likedProductIds.includes(row.id),
+  } as Product;
+}
+
+/**
+ * Xarita -> Marketplace yaqin e'lonlar rejimi. Query server tomonda koordinata
+ * bounding-box bilan cheklanadi, shuning uchun faqat oxirgi 50 ta mahsulotni
+ * clientda filtrlash xatosi yo'q.
+ */
+export function useNearbyMarketplaceProducts(center?: MarketplaceCenter | null, radiusKm = 5) {
+  const { user } = useAuth();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchProducts = useCallback(async () => {
+    if (!center) {
+      setProducts([]);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      const dLat = radiusKm / 111;
+      const dLng = radiusKm / (111 * Math.max(0.2, Math.cos((center.latitude * Math.PI) / 180)));
+
+      const { data, error: fetchError } = await db
+        .from('products')
+        .select(`
+          *,
+          seller:sellers(
+            id, user_id, business_name, business_type, logo_url, location,
+            is_verified, rating, total_sales,
+            profile:profiles(username, display_name, avatar_url)
+          ),
+          category:product_categories(id, name, slug, icon),
+          images:product_images(id, url, position)
+        `)
+        .eq('status', 'active')
+        .not('latitude', 'is', null)
+        .not('longitude', 'is', null)
+        .gte('latitude', center.latitude - dLat)
+        .lte('latitude', center.latitude + dLat)
+        .gte('longitude', center.longitude - dLng)
+        .lte('longitude', center.longitude + dLng)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (fetchError) throw fetchError;
+
+      let likedProductIds: string[] = [];
+      if (user && data?.length) {
+        const ids = data.map((row: any) => row.id);
+        const { data: likes } = await db
+          .from('product_likes')
+          .select('product_id')
+          .eq('user_id', user.id)
+          .in('product_id', ids);
+        likedProductIds = (likes ?? []).map((row: any) => row.product_id);
+      }
+
+      const toRad = (value: number) => (value * Math.PI) / 180;
+      const distanceM = (lat: number, lng: number) => {
+        const dLatR = toRad(lat - center.latitude);
+        const dLngR = toRad(lng - center.longitude);
+        const a =
+          Math.sin(dLatR / 2) ** 2 +
+          Math.cos(toRad(center.latitude)) *
+            Math.cos(toRad(lat)) *
+            Math.sin(dLngR / 2) ** 2;
+        return 2 * 6371000 * Math.asin(Math.sqrt(a));
+      };
+
+      const result = (data ?? [])
+        .filter((row: any) => {
+          const lat = Number(row.latitude);
+          const lng = Number(row.longitude);
+          return Number.isFinite(lat) && Number.isFinite(lng) && distanceM(lat, lng) <= radiusKm * 1000;
+        })
+        .sort((a: any, b: any) => distanceM(Number(a.latitude), Number(a.longitude)) - distanceM(Number(b.latitude), Number(b.longitude)))
+        .map((row: any) => mapMarketplaceProduct(row, likedProductIds));
+
+      setProducts(result);
+    } catch (err) {
+      setProducts([]);
+      setError(err instanceof Error ? err.message : "Yaqin e'lonlar yuklanmadi");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [center?.latitude, center?.longitude, radiusKm, user?.id]);
+
+  useEffect(() => {
+    void fetchProducts();
+  }, [fetchProducts]);
+
+  return { products, isLoading, error, refresh: fetchProducts };
+}
+
+/** Marketplace deep-link kartasini ID bo'yicha to'liq yuklaydi. */
+export async function fetchMarketplaceProductById(productId: string): Promise<Product | null> {
+  if (!productId) return null;
+  const { data, error } = await db
+    .from('products')
+    .select(`
+      *,
+      seller:sellers(
+        id, user_id, business_name, business_type, description, logo_url, location,
+        is_verified, rating, total_sales,
+        profile:profiles(username, display_name, avatar_url)
+      ),
+      category:product_categories(id, name, slug, icon),
+      images:product_images(id, url, position)
+    `)
+    .eq('id', productId)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return mapMarketplaceProduct(data);
 }
 
 export function useSellerProducts() {
