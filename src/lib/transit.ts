@@ -136,7 +136,10 @@ function routeMode(tags: Record<string, string>): TransitRoute['mode'] {
  * barqaror (bir xil daqiqada bir xil natija beruvchi) prognoz.
  */
 function estimateArrivals(intervalMin: number, seed: string): number[] {
-  const interval = intervalMin > 0 ? intervalMin : 12;
+  // Interval tegi bo'lmasa kelish vaqtini uydirmaymiz. Real-time feed yoki
+  // haqiqiy jadval mavjud bo'lgandagina ETA ko'rsatish kerak.
+  if (intervalMin <= 0) return [];
+  const interval = intervalMin;
   let hash = 0;
   for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) % 997;
   const now = new Date();
@@ -180,7 +183,7 @@ export async function fetchStopRoutes(
         to: tags.to ?? null,
         operator: tags.operator ?? null,
         colour: tags.colour ?? null,
-        intervalMin: intervalMin || 12,
+        intervalMin,
         nextArrivalsMin: estimateArrivals(intervalMin, 'relation/' + element.id),
         realtime: false,
       };
@@ -204,6 +207,11 @@ export async function fetchStopRoutes(
 }
 
 const REALTIME_URL = String(import.meta.env.VITE_TRANSIT_RT_URL ?? '').replace(/\/+$/, '');
+
+/** Real-time transport manbasi ulangan-ulanmaganini UI ga bildiradi. */
+export function hasRealtimeTransitFeed(): boolean {
+  return REALTIME_URL.length > 0;
+}
 
 /**
  * Real vaqt (agar shahar API'si ulangan bo'lsa).
