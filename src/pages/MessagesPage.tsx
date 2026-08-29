@@ -13,6 +13,7 @@ import {
   Bookmark,
   Megaphone,
   ArrowDown,
+  MapPin,
 } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Input } from '@/components/ui/input';
@@ -101,6 +102,28 @@ export default function MessagesPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  const pendingSharedLocation = useMemo(() => {
+    if (searchParams.get('share') !== 'location') return null;
+    const latRaw = searchParams.get('lat');
+    const lngRaw = searchParams.get('lng');
+    if (latRaw == null || lngRaw == null) return null;
+    const latitude = Number(latRaw);
+    const longitude = Number(lngRaw);
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      Math.abs(latitude) > 90 ||
+      Math.abs(longitude) > 180
+    ) {
+      return null;
+    }
+    return {
+      latitude,
+      longitude,
+      label: searchParams.get('label') || searchParams.get('name') || 'Joylashuv',
+    };
+  }, [searchParams]);
 
   // Interfeys holati
   const [activeTab, setActiveTab] = useState<MessageTab>('all');
@@ -553,11 +576,55 @@ export default function MessagesPage() {
     }
   };
 
+  const sendPendingSharedLocation = useCallback(
+    async (conversationId: string) => {
+      if (!pendingSharedLocation || !user) return;
+      const content =
+        LOCATION_PREFIX +
+        pendingSharedLocation.latitude.toFixed(6) +
+        ',' +
+        pendingSharedLocation.longitude.toFixed(6) +
+        '|' +
+        pendingSharedLocation.label;
+
+      const { error } = await supabase.from('messages').insert({
+        conversation_id: conversationId,
+        sender_id: user.id,
+        content,
+      });
+
+      if (error) {
+        toast({
+          title: 'Xatolik',
+          description: 'Lokatsiyani chatga yuborib bo\u2018lmadi',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      await supabase
+        .from('conversations')
+        .update({ last_message_at: new Date().toISOString() })
+        .eq('id', conversationId);
+
+      const next = new URLSearchParams(searchParams);
+      next.delete('share');
+      next.delete('lat');
+      next.delete('lng');
+      next.delete('label');
+      next.delete('name');
+      setSearchParams(next, { replace: true });
+      toast({ title: 'Lokatsiya yuborildi' });
+    },
+    [pendingSharedLocation, user, searchParams, setSearchParams, toast],
+  );
+
   const handleSelectConversation = (conv: Conversation) => {
     setSelectedConversation(conv);
     setShowMobileChat(true);
     setReplyTo(null);
     isAtBottomRef.current = true;
+    if (pendingSharedLocation) void sendPendingSharedLocation(conv.id);
   };
 
   // Umumiy qidiruvdan chat/xabar tanlash
@@ -1557,6 +1624,34 @@ export default function MessagesPage() {
             </div>
           )}
         </>
+      )}
+
+      {pendingSharedLocation && (
+        <div className="flex flex-shrink-0 items-center gap-2 border-b border-border bg-primary/5 px-3 py-2">
+          <MapPin className="h-4 w-4 shrink-0 text-primary" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-semibold">Lokatsiyani yuborish</p>
+            <p className="truncate text-[11px] text-muted-foreground">
+              {pendingSharedLocation.label} — chatni tanlang
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const next = new URLSearchParams(searchParams);
+              next.delete('share');
+              next.delete('lat');
+              next.delete('lng');
+              next.delete('label');
+              next.delete('name');
+              setSearchParams(next, { replace: true });
+            }}
+            className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="Ulashishni bekor qilish"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       )}
 
       {/* Natijalar / suhbatlar - guruh, kanal va shaxsiy chatlar bitta ko'rinishda */}
