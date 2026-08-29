@@ -54,7 +54,7 @@ import { cn } from '@/lib/utils';
 const DEFAULT_CENTER = { latitude: 41.311081, longitude: 69.240562 };
 
 type Snap = 'peek' | 'half' | 'full';
-type PanelMode = 'search' | 'place' | 'stop' | 'route' | 'history';
+type PanelMode = 'search' | 'place' | 'stop' | 'route' | 'history' | 'saved';
 
 const MODES: { id: RouteMode; label: string; Icon: typeof Car }[] = [
   { id: 'car', label: 'Avtomobil', Icon: Car },
@@ -117,7 +117,7 @@ function MapController({
 
 export default function MapPage() {
   const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
 
   const [center, setCenter] = useState(DEFAULT_CENTER);
   const [me, setMe] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -215,7 +215,13 @@ export default function MapPage() {
         const result = await fetchRoutes(mode, from, place, controller.signal);
         setRoutes(result);
         setRouteIndex(0);
-        if (!result.length) toast.error('Marshrut topilmadi.');
+        if (!result.length) {
+          toast.error(
+            mode === 'transit'
+              ? "Jamoat transporti marshruti uchun real provayder hali ulanmagan."
+              : 'Marshrut topilmadi.',
+          );
+        }
       } catch {
         toast.error("Marshrut hisoblanmadi. Internetni tekshirib ko'ring.");
       } finally {
@@ -425,6 +431,83 @@ export default function MapPage() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      );
+    }
+
+    if (panel === 'saved') {
+      return (
+        <div className="flex h-full flex-col">
+          <div className="flex items-center gap-2 border-b border-border/60 px-4 py-3">
+            <Bookmark className="h-4 w-4 text-primary" />
+            <p className="flex-1 text-sm font-semibold">Saqlangan joylar</p>
+            <button
+              type="button"
+              onClick={() => setPanel('search')}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground"
+              aria-label="Yopish"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            {saved.loading && (
+              <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Yuklanmoqda...
+              </div>
+            )}
+
+            {!saved.loading && !saved.places.length && (
+              <p className="px-6 py-10 text-center text-sm text-muted-foreground">
+                Hozircha saqlangan joy yo'q. Joy kartasidagi saqlash tugmasi orqali sevimli manzillaringizni qo'shing.
+              </p>
+            )}
+
+            <div className="divide-y divide-border/50">
+              {saved.places.map((place) => {
+                const ui = categoryUi(place.category);
+                return (
+                  <button
+                    key={place.id}
+                    type="button"
+                    onClick={() => {
+                      const mapPlace = {
+                        id: 'saved:' + place.id,
+                        source: 'saved',
+                        name: place.name,
+                        categoryId: place.category ?? undefined,
+                        categoryLabel: ui.label,
+                        latitude: place.latitude,
+                        longitude: place.longitude,
+                        address: place.address,
+                      } as unknown as MapPlace;
+                      setSelectedPlace(mapPlace);
+                      setCenter({ latitude: place.latitude, longitude: place.longitude });
+                      setPanel('place');
+                      setSnap('half');
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/50"
+                  >
+                    <span
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                      style={{ backgroundColor: ui.color + '1f' }}
+                    >
+                      <ui.Icon className="h-4 w-4" style={{ color: ui.color }} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{place.name}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {place.address || place.latitude.toFixed(4) + ', ' + place.longitude.toFixed(4)}
+                      </span>
+                    </span>
+                    <Navigation className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       );
@@ -647,7 +730,7 @@ export default function MapPage() {
       </MapContainer>
 
       {/* Yuqoridagi qidiruv qatori */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-[1100] p-3">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-[1100] p-3 md:left-[400px]">
         <div className="pointer-events-auto mx-auto flex max-w-xl items-center gap-2">
           <div className="flex h-11 flex-1 items-center gap-2 rounded-2xl bg-background/95 px-3 shadow-lg ring-1 ring-border/60 backdrop-blur">
             <Search className="h-4 w-4 text-muted-foreground" />
@@ -736,9 +819,11 @@ export default function MapPage() {
         <button
           type="button"
           onClick={() => {
-            setPanel('search');
+            setPanel('saved');
             setCategory(null);
-            setSnap('full');
+            setQuery('');
+            setSnap('half');
+            void saved.reload();
           }}
           className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/95 text-foreground shadow-md ring-1 ring-border/60 backdrop-blur"
           aria-label="Saqlangan joylar"
