@@ -1,6 +1,6 @@
 import { Bus, Clock, Loader2, Navigation, RefreshCw, Radio, Train, X } from 'lucide-react';
 import type { TransitRoute, TransitStop } from '@/lib/transit';
-import { formatArrival } from '@/lib/transit';
+import { formatArrival, hasRealtimeTransitFeed } from '@/lib/transit';
 import { formatDistance } from '@/lib/geocoding';
 import { cn } from '@/lib/utils';
 
@@ -32,6 +32,8 @@ export function BusStopCard({
   onClose,
   className,
 }: BusStopCardProps) {
+  const realtimeFeedEnabled = hasRealtimeTransitFeed();
+
   return (
     <div className={cn('flex flex-col overflow-hidden bg-background', className)}>
       <div className="flex items-start gap-3 border-b border-border/60 px-4 py-3">
@@ -71,6 +73,11 @@ export function BusStopCard({
       </div>
 
       <div className="max-h-72 flex-1 overflow-y-auto">
+        {!realtimeFeedEnabled && (
+          <div className="border-b border-border/50 bg-muted/40 px-4 py-2 text-[11px] leading-relaxed text-muted-foreground">
+            Jonli kelish vaqti provayderi ulanmagan. Vaqt faqat OSM jadval oralig'i mavjud bo'lsa taxminiy ko'rsatiladi.
+          </div>
+        )}
         {loading && !routes.length && (
           <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -108,7 +115,7 @@ export function BusStopCard({
                       Har {route.intervalMin} daqiqada
                     </>
                   ) : (
-                    route.operator || 'Jadval taxminiy'
+                    route.operator || "Qatnov oralig'i ko'rsatilmagan"
                   )}
                 </p>
               </div>
@@ -121,20 +128,22 @@ export function BusStopCard({
                   )}
                 >
                   {route.nextArrivalsMin?.length
-                    ? formatArrival(route.nextArrivalsMin[0])
-                    : 'Jadvalsiz'}
+                    ? (route.realtime ? formatArrival(route.nextArrivalsMin[0]) : '~' + formatArrival(route.nextArrivalsMin[0]))
+                    : "Vaqt ma'lum emas"}
                 </span>
                 {route.nextArrivalsMin && route.nextArrivalsMin.length > 1 && (
                   <span className="text-[11px] text-muted-foreground">
                     keyingi: {route.nextArrivalsMin.slice(1, 3).join(', ')} daq
                   </span>
                 )}
-                {route.realtime && (
+                {route.realtime ? (
                   <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600">
                     <Radio className="h-3 w-3" />
                     real vaqt
                   </span>
-                )}
+                ) : route.intervalMin > 0 ? (
+                  <span className="text-[11px] text-muted-foreground">jadval bo'yicha</span>
+                ) : null}
               </div>
             </div>
           ))}
