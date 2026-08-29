@@ -401,6 +401,60 @@ export function normalizeQuery(value: string): string {
     .trim();
 }
 
+/**
+ * O'zbekcha/ruscha/inglizcha OSM nomlarida tez-tez uchraydigan yozuv
+ * variantlari. Masalan "Rahimjon ota masjidi" OSMda "Rahimjan-Ata Friday
+ * Mosque" bo'lishi mumkin. Qidiruv hech qachon faqat bitta transliteratsiyaga
+ * bog'lanib qolmasligi kerak.
+ */
+function queryTokenVariants(token: string): string[] {
+  const t = normalizeQuery(token);
+  const variants = new Set<string>([t]);
+
+  if (t.includes('jon')) variants.add(t.replace(/jon/g, 'jan'));
+  if (t.includes('jan')) variants.add(t.replace(/jan/g, 'jon'));
+  if (t === 'ota') variants.add('ata');
+  if (t === 'ata') variants.add('ota');
+  if (t.startsWith('masjid')) {
+    variants.add('mosque');
+    variants.add('masjid');
+  }
+  if (t === 'juma' || t === 'jome') variants.add('friday');
+
+  return Array.from(variants).filter(Boolean);
+}
+
+function searchQueryVariants(value: string): string[] {
+  const base = normalizeQuery(value);
+  const rawTokens = base.split(/\s+/).filter(Boolean);
+  const variants = new Set<string>([base]);
+
+  // Bitta-bitta eng ko'p uchraydigan transliteratsiya almashtirishlar.
+  rawTokens.forEach((token, index) => {
+    for (const variant of queryTokenVariants(token)) {
+      if (variant === token) continue;
+      const copy = rawTokens.slice();
+      copy[index] = variant;
+      variants.add(copy.join(' '));
+    }
+  });
+
+  // Keng tarqalgan diniy nomlash: "... ota masjidi" -> "... ata mosque".
+  variants.add(
+    rawTokens
+      .map((token) => {
+        if (token === 'ota') return 'ata';
+        if (token.startsWith('masjid')) return 'mosque';
+        if (token === 'juma' || token === 'jome') return 'friday';
+        if (token.includes('jon')) return token.replace(/jon/g, 'jan');
+        return token;
+      })
+      .join(' '),
+  );
+
+  return Array.from(variants).filter((item) => item.length >= 2).slice(0, 8);
+}
+
 /** Qidiruv matni kategoriya nomiga o'xshasa - kategoriya qidiruviga o'tamiz. */
 export function detectCategoryFromQuery(query: string): PlaceCategory | undefined {
   const normalized = normalizeQuery(query);
@@ -434,7 +488,7 @@ async function searchByNameOverpass(
 
   // Eng uzun (eng ajralib turuvchi) so'zni regexga olamiz, qolganlari bilan baholaymiz.
   const primary = parts.slice().sort((a, b) => b.length - a.length)[0];
-  const pattern = escapeRegex(primary);
+  const pattern = queryTokenVariants(primary).map(escapeRegex).join('|');
 
   const area = center
     ? '(around:60000,' + center.latitude + ',' + center.longitude + ')'
@@ -547,7 +601,7 @@ function scorePlace(place: MapPlace, queryTokens: string[]): number {
   const haystack = normalizeQuery(place.name + ' ' + (place.address ?? ''));
   let matched = 0;
   for (const token of queryTokens) {
-    if (haystack.includes(token)) matched += 1;
+    if (queryTokenVariants(token).some((variant) => haystack.includes(variant))) matched += 1;
   }
   const ratio = queryTokens.length ? matched / queryTokens.length : 0;
   const exact = normalizeQuery(place.name).startsWith(queryTokens[0] ?? '') ? 0.2 : 0;
@@ -581,10 +635,12 @@ export async function searchMapPlaces(
   }
 
   // 2) Nom bo'yicha qidiruv - uch manba parallel, birortasi ishlamasa ham natija bo'ladi.
+  const variants = searchQueryVariants(term);
   const settled = await Promise.allSettled([
+    // Overpass regexning o'zi transliteratsiya variantlarini ko'radi.
     searchByNameOverpass(term, center, signal),
-    searchByNominatim(term, center, signal),
-    searchByPhoton(term, center, signal),
+    ...variants.slice(0, 4).map((variant) => searchByNominatim(variant, center, signal)),
+    ...variants.slice(0, 3).map((variant) => searchByPhoton(variant, center, signal)),
   ]);
 
   const merged = new Map<string, MapPlace>();
