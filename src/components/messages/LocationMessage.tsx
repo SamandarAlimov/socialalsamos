@@ -92,9 +92,9 @@ export function LocationMessage({
           doubleClickZoom={false}
           touchZoom={false}
           keyboard={false}
-          attributionControl={false}
+          attributionControl={true}
         >
-          <TileLayer url={OSM_TILE_URL} />
+          <TileLayer url={OSM_TILE_URL} attribution="OpenStreetMap" />
           <Marker position={[latitude, longitude]} />
         </MapContainer>
 
