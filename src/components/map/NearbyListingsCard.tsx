@@ -38,6 +38,24 @@ export function NearbyListingsCard({
         <ShoppingBag className="h-4 w-4 text-primary" />
         <p className="text-sm font-semibold">Yaqin e\u2019lonlar</p>
         {loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+        {!loading && listings.length > 0 && (
+          <button
+            type="button"
+            onClick={() =>
+              navigate(
+                '/marketplace?lat=' +
+                  latitude +
+                  '&lng=' +
+                  longitude +
+                  '&near=' +
+                  radiusKm,
+              )
+            }
+            className="ml-auto text-xs font-semibold text-primary hover:underline"
+          >
+            Barchasi
+          </button>
+        )}
       </div>
 
       <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
