@@ -497,7 +497,10 @@
   }
 }
 
-/* Hide Leaflet attribution */
+/* Map data/provider attribution must remain visible for licensing compliance. */
 .leaflet-control-attribution {
-  display: none !important;
+  font-size: 10px;
+  background: hsl(var(--background) / 0.88) !important;
+  color: hsl(var(--muted-foreground)) !important;
+  backdrop-filter: blur(8px);
 }
