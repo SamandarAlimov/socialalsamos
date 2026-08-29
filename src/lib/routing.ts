@@ -2,7 +2,7 @@
 
 const H = 'https://';
 const PRIMARY = H + 'routing.openstreetmap.de';
-const FALLBACK = H + 'router.project-osrm.org';
+const FALLBACK_CAR = H + 'router.project-osrm.org';
 
 export type RouteMode = 'car' | 'foot' | 'bike' | 'transit';
 
@@ -30,12 +30,20 @@ export interface RouteResult {
   label: string;
 }
 
-const PROFILE: Record<RouteMode, string> = {
-  car: 'routed-car',
-  foot: 'routed-foot',
-  bike: 'routed-bike',
-  transit: 'routed-foot',
+const PROFILE: Record<Exclude<RouteMode, 'transit'>, { prefix: string; profile: string }> = {
+  car: { prefix: 'routed-car', profile: 'driving' },
+  foot: { prefix: 'routed-foot', profile: 'walking' },
+  bike: { prefix: 'routed-bike', profile: 'cycling' },
 };
+
+/**
+ * Oddiy OSRM jamoat transportini hisoblamaydi. Shuning uchun piyoda marshrutni
+ * "transit" deb tezlashtirib ko'rsatish noto'g'ri edi. Real transit router
+ * ulanganidan keyin shu adapter alohida implementatsiya qilinadi.
+ */
+export function hasTransitRoutingProvider(): boolean {
+  return false;
+}
 
 export function maneuverText(step: {
   maneuver?: string;
@@ -100,18 +108,21 @@ interface OsrmRoute {
 
 async function request(
   base: string,
-  mode: RouteMode,
+  mode: Exclude<RouteMode, 'transit'>,
   from: RoutePoint,
   to: RoutePoint,
   signal?: AbortSignal,
+  bare = false,
 ): Promise<OsrmRoute[]> {
   const coords =
     from.longitude + ',' + from.latitude + ';' + to.longitude + ',' + to.latitude;
+  const config = PROFILE[mode];
+  const path = bare
+    ? '/route/v1/' + config.profile + '/'
+    : '/' + config.prefix + '/route/v1/' + config.profile + '/';
   const url =
     base +
-    '/' +
-    PROFILE[mode] +
-    '/route/v1/driving/' +
+    path +
     coords +
     '?overview=full&geometries=geojson&steps=true&alternatives=true';
   const response = await fetch(url, { signal });
@@ -126,17 +137,22 @@ export async function fetchRoutes(
   to: RoutePoint,
   signal?: AbortSignal,
 ): Promise<RouteResult[]> {
+  // Transit uchun soxta piyoda marshrutini qaytarmaymiz.
+  if (mode === 'transit') return [];
+
   let raw: OsrmRoute[] = [];
   try {
     raw = await request(PRIMARY, mode, from, to, signal);
   } catch {
-    raw = await request(FALLBACK, mode, from, to, signal);
+    // Public router.project-osrm.org faqat avtomobil profilini kafolatlaydi.
+    if (mode !== 'car') throw new Error('routing provider unavailable');
+    raw = await request(FALLBACK_CAR, mode, from, to, signal, true);
   }
 
   return raw.slice(0, 3).map((route, index) => ({
     mode,
     distanceM: route.distance,
-    durationS: mode === 'transit' ? route.duration * 0.6 + 300 : route.duration,
+    durationS: route.duration,
     coordinates: (route.geometry?.coordinates ?? []).map(
       (pair) => [pair[1], pair[0]] as [number, number],
     ),
