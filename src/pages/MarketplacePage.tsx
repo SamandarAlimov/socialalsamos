@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Search, ShoppingBag, Plus, Store, Package, Heart, TrendingUp, Sparkles,
   LayoutDashboard, Flame, Crown, ChevronRight, SlidersHorizontal, Grid3X3,
-  LayoutList, ClipboardList, AlertTriangle, RotateCcw, X,
+  LayoutList, ClipboardList, AlertTriangle, RotateCcw, X, MapPin,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,8 @@ import {
   useSellerProducts,
   useSavedProducts,
   useCart,
+  useNearbyMarketplaceProducts,
+  fetchMarketplaceProductById,
   Product,
 } from '@/hooks/useMarketplace';
 import { ProductCard } from '@/components/marketplace/ProductCard';
@@ -83,6 +85,26 @@ export default function MarketplacePage() {
   /** Seller area sub-view: own catalogue vs incoming order queue. */
   const [sellingView, setSellingView] = useState<'products' | 'orders'>('products');
 
+  // /marketplace?product=<id> — xaritadagi yaqin e'lon kartasidan kelganda
+  // mahsulot oynasini to'g'ridan-to'g'ri ochamiz.
+  useEffect(() => {
+    const productId = searchParams.get('product');
+    if (!productId) return;
+
+    let cancelled = false;
+    void fetchMarketplaceProductById(productId).then((product) => {
+      if (cancelled) return;
+      if (product) {
+        setSelectedProduct(product);
+        setActiveTab('browse');
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams]);
+
   // Debounced search: one query per pause, not one per keystroke.
   useEffect(() => {
     const timer = setTimeout(() => setSearchQuery(searchInput.trim()), SEARCH_DEBOUNCE_MS);
@@ -91,11 +113,30 @@ export default function MarketplacePage() {
 
   const { categories } = useCategories();
   const {
-    products,
-    isLoading: productsLoading,
-    error: productsError,
-    refresh: refreshProducts,
+    products: catalogueProducts,
+    isLoading: catalogueLoading,
+    error: catalogueError,
+    refresh: refreshCatalogue,
   } = useProducts(selectedCategory, searchQuery);
+
+  const nearLat = Number(searchParams.get('lat'));
+  const nearLng = Number(searchParams.get('lng'));
+  const nearRadiusRaw = Number(searchParams.get('near'));
+  const nearCenter =
+    Number.isFinite(nearLat) &&
+    Number.isFinite(nearLng) &&
+    Math.abs(nearLat) <= 90 &&
+    Math.abs(nearLng) <= 180
+      ? { latitude: nearLat, longitude: nearLng }
+      : null;
+  const nearRadiusKm =
+    Number.isFinite(nearRadiusRaw) && nearRadiusRaw > 0 ? Math.min(50, nearRadiusRaw) : 5;
+
+  const nearbyProducts = useNearbyMarketplaceProducts(nearCenter, nearRadiusKm);
+  const products = nearCenter ? nearbyProducts.products : catalogueProducts;
+  const productsLoading = nearCenter ? nearbyProducts.isLoading : catalogueLoading;
+  const productsError = nearCenter ? nearbyProducts.error : catalogueError;
+  const refreshProducts = nearCenter ? nearbyProducts.refresh : refreshCatalogue;
   const { products: sellerProducts, seller, isLoading: sellerLoading, refresh: refreshSeller } = useSellerProducts();
   const { products: savedProducts, isLoading: savedLoading, refresh: refreshSaved } = useSavedProducts();
   const { itemCount, refresh: refreshCart } = useCart();
@@ -326,6 +367,28 @@ export default function MarketplacePage() {
               transition={{ duration: 0.2 }}
               className="space-y-5 p-4"
             >
+              {nearCenter && (
+                <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
+                  <MapPin className="h-4 w-4 shrink-0 text-primary" />
+                  <span className="min-w-0 flex-1">
+                    Xaritadagi nuqtadan {nearRadiusKm} km ichidagi e'lonlar
+                  </span>
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-primary hover:underline"
+                    onClick={() => {
+                      const next = new URLSearchParams(searchParams);
+                      next.delete('lat');
+                      next.delete('lng');
+                      next.delete('near');
+                      setSearchParams(next, { replace: true });
+                    }}
+                  >
+                    Barchasi
+                  </button>
+                </div>
+              )}
+
               {/* Category Chips — professional Lucide icons, no emoji stickers */}
               <ScrollArea className="w-full">
                 <div className="flex gap-2 pb-1">
@@ -752,7 +815,14 @@ export default function MarketplacePage() {
       {/* Product Detail */}
       <ProductDetail
         product={selectedProduct}
-        onClose={() => setSelectedProduct(null)}
+        onClose={() => {
+          setSelectedProduct(null);
+          if (searchParams.has('product')) {
+            const next = new URLSearchParams(searchParams);
+            next.delete('product');
+            setSearchParams(next, { replace: true });
+          }
+        }}
         onSellerClick={(id) => { setSelectedProduct(null); setSelectedSellerId(id); }}
         onBuyNow={handleBuyNow}
         onCartChange={refreshCart}
