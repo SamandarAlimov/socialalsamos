@@ -58,6 +58,8 @@ export interface PostMusicInput {
     title: string;
     artist?: string | null;
     audioUrl: string;
+    storageBucket?: string | null;
+    storageKey?: string | null;
     coverUrl?: string | null;
     durationSeconds?: number | null;
     source?: 'platform' | 'device' | 'jamendo' | 'audius' | 'fma' | 'ccmixter' | 'pixabay';

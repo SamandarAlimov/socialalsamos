@@ -1,37 +1,42 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { MapContainer, Marker, TileLayer, useMapEvents, useMap } from 'react-leaflet';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
   Check,
   Crosshair,
   Loader2,
+  LocateFixed,
+  MapPinned,
   MapPin,
-  Navigation,
   Radio,
   Search,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatDistance, reverseGeocode, type GeoPlace } from '@/lib/geocoding';
-import { usePlaceSearch } from '@/hooks/usePlaceSearch';
+import { formatDistance } from '@/lib/geocoding';
+import {
+  PLACE_CATEGORIES,
+  fetchPlacesByCategory,
+  resolveMapClickPlace,
+  searchMapPlaces,
+  type MapPlace,
+  type PlaceCategoryId,
+} from '@/lib/mapPlaces';
 import type { PostLocationInput } from '@/lib/postMeta';
 
 interface LocationPickerProps {
   open: boolean;
   onClose: () => void;
   onSelect: (location: PostLocationInput) => void;
-  /** Boshlang'ich markaz (foydalanuvchi joylashuvi bo'lsa). */
   initialCenter?: { latitude: number; longitude: number } | null;
 }
 
-/**
- * OSM tile shabloni. Leaflet o'zi {s}/{z}/{x}/{y} ni almashtiradi, shu sababli
- * shablonni qismlardan yig'amiz (bundler yoki formatter buzmasligi uchun).
- */
-const TILE_URL = ['https://', '{s}', '.tile.openstreetmap.org/', '{z}/{x}/{y}', '.png'].join('');
+type PickerMode = 'place' | 'pin' | 'live';
 
-/** Leaflet ning standart marker rasmi Vite build da yo'qoladi — divIcon ishlatamiz. */
+const TILE_URL = ['https://', '{s}', '.tile.openstreetmap.org/', '{z}/{x}/{y}', '.png'].join('');
+const DEFAULT_CENTER = { latitude: 41.2995, longitude: 69.2401 };
+
 const PIN_ICON = L.divIcon({
   className: 'alsamos-map-pin',
   html: [
@@ -51,16 +56,34 @@ const LIVE_DURATIONS = [
   { label: '8 soat', minutes: 480 },
 ];
 
-const DEFAULT_CENTER = { latitude: 41.2995, longitude: 69.2401 }; // Toshkent
+const QUICK_CATEGORIES = PLACE_CATEGORIES.filter((category) =>
+  ['restaurant', 'cafe', 'fuel', 'pharmacy', 'market', 'mosque', 'parking', 'atm'].includes(
+    category.id,
+  ),
+);
 
-function MapClickHandler({ onPick }: { onPick: (lat: number, lng: number) => void }) {
-  useMapEvents({
-    click: (event) => onPick(event.latlng.lat, event.latlng.lng),
+function MapClickHandler({
+  enabled,
+  onPick,
+}: {
+  enabled: boolean;
+  onPick: (lat: number, lng: number, zoom: number) => void;
+}) {
+  const map = useMapEvents({
+    click: (event) => {
+      if (enabled) onPick(event.latlng.lat, event.latlng.lng, map.getZoom());
+    },
   });
   return null;
 }
 
-function MapCenterSync({ latitude, longitude }: { latitude: number; longitude: number }) {
+function MapCenterSync({
+  latitude,
+  longitude,
+}: {
+  latitude: number;
+  longitude: number;
+}) {
   const map = useMap();
   useEffect(() => {
     const zoom = map.getZoom();
@@ -69,40 +92,58 @@ function MapCenterSync({ latitude, longitude }: { latitude: number; longitude: n
   return null;
 }
 
-/**
- * Joylashuv tanlash — ikki rejim:
- *  1) "Joy"         — xaritadan pin tanlash, qidiruv, atrofdagi joylar ro'yxati
- *  2) "Real vaqtli" — live location, belgilangan muddat davomida yangilanadi
- *
- * Telegramdagi joylashuv oynasi asos qilib olingan, lekin bizda masofa,
- * kategoriya, erkin pin surish va joy sahifasiga o'tish ham bor.
- */
+function toLocation(place: MapPlace): PostLocationInput {
+  return {
+    mode: 'place',
+    latitude: place.latitude,
+    longitude: place.longitude,
+    label: place.name,
+    place: {
+      name: place.name,
+      address: place.address ?? null,
+      category: place.categoryLabel ?? place.categoryId ?? null,
+      externalSource: place.source,
+      externalId: place.id,
+    },
+  };
+}
+
 export function LocationPicker({
   open,
   onClose,
   onSelect,
   initialCenter,
 }: LocationPickerProps) {
-  const [mode, setMode] = useState<'place' | 'live'>('place');
+  const [mode, setMode] = useState<PickerMode>('place');
   const [myCoords, setMyCoords] = useState<{ latitude: number; longitude: number } | null>(
     initialCenter ?? null,
   );
+  const [accuracy, setAccuracy] = useState<number | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<MapPlace[]>([]);
+  const [nearby, setNearby] = useState<MapPlace[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<PlaceCategoryId | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isLoadingNearby, setIsLoadingNearby] = useState(false);
+
+  const [selectedPlace, setSelectedPlace] = useState<MapPlace | null>(null);
   const [pin, setPin] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [pinPlace, setPinPlace] = useState<GeoPlace | null>(null);
+  const [pinLabel, setPinLabel] = useState<string | null>(null);
   const [isResolvingPin, setIsResolvingPin] = useState(false);
   const [liveMinutes, setLiveMinutes] = useState(60);
-  const [accuracy, setAccuracy] = useState<number | null>(null);
 
-  const center = myCoords ?? initialCenter ?? DEFAULT_CENTER;
-  const { query, setQuery, results, nearby, isSearching, isLoadingNearby, error } =
-    usePlaceSearch(open ? (myCoords ?? initialCenter ?? null) : null);
+  const searchAbort = useRef<AbortController | null>(null);
+  const nearbyAbort = useRef<AbortController | null>(null);
+  const resolveAbort = useRef<AbortController | null>(null);
 
-  /** Qurilma joylashuvini aniqlash. */
+  const center = selectedPlace ?? pin ?? myCoords ?? initialCenter ?? DEFAULT_CENTER;
+
   const locateMe = useCallback(() => {
     if (!('geolocation' in navigator)) {
-      setLocationError('Qurilma joylashuvni qo\u2018llab-quvvatlamaydi');
+      setLocationError('Qurilma joylashuvni qo‘llab-quvvatlamaydi');
       return;
     }
 
@@ -118,12 +159,12 @@ export function LocationPicker({
         setAccuracy(position.coords.accuracy ?? null);
         setIsLocating(false);
       },
-      (positionError) => {
+      (error) => {
         setIsLocating(false);
         setLocationError(
-          positionError.code === positionError.PERMISSION_DENIED
+          error.code === error.PERMISSION_DENIED
             ? 'Joylashuvga ruxsat berilmadi. Brauzer sozlamalaridan yoqing.'
-            : 'Joylashuvni aniqlab bo\u2018lmadi',
+            : 'Joylashuvni aniqlab bo‘lmadi',
         );
       },
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
@@ -132,65 +173,180 @@ export function LocationPicker({
 
   useEffect(() => {
     if (open && !myCoords) locateMe();
-  }, [open, myCoords, locateMe]);
+  }, [locateMe, myCoords, open]);
 
-  /** Xaritadan nuqta tanlanganda manzilni aniqlaymiz. */
-  const handlePin = useCallback(async (latitude: number, longitude: number) => {
-    setPin({ latitude, longitude });
-    setPinPlace(null);
-    setIsResolvingPin(true);
+  useEffect(() => {
+    if (!open || mode !== 'place') return;
 
-    try {
-      const place = await reverseGeocode(latitude, longitude);
-      setPinPlace(place);
-    } catch {
-      setPinPlace(null);
-    } finally {
-      setIsResolvingPin(false);
+    const term = query.trim();
+    if (term.length < 2) {
+      setResults([]);
+      setIsSearching(false);
+      return;
     }
-  }, []);
 
-  const handleSelectPlace = useCallback(
-    (place: GeoPlace) => {
-      onSelect({
-        mode: 'place',
-        latitude: place.latitude,
-        longitude: place.longitude,
-        label: place.name,
-        place: {
-          name: place.name,
-          address: place.address ?? null,
-          category: place.category ?? null,
-          externalSource: place.externalSource,
-          externalId: place.externalId,
-        },
-      });
-      onClose();
+    searchAbort.current?.abort();
+    const controller = new AbortController();
+    searchAbort.current = controller;
+
+    const timer = window.setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const response = await searchMapPlaces(
+          term,
+          myCoords ?? initialCenter ?? null,
+          controller.signal,
+        );
+        if (!controller.signal.aborted) setResults(response.places);
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          console.error('Create place search xatosi:', error);
+          if (!controller.signal.aborted) setResults([]);
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsSearching(false);
+      }
+    }, 220);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [initialCenter, mode, myCoords, open, query]);
+
+  useEffect(() => {
+    if (!open || mode !== 'place' || !myCoords) {
+      setNearby([]);
+      return;
+    }
+
+    nearbyAbort.current?.abort();
+    const controller = new AbortController();
+    nearbyAbort.current = controller;
+
+    const load = async () => {
+      setIsLoadingNearby(true);
+      try {
+        let places: MapPlace[];
+
+        if (selectedCategory) {
+          places = await fetchPlacesByCategory(selectedCategory, myCoords, {
+            radiusM: 7000,
+            limit: 30,
+            signal: controller.signal,
+          });
+        } else {
+          const ids: PlaceCategoryId[] = [
+            'restaurant',
+            'cafe',
+            'pharmacy',
+            'fuel',
+            'market',
+            'mosque',
+          ];
+          const settled = await Promise.allSettled(
+            ids.map((id) =>
+              fetchPlacesByCategory(id, myCoords, {
+                radiusM: 5000,
+                limit: 7,
+                signal: controller.signal,
+              }),
+            ),
+          );
+
+          const merged = new Map<string, MapPlace>();
+          for (const item of settled) {
+            if (item.status !== 'fulfilled') continue;
+            for (const place of item.value) merged.set(place.id, place);
+          }
+          places = Array.from(merged.values())
+            .sort((a, b) => (a.distanceM ?? Infinity) - (b.distanceM ?? Infinity))
+            .slice(0, 36);
+        }
+
+        if (!controller.signal.aborted) setNearby(places);
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          console.error('Create nearby places xatosi:', error);
+          if (!controller.signal.aborted) setNearby([]);
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsLoadingNearby(false);
+      }
+    };
+
+    void load();
+    return () => controller.abort();
+  }, [mode, myCoords, open, selectedCategory]);
+
+  useEffect(
+    () => () => {
+      searchAbort.current?.abort();
+      nearbyAbort.current?.abort();
+      resolveAbort.current?.abort();
     },
-    [onSelect, onClose],
+    [],
   );
 
-  const handleConfirmPin = useCallback(() => {
-    if (!pin) return;
+  const handleMapPick = useCallback(
+    async (latitude: number, longitude: number, zoom: number) => {
+      resolveAbort.current?.abort();
+      const controller = new AbortController();
+      resolveAbort.current = controller;
 
-    onSelect({
-      mode: 'place',
-      latitude: pin.latitude,
-      longitude: pin.longitude,
-      label: pinPlace?.name ?? 'Xaritadagi nuqta',
-      accuracyM: accuracy,
-      place: pinPlace
-        ? {
-            name: pinPlace.name,
-            address: pinPlace.address ?? null,
-            category: pinPlace.category ?? null,
-            externalSource: pinPlace.externalSource,
-            externalId: pinPlace.externalId,
-          }
-        : null,
-    });
-    onClose();
-  }, [pin, pinPlace, accuracy, onSelect, onClose]);
+      setIsResolvingPin(true);
+      setPin({ latitude, longitude });
+      setPinLabel(null);
+
+      if (mode === 'place') setSelectedPlace(null);
+
+      try {
+        const place = await resolveMapClickPlace({ latitude, longitude }, zoom, controller.signal);
+        if (controller.signal.aborted) return;
+
+        if (mode === 'place' && place) {
+          setSelectedPlace(place);
+          setPin({ latitude: place.latitude, longitude: place.longitude });
+        } else {
+          setPinLabel(place?.address ?? place?.name ?? null);
+        }
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          console.error('Map click resolve xatosi:', error);
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsResolvingPin(false);
+      }
+    },
+    [mode],
+  );
+
+  const handleSelectPlace = useCallback(
+    (place: MapPlace) => {
+      onSelect(toLocation(place));
+      onClose();
+    },
+    [onClose, onSelect],
+  );
+
+  const handleConfirmMapSelection = useCallback(() => {
+    if (mode === 'place' && selectedPlace) {
+      handleSelectPlace(selectedPlace);
+      return;
+    }
+
+    if (mode === 'pin' && pin) {
+      onSelect({
+        mode: 'place',
+        latitude: pin.latitude,
+        longitude: pin.longitude,
+        label: pinLabel ?? 'Xaritadagi aniq nuqta',
+        accuracyM: accuracy,
+        place: null,
+      });
+      onClose();
+    }
+  }, [accuracy, handleSelectPlace, mode, onClose, onSelect, pin, pinLabel, selectedPlace]);
 
   const handleShareLive = useCallback(() => {
     if (!myCoords) {
@@ -204,22 +360,36 @@ export function LocationPicker({
       longitude: myCoords.longitude,
       label: 'Real vaqtli joylashuv',
       accuracyM: accuracy,
-      liveUntil: new Date(Date.now() + liveMinutes * 60000).toISOString(),
+      liveUntil: new Date(Date.now() + liveMinutes * 60_000).toISOString(),
     });
     onClose();
-  }, [myCoords, accuracy, liveMinutes, onSelect, onClose, locateMe]);
+  }, [accuracy, liveMinutes, locateMe, myCoords, onClose, onSelect]);
 
-  const list = useMemo(
-    () => (query.trim().length >= 2 ? results : nearby),
-    [query, results, nearby],
-  );
+  const list = query.trim().length >= 2 ? results : nearby;
+
+  const selectionLabel = useMemo(() => {
+    if (mode === 'place' && selectedPlace) {
+      return {
+        title: selectedPlace.name,
+        subtitle: selectedPlace.address ?? selectedPlace.categoryLabel ?? 'Joy',
+      };
+    }
+
+    if (mode === 'pin' && pin) {
+      return {
+        title: isResolvingPin ? 'Nuqta aniqlanmoqda...' : 'Aniq nuqta',
+        subtitle: pinLabel ?? `${pin.latitude.toFixed(5)}, ${pin.longitude.toFixed(5)}`,
+      };
+    }
+
+    return null;
+  }, [isResolvingPin, mode, pin, pinLabel, selectedPlace]);
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-background">
-      {/* Sarlavha */}
-      <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
+    <div className="fixed inset-0 z-[60] flex h-[100dvh] min-h-0 flex-col bg-background">
+      <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-3">
         <h2 className="text-base font-semibold">Joylashuv</h2>
         <button
           type="button"
@@ -231,36 +401,35 @@ export function LocationPicker({
         </button>
       </div>
 
-      {/* Rejim tanlash */}
-      <div className="flex gap-2 px-4 py-3">
-        <button
-          type="button"
-          onClick={() => setMode('place')}
-          className={cn(
-            'flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition',
-            mode === 'place'
-              ? 'border-primary bg-primary/10 text-primary'
-              : 'border-border/60 text-muted-foreground hover:bg-muted',
-          )}
-        >
-          <MapPin className="h-4 w-4" /> Joy
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode('live')}
-          className={cn(
-            'flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition',
-            mode === 'live'
-              ? 'border-primary bg-primary/10 text-primary'
-              : 'border-border/60 text-muted-foreground hover:bg-muted',
-          )}
-        >
-          <Radio className="h-4 w-4" /> Real vaqtli
-        </button>
+      <div className="grid shrink-0 grid-cols-3 gap-2 px-4 py-3">
+        {([
+          ['place', 'Joy', MapPin],
+          ['pin', 'Aniq pin', MapPinned],
+          ['live', 'Jonli', Radio],
+        ] as const).map(([id, label, Icon]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => {
+              setMode(id);
+              setSelectedPlace(null);
+              setPin(null);
+              setPinLabel(null);
+            }}
+            className={cn(
+              'flex items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-xs font-medium transition',
+              mode === id
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-border/60 text-muted-foreground hover:bg-muted',
+            )}
+          >
+            <Icon className="h-4 w-4" />
+            {label}
+          </button>
+        ))}
       </div>
 
-      {/* Xarita */}
-      <div className="relative h-56 shrink-0 overflow-hidden border-y border-border/60">
+      <div className="relative h-[38dvh] min-h-[220px] shrink-0 overflow-hidden border-y border-border/60">
         <MapContainer
           center={[center.latitude, center.longitude]}
           zoom={15}
@@ -270,11 +439,15 @@ export function LocationPicker({
         >
           <TileLayer url={TILE_URL} maxZoom={19} />
           <MapCenterSync latitude={center.latitude} longitude={center.longitude} />
-          {mode === 'place' && <MapClickHandler onPick={handlePin} />}
-          {pin && mode === 'place' && (
-            <Marker position={[pin.latitude, pin.longitude]} icon={PIN_ICON} />
+          <MapClickHandler enabled={mode !== 'live'} onPick={handleMapPick} />
+          {mode === 'place' && selectedPlace && (
+            <Marker
+              position={[selectedPlace.latitude, selectedPlace.longitude]}
+              icon={PIN_ICON}
+            />
           )}
-          {myCoords && mode === 'live' && (
+          {mode === 'pin' && pin && <Marker position={[pin.latitude, pin.longitude]} icon={PIN_ICON} />}
+          {mode === 'live' && myCoords && (
             <Marker position={[myCoords.latitude, myCoords.longitude]} icon={PIN_ICON} />
           )}
         </MapContainer>
@@ -282,8 +455,8 @@ export function LocationPicker({
         <button
           type="button"
           onClick={locateMe}
-          aria-label="Meni topish"
-          className="absolute bottom-3 right-3 z-[500] flex h-10 w-10 items-center justify-center rounded-full bg-background/95 shadow-lg transition hover:bg-background"
+          aria-label="Mening joylashuvim"
+          className="absolute bottom-3 right-3 z-[500] flex h-10 w-10 items-center justify-center rounded-full bg-background/95 shadow-lg"
         >
           {isLocating ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -292,41 +465,41 @@ export function LocationPicker({
           )}
         </button>
 
-        {mode === 'place' && (
+        {mode !== 'live' && (
           <p className="absolute left-3 top-3 z-[500] rounded-full bg-background/90 px-2.5 py-1 text-[11px] text-muted-foreground shadow">
-            Xaritaga bosib nuqta tanlang
+            {mode === 'place' ? 'Joyni bosib tanlang' : 'Aniq nuqtani belgilang'}
           </p>
         )}
       </div>
 
-      {locationError && <p className="px-4 pt-3 text-xs text-destructive">{locationError}</p>}
-
-      {/* Tanlangan pin */}
-      {mode === 'place' && pin && (
-        <div className="mx-4 mt-3 flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 p-3">
-          <MapPin className="h-5 w-5 shrink-0 text-primary" />
+      {selectionLabel && (
+        <div className="mx-4 mt-3 flex shrink-0 items-center gap-3 rounded-xl border border-primary/35 bg-primary/5 p-3">
+          {mode === 'place' ? (
+            <MapPin className="h-5 w-5 shrink-0 text-primary" />
+          ) : (
+            <LocateFixed className="h-5 w-5 shrink-0 text-primary" />
+          )}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">
-              {isResolvingPin ? 'Manzil aniqlanmoqda...' : (pinPlace?.name ?? 'Xaritadagi nuqta')}
-            </p>
-            <p className="truncate text-xs text-muted-foreground">
-              {pinPlace?.address ?? pin.latitude.toFixed(5) + ', ' + pin.longitude.toFixed(5)}
-            </p>
+            <p className="truncate text-sm font-medium">{selectionLabel.title}</p>
+            <p className="truncate text-xs text-muted-foreground">{selectionLabel.subtitle}</p>
           </div>
           <button
             type="button"
-            onClick={handleConfirmPin}
-            className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3 text-sm font-semibold text-primary-foreground"
+            onClick={handleConfirmMapSelection}
+            disabled={isResolvingPin || (mode === 'place' && !selectedPlace)}
+            className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-50"
           >
-            <Check className="h-4 w-4" /> Tanlash
+            <Check className="h-4 w-4" />
+            Tanlash
           </button>
         </div>
       )}
 
-      {/* Rejimga qarab pastki qism */}
+      {locationError && <p className="shrink-0 px-4 pt-3 text-xs text-destructive">{locationError}</p>}
+
       {mode === 'place' ? (
-        <>
-          <div className="px-4 pt-3">
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="shrink-0 space-y-3 px-4 pt-3">
             <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/40 px-3">
               <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
               <input
@@ -337,82 +510,106 @@ export function LocationPicker({
               />
               {isSearching && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
               {query && !isSearching && (
-                <button
-                  type="button"
-                  onClick={() => setQuery('')}
-                  aria-label="Tozalash"
-                  className="text-muted-foreground"
-                >
-                  <X className="h-4 w-4" />
+                <button type="button" onClick={() => setQuery('')} aria-label="Tozalash">
+                  <X className="h-4 w-4 text-muted-foreground" />
                 </button>
               )}
             </div>
-          </div>
-
-          {/* Ro'yxat — scroll ishlaydi */}
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 [-webkit-overflow-scrolling:touch]">
-            {error && <p className="pb-2 text-xs text-destructive">{error}</p>}
 
             {query.trim().length < 2 && (
-              <p className="pb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Atrofdagi joylar
-              </p>
-            )}
-
-            {isLoadingNearby && list.length === 0 && (
-              <div className="flex items-center justify-center py-8 text-muted-foreground">
-                <Loader2 className="h-5 w-5 animate-spin" />
+              <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 scrollbar-hidden">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory(null)}
+                  className={cn(
+                    'shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium',
+                    selectedCategory === null
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border/60 text-muted-foreground',
+                  )}
+                >
+                  Yaqin
+                </button>
+                {QUICK_CATEGORIES.map((category) => (
+                  <button
+                    key={category.id}
+                    type="button"
+                    onClick={() => setSelectedCategory(category.id)}
+                    className={cn(
+                      'shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium',
+                      selectedCategory === category.id
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border/60 text-muted-foreground',
+                    )}
+                  >
+                    {category.emoji} {category.label}
+                  </button>
+                ))}
               </div>
             )}
+          </div>
 
-            {!isLoadingNearby && list.length === 0 && (
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 [-webkit-overflow-scrolling:touch]">
+            {(isLoadingNearby || isSearching) && list.length === 0 ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : list.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 {query.trim().length >= 2
-                  ? 'Hech narsa topilmadi'
-                  : 'Atrofdagi joylar topilmadi. Xaritadan tanlang.'}
+                  ? 'Mos joy topilmadi'
+                  : myCoords
+                    ? 'Yaqin joy topilmadi. Xaritadan tanlang.'
+                    : 'Yaqin joylar uchun joylashuvga ruxsat bering.'}
               </p>
+            ) : (
+              <ul className="space-y-1">
+                {list.map((place) => (
+                  <li key={place.id}>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectPlace(place)}
+                      className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left transition hover:bg-muted"
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                        <MapPin className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">{place.name}</span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {[place.categoryLabel, place.address].filter(Boolean).join(' · ')}
+                        </span>
+                      </span>
+                      {place.distanceM != null && (
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {formatDistance(place.distanceM)}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
-
-            <ul className="space-y-1">
-              {list.map((place) => (
-                <li key={place.externalSource + '-' + place.externalId}>
-                  <button
-                    type="button"
-                    onClick={() => handleSelectPlace(place)}
-                    className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left transition hover:bg-muted"
-                  >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                      <MapPin className="h-4 w-4" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">{place.name}</span>
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {[place.category, place.address].filter(Boolean).join(' · ')}
-                      </span>
-                    </span>
-                    {place.distanceM !== undefined && (
-                      <span className="shrink-0 text-xs text-muted-foreground">
-                        {formatDistance(place.distanceM)}
-                      </span>
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
           </div>
-        </>
+        </div>
+      ) : mode === 'pin' ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          <div className="rounded-2xl border border-border/60 p-4 text-sm text-muted-foreground">
+            Xaritada istalgan nuqtani bosing. Bu rejim yaqin POI nomiga bog‘lanmaydi —
+            post aynan siz belgilagan koordinatani saqlaydi.
+          </div>
+        </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
           <div className="rounded-2xl border border-border/60 p-4">
             <div className="flex items-start gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <Navigation className="h-5 w-5" />
+                <Radio className="h-5 w-5" />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold">Real vaqtli joylashuv</p>
+                <p className="text-sm font-semibold">Jonli joylashuv</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Belgilangan muddat davomida joylashuvingiz avtomatik yangilanadi. Istalgan
-                  payt to\u2018xtatishingiz mumkin.
+                  Post yaratilgach, belgilangan muddat davomida koordinata yangilanib boradi.
                 </p>
                 {myCoords && (
                   <p className="mt-2 text-xs text-muted-foreground">
@@ -426,17 +623,17 @@ export function LocationPicker({
             <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Muddat
             </p>
-            <div className="mt-2 flex gap-2">
+            <div className="mt-2 grid grid-cols-3 gap-2">
               {LIVE_DURATIONS.map((duration) => (
                 <button
                   key={duration.minutes}
                   type="button"
                   onClick={() => setLiveMinutes(duration.minutes)}
                   className={cn(
-                    'flex-1 rounded-xl border px-2 py-2 text-xs font-medium transition',
+                    'rounded-xl border px-2 py-2 text-xs font-medium transition',
                     liveMinutes === duration.minutes
                       ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border/60 text-muted-foreground hover:bg-muted',
+                      : 'border-border/60 text-muted-foreground',
                   )}
                 >
                   {duration.label}
@@ -455,7 +652,7 @@ export function LocationPicker({
               ) : (
                 <Radio className="h-4 w-4" />
               )}
-              {myCoords ? 'Ulashishni boshlash' : 'Joylashuvni aniqlash'}
+              {myCoords ? 'Jonli ulashishni tanlash' : 'Joylashuvni aniqlash'}
             </button>
           </div>
         </div>

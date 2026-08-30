@@ -55,6 +55,7 @@ export function PostLocationCard({
 
   const { endSharing } = useLiveLocationSharing({
     locationId: location.id,
+    postId: location.post_id,
     liveUntil: location.live_until,
     enabled: isOwner && live,
   });

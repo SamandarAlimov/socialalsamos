@@ -412,8 +412,8 @@ function filterParts(filter: string): [string, string][] {
     .map((part) => {
       const splitAt = part.indexOf('=');
       return splitAt > 0
-        ? [part.slice(0, splitAt), part.slice(splitAt + 1)]
-        : ['', ''];
+        ? ([part.slice(0, splitAt), part.slice(splitAt + 1)] as [string, string])
+        : (['', ''] as [string, string]);
     })
     .filter(([key, value]) => Boolean(key && value));
 }
@@ -1420,7 +1420,7 @@ export async function searchMapPlaces(
     mergePlaces(osmResults);
   }
 
-  let places = withDistance(Array.from(merged.values()), center)
+  let places: MapPlace[] = withDistance(Array.from(merged.values()), center)
     .map((place) => ({ ...place, score: scorePlace(place, queryTokens) }))
     .sort((a, b) => {
       const categoryBonus = (place: MapPlace) =>

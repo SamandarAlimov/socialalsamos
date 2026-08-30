@@ -9,7 +9,6 @@ import type {
   PostMusicInput,
 } from '@/lib/postMeta';
 import { MAX_COLLABORATORS } from '@/lib/postComposer';
-import { MEDIA_BUCKET, PRIVATE_MEDIA_BUCKET } from '@/lib/mediaUpload';
 
 export interface Post {
   id: string;
@@ -39,30 +38,6 @@ export interface Post {
 }
 
 export type PostVisibility = 'public' | 'friends' | 'private';
-
-async function cleanupUnpublishedMedia(items: PostMediaInput[]): Promise<void> {
-  const byBucket = new Map<string, Set<string>>();
-
-  const add = (bucket?: string | null, key?: string | null) => {
-    if (!bucket || !key) return;
-    if (bucket !== MEDIA_BUCKET && bucket !== PRIVATE_MEDIA_BUCKET) return;
-    const keys = byBucket.get(bucket) ?? new Set<string>();
-    keys.add(key);
-    byBucket.set(bucket, keys);
-  };
-
-  for (const item of items) {
-    add(item.storageBucket, item.storageKey);
-    add(item.thumbnailBucket, item.thumbnailKey);
-  }
-
-  await Promise.all(
-    Array.from(byBucket.entries()).map(async ([bucket, keys]) => {
-      const { error } = await supabase.storage.from(bucket).remove(Array.from(keys));
-      if (error) console.warn('Yarim qolgan uploadni tozalab bo‘lmadi:', error);
-    }),
-  );
-}
 
 /** Post yaratishda qo'shimcha strukturali ma'lumotlar. */
 export interface CreatePostOptions {
@@ -290,9 +265,9 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
       );
 
       if (publishError || !postId) {
-        // Binary upload DB transaction ichida emas. DB publish yiqilsa
-        // hech qayerga bog'lanmagan Supabase obyektlarini best-effort tozalaymiz.
-        await cleanupUnpublishedMedia(options.media ?? []);
+        // Uploadlar draft lifecycle tomonidan saqlanadi: foydalanuvchi shu
+        // composer ichida darhol qayta urinishi mumkin. Route yopilsa hook
+        // orphan obyektlarni o'zi tozalaydi.
         throw publishError ?? new Error('Post identifikatori qaytmadi');
       }
 

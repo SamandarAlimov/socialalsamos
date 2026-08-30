@@ -61,6 +61,25 @@ export function AttachmentGrid({
       {attachments.map((attachment, index) => {
         const isBusy = attachment.status === 'uploading';
         const isError = attachment.status === 'error';
+        const videoEdit =
+          attachment.kind === 'video'
+            ? ((attachment.editState?.video ?? null) as
+                | {
+                    trimStart?: number;
+                    trimEnd?: number;
+                    rotation?: number;
+                    flipHorizontal?: boolean;
+                    flipVertical?: boolean;
+                    rendered?: boolean;
+                  }
+                | null)
+            : null;
+        const editedVideoDuration =
+          videoEdit?.trimStart != null &&
+          videoEdit?.trimEnd != null &&
+          videoEdit.trimEnd > videoEdit.trimStart
+            ? videoEdit.trimEnd - videoEdit.trimStart
+            : attachment.durationSeconds;
 
         return (
           <div
@@ -81,8 +100,20 @@ export function AttachmentGrid({
               ) : attachment.kind === 'video' && attachment.previewUrl ? (
                 <>
                   <video
-                    src={attachment.previewUrl}
-                    className="h-full w-full object-cover"
+                    src={
+                      videoEdit?.trimStart != null && videoEdit?.trimEnd != null
+                        ? `${attachment.previewUrl}#t=${Math.max(0, videoEdit.trimStart)},${Math.max(
+                            videoEdit.trimStart,
+                            videoEdit.trimEnd,
+                          )}`
+                        : attachment.previewUrl
+                    }
+                    className="h-full w-full object-cover transition-transform duration-200"
+                    style={{
+                      transform: `rotate(${videoEdit?.rotation ?? 0}deg) scaleX(${
+                        videoEdit?.flipHorizontal ? -1 : 1
+                      }) scaleY(${videoEdit?.flipVertical ? -1 : 1})`,
+                    }}
                     muted
                     playsInline
                     preload="metadata"
@@ -92,11 +123,16 @@ export function AttachmentGrid({
                       <Play className="h-4 w-4" />
                     </span>
                   </span>
-                  {attachment.durationSeconds ? (
+                  {editedVideoDuration ? (
                     <span className="absolute bottom-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
-                      {formatDuration(attachment.durationSeconds)}
+                      {formatDuration(editedVideoDuration)}
                     </span>
                   ) : null}
+                  {videoEdit && (
+                    <span className="absolute bottom-1.5 left-1.5 rounded bg-primary/90 px-1.5 py-0.5 text-[9px] font-semibold text-primary-foreground">
+                      {videoEdit.rendered ? 'Rendered' : 'Edit saqlandi'}
+                    </span>
+                  )}
                 </>
               ) : (
                 <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-2 text-center text-muted-foreground">
