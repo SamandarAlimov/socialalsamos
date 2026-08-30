@@ -13,6 +13,9 @@ on:
       - 'src/lib/routing.ts'
       - 'src/lib/taxiProviders.ts'
       - 'src/lib/placeIcons.tsx'
+      - 'src/lib/navigationSession.ts'
+      - 'api/map-places.ts'
+      - 'tsconfig.api.json'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/map-quality.yml'
@@ -27,6 +30,9 @@ on:
       - 'src/lib/routing.ts'
       - 'src/lib/taxiProviders.ts'
       - 'src/lib/placeIcons.tsx'
+      - 'src/lib/navigationSession.ts'
+      - 'api/map-places.ts'
+      - 'tsconfig.api.json'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/map-quality.yml'
@@ -55,6 +61,9 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: API typecheck
+        run: npm run typecheck:api
 
       - name: Map regression tests
         run: npm run test:map
