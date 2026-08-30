@@ -58,6 +58,7 @@ import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { MapBottomSheet, type MapSheetSnap } from '@/components/map/MapBottomSheet';
 import { MapOverviewPanel } from '@/components/map/MapOverviewPanel';
+import { MapDataCredit } from '@/components/map/MapDataCredit';
 
 const DEFAULT_CENTER = { latitude: 41.311081, longitude: 69.240562 };
 
@@ -967,9 +968,9 @@ export default function MapPage() {
       </MapContainer>
 
       {/* Yuqoridagi qidiruv qatori */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-[1100] px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:left-[400px] md:pt-3">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-[1100] px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:left-[404px] md:pt-3">
         <div className="pointer-events-auto mx-auto flex max-w-xl items-center gap-2">
-          <div className="flex h-11 flex-1 items-center gap-2 rounded-2xl bg-background/95 px-3 shadow-lg ring-1 ring-border/60 backdrop-blur">
+          <div className="flex h-11 flex-1 items-center gap-2 rounded-[18px] bg-background/84 px-3 shadow-xl ring-1 ring-border/45 backdrop-blur-2xl transition focus-within:bg-background/94 focus-within:ring-primary/25">
             <Search className="h-4 w-4 text-muted-foreground" />
             <input
               value={query}
@@ -1014,7 +1015,7 @@ export default function MapPage() {
       </div>
 
       {movedCenter && (
-        <div className="pointer-events-none absolute inset-x-0 top-[72px] z-[1090] flex justify-center md:left-[400px]">
+        <div className="pointer-events-none absolute inset-x-0 top-[72px] z-[1090] flex justify-center md:left-[404px]">
           <button
             type="button"
             onClick={() => {
@@ -1025,7 +1026,7 @@ export default function MapPage() {
               setPanel('search');
               if (category || query.trim()) setSnap('half');
             }}
-            className="pointer-events-auto flex h-9 items-center gap-2 rounded-full border border-border/60 bg-background/95 px-3 text-xs font-semibold shadow-lg backdrop-blur"
+            className="pointer-events-auto flex h-9 items-center gap-2 rounded-full border border-border/45 bg-background/82 px-3 text-xs font-semibold shadow-lg backdrop-blur-2xl transition hover:bg-background/95"
           >
             <Search className="h-3.5 w-3.5 text-primary" />
             Shu hududda qidirish
@@ -1035,13 +1036,13 @@ export default function MapPage() {
 
       {/* O'ng tomondagi tez amallar */}
       <div
-        className="absolute right-3 z-[1100] flex flex-col gap-2 transition-[bottom] duration-300 md:bottom-auto md:top-1/2 md:-translate-y-1/2"
+        className="absolute right-3 z-[1100] flex flex-col gap-1.5 rounded-[18px] border border-border/35 bg-background/55 p-1.5 shadow-xl backdrop-blur-2xl transition-[bottom] duration-300 md:bottom-auto md:top-1/2 md:-translate-y-1/2"
         style={isMobile ? { bottom: sheetHeightPx + 16 } : undefined}
       >
         <button
           type="button"
           onClick={() => mapRef.current?.zoomIn()}
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/95 text-foreground shadow-md ring-1 ring-border/60 backdrop-blur"
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/68 text-foreground transition hover:bg-background/95 hover:shadow-sm"
           aria-label="Yaqinlashtirish"
         >
           <ZoomIn className="h-5 w-5" />
@@ -1049,7 +1050,7 @@ export default function MapPage() {
         <button
           type="button"
           onClick={() => mapRef.current?.zoomOut()}
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/95 text-foreground shadow-md ring-1 ring-border/60 backdrop-blur"
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/68 text-foreground transition hover:bg-background/95 hover:shadow-sm"
           aria-label="Uzoqlashtirish"
         >
           <ZoomOut className="h-5 w-5" />
@@ -1057,7 +1058,7 @@ export default function MapPage() {
         <button
           type="button"
           onClick={centerOnMe}
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/95 text-foreground shadow-md ring-1 ring-border/60 backdrop-blur"
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/68 text-foreground transition hover:bg-background/95 hover:shadow-sm"
           aria-label="Mening joylashuvim"
         >
           <Crosshair className="h-5 w-5" />
@@ -1069,7 +1070,7 @@ export default function MapPage() {
             setSnap('half');
             void visits.reload();
           }}
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/95 text-foreground shadow-md ring-1 ring-border/60 backdrop-blur"
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/68 text-foreground transition hover:bg-background/95 hover:shadow-sm"
           aria-label="Tashriflar tarixi"
         >
           <History className="h-5 w-5" />
@@ -1082,8 +1083,10 @@ export default function MapPage() {
             )
           }
           className={cn(
-            'flex h-10 w-10 items-center justify-center rounded-xl shadow-md ring-1 ring-border/60 backdrop-blur',
-            showStops ? 'bg-primary text-primary-foreground' : 'bg-background/95 text-foreground',
+            'flex h-10 w-10 items-center justify-center rounded-xl transition',
+            showStops
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'bg-background/68 text-foreground hover:bg-background/95 hover:shadow-sm',
           )}
           aria-label="Bekatlar"
         >
@@ -1098,22 +1101,19 @@ export default function MapPage() {
             setSnap('half');
             void saved.reload();
           }}
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/95 text-foreground shadow-md ring-1 ring-border/60 backdrop-blur"
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/68 text-foreground transition hover:bg-background/95 hover:shadow-sm"
           aria-label="Saqlangan joylar"
         >
           <Bookmark className="h-5 w-5" />
         </button>
       </div>
 
-      <a
-        href="https://www.openstreetmap.org/copyright"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="absolute right-2 z-[1060] rounded bg-background/75 px-1.5 py-0.5 text-[9px] leading-none text-muted-foreground/80 backdrop-blur hover:text-foreground md:bottom-1"
+      <MapDataCredit
+        layerId={layerId}
+        overlays={overlays}
+        className="right-2 md:bottom-2"
         style={isMobile ? { bottom: sheetHeightPx + 4 } : undefined}
-      >
-        © OpenStreetMap
-      </a>
+      />
 
       {/* Pastdagi suzuvchi panel */}
       <MapBottomSheet snap={snap} onSnapChange={setSnap} onHeightChange={setSheetHeightPx}>
