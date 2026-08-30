@@ -142,6 +142,9 @@ export function ProductDetail({
 
   const selectedVariant = useMemo(() => {
     if (variants.length === 0) return null;
+    const hasSelection = Object.keys(selectedOptions).length > 0;
+    if (!hasSelection) return variants[0] ?? null;
+
     return variants.find(variant =>
       variantOptionNames.every(
         name => String(variant.options?.[name] ?? '') === String(selectedOptions[name] ?? ''),
