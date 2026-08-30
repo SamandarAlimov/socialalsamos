@@ -1,3 +1,5 @@
+import { fetchTransitJourneyRoutes } from './transitRealtime';
+
 /** Marshrut hisoblash (OSRM). URL manzillar bo'laklardan yig'iladi. */
 
 const H = 'https://';
@@ -42,6 +44,8 @@ const PROFILE: Record<Exclude<RouteMode, 'transit'>, { prefix: string; profile: 
  * ulanganidan keyin shu adapter alohida implementatsiya qilinadi.
  */
 export function hasTransitRoutingProvider(): boolean {
+  // Runtime holati Supabase transit gateway statusi orqali aniqlanadi.
+  // Bu funksiya backward compatibility uchun qoldirilgan.
   return false;
 }
 
@@ -137,8 +141,45 @@ export async function fetchRoutes(
   to: RoutePoint,
   signal?: AbortSignal,
 ): Promise<RouteResult[]> {
-  // Transit uchun soxta piyoda marshrutini qaytarmaymiz.
-  if (mode === 'transit') return [];
+  // Transit faqat real multimodal router ulangan bo'lsa qaytadi.
+  if (mode === 'transit') {
+    const response = await fetchTransitJourneyRoutes({
+      from: {
+        latitude: from.latitude,
+        longitude: from.longitude,
+      },
+      to: {
+        latitude: to.latitude,
+        longitude: to.longitude,
+      },
+    });
+    return (response?.routes ?? []).map((route, index) => ({
+      mode: 'transit' as const,
+      distanceM: Number(route.distanceM) || 0,
+      durationS: Number(route.durationS) || 0,
+      coordinates: (route.coordinates ?? []).filter(
+        (pair): pair is [number, number] =>
+          Array.isArray(pair) &&
+          pair.length >= 2 &&
+          Number.isFinite(Number(pair[0])) &&
+          Number.isFinite(Number(pair[1])),
+      ),
+      steps: (route.steps ?? []).map((step) => ({
+        distanceM: Number(step.distanceM) || 0,
+        durationS: Number(step.durationS) || 0,
+        name: step.name ?? step.routeRef ?? '',
+        maneuver: step.maneuver ?? step.mode ?? 'transit',
+        modifier: step.modifier,
+        instruction:
+          step.instruction ??
+          [step.routeRef, step.from && step.to ? step.from + ' → ' + step.to : null]
+            .filter(Boolean)
+            .join(' · ') ??
+          'Jamoat transportida davom eting',
+      })),
+      label: route.label || labelFor('transit', index),
+    }));
+  }
 
   let raw: OsrmRoute[] = [];
   try {
