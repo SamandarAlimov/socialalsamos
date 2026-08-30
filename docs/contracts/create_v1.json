@@ -2,8 +2,17 @@
   "schema": "alsamos.create.contract",
   "version": 1,
   "updatedAt": "2026-08-30",
-  "modes": ["post", "story", "reel", "live"],
-  "visibility": ["public", "friends", "private"],
+  "modes": [
+    "post",
+    "story",
+    "reel",
+    "live"
+  ],
+  "visibility": [
+    "public",
+    "friends",
+    "private"
+  ],
   "limits": {
     "postFiles": 10,
     "postCollaborators": 10,
@@ -14,10 +23,18 @@
     "lifetimeHours": 24,
     "sourceOfTruth": "posts+post_media",
     "viewerIndex": "stories",
-    "draftLifecycle": ["create_story_draft", "activate_story_draft", "discard_story_draft"]
+    "draftLifecycle": [
+      "create_story_draft",
+      "activate_story_draft",
+      "discard_story_draft"
+    ]
   },
   "collaboration": {
-    "statuses": ["pending", "accepted", "declined"],
+    "statuses": [
+      "pending",
+      "accepted",
+      "declined"
+    ],
     "inviteRpc": "invite_post_collaborator",
     "respondRpc": "respond_post_collaboration",
     "removeRpc": "remove_post_collaborator",
@@ -30,9 +47,11 @@
     "postKindField": "post_kind"
   },
   "ui": {
-    "modeSwitcher": "floating-bottom",
-    "mediaFirstDesktop": true,
-    "mobileViewport": "100dvh",
+    "platformAdaptive": true,
+    "visualParityRequired": false,
+    "semanticParityRequired": true,
+    "webMayUseRicherDesktopLayout": true,
+    "nativeMayUsePlatformGestures": true,
     "fakeControlsAllowed": false
   }
 }
