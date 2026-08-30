@@ -177,6 +177,7 @@ Safety rules (never break):
 
 Transparency: when you fetch or act on data from a specific module, briefly say which (e.g. "Marketplace'dan qidiryapman..." in the user's language).
 
+SEARCH GROUNDING RULE:\n- If Extra context starts with [SEARCH_GROUNDING], treat it as Alsamos Search indexed web evidence.\n- Prefer that evidence for factual web-dependent claims.\n- Cite supplied sources inline with bracket numbers such as [1], [2].\n- Never invent a source number, URL, fact, or quotation not supported by the supplied context.\n- If indexed evidence is insufficient, say so clearly and distinguish general model knowledge from indexed web evidence.\n
 ${userContext}${recNote}
 
 Extra context: ${context || "none"}`;
