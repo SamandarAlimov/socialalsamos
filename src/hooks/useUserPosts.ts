@@ -65,7 +65,8 @@ export function useUserPosts(userId: string | undefined) {
             is_verified
           )
         `)
-        .neq('post_kind', 'story')
+        // Production DB migration ba'zan frontenddan keyinroq yetib keladi.
+        // post_kind'ni REST filterga qo'ymaymiz; mavjud bo'lsa clientda filtrlash xavfsiz.
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
 
@@ -80,9 +81,12 @@ export function useUserPosts(userId: string | undefined) {
 
       if (error) throw error;
 
+      const visibleData = ((data ?? []) as Array<UserPost & { post_kind?: string | null }>)
+        .filter((post) => post.post_kind !== 'story');
+
       // Get liked status for current user
-      if (user && data) {
-        const postIds = data.map(p => p.id);
+      if (user && visibleData.length > 0) {
+        const postIds = visibleData.map(p => p.id);
         
         const { data: likesData } = await supabase
           .from('post_likes')
@@ -92,7 +96,7 @@ export function useUserPosts(userId: string | undefined) {
 
         const likedPostIds = new Set(likesData?.map(l => l.post_id) || []);
 
-        const postsWithStatus = data.map(post => ({
+        const postsWithStatus = visibleData.map(post => ({
           ...post,
           media_urls: post.media_urls || [],
           is_pinned: post.is_pinned || false,
@@ -101,7 +105,7 @@ export function useUserPosts(userId: string | undefined) {
 
         setPosts(postsWithStatus as UserPost[]);
       } else {
-        setPosts((data || []).map(post => ({
+        setPosts(visibleData.map(post => ({
           ...post,
           media_urls: post.media_urls || [],
           is_pinned: post.is_pinned || false,
