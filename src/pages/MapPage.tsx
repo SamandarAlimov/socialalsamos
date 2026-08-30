@@ -1564,6 +1564,24 @@ export default function MapPage() {
   ]); // navigation-session heartbeat
 
   const activeRoute = routes[routeIndex] ?? null;
+  const navigationCheckpoints = useMemo(
+    () =>
+      destination
+        ? [
+            ...routeWaypoints.map((place) => ({
+              latitude: place.latitude,
+              longitude: place.longitude,
+              name: place.name,
+            })),
+            {
+              latitude: destination.latitude,
+              longitude: destination.longitude,
+              name: destination.name,
+            },
+          ]
+        : [],
+    [routeWaypoints, destination],
+  );
   const navigation = useActiveNavigation({
     active: navigationActive,
     route: activeRoute,
@@ -1571,20 +1589,7 @@ export default function MapPage() {
     destination: destination
       ? { latitude: destination.latitude, longitude: destination.longitude }
       : null,
-    checkpoints: destination
-      ? [
-          ...routeWaypoints.map((place) => ({
-            latitude: place.latitude,
-            longitude: place.longitude,
-            name: place.name,
-          })),
-          {
-            latitude: destination.latitude,
-            longitude: destination.longitude,
-            name: destination.name,
-          },
-        ]
-      : [],
+    checkpoints: navigationCheckpoints,
     onPosition: handleNavigationPosition,
     onReroute: rerouteNavigation,
     onCheckpoint: handleNavigationCheckpoint,
