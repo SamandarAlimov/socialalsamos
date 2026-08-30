@@ -47,30 +47,39 @@ export function useVideoCall() {
   const [callEnded, setCallEnded] = useState(false);
   const callSubscriptionRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const isCreatingCallRef = useRef(false);
+  const endedToastCallRef = useRef<string | null>(null);
 
-  // Subscribe to call status changes
+  // Subscribe once per call id. Updating currentCall with realtime payloads must
+  // NOT tear down and recreate the channel on every status update.
+  const currentCallId = currentCall?.id ?? null;
   useEffect(() => {
-    if (!currentCall) return;
+    if (!currentCallId) return;
 
-    console.log('[VideoCall] Subscribing to call status:', currentCall.id);
-    
-    callSubscriptionRef.current = supabase
-      .channel(`call_status_${currentCall.id}`)
+    console.log('[VideoCall] Subscribing to call status:', currentCallId);
+
+    const channel = supabase
+      .channel(`call_status_${currentCallId}`)
       .on(
         'postgres_changes',
         {
           event: 'UPDATE',
           schema: 'public',
           table: 'video_calls',
-          filter: `id=eq.${currentCall.id}`,
+          filter: `id=eq.${currentCallId}`,
         },
         (payload) => {
           const updated = payload.new as VideoCallRecord;
           console.log('[VideoCall] Call status updated:', updated.status);
 
-          setCurrentCall(updated);
+          setCurrentCall((previous) =>
+            previous?.id === updated.id ? { ...previous, ...updated } : updated
+          );
 
-          if (updated.status === 'ended') {
+          if (
+            updated.status === 'ended' &&
+            endedToastCallRef.current !== updated.id
+          ) {
+            endedToastCallRef.current = updated.id;
             console.log('[VideoCall] Call ended by other participant');
             setCallEnded(true);
             toast({
@@ -82,14 +91,16 @@ export function useVideoCall() {
       )
       .subscribe();
 
+    callSubscriptionRef.current = channel;
+
     return () => {
-      if (callSubscriptionRef.current) {
-        console.log('[VideoCall] Unsubscribing from call status');
-        supabase.removeChannel(callSubscriptionRef.current);
+      console.log('[VideoCall] Unsubscribing from call status');
+      if (callSubscriptionRef.current === channel) {
         callSubscriptionRef.current = null;
       }
+      void supabase.removeChannel(channel);
     };
-  }, [currentCall, toast]);
+  }, [currentCallId, toast]);
 
   // Create a new video call
   const createCall = useCallback(async (
@@ -112,6 +123,7 @@ export function useVideoCall() {
     isCreatingCallRef.current = true;
     setIsCreatingCall(true);
     setCallEnded(false);
+    endedToastCallRef.current = null;
 
     try {
       // The database function atomically validates membership, creates/reuses
@@ -159,6 +171,7 @@ export function useVideoCall() {
     if (!user?.id) return false;
 
     setCallEnded(false);
+    endedToastCallRef.current = null;
 
     try {
       const { data, error } = await supabase.rpc('join_video_call_guarded', {
@@ -252,6 +265,7 @@ export function useVideoCall() {
     setCurrentCall(null);
     setCallParticipants([]);
     setCallEnded(false);
+    endedToastCallRef.current = null;
   }, []);
 
   /**
