@@ -1,8 +1,15 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { IncomingCallDialog } from '@/components/messages/IncomingCallDialog';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
 interface IncomingCall {
   id: string;
@@ -20,10 +27,21 @@ interface GlobalCallContextType {
   incomingCall: IncomingCall | null;
   handleCallHandled: (callId: string) => void;
   acceptCall: () => void;
-  declineCall: () => void;
+  declineCall: () => Promise<void>;
+  missCall: () => Promise<void>;
 }
 
 const GlobalCallContext = createContext<GlobalCallContextType | undefined>(undefined);
+
+const TERMINAL_INVITE_STATUSES = new Set([
+  'accepted',
+  'joined',
+  'declined',
+  'missed',
+  'cancelled',
+  'ended',
+  'expired',
+]);
 
 export function GlobalCallProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -31,53 +49,213 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
   const location = useLocation();
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
   const [handledCallIds, setHandledCallIds] = useState<Set<string>>(new Set());
-  const callSoundRef = useRef<AudioContext | null>(null);
 
-  // Refs mirror state so the realtime subscription below can stay mounted for
-  // the whole session (single source of truth, no re-subscription churn).
   const incomingCallRef = useRef<IncomingCall | null>(null);
   const handledCallIdsRef = useRef<Set<string>>(new Set());
   incomingCallRef.current = incomingCall;
   handledCallIdsRef.current = handledCallIds;
 
-  const handleCallHandled = useCallback((callId: string) => {
-    setHandledCallIds(prev => new Set([...prev, callId]));
-    if (incomingCallRef.current?.id === callId) {
-      setIncomingCall(null);
-    }
+  const rememberHandled = useCallback((callId: string) => {
+    setHandledCallIds((previous) => {
+      const next = new Set(previous);
+      next.add(callId);
+
+      // A session can stay open for days. Keep dedupe memory bounded.
+      while (next.size > 200) {
+        const oldest = next.values().next().value as string | undefined;
+        if (!oldest) break;
+        next.delete(oldest);
+      }
+      return next;
+    });
   }, []);
 
+  const handleCallHandled = useCallback(
+    (callId: string) => {
+      rememberHandled(callId);
+      if (incomingCallRef.current?.id === callId) setIncomingCall(null);
+    },
+    [rememberHandled]
+  );
 
-  const acceptCall = useCallback(() => {
-    if (incomingCall) {
-      handleCallHandled(incomingCall.id);
-      // Navigate to messages with call info
-      navigate(`/messages?call=${incomingCall.id}&type=${incomingCall.call_type}`);
-    }
-  }, [incomingCall, handleCallHandled, navigate]);
+  const resolveIncomingCall = useCallback(
+    async (
+      callId: string,
+      hints?: {
+        inviterId?: string | null;
+        conversationId?: string | null;
+        callType?: string | null;
+      }
+    ) => {
+      if (!user?.id) return;
+      if (handledCallIdsRef.current.has(callId)) return;
+      if (incomingCallRef.current?.id === callId) return;
 
-  const declineCall = useCallback(async () => {
-    if (incomingCall) {
-      const callId = incomingCall.id;
-      const { error } = await supabase.rpc('decline_video_call', {
-        p_call_id: callId,
-      });
+      const { data: call, error: callError } = await supabase
+        .from('video_calls')
+        .select('id, conversation_id, host_id, call_type, status, ended_at')
+        .eq('id', callId)
+        .maybeSingle();
 
-      if (error) {
-        console.error('[GlobalCall] Failed to decline call:', error);
+      if (
+        callError ||
+        !call ||
+        call.ended_at ||
+        call.status === 'ended' ||
+        call.host_id === user.id
+      ) {
         return;
       }
 
-      handleCallHandled(callId);
+      const conversationId = call.conversation_id || hints?.conversationId;
+      if (!conversationId) return;
+
+      // Compatibility/security guard. Invite-driven events already target this
+      // user, while the legacy video_calls fallback is global and must verify.
+      const { data: membership } = await supabase
+        .from('conversation_participants')
+        .select('id')
+        .eq('conversation_id', conversationId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (!membership) return;
+
+      const callerId = hints?.inviterId || call.host_id;
+      const { data: hostProfile } = await supabase
+        .from('profiles')
+        .select('display_name, username, avatar_url')
+        .eq('id', callerId)
+        .maybeSingle();
+
+      setIncomingCall({
+        id: call.id,
+        conversation_id: conversationId,
+        host_id: callerId,
+        call_type:
+          call.call_type === 'audio' || hints?.callType === 'audio' ? 'audio' : 'video',
+        host_profile: hostProfile,
+      });
+    },
+    [user?.id]
+  );
+
+  const acceptCall = useCallback(() => {
+    const call = incomingCallRef.current;
+    if (!call) return;
+
+    handleCallHandled(call.id);
+    navigate(`/messages?call=${call.id}&type=${call.call_type}`);
+  }, [handleCallHandled, navigate]);
+
+  const declineCall = useCallback(async () => {
+    const call = incomingCallRef.current;
+    if (!call) return;
+
+    const { error } = await supabase.rpc('decline_video_call', {
+      p_call_id: call.id,
+    });
+    if (error) {
+      console.error('[GlobalCall] Failed to decline call:', error);
+      return;
     }
-  }, [incomingCall, handleCallHandled]);
 
-  // Listen for incoming calls globally
+    handleCallHandled(call.id);
+  }, [handleCallHandled]);
+
+  const missCall = useCallback(async () => {
+    const call = incomingCallRef.current;
+    if (!call) return;
+
+    const { error } = await supabase.rpc('mark_video_call_missed' as never, {
+      p_call_id: call.id,
+    } as never);
+
+    if (error) {
+      // Compatibility until the new migration reaches every environment.
+      const fallback = await supabase.rpc('decline_video_call', {
+        p_call_id: call.id,
+      });
+      if (fallback.error) {
+        console.error('[GlobalCall] Failed to mark call missed:', error);
+        return;
+      }
+    }
+
+    handleCallHandled(call.id);
+  }, [handleCallHandled]);
+
   useEffect(() => {
-    if (!user) return;
+    if (!user?.id) {
+      setIncomingCall(null);
+      return;
+    }
 
-    const channel = supabase
-      .channel('global-incoming-calls')
+    let cancelled = false;
+
+    // Recover an invite that arrived while this tab was suspended/reloaded.
+    void (async () => {
+      const { data } = await supabase
+        .from('call_invites')
+        .select('call_id, conversation_id, inviter_id, call_type, status')
+        .eq('invitee_id', user.id)
+        .in('status', ['pending', 'ringing'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!cancelled && data?.call_id) {
+        await resolveIncomingCall(data.call_id, {
+          inviterId: data.inviter_id,
+          conversationId: data.conversation_id,
+          callType: data.call_type,
+        });
+      }
+    })();
+
+    const inviteChannel = supabase
+      .channel(`incoming-call-invites:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'call_invites',
+          filter: `invitee_id=eq.${user.id}`,
+        },
+        async (payload) => {
+          const row = payload.new as {
+            call_id?: string;
+            conversation_id?: string | null;
+            inviter_id?: string | null;
+            call_type?: string | null;
+            status?: string | null;
+          };
+
+          if (!row?.call_id) return;
+          const status = String(row.status || 'pending').toLowerCase();
+
+          if (TERMINAL_INVITE_STATUSES.has(status)) {
+            if (incomingCallRef.current?.id === row.call_id) setIncomingCall(null);
+            if (status !== 'accepted' && status !== 'joined') rememberHandled(row.call_id);
+            return;
+          }
+
+          if (status === 'pending' || status === 'ringing') {
+            await resolveIncomingCall(row.call_id, {
+              inviterId: row.inviter_id,
+              conversationId: row.conversation_id,
+              callType: row.call_type,
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    // Legacy compatibility path. It can be removed after all production
+    // databases have the invite-seeding trigger from 20260830171000.
+    const callChannel = supabase
+      .channel(`incoming-call-legacy:${user.id}`)
       .on(
         'postgres_changes',
         {
@@ -85,52 +263,25 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
           schema: 'public',
           table: 'video_calls',
         },
-        async (payload) => {
-          const newCall = payload.new as {
-            id: string;
-            conversation_id: string;
-            host_id: string;
-            call_type: string;
-            status: string;
+        async ({ new: raw }) => {
+          const row = raw as {
+            id?: string;
+            host_id?: string;
+            status?: string;
           };
+          if (!row.id || row.host_id === user.id || row.status === 'ended') return;
 
-          console.log('[GlobalCall] New call detected:', newCall);
-
-          // Skip if it's our own call or already handled
-          if (newCall.host_id === user.id || handledCallIdsRef.current.has(newCall.id)) {
-            console.log('[GlobalCall] Skipping - our call or already handled');
-            return;
-          }
-
-          // Check if we're a participant in this conversation
-          const { data: participant } = await supabase
-            .from('conversation_participants')
-            .select('id')
-            .eq('conversation_id', newCall.conversation_id)
-            .eq('user_id', user.id)
-            .maybeSingle();
-
-          if (!participant) {
-            console.log('[GlobalCall] Not a participant in this conversation');
-            return;
-          }
-
-          // Fetch caller's profile
-          const { data: hostProfile } = await supabase
-            .from('profiles')
-            .select('display_name, username, avatar_url')
-            .eq('id', newCall.host_id)
-            .single();
-
-          console.log('[GlobalCall] Incoming call from:', hostProfile);
-
-          setIncomingCall({
-            id: newCall.id,
-            conversation_id: newCall.conversation_id,
-            host_id: newCall.host_id,
-            call_type: newCall.call_type as 'audio' | 'video',
-            host_profile: hostProfile,
-          });
+          // Give the explicit invite event a short head start so normal
+          // deployments never do the heavier legacy membership path twice.
+          window.setTimeout(() => {
+            if (
+              !cancelled &&
+              !handledCallIdsRef.current.has(row.id!) &&
+              incomingCallRef.current?.id !== row.id
+            ) {
+              void resolveIncomingCall(row.id!);
+            }
+          }, 350);
         }
       )
       .on(
@@ -140,45 +291,45 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
           schema: 'public',
           table: 'video_calls',
         },
-        (payload) => {
-          const updatedCall = payload.new as { id: string; status: string };
-          
-          console.log('[GlobalCall] Call updated:', updatedCall.id, 'status:', updatedCall.status);
-          
-          // If call ended, dismiss the notification immediately
-          if (updatedCall.status === 'ended') {
-            if (incomingCallRef.current?.id === updatedCall.id) {
-              console.log('[GlobalCall] Incoming call ended, dismissing');
-              setIncomingCall(null);
-            }
-            // Also mark as handled to prevent any stale state
-            setHandledCallIds(prev => new Set([...prev, updatedCall.id]));
+        ({ new: raw }) => {
+          const row = raw as { id?: string; status?: string; ended_at?: string | null };
+          if (!row.id) return;
+          if (row.status === 'ended' || row.ended_at) {
+            if (incomingCallRef.current?.id === row.id) setIncomingCall(null);
+            rememberHandled(row.id);
           }
         }
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      cancelled = true;
+      void supabase.removeChannel(inviteChannel);
+      void supabase.removeChannel(callChannel);
     };
-  }, [user]);
+  }, [rememberHandled, resolveIncomingCall, user?.id]);
 
-  // Don't show dialog if already on messages page (it handles its own calls)
   const showDialog = incomingCall && location.pathname !== '/messages';
 
   return (
-    <GlobalCallContext.Provider value={{ incomingCall, handleCallHandled, acceptCall, declineCall }}>
+    <GlobalCallContext.Provider
+      value={{ incomingCall, handleCallHandled, acceptCall, declineCall, missCall }}
+    >
       {children}
-      
-      {/* Global incoming call dialog */}
+
       {showDialog && (
         <IncomingCallDialog
-          isOpen={true}
-          callerName={incomingCall.host_profile?.display_name || incomingCall.host_profile?.username || 'Unknown'}
+          isOpen
+          callerName={
+            incomingCall.host_profile?.display_name ||
+            incomingCall.host_profile?.username ||
+            'Foydalanuvchi'
+          }
           callerAvatar={incomingCall.host_profile?.avatar_url || undefined}
           callType={incomingCall.call_type}
           onAccept={acceptCall}
           onDecline={declineCall}
+          onMissed={missCall}
         />
       )}
     </GlobalCallContext.Provider>
