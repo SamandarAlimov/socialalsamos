@@ -163,8 +163,8 @@ function MapViewportObserver({
   );
 
   const map = useMapEvents({
-    moveend: () => publish(map, true),
-    zoomend: () => publish(map, true),
+    moveend: (event) => publish(event.target as L.Map, true),
+    zoomend: (event) => publish(event.target as L.Map, true),
   });
 
   useEffect(() => {
