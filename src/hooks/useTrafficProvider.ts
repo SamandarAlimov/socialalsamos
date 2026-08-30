@@ -19,6 +19,7 @@ export function useTrafficProvider() {
   const [status, setStatus] =
     useState<TrafficProviderStatus>(EMPTY);
   const [loading, setLoading] = useState(true);
+  const [revision, setRevision] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -34,7 +35,20 @@ export function useTrafficProvider() {
     return () => controller.abort();
   }, []);
 
-  return { status, loading };
+  useEffect(() => {
+    if (!status.configured) return;
+    const intervalMs = Math.max(
+      15,
+      status.refreshSeconds || 60,
+    ) * 1000;
+    const timer = window.setInterval(
+      () => setRevision((value) => value + 1),
+      intervalMs,
+    );
+    return () => window.clearInterval(timer);
+  }, [status.configured, status.refreshSeconds]);
+
+  return { status, loading, revision };
 }
 
 export default useTrafficProvider;
