@@ -3,7 +3,7 @@ import { Outlet, Navigate, useLocation } from 'react-router-dom';
 import { AppSidebar } from './AppSidebar';
 import { BottomNavbar } from './BottomNavbar';
 import { MobileHeader } from './MobileHeader';
-import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useActivityTracking } from '@/hooks/useActivityTracking';
 import { LocationPermissionDialog } from '@/components/LocationPermissionDialog';
@@ -79,20 +79,6 @@ export function AppLayout() {
       )}>
         <Outlet />
       </main>
-
-      {/* Global desktop/tablet collapse control.
-          The button starts exactly at the sidebar's outer edge instead of being
-          centered over it, so the entire 32px control always remains visible on
-          every page. z-[60] also keeps it above the sticky sidebar layer. */}
-      <button
-        type="button"
-        aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        onClick={() => setSidebarCollapsed(value => !value)}
-        className="hidden md:flex fixed top-20 z-[60] h-8 w-8 items-center justify-center rounded-full border border-sidebar-border bg-background/95 shadow-lg backdrop-blur-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 pointer-events-auto"
-        style={{ left: sidebarCollapsed ? '72px' : '256px' }}
-      >
-        {sidebarCollapsed ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronLeft className="h-4 w-4 text-muted-foreground" />}
-      </button>
 
       {!immersiveMobile && <BottomNavbar />}
       <LocationPermissionDialog />
