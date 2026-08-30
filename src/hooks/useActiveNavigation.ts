@@ -178,6 +178,10 @@ export function useActiveNavigation({
     arrivedRef.current = false;
     setSnapshot((current) => ({
       ...EMPTY_SNAPSHOT,
+      remainingDistanceM: Number(route?.distanceM) || 0,
+      remainingDurationS: Number(route?.durationS) || 0,
+      currentStep: route?.steps?.[0] ?? null,
+      distanceToManeuverM: Number(route?.steps?.[0]?.distanceM) || 0,
       rerouting: current.rerouting,
     }));
   }, [route]);
@@ -263,6 +267,36 @@ export function useActiveNavigation({
     },
     [route, cumulative, destination, mode, onArrive, onReroute],
   );
+
+  useEffect(() => {
+    if (!active || typeof navigator === 'undefined') return;
+
+    let released = false;
+    let lock: { release: () => Promise<void> } | null = null;
+    const wakeNavigator = navigator as Navigator & {
+      wakeLock?: {
+        request: (type: 'screen') => Promise<{ release: () => Promise<void> }>;
+      };
+    };
+
+    if (wakeNavigator.wakeLock?.request) {
+      void wakeNavigator.wakeLock
+        .request('screen')
+        .then((value) => {
+          if (released) {
+            void value.release().catch(() => undefined);
+            return;
+          }
+          lock = value;
+        })
+        .catch(() => undefined);
+    }
+
+    return () => {
+      released = true;
+      if (lock) void lock.release().catch(() => undefined);
+    };
+  }, [active]);
 
   useEffect(() => {
     if (!active) {
