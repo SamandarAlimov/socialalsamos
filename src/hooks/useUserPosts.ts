@@ -6,6 +6,7 @@ export interface UserPost {
   id: string;
   user_id: string;
   content: string | null;
+  formatted_content?: unknown;
   media_urls: string[];
   media_type: string;
   likes_count: number;
