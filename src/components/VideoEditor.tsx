@@ -1,38 +1,37 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { Button } from '@/components/ui/button';
-import { Slider } from '@/components/ui/slider';
-import { 
-  Scissors, 
-  Crop, 
-  RotateCcw, 
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Check,
+  Crop,
   FlipHorizontal,
   FlipVertical,
-  Play, 
-  Pause, 
+  Pause,
+  Play,
+  RotateCcw,
+  Scissors,
   SkipBack,
   SkipForward,
   Volume2,
   VolumeX,
-  Check,
   X,
-  ZoomIn,
-  ZoomOut,
-  Move
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+
+import { Button } from '@/components/ui/button';
+import { Slider } from '@/components/ui/slider';
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
 
 interface VideoEditorProps {
   videoUrl: string;
   onSave: (editedData: VideoEditData) => void;
   onCancel: () => void;
   open: boolean;
+  initialEditData?: VideoEditData | null;
 }
 
 export interface VideoEditData {
@@ -48,235 +47,348 @@ export interface VideoEditData {
 }
 
 type EditorMode = 'trim' | 'crop' | 'transform';
+type AspectRatio = 'free' | '1:1' | '16:9' | '9:16' | '4:3';
 
-export function VideoEditor({ videoUrl, onSave, onCancel, open }: VideoEditorProps) {
+const DEFAULT_CROP = { x: 0, y: 0, width: 100, height: 100 };
+
+function formatTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+function waitForMediaEvent(
+  element: HTMLMediaElement,
+  event: 'loadedmetadata' | 'seeked',
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onSuccess = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error('Video kadrini o‘qib bo‘lmadi'));
+    };
+    const cleanup = () => {
+      element.removeEventListener(event, onSuccess);
+      element.removeEventListener('error', onError);
+    };
+
+    element.addEventListener(event, onSuccess, { once: true });
+    element.addEventListener('error', onError, { once: true });
+  });
+}
+
+async function generateThumbnails(videoUrl: string): Promise<string[]> {
+  const video = document.createElement('video');
+  video.src = videoUrl;
+  video.preload = 'metadata';
+  video.muted = true;
+  video.playsInline = true;
+
+  await waitForMediaEvent(video, 'loadedmetadata');
+
+  const duration = Number.isFinite(video.duration) ? video.duration : 0;
+  if (duration <= 0) return [];
+
+  const count = Math.min(10, Math.max(4, Math.ceil(duration)));
+  const canvas = document.createElement('canvas');
+  canvas.width = 120;
+  canvas.height = 72;
+  const context = canvas.getContext('2d');
+  if (!context) return [];
+
+  const output: string[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const time = Math.min(
+      Math.max(0, duration - 0.05),
+      (duration / Math.max(1, count - 1)) * index,
+    );
+
+    if (Math.abs(video.currentTime - time) > 0.01) {
+      video.currentTime = time;
+      await waitForMediaEvent(video, 'seeked');
+    }
+
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    output.push(canvas.toDataURL('image/jpeg', 0.7));
+  }
+
+  video.removeAttribute('src');
+  video.load();
+  return output;
+}
+
+export function VideoEditor({
+  videoUrl,
+  onSave,
+  onCancel,
+  open,
+  initialEditData,
+}: VideoEditorProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  
-  // Video state
+  const cropSurfaceRef = useRef<HTMLDivElement>(null);
+  const pointerStartRef = useRef<{ x: number; y: number; cropX: number; cropY: number } | null>(
+    null,
+  );
+
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(1);
-  
-  // Edit state
+
   const [mode, setMode] = useState<EditorMode>('trim');
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(100);
   const [rotation, setRotation] = useState(0);
   const [flipHorizontal, setFlipHorizontal] = useState(false);
   const [flipVertical, setFlipVertical] = useState(false);
-  
-  // Crop state
-  const [cropArea, setCropArea] = useState({ x: 0, y: 0, width: 100, height: 100 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [aspectRatio, setAspectRatio] = useState<'free' | '1:1' | '16:9' | '9:16' | '4:3'>('free');
-  
-  // Timeline thumbnails
+
+  const [cropArea, setCropArea] = useState(DEFAULT_CROP);
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('free');
   const [thumbnails, setThumbnails] = useState<string[]>([]);
-  
-  // Generate thumbnails from video
+  const [loadingThumbnails, setLoadingThumbnails] = useState(false);
+
   useEffect(() => {
-    if (!videoUrl || !open) return;
-    
-    const video = document.createElement('video');
-    video.src = videoUrl;
-    video.crossOrigin = 'anonymous';
-    
-    video.onloadedmetadata = () => {
-      const dur = video.duration;
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      canvas.width = 80;
-      canvas.height = 60;
-      
-      const thumbs: string[] = [];
-      const count = Math.min(10, Math.ceil(dur));
-      let loaded = 0;
-      
-      for (let i = 0; i < count; i++) {
-        const time = (dur / count) * i;
-        video.currentTime = time;
-        
-        video.onseeked = () => {
-          if (ctx) {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            thumbs[i] = canvas.toDataURL();
-            loaded++;
-            if (loaded === count) {
-              setThumbnails([...thumbs]);
-            }
+    if (!open) return;
+
+    const edit = initialEditData;
+    setMode('trim');
+    setRotation(edit?.rotation ?? 0);
+    setFlipHorizontal(edit?.flipHorizontal ?? false);
+    setFlipVertical(edit?.flipVertical ?? false);
+    setCropArea(
+      edit
+        ? {
+            x: edit.cropX,
+            y: edit.cropY,
+            width: edit.cropWidth,
+            height: edit.cropHeight,
           }
-        };
-      }
-    };
-  }, [videoUrl, open]);
-  
-  // Video event handlers
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    
-    const handleLoadedMetadata = () => {
-      setDuration(video.duration);
+        : DEFAULT_CROP,
+    );
+    setAspectRatio('free');
+
+    if (!duration || !edit) {
+      setTrimStart(0);
       setTrimEnd(100);
+    } else {
+      setTrimStart(Math.max(0, Math.min(100, (edit.trimStart / duration) * 100)));
+      setTrimEnd(Math.max(0, Math.min(100, (edit.trimEnd / duration) * 100)));
+    }
+  }, [duration, initialEditData, open, videoUrl]);
+
+  useEffect(() => {
+    if (!open || !videoUrl) {
+      setThumbnails([]);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingThumbnails(true);
+
+    void generateThumbnails(videoUrl)
+      .then((frames) => {
+        if (!cancelled) setThumbnails(frames);
+      })
+      .catch((error) => {
+        console.warn('Video timeline kadrlarini yaratib bo‘lmadi:', error);
+        if (!cancelled) setThumbnails([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingThumbnails(false);
+      });
+
+    return () => {
+      cancelled = true;
     };
-    
+  }, [open, videoUrl]);
+
+  useEffect(() => {
+    const videoElement = videoRef.current;
+    if (!videoElement) return;
+
+    const handleLoadedMetadata = () => {
+      const nextDuration = Number.isFinite(videoElement.duration) ? videoElement.duration : 0;
+      setDuration(nextDuration);
+      setCurrentTime(videoElement.currentTime || 0);
+    };
+
     const handleTimeUpdate = () => {
-      setCurrentTime(video.currentTime);
-      
-      // Loop within trim range
+      const nextTime = videoElement.currentTime;
+      setCurrentTime(nextTime);
+
+      if (duration <= 0) return;
       const endTime = (trimEnd / 100) * duration;
-      if (video.currentTime >= endTime) {
-        video.currentTime = (trimStart / 100) * duration;
+      if (nextTime >= endTime) {
+        videoElement.currentTime = (trimStart / 100) * duration;
       }
     };
-    
+
     const handlePlay = () => setIsPlaying(true);
     const handlePause = () => setIsPlaying(false);
-    
-    video.addEventListener('loadedmetadata', handleLoadedMetadata);
-    video.addEventListener('timeupdate', handleTimeUpdate);
-    video.addEventListener('play', handlePlay);
-    video.addEventListener('pause', handlePause);
-    
+
+    videoElement.addEventListener('loadedmetadata', handleLoadedMetadata);
+    videoElement.addEventListener('timeupdate', handleTimeUpdate);
+    videoElement.addEventListener('play', handlePlay);
+    videoElement.addEventListener('pause', handlePause);
+
+    if (videoElement.readyState >= 1) handleLoadedMetadata();
+
     return () => {
-      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      video.removeEventListener('timeupdate', handleTimeUpdate);
-      video.removeEventListener('play', handlePlay);
-      video.removeEventListener('pause', handlePause);
+      videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      videoElement.removeEventListener('timeupdate', handleTimeUpdate);
+      videoElement.removeEventListener('play', handlePlay);
+      videoElement.removeEventListener('pause', handlePause);
     };
-  }, [duration, trimStart, trimEnd]);
-  
-  // Playback controls
+  }, [duration, trimEnd, trimStart]);
+
   const togglePlay = useCallback(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    
-    if (isPlaying) {
-      video.pause();
-    } else {
-      const startTime = (trimStart / 100) * duration;
-      if (video.currentTime < startTime || video.currentTime >= (trimEnd / 100) * duration) {
-        video.currentTime = startTime;
-      }
-      video.play();
+    const videoElement = videoRef.current;
+    if (!videoElement || duration <= 0) return;
+
+    if (!videoElement.paused) {
+      videoElement.pause();
+      return;
     }
-  }, [isPlaying, duration, trimStart, trimEnd]);
-  
+
+    const startTime = (trimStart / 100) * duration;
+    const endTime = (trimEnd / 100) * duration;
+    if (videoElement.currentTime < startTime || videoElement.currentTime >= endTime) {
+      videoElement.currentTime = startTime;
+    }
+    void videoElement.play();
+  }, [duration, trimEnd, trimStart]);
+
   const toggleMute = useCallback(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.muted = !isMuted;
-    setIsMuted(!isMuted);
+    const videoElement = videoRef.current;
+    if (!videoElement) return;
+
+    const next = !isMuted;
+    videoElement.muted = next;
+    setIsMuted(next);
   }, [isMuted]);
-  
-  const handleVolumeChange = useCallback((value: number[]) => {
-    const video = videoRef.current;
-    if (!video) return;
-    const vol = value[0];
-    video.volume = vol;
-    setVolume(vol);
-    if (vol === 0) {
-      video.muted = true;
-      setIsMuted(true);
-    } else if (isMuted) {
-      video.muted = false;
-      setIsMuted(false);
-    }
-  }, [isMuted]);
-  
-  const seekTo = useCallback((time: number) => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.currentTime = time;
-  }, []);
-  
+
+  const handleVolumeChange = useCallback(
+    (value: number[]) => {
+      const videoElement = videoRef.current;
+      if (!videoElement) return;
+
+      const next = Math.max(0, Math.min(1, value[0] ?? 1));
+      videoElement.volume = next;
+      setVolume(next);
+
+      const nextMuted = next === 0;
+      videoElement.muted = nextMuted;
+      setIsMuted(nextMuted);
+    },
+    [],
+  );
+
+  const seekTo = useCallback(
+    (time: number) => {
+      const videoElement = videoRef.current;
+      if (!videoElement || duration <= 0) return;
+      videoElement.currentTime = Math.max(0, Math.min(duration, time));
+    },
+    [duration],
+  );
+
   const skipBackward = useCallback(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.currentTime = Math.max((trimStart / 100) * duration, video.currentTime - 5);
+    const videoElement = videoRef.current;
+    if (!videoElement || duration <= 0) return;
+    videoElement.currentTime = Math.max(
+      (trimStart / 100) * duration,
+      videoElement.currentTime - 5,
+    );
   }, [duration, trimStart]);
-  
+
   const skipForward = useCallback(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.currentTime = Math.min((trimEnd / 100) * duration, video.currentTime + 5);
+    const videoElement = videoRef.current;
+    if (!videoElement || duration <= 0) return;
+    videoElement.currentTime = Math.min(
+      (trimEnd / 100) * duration,
+      videoElement.currentTime + 5,
+    );
   }, [duration, trimEnd]);
-  
-  // Trim handlers
-  const handleTrimChange = useCallback((values: number[]) => {
-    setTrimStart(values[0]);
-    setTrimEnd(values[1]);
-  }, []);
-  
-  // Rotation
-  const rotate90 = useCallback(() => {
-    setRotation((r) => (r + 90) % 360);
-  }, []);
-  
-  // Crop handlers
-  const handleCropMouseDown = useCallback((e: React.MouseEvent) => {
-    if (mode !== 'crop') return;
-    setIsDragging(true);
-    setDragStart({ x: e.clientX, y: e.clientY });
-  }, [mode]);
-  
-  const handleCropMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isDragging || mode !== 'crop') return;
-    
-    const dx = e.clientX - dragStart.x;
-    const dy = e.clientY - dragStart.y;
-    
-    setCropArea((prev) => ({
-      ...prev,
-      x: Math.max(0, Math.min(100 - prev.width, prev.x + dx / 3)),
-      y: Math.max(0, Math.min(100 - prev.height, prev.y + dy / 3)),
-    }));
-    
-    setDragStart({ x: e.clientX, y: e.clientY });
-  }, [isDragging, mode, dragStart]);
-  
-  const handleCropMouseUp = useCallback(() => {
-    setIsDragging(false);
-  }, []);
-  
-  // Set aspect ratio preset
-  const setAspectRatioPreset = useCallback((ratio: typeof aspectRatio) => {
+
+  const setAspectRatioPreset = useCallback((ratio: AspectRatio) => {
     setAspectRatio(ratio);
-    
-    let w = 100, h = 100;
-    switch (ratio) {
-      case '1:1':
-        w = 80; h = 80;
-        break;
-      case '16:9':
-        w = 100; h = 56.25;
-        break;
-      case '9:16':
-        w = 56.25; h = 100;
-        break;
-      case '4:3':
-        w = 100; h = 75;
-        break;
+
+    let width = 100;
+    let height = 100;
+    if (ratio === '1:1') {
+      width = 82;
+      height = 82;
+    } else if (ratio === '16:9') {
+      width = 100;
+      height = 56.25;
+    } else if (ratio === '9:16') {
+      width = 56.25;
+      height = 100;
+    } else if (ratio === '4:3') {
+      width = 100;
+      height = 75;
     }
-    
+
     setCropArea({
-      x: (100 - w) / 2,
-      y: (100 - h) / 2,
-      width: w,
-      height: h,
+      x: (100 - width) / 2,
+      y: (100 - height) / 2,
+      width,
+      height,
     });
   }, []);
-  
-  // Save edits
+
+  const handleCropPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (mode !== 'crop') return;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      pointerStartRef.current = {
+        x: event.clientX,
+        y: event.clientY,
+        cropX: cropArea.x,
+        cropY: cropArea.y,
+      };
+    },
+    [cropArea.x, cropArea.y, mode],
+  );
+
+  const handleCropPointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const start = pointerStartRef.current;
+      const surface = cropSurfaceRef.current;
+      if (!start || !surface || mode !== 'crop') return;
+
+      const rect = surface.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+
+      const deltaX = ((event.clientX - start.x) / rect.width) * 100;
+      const deltaY = ((event.clientY - start.y) / rect.height) * 100;
+
+      setCropArea((current) => ({
+        ...current,
+        x: Math.max(0, Math.min(100 - current.width, start.cropX + deltaX)),
+        y: Math.max(0, Math.min(100 - current.height, start.cropY + deltaY)),
+      }));
+    },
+    [mode],
+  );
+
+  const handleCropPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    pointerStartRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }, []);
+
   const handleSave = useCallback(() => {
-    const editData: VideoEditData = {
-      trimStart: (trimStart / 100) * duration,
-      trimEnd: (trimEnd / 100) * duration,
+    const safeDuration = Math.max(0, duration);
+    onSave({
+      trimStart: (trimStart / 100) * safeDuration,
+      trimEnd: (trimEnd / 100) * safeDuration,
       cropX: cropArea.x,
       cropY: cropArea.y,
       cropWidth: cropArea.width,
@@ -284,310 +396,367 @@ export function VideoEditor({ videoUrl, onSave, onCancel, open }: VideoEditorPro
       rotation,
       flipHorizontal,
       flipVertical,
-    };
-    onSave(editData);
-  }, [trimStart, trimEnd, duration, cropArea, rotation, flipHorizontal, flipVertical, onSave]);
-  
-  // Format time
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-  
+    });
+  }, [
+    cropArea,
+    duration,
+    flipHorizontal,
+    flipVertical,
+    onSave,
+    rotation,
+    trimEnd,
+    trimStart,
+  ]);
+
+  const progressPercent =
+    duration > 0 ? Math.max(0, Math.min(100, (currentTime / duration) * 100)) : 0;
+
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden p-0">
-        <DialogHeader className="p-4 border-b border-border">
-          <DialogTitle>Edit Video</DialogTitle>
-        </DialogHeader>
-        
-        <div className="flex flex-col lg:flex-row h-[70vh]">
-          {/* Video Preview */}
-          <div 
-            ref={containerRef}
-            className="flex-1 relative bg-black flex items-center justify-center overflow-hidden"
-            onMouseDown={handleCropMouseDown}
-            onMouseMove={handleCropMouseMove}
-            onMouseUp={handleCropMouseUp}
-            onMouseLeave={handleCropMouseUp}
-          >
-            <div 
-              className="relative"
-              style={{
-                transform: `rotate(${rotation}deg) scaleX(${flipHorizontal ? -1 : 1}) scaleY(${flipVertical ? -1 : 1})`,
-                transition: 'transform 0.3s ease',
-              }}
-            >
-              <video
-                ref={videoRef}
-                src={videoUrl}
-                className="max-w-full max-h-[50vh] object-contain"
-                playsInline
-              />
-              
-              {/* Crop overlay */}
-              {mode === 'crop' && (
-                <>
-                  <div className="absolute inset-0 bg-black/50" />
-                  <div 
-                    className="absolute border-2 border-primary cursor-move"
-                    style={{
-                      left: `${cropArea.x}%`,
-                      top: `${cropArea.y}%`,
-                      width: `${cropArea.width}%`,
-                      height: `${cropArea.height}%`,
-                      backgroundColor: 'transparent',
-                      boxShadow: '0 0 0 9999px rgba(0,0,0,0.5)',
-                    }}
-                  >
-                    {/* Corner handles */}
-                    <div className="absolute -top-1 -left-1 w-3 h-3 bg-primary rounded-full cursor-nw-resize" />
-                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full cursor-ne-resize" />
-                    <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-primary rounded-full cursor-sw-resize" />
-                    <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-primary rounded-full cursor-se-resize" />
-                    
-                    {/* Grid */}
-                    <div className="absolute inset-0 grid grid-cols-3 grid-rows-3">
-                      {[...Array(9)].map((_, i) => (
-                        <div key={i} className="border border-primary/30" />
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
+    <Dialog open={open} onOpenChange={(next) => !next && onCancel()}>
+      <DialogContent className="flex h-[92dvh] max-h-[920px] max-w-6xl flex-col overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b border-border/60 bg-background/90 px-5 py-4 backdrop-blur">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <DialogTitle className="text-base">Video tahrirlash</DialogTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Trim, crop va transform non-destructive edit holati sifatida saqlanadi.
+              </p>
             </div>
-            
-            {/* Playback controls overlay */}
-            <div className="absolute bottom-4 left-4 right-4 bg-background/90 backdrop-blur-sm rounded-xl p-3 space-y-3">
-              {/* Progress */}
-              <div className="flex items-center gap-2 text-sm">
-                <span>{formatTime(currentTime)}</span>
-                <div 
-                  className="flex-1 h-1 bg-muted rounded-full cursor-pointer relative"
-                  onClick={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const percent = (e.clientX - rect.left) / rect.width;
+            <span className="hidden rounded-full border border-border/60 bg-muted/40 px-3 py-1 text-[10px] font-medium text-muted-foreground sm:block">
+              Asl fayl saqlanadi
+            </span>
+          </div>
+        </DialogHeader>
+
+        <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <section className="relative min-h-[360px] overflow-hidden bg-black">
+            <div
+              ref={cropSurfaceRef}
+              className="absolute inset-0 flex touch-none items-center justify-center p-4 sm:p-8"
+              onPointerMove={handleCropPointerMove}
+              onPointerUp={handleCropPointerUp}
+              onPointerCancel={handleCropPointerUp}
+            >
+              <div
+                className="relative max-h-full max-w-full"
+                style={{
+                  transform: `rotate(${rotation}deg) scaleX(${
+                    flipHorizontal ? -1 : 1
+                  }) scaleY(${flipVertical ? -1 : 1})`,
+                  transition: 'transform 180ms ease',
+                }}
+              >
+                <video
+                  ref={videoRef}
+                  src={videoUrl}
+                  className="max-h-[64dvh] max-w-full object-contain"
+                  playsInline
+                />
+
+                {mode === 'crop' && (
+                  <>
+                    <div className="pointer-events-none absolute inset-0 bg-black/20" />
+                    <div
+                      className="absolute cursor-move touch-none border-2 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.58)]"
+                      style={{
+                        left: `${cropArea.x}%`,
+                        top: `${cropArea.y}%`,
+                        width: `${cropArea.width}%`,
+                        height: `${cropArea.height}%`,
+                      }}
+                      onPointerDown={handleCropPointerDown}
+                      onPointerMove={handleCropPointerMove}
+                      onPointerUp={handleCropPointerUp}
+                      onPointerCancel={handleCropPointerUp}
+                    >
+                      <div className="pointer-events-none absolute inset-0 grid grid-cols-3 grid-rows-3">
+                        {Array.from({ length: 9 }).map((_, index) => (
+                          <div key={index} className="border border-white/20" />
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="absolute inset-x-3 bottom-3 rounded-2xl border border-white/10 bg-black/60 p-3 text-white shadow-xl backdrop-blur-xl sm:inset-x-5 sm:bottom-5">
+              <div className="flex items-center gap-2 text-[11px] text-white/70">
+                <span className="w-10 text-right">{formatTime(currentTime)}</span>
+                <button
+                  type="button"
+                  aria-label="Videoda joyga o‘tish"
+                  className="relative h-5 flex-1"
+                  onClick={(event) => {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    const percent = (event.clientX - rect.left) / rect.width;
                     seekTo(percent * duration);
                   }}
                 >
-                  <div 
-                    className="absolute h-full bg-primary rounded-full"
-                    style={{ width: `${(currentTime / duration) * 100}%` }}
+                  <span className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-white/20" />
+                  <span
+                    className="absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-white"
+                    style={{ width: `${progressPercent}%` }}
                   />
-                </div>
-                <span>{formatTime(duration)}</span>
+                </button>
+                <span className="w-10">{formatTime(duration)}</span>
               </div>
-              
-              {/* Controls */}
-              <div className="flex items-center justify-center gap-2">
-                <Button variant="ghost" size="icon" onClick={skipBackward}>
+
+              <div className="mt-2 flex items-center justify-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={skipBackward}
+                  className="text-white hover:bg-white/10 hover:text-white"
+                >
                   <SkipBack className="h-4 w-4" />
                 </Button>
-                <Button variant="default" size="icon" onClick={togglePlay}>
-                  {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                <Button
+                  type="button"
+                  size="icon"
+                  onClick={togglePlay}
+                  className="rounded-full"
+                >
+                  {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="ml-0.5 h-4 w-4" />}
                 </Button>
-                <Button variant="ghost" size="icon" onClick={skipForward}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={skipForward}
+                  className="text-white hover:bg-white/10 hover:text-white"
+                >
                   <SkipForward className="h-4 w-4" />
                 </Button>
-                
-                <div className="flex items-center gap-2 ml-4">
-                  <Button variant="ghost" size="icon" onClick={toggleMute}>
+
+                <div className="ml-3 hidden items-center gap-2 sm:flex">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={toggleMute}
+                    className="text-white hover:bg-white/10 hover:text-white"
+                  >
                     {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
                   </Button>
                   <Slider
                     value={[isMuted ? 0 : volume]}
                     onValueChange={handleVolumeChange}
                     max={1}
-                    step={0.1}
-                    className="w-20"
+                    step={0.05}
+                    className="w-24"
                   />
                 </div>
               </div>
             </div>
-          </div>
-          
-          {/* Editor Panel */}
-          <div className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-border bg-card p-4 space-y-4 overflow-y-auto">
-            {/* Mode tabs */}
-            <div className="flex gap-1 p-1 bg-muted rounded-lg">
-              <Button
-                variant={mode === 'trim' ? 'default' : 'ghost'}
-                size="sm"
-                className="flex-1"
-                onClick={() => setMode('trim')}
-              >
-                <Scissors className="h-4 w-4 mr-1" />
-                Trim
-              </Button>
-              <Button
-                variant={mode === 'crop' ? 'default' : 'ghost'}
-                size="sm"
-                className="flex-1"
-                onClick={() => setMode('crop')}
-              >
-                <Crop className="h-4 w-4 mr-1" />
-                Crop
-              </Button>
-              <Button
-                variant={mode === 'transform' ? 'default' : 'ghost'}
-                size="sm"
-                className="flex-1"
-                onClick={() => setMode('transform')}
-              >
-                <RotateCcw className="h-4 w-4 mr-1" />
-                Transform
-              </Button>
+          </section>
+
+          <aside className="min-h-0 overflow-y-auto border-t border-border/60 bg-card lg:border-l lg:border-t-0">
+            <div className="sticky top-0 z-10 border-b border-border/60 bg-card/95 p-3 backdrop-blur">
+              <div className="grid grid-cols-3 gap-1 rounded-2xl bg-muted/60 p-1">
+                {([
+                  ['trim', Scissors, 'Kesish'],
+                  ['crop', Crop, 'Kadr'],
+                  ['transform', RotateCcw, 'Burish'],
+                ] as const).map(([id, Icon, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setMode(id)}
+                    className={cn(
+                      'flex h-9 items-center justify-center gap-1.5 rounded-xl px-2 text-[11px] font-medium transition',
+                      mode === id
+                        ? 'bg-background text-primary shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-            
-            {/* Trim mode */}
-            {mode === 'trim' && (
-              <div className="space-y-4">
-                <h4 className="font-medium">Trim Video</h4>
-                
-                {/* Timeline with thumbnails */}
-                <div className="relative h-16 bg-muted rounded-lg overflow-hidden">
-                  <div className="absolute inset-0 flex">
-                    {thumbnails.map((thumb, i) => (
-                      <img 
-                        key={i} 
-                        src={thumb} 
-                        alt=""
-                        className="h-full flex-1 object-cover"
-                      />
-                    ))}
+
+            <div className="space-y-5 p-4">
+              {mode === 'trim' && (
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="text-sm font-semibold">Video oralig‘i</h4>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Boshlanish va tugash vaqtini belgilang.
+                    </p>
                   </div>
-                  
-                  {/* Trim overlay */}
-                  <div 
-                    className="absolute inset-y-0 bg-black/60"
-                    style={{ left: 0, width: `${trimStart}%` }}
+
+                  <div className="relative h-20 overflow-hidden rounded-2xl bg-muted">
+                    <div className="absolute inset-0 flex">
+                      {loadingThumbnails && thumbnails.length === 0 ? (
+                        <div className="flex w-full items-center justify-center text-xs text-muted-foreground">
+                          Timeline tayyorlanmoqda...
+                        </div>
+                      ) : (
+                        thumbnails.map((thumb, index) => (
+                          <img
+                            key={index}
+                            src={thumb}
+                            alt=""
+                            className="h-full min-w-0 flex-1 object-cover"
+                          />
+                        ))
+                      )}
+                    </div>
+                    <div
+                      className="absolute inset-y-0 left-0 bg-black/60"
+                      style={{ width: `${trimStart}%` }}
+                    />
+                    <div
+                      className="absolute inset-y-0 right-0 bg-black/60"
+                      style={{ width: `${100 - trimEnd}%` }}
+                    />
+                    <div
+                      className="absolute inset-y-0 w-1 bg-primary shadow"
+                      style={{ left: `calc(${trimStart}% - 2px)` }}
+                    />
+                    <div
+                      className="absolute inset-y-0 w-1 bg-primary shadow"
+                      style={{ left: `calc(${trimEnd}% - 2px)` }}
+                    />
+                  </div>
+
+                  <Slider
+                    value={[trimStart, trimEnd]}
+                    onValueChange={(values) => {
+                      const start = Math.min(values[0] ?? 0, (values[1] ?? 100) - 0.1);
+                      const end = Math.max(values[1] ?? 100, start + 0.1);
+                      setTrimStart(start);
+                      setTrimEnd(end);
+                    }}
+                    min={0}
+                    max={100}
+                    step={0.1}
                   />
-                  <div 
-                    className="absolute inset-y-0 bg-black/60"
-                    style={{ right: 0, width: `${100 - trimEnd}%` }}
-                  />
-                  
-                  {/* Trim handles */}
-                  <div 
-                    className="absolute inset-y-0 w-1 bg-primary cursor-ew-resize"
-                    style={{ left: `${trimStart}%` }}
-                  />
-                  <div 
-                    className="absolute inset-y-0 w-1 bg-primary cursor-ew-resize"
-                    style={{ left: `${trimEnd}%` }}
-                  />
-                </div>
-                
-                {/* Trim slider */}
-                <Slider
-                  value={[trimStart, trimEnd]}
-                  onValueChange={handleTrimChange}
-                  min={0}
-                  max={100}
-                  step={0.1}
-                  className="mt-2"
-                />
-                
-                <div className="flex justify-between text-sm text-muted-foreground">
-                  <span>Start: {formatTime((trimStart / 100) * duration)}</span>
-                  <span>End: {formatTime((trimEnd / 100) * duration)}</span>
-                </div>
-                
-                <div className="text-sm text-muted-foreground text-center">
-                  Duration: {formatTime(((trimEnd - trimStart) / 100) * duration)}
-                </div>
-              </div>
-            )}
-            
-            {/* Crop mode */}
-            {mode === 'crop' && (
-              <div className="space-y-4">
-                <h4 className="font-medium">Crop Video</h4>
-                
-                <div className="grid grid-cols-3 gap-2">
-                  {(['free', '1:1', '16:9', '9:16', '4:3'] as const).map((ratio) => (
-                    <Button
-                      key={ratio}
-                      variant={aspectRatio === ratio ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setAspectRatioPreset(ratio)}
-                    >
-                      {ratio === 'free' ? 'Free' : ratio}
-                    </Button>
-                  ))}
-                </div>
-                
-                <p className="text-sm text-muted-foreground">
-                  Drag the crop area on the video to adjust
-                </p>
-              </div>
-            )}
-            
-            {/* Transform mode */}
-            {mode === 'transform' && (
-              <div className="space-y-4">
-                <h4 className="font-medium">Transform Video</h4>
-                
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Rotation</span>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={rotate90}>
-                        <RotateCcw className="h-4 w-4 mr-1" />
-                        90°
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => setRotation(0)}
-                      >
-                        Reset
-                      </Button>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="rounded-2xl bg-muted/45 p-3 text-center">
+                      <p className="text-[10px] text-muted-foreground">Boshlanish</p>
+                      <p className="mt-1 text-xs font-semibold">
+                        {formatTime((trimStart / 100) * duration)}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl bg-muted/45 p-3 text-center">
+                      <p className="text-[10px] text-muted-foreground">Tugash</p>
+                      <p className="mt-1 text-xs font-semibold">
+                        {formatTime((trimEnd / 100) * duration)}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl bg-primary/[0.07] p-3 text-center">
+                      <p className="text-[10px] text-muted-foreground">Davomiylik</p>
+                      <p className="mt-1 text-xs font-semibold text-primary">
+                        {formatTime(((trimEnd - trimStart) / 100) * duration)}
+                      </p>
                     </div>
                   </div>
-                  
-                  <div className="text-sm text-muted-foreground text-center">
-                    Current: {rotation}°
+                </div>
+              )}
+
+              {mode === 'crop' && (
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="text-sm font-semibold">Kadr formati</h4>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Formatni tanlang, keyin crop maydonini videoda suring.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['free', '1:1', '16:9', '9:16', '4:3'] as const).map((ratio) => (
+                      <button
+                        key={ratio}
+                        type="button"
+                        onClick={() => setAspectRatioPreset(ratio)}
+                        className={cn(
+                          'h-10 rounded-xl border text-xs font-medium transition',
+                          aspectRatio === ratio
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-border/60 bg-background text-muted-foreground hover:bg-muted',
+                        )}
+                      >
+                        {ratio === 'free' ? 'Erkin' : ratio}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="rounded-2xl bg-muted/45 p-3 text-xs leading-relaxed text-muted-foreground">
+                    Crop o‘lchami format orqali belgilanadi. Maydonni sichqoncha yoki barmoq bilan surish mumkin.
                   </div>
                 </div>
-                
-                <div className="space-y-3">
-                  <span className="text-sm">Flip</span>
-                  <div className="flex gap-2">
+              )}
+
+              {mode === 'transform' && (
+                <div className="space-y-5">
+                  <div>
+                    <h4 className="text-sm font-semibold">Transform</h4>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Videoni burish yoki akslantirish.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-border/60 bg-background p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold">Burilish</p>
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">{rotation}°</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={() => setRotation((value) => (value + 90) % 360)}>
+                          <RotateCcw className="mr-1.5 h-4 w-4" />
+                          90°
+                        </Button>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setRotation(0)}>
+                          Reset
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
                     <Button
+                      type="button"
                       variant={flipHorizontal ? 'default' : 'outline'}
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => setFlipHorizontal(!flipHorizontal)}
+                      className="rounded-xl"
+                      onClick={() => setFlipHorizontal((value) => !value)}
                     >
-                      <FlipHorizontal className="h-4 w-4 mr-1" />
-                      Horizontal
+                      <FlipHorizontal className="mr-2 h-4 w-4" />
+                      Gorizontal
                     </Button>
                     <Button
+                      type="button"
                       variant={flipVertical ? 'default' : 'outline'}
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => setFlipVertical(!flipVertical)}
+                      className="rounded-xl"
+                      onClick={() => setFlipVertical((value) => !value)}
                     >
-                      <FlipVertical className="h-4 w-4 mr-1" />
-                      Vertical
+                      <FlipVertical className="mr-2 h-4 w-4" />
+                      Vertikal
                     </Button>
                   </div>
                 </div>
+              )}
+
+              <div className="rounded-2xl border border-border/60 bg-muted/25 p-3 text-[11px] leading-relaxed text-muted-foreground">
+                Bu editor hozir non-destructive edit holatini saqlaydi. Final server render pipeline alohida media engine orqali bajariladi.
               </div>
-            )}
-          </div>
+            </div>
+          </aside>
         </div>
-        
-        <DialogFooter className="p-4 border-t border-border">
-          <Button variant="outline" onClick={onCancel}>
-            <X className="h-4 w-4 mr-2" />
-            Cancel
+
+        <DialogFooter className="shrink-0 gap-2 border-t border-border/60 bg-background px-5 py-4">
+          <Button type="button" variant="outline" onClick={onCancel} className="rounded-xl">
+            <X className="mr-2 h-4 w-4" />
+            Bekor qilish
           </Button>
-          <Button onClick={handleSave}>
-            <Check className="h-4 w-4 mr-2" />
-            Apply Changes
+          <Button type="button" onClick={handleSave} className="rounded-xl">
+            <Check className="mr-2 h-4 w-4" />
+            Tahrirni saqlash
           </Button>
         </DialogFooter>
       </DialogContent>
