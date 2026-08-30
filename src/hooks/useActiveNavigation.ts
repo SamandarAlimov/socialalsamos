@@ -142,6 +142,30 @@ function stepProgress(
   };
 }
 
+function snappedNavigationPosition(
+  position: NavigationPosition,
+  route: RouteResult,
+  nearestIndex: number,
+  distanceToRouteM: number,
+): NavigationPosition {
+  const coordinate = route.coordinates[nearestIndex];
+  if (!coordinate) return position;
+
+  // Marker yo'l bo'ylab silliq ko'rinishi uchun GPS juda yaqin bo'lsa route
+  // geometriyasiga snap qilamiz. Yo'ldan chiqib ketganda esa raw GPS saqlanadi.
+  const snapThreshold = Math.max(
+    18,
+    Math.min(48, Math.max(1, position.accuracyM) * 1.25),
+  );
+  if (distanceToRouteM > snapThreshold) return position;
+
+  return {
+    ...position,
+    latitude: coordinate[0],
+    longitude: coordinate[1],
+  };
+}
+
 function offRouteThreshold(mode: RouteMode): number {
   if (mode === 'foot') return 45;
   if (mode === 'bike') return 60;
@@ -188,7 +212,11 @@ export function useActiveNavigation({
 
   const evaluate = useCallback(
     async (next: NavigationPosition) => {
-      if (!route?.coordinates?.length) return;
+      if (!route?.coordinates?.length) {
+        setPosition(next);
+        onPosition?.(next);
+        return;
+      }
 
       const nearest = nearestCoordinateIndex(
         next,
@@ -196,6 +224,15 @@ export function useActiveNavigation({
         nearestIndexRef.current,
       );
       nearestIndexRef.current = Math.max(nearestIndexRef.current, nearest.index);
+
+      const displayPosition = snappedNavigationPosition(
+        next,
+        route,
+        nearest.index,
+        nearest.distanceM,
+      );
+      setPosition(displayPosition);
+      onPosition?.(displayPosition);
 
       const lastIndex = route.coordinates.length - 1;
       const routeTotalM =
@@ -355,9 +392,7 @@ export function useActiveNavigation({
         };
 
         previousPositionRef.current = next;
-        setPosition(next);
         setError(null);
-        onPosition?.(next);
         void evaluate(next);
       },
       (geolocationError) => {
