@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { detectPII } from '@/hooks/useMessageSafety';
+import { useMessageDraft } from '@/hooks/useMessageDraft';
 
 interface ReplyTo {
   id: string;
@@ -35,6 +36,7 @@ interface ReplyTo {
 }
 
 interface MessageInputProps {
+  conversationId: string | null;
   onSend: (content: string, mediaUrl?: string, mediaType?: string) => Promise<any>;
   onSchedule?: (
     scheduledFor: Date,
@@ -97,6 +99,7 @@ interface PendingAttachment {
 }
 
 export function MessageInput({
+  conversationId,
   onSend,
   onSchedule,
   onTyping,
@@ -106,8 +109,8 @@ export function MessageInput({
   onShareLocation,
 }: MessageInputProps) {
   const { t } = useTranslation();
+  const { draft: message, setDraft: setMessage, clearDraft } = useMessageDraft(conversationId);
   const [uploading, setUploading] = useState(false);
-  const [message, setMessage] = useState('');
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
   const [pendingAlbum, setPendingAlbum] = useState<AlbumItem[] | null>(null);
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
@@ -119,6 +122,7 @@ export function MessageInput({
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const localPreviewRef = useRef<string | null>(null);
+  const previousConversationRef = useRef<string | null>(conversationId);
   const {
     mentionState,
     handleInputChange: handleMentionChange,
@@ -170,26 +174,50 @@ export function MessageInput({
 
   const clearAlbum = () => setPendingAlbum(null);
 
+  // Chat almashganda pending media/reply yangi suhbatga ko'chib ketmasin.
+  useEffect(() => {
+    if (previousConversationRef.current === conversationId) return;
+    previousConversationRef.current = conversationId;
+
+    if (localPreviewRef.current) {
+      URL.revokeObjectURL(localPreviewRef.current);
+      localPreviewRef.current = null;
+    }
+
+    setPendingAttachment(null);
+    setPendingAlbum(null);
+    setAttachmentOpen(false);
+    setShowScheduleDialog(false);
+    setShowArticleComposer(false);
+    setIsDragging(false);
+    closeMention();
+    onCancelReply?.();
+    onTyping(false);
+  }, [conversationId, closeMention, onCancelReply, onTyping]);
+
   const handleSend = async () => {
     if (!message.trim() && !pendingAttachment && !pendingAlbum) return;
 
-    // Albom: bir nechta rasm/video Telegramdek BITTA xabar bo'lib ketadi
+    // Albom: bir nechta rasm/video Telegramdek BITTA xabar bo'lib ketadi.
+    // Server yozuvi muvaffaqiyatsiz bo'lsa draft/attachment yo'qolmaydi.
     if (pendingAlbum && pendingAlbum.length > 0) {
       const payload = buildAlbumPayload({
         items: pendingAlbum,
         caption: message.trim() || undefined,
       });
-      await onSend(payload);
+      const sent = await onSend(payload);
+      if (sent === null) return;
       clearAlbum();
     }
 
     // Bitta biriktirma yoki oddiy matn
     if (pendingAttachment || (!pendingAlbum && message.trim())) {
-      await onSend(message.trim(), pendingAttachment?.url, pendingAttachment?.type);
+      const sent = await onSend(message.trim(), pendingAttachment?.url, pendingAttachment?.type);
+      if (sent === null) return;
       clearAttachment();
     }
 
-    setMessage('');
+    await clearDraft();
     onTyping(false);
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -197,8 +225,9 @@ export function MessageInput({
 
   /** Maqola (article) xabarini yuborish */
   const handleSendArticle = async (payload: string) => {
-    await onSend(payload);
-    setMessage('');
+    const sent = await onSend(payload);
+    if (sent === null) return;
+    await clearDraft();
     onTyping(false);
   };
 
@@ -788,14 +817,25 @@ export function MessageInput({
           onOpenChange={setShowScheduleDialog}
           messagePreview={message || pendingAttachment?.name || ''}
           onSchedule={async (scheduledFor) => {
-            await onSchedule(
+            const scheduledContent =
+              pendingAlbum && pendingAlbum.length > 0
+                ? buildAlbumPayload({
+                    items: pendingAlbum,
+                    caption: message.trim() || undefined,
+                  })
+                : message.trim();
+
+            const scheduled = await onSchedule(
               scheduledFor,
-              message.trim(),
-              pendingAttachment?.url,
-              pendingAttachment?.type
+              scheduledContent,
+              pendingAlbum ? undefined : pendingAttachment?.url,
+              pendingAlbum ? undefined : pendingAttachment?.type
             );
-            setMessage('');
+            if (scheduled === null) return;
+
+            await clearDraft();
             clearAttachment();
+            clearAlbum();
           }}
         />
       )}

@@ -658,8 +658,9 @@ export default function MessagesPage() {
   };
 
   const handleSendMessage = async (content: string, mediaUrl?: string, mediaType?: string) => {
-    await sendMessage(content, mediaUrl, mediaType);
-    setReplyTo(null);
+    const sent = await sendMessage(content, mediaUrl, mediaType);
+    if (sent) setReplyTo(null);
+    return sent;
   };
 
   const handleScheduleMessage = async (
@@ -668,9 +669,8 @@ export default function MessagesPage() {
     mediaUrl?: string,
     mediaType?: string
   ) => {
-    if (selectedConversation) {
-      await scheduleMessage(selectedConversation.id, scheduledFor, content, mediaUrl, mediaType);
-    }
+    if (!selectedConversation) return null;
+    return scheduleMessage(selectedConversation.id, scheduledFor, content, mediaUrl, mediaType);
   };
 
   // Joylashuv (oddiy va jonli)
@@ -2065,6 +2065,7 @@ export default function MessagesPage() {
 
           <div className="pb-safe mb-16 flex-shrink-0 border-t border-border bg-card md:mb-0">
             <MessageInput
+              conversationId={selectedConversation.id}
               onSend={handleSendMessage}
               onSchedule={handleScheduleMessage}
               onTyping={setTyping}
