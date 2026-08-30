@@ -1,5 +1,7 @@
 import {
   Crosshair,
+  Flag,
+  SkipForward,
   X,
   Loader2,
   Navigation,
@@ -27,6 +29,12 @@ interface ActiveNavigationPanelProps {
   voiceSupported?: boolean;
   onToggleVoice?: () => void;
   following?: boolean;
+  nextStopName?: string | null;
+  nextStopDistanceM?: number | null;
+  canSkipNextStop?: boolean;
+  reachedStopName?: string | null;
+  onContinueAfterStop?: () => void;
+  onSkipNextStop?: () => void;
   onRecenter: () => void;
   onStop: () => void;
 }
@@ -70,6 +78,12 @@ export function ActiveNavigationPanel({
   voiceSupported = false,
   onToggleVoice,
   following = true,
+  nextStopName = null,
+  nextStopDistanceM = null,
+  canSkipNextStop = false,
+  reachedStopName = null,
+  onContinueAfterStop,
+  onSkipNextStop,
   onRecenter,
   onStop,
 }: ActiveNavigationPanelProps) {
@@ -190,6 +204,93 @@ export function ActiveNavigationPanel({
               </button>
             </div>
           </div>
+
+          {reachedStopName ? (
+            <div
+              className={cn(
+                'flex items-center gap-3 border-t px-4 py-3',
+                highContrast
+                  ? 'border-emerald-300/[0.14] bg-emerald-300/[0.08]'
+                  : 'border-emerald-500/[0.16] bg-emerald-500/[0.07]',
+              )}
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/[0.14] text-emerald-500">
+                <Flag className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-extrabold">
+                  {reachedStopName}
+                </p>
+                <p
+                  className={cn(
+                    'mt-0.5 text-[11px]',
+                    highContrast
+                      ? 'text-white/[0.55]'
+                      : 'text-muted-foreground',
+                  )}
+                >
+                  Oraliq manzilga yetdingiz
+                </p>
+              </div>
+              {onContinueAfterStop && (
+                <button
+                  type="button"
+                  onClick={onContinueAfterStop}
+                  className="h-9 rounded-xl bg-emerald-500 px-3 text-xs font-extrabold text-white"
+                >
+                  Davom etish
+                </button>
+              )}
+            </div>
+          ) : nextStopName ? (
+            <div
+              className={cn(
+                'flex items-center gap-3 border-t px-4 py-2.5',
+                highContrast
+                  ? 'border-white/[0.10] bg-white/[0.035]'
+                  : 'border-border/[0.45] bg-muted/[0.20]',
+              )}
+            >
+              <Flag
+                className={cn(
+                  'h-4 w-4 shrink-0',
+                  highContrast ? 'text-white/[0.60]' : 'text-primary',
+                )}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[11px] font-bold">
+                  Keyingi: {nextStopName}
+                </p>
+                {nextStopDistanceM != null && (
+                  <p
+                    className={cn(
+                      'mt-0.5 text-[10px]',
+                      highContrast
+                        ? 'text-white/[0.45]'
+                        : 'text-muted-foreground',
+                    )}
+                  >
+                    {formatKm(nextStopDistanceM)}
+                  </p>
+                )}
+              </div>
+              {canSkipNextStop && onSkipNextStop && (
+                <button
+                  type="button"
+                  onClick={onSkipNextStop}
+                  className={cn(
+                    'flex h-8 items-center gap-1.5 rounded-xl border px-2.5 text-[10px] font-bold transition',
+                    highContrast
+                      ? 'border-white/[0.12] bg-white/[0.04] text-white/[0.65] hover:bg-white/[0.09]'
+                      : 'border-border/[0.55] bg-background text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  <SkipForward className="h-3.5 w-3.5" />
+                  O‘tkazish
+                </button>
+              )}
+            </div>
+          ) : null}
 
           {error && (
             <div className="border-t border-amber-500/[0.18] bg-amber-500/[0.08] px-4 py-2 text-xs font-medium text-amber-600 dark:text-amber-300">
