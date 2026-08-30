@@ -15,6 +15,7 @@ export function useMessageDraft(conversationId: string | null) {
   const [isLoading, setIsLoading] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRef = useRef('');
+  const dirtyRef = useRef(false);
   const revisionRef = useRef(0);
 
   const cancelSaveTimer = useCallback(() => {
@@ -29,6 +30,7 @@ export function useMessageDraft(conversationId: string | null) {
       if (!user?.id || !conversationId) return;
       try {
         await saveMessageDraft(user.id, conversationId, value);
+        if (pendingRef.current === value) dirtyRef.current = false;
       } catch (error) {
         console.error('Message draft save failed:', error);
       }
@@ -39,6 +41,7 @@ export function useMessageDraft(conversationId: string | null) {
   useEffect(() => {
     cancelSaveTimer();
     pendingRef.current = '';
+    dirtyRef.current = false;
     setDraftState('');
 
     if (!user?.id || !conversationId) {
@@ -54,6 +57,7 @@ export function useMessageDraft(conversationId: string | null) {
       .then((value) => {
         if (cancelled || revisionRef.current !== loadRevision) return;
         pendingRef.current = value;
+        dirtyRef.current = false;
         setDraftState(value);
       })
       .catch((error) => {
@@ -67,7 +71,7 @@ export function useMessageDraft(conversationId: string | null) {
       cancelled = true;
       cancelSaveTimer();
       const pending = pendingRef.current;
-      if (pending.trim()) {
+      if (dirtyRef.current) {
         void saveMessageDraft(user.id, conversationId, pending).catch((error) => {
           console.error('Message draft flush failed:', error);
         });
@@ -81,6 +85,7 @@ export function useMessageDraft(conversationId: string | null) {
       setDraftState((previous) => {
         const value = typeof next === 'function' ? next(previous) : next;
         pendingRef.current = value;
+        dirtyRef.current = true;
 
         cancelSaveTimer();
         if (user?.id && conversationId) {
@@ -100,6 +105,7 @@ export function useMessageDraft(conversationId: string | null) {
     revisionRef.current += 1;
     cancelSaveTimer();
     pendingRef.current = '';
+    dirtyRef.current = false;
     setDraftState('');
 
     if (!user?.id || !conversationId) return;
