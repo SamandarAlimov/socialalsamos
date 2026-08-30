@@ -20,6 +20,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { formatPrice, getShippingCost, checkoutErrorMessage } from '@/lib/marketplace';
+import { getCartItemStock, getCartItemUnitPrice, getVariantOptionsLabel } from '@/hooks/useMarketplace';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { marketplaceUz } from '@/i18n/marketplace';
@@ -89,7 +90,8 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
     () => cartItems.filter(item =>
       !item.product ||
       item.product.status !== 'active' ||
-      Number(item.product.quantity ?? 0) < item.quantity,
+      (item.product_variant_id != null && (!item.variant || !item.variant.is_active)) ||
+      getCartItemStock(item) < item.quantity,
     ),
     [cartItems],
   );
@@ -487,8 +489,10 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                     {cartItems.map(item => {
                       const product = item.product;
                       if (!product) return null;
-                      const image = product.images?.[0]?.url;
+                      const image = item.variant?.image_url || product.images?.[0]?.url;
                       const itemShipping = getShippingCost(product, item.quantity);
+                      const unitPrice = getCartItemUnitPrice(item);
+                      const variantLabel = getVariantOptionsLabel(item.variant);
                       return (
                         <div key={item.id} className="flex gap-3 p-2 rounded-xl bg-muted/20">
                           <div className="relative w-14 h-14 rounded-lg overflow-hidden bg-muted shrink-0">
@@ -511,8 +515,13 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium line-clamp-1">{product.title}</p>
+                            {variantLabel && (
+                              <p className="line-clamp-1 text-[11px] font-medium text-foreground/75">
+                                {variantLabel}
+                              </p>
+                            )}
                             <p className="text-xs text-muted-foreground tabular-nums">
-                              {item.quantity} × {formatPrice(product.price, currency)}
+                              {item.quantity} × {formatPrice(unitPrice, currency)}
                             </p>
                             {itemShipping > 0 && (
                               <p className="text-[11px] text-muted-foreground">
@@ -521,7 +530,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                             )}
                           </div>
                           <p className="text-sm font-bold tabular-nums">
-                            {formatPrice(product.price * item.quantity, currency)}
+                            {formatPrice(unitPrice * item.quantity, currency)}
                           </p>
                         </div>
                       );
