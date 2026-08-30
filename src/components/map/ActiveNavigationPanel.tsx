@@ -1,6 +1,6 @@
 import {
-  CircleStop,
   Crosshair,
+  X,
   Loader2,
   Navigation,
   Route,
@@ -177,15 +177,16 @@ export function ActiveNavigationPanel({
                 type="button"
                 onClick={onStop}
                 className={cn(
-                  'flex h-10 w-10 items-center justify-center rounded-xl border transition',
+                  'flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-extrabold transition',
                   highContrast
-                    ? 'border-white/[0.12] bg-white/[0.05] text-white/[0.72] hover:bg-white/[0.1] hover:text-white'
-                    : 'border-border/[0.50] bg-background/[0.75] text-muted-foreground hover:bg-muted hover:text-foreground',
+                    ? 'border-red-300/[0.22] bg-red-400/[0.10] text-red-100 hover:bg-red-400/[0.18]'
+                    : 'border-red-500/[0.20] bg-red-500/[0.08] text-red-600 hover:bg-red-500/[0.14] dark:text-red-300',
                 )}
-                aria-label="Navigatsiyani tugatish"
-                title="Navigatsiyani tugatish"
+                aria-label="Navigatsiyadan chiqish"
+                title="Navigatsiyadan chiqish"
               >
-                <CircleStop className="h-5 w-5" />
+                <X className="h-4 w-4" />
+                <span>Tugatish</span>
               </button>
             </div>
           </div>
