@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, X, Globe, Sparkles, LayoutGrid, User, FileText, Users, Radio, ShoppingBag, Hash, TrendingUp, Clock, ArrowLeft, Mic, SlidersHorizontal, ChevronRight, Heart, MessageCircle, Eye, Play, Star, MapPin, Verified } from 'lucide-react';
+import { Search, X, Globe, Sparkles, LayoutGrid, User, FileText, Users, Radio, ShoppingBag, Hash, TrendingUp, Clock, ArrowLeft, Mic, SlidersHorizontal, ChevronRight, Heart, MessageCircle, Eye, Play, Star, MapPin, Verified, ExternalLink, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +15,9 @@ import { PullToRefresh } from '@/components/PullToRefresh';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
-import { GlobalSearchResults } from '@/components/search/GlobalSearchResults';
+import { GlobalSearchResults, type GlobalSearchResult } from '@/components/search/GlobalSearchResults';
+import { useHashtagSearch, type HashtagSuggestion } from '@/hooks/useHashtags';
+import { useVoiceSearch } from '@/hooks/useVoiceSearch';
 
 
 // ── Types ──────────────────────────────────────────────
@@ -68,6 +70,14 @@ interface SearchProduct {
   };
 }
 
+interface SearchGroup {
+  id: string;
+  name: string | null;
+  description: string | null;
+  avatar_url: string | null;
+  type: string;
+}
+
 type TabKey = 'global' | 'ai' | 'all' | 'users' | 'posts' | 'groups' | 'channels' | 'products' | 'hashtags';
 
 const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
@@ -110,9 +120,25 @@ export default function SearchPage() {
   const [posts, setPosts] = useState<SearchPost[]>([]);
   const [channels, setChannels] = useState<SearchChannel[]>([]);
   const [products, setProducts] = useState<SearchProduct[]>([]);
+  const [groups, setGroups] = useState<SearchGroup[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [aiResponse, setAiResponse] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiSources, setAiSources] = useState<GlobalSearchResult[]>([]);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const aiAbortRef = useRef<AbortController | null>(null);
+
+  const hashtagQuery = debouncedQuery.trim() ? debouncedQuery.replace(/^#/, '') : null;
+  const { suggestions: hashtags, isLoading: hashtagsLoading } = useHashtagSearch(hashtagQuery, 20);
+
+  const onVoiceResult = useCallback((text: string) => {
+    setQuery(text);
+    inputRef.current?.focus();
+  }, []);
+  const { isListening, isSupported: voiceSupported, toggleListening } = useVoiceSearch({
+    onResult: onVoiceResult,
+    language: 'uz-UZ',
+  });
 
   // Search logic
   const performSearch = useCallback(async (searchTerm: string) => {
@@ -121,12 +147,13 @@ export default function SearchPage() {
       setPosts([]);
       setChannels([]);
       setProducts([]);
+      setGroups([]);
       return;
     }
     setIsLoading(true);
     const term = searchTerm.replace('#', '');
 
-    const [usersRes, postsRes, channelsRes, productsRes] = await Promise.all([
+    const [usersRes, postsRes, channelsRes, productsRes, groupsRes] = await Promise.all([
       supabase
         .from('profiles')
         .select('id, username, display_name, avatar_url, bio, followers_count, is_verified')
@@ -156,12 +183,19 @@ export default function SearchPage() {
         .eq('status', 'active')
         .ilike('title', `%${term}%`)
         .limit(20),
+      supabase
+        .from('conversations')
+        .select('id, name, description, avatar_url, type')
+        .eq('type', 'group')
+        .or(`name.ilike.%${term}%,description.ilike.%${term}%`)
+        .limit(20),
     ]);
 
     if (usersRes.data) setUsers(usersRes.data);
     if (postsRes.data) setPosts(postsRes.data as any);
     if (channelsRes.data) setChannels(channelsRes.data);
     if (productsRes.data) setProducts(productsRes.data as any);
+    if (groupsRes.data) setGroups(groupsRes.data as SearchGroup[]);
     setIsLoading(false);
   }, []);
 
@@ -184,46 +218,156 @@ export default function SearchPage() {
     setActiveTab(tab);
   };
 
-  const handleAISearch = useCallback(async () => {
-    if (!query.trim() || activeTab !== 'ai') return;
+  const handleAISearch = useCallback(async (searchTerm: string) => {
+    const cleanQuery = searchTerm.trim();
+    if (!cleanQuery || activeTab !== 'ai') return;
+
+    aiAbortRef.current?.abort();
+    const controller = new AbortController();
+    aiAbortRef.current = controller;
+
     setAiLoading(true);
     setAiResponse('');
+    setAiSources([]);
+    setAiError(null);
+
     try {
-      const resp = await supabase.functions.invoke('ai-assistant', {
-        body: { 
-          messages: [
-            { role: 'user', content: `Quyidagi so'rov bo'yicha qisqa, foydali ma'lumot ber: "${query}"` }
-          ]
-        }
+      // AI Search is grounded by Alsamos' own Global Search index.
+      const { data: searchData } = await supabase.functions.invoke<{
+        results?: GlobalSearchResult[];
+      }>('global-search', {
+        body: {
+          query: cleanQuery,
+          category: 'all',
+          page: 1,
+          pageSize: 8,
+          locale: 'uz',
+        },
       });
-      if (resp.data?.response) {
-        setAiResponse(resp.data.response);
-      } else if (resp.data?.choices?.[0]?.message?.content) {
-        setAiResponse(resp.data.choices[0].message.content);
-      } else {
-        setAiResponse('Javob topilmadi. Iltimos, qayta urinib ko\'ring.');
+
+      if (controller.signal.aborted) return;
+
+      const sources = (searchData?.results ?? []).slice(0, 8);
+      setAiSources(sources);
+
+      const grounding = sources.length
+        ? sources
+            .map(
+              (source, index) =>
+                `[${index + 1}] ${source.title}\nURL: ${source.url}\n${source.snippet}`,
+            )
+            .join('\n\n')
+        : 'Alsamos Global Search indexida bu so\'rov uchun tashqi manba topilmadi.';
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      const bearer =
+        sessionData.session?.access_token ||
+        import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-assistant`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${bearer}`,
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            messages: [
+              {
+                role: 'user',
+                content: cleanQuery,
+              },
+            ],
+            context:
+              '[SEARCH_GROUNDING]\n' +
+              'Bu Alsamos Search ichidagi AI qidiruv. Quyidagi indekslangan web manbalaridan foydalan. ' +
+              'Manba bor bo\'lsa faktlarni shu manbalarga tayab yoz va [1], [2] ko\'rinishida iqtibos raqamini ko\'rsat. ' +
+              'Manba yetarli bo\'lmasa buni aniq ayt; fakt yoki URL o\'ylab topma.\n\n' +
+              grounding,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body?.error || 'AI xizmati bilan xatolik');
       }
-    } catch {
-      setAiResponse('AI xizmatiga ulanib bo\'lmadi.');
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('AI oqimi mavjud emas');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let answer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done || controller.signal.aborted) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let newlineIndex: number;
+        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+          let line = buffer.slice(0, newlineIndex);
+          buffer = buffer.slice(newlineIndex + 1);
+
+          if (line.endsWith('\r')) line = line.slice(0, -1);
+          if (!line.startsWith('data: ')) continue;
+
+          const jsonText = line.slice(6).trim();
+          if (!jsonText || jsonText === '[DONE]') continue;
+
+          try {
+            const chunk = JSON.parse(jsonText);
+            const delta = chunk.choices?.[0]?.delta?.content;
+            if (delta) {
+              answer += delta;
+              setAiResponse(answer);
+            }
+          } catch {
+            // Partial SSE line is ignored; the next complete event continues.
+          }
+        }
+      }
+
+      if (!answer && !controller.signal.aborted) {
+        setAiError('AI javobi bo\'sh qaytdi.');
+      }
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      setAiError(error instanceof Error ? error.message : 'AI xizmatiga ulanib bo\'lmadi.');
+    } finally {
+      if (aiAbortRef.current === controller) {
+        setAiLoading(false);
+      }
     }
-    setAiLoading(false);
-  }, [query, activeTab]);
+  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab === 'ai' && debouncedQuery.trim()) {
-      handleAISearch();
+      void handleAISearch(debouncedQuery);
+    } else if (activeTab !== 'ai') {
+      aiAbortRef.current?.abort();
+      setAiLoading(false);
     }
+
+    return () => {
+      if (activeTab === 'ai') aiAbortRef.current?.abort();
+    };
   }, [activeTab, debouncedQuery, handleAISearch]);
 
-  const hasResults = users.length > 0 || posts.length > 0 || channels.length > 0 || products.length > 0;
+  const hasResults = users.length > 0 || posts.length > 0 || groups.length > 0 || channels.length > 0 || products.length > 0 || hashtags.length > 0;
   const hasQuery = query.trim().length > 0;
 
   // Count helpers
   const resultCounts: Partial<Record<TabKey, number>> = {
     users: users.length,
     posts: posts.length,
+    groups: groups.length,
     channels: channels.length,
     products: products.length,
+    hashtags: hashtags.length,
   };
 
   const pageContent = (
@@ -282,8 +426,18 @@ export default function SearchPage() {
                     <X className="h-3.5 w-3.5 text-muted-foreground" />
                   </motion.button>
                 )}
-                <button className="h-7 w-7 rounded-full bg-muted/60 flex items-center justify-center hover:bg-muted transition-colors">
-                  <Mic className="h-3.5 w-3.5 text-muted-foreground" />
+                <button
+                  type="button"
+                  disabled={!voiceSupported}
+                  onClick={toggleListening}
+                  className={cn(
+                    "h-7 w-7 rounded-full flex items-center justify-center transition-colors",
+                    isListening ? "bg-primary text-primary-foreground" : "bg-muted/60 hover:bg-muted",
+                    !voiceSupported && "opacity-40 cursor-not-allowed",
+                  )}
+                  aria-label={isListening ? "Ovozli qidiruvni to'xtatish" : "Ovozli qidiruv"}
+                >
+                  <Mic className={cn("h-3.5 w-3.5", !isListening && "text-muted-foreground")} />
                 </button>
               </div>
             </div>
@@ -352,12 +506,19 @@ export default function SearchPage() {
                 <GlobalTab query={query} />
               )}
               {activeTab === 'ai' && (
-                <AITab query={query} response={aiResponse} loading={aiLoading} />
+                <AITab
+                  query={query}
+                  response={aiResponse}
+                  loading={aiLoading}
+                  sources={aiSources}
+                  error={aiError}
+                />
               )}
               {activeTab === 'all' && (
                 <AllTab
-                  users={users} posts={posts} channels={channels} products={products}
-                  isLoading={isLoading} query={query} navigate={navigate}
+                  users={users} posts={posts} groups={groups} channels={channels} products={products}
+                  hashtags={hashtags}
+                  isLoading={isLoading || hashtagsLoading} query={query} navigate={navigate}
                   onTabSwitch={handleTabChange}
                 />
               )}
@@ -368,7 +529,7 @@ export default function SearchPage() {
                 <PostsTab posts={posts} isLoading={isLoading} navigate={navigate} />
               )}
               {activeTab === 'groups' && (
-                <GroupsTab query={query} />
+                <GroupsTab groups={groups} isLoading={isLoading} navigate={navigate} />
               )}
               {activeTab === 'channels' && (
                 <ChannelsTab channels={channels} isLoading={isLoading} navigate={navigate} />
@@ -377,7 +538,7 @@ export default function SearchPage() {
                 <ProductsTab products={products} isLoading={isLoading} navigate={navigate} />
               )}
               {activeTab === 'hashtags' && (
-                <HashtagsTab query={query} />
+                <HashtagsTab hashtags={hashtags} isLoading={hashtagsLoading} />
               )}
             </motion.div>
           )}
@@ -463,7 +624,19 @@ function GlobalTab({ query }: { query: string }) {
 
 
 // ── AI Tab ──────────────────────────────────────────────
-function AITab({ query, response, loading }: { query: string; response: string; loading: boolean }) {
+function AITab({
+  query,
+  response,
+  loading,
+  sources,
+  error,
+}: {
+  query: string;
+  response: string;
+  loading: boolean;
+  sources: GlobalSearchResult[];
+  error: string | null;
+}) {
   return (
     <div className="space-y-4">
       <div className="p-4 rounded-2xl bg-gradient-to-br from-primary/5 via-primary/3 to-transparent border border-primary/10 backdrop-blur-sm">
@@ -471,36 +644,73 @@ function AITab({ query, response, loading }: { query: string; response: string; 
           <div className="h-9 w-9 rounded-xl bg-primary/15 flex items-center justify-center">
             <Sparkles className="h-4.5 w-4.5 text-primary" />
           </div>
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">AI Javob</h3>
-            <p className="text-[11px] text-muted-foreground">"{query}" so'rovi bo'yicha</p>
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-foreground">Alsamos AI Search</h3>
+            <p className="text-[11px] text-muted-foreground truncate">"{query}" so'rovi bo'yicha</p>
           </div>
+          {loading && <Loader2 className="ml-auto h-4 w-4 animate-spin text-primary" />}
         </div>
-        {loading ? (
+
+        {response ? (
+          <p className="text-sm text-foreground/90 leading-7 whitespace-pre-wrap">{response}</p>
+        ) : loading ? (
           <div className="space-y-2">
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-4 w-4/5" />
             <Skeleton className="h-4 w-3/5" />
           </div>
-        ) : response ? (
-          <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">{response}</p>
+        ) : error ? (
+          <p className="text-sm text-destructive">{error}</p>
         ) : (
-          <p className="text-sm text-muted-foreground">So'rov yuboring va AI javob beradi...</p>
+          <p className="text-sm text-muted-foreground">Savol yozing — Alsamos AI javob beradi.</p>
         )}
       </div>
+
+      {sources.length > 0 && (
+        <section>
+          <div className="flex items-center gap-2 mb-2">
+            <Globe className="h-4 w-4 text-primary" />
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Manbalar
+            </h4>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {sources.map((source, index) => (
+              <a
+                key={source.id}
+                href={source.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group rounded-xl border border-border/40 bg-card/50 p-3 hover:bg-muted/40 transition-colors"
+              >
+                <div className="flex items-start gap-2">
+                  <span className="flex h-5 min-w-5 items-center justify-center rounded-md bg-primary/10 px-1 text-[10px] font-bold text-primary">
+                    {index + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-foreground line-clamp-2">{source.title}</p>
+                    <p className="mt-1 text-[10px] text-muted-foreground truncate">{source.displayUrl}</p>
+                  </div>
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-60" />
+                </div>
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
 
 // ── All Tab ─────────────────────────────────────────────
-function AllTab({ users, posts, channels, products, isLoading, query, navigate, onTabSwitch }: {
-  users: SearchUser[]; posts: SearchPost[]; channels: SearchChannel[];
-  products: SearchProduct[]; isLoading: boolean; query: string;
+function AllTab({ users, posts, groups, channels, products, hashtags, isLoading, query, navigate, onTabSwitch }: {
+  users: SearchUser[]; posts: SearchPost[]; groups: SearchGroup[]; channels: SearchChannel[];
+  products: SearchProduct[]; hashtags: HashtagSuggestion[]; isLoading: boolean; query: string;
   navigate: (path: string) => void; onTabSwitch: (tab: TabKey) => void;
 }) {
   if (isLoading) return <AllSkeleton />;
 
-  const noResults = users.length === 0 && posts.length === 0 && channels.length === 0 && products.length === 0;
+  const noResults = users.length === 0 && posts.length === 0 && groups.length === 0 && channels.length === 0 && products.length === 0 && hashtags.length === 0;
 
   if (noResults) {
     return (
@@ -548,6 +758,40 @@ function AllTab({ users, posts, channels, products, isLoading, query, navigate, 
         </ResultSection>
       )}
 
+      {groups.length > 0 && (
+        <ResultSection
+          title="Guruhlar"
+          count={groups.length}
+          icon={Users}
+          onSeeAll={() => onTabSwitch('groups')}
+        >
+          <div className="space-y-1.5">
+            {groups.slice(0, 4).map((group) => (
+              <GroupResultCard
+                key={group.id}
+                group={group}
+                onClick={() => navigate('/messages')}
+              />
+            ))}
+          </div>
+        </ResultSection>
+      )}
+
+      {hashtags.length > 0 && (
+        <ResultSection
+          title="Teglar"
+          count={hashtags.length}
+          icon={Hash}
+          onSeeAll={() => onTabSwitch('hashtags')}
+        >
+          <div className="flex flex-wrap gap-2">
+            {hashtags.slice(0, 8).map((tag) => (
+              <HashtagChip key={tag.id} hashtag={tag} />
+            ))}
+          </div>
+        </ResultSection>
+      )}
+
       {channels.length > 0 && (
         <ResultSection
           title="Kanallar"
@@ -572,7 +816,7 @@ function AllTab({ users, posts, channels, products, isLoading, query, navigate, 
         >
           <div className="grid grid-cols-2 gap-2.5">
             {products.slice(0, 4).map((p) => (
-              <PremiumProductCard key={p.id} product={p} onClick={() => navigate('/marketplace')} />
+              <PremiumProductCard key={p.id} product={p} onClick={() => navigate(`/marketplace/product/${p.id}`)} />
             ))}
           </div>
         </ResultSection>
@@ -641,13 +885,24 @@ function PostsTab({ posts, isLoading, navigate }: {
 }
 
 // ── Groups Tab ──────────────────────────────────────────
-function GroupsTab({ query }: { query: string }) {
+function GroupsTab({
+  groups,
+  isLoading,
+  navigate,
+}: {
+  groups: SearchGroup[];
+  isLoading: boolean;
+  navigate: (path: string) => void;
+}) {
+  if (isLoading) return <UsersSkeleton />;
+  if (groups.length === 0) return <EmptyTabState icon={Users} text="Guruh topilmadi" />;
+
   return (
-    <GlassInfoCard
-      icon={Users}
-      title="Guruhlar"
-      description={`"${query}" bo'yicha guruhlar qidiruvi tez orada qo'shiladi.`}
-    />
+    <div className="space-y-1.5">
+      {groups.map((group) => (
+        <GroupResultCard key={group.id} group={group} onClick={() => navigate('/messages')} />
+      ))}
+    </div>
   );
 }
 
@@ -682,19 +937,67 @@ function ProductsTab({ products, isLoading, navigate }: {
 }
 
 // ── Hashtags Tab ────────────────────────────────────────
-function HashtagsTab({ query }: { query: string }) {
+function HashtagsTab({
+  hashtags,
+  isLoading,
+}: {
+  hashtags: HashtagSuggestion[];
+  isLoading: boolean;
+}) {
+  if (isLoading) return <UsersSkeleton />;
+  if (hashtags.length === 0) return <EmptyTabState icon={Hash} text="Teg topilmadi" />;
+
   return (
-    <GlassInfoCard
-      icon={Hash}
-      title="Teglar"
-      description={`#${query.replace('#', '')} bo'yicha teglar qidiruvi tez orada ishga tushadi.`}
-    />
+    <div className="flex flex-wrap gap-2">
+      {hashtags.map((tag) => (
+        <HashtagChip key={tag.id} hashtag={tag} />
+      ))}
+    </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════
 // ── PREMIUM CARDS ──────────────────────────────────────
 // ═══════════════════════════════════════════════════════
+
+function GroupResultCard({ group, onClick }: { group: SearchGroup; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center gap-3 rounded-2xl border border-border/20 bg-card/50 p-3 text-left transition-colors hover:bg-card/80"
+    >
+      <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-primary/10 flex items-center justify-center">
+        {group.avatar_url ? (
+          <img src={group.avatar_url} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <Users className="h-5 w-5 text-primary" />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-foreground">{group.name || 'Guruh'}</p>
+        {group.description && (
+          <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">{group.description}</p>
+        )}
+      </div>
+      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/50" />
+    </button>
+  );
+}
+
+function HashtagChip({ hashtag }: { hashtag: HashtagSuggestion }) {
+  return (
+    <button
+      type="button"
+      className="rounded-xl border border-border/30 bg-muted/40 px-3 py-2 text-left transition-colors hover:bg-muted/70"
+    >
+      <span className="text-sm font-semibold text-foreground">#{hashtag.tag}</span>
+      <span className="ml-2 text-[10px] text-muted-foreground">
+        {formatCount(hashtag.posts_count || 0)} post
+      </span>
+    </button>
+  );
+}
 
 function PremiumUserCard({ user, onClick }: { user: SearchUser; onClick: () => void }) {
   const { triggerHaptic } = useHapticFeedback();
