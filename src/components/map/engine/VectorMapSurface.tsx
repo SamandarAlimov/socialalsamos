@@ -47,6 +47,7 @@ interface VectorMapSurfaceProps {
   traffic?: TrafficProviderStatus | null;
   trafficEnabled?: boolean;
   trafficStyle?: TrafficStyle;
+  trafficRevision?: number;
   pickMode?: boolean;
   referenceCenter: { latitude: number; longitude: number };
   onViewport: (viewport: MapViewport) => void;
@@ -246,6 +247,7 @@ function syncTrafficLayer(
   traffic: TrafficProviderStatus | null | undefined,
   enabled: boolean,
   style: TrafficStyle,
+  revision = 0,
 ): void {
   if (!map?.isStyleLoaded?.()) return;
 
@@ -259,7 +261,7 @@ function syncTrafficLayer(
   try {
     map.addSource(TRAFFIC_SOURCE_ID, {
       type: 'raster',
-      tiles: [trafficTileTemplate(style)],
+      tiles: [trafficTileTemplate(style, revision)],
       tileSize: 256,
       minzoom: traffic.minZoom,
       maxzoom: traffic.maxZoom,
@@ -457,6 +459,7 @@ export function VectorMapSurface({
   traffic = null,
   trafficEnabled = false,
   trafficStyle = 'light',
+  trafficRevision = 0,
   pickMode = false,
   referenceCenter,
   onViewport,
@@ -634,6 +637,7 @@ export function VectorMapSurface({
             traffic,
             trafficEnabled,
             trafficStyle,
+            trafficRevision,
           );
           if (buildings3d) add3dBuildings(map);
           setStyleRevision((value) => value + 1);
@@ -650,6 +654,7 @@ export function VectorMapSurface({
             traffic,
             trafficEnabled,
             trafficStyle,
+            trafficRevision,
           );
           if (buildings3d) add3dBuildings(map);
           setStyleRevision((value) => value + 1);
@@ -824,6 +829,7 @@ export function VectorMapSurface({
       traffic,
       trafficEnabled,
       trafficStyle,
+      trafficRevision,
     );
   }, [
     traffic?.configured,
@@ -833,6 +839,7 @@ export function VectorMapSurface({
     traffic?.maxZoom,
     trafficEnabled,
     trafficStyle,
+    trafficRevision,
     styleRevision,
   ]);
 
