@@ -60,6 +60,8 @@ import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { MapBottomSheet, type MapSheetSnap } from '@/components/map/MapBottomSheet';
 import { MapOverviewPanel } from '@/components/map/MapOverviewPanel';
+import { MapSearchSuggestions } from '@/components/map/MapSearchSuggestions';
+import { useMapSearchHistory } from '@/hooks/useMapSearchHistory';
 
 const DEFAULT_CENTER = { latitude: 41.311081, longitude: 69.240562 };
 
@@ -266,6 +268,7 @@ export default function MapPage() {
   const [layerOpen, setLayerOpen] = useState(false);
 
   const [query, setQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
   const [category, setCategory] = useState<string | null>(null);
   const [selectedPlace, setSelectedPlace] = useState<MapPlace | null>(null);
   const [selectedStop, setSelectedStop] = useState<TransitStop | null>(null);
@@ -316,6 +319,7 @@ export default function MapPage() {
   const stopRoutes = useStopRoutes(selectedStop);
   const transitStatus = useTransitRealtimeStatus();
   const saved = useSavedPlaces();
+  const searchHistory = useMapSearchHistory();
   useVisitTracking(true);
   const visits = usePlaceVisits(60);
 
@@ -516,6 +520,19 @@ export default function MapPage() {
     [me, center, routeOrigin],
   );
 
+  const selectSearchPlace = useCallback(
+    (place: MapPlace) => {
+      searchHistory.addRecent(query.trim() || place.name);
+      setSelectedPlace(place);
+      setSelectedStop(null);
+      setCenter({ latitude: place.latitude, longitude: place.longitude });
+      setPanel('place');
+      setSnap('half');
+      setSearchFocused(false);
+    },
+    [query, searchHistory],
+  );
+
   const openDirections = useCallback(
     (place: MapPlace) => {
       const origin = me
@@ -641,6 +658,7 @@ export default function MapPage() {
         <PlaceDetailsCard
           place={selectedPlace}
           saved={saved.isSaved(selectedPlace.latitude, selectedPlace.longitude)}
+          highContrast={imageryLayer}
           onClose={() => {
             setSelectedPlace(null);
             setPanel('search');
@@ -1176,13 +1194,7 @@ export default function MapPage() {
                   ? "Hech narsa topilmadi. Nomni boshqacha yozib ko'ring."
                   : 'Kategoriya tanlang yoki qidiruvdan foydalaning.'
               }
-              onSelect={(place) => {
-                setSelectedPlace(place);
-                setSelectedStop(null);
-                setCenter({ latitude: place.latitude, longitude: place.longitude });
-                setPanel('place');
-                setSnap('half');
-              }}
+              onSelect={selectSearchPlace}
               onDirections={openDirections}
               onSendToChat={setShareTarget}
               onSave={toggleSave}
@@ -1230,6 +1242,8 @@ export default function MapPage() {
     routeEndpointSearch.places,
     selectRouteEndpoint,
     useCurrentLocationAsOrigin,
+    selectSearchPlace,
+    imageryLayer,
   ]);
 
   return (
