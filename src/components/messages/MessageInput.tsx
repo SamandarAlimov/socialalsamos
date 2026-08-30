@@ -122,6 +122,7 @@ export function MessageInput({
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const localPreviewRef = useRef<string | null>(null);
+  const previousConversationRef = useRef<string | null>(conversationId);
   const {
     mentionState,
     handleInputChange: handleMentionChange,
@@ -172,6 +173,27 @@ export function MessageInput({
   };
 
   const clearAlbum = () => setPendingAlbum(null);
+
+  // Chat almashganda pending media/reply yangi suhbatga ko'chib ketmasin.
+  useEffect(() => {
+    if (previousConversationRef.current === conversationId) return;
+    previousConversationRef.current = conversationId;
+
+    if (localPreviewRef.current) {
+      URL.revokeObjectURL(localPreviewRef.current);
+      localPreviewRef.current = null;
+    }
+
+    setPendingAttachment(null);
+    setPendingAlbum(null);
+    setAttachmentOpen(false);
+    setShowScheduleDialog(false);
+    setShowArticleComposer(false);
+    setIsDragging(false);
+    closeMention();
+    onCancelReply?.();
+    onTyping(false);
+  }, [conversationId, closeMention, onCancelReply, onTyping]);
 
   const handleSend = async () => {
     if (!message.trim() && !pendingAttachment && !pendingAlbum) return;
@@ -795,14 +817,25 @@ export function MessageInput({
           onOpenChange={setShowScheduleDialog}
           messagePreview={message || pendingAttachment?.name || ''}
           onSchedule={async (scheduledFor) => {
-            await onSchedule(
+            const scheduledContent =
+              pendingAlbum && pendingAlbum.length > 0
+                ? buildAlbumPayload({
+                    items: pendingAlbum,
+                    caption: message.trim() || undefined,
+                  })
+                : message.trim();
+
+            const scheduled = await onSchedule(
               scheduledFor,
-              message.trim(),
-              pendingAttachment?.url,
-              pendingAttachment?.type
+              scheduledContent,
+              pendingAlbum ? undefined : pendingAttachment?.url,
+              pendingAlbum ? undefined : pendingAttachment?.type
             );
-            setMessage('');
+            if (scheduled === null) return;
+
+            await clearDraft();
             clearAttachment();
+            clearAlbum();
           }}
         />
       )}
