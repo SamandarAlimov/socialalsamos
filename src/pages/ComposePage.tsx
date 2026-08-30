@@ -38,8 +38,7 @@ export default function ComposePage() {
 
     if (currentModeLocked && nextMode !== mode) {
       const params = new URLSearchParams(searchParams);
-      if (mode === 'post') params.delete('mode');
-      else params.set('mode', mode);
+      params.set('mode', mode);
       setSearchParams(params, { replace: true });
       return;
     }
