@@ -175,6 +175,61 @@ function records(text: string): Record<string, string>[] {
   );
 }
 
+function forEachRecord(
+  text: string,
+  visit: (record: Record<string, string>) => void,
+): void {
+  let headers: string[] | null = null;
+  let row: string[] = [];
+  let field = "";
+  let quoted = false;
+
+  const flushRow = () => {
+    row.push(field.replace(/\r$/, ""));
+    field = "";
+    if (!headers) {
+      headers = row.map((value) =>
+        value.replace(/^\uFEFF/, "").trim()
+      );
+    } else if (row.some((value) => value.length > 0)) {
+      const record: Record<string, string> = {};
+      headers.forEach((header, index) => {
+        record[header] = row[index] ?? "";
+      });
+      visit(record);
+    }
+    row = [];
+  };
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (quoted) {
+      if (char === '"' && text[index + 1] === '"') {
+        field += '"';
+        index += 1;
+      } else if (char === '"') {
+        quoted = false;
+      } else {
+        field += char;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      quoted = true;
+    } else if (char === ",") {
+      row.push(field);
+      field = "";
+    } else if (char === "\n") {
+      flushRow();
+    } else {
+      field += char;
+    }
+  }
+
+  if (field.length || row.length) flushRow();
+}
+
 async function fetchBytes(url: string): Promise<Uint8Array> {
   const response = await fetch(url, {
     headers: {
@@ -239,14 +294,17 @@ async function loadStatic(): Promise<StaticData | null> {
   }
 
   const stopRouteSets = new Map<string, Set<string>>();
-  for (const row of records(read("stop_times.txt"))) {
-    if (!row.stop_id || !row.trip_id) continue;
+  // stop_times.txt odatda feedning eng katta fayli. Uni to‘liq rows[]
+  // ko‘rinishida xotiraga ko‘tarmaymiz; bitta recorddan oqim kabi o‘tamiz.
+  forEachRecord(read("stop_times.txt"), (row) => {
+    if (!row.stop_id || !row.trip_id) return;
     const routeId = tripRoute.get(row.trip_id);
-    if (!routeId) continue;
-    const set = stopRouteSets.get(row.stop_id) ?? new Set<string>();
+    if (!routeId) return;
+    const set =
+      stopRouteSets.get(row.stop_id) ?? new Set<string>();
     set.add(routeId);
     stopRouteSets.set(row.stop_id, set);
-  }
+  });
   const stopRoutes = new Map<string, string[]>(
     Array.from(stopRouteSets.entries()).map(([stopId, set]) => [
       stopId,
