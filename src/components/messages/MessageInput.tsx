@@ -483,7 +483,7 @@ export function MessageInput({
   return (
     <div
       className={cn(
-        'relative z-10 border-t border-border bg-card px-3 py-2 tg-transition',
+        'relative isolate z-10 border-t border-border bg-card px-3 py-2 tg-transition',
         isDragging && 'bg-muted/60'
       )}
       onDragOver={(e) => {
