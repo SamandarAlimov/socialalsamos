@@ -2,15 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Camera,
-  Check,
   ChevronDown,
   ImagePlus,
   Loader2,
   Music2,
   Pencil,
-  Play,
   Send,
-  ShieldCheck,
   Users,
   Video,
   X,
@@ -334,17 +331,12 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
                   <span className="flex h-16 w-16 items-center justify-center rounded-[22px] border border-white/10 bg-white/10 shadow-xl backdrop-blur">
                     <Video className="h-7 w-7" />
                   </span>
-                  <div>
-                    <p className="text-sm font-semibold">Reel video</p>
-                    <p className="mt-1 max-w-xs text-xs leading-relaxed text-white/55">
-                      9:16 video tanlang, kamera ishlating yoki desktopda shu yerga tashlang.
-                    </p>
-                  </div>
+                  <p className="text-sm font-semibold">Video qo‘shish</p>
                 </button>
               )}
 
               <span className="pointer-events-none absolute left-3 top-3 rounded-full border border-white/10 bg-black/55 px-2.5 py-1 text-[10px] font-semibold text-white backdrop-blur">
-                Reel · 9:16
+                9:16
               </span>
 
               {music && (
@@ -407,7 +399,7 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
                 className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-muted/60 text-xs font-medium transition hover:bg-muted"
               >
                 <Pencil className="h-4 w-4" />
-                Video tahrirlash · real render
+                Tahrirlash
               </button>
             )}
           </div>
@@ -468,14 +460,9 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
 
           <div className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-sm">
             <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Caption
-                </p>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">
-                  Hashtaglar oddiy #tag formatida ishlaydi
-                </p>
-              </div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Caption
+              </p>
               <span className="text-[10px] text-muted-foreground">
                 {caption.length}/2200
               </span>
@@ -508,7 +495,7 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
               <span className="min-w-0">
                 <span className="block text-xs font-semibold">Musiqa</span>
                 <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
-                  {music?.track?.title ?? 'Katalog yoki device'}
+                  {music?.track?.title ?? 'Tanlanmagan'}
                 </span>
               </span>
             </button>
@@ -569,16 +556,6 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
               )}
             </div>
           )}
-
-          <div className="rounded-3xl border border-border/60 bg-muted/25 p-4">
-            <div className="flex items-start gap-3">
-              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                Reel v1 bitta real video fayl bilan ishlaydi. Multi-clip tugmasi
-                ataylab yo‘q — timeline render engine tayyor bo‘lganda qo‘shiladi.
-              </p>
-            </div>
-          </div>
 
           <button
             type="button"
