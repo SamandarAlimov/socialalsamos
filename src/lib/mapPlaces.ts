@@ -211,7 +211,7 @@ export function findCategory(id?: string | null): PlaceCategory | undefined {
 
 export interface MapPlace {
   id: string;
-  source: 'overpass' | 'nominatim' | 'photon';
+  source: 'overpass' | 'nominatim' | 'photon' | 'vector';
   /** Providerlardan mustaqil, bir xil OSM obyektini bitta joy sifatida tanitadi. */
   canonicalId?: string;
   name: string;
