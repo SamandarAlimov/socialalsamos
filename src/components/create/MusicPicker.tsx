@@ -352,7 +352,7 @@ export function MusicPicker({
         onOpenChange(next);
       }}
     >
-      <DialogContent className="flex max-h-[92dvh] max-w-xl flex-col overflow-hidden p-0">
+      <DialogContent className="flex h-[88dvh] max-h-[860px] max-w-5xl flex-col overflow-hidden p-0">
         <audio ref={audioRef} onEnded={() => setPlayingKey(null)} />
         <input
           ref={fileInputRef}
@@ -362,217 +362,291 @@ export function MusicPicker({
           onChange={handleDeviceFile}
         />
 
-        <DialogHeader className="shrink-0 border-b border-border/60 px-5 pb-4 pt-5">
-          <DialogTitle className="flex items-center gap-2">
-            <Music2 className="h-5 w-5 text-primary" />
-            Musiqa
-          </DialogTitle>
+        <DialogHeader className="shrink-0 border-b border-border/60 bg-background/90 px-5 py-4 backdrop-blur">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <Music2 className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <DialogTitle className="text-base">Musiqa tanlash</DialogTitle>
+              <p className="mt-1 truncate text-xs text-muted-foreground">
+                Katalog yoki qurilmadan audio · clip va volume sozlamalari
+              </p>
+            </div>
+          </div>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4">
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full gap-2"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-          >
-            {uploading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Upload className="h-4 w-4" />
-            )}
-            {uploading ? 'Yuklanmoqda...' : 'Qurilmadan audio tanlash'}
-          </Button>
-
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Trek yoki ijrochini qidiring..."
-              className="pl-9"
-            />
-          </div>
-
-          <Tabs value={tab} onValueChange={(value) => setTab(value as 'catalog' | 'mine')}>
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="catalog">Katalog</TabsTrigger>
-              <TabsTrigger value="mine">Mening musiqam</TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          {selected && (
-            <div className="space-y-4 rounded-2xl border border-primary/30 bg-primary/5 p-4">
-              <div className="flex items-center gap-3">
-                <button
+        <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_330px]">
+          <section className="flex min-h-0 flex-col border-b border-border/60 lg:border-b-0 lg:border-r">
+            <div className="shrink-0 space-y-3 border-b border-border/50 p-4">
+              <div className="flex gap-2">
+                <Button
                   type="button"
-                  onClick={() => void togglePlay(selected)}
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
+                  variant="outline"
+                  className="h-10 flex-1 rounded-xl"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
                 >
-                  {playingKey === selected.key ? (
-                    <Pause className="h-4 w-4" />
+                  {uploading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
-                    <Play className="ml-0.5 h-4 w-4" />
+                    <Upload className="mr-2 h-4 w-4" />
                   )}
-                </button>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold">{selected.title}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {selected.artist || 'Noma’lum ijrochi'} · {formatTime(selected.duration)}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  aria-label="Musiqani olib tashlash"
-                  onClick={() => {
-                    stopPreview();
-                    void cleanupTransientUpload();
-                    setSelected(null);
-                  }}
-                  className="rounded-lg p-2 text-muted-foreground transition hover:bg-muted hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
+                  {uploading ? 'Yuklanmoqda...' : 'Qurilmadan'}
+                </Button>
 
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Boshlanish: {formatTime(startSeconds)}</span>
-                  <span>Klip: {formatTime(effectiveClip)}</span>
-                </div>
-                <Slider
-                  value={[Math.min(startSeconds, maxStart)]}
-                  min={0}
-                  max={Math.max(1, maxStart)}
-                  step={0.5}
-                  onValueChange={([value]) => {
-                    setStartSeconds(value);
-                    if (audioRef.current && playingKey === selected.key) {
-                      audioRef.current.currentTime = value;
-                    }
-                  }}
-                />
-                <Slider
-                  value={[Math.min(effectiveClip, maxClip)]}
-                  min={1}
-                  max={Math.max(1, maxClip)}
-                  step={1}
-                  onValueChange={([value]) => setClipSeconds(value)}
-                />
-              </div>
-
-              <div className="flex items-center gap-3">
-                <Volume2 className="h-4 w-4 text-muted-foreground" />
-                <Slider
-                  value={[volume]}
-                  min={0}
-                  max={100}
-                  step={1}
-                  onValueChange={([value]) => setVolume(value)}
+                <Tabs
+                  value={tab}
+                  onValueChange={(value) => setTab(value as 'catalog' | 'mine')}
                   className="flex-1"
-                />
-                <span className="w-10 text-right text-xs text-muted-foreground">{volume}%</span>
+                >
+                  <TabsList className="grid h-10 w-full grid-cols-2 rounded-xl">
+                    <TabsTrigger value="catalog" className="rounded-lg text-xs">
+                      Katalog
+                    </TabsTrigger>
+                    <TabsTrigger value="mine" className="rounded-lg text-xs">
+                      Mening
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setMutedOriginal((value) => !value)}
-                className={cn(
-                  'w-full rounded-xl border px-3 py-2 text-xs font-medium transition',
-                  mutedOriginal
-                    ? 'border-primary/40 bg-primary/10 text-primary'
-                    : 'border-border/60 text-muted-foreground',
-                )}
-              >
-                {mutedOriginal ? 'Asl audio o‘chiriladi' : 'Asl audio saqlanadi'}
-              </button>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Trek yoki ijrochini qidiring..."
+                  className="h-11 rounded-xl pl-9"
+                />
+              </div>
             </div>
-          )}
 
-          <ScrollArea className="h-[280px] rounded-xl border border-border/50">
-            <div className="space-y-1 p-2">
-              {isLoading ? (
-                <div className="flex h-32 items-center justify-center">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <ScrollArea className="min-h-0 flex-1">
+              <div className="space-y-1 p-3">
+                {isLoading ? (
+                  <div className="flex h-48 items-center justify-center">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : error ? (
+                  <div className="flex h-48 flex-col items-center justify-center gap-3 px-4 text-center text-sm text-muted-foreground">
+                    <span>{error}</span>
+                    <Button size="sm" variant="outline" onClick={() => void refresh()}>
+                      Qayta urinish
+                    </Button>
+                  </div>
+                ) : visibleTracks.length === 0 ? (
+                  <div className="flex h-48 flex-col items-center justify-center gap-3 px-4 text-center text-muted-foreground">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted">
+                      <FileAudio className="h-5 w-5" />
+                    </span>
+                    <p className="max-w-sm text-sm">
+                      {tab === 'mine'
+                        ? 'Shaxsiy trek topilmadi. Qurilmadan audio qo‘shishingiz mumkin.'
+                        : 'Katalogda mos trek topilmadi.'}
+                    </p>
+                  </div>
+                ) : (
+                  visibleTracks.map((track) => {
+                    const item = fromCatalog(track);
+                    const active = selected?.trackId === track.id;
+                    return (
+                      <div
+                        key={track.id}
+                        className={cn(
+                          'flex items-center gap-3 rounded-2xl border border-transparent p-2.5 transition',
+                          active
+                            ? 'border-primary/20 bg-primary/[0.055]'
+                            : 'hover:border-border/60 hover:bg-muted/40',
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => void togglePlay(item)}
+                          className={cn(
+                            'flex h-10 w-10 shrink-0 items-center justify-center rounded-full',
+                            playingKey === item.key
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-muted text-foreground',
+                          )}
+                        >
+                          {playingKey === item.key ? (
+                            <Pause className="h-4 w-4" />
+                          ) : (
+                            <Play className="ml-0.5 h-4 w-4" />
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            stopPreview();
+                            void cleanupTransientUpload();
+                            setSelected(item);
+                            setStartSeconds(0);
+                            setClipSeconds(Math.min(30, item.duration ?? 30));
+                          }}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <p className="truncate text-sm font-medium">{track.title}</p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {track.artist || 'Noma’lum'} · {formatTime(track.duration_seconds)}
+                            {track.license ? ` · ${track.license}` : ''}
+                          </p>
+                        </button>
+
+                        {active && (
+                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary">
+                            <Check className="h-4 w-4" />
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </ScrollArea>
+          </section>
+
+          <aside className="min-h-0 overflow-y-auto bg-card/55 p-4">
+            {selected ? (
+              <div className="space-y-4">
+                <div className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/[0.08] via-card to-card p-4 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => void togglePlay(selected)}
+                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm"
+                    >
+                      {playingKey === selected.key ? (
+                        <Pause className="h-4 w-4" />
+                      ) : (
+                        <Play className="ml-0.5 h-4 w-4" />
+                      )}
+                    </button>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold">{selected.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {selected.artist || 'Noma’lum ijrochi'}
+                      </p>
+                      <p className="mt-1 text-[10px] text-muted-foreground">
+                        {formatTime(selected.duration)}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      aria-label="Musiqani olib tashlash"
+                      onClick={() => {
+                        stopPreview();
+                        void cleanupTransientUpload();
+                        setSelected(null);
+                      }}
+                      className="rounded-xl p-2 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
-              ) : error ? (
-                <div className="flex h-32 flex-col items-center justify-center gap-2 px-4 text-center text-sm text-muted-foreground">
-                  <span>{error}</span>
-                  <Button size="sm" variant="outline" onClick={() => void refresh()}>
-                    Qayta urinish
-                  </Button>
+
+                <div className="space-y-4 rounded-3xl border border-border/60 bg-background p-4">
+                  <div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium">Boshlanish</span>
+                      <span className="text-muted-foreground">{formatTime(startSeconds)}</span>
+                    </div>
+                    <Slider
+                      value={[Math.min(startSeconds, maxStart)]}
+                      min={0}
+                      max={Math.max(1, maxStart)}
+                      step={0.5}
+                      className="mt-3"
+                      onValueChange={([value]) => {
+                        setStartSeconds(value);
+                        if (audioRef.current && playingKey === selected.key) {
+                          audioRef.current.currentTime = value;
+                        }
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium">Klip uzunligi</span>
+                      <span className="text-muted-foreground">{formatTime(effectiveClip)}</span>
+                    </div>
+                    <Slider
+                      value={[Math.min(effectiveClip, maxClip)]}
+                      min={1}
+                      max={Math.max(1, maxClip)}
+                      step={1}
+                      className="mt-3"
+                      onValueChange={([value]) => setClipSeconds(value)}
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <Volume2 className="h-3.5 w-3.5" />
+                        Volume
+                      </span>
+                      <span className="text-muted-foreground">{volume}%</span>
+                    </div>
+                    <Slider
+                      value={[volume]}
+                      min={0}
+                      max={100}
+                      step={1}
+                      className="mt-3"
+                      onValueChange={([value]) => setVolume(value)}
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setMutedOriginal((value) => !value)}
+                    className={cn(
+                      'flex w-full items-center justify-between rounded-2xl border px-3 py-3 text-xs font-medium transition',
+                      mutedOriginal
+                        ? 'border-primary/35 bg-primary/[0.07] text-primary'
+                        : 'border-border/60 text-muted-foreground hover:bg-muted',
+                    )}
+                  >
+                    <span>Asl media audiosi</span>
+                    <span>{mutedOriginal ? 'O‘chadi' : 'Saqlanadi'}</span>
+                  </button>
                 </div>
-              ) : visibleTracks.length === 0 ? (
-                <div className="flex h-32 flex-col items-center justify-center gap-2 px-4 text-center text-muted-foreground">
-                  <FileAudio className="h-6 w-6" />
-                  <p className="text-sm">
-                    {tab === 'mine'
-                      ? 'Shaxsiy trek topilmadi. Qurilmadan audio qo‘shishingiz mumkin.'
-                      : 'Katalogda mos trek topilmadi.'}
+
+                {selected.license && (
+                  <div className="rounded-2xl bg-muted/40 p-3 text-[10px] leading-relaxed text-muted-foreground">
+                    Litsenziya: {selected.license}
+                    {selected.attribution ? ` · ${selected.attribution}` : ''}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex h-full min-h-48 flex-col items-center justify-center gap-3 text-center text-muted-foreground">
+                <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <Music2 className="h-6 w-6" />
+                </span>
+                <div>
+                  <p className="text-sm font-medium text-foreground">Trek tanlang</p>
+                  <p className="mt-1 text-xs leading-relaxed">
+                    Tanlangan musiqa uchun clip va volume sozlamalari shu yerda chiqadi.
                   </p>
                 </div>
-              ) : (
-                visibleTracks.map((track) => {
-                  const item = fromCatalog(track);
-                  const active = selected?.trackId === track.id;
-                  return (
-                    <div
-                      key={track.id}
-                      className={cn(
-                        'flex items-center gap-3 rounded-xl p-2.5 transition',
-                        active ? 'bg-primary/10' : 'hover:bg-muted/60',
-                      )}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => void togglePlay(item)}
-                        className={cn(
-                          'flex h-10 w-10 shrink-0 items-center justify-center rounded-full',
-                          playingKey === item.key
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted text-foreground',
-                        )}
-                      >
-                        {playingKey === item.key ? (
-                          <Pause className="h-4 w-4" />
-                        ) : (
-                          <Play className="ml-0.5 h-4 w-4" />
-                        )}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          stopPreview();
-                          void cleanupTransientUpload();
-                          setSelected(item);
-                          setStartSeconds(0);
-                          setClipSeconds(Math.min(30, item.duration ?? 30));
-                        }}
-                        className="min-w-0 flex-1 text-left"
-                      >
-                        <p className="truncate text-sm font-medium">{track.title}</p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {track.artist || 'Noma’lum'} · {formatTime(track.duration_seconds)}
-                          {track.license ? ` · ${track.license}` : ''}
-                        </p>
-                      </button>
-
-                      {active && <Check className="h-4 w-4 shrink-0 text-primary" />}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </ScrollArea>
+              </div>
+            )}
+          </aside>
         </div>
 
         <div className="flex shrink-0 gap-2 border-t border-border/60 bg-background px-5 py-4">
           <Button
             type="button"
             variant="ghost"
-            className="flex-1"
+            className="flex-1 rounded-xl"
             onClick={() => {
               onSelectMusic(null);
               stopPreview();
@@ -582,7 +656,12 @@ export function MusicPicker({
           >
             Musiqasiz
           </Button>
-          <Button type="button" className="flex-1" disabled={!selected} onClick={apply}>
+          <Button
+            type="button"
+            className="flex-1 rounded-xl"
+            disabled={!selected}
+            onClick={apply}
+          >
             <Check className="mr-2 h-4 w-4" />
             Qo‘llash
           </Button>
