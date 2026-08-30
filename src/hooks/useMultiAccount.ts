@@ -59,6 +59,86 @@ function isSchemaMissingError(error: unknown): boolean {
   return /schema cache|does not exist/i.test(message);
 }
 
+const MULTI_ACCOUNT_SCHEMA_MISSING_KEY = 'alsamos.multi-account-schema-missing-at';
+const MULTI_ACCOUNT_SCHEMA_RETRY_MS = 10 * 60 * 1000;
+let ownIdentityProbe:
+  | {
+      userId: string;
+      promise: Promise<any>;
+    }
+  | null = null;
+
+function schemaProbeSuppressed(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const at = Number(window.sessionStorage.getItem(MULTI_ACCOUNT_SCHEMA_MISSING_KEY) || '0');
+    return Number.isFinite(at) && at > 0 && Date.now() - at < MULTI_ACCOUNT_SCHEMA_RETRY_MS;
+  } catch {
+    return false;
+  }
+}
+
+function markSchemaMissing() {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(MULTI_ACCOUNT_SCHEMA_MISSING_KEY, String(Date.now()));
+  } catch {
+    // Session storage is only an optimization.
+  }
+}
+
+function clearSchemaMissingMark() {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.removeItem(MULTI_ACCOUNT_SCHEMA_MISSING_KEY);
+  } catch {
+    // Ignore private mode/storage restrictions.
+  }
+}
+
+async function probeOwnIdentity(userId: string): Promise<{
+  data: { identity_id?: string | null } | null;
+  error: unknown | null;
+}> {
+  if (schemaProbeSuppressed()) {
+    return {
+      data: null,
+      error: {
+        code: 'PGRST205',
+        message: 'identity_accounts schema capability temporarily unavailable',
+      },
+    };
+  }
+
+  if (ownIdentityProbe?.userId === userId) {
+    return ownIdentityProbe.promise;
+  }
+
+  const promise = supabase
+    .from('identity_accounts')
+    .select('identity_id')
+    .eq('user_id', userId)
+    .neq('status', 'deleted')
+    .maybeSingle()
+    .then((result) => {
+      if (result.error && isSchemaMissingError(result.error)) {
+        markSchemaMissing();
+      } else if (!result.error) {
+        clearSchemaMissingMark();
+      }
+      return result as {
+        data: { identity_id?: string | null } | null;
+        error: unknown | null;
+      };
+    })
+    .finally(() => {
+      if (ownIdentityProbe?.promise === promise) ownIdentityProbe = null;
+    });
+
+  ownIdentityProbe = { userId, promise };
+  return promise;
+}
+
 export function useMultiAccount() {
   const { user } = useAuth();
   const [accounts, setAccounts] = useState<LinkedAccount[]>([]);
@@ -67,7 +147,7 @@ export function useMultiAccount() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** Server tomonda multi-account umuman sozlanmagan */
-  const [isSupported, setIsSupported] = useState(true);
+  const [isSupported, setIsSupported] = useState(() => !schemaProbeSuppressed());
 
   const activeSlot = getActiveSlot();
 
@@ -82,12 +162,7 @@ export function useMultiAccount() {
     setError(null);
 
     try {
-      const { data: own, error: ownError } = await supabase
-        .from('identity_accounts')
-        .select('identity_id')
-        .eq('user_id', user.id)
-        .neq('status', 'deleted')
-        .maybeSingle();
+      const { data: own, error: ownError } = await probeOwnIdentity(user.id);
 
       if (ownError) throw ownError;
       if (!own?.identity_id) {
@@ -162,6 +237,7 @@ export function useMultiAccount() {
     } catch (e) {
       if (isSchemaMissingError(e)) {
         // Migratsiya qo'llanmagan: funksiyani jimgina o'chiramiz
+        markSchemaMissing();
         setIsSupported(false);
         setAccounts([]);
         setError(null);
