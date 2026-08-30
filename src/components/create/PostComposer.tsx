@@ -911,6 +911,7 @@ export function PostComposer() {
       <VideoEditor
         open={Boolean(videoTarget)}
         videoUrl={videoTarget?.previewUrl ?? ''}
+        initialEditData={(videoTarget?.editState?.video ?? null) as VideoEditData | null}
         onSave={handleVideoSaved}
         onCancel={() => setVideoTargetId(null)}
       />
