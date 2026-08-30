@@ -18,7 +18,7 @@ import { useToast } from '@/hooks/use-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface TelegramMediaRecorderProps {
-  onSend: (url: string, duration: number, type: 'audio' | 'video') => void;
+  onSend: (url: string, duration: number, type: 'audio' | 'video') => void | Promise<unknown>;
   onCancel?: () => void;
 }
 
