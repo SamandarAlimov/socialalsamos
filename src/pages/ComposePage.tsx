@@ -1,22 +1,24 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, FileText, UserCircle2, Video } from 'lucide-react';
+import { ArrowLeft, FileText, Radio, UserCircle2, Video } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { PostComposer } from '@/components/create/PostComposer';
 import { StoryComposer } from '@/components/create/StoryComposer';
 import { ReelComposer } from '@/components/create/ReelComposer';
+import { LiveStreamBroadcast } from '@/components/live/LiveStreamBroadcast';
 
-type CreateMode = 'post' | 'story' | 'reel';
+type CreateMode = 'post' | 'story' | 'reel' | 'live';
 
 const MODES = [
   { id: 'post' as const, label: 'Post', icon: FileText },
   { id: 'story' as const, label: 'Story', icon: UserCircle2 },
   { id: 'reel' as const, label: 'Reel', icon: Video },
+  { id: 'live' as const, label: 'Live', icon: Radio },
 ];
 
 function modeFromParams(value: string | null): CreateMode {
-  if (value === 'story' || value === 'reel') return value;
+  if (value === 'story' || value === 'reel' || value === 'live') return value;
   return 'post';
 }
 
@@ -113,8 +115,17 @@ export default function ComposePage() {
             <PostComposer />
           ) : mode === 'story' ? (
             <StoryComposer onDraftStateChange={setStoryDraftActive} />
-          ) : (
+          ) : mode === 'reel' ? (
             <ReelComposer onDraftStateChange={setReelDraftActive} />
+          ) : (
+            <LiveStreamBroadcast
+              onClose={() => {
+                setMode('post');
+                const params = new URLSearchParams(searchParams);
+                params.delete('mode');
+                setSearchParams(params, { replace: true });
+              }}
+            />
           )}
         </div>
       </main>
