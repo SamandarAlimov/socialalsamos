@@ -108,7 +108,7 @@ export function PostComposer() {
     retryAttachment,
     setEditState,
     uploadAll,
-  } = usePostAttachments();
+  } = usePostAttachments({ visibility });
 
   const canSubmit = useMemo(
     () =>
@@ -247,7 +247,9 @@ export function PostComposer() {
       }
 
       // 2. Postni yaratamiz — barcha meta jadvallarga ham yoziladi
-      const mediaUrls = media.map((item) => item.storageUrl);
+      // Legacy media_urls faqat public postlarda qoladi.
+      // Friends/private postlarda URL/reference sizib chiqmasligi uchun bo‘sh massiv yoziladi.
+      const mediaUrls = visibility === 'public' ? media.map((item) => item.storageUrl) : [];
       const primaryKind = media[0]?.kind ?? 'text';
 
       const created = await createPost(content.trim(), mediaUrls, primaryKind, collaborators.map((item) => item.id), {
