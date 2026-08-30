@@ -28,6 +28,10 @@ import {
   type MapSceneMarker,
   type MapViewport,
 } from '@/lib/mapEngine';
+import {
+  trafficTileTemplate,
+  type TrafficProviderStatus,
+} from '@/lib/traffic';
 import { cn } from '@/lib/utils';
 import { LeafletEngineBridge } from './LeafletEngineBridge';
 
@@ -44,6 +48,7 @@ interface LeafletMapSurfaceProps {
   pickMode?: boolean;
   referenceCenter: { latitude: number; longitude: number };
   highContrast?: boolean;
+  traffic?: TrafficProviderStatus | null;
   onViewport: (viewport: MapViewport) => void;
   onMovedCenter: (
     center: { latitude: number; longitude: number } | null,
@@ -279,6 +284,7 @@ export function LeafletMapSurface({
   pickMode = false,
   referenceCenter,
   highContrast = false,
+  traffic = null,
   onViewport,
   onMovedCenter,
   onMapClick,
@@ -313,6 +319,24 @@ export function LeafletMapSurface({
           attribution={layer.attribution}
           maxZoom={layer.maxZoom}
           updateWhenIdle
+          keepBuffer={2}
+        />
+      )}
+
+      {traffic?.configured && overlays.includes('traffic') && (
+        <TileLayer
+          key={
+            'traffic:' +
+            (layerId === 'night' ? 'dark' : 'light')
+          }
+          url={trafficTileTemplate(
+            layerId === 'night' ? 'dark' : 'light',
+          )}
+          attribution={traffic.attribution ?? undefined}
+          minZoom={traffic.minZoom}
+          maxZoom={traffic.maxZoom}
+          opacity={0.88}
+          updateWhenIdle={false}
           keepBuffer={2}
         />
       )}
