@@ -16,6 +16,14 @@ import { cn } from '@/lib/utils';
 import { uploadMedia } from '@/lib/mediaUpload';
 import { useToast } from '@/hooks/use-toast';
 import { motion, AnimatePresence } from 'framer-motion';
+import {
+  getVideoNoteProgress,
+  VIDEO_NOTE_CIRCLE_CLASS,
+  VIDEO_NOTE_CIRCLE_STYLE,
+  VIDEO_NOTE_MAX_SECONDS,
+  VIDEO_NOTE_PANEL_CLASS,
+  VIDEO_NOTE_PANEL_STYLE,
+} from '@/lib/videoNoteLayout';
 
 interface TelegramMediaRecorderProps {
   onSend: (url: string, duration: number, type: 'audio' | 'video') => void | Promise<unknown>;
@@ -29,8 +37,6 @@ type RecordingMode = 'voice' | 'video';
 const HOLD_TO_RECORD_MS = 260;
 /** Shundan qisqa yozuvlar bekor qilinadi (Telegramdek). */
 const MIN_DURATION_MS = 700;
-/** Telegram video-note maksimal davomiyligi. */
-const VIDEO_NOTE_MAX_SECONDS = 60;
 const VIDEO_RING_RADIUS = 47;
 const VIDEO_RING_CIRCUMFERENCE = 2 * Math.PI * VIDEO_RING_RADIUS;
 
@@ -40,6 +46,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
   const [state, setState] = useState<RecordingState>('idle');
   const [mode, setMode] = useState<RecordingMode>('voice');
   const [duration, setDuration] = useState(0);
+  const [elapsedMs, setElapsedMs] = useState(0);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [mediaBlob, setMediaBlob] = useState<Blob | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -127,6 +134,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     setMediaUrl(null);
     setMediaBlob(null);
     setDuration(0);
+    setElapsedMs(0);
     setIsPlaying(false);
     setIsLocked(false);
     lockedRef.current = false;
@@ -262,6 +270,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         modeRef.current = recordMode;
         setMode(recordMode);
         setDuration(0);
+        setElapsedMs(0);
         setMediaBlob(null);
         setMediaUrl(null);
         chunksRef.current = [];
@@ -286,7 +295,8 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         }
 
         if (isVideo) {
-          // Video xabar to'liq ekranda - qulflangan holatda yozadi
+          // Video-note faqat Messages composer ustidagi dumaloq local previewda yoziladi.
+          // Viewport/full-screen overlay yaratmaymiz; header va sidebar ochiq qoladi.
           lockedRef.current = true;
           setIsLocked(true);
           setState('recording');
@@ -325,10 +335,9 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
           }
 
           const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current });
-          const seconds = Math.max(
-            1,
-            Math.round((Date.now() - startedAtRef.current) / 1000)
-          );
+          const elapsedAtStop = Math.max(1, Date.now() - startedAtRef.current);
+          const seconds = Math.max(1, Math.round(elapsedAtStop / 1000));
+          setElapsedMs(elapsedAtStop);
 
           if (autoSendRef.current) {
             autoSendRef.current = false;
@@ -367,6 +376,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
           const elapsedMs = Date.now() - startedAtRef.current;
           const elapsedSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
           setDuration(elapsedSeconds);
+          setElapsedMs(elapsedMs);
 
           // Telegram video-note 60 soniyada avtomatik previewga o'tadi.
           if (
@@ -563,7 +573,9 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     setIsLocked(true);
   };
 
-  const videoRingProgress = Math.min(duration / VIDEO_NOTE_MAX_SECONDS, 1);
+  const videoRingProgress = getVideoNoteProgress(
+    state === 'recording' ? elapsedMs : duration * 1000
+  );
   const videoRingOffset = VIDEO_RING_CIRCUMFERENCE * (1 - videoRingProgress);
 
   /* ---------------------------- Yuborilmoqda ---------------------------- */
