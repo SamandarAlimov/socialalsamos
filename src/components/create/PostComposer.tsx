@@ -30,6 +30,8 @@ import { LocationPicker } from '@/components/create/LocationPicker';
 import { MusicPicker } from '@/components/create/MusicPicker';
 import { MentionCollaborator } from '@/components/create/MentionCollaborator';
 import { StickerMediaEditor } from '@/components/create/StickerMediaEditor';
+import { ImageEditor } from '@/components/create/ImageEditor';
+import { VideoEditor, type VideoEditData } from '@/components/VideoEditor';
 import { HashtagSuggestions } from '@/components/HashtagSuggestions';
 import { startLiveLocationSharing } from '@/lib/liveLocationSharing';
 
@@ -96,6 +98,10 @@ export function PostComposer() {
   const [showMusic, setShowMusic] = useState(false);
   const [showCollaborators, setShowCollaborators] = useState(false);
 
+  /** Media editor targetlari sticker qatlamidan alohida boshqariladi. */
+  const [imageTargetId, setImageTargetId] = useState<string | null>(null);
+  const [videoTargetId, setVideoTargetId] = useState<string | null>(null);
+
   /** Stiker tahriri: qaysi fayl ustida ishlanmoqda. */
   const [stickerTargetId, setStickerTargetId] = useState<string | null>(null);
   /** Fayl id -> stiker joylashuvlari. */
@@ -112,6 +118,7 @@ export function PostComposer() {
     reorderAttachments,
     retryAttachment,
     setEditState,
+    replaceAttachmentFile,
     uploadAll,
   } = usePostAttachments({ visibility });
 
@@ -119,8 +126,14 @@ export function PostComposer() {
     () =>
       !isPosting &&
       !isUploading &&
-      (content.trim().length > 0 || attachments.length > 0 || Boolean(poll) || Boolean(location)),
-    [isPosting, isUploading, content, attachments.length, poll, location],
+      (
+        content.trim().length > 0 ||
+        attachments.length > 0 ||
+        Boolean(poll) ||
+        Boolean(location) ||
+        Boolean(music)
+      ),
+    [isPosting, isUploading, content, attachments.length, poll, location, music],
   );
 
   /** Stiker qo‘yish mumkin bo‘lgan fayllar (faqat rasm va video). */
@@ -132,6 +145,16 @@ export function PostComposer() {
   const stickerTarget = useMemo(
     () => attachments.find((item) => item.id === stickerTargetId) ?? null,
     [attachments, stickerTargetId],
+  );
+
+  const imageTarget = useMemo(
+    () => attachments.find((item) => item.id === imageTargetId) ?? null,
+    [attachments, imageTargetId],
+  );
+
+  const videoTarget = useMemo(
+    () => attachments.find((item) => item.id === videoTargetId) ?? null,
+    [attachments, videoTargetId],
   );
 
   const totalStickers = useMemo(
@@ -177,6 +200,41 @@ export function PostComposer() {
       if (files.length > 0) await addFiles(files);
     },
     [addFiles],
+  );
+
+  const openImageEditor = useCallback((attachment: { id: string }) => {
+    setImageTargetId(attachment.id);
+  }, []);
+
+  const openVideoEditor = useCallback((attachment: { id: string }) => {
+    setVideoTargetId(attachment.id);
+  }, []);
+
+  const handleImageSaved = useCallback(
+    async (file: File, editState: Record<string, unknown>) => {
+      if (!imageTargetId) return;
+      await replaceAttachmentFile(imageTargetId, file, editState);
+      setImageTargetId(null);
+    },
+    [imageTargetId, replaceAttachmentFile],
+  );
+
+  const handleVideoSaved = useCallback(
+    (editData: VideoEditData) => {
+      if (!videoTargetId) return;
+
+      const target = attachments.find((item) => item.id === videoTargetId);
+      setEditState(videoTargetId, {
+        ...(target?.editState ?? {}),
+        video: {
+          ...editData,
+          rendered: false,
+          savedAt: new Date().toISOString(),
+        },
+      });
+      setVideoTargetId(null);
+    },
+    [attachments, setEditState, videoTargetId],
   );
 
   /** Stiker tahririni ochish. Media bo‘lmasa tushunarli ogohlantirish. */
@@ -350,8 +408,8 @@ export function PostComposer() {
         onRemove={removeAttachment}
         onRetry={retryAttachment}
         onReorder={reorderAttachments}
-        onEditImage={openStickerEditor}
-        onEditVideo={openStickerEditor}
+        onEditImage={openImageEditor}
+        onEditVideo={openVideoEditor}
       />
 
       {/* Stiker xulosasi */}
@@ -602,6 +660,22 @@ export function PostComposer() {
         currentMusic={music}
         onSelectMusic={setMusic}
         visibility={visibility}
+      />
+
+      <ImageEditor
+        open={Boolean(imageTarget)}
+        onOpenChange={(next) => {
+          if (!next) setImageTargetId(null);
+        }}
+        attachment={imageTarget}
+        onSave={handleImageSaved}
+      />
+
+      <VideoEditor
+        open={Boolean(videoTarget)}
+        videoUrl={videoTarget?.previewUrl ?? ''}
+        onSave={handleVideoSaved}
+        onCancel={() => setVideoTargetId(null)}
       />
 
       <StickerMediaEditor
