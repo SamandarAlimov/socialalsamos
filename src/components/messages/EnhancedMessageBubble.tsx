@@ -88,6 +88,7 @@ interface EnhancedMessageBubbleProps {
   onSelect?: (messageId: string) => void;
   onLongPress?: (messageId: string) => void;
   onJumpToMessage?: (messageId: string) => void;
+  onRetry?: (message: Message) => void;
   isPinned?: boolean;
   isSelected?: boolean;
   isSelectionMode?: boolean;
@@ -109,6 +110,7 @@ export function EnhancedMessageBubble({
   onSelect,
   onLongPress,
   onJumpToMessage,
+  onRetry,
   isPinned = false,
   isSelected = false,
   isSelectionMode = false,
@@ -438,7 +440,22 @@ export function EnhancedMessageBubble({
           {message.status === 'sending' ? (
             <Clock className="h-3 w-3 animate-pulse" />
           ) : message.status === 'failed' ? (
-            <AlertCircle className="h-3 w-3 text-destructive" />
+            onRetry ? (
+              <button
+                type="button"
+                className="tg-transition -m-1 flex h-6 w-6 items-center justify-center rounded-full text-destructive hover:bg-destructive/10 active:scale-90"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRetry(message);
+                }}
+                aria-label="Xabarni qayta yuborish"
+                title="Qayta yuborish"
+              >
+                <AlertCircle className="h-3.5 w-3.5" />
+              </button>
+            ) : (
+              <AlertCircle className="h-3 w-3 text-destructive" />
+            )
           ) : message.status === 'read' || message.is_read ? (
             <CheckCheck className="h-3.5 w-3.5 text-[#0095F6]" />
           ) : (
