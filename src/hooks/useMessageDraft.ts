@@ -18,6 +18,20 @@ export function useMessageDraft(conversationId: string | null) {
   const dirtyRef = useRef(false);
   const revisionRef = useRef(0);
 
+  /**
+   * Draft mutations must be ordered. Without this queue an in-flight stale save
+   * can finish after clearDraft() and recreate a draft that was already sent.
+   */
+  const mutationChainRef = useRef<Promise<void>>(Promise.resolve());
+
+  const enqueueMutation = useCallback((work: () => Promise<void>): Promise<void> => {
+    const next = mutationChainRef.current
+      .catch(() => undefined)
+      .then(work);
+    mutationChainRef.current = next.catch(() => undefined);
+    return next;
+  }, []);
+
   const cancelSaveTimer = useCallback(() => {
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
@@ -26,16 +40,18 @@ export function useMessageDraft(conversationId: string | null) {
   }, []);
 
   const persist = useCallback(
-    async (value: string) => {
+    async (value: string, revision: number) => {
       if (!user?.id || !conversationId) return;
       try {
-        await saveMessageDraft(user.id, conversationId, value);
-        if (pendingRef.current === value) dirtyRef.current = false;
+        await enqueueMutation(() => saveMessageDraft(user.id, conversationId, value));
+        if (revisionRef.current === revision && pendingRef.current === value) {
+          dirtyRef.current = false;
+        }
       } catch (error) {
         console.error('Message draft save failed:', error);
       }
     },
-    [conversationId, user?.id]
+    [conversationId, enqueueMutation, user?.id]
   );
 
   useEffect(() => {
@@ -72,16 +88,18 @@ export function useMessageDraft(conversationId: string | null) {
       cancelSaveTimer();
       const pending = pendingRef.current;
       if (dirtyRef.current) {
-        void saveMessageDraft(user.id, conversationId, pending).catch((error) => {
+        const uid = user.id;
+        const cid = conversationId;
+        void enqueueMutation(() => saveMessageDraft(uid, cid, pending)).catch((error) => {
           console.error('Message draft flush failed:', error);
         });
       }
     };
-  }, [cancelSaveTimer, conversationId, user?.id]);
+  }, [cancelSaveTimer, conversationId, enqueueMutation, user?.id]);
 
   const setDraft: Dispatch<SetStateAction<string>> = useCallback(
     (next) => {
-      revisionRef.current += 1;
+      const revision = ++revisionRef.current;
       setDraftState((previous) => {
         const value = typeof next === 'function' ? next(previous) : next;
         pendingRef.current = value;
@@ -91,7 +109,7 @@ export function useMessageDraft(conversationId: string | null) {
         if (user?.id && conversationId) {
           saveTimerRef.current = setTimeout(() => {
             saveTimerRef.current = null;
-            void persist(value);
+            void persist(value, revision);
           }, DRAFT_SAVE_DELAY_MS);
         }
 
@@ -102,7 +120,7 @@ export function useMessageDraft(conversationId: string | null) {
   );
 
   const clearDraft = useCallback(async () => {
-    revisionRef.current += 1;
+    ++revisionRef.current;
     cancelSaveTimer();
     pendingRef.current = '';
     dirtyRef.current = false;
@@ -110,11 +128,12 @@ export function useMessageDraft(conversationId: string | null) {
 
     if (!user?.id || !conversationId) return;
     try {
-      await clearMessageDraft(user.id, conversationId);
+      // Queued behind every older save for this mounted composer.
+      await enqueueMutation(() => clearMessageDraft(user.id, conversationId));
     } catch (error) {
       console.error('Message draft clear failed:', error);
     }
-  }, [cancelSaveTimer, conversationId, user?.id]);
+  }, [cancelSaveTimer, conversationId, enqueueMutation, user?.id]);
 
   return { draft, setDraft, clearDraft, isLoading };
 }
