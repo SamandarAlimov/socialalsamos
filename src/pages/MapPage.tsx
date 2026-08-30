@@ -3142,6 +3142,34 @@ export default function MapPage() {
 
   return (
     <div className={cn('relative h-full min-h-0 w-full overflow-hidden', layer.dark && 'dark')}>
+      {effectiveMapEngine === 'vector' ? (
+        <VectorMapSurface
+          controllerRef={mapRef}
+          center={center}
+          zoom={navigationActive ? 17 : selectedPlace ? 16 : 14}
+          fitTo={fitTo}
+          styleUrl={vectorStyleUrl(layerId === 'night')}
+          markers={vectorSceneMarkers}
+          lines={vectorSceneLines}
+          navigationActive={navigationActive}
+          navigationBearing={navigation.position?.heading ?? null}
+          navigationPitch={48}
+          buildings3d
+          pickMode={Boolean(routeMapPickTarget)}
+          referenceCenter={center}
+          onViewport={setViewport}
+          onMovedCenter={setMovedCenter}
+          onMapClick={
+            routeMapPickTarget ? handleRouteMapPick : handleMapClick
+          }
+          onFeatureClick={handleVectorFeatureClick}
+          onMarkerClick={handleVectorMarkerClick}
+          onManualPan={() => {
+            if (navigationActive) setNavigationFollowing(false);
+          }}
+          onError={handleVectorEngineError}
+        />
+      ) : (
       <MapContainer
         center={[center.latitude, center.longitude]}
         zoom={14}
@@ -3439,6 +3467,7 @@ export default function MapPage() {
           </>
         )}
       </MapContainer>
+      )}
 
       {/* Yuqoridagi qidiruv qatori */}
       {!navigationActive && !routeMapPickTarget && (
