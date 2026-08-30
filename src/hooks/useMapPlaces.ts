@@ -17,6 +17,7 @@ import {
   fetchTransitAlerts,
   fetchTransitArrivals,
   fetchTransitRealtimeStatus,
+  fetchTransitStaticStopRoutes,
   fetchTransitVehicles,
   type TransitRealtimeStatus,
   type TransitRealtimeVehicle,
@@ -184,25 +185,54 @@ export function useStopRoutes(stop?: TransitStop | null) {
       setLoading(true);
       setError(null);
       try {
-        const [base, edgeRealtime] = await Promise.all([
-          fetchStopRoutes(stop.id, { signal }),
-          fetchTransitArrivals({
-            stopId: stop.id,
-            latitude: stop.latitude,
-            longitude: stop.longitude,
-          }),
-        ]);
+        const staticGtfs = await fetchTransitStaticStopRoutes({
+          stopId: stop.id,
+          latitude: stop.latitude,
+          longitude: stop.longitude,
+        });
+
+        const edgeRealtime = await fetchTransitArrivals({
+          stopId: stop.id,
+          gtfsStopId: staticGtfs?.gtfsStopId ?? null,
+          latitude: stop.latitude,
+          longitude: stop.longitude,
+        });
+
+        const base: TransitRoute[] =
+          staticGtfs?.configured && staticGtfs.routes?.length
+            ? staticGtfs.routes.map((route) => ({
+                id: 'gtfs:' + route.id,
+                ref: route.ref,
+                name: route.name,
+                mode: route.mode ?? 'other',
+                colour: route.color ?? null,
+                intervalMin: 0,
+                nextArrivalsMin: [],
+                realtime: false,
+              }))
+            : await fetchStopRoutes(stop.id, { signal });
 
         // Asosiy realtime manba: server-side GTFS gateway.
         setRealtimeConfigured(Boolean(edgeRealtime?.configured));
         setRealtimeFresh(Boolean(edgeRealtime?.realtime && !edgeRealtime?.stale));
 
         const byRef = new Map<string, number[]>();
+        const byRouteId = new Map<string, number[]>();
         for (const arrival of edgeRealtime?.arrivals ?? []) {
-          if (!arrival.ref || !Number.isFinite(arrival.minutes)) continue;
-          const list = byRef.get(arrival.ref) ?? [];
-          list.push(arrival.minutes);
-          byRef.set(arrival.ref, list.sort((a, b) => a - b));
+          if (!Number.isFinite(arrival.minutes)) continue;
+          if (arrival.ref) {
+            const list = byRef.get(arrival.ref) ?? [];
+            list.push(arrival.minutes);
+            byRef.set(arrival.ref, list.sort((a, b) => a - b));
+          }
+          if (arrival.routeId) {
+            const list = byRouteId.get(arrival.routeId) ?? [];
+            list.push(arrival.minutes);
+            byRouteId.set(
+              arrival.routeId,
+              list.sort((a, b) => a - b),
+            );
+          }
         }
 
         const edgeAlerts = await fetchTransitAlerts({
@@ -219,7 +249,14 @@ export function useStopRoutes(stop?: TransitStop | null) {
 
         setRoutes(
           base.map((route) => {
-            const arrivals = byRef.get(route.ref) ?? legacyRealtime?.[route.ref] ?? [];
+            const gtfsRouteId = route.id.startsWith('gtfs:')
+              ? route.id.slice('gtfs:'.length)
+              : '';
+            const arrivals =
+              (gtfsRouteId ? byRouteId.get(gtfsRouteId) : undefined) ??
+              byRef.get(route.ref) ??
+              legacyRealtime?.[route.ref] ??
+              [];
             return arrivals.length
               ? { ...route, nextArrivalsMin: arrivals, realtime: true }
               : route;
