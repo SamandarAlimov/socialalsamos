@@ -300,7 +300,7 @@ export function ChatHeader({
     '-mx-2 flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2 py-1 tg-transition hover:bg-muted/60 sm:gap-3';
 
   return (
-    <div className="flex h-14 min-w-0 items-center gap-1 border-b border-border bg-card/95 px-2 backdrop-blur sm:h-16 sm:px-4">
+    <div className="relative z-20 flex h-14 min-w-0 items-center gap-1 border-b border-border bg-card/95 px-2 backdrop-blur sm:h-16 sm:px-4">
       <div className="flex min-w-0 flex-1 items-center gap-1 sm:gap-2">
         {onBack && (
           <Button
