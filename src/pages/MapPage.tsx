@@ -102,6 +102,7 @@ import {
   type VectorRenderedFeature,
 } from '@/lib/mapEngine';
 import {
+  clearNavigationSession,
   readNavigationSession,
   writeNavigationSession,
 } from '@/lib/navigationSession';
@@ -1329,10 +1330,34 @@ export default function MapPage() {
       return;
     }
 
+    clearNavigationSession();
     setDestination(null);
+    setRouteWaypoints([]);
+    setRouteOrigin(null);
     setRoutes([]);
+    setRouteIndex(0);
     setSelectedPlace(null);
+    setPendingNavigationStart(null);
   }, [routeWaypoints, routeMode, routeOrigin, buildRoute]);
+
+  const dismissRoute = useCallback(() => {
+    clearNavigationSession();
+    setNavigationActive(false);
+    setNavigationFollowing(true);
+    setPendingNavigationStart(null);
+    setReachedNavigationStop(null);
+    setRoutes([]);
+    setRouteIndex(0);
+    setRouteOrigin(null);
+    setRouteWaypoints([]);
+    setDestination(null);
+    setRouteEditField(null);
+    setRouteEditQuery('');
+    setRouteMapPickTarget(null);
+    setSelectedPlace(null);
+    setPanel('search');
+    setSnap('peek');
+  }, []);
 
   const useCurrentLocationAsOrigin = useCallback(() => {
     if (!me) {
@@ -1581,6 +1606,7 @@ export default function MapPage() {
   );
 
   const stopNavigation = useCallback(() => {
+    clearNavigationSession();
     setNavigationActive(false);
     setNavigationFollowing(true);
     setPendingNavigationStart(null);
@@ -1784,7 +1810,10 @@ export default function MapPage() {
 
 
   useEffect(() => {
-    if (!destination || !routes.length) return;
+    if (!navigationActive || !destination || !routes.length) {
+      if (!navigationActive) clearNavigationSession();
+      return;
+    }
     writeNavigationSession({
       active: navigationActive,
       following: navigationFollowing,
@@ -2967,10 +2996,7 @@ export default function MapPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setPanel(selectedPlace ? 'place' : 'search');
-                    setRoutes([]);
-                  }}
+                  onClick={dismissRoute}
                   className="flex h-10 w-10 items-center justify-center rounded-2xl border border-border/[0.45] bg-background/[0.60] text-muted-foreground transition hover:bg-background hover:text-foreground"
                   aria-label="Yopish"
                 >
@@ -3787,6 +3813,7 @@ export default function MapPage() {
     swapRouteEndpoints,
     removeRouteWaypoint,
     removeFinalDestination,
+    dismissRoute,
     reorderRouteStop,
     optimizeStops,
     routeOptimizing,
