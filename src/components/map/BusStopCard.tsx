@@ -1,5 +1,6 @@
-import { Bus, Clock, Loader2, Navigation, RefreshCw, Radio, Train, X } from 'lucide-react';
+import { AlertTriangle, Bus, Clock, ExternalLink, Loader2, Navigation, RefreshCw, Radio, ShieldCheck, Train, X } from 'lucide-react';
 import type { TransitRoute, TransitStop } from '@/lib/transit';
+import type { TransitServiceAlert } from '@/lib/transitRealtime';
 import { formatArrival } from '@/lib/transit';
 import { formatDistance } from '@/lib/geocoding';
 import { cn } from '@/lib/utils';
@@ -11,6 +12,9 @@ interface BusStopCardProps {
   error?: string | null;
   realtimeConfigured?: boolean;
   realtimeFresh?: boolean;
+  providerName?: string | null;
+  authoritative?: boolean;
+  alerts?: TransitServiceAlert[];
   highContrast?: boolean;
   onReload?: () => void;
   onDirections?: (stop: TransitStop) => void;
@@ -32,6 +36,9 @@ export function BusStopCard({
   error,
   realtimeConfigured = false,
   realtimeFresh = false,
+  providerName = null,
+  authoritative = false,
+  alerts = [],
   highContrast = false,
   onReload,
   onDirections,
@@ -112,18 +119,65 @@ export function BusStopCard({
                 : 'border-border/50 bg-muted/40 text-muted-foreground',
             )}
           >
-            Jonli kelish vaqti provayderi ulanmagan. Faqat haqiqiy OSM jadval oralig'i mavjud bo'lsa taxminiy vaqt ko'rsatiladi.
+            Jonli GTFS/GTFS-RT manbasi ulanmagan. OSM'dagi qatnov oralig'i ko‘rsatilishi mumkin, lekin kelish vaqti uydirilmaydi.
           </div>
         ) : !realtimeFresh ? (
           <div className="border-b border-amber-400/15 bg-amber-400/[0.08] px-4 py-2.5 text-[11px] leading-relaxed text-amber-300">
-            Real-time manba mavjud, lekin hozirgi ma'lumot eskirgan yoki vaqtincha olinmayapti.
+            {providerName ? providerName + ' · ' : ''}
+            real-time manba mavjud, lekin hozirgi ma'lumot eskirgan yoki vaqtincha olinmayapti.
+          </div>
+        ) : authoritative ? (
+          <div className="flex items-center gap-1.5 border-b border-emerald-400/15 bg-emerald-400/[0.08] px-4 py-2.5 text-[11px] font-medium text-emerald-400">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            {providerName ? providerName + ' · ' : ''}
+            rasmiy GTFS real-time
           </div>
         ) : (
-          <div className="flex items-center gap-1.5 border-b border-emerald-400/15 bg-emerald-400/[0.08] px-4 py-2.5 text-[11px] font-medium text-emerald-400">
+          <div className="flex items-center gap-1.5 border-b border-sky-400/15 bg-sky-400/[0.08] px-4 py-2.5 text-[11px] font-medium text-sky-400">
             <Radio className="h-3 w-3" />
-            GTFS real-time yangilanmoqda
+            {providerName ? providerName + ' · ' : ''}
+            GTFS real-time · manba statusi tasdiqlanmagan
           </div>
         )}
+        {alerts.length > 0 && (
+          <div className="space-y-2 border-b border-amber-400/15 p-3">
+            {alerts.map((alert) => (
+              <div
+                key={alert.id}
+                className={cn(
+                  'rounded-2xl border px-3 py-2.5',
+                  highContrast
+                    ? 'border-amber-300/15 bg-amber-300/[0.08]'
+                    : 'border-amber-500/20 bg-amber-500/[0.07]',
+                )}
+              >
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold">{alert.title}</p>
+                    {alert.description && (
+                      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                        {alert.description}
+                      </p>
+                    )}
+                    {alert.url && (
+                      <a
+                        href={alert.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                      >
+                        Batafsil
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {loading && !routes.length && (
           <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
