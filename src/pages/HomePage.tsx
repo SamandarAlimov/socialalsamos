@@ -35,6 +35,7 @@ import { useActiveAds } from '@/hooks/useAds';
 import { FeedAd } from '@/components/ads/FeedAd';
 import { PostViewsDialog } from '@/components/PostViewsDialog';
 import { usePostViews } from '@/hooks/usePostViews';
+import { parseLocationFromContent } from '@/lib/postMarkers';
 
 /**
  * Yangi sxemadagi qo‘shimcha maydonlar. `posts` jadvalidan `*` bilan
@@ -409,6 +410,9 @@ function PostCard({
 
   // Yangi so‘rovnoma tizimi: `has_poll` bo‘lmasa `post_kind` ga qaraymiz.
   const hasStructuredPoll = Boolean(post.has_poll) || post.post_kind === 'poll';
+  const legacyLocation = parseLocationFromContent(
+    parsePollFromContent(post.content || '').cleanContent,
+  ).location;
 
   const handleUserClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -473,12 +477,13 @@ function PostCard({
       {/* Post matni — formatlash bilan (qalin, qiya, chizilgan, rangli, sarlavha) */}
       {post.content && (() => {
         const { pollData, cleanContent } = parsePollFromContent(post.content);
+        const { cleanContent: textContent } = parseLocationFromContent(cleanContent);
         return (
           <>
-            {cleanContent && (
+            {textContent && (
               <div className="px-3 md:px-4 pb-2 md:pb-3">
                 <RichText
-                  content={cleanContent}
+                  content={textContent}
                   formattedContent={post.formatted_content}
                   className="text-sm leading-relaxed"
                 />
@@ -504,6 +509,7 @@ function PostCard({
         isOwner={isOwner}
         legacyMediaUrls={post.media_urls}
         legacyMediaType={post.media_type}
+        legacyLocation={legacyLocation}
         className="px-3 pb-3 md:px-4"
       />
 
