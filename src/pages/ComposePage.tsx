@@ -79,7 +79,7 @@ export default function ComposePage() {
             Create
           </h1>
 
-          <div className="flex h-full items-stretch">
+          <div className="flex items-center rounded-2xl border border-border/60 bg-muted/30 p-1 shadow-sm">
             {MODES.map(({ id, label, icon: Icon }) => {
               const disabled = currentModeLocked && id !== mode;
               return (
@@ -90,18 +90,15 @@ export default function ComposePage() {
                   disabled={disabled}
                   title={disabled ? 'Avval qoralamani yakunlang' : undefined}
                   className={cn(
-                    'relative flex min-w-[58px] items-center justify-center gap-1 px-1.5 text-[11px] font-medium transition sm:min-w-[82px] sm:gap-1.5 sm:px-3 sm:text-xs',
+                    'flex h-9 min-w-[58px] items-center justify-center gap-1.5 rounded-xl px-2 text-[11px] font-medium transition sm:min-w-[82px] sm:px-3 sm:text-xs',
                     mode === id
-                      ? 'text-primary'
-                      : 'text-muted-foreground hover:text-foreground',
+                      ? 'bg-background text-primary shadow-sm ring-1 ring-border/50'
+                      : 'text-muted-foreground hover:bg-background/60 hover:text-foreground',
                     disabled && 'cursor-not-allowed opacity-40',
                   )}
                 >
-                  <Icon className="hidden h-4 w-4 sm:block" />
+                  <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   {label}
-                  {mode === id && (
-                    <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-primary sm:inset-x-3" />
-                  )}
                 </button>
               );
             })}
