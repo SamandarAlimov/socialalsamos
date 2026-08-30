@@ -1,3 +1,5 @@
+import type { PostLocation } from '@/hooks/usePostLocation';
+
 /**
  * Post matni ichida maxsus markerlar saqlanadi, masalan:
  *   [MUSIC]{"title":"...","artist":"...","audio_url":"..."}
@@ -187,6 +189,34 @@ export function parseLocationFromContent(content: string | null | undefined): {
   }
 
   return { location: null, cleanContent: cleaned };
+}
+
+export function legacyLocationToPostLocation(
+  postId: string,
+  location: LegacyPostLocation,
+): PostLocation {
+  return {
+    id: 'legacy-location:' + postId,
+    post_id: postId,
+    place_id: null,
+    // Legacy marker static snapshot: realtime DB jadvali mavjud bo'lmaganda
+    // foydalanuvchiga noto'g'ri "Live" holatini ko'rsatmaymiz.
+    mode: 'place',
+    label: location.label,
+    latitude: location.latitude,
+    longitude: location.longitude,
+    accuracy_m: location.accuracyM,
+    live_until: null,
+    updated_at: new Date(0).toISOString(),
+    place: location.place
+      ? {
+          id: 'legacy-place:' + postId,
+          name: location.place.name,
+          address: location.place.address,
+          category: location.place.category,
+        }
+      : null,
+  };
 }
 
 export function appendLocationMarker(
