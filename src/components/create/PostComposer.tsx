@@ -4,6 +4,7 @@ import {
   BarChart3,
   CalendarClock,
   ChevronDown,
+  Eye,
   Globe2,
   Loader2,
   Lock,
@@ -48,6 +49,7 @@ import { startLiveLocationSharing } from '@/lib/liveLocationSharing';
 import { parseStorageReference } from '@/lib/mediaUpload';
 import { supabase } from '@/integrations/supabase/client';
 import { RichTextComposer } from '@/components/create/RichTextComposer';
+import { PostDraftPreview } from '@/components/create/PostDraftPreview';
 import {
   normalizeAlsamosRichTextDocument,
   type AlsamosRichTextDocument,
@@ -229,6 +231,7 @@ export function PostComposer() {
   const [showMusic, setShowMusic] = useState(false);
   const [showCollaborators, setShowCollaborators] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [draftHydrated, setDraftHydrated] = useState(false);
   const [richEditorVersion, setRichEditorVersion] = useState(0);
 
@@ -987,6 +990,16 @@ export function PostComposer() {
           )}
 
           <div className="sticky bottom-2 z-20 rounded-3xl border border-border/70 bg-background/94 p-2.5 shadow-[0_16px_50px_rgba(0,0,0,0.18)] backdrop-blur-xl">
+            <button
+              type="button"
+              onClick={() => setShowPreview(true)}
+              disabled={!canSubmit}
+              className="mb-2 flex h-10 w-full items-center justify-center gap-2 rounded-2xl border border-border/60 bg-background text-xs font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Eye className="h-4 w-4" />
+              Postni ko‘rib chiqish
+            </button>
+
             <div className="mb-2 hidden px-1 xl:block">
               <p className="truncate text-xs font-semibold">
                 {scheduledAt ? 'Rejalashtirilgan nashr' : 'Post joylashga tayyor'}
@@ -1037,6 +1050,25 @@ export function PostComposer() {
       </div>
 
       {/* Oynalar */}
+      <PostDraftPreview
+        open={showPreview}
+        onOpenChange={setShowPreview}
+        author={{
+          displayName: profile?.display_name || profile?.username || 'Foydalanuvchi',
+          username: profile?.username || 'user',
+          avatarUrl: profile?.avatar_url ?? null,
+        }}
+        content={content}
+        formattedContent={formattedContent}
+        attachments={attachments}
+        visibility={visibility}
+        poll={poll}
+        location={location}
+        music={music}
+        collaborators={collaborators}
+        scheduledAt={scheduledAt}
+      />
+
       <PollComposer
         open={showPoll}
         onClose={() => setShowPoll(false)}
