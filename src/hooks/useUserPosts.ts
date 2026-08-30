@@ -38,10 +38,21 @@ export function useUserPosts(userId: string | undefined) {
     setIsLoading(true);
 
     try {
-      // If viewing own profile, show all posts
-      // If viewing other user's profile, show only public posts
-      const isOwnProfile = user?.id === userId;
-      
+      // Profil faqat user_id egasining postlari emas, qabul qilingan
+      // hammualliflik postlarini ham ko'rsatadi. Visibility'ni qo'lda publicga
+      // kesmaymiz: posts RLS -> can_view_post canonical ruxsatni tekshiradi.
+      const { data: collaborationRows, error: collaborationError } = await supabase
+        .from('post_collaborators')
+        .select('post_id')
+        .eq('user_id', userId)
+        .eq('status', 'accepted');
+
+      if (collaborationError) throw collaborationError;
+
+      const collaborationPostIds = Array.from(
+        new Set((collaborationRows ?? []).map((row) => row.post_id)),
+      );
+
       let query = supabase
         .from('posts')
         .select(`
@@ -54,14 +65,15 @@ export function useUserPosts(userId: string | undefined) {
             is_verified
           )
         `)
-        .eq('user_id', userId)
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
 
-      // Only filter by visibility for other users' profiles
-      if (!isOwnProfile) {
-        query = query.eq('visibility', 'public');
-      }
+      query =
+        collaborationPostIds.length > 0
+          ? query.or(
+              `user_id.eq.${userId},id.in.(${collaborationPostIds.join(',')})`,
+            )
+          : query.eq('user_id', userId);
 
       const { data, error } = await query;
 
