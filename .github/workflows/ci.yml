@@ -30,6 +30,9 @@ jobs:
       - name: Messages regression tests
         run: npm run test:messages
 
+      - name: Messages typecheck
+        run: npm run typecheck:messages
+
       - name: Typecheck
         run: npm run typecheck:create
 
