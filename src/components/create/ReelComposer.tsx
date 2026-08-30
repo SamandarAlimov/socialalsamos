@@ -534,7 +534,6 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
           >
             <SelectTrigger className="h-8 w-auto min-w-0 gap-1 rounded-full border-0 bg-muted/55 px-2.5 text-[11px] font-medium shadow-none focus:ring-0">
               <SelectValue />
-              <ChevronDown className="h-3 w-3 text-muted-foreground" />
             </SelectTrigger>
             <SelectContent>
               {VISIBILITIES.map((item) => (
