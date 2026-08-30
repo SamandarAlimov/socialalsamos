@@ -73,13 +73,23 @@ export async function trackStickerUse(
   writeLocal(items);
 
   try {
+    const { error } = await supabase.rpc('touch_sticker_recent', {
+      p_sticker_key: fileUrl,
+      p_kind: kind === 'gif' ? 'gif' : 'image',
+      p_preview_url: fileUrl,
+      p_full_url: fileUrl,
+      p_sticker_id: stickerId ?? null,
+    });
+    if (!error) return;
+
+    // Legacy schema fallback.
     await supabase.rpc('touch_sticker_usage', {
       p_file_url: fileUrl,
       p_kind: kind,
       p_sticker_id: stickerId ?? null,
     });
   } catch {
-    // Migratsiya hali qo'llanmagan bo'lsa panel mahalliy ro'yxat bilan ishlaydi
+    // Local history remains authoritative when server capability is absent.
   }
 }
 
@@ -89,6 +99,30 @@ export async function fetchRecentStickers(
   limit = 24
 ): Promise<RecentSticker[]> {
   try {
+    const current = await supabase.rpc('top_sticker_recents', { p_limit: limit });
+    if (!current.error && Array.isArray(current.data)) {
+      return (current.data as Array<Record<string, unknown>>)
+        .map((row) => {
+          const serverKind = String(row.kind ?? 'image');
+          const mappedKind: StickerKind = serverKind === 'gif' ? 'gif' : 'sticker';
+          const fileUrl = String(
+            row.full_url ?? row.preview_url ?? row.sticker_key ?? ''
+          ).trim();
+          if (!fileUrl) return null;
+          return {
+            fileUrl,
+            kind: mappedKind,
+            stickerId: (row.sticker_id as string | null) ?? null,
+            useCount: Number(row.use_count ?? 1),
+            lastUsedAt: String(row.used_at ?? new Date().toISOString()),
+          } satisfies RecentSticker;
+        })
+        .filter((item): item is RecentSticker => Boolean(item))
+        .filter((item) => !kind || item.kind === kind)
+        .slice(0, limit);
+    }
+
+    // Legacy schema compatibility.
     let query = supabase
       .from('sticker_usage')
       .select('file_url, kind, sticker_id, use_count, last_used_at')
