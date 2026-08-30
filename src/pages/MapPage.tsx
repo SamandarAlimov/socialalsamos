@@ -46,7 +46,7 @@ import {
   resolveMapClickPlace,
   type MapPlace,
 } from '@/lib/mapPlaces';
-import type { TransitStop } from '@/lib/transit';
+import type { TransitRoute, TransitStop } from '@/lib/transit';
 import {
   arrivalTime,
   fetchRoutesThrough,
@@ -428,6 +428,8 @@ export default function MapPage() {
   const [category, setCategory] = useState<string | null>(null);
   const [selectedPlace, setSelectedPlace] = useState<MapPlace | null>(null);
   const [selectedStop, setSelectedStop] = useState<TransitStop | null>(null);
+  const [selectedTransitRoute, setSelectedTransitRoute] =
+    useState<TransitRoute | null>(null);
   const [selectedIncident, setSelectedIncident] =
     useState<TrafficIncident | null>(null);
   const [panel, setPanel] = useState<PanelMode>('search');
@@ -525,6 +527,11 @@ export default function MapPage() {
     isBusStopFilter ? 5000 : 1500,
   );
   const stopRoutes = useStopRoutes(selectedStop);
+
+  useEffect(() => {
+    setSelectedTransitRoute(null);
+  }, [selectedStop?.id]);
+
   const transitStatus = useTransitRealtimeStatus();
   const trafficProvider = useTrafficProvider();
   const trafficIncidents = useTrafficIncidents(
@@ -2078,6 +2085,7 @@ export default function MapPage() {
     overlays,
     trafficIncidents.incidents,
     selectedIncident?.id,
+    selectedTransitRoute,
   ]);
 
   const vectorSceneMarkers = useMemo<MapSceneMarker[]>(() => {
@@ -2233,6 +2241,19 @@ export default function MapPage() {
 
   const vectorSceneLines = useMemo<MapSceneLine[]>(() => {
     const lines: MapSceneLine[] = [];
+
+    if (
+      selectedTransitRoute?.shapeCoordinates &&
+      selectedTransitRoute.shapeCoordinates.length > 1
+    ) {
+      lines.push({
+        id: 'selected-transit-route:' + selectedTransitRoute.id,
+        coordinates: selectedTransitRoute.shapeCoordinates,
+        color: selectedTransitRoute.colour || '#1E7BC4',
+        width: 6,
+        opacity: 0.94,
+      });
+    }
 
     if (overlays.includes('traffic')) {
       trafficIncidents.incidents.forEach((incident) => {
@@ -2503,10 +2524,28 @@ export default function MapPage() {
           authoritative={Boolean(transitStatus.authoritative)}
           staticGtfsAvailable={Boolean(transitStatus.staticGtfs)}
           alerts={stopRoutes.alerts}
+          selectedRouteId={selectedTransitRoute?.id ?? null}
           highContrast={contrastLayer}
           onReload={stopRoutes.reload}
+          onRouteSelect={(route) => {
+            const next =
+              selectedTransitRoute?.id === route.id
+                ? null
+                : route;
+            setSelectedTransitRoute(next);
+            if (next?.shapeCoordinates?.length) {
+              mapRef.current?.fitBounds(
+                next.shapeCoordinates,
+                {
+                  padding: [52, 52],
+                  animate: true,
+                },
+              );
+            }
+          }}
           onClose={() => {
             setSelectedStop(null);
+            setSelectedTransitRoute(null);
             setPanel('search');
             setSnap('peek');
           }}
@@ -3464,6 +3503,7 @@ export default function MapPage() {
     panel,
     selectedPlace,
     selectedStop,
+    selectedTransitRoute,
     selectedIncident,
     stopRoutes.routes,
     stopRoutes.loading,
