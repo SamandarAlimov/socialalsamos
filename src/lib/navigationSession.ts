@@ -17,6 +17,7 @@ export interface NavigationSession {
     name: string;
   } | null;
   destination: MapPlace | null;
+  routeWaypoints: MapPlace[];
   routes: RouteResult[];
 }
 
@@ -96,6 +97,11 @@ export function readNavigationSession(): NavigationSession | null {
       ),
       routeOrigin,
       destination,
+      routeWaypoints: Array.isArray(parsed.routeWaypoints)
+        ? parsed.routeWaypoints.filter(
+            (place): place is MapPlace => Boolean(place && validPoint(place)),
+          )
+        : [],
       routes,
     };
   } catch {
