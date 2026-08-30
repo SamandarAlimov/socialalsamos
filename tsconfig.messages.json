@@ -17,7 +17,6 @@
     "src/components/chat/RichComposer.tsx",
     "src/components/chat/RichComposer.test.ts",
     "src/components/messages/MessagePoll.tsx",
-    "src/components/messages/TelegramAttachSheet.tsx",
-    "src/components/messages/MessageInput.tsx"
+    "src/components/messages/TelegramAttachSheet.tsx"
   ]
 }
