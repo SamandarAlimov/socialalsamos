@@ -97,6 +97,7 @@ Deno.serve(async (req) => {
           content: scheduledMsg.content,
           media_url: scheduledMsg.media_url,
           media_type: scheduledMsg.media_type,
+          reply_to_id: scheduledMsg.reply_to_id,
         });
         if (insertError) throw insertError;
 
