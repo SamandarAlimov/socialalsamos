@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   BarChart3,
   CalendarClock,
+  ChevronDown,
   Globe2,
   Loader2,
   Lock,
@@ -18,6 +19,15 @@ import {
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { usePosts, type PostVisibility } from '@/hooks/usePosts';
 import { usePostAttachments } from '@/hooks/usePostAttachments';
@@ -106,6 +116,7 @@ async function cleanupDraftMusic(input?: PostMusicInput | null): Promise<void> {
 export function PostComposer() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { profile } = useAuth();
   const { createPost } = usePosts();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -466,23 +477,56 @@ export function PostComposer() {
           </div>
         </div>
       )}
-      {/* Maxfiylik */}
-      <div className="flex gap-2">
-        {VISIBILITIES.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setVisibility(id)}
-            className={cn(
-              'flex flex-1 items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-xs font-medium transition',
-              visibility === id
-                ? 'border-primary bg-primary/10 text-primary'
-                : 'border-border/60 text-muted-foreground hover:bg-muted',
-            )}
-          >
-            <Icon className="h-3.5 w-3.5" /> {label}
-          </button>
-        ))}
+      {/* Flutter bilan bir xil identity-first composer header */}
+      <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/20 p-3">
+        <Avatar className="h-12 w-12 shrink-0 border border-border/60">
+          <AvatarImage src={profile?.avatar_url ?? ''} />
+          <AvatarFallback className="font-semibold">
+            {(profile?.display_name || profile?.username || 'U').charAt(0).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold">
+            {profile?.display_name || profile?.username || 'Foydalanuvchi'}
+          </p>
+
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <Select
+              value={visibility}
+              onValueChange={(value) => setVisibility(value as PostVisibility)}
+            >
+              <SelectTrigger className="h-8 w-auto min-w-28 gap-1 rounded-full border-border/60 bg-background px-3 text-xs shadow-none">
+                <SelectValue />
+                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+              </SelectTrigger>
+              <SelectContent>
+                {VISIBILITIES.map(({ id, label, icon: Icon }) => (
+                  <SelectItem key={id} value={id}>
+                    <span className="flex items-center gap-2">
+                      <Icon className="h-3.5 w-3.5" />
+                      {label}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <button
+              type="button"
+              onClick={() => setShowCollaborators(true)}
+              className={cn(
+                'inline-flex h-8 items-center gap-1.5 rounded-full border border-border/60 bg-background px-3 text-xs font-medium transition hover:bg-muted',
+                collaborators.length > 0 && 'border-primary/30 bg-primary/[0.06] text-primary',
+              )}
+            >
+              <Users className="h-3.5 w-3.5" />
+              {collaborators.length > 0
+                ? `${collaborators.length} hammuallif`
+                : 'Hammuallif qo‘shish'}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Structured WYSIWYG matn editori */}
