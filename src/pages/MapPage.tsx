@@ -2121,6 +2121,15 @@ export default function MapPage() {
     [markerGroups, visibleStops, withUserDistance],
   );
 
+  const handleVectorEngineError = useCallback((error: Error) => {
+    console.error('[map/vector] renderer failed, reverting to raster', error);
+    setMapEngine('raster');
+    writePreferredMapEngine('raster');
+    toast.error(
+      'Vector xarita ishga tushmadi. Oddiy xaritaga xavfsiz qaytildi.',
+    );
+  }, []);
+
   const panelBody = useMemo(() => {
     if (panel === 'place' && selectedPlace) {
       return (
