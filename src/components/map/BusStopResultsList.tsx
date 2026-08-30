@@ -7,6 +7,7 @@ interface BusStopResultsListProps {
   stops: TransitStop[];
   loading?: boolean;
   activeId?: string | null;
+  highContrast?: boolean;
   onSelect: (stop: TransitStop) => void;
   onDirections?: (stop: TransitStop) => void;
   className?: string;
@@ -16,6 +17,7 @@ export function BusStopResultsList({
   stops,
   loading,
   activeId,
+  highContrast = false,
   onSelect,
   onDirections,
   className,
@@ -38,7 +40,7 @@ export function BusStopResultsList({
   }
 
   return (
-    <div className={cn('divide-y divide-border/60', className)}>
+    <div className={cn(highContrast ? 'divide-y divide-white/10' : 'divide-y divide-border/60', className)}>
       {stops.map((stop) => (
         <div
           key={stop.id}
@@ -49,11 +51,12 @@ export function BusStopResultsList({
             if (event.key === 'Enter') onSelect(stop);
           }}
           className={cn(
-            'flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors hover:bg-muted/60',
-            activeId === stop.id && 'bg-muted',
+            'flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors',
+            highContrast ? 'hover:bg-white/[0.07]' : 'hover:bg-muted/60',
+            activeId === stop.id && (highContrast ? 'bg-white/[0.1]' : 'bg-muted'),
           )}
         >
-          <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500/15 text-sky-600">
+          <span className={cn('mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sky-500', highContrast ? 'bg-sky-400/[0.12]' : 'bg-sky-500/15')}>
             <Bus className="h-5 w-5" />
           </span>
 
