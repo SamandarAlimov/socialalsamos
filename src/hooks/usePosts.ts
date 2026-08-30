@@ -42,6 +42,30 @@ export interface Post {
 
 export type PostVisibility = 'public' | 'friends' | 'private';
 
+function isMissingPostKindError(error: unknown): boolean {
+  const value = error as {
+    code?: string;
+    message?: string;
+    details?: string;
+    hint?: string;
+  } | null;
+  const text = [value?.code, value?.message, value?.details, value?.hint]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  return (
+    text.includes('post_kind') &&
+    (
+      text.includes('column') ||
+      text.includes('schema cache') ||
+      text.includes('does not exist') ||
+      value?.code === '42703' ||
+      value?.code === 'PGRST204'
+    )
+  );
+}
+
 /** Post yaratishda qo'shimcha strukturali ma'lumotlar. */
 export interface CreatePostOptions {
   /** MUHIM: ilgari bu qiymat saqlanmasdan tushib qolar edi (maxfiylik bug'i). */
@@ -71,27 +95,11 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
     setIsLoading(true);
 
     try {
-      // Feed query visibility bilan bir xil semantikaga ega bo'lishi kerak.
-      // RLS oxirgi himoya qatlamidir; client esa keraksiz qatorlarni so'ramaydi.
-      let query = db
-        .from('posts')
-        .select(`
-          *,
-          profile:profiles!posts_user_id_fkey (
-            id,
-            username,
-            display_name,
-            avatar_url,
-            is_verified
-          )
-        `)
-        .neq('post_kind', 'story')
-        .order('created_at', { ascending: false })
-        .range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1);
+      let allowedUserIds: string[] | null = null;
+      let visibility: 'public' | Array<'public' | 'friends'> =
+        filter === 'friends' ? ['public', 'friends'] : 'public';
 
-      if (filter === 'global') {
-        query = query.eq('visibility', 'public');
-      } else if (filter === 'following') {
+      if (filter === 'following') {
         if (!user) {
           if (refresh) setPosts([]);
           setHasMore(false);
@@ -104,20 +112,8 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
           .eq('follower_id', user.id);
 
         if (followingError) throw followingError;
-
-        const followingIds = (following ?? []).map((row) => row.following_id);
-        if (followingIds.length === 0) {
-          if (refresh) setPosts([]);
-          setHasMore(false);
-          return;
-        }
-
-        query = query
-          .eq('visibility', 'public')
-          .in('user_id', followingIds);
-      } else {
-        // "friends" = mutual follow. Faqat ikki tomonlama follow bo'lgan
-        // foydalanuvchilarning public + friends postlari olinadi.
+        allowedUserIds = (following ?? []).map((row) => row.following_id);
+      } else if (filter === 'friends') {
         if (!user) {
           if (refresh) setPosts([]);
           setHasMore(false);
@@ -132,79 +128,105 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
         if (outgoingError) throw outgoingError;
 
         const outgoingIds = (outgoing ?? []).map((row) => row.following_id);
-        if (outgoingIds.length === 0) {
-          if (refresh) setPosts([]);
-          setHasMore(false);
-          return;
+        if (outgoingIds.length > 0) {
+          const { data: reciprocal, error: reciprocalError } = await supabase
+            .from('follows')
+            .select('follower_id')
+            .eq('following_id', user.id)
+            .in('follower_id', outgoingIds);
+
+          if (reciprocalError) throw reciprocalError;
+          allowedUserIds = (reciprocal ?? []).map((row) => row.follower_id);
+        } else {
+          allowedUserIds = [];
         }
-
-        const { data: reciprocal, error: reciprocalError } = await supabase
-          .from('follows')
-          .select('follower_id')
-          .eq('following_id', user.id)
-          .in('follower_id', outgoingIds);
-
-        if (reciprocalError) throw reciprocalError;
-
-        const friendIds = (reciprocal ?? []).map((row) => row.follower_id);
-        if (friendIds.length === 0) {
-          if (refresh) setPosts([]);
-          setHasMore(false);
-          return;
-        }
-
-        query = query
-          .in('visibility', ['public', 'friends'])
-          .in('user_id', friendIds);
       }
 
-      const { data, error } = await query;
+      if (allowedUserIds && allowedUserIds.length === 0) {
+        if (refresh) setPosts([]);
+        setHasMore(false);
+        return;
+      }
 
+      const buildQuery = (includePostKind: boolean) => {
+        let query = db
+          .from('posts')
+          .select(`
+            *,
+            profile:profiles!posts_user_id_fkey (
+              id,
+              username,
+              display_name,
+              avatar_url,
+              is_verified
+            )
+          `)
+          .order('created_at', { ascending: false })
+          .range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1);
+
+        // Production may briefly lag behind the app migration. Only this
+        // optional discriminator gets a compatibility retry; RLS still applies.
+        if (includePostKind) query = query.neq('post_kind', 'story');
+
+        query = Array.isArray(visibility)
+          ? query.in('visibility', visibility)
+          : query.eq('visibility', visibility);
+
+        if (allowedUserIds) query = query.in('user_id', allowedUserIds);
+        return query;
+      };
+
+      let result = await buildQuery(true);
+      if (result.error && isMissingPostKindError(result.error)) {
+        result = await buildQuery(false);
+      }
+
+      const { data, error } = result;
       if (error) throw error;
 
-      // Check if user has liked/bookmarked these posts
-      if (user && data) {
-        const postIds = data.map(p => p.id);
-        
-        const [likesResult, bookmarksResult] = await Promise.all([
-          supabase
-            .from('post_likes')
-            .select('post_id')
-            .eq('user_id', user.id)
-            .in('post_id', postIds),
-          // For now, just return empty since we don't have bookmarks table
-          { data: [] as any[], error: null }
-        ]);
+      if (user && data && data.length > 0) {
+        const postIds = data.map((post) => post.id);
+        const { data: likes, error: likesError } = await supabase
+          .from('post_likes')
+          .select('post_id')
+          .eq('user_id', user.id)
+          .in('post_id', postIds);
 
-        const likedPostIds = new Set(likesResult.data?.map(l => l.post_id) || []);
+        if (likesError) {
+          console.warn('Post like state hydrate failed:', likesError);
+        }
 
-        const postsWithStatus = data.map(post => ({
+        const likedPostIds = new Set((likes ?? []).map((row) => row.post_id));
+        const postsWithStatus = data.map((post) => ({
           ...post,
           is_liked: likedPostIds.has(post.id),
           is_bookmarked: false,
         }));
 
-        if (refresh) {
-          setPosts(postsWithStatus as Post[]);
-        } else {
-          setPosts(prev => [...prev, ...(postsWithStatus as Post[])]);
-        }
+        setPosts((previous) =>
+          refresh ? (postsWithStatus as Post[]) : [...previous, ...(postsWithStatus as Post[])]
+        );
       } else {
-        if (refresh) {
-          setPosts(data as Post[]);
-        } else {
-          setPosts(prev => [...prev, ...(data as Post[])]);
-        }
+        setPosts((previous) =>
+          refresh ? ((data ?? []) as Post[]) : [...previous, ...((data ?? []) as Post[])]
+        );
       }
 
-      setHasMore(data ? data.length === PAGE_SIZE : false);
+      setHasMore(Boolean(data && data.length === PAGE_SIZE));
     } catch (error: any) {
       console.error('Error fetching posts:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load posts',
-        variant: 'destructive',
-      });
+
+      // A failed page must not keep infinite-scroll requesting offset
+      // 10/20/30/... forever. Stop until an explicit refresh.
+      setHasMore(false);
+
+      if (refresh || pageNum === 0) {
+        toast({
+          title: 'Error',
+          description: 'Failed to load posts',
+          variant: 'destructive',
+        });
+      }
     } finally {
       setIsLoading(false);
     }
