@@ -14,6 +14,7 @@ interface BusStopCardProps {
   realtimeFresh?: boolean;
   providerName?: string | null;
   authoritative?: boolean;
+  staticGtfsAvailable?: boolean;
   alerts?: TransitServiceAlert[];
   highContrast?: boolean;
   onReload?: () => void;
@@ -50,6 +51,7 @@ export function BusStopCard({
   realtimeFresh = false,
   providerName = null,
   authoritative = false,
+  staticGtfsAvailable = false,
   alerts = [],
   highContrast = false,
   onReload,
@@ -131,7 +133,13 @@ export function BusStopCard({
                 : 'border-border/50 bg-muted/40 text-muted-foreground',
             )}
           >
-            Jonli GTFS/GTFS-RT manbasi ulanmagan. OSM'dagi qatnov oralig'i ko‘rsatilishi mumkin, lekin kelish vaqti uydirilmaydi.
+            {staticGtfsAvailable
+              ? (providerName ? providerName + ' · ' : '') +
+                (authoritative
+                  ? 'rasmiy GTFS marshrut ma’lumoti ulangan. '
+                  : 'GTFS marshrut ma’lumoti ulangan. ') +
+                'Jonli kelish vaqti feed’i hali ulanmagan.'
+              : "Jonli GTFS/GTFS-RT manbasi ulanmagan. OSM'dagi qatnov oralig'i ko‘rsatilishi mumkin, lekin kelish vaqti uydirilmaydi."}
           </div>
         ) : !realtimeFresh ? (
           <div className="border-b border-amber-400/15 bg-amber-400/[0.08] px-4 py-2.5 text-[11px] leading-relaxed text-amber-300">
