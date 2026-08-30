@@ -10,6 +10,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useCheckout } from '@/hooks/useOrders';
+import {
+  getEnabledPaymentProviders,
+  getPendingPaymentProviders,
+  initPayment,
+  type PaymentProviderId,
+} from '@/lib/payments';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { formatPrice, getShippingCost, checkoutErrorMessage } from '@/lib/marketplace';
@@ -23,8 +29,10 @@ interface CheckoutSheetProps {
   onSuccess?: () => void;
 }
 
-type Step = 'address' | 'payment' | 'review' | 'success' | 'failed';
-type PaymentMethod = 'wallet' | 'card_on_delivery' | 'cash';
+type Step = 'address' | 'payment' | 'review' | 'pending' | 'success' | 'failed';
+
+const ENABLED_PAYMENT_PROVIDERS = getEnabledPaymentProviders();
+const PENDING_PAYMENT_PROVIDERS = getPendingPaymentProviders();
 
 const EMPTY_ADDRESS = {
   full_name: '',
@@ -48,7 +56,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
   const [step, setStep] = useState<Step>('address');
   const [address, setAddress] = useState(EMPTY_ADDRESS);
   const [notes, setNotes] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('wallet');
+  const [paymentProviderId, setPaymentProviderId] = useState<PaymentProviderId>('wallet');
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [walletLoading, setWalletLoading] = useState(false);
   const [lastResult, setLastResult] = useState<{
@@ -60,6 +68,8 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
   } | null>(null);
 
   const currency = cartItems[0]?.product?.currency || 'USD';
+  const selectedProvider = ENABLED_PAYMENT_PROVIDERS.find(provider => provider.id === paymentProviderId)
+    ?? ENABLED_PAYMENT_PROVIDERS[0];
 
   /**
    * Shipping used to be summed once per cart line, ignoring quantity and even
@@ -90,14 +100,15 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
   );
 
   const walletInsufficient =
-    paymentMethod === 'wallet' && walletBalance !== null && walletBalance < grandTotal;
+    selectedProvider?.id === 'wallet' && walletBalance !== null && walletBalance < grandTotal;
 
   const canPlaceOrder =
     !isProcessing &&
     isAddressValid &&
     cartItems.length > 0 &&
     unavailableItems.length === 0 &&
-    !walletInsufficient;
+    !walletInsufficient &&
+    Boolean(selectedProvider);
 
   // Fetch wallet balance whenever the sheet opens / user changes
   useEffect(() => {
@@ -127,7 +138,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
   }, [open]);
 
   const handlePlaceOrder = async () => {
-    if (isProcessing) return;
+    if (isProcessing || !selectedProvider) return;
 
     if (unavailableItems.length > 0) {
       toast.error("Savatdagi ba'zi mahsulotlar mavjud emas");
@@ -138,9 +149,79 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
       return;
     }
 
-    const result = await placeOrder(address, paymentMethod, notes || undefined);
+    const result = await placeOrder(address, selectedProvider.method, notes || undefined);
     setLastResult(result);
-    setStep(result?.success ? 'success' : 'failed');
+
+    if (!result?.success) {
+      setStep('failed');
+      return;
+    }
+
+    if (result.order_ids.length === 0) {
+      setLastResult({ ...result, success: false, error: 'Buyurtma identifikatori topilmadi' });
+      setStep('failed');
+      return;
+    }
+
+    const { data: orderRows, error: orderError } = await supabase
+      .from('orders')
+      .select('id, order_number, total, currency')
+      .in('id', result.order_ids);
+
+    if (orderError || !orderRows || orderRows.length !== result.order_ids.length) {
+      setLastResult({
+        ...result,
+        success: false,
+        error: "Buyurtma yaratildi, lekin to'lovni boshlash uchun ma'lumot olinmadi",
+      });
+      setStep('failed');
+      return;
+    }
+
+    let hasPending = false;
+    const returnUrl = typeof window !== 'undefined'
+      ? `${window.location.origin}/marketplace?tab=orders`
+      : '/marketplace?tab=orders';
+
+    for (const order of orderRows) {
+      const paymentResult = await initPayment(paymentProviderId, {
+        orderId: order.id,
+        orderNumber: order.order_number,
+        amount: Number(order.total),
+        currency: order.currency || currency,
+        returnUrl,
+      });
+
+      if (paymentResult.status === 'failed') {
+        setLastResult({
+          ...result,
+          success: false,
+          error: paymentResult.error || "To'lovni boshlashda xatolik yuz berdi",
+        });
+        setStep('failed');
+        return;
+      }
+
+      if (paymentResult.status === 'redirect') {
+        if (!paymentResult.redirectUrl) {
+          setLastResult({
+            ...result,
+            success: false,
+            error: "To'lov sahifasi manzili olinmadi",
+          });
+          setStep('failed');
+          return;
+        }
+        window.location.assign(paymentResult.redirectUrl);
+        return;
+      }
+
+      if (paymentResult.status === 'pending') {
+        hasPending = true;
+      }
+    }
+
+    setStep(hasPending ? 'pending' : 'success');
   };
 
   const resetAndClose = () => {
@@ -155,7 +236,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
       onOpenChange(true);
       return;
     }
-    if (step === 'success') onSuccess?.();
+    if (step === 'success' || step === 'pending') onSuccess?.();
     resetAndClose();
   };
 
@@ -169,15 +250,10 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
     address: 0,
     payment: 1,
     review: 2,
+    pending: 3,
     success: 3,
     failed: 2,
   }[step];
-
-  const paymentLabel: Record<PaymentMethod, string> = {
-    wallet: 'Alsamos Hamyon',
-    card_on_delivery: 'Karta (yetkazishda)',
-    cash: 'Naqd (yetkazishda)',
-  };
 
   const paidTotal = lastResult?.total ?? grandTotal;
 
@@ -202,11 +278,12 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                 {step === 'address' && 'Yetkazib berish manzili'}
                 {step === 'payment' && "To'lov usuli"}
                 {step === 'review' && 'Buyurtmani tasdiqlash'}
-                {step === 'success' && 'Buyurtma qabul qilindi!'}
+                {step === 'pending' && "To'lov kutilmoqda"}
+                {step === 'success' && "To'lov muvaffaqiyatli!"}
                 {step === 'failed' && "To'lov amalga oshmadi"}
               </SheetTitle>
             </div>
-            {step !== 'success' && step !== 'failed' && (
+            {step !== 'success' && step !== 'pending' && step !== 'failed' && (
               <div className="flex gap-2 mt-2">
                 {['address', 'payment', 'review'].map((s, i) => (
                   <div key={s} className={cn(
@@ -285,69 +362,63 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   exit={{ opacity: 0, x: -20 }}
                   className="p-4 space-y-3"
                 >
-                  {/* Wallet */}
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('wallet')}
-                    className={cn(
-                      'w-full text-left rounded-2xl p-4 border transition-all',
-                      paymentMethod === 'wallet'
-                        ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-                        : 'border-border/50 hover:border-border bg-muted/20',
-                    )}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shrink-0">
-                        <Wallet className="h-5 w-5 text-primary-foreground" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="font-semibold text-sm">Alsamos Hamyon</p>
-                          {paymentMethod === 'wallet' && (
-                            <CheckCircle className="h-5 w-5 text-primary" />
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">Balansdan darhol yechiladi</p>
-                        <div className="mt-2 flex items-center justify-between">
-                          <span className="text-xs text-muted-foreground">Mavjud balans</span>
-                          <span className="text-sm font-bold tabular-nums">
+                  {ENABLED_PAYMENT_PROVIDERS.map(provider => (
+                    <div key={provider.id} className="space-y-2">
+                      <PaymentOption
+                        icon={paymentProviderIcon(provider.id)}
+                        title={provider.label}
+                        subtitle={provider.description}
+                        active={paymentProviderId === provider.id}
+                        onSelect={() => setPaymentProviderId(provider.id)}
+                      />
+                      {provider.id === 'wallet' && (
+                        <div className="mx-2 flex items-center justify-between rounded-xl bg-muted/30 px-3 py-2 text-xs">
+                          <span className="text-muted-foreground">Mavjud balans</span>
+                          <span className="font-bold tabular-nums">
                             {walletLoading ? '…' : formatPrice(walletBalance ?? 0, currency)}
                           </span>
                         </div>
-                      </div>
+                      )}
+                      {provider.id === 'wallet' && walletInsufficient && (
+                        <div className="mx-2 flex items-center gap-2 rounded-xl bg-destructive/10 p-2.5 text-xs text-destructive">
+                          <AlertCircle className="h-4 w-4 shrink-0" />
+                          <span className="flex-1">Balans yetarli emas. To'ldiring yoki boshqa usul tanlang.</span>
+                          <button
+                            type="button"
+                            onClick={goToPaymentSettings}
+                            className="shrink-0 font-semibold underline"
+                          >
+                            To'ldirish
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    {walletInsufficient && (
-                      <div className="mt-3 flex items-center gap-2 p-2.5 rounded-lg bg-destructive/10 text-destructive text-xs">
-                        <AlertCircle className="h-4 w-4 shrink-0" />
-                        <span className="flex-1">Balans yetarli emas. To'ldiring yoki boshqa usul tanlang.</span>
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); goToPaymentSettings(); }}
-                          className="font-semibold underline shrink-0"
+                  ))}
+
+                  {PENDING_PAYMENT_PROVIDERS.length > 0 && (
+                    <div className="space-y-2 pt-2">
+                      <p className="px-1 text-xs font-semibold text-muted-foreground">
+                        Tez orada ulanadi
+                      </p>
+                      {PENDING_PAYMENT_PROVIDERS.map(provider => (
+                        <div
+                          key={provider.id}
+                          className="flex w-full items-center gap-3 rounded-2xl border border-dashed border-border/50 bg-muted/20 p-4 opacity-70"
+                          aria-disabled="true"
                         >
-                          To'ldirish
-                        </button>
-                      </div>
-                    )}
-                  </button>
-
-                  {/* Card on delivery */}
-                  <PaymentOption
-                    icon={<CreditCard className="h-5 w-5 text-primary-foreground" />}
-                    title="Karta orqali (yetkazishda)"
-                    subtitle="Kuryer POS-terminali orqali to'lov"
-                    active={paymentMethod === 'card_on_delivery'}
-                    onSelect={() => setPaymentMethod('card_on_delivery')}
-                  />
-
-                  {/* Cash */}
-                  <PaymentOption
-                    icon={<Banknote className="h-5 w-5 text-primary-foreground" />}
-                    title="Naqd (yetkazishda)"
-                    subtitle="Mahsulotni qo'lingizga olganda to'lang"
-                    active={paymentMethod === 'cash'}
-                    onSelect={() => setPaymentMethod('cash')}
-                  />
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-muted">
+                            {paymentProviderIcon(provider.id, false)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold">{provider.label}</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {provider.unavailableReason || "Hozircha mavjud emas"}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {/* Manage cards link */}
                   <button
@@ -399,7 +470,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   <div className="p-3 rounded-xl bg-muted/30 border border-border/20 flex items-center justify-between">
                     <div className="flex items-center gap-2 text-sm font-medium">
                       <CreditCard className="h-4 w-4 text-primary" />
-                      {paymentLabel[paymentMethod]}
+                      {selectedProvider?.label || "To'lov usuli"}
                     </div>
                     <button
                       onClick={() => setStep('payment')}
@@ -477,6 +548,55 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                 </motion.div>
               )}
 
+              {step === 'pending' && (
+                <motion.div
+                  key="pending"
+                  initial={{ opacity: 0, scale: 0.96 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="p-6 flex flex-col items-center text-center"
+                >
+                  <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
+                    <Truck className="h-10 w-10 text-primary" />
+                  </div>
+                  <h2 className="mb-1 text-xl font-bold">Buyurtma qabul qilindi</h2>
+                  <p className="mb-5 max-w-xs text-sm text-muted-foreground">
+                    {selectedProvider?.settlement === 'on_delivery'
+                      ? "To'lov mahsulot yetkazilganda olinadi. Buyurtma holatini kuzatishingiz mumkin."
+                      : "To'lov tasdiqlanishi kutilmoqda. Holat buyurtmalar bo'limida yangilanadi."}
+                  </p>
+                  <div className="mb-5 w-full rounded-2xl border border-border/50 bg-muted/20 p-4 text-left">
+                    <div className="mb-2 flex justify-between text-sm">
+                      <span className="text-muted-foreground">Buyurtmalar</span>
+                      <span className="font-semibold tabular-nums">{lastResult?.order_ids?.length ?? 0}</span>
+                    </div>
+                    <div className="mb-2 flex justify-between text-sm">
+                      <span className="text-muted-foreground">To'lov usuli</span>
+                      <span className="font-semibold">{selectedProvider?.label}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Umumiy</span>
+                      <span className="font-bold text-primary tabular-nums">{formatPrice(paidTotal, currency)}</span>
+                    </div>
+                  </div>
+                  <div className="flex w-full flex-col gap-2">
+                    <Button
+                      className="h-11 rounded-xl"
+                      onClick={() => { onSuccess?.(); resetAndClose(); navigate('/marketplace?tab=orders'); }}
+                    >
+                      <Package className="mr-2 h-4 w-4" />
+                      Buyurtmalarim
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="h-11 rounded-xl"
+                      onClick={() => { onSuccess?.(); resetAndClose(); }}
+                    >
+                      Yopish
+                    </Button>
+                  </div>
+                </motion.div>
+              )}
+
               {step === 'success' && (
                 <motion.div
                   key="success"
@@ -493,12 +613,10 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                     <CheckCircle className="h-10 w-10 text-green-500" />
                   </motion.div>
                   <h2 className="text-xl font-bold mb-1">
-                    {lastResult?.payment_status === 'paid' ? "To'lov muvaffaqiyatli!" : 'Buyurtma qabul qilindi!'}
+                    "To'lov muvaffaqiyatli!"
                   </h2>
                   <p className="text-muted-foreground text-sm mb-5 max-w-xs">
-                    {lastResult?.payment_status === 'paid'
-                      ? 'Hamyondan yechildi. Kvitansiya buyurtmalar bo\'limida saqlandi.'
-                      : "Yetkazganda to'lang. Sotuvchi tayyorlashni boshladi."}
+                    To'lov muvaffaqiyatli yakunlandi. Kvitansiya buyurtmalar bo'limida saqlandi.
                   </p>
                   <div className="w-full rounded-2xl border border-border/50 bg-muted/20 p-4 mb-5 text-left">
                     <div className="flex justify-between text-sm mb-2">
@@ -507,7 +625,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                     </div>
                     <div className="flex justify-between text-sm mb-2">
                       <span className="text-muted-foreground">To'lov usuli</span>
-                      <span className="font-semibold">{paymentLabel[paymentMethod]}</span>
+                      <span className="font-semibold">{selectedProvider?.label || "To'lov usuli"}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Umumiy</span>
@@ -551,7 +669,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                     <Button className="rounded-xl h-11" onClick={() => setStep('review')}>
                       Qayta urinish
                     </Button>
-                    {(paymentMethod === 'wallet' || lastResult?.error === 'insufficient_balance') && (
+                    {(selectedProvider?.id === 'wallet' || lastResult?.error === 'insufficient_balance') && (
                       <Button variant="outline" className="rounded-xl h-11" onClick={goToPaymentSettings}>
                         <Wallet className="h-4 w-4 mr-2" />
                         Hamyonni to'ldirish
@@ -566,7 +684,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
             </AnimatePresence>
           </ScrollArea>
 
-          {step !== 'success' && step !== 'failed' && (
+          {step !== 'success' && step !== 'pending' && step !== 'failed' && (
             <div className="p-4 border-t border-border/30 bg-background/95 backdrop-blur-xl">
               {step === 'address' && (
                 <Button
@@ -581,7 +699,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
               {step === 'payment' && (
                 <Button
                   className="w-full h-12 rounded-xl text-sm font-semibold shadow-lg shadow-primary/20"
-                  disabled={walletInsufficient}
+                  disabled={walletInsufficient || !selectedProvider}
                   onClick={() => setStep('review')}
                 >
                   Ko'rib chiqish
@@ -646,4 +764,17 @@ function PaymentOption({
       </div>
     </button>
   );
+}
+
+
+function paymentProviderIcon(id: PaymentProviderId, inverse = true) {
+  const className = cn('h-5 w-5', inverse ? 'text-primary-foreground' : 'text-muted-foreground');
+  switch (id) {
+    case 'wallet':
+      return <Wallet className={className} />;
+    case 'cash':
+      return <Banknote className={className} />;
+    default:
+      return <CreditCard className={className} />;
+  }
 }
