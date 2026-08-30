@@ -566,6 +566,7 @@ export default function MapPage() {
       setLayerOpen(false);
       setSelectedStop(null);
       setMovedCenter(null);
+      setCenter({ latitude: point.latitude, longitude: point.longitude });
 
       // UX: provider javobini kutib turmaymiz. Foydalanuvchi bosgan nuqta
       // darhol marker + karta sifatida ko'rinadi, keyin real OSM ma'lumoti bilan
@@ -597,6 +598,7 @@ export default function MapPage() {
 
         const place = withUserDistance(resolved);
         setSelectedPlace(place);
+        setCenter({ latitude: place.latitude, longitude: place.longitude });
 
         if (mapRef.current) {
           mapRef.current.panTo([place.latitude, place.longitude], { animate: true });
@@ -1596,7 +1598,14 @@ export default function MapPage() {
               icon={placeIcon(categoryUi(group.place.categoryId).color, false)}
               eventHandlers={{
                 click: () => {
-                  setSelectedPlace(group.place);
+                  const selected = withUserDistance(group.place);
+                  setSelectedPlace(selected);
+                  setSelectedStop(null);
+                  setMovedCenter(null);
+                  setCenter({
+                    latitude: selected.latitude,
+                    longitude: selected.longitude,
+                  });
                   setPanel('place');
                   setSnap('half');
                 },
