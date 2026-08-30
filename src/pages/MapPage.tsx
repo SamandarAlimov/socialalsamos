@@ -1591,6 +1591,26 @@ export default function MapPage() {
     snapshot: navigation.snapshot,
   });
 
+  const nextNavigationStop = useMemo(() => {
+    const index = navigation.snapshot.nextCheckpointIndex;
+    if (index == null) return null;
+
+    if (index < routeWaypoints.length) {
+      return {
+        name: routeWaypoints[index]?.name ?? 'Oraliq manzil',
+        intermediate: true,
+      };
+    }
+
+    return destination
+      ? { name: destination.name, intermediate: false }
+      : null;
+  }, [
+    navigation.snapshot.nextCheckpointIndex,
+    routeWaypoints,
+    destination,
+  ]);
+
   const skipNextNavigationStop = useCallback(async () => {
     if (!destination || !navigation.position) return;
 
@@ -3249,6 +3269,12 @@ export default function MapPage() {
           voiceSupported={navigationVoice.supported}
           onToggleVoice={navigationVoice.toggle}
           following={navigationFollowing}
+          nextStopName={nextNavigationStop?.name ?? null}
+          nextStopDistanceM={navigation.snapshot.distanceToCheckpointM}
+          canSkipNextStop={Boolean(nextNavigationStop?.intermediate)}
+          reachedStopName={reachedNavigationStop?.name ?? null}
+          onContinueAfterStop={() => setReachedNavigationStop(null)}
+          onSkipNextStop={() => void skipNextNavigationStop()}
           onRecenter={() => {
             if (!navigation.position || !mapRef.current) return;
             setNavigationFollowing(true);
