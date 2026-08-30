@@ -155,7 +155,17 @@ export const PLACE_CATEGORIES: PlaceCategory[] = [
     label: 'Masjidlar',
     emoji: '\ud83d\udd4c',
     filters: ['amenity=place_of_worship&religion=muslim', 'building=mosque'],
-    keywords: ['masjid', 'masjidi', 'mosque', 'мечеть', 'jome', 'juma masjidi', 'namoz'],
+    keywords: [
+      'masjid',
+      'masjidi',
+      'mosque',
+      'мечеть',
+      'jome',
+      "jom'e",
+      'jom',
+      'juma masjidi',
+      'namoz',
+    ],
   },
   {
     id: 'hotel',
@@ -423,7 +433,7 @@ function categoryFromName(name?: string | null): PlaceCategory | undefined {
   if (!value) return undefined;
 
   if (
-    /(^|[\s'’-])(masjid|masjidi|mosque|мечеть|jome|juma|jom'e|jom’e)([\s'’-]|$)/i.test(value)
+    /(^|[\s'’-])(masjid|masjidi|mosque|мечеть|jome|juma|jom|jom'e|jom’e)([\s'’-]|$)/i.test(value)
   ) {
     return findCategory('mosque');
   }
@@ -884,7 +894,11 @@ function queryTokenVariants(token: string): string[] {
     variants.add('mosque');
     variants.add('masjid');
   }
-  if (t === 'juma' || t === 'jome') variants.add('friday');
+  if (t === 'juma' || t === 'jome' || t === 'jom' || t === "jom'e") {
+    variants.add('friday');
+    variants.add('mosque');
+    variants.add('masjid');
+  }
 
   return Array.from(variants).filter(Boolean);
 }
@@ -910,7 +924,9 @@ function searchQueryVariants(value: string): string[] {
       .map((token) => {
         if (token === 'ota') return 'ata';
         if (token.startsWith('masjid')) return 'mosque';
-        if (token === 'juma' || token === 'jome') return 'friday';
+        if (token === 'juma' || token === 'jome' || token === 'jom' || token === "jom'e") {
+          return 'mosque';
+        }
         if (token.includes('jon')) return token.replace(/jon/g, 'jan');
         return token;
       })
@@ -929,8 +945,10 @@ function latinTokenToCyrillic(token: string): string {
     mosque: 'мечеть',
     ota: 'ата',
     ata: 'ата',
-    juma: 'джума',
-    jome: 'джума',
+    juma: 'мечеть',
+    jome: 'мечеть',
+    jom: 'мечеть',
+    "jom'e": 'мечеть',
   };
   if (semantic[value]) return semantic[value];
 
