@@ -15,6 +15,7 @@ export interface MessageInsertArgs {
   mediaUrl?: string;
   mediaType?: string;
   replyToId?: string | null;
+  clientMessageId?: string;
 }
 
 export function buildMessageInsertPayload({
@@ -24,6 +25,7 @@ export function buildMessageInsertPayload({
   mediaUrl,
   mediaType,
   replyToId,
+  clientMessageId,
 }: MessageInsertArgs): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     conversation_id: conversationId,
@@ -35,6 +37,7 @@ export function buildMessageInsertPayload({
 
   // Oddiy xabar reply schema/cache holatiga umuman bog'lanmasin.
   if (replyToId) payload.reply_to_id = replyToId;
+  if (clientMessageId) payload.client_message_id = clientMessageId;
 
   return payload;
 }
