@@ -975,13 +975,16 @@ export function ProductDetail({
                             <>
                               <span className={cn(
                                 'flex items-center gap-1',
-                                sellerResponseStats?.is_online && 'font-medium text-emerald-600',
+                                (sellerResponseStats?.is_online || product.seller.profile?.is_online) &&
+                                  'font-medium text-emerald-600',
                               )}>
                                 <span className={cn(
                                   'h-1.5 w-1.5 rounded-full',
-                                  sellerResponseStats?.is_online ? 'bg-emerald-500' : 'bg-muted-foreground/40',
+                                  (sellerResponseStats?.is_online || product.seller.profile?.is_online)
+                                    ? 'bg-emerald-500'
+                                    : 'bg-muted-foreground/40',
                                 )} />
-                                {sellerResponseStats?.is_online
+                                {sellerResponseStats?.is_online || product.seller.profile?.is_online
                                   ? marketplaceUz.productDetail.online
                                   : marketplaceUz.productDetail.offline}
                               </span>
@@ -1308,7 +1311,7 @@ export function ProductDetail({
                 </div>
 
           </div>
-          <aside className="hidden space-y-4 lg:block">
+          <aside className="hidden space-y-4 lg:sticky lg:top-20 lg:block lg:self-start">
             <div className="rounded-2xl border border-border/30 bg-card p-4">
               <h3 className="text-sm font-semibold">{marketplaceUz.productDetail.purchaseSummary}</h3>
               <div className="mt-3 flex items-baseline justify-between gap-3">
