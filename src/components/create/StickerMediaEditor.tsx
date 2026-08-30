@@ -174,7 +174,7 @@ export function StickerMediaEditor({
                             {index + 1}
                           </span>
                           <span className="min-w-0 flex-1 truncate text-xs font-medium">
-                            {placement.stickerId}
+                            {placement.sticker.name || placement.sticker.emoji || 'Stiker'}
                           </span>
                           <button
                             type="button"
