@@ -1,0 +1,299 @@
+import { useMemo, useState } from 'react';
+import { Check, Clock3, LogOut, Trash2, UserPlus, X } from 'lucide-react';
+import { toast } from 'sonner';
+
+import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  usePostCollaborators,
+  type PostCollaboratorProfile,
+} from '@/hooks/usePostCollaborators';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { MentionCollaborator } from '@/components/create/MentionCollaborator';
+
+interface PostCollaboratorBylineProps {
+  postId: string;
+  isOwner?: boolean;
+  className?: string;
+}
+
+export function PostCollaboratorByline({
+  postId,
+  isOwner = false,
+  className,
+}: PostCollaboratorBylineProps) {
+  const { user } = useAuth();
+  const {
+    collaborators,
+    isLoading,
+    invite,
+    respond,
+    remove,
+    leave,
+  } = usePostCollaborators(postId);
+
+  const [open, setOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const accepted = useMemo(
+    () => collaborators.filter((item) => item.status === 'accepted'),
+    [collaborators],
+  );
+  const active = useMemo(
+    () =>
+      collaborators.filter(
+        (item) => item.status === 'accepted' || item.status === 'pending',
+      ),
+    [collaborators],
+  );
+  const pending = useMemo(
+    () => collaborators.filter((item) => item.status === 'pending'),
+    [collaborators],
+  );
+  const selfCollaboration = useMemo(
+    () => collaborators.find((item) => item.user_id === user?.id) ?? null,
+    [collaborators, user?.id],
+  );
+
+  const selectedProfiles = useMemo(
+    () =>
+      active
+        .map((item) => item.profile)
+        .filter((profile): profile is PostCollaboratorProfile => Boolean(profile)),
+    [active],
+  );
+
+  const summary = useMemo(() => {
+    if (accepted.length === 0) return null;
+    const first = '@' + (accepted[0].profile?.username || 'user');
+    if (accepted.length === 1) return 'and ' + first;
+    return 'and ' + first + ' and ' + (accepted.length - 1) + ' more';
+  }, [accepted]);
+
+  const run = async (
+    id: string,
+    action: () => Promise<void>,
+    successMessage: string,
+  ) => {
+    if (busyId) return;
+    setBusyId(id);
+    try {
+      await action();
+      toast.success(successMessage);
+    } catch (error) {
+      console.error('Hammualliflik amali xatosi:', error);
+      toast.error('Hammualliflik amalini bajarib bo‘lmadi');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleInvite = (profile: PostCollaboratorProfile) => {
+    void run(
+      'invite-' + profile.id,
+      () => invite(profile.id),
+      '@' + profile.username + ' ga taklif yuborildi',
+    );
+  };
+
+  if (isLoading) return null;
+
+  const hasLifecycle =
+    isOwner ||
+    accepted.length > 0 ||
+    selfCollaboration?.status === 'pending' ||
+    selfCollaboration?.status === 'accepted';
+
+  if (!hasLifecycle) return null;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          setOpen(true);
+        }}
+        className={cn(
+          'inline min-w-0 text-left font-normal text-muted-foreground transition hover:text-foreground',
+          className,
+        )}
+      >
+        {summary ? (
+          summary
+        ) : selfCollaboration?.status === 'pending' ? (
+          <span className="text-primary">Hammualliflik taklifi</span>
+        ) : isOwner && pending.length > 0 ? (
+          <span>{pending.length} taklif kutilmoqda</span>
+        ) : null}
+      </button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="flex max-h-[86dvh] max-w-sm flex-col overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b border-border/60 px-4 py-4">
+            <DialogTitle className="text-base">Hammualliflar</DialogTitle>
+          </DialogHeader>
+
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {isOwner && (
+              <button
+                type="button"
+                disabled={active.length >= 10}
+                onClick={() => setPickerOpen(true)}
+                className="flex min-h-12 w-full items-center gap-3 border-b border-border/50 px-4 text-sm font-medium transition hover:bg-muted/50 disabled:opacity-40"
+              >
+                <UserPlus className="h-4 w-4 text-primary" />
+                Hammuallif qo‘shish
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {active.length}/10
+                </span>
+              </button>
+            )}
+
+            {collaborators.length === 0 ? (
+              <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+                Hammuallif yo‘q
+              </div>
+            ) : (
+              collaborators.map((item) => {
+                const label =
+                  item.profile?.display_name ||
+                  item.profile?.username ||
+                  'Foydalanuvchi';
+                const isSelf = item.user_id === user?.id;
+
+                return (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-3 border-b border-border/40 px-4 py-3 last:border-b-0"
+                  >
+                    <Avatar className="h-9 w-9 shrink-0">
+                      <AvatarImage src={item.profile?.avatar_url || ''} />
+                      <AvatarFallback className="text-xs">
+                        {label.charAt(0).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{label}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        @{item.profile?.username || 'user'}
+                        {' · '}
+                        {item.status === 'accepted'
+                          ? 'Qabul qilingan'
+                          : item.status === 'pending'
+                            ? 'Kutilmoqda'
+                            : 'Rad etilgan'}
+                      </p>
+                    </div>
+
+                    {isSelf && item.status === 'pending' && !isOwner ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={Boolean(busyId)}
+                          onClick={() =>
+                            void run(
+                              item.id,
+                              () => respond(item.id, true),
+                              'Hammualliflik qabul qilindi',
+                            )
+                          }
+                          className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40"
+                          aria-label="Qabul qilish"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={Boolean(busyId)}
+                          onClick={() =>
+                            void run(
+                              item.id,
+                              () => respond(item.id, false),
+                              'Taklif rad etildi',
+                            )
+                          }
+                          className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground disabled:opacity-40"
+                          aria-label="Rad etish"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : isSelf && item.status === 'accepted' && !isOwner ? (
+                      <button
+                        type="button"
+                        disabled={Boolean(busyId)}
+                        onClick={() =>
+                          void run(
+                            item.id,
+                            () => leave(item.id),
+                            'Hammualliflikdan chiqdingiz',
+                          )
+                        }
+                        className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+                        aria-label="Hammualliflikdan chiqish"
+                      >
+                        <LogOut className="h-4 w-4" />
+                      </button>
+                    ) : isOwner && item.status !== 'declined' ? (
+                      <button
+                        type="button"
+                        disabled={Boolean(busyId)}
+                        onClick={() =>
+                          void run(
+                            item.id,
+                            () => remove(item.id),
+                            item.status === 'pending'
+                              ? 'Taklif bekor qilindi'
+                              : 'Hammuallif olib tashlandi',
+                          )
+                        }
+                        className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+                        aria-label="Hammuallifni olib tashlash"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    ) : item.status === 'pending' ? (
+                      <Clock3 className="h-4 w-4 text-muted-foreground" />
+                    ) : null}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {isOwner && (
+        <MentionCollaborator
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          mode="collaborate"
+          maxUsers={10}
+          selectedUsers={selectedProfiles}
+          onSelectUser={handleInvite}
+          onRemoveUser={(userId) => {
+            const item = active.find((row) => row.user_id === userId);
+            if (item) {
+              void run(
+                item.id,
+                () => remove(item.id),
+                item.status === 'pending'
+                  ? 'Taklif bekor qilindi'
+                  : 'Hammuallif olib tashlandi',
+              );
+            }
+          }}
+        />
+      )}
+    </>
+  );
+}
