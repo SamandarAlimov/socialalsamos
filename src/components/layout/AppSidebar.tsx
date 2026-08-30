@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, ShieldCheck, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UserPlus } from 'lucide-react';
+import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, ShieldCheck, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UserPlus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -71,10 +71,25 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
 
   return (
     <aside className={cn(
-      "h-screen min-h-0 sticky top-0 bg-sidebar border-r border-sidebar-border flex-col transition-all duration-300 z-50",
+      "h-screen min-h-0 sticky top-0 bg-sidebar border-r border-sidebar-border flex-col transition-all duration-300 z-50 overflow-visible",
       "hidden md:flex",
       collapsed ? "w-[72px]" : "w-64"
     )}>
+      <button
+        type="button"
+        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        onClick={() => {
+          setUserToggled(true);
+          onCollapsedChange(!collapsed);
+        }}
+        className="absolute left-full top-20 z-[70] flex h-8 w-8 items-center justify-center rounded-full border border-sidebar-border bg-background shadow-lg transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+      >
+        {collapsed ? (
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        ) : (
+          <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+        )}
+      </button>
       <div className="h-16 shrink-0 flex items-center justify-between px-4 border-b border-sidebar-border">
         <AlsamosLogo size="sm" showText={!collapsed} />
         {!collapsed && <NotificationsDropdown />}
