@@ -85,7 +85,7 @@ export function TaxiOffersCard({
                 className={cn(
                   'flex h-8 w-8 items-center justify-center rounded-xl border transition',
                   highContrast
-                    ? 'border-white/12 bg-white/[0.04] text-white/60 hover:bg-white/[0.1] hover:text-white'
+                    ? 'border-white/[0.12] bg-white/[0.04] text-white/[0.60] hover:bg-white/[0.1] hover:text-white'
                     : 'border-border/60 text-muted-foreground hover:text-foreground',
                 )}
                 aria-label="Qo'ng'iroq"
