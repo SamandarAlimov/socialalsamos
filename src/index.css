@@ -319,6 +319,34 @@
     background: rgb(255 255 255 / 0.12) !important;
   }
 
+
+  .leaflet-tooltip.alsamos-map-tooltip {
+    border: 1px solid hsl(var(--border) / 0.55);
+    border-radius: 12px;
+    background: hsl(var(--background) / 0.94);
+    color: hsl(var(--foreground));
+    box-shadow: 0 10px 28px rgb(0 0 0 / 0.16);
+    padding: 7px 10px;
+    font-size: 11px;
+    line-height: 1.2;
+    backdrop-filter: blur(16px);
+  }
+
+  .leaflet-tooltip.alsamos-map-tooltip::before {
+    border-top-color: hsl(var(--background) / 0.94);
+  }
+
+  .leaflet-tooltip.alsamos-map-tooltip--contrast {
+    border-color: rgb(255 255 255 / 0.16);
+    background: rgb(15 23 42 / 0.9);
+    color: rgb(255 255 255 / 0.96);
+    box-shadow: 0 12px 32px rgb(0 0 0 / 0.32);
+  }
+
+  .leaflet-tooltip.alsamos-map-tooltip--contrast::before {
+    border-top-color: rgb(15 23 42 / 0.9);
+  }
+
   /* Animation Utilities */
   .animate-fade-up {
     animation: fadeUp 0.5s ease-out forwards;
