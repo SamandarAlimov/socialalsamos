@@ -351,7 +351,35 @@ export default function MapPage() {
   useVisitTracking(true);
   const visits = usePlaceVisits(60);
 
-  const places = query.trim() ? search.places : isBusStopFilter ? [] : categoryResults.places;
+  const withUserDistance = useCallback(
+    (place: MapPlace): MapPlace => ({
+      ...place,
+      distanceM: me
+        ? distanceMeters(
+            me.latitude,
+            me.longitude,
+            place.latitude,
+            place.longitude,
+          )
+        : undefined,
+    }),
+    [me],
+  );
+
+  const searchPlacesForDisplay = useMemo(
+    () => search.places.map(withUserDistance),
+    [search.places, withUserDistance],
+  );
+  const categoryPlacesForDisplay = useMemo(
+    () => categoryResults.places.map(withUserDistance),
+    [categoryResults.places, withUserDistance],
+  );
+
+  const places = query.trim()
+    ? searchPlacesForDisplay
+    : isBusStopFilter
+      ? []
+      : categoryPlacesForDisplay;
   const listLoading = isBusStopFilter
     ? nearbyStops.loading
     : query.trim()
@@ -439,6 +467,14 @@ export default function MapPage() {
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
     );
   }, []);
+
+  useEffect(() => {
+    if (!me) return;
+    setSelectedPlace((current) => (current ? withUserDistance(current) : current));
+  }, [me?.latitude, me?.longitude, withUserDistance]);
+
+  // Distance badge har doim real user joylashuviga nisbatan; xarita markazi
+  // faqat qidiruv bias/viewport uchun ishlatiladi.
 
   const centerOnMe = useCallback(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
@@ -528,26 +564,49 @@ export default function MapPage() {
 
       setSearchFocused(false);
       setLayerOpen(false);
+      setSelectedStop(null);
+      setMovedCenter(null);
+      setCenter({ latitude: point.latitude, longitude: point.longitude });
+
+      // UX: provider javobini kutib turmaymiz. Foydalanuvchi bosgan nuqta
+      // darhol marker + karta sifatida ko'rinadi, keyin real OSM ma'lumoti bilan
+      // shu karta joyida boyitiladi.
+      const provisional = withUserDistance({
+        id: 'click:' + point.latitude.toFixed(6) + ',' + point.longitude.toFixed(6),
+        source: 'nominatim',
+        name: 'Tanlangan joy',
+        categoryLabel: 'Joy',
+        latitude: point.latitude,
+        longitude: point.longitude,
+        address: null,
+        tags: {},
+      } as MapPlace);
+
+      setSelectedPlace(provisional);
+      setPanel('place');
+      setSnap('half');
       setMapClickLoading(true);
 
+      const map = mapRef.current;
+      if (map) {
+        map.panTo([point.latitude, point.longitude], { animate: true });
+      }
+
       try {
-        const place = await resolveMapClickPlace(point, zoom, controller.signal);
-        if (controller.signal.aborted || !place) return;
+        const resolved = await resolveMapClickPlace(point, zoom, controller.signal);
+        if (controller.signal.aborted || !resolved) return;
 
+        const place = withUserDistance(resolved);
         setSelectedPlace(place);
-        setSelectedStop(null);
-        setPanel('place');
-        setSnap('half');
+        setCenter({ latitude: place.latitude, longitude: place.longitude });
 
-        // Raster labelning o'zi bosiladigan DOM element emas. Topilgan real OSM
-        // obyektiga marker qo'yib, xaritani keskin zoom qilmasdan markazga yaqinlashtiramiz.
-        const map = mapRef.current;
-        if (map) {
-          map.panTo([place.latitude, place.longitude], { animate: true });
+        if (mapRef.current) {
+          mapRef.current.panTo([place.latitude, place.longitude], { animate: true });
         }
       } catch (error) {
         if ((error as Error).name !== 'AbortError') {
-          toast.error('Bu joy haqidagi ma’lumotni hozir olib bo‘lmadi.');
+          // Provisional marker/card qoladi; provider xatosi clickni "yo'q" qilmaydi.
+          toast.error('Joy tafsilotlarini yuklab bo‘lmadi, koordinata saqlandi.');
         }
       } finally {
         if (mapClickAbortRef.current === controller) {
@@ -555,7 +614,7 @@ export default function MapPage() {
         }
       }
     },
-    [],
+    [withUserDistance],
   );
 
   const buildRoute = useCallback(
@@ -591,15 +650,17 @@ export default function MapPage() {
 
   const selectSearchPlace = useCallback(
     (place: MapPlace) => {
-      searchHistory.addRecent(query.trim() || place.name);
-      setSelectedPlace(place);
+      const selected = withUserDistance(place);
+      searchHistory.addRecent(query.trim() || selected.name);
+      setSelectedPlace(selected);
       setSelectedStop(null);
-      setCenter({ latitude: place.latitude, longitude: place.longitude });
+      setMovedCenter(null);
+      setCenter({ latitude: selected.latitude, longitude: selected.longitude });
       setPanel('place');
       setSnap('half');
       setSearchFocused(false);
     },
-    [query, searchHistory],
+    [query, searchHistory, withUserDistance],
   );
 
   const openDirections = useCallback(
@@ -1537,7 +1598,14 @@ export default function MapPage() {
               icon={placeIcon(categoryUi(group.place.categoryId).color, false)}
               eventHandlers={{
                 click: () => {
-                  setSelectedPlace(group.place);
+                  const selected = withUserDistance(group.place);
+                  setSelectedPlace(selected);
+                  setSelectedStop(null);
+                  setMovedCenter(null);
+                  setCenter({
+                    latitude: selected.latitude,
+                    longitude: selected.longitude,
+                  });
                   setPanel('place');
                   setSnap('half');
                 },
@@ -1686,7 +1754,7 @@ export default function MapPage() {
 
             <MapSearchSuggestions
               query={query}
-              places={search.places}
+              places={searchPlacesForDisplay}
               loading={search.loading}
               error={search.error}
               recent={searchHistory.recent}
