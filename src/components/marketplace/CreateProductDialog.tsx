@@ -32,7 +32,11 @@ const conditions = [
 export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreateProductDialogProps) {
   const { user } = useAuth();
   const { categories } = useCategories();
-  const { createProduct, createProductVariants } = useProductActions();
+  const {
+    createProduct,
+    checkProductVariantsReady,
+    createProductVariants,
+  } = useProductActions();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -139,6 +143,14 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
       : [];
 
     if (hasVariants && parsedVariants.length === 0) return;
+
+    if (hasVariants) {
+      const variantsReady = await checkProductVariantsReady();
+      if (!variantsReady) {
+        setIsSubmitting(false);
+        return;
+      }
+    }
 
     const totalVariantStock = parsedVariants.reduce(
       (sum, variant) => sum + variant.quantity,
