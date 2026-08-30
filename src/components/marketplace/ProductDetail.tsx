@@ -347,7 +347,7 @@ export function ProductDetail({
   };
 
   const handleBuyNow = async () => {
-    if (isBuying || isAddingToCart || isSoldOut) return;
+    if (isBuying || isAddingToCart || isSoldOut || variantsLoading) return;
     setIsBuying(true);
     triggerHaptic('heavy');
     const success = await addToCart(product.id, quantity, selectedVariant?.id);
