@@ -96,6 +96,7 @@ export function usePostAttachments(options?: {
 
   // Cleanup uchun eng oxirgi holatga ishonchli havola (stale closure muammosi yo'q)
   const attachmentsRef = useRef<Attachment[]>([]);
+  const publishedAttachmentIds = useRef(new Set<string>());
   const abortControllers = useRef(new Map<string, AbortController>());
 
   useEffect(() => {
@@ -105,9 +106,17 @@ export function usePostAttachments(options?: {
   // Unmount: barcha blob URL lar bo'shatiladi, yuklashlar bekor qilinadi
   useEffect(() => {
     return () => {
-      revokePreviewUrls(attachmentsRef.current.map((item) => item.previewUrl));
+      const current = attachmentsRef.current;
+      revokePreviewUrls(current.map((item) => item.previewUrl));
       abortControllers.current.forEach((controller) => controller.abort());
       abortControllers.current.clear();
+
+      // Publish bo'lmagan draft uploadlar route yopilganda orphan bo'lib qolmasin.
+      for (const item of current) {
+        if (!publishedAttachmentIds.current.has(item.id)) {
+          void cleanupUploadedObjects(item);
+        }
+      }
     };
   }, []);
 
@@ -208,6 +217,12 @@ export function usePostAttachments(options?: {
     },
     [patch],
   );
+
+  const markAttachmentsPublished = useCallback(() => {
+    for (const item of attachmentsRef.current) {
+      publishedAttachmentIds.current.add(item.id);
+    }
+  }, []);
 
   const clearAttachments = useCallback(() => {
     abortControllers.current.forEach((controller) => controller.abort());
@@ -444,6 +459,7 @@ export function usePostAttachments(options?: {
     setEditState,
     setAltText,
     replaceAttachmentFile,
+    markAttachmentsPublished,
     uploadAll,
   };
 }
