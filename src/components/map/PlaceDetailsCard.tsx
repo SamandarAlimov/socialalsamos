@@ -101,22 +101,54 @@ function InfoRow({
   );
 }
 
-function resolvePlaceImage(place: MapPlace): string | null {
+function resolvePlaceImages(place: MapPlace): string[] {
+  const urls = new Set<string>();
+
   const direct = place.tags?.image?.trim();
-  if (direct && /^https?:\/\//i.test(direct)) return direct;
+  if (direct) {
+    for (const value of direct.split(';').map((item) => item.trim())) {
+      if (/^https?:\/\//i.test(value)) urls.add(value);
+    }
+  }
 
   const commons = place.tags?.wikimedia_commons?.trim();
   if (commons?.toLowerCase().startsWith('file:')) {
     const filename = commons.slice(5).trim();
     if (filename) {
-      return (
+      urls.add(
         'https://commons.wikimedia.org/wiki/Special:Redirect/file/' +
-        encodeURIComponent(filename)
+          encodeURIComponent(filename),
       );
     }
   }
 
-  return null;
+  return Array.from(urls).slice(0, 6);
+}
+
+function formatOpeningHours(value: string): string {
+  const normalized = value.trim();
+  if (!normalized) return '';
+  if (normalized === '24/7') return 'Har kuni · 24 soat';
+
+  const days: Record<string, string> = {
+    Mo: 'Du',
+    Tu: 'Se',
+    We: 'Ch',
+    Th: 'Pa',
+    Fr: 'Ju',
+    Sa: 'Sh',
+    Su: 'Ya',
+  };
+
+  return normalized
+    .split(';')
+    .map((part) =>
+      part
+        .trim()
+        .replace(/\b(Mo|Tu|We|Th|Fr|Sa|Su)\b/g, (token) => days[token] ?? token),
+    )
+    .filter(Boolean)
+    .join(' · ');
 }
 
 type AmenityChip = {
@@ -185,7 +217,8 @@ export function PlaceDetailsCard({
   );
 
   const { summary } = usePlaceReviews(placeRef);
-  const heroImage = resolvePlaceImage(place);
+  const photoUrls = useMemo(() => resolvePlaceImages(place), [place]);
+  const heroImage = photoUrls[0] ?? null;
   const [imageFailed, setImageFailed] = useState(false);
   const amenities = useMemo(() => amenityChips(place.tags), [place.tags]);
   const email = place.tags?.email || place.tags?.['contact:email'] || null;
@@ -430,7 +463,7 @@ export function PlaceDetailsCard({
 
               {place.openingHours && (
                 <InfoRow title="Ish vaqti" icon={<Clock className="h-4 w-4" />} highContrast={highContrast}>
-                  <span className="whitespace-pre-wrap">{place.openingHours}</span>
+                  <span className="whitespace-pre-wrap">{formatOpeningHours(place.openingHours)}</span>
                 </InfoRow>
               )}
 
@@ -456,6 +489,40 @@ export function PlaceDetailsCard({
                 </InfoRow>
               )}
             </div>
+
+            {photoUrls.length > 1 && (
+              <div>
+                <p
+                  className={cn(
+                    'mb-2 text-[11px] font-semibold uppercase tracking-wide',
+                    highContrast ? 'text-white/[0.45]' : 'text-muted-foreground',
+                  )}
+                >
+                  Rasmlar
+                </p>
+                <div className="map-panel-scrollbar flex gap-2 overflow-x-auto pb-1">
+                  {photoUrls.slice(1).map((url) => (
+                    <button
+                      key={url}
+                      type="button"
+                      onClick={() => window.open(url, '_blank', 'noopener')}
+                      className={cn(
+                        'h-20 w-28 shrink-0 overflow-hidden rounded-xl border',
+                        highContrast ? 'border-white/[0.10]' : 'border-border/[0.50]',
+                      )}
+                    >
+                      <img
+                        src={url}
+                        alt={place.name}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                      />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {amenities.length > 0 && (
               <div
@@ -529,7 +596,7 @@ export function PlaceDetailsCard({
           </div>
         )}
 
-        {tab === 'reviews' && <PlaceReviews place={placeRef} />}
+        {tab === 'reviews' && <PlaceReviews place={placeRef} highContrast={highContrast} />}
 
         {tab === 'details' && (
           <div className="space-y-2">
