@@ -36,7 +36,6 @@ import {
   formatMinutes,
   type RouteMode,
   type RouteResult,
-  hasTransitRoutingProvider,
 } from '@/lib/routing';
 import {
   useNearbyStops,
@@ -585,6 +584,8 @@ export default function MapPage() {
           routes={stopRoutes.routes}
           loading={stopRoutes.loading}
           error={stopRoutes.error}
+          realtimeConfigured={stopRoutes.realtimeConfigured}
+          realtimeFresh={stopRoutes.realtimeFresh}
           onReload={stopRoutes.reload}
           onClose={() => {
             setSelectedStop(null);
@@ -608,41 +609,78 @@ export default function MapPage() {
     if (panel === 'route') {
       return (
         <div className="flex h-full flex-col">
-          <div className="flex items-center gap-2 border-b border-border/60 px-3 py-2">
-            {MODES.map((mode) => (
-              <button
-                key={mode.id}
-                type="button"
-                onClick={() => changeMode(mode.id)}
-                disabled={mode.id === 'transit' && !transitRoutingAvailable}
-                title={
-                  mode.id === 'transit' && !transitRoutingAvailable
-                    ? 'Real jamoat transporti routeri ulanmagan'
-                    : undefined
-                }
-                className={cn(
-                  'flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg text-xs font-medium',
-                  routeMode === mode.id
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-muted',
-                  mode.id === 'transit' && !transitRoutingAvailable && 'cursor-not-allowed opacity-40',
-                )}
-              >
-                <mode.Icon className="h-4 w-4" />
-                <span className="hidden sm:inline">{mode.label}</span>
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => {
-                setPanel(selectedPlace ? 'place' : 'search');
-                setRoutes([]);
-              }}
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground"
-              aria-label="Yopish"
-            >
-              <X className="h-4 w-4" />
-            </button>
+          <div className="border-b border-border/45 bg-background/35 px-3 pb-3 pt-2 backdrop-blur-xl">
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-border/45 bg-background/55 px-3">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-primary bg-background" />
+                  <span className="w-10 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    From
+                  </span>
+                  <span className="truncate text-sm font-medium">
+                    {routeOrigin?.name || (me ? 'Joriy joylashuv' : 'Xarita markazi')}
+                  </span>
+                </div>
+                <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-border/45 bg-background/55 px-3">
+                  <MapPin className="h-4 w-4 shrink-0 text-destructive" />
+                  <span className="w-10 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    To
+                  </span>
+                  <span className="truncate text-sm font-semibold">
+                    {destination?.name || 'Manzil tanlanmagan'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex shrink-0 flex-col gap-1.5">
+                <button
+                  type="button"
+                  onClick={swapRouteEndpoints}
+                  disabled={!destination}
+                  className="flex h-10 w-10 items-center justify-center rounded-2xl border border-border/45 bg-background/60 text-foreground transition hover:bg-background disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label="Boshlanish va manzilni almashtirish"
+                >
+                  <ArrowDownUp className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPanel(selectedPlace ? 'place' : 'search');
+                    setRoutes([]);
+                  }}
+                  className="flex h-10 w-10 items-center justify-center rounded-2xl border border-border/45 bg-background/60 text-muted-foreground transition hover:bg-background hover:text-foreground"
+                  aria-label="Yopish"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-2.5 grid grid-cols-4 gap-1 rounded-2xl bg-muted/40 p-1">
+              {MODES.map((mode) => (
+                <button
+                  key={mode.id}
+                  type="button"
+                  onClick={() => changeMode(mode.id)}
+                  disabled={mode.id === 'transit' && !transitRoutingAvailable}
+                  title={
+                    mode.id === 'transit' && !transitRoutingAvailable
+                      ? 'Real jamoat transporti routeri ulanmagan'
+                      : undefined
+                  }
+                  className={cn(
+                    'flex h-9 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition',
+                    routeMode === mode.id
+                      ? 'bg-background text-primary shadow-sm'
+                      : 'text-muted-foreground hover:bg-background/60 hover:text-foreground',
+                    mode.id === 'transit' && !transitRoutingAvailable && 'cursor-not-allowed opacity-40',
+                  )}
+                >
+                  <mode.Icon className="h-4 w-4" />
+                  <span className="hidden xl:inline">{mode.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto px-3 py-3">
@@ -1000,6 +1038,11 @@ export default function MapPage() {
     me,
     transitRoutingAvailable,
     centerOnMe,
+    routeOrigin,
+    destination,
+    swapRouteEndpoints,
+    stopRoutes.realtimeConfigured,
+    stopRoutes.realtimeFresh,
   ]);
 
   return (
@@ -1053,27 +1096,56 @@ export default function MapPage() {
 
         {me && <Marker position={[me.latitude, me.longitude]} icon={ME_ICON} />}
 
-        {visiblePlaces.map((place) => (
-          <Marker
-            key={place.id}
-            position={[place.latitude, place.longitude]}
-            icon={placeIcon(categoryUi(place.categoryId).color, selectedPlace?.id === place.id)}
-            eventHandlers={{
-              click: () => {
-                setSelectedPlace(place);
-                setPanel('place');
-                setSnap('half');
-              },
-            }}
-          />
-        ))}
+        {markerGroups.map((group) =>
+          group.type === 'cluster' ? (
+            <Marker
+              key={group.id}
+              position={[group.latitude, group.longitude]}
+              icon={clusterIcon(group.count)}
+              eventHandlers={{
+                click: () => {
+                  const map = mapRef.current;
+                  if (!map) return;
+                  map.setView(
+                    [group.latitude, group.longitude],
+                    Math.min(18, Math.max(map.getZoom() + 2, 15)),
+                    { animate: true },
+                  );
+                },
+              }}
+            />
+          ) : (
+            <Marker
+              key={group.place.id}
+              position={[group.place.latitude, group.place.longitude]}
+              icon={placeIcon(categoryUi(group.place.categoryId).color, false)}
+              eventHandlers={{
+                click: () => {
+                  setSelectedPlace(group.place);
+                  setPanel('place');
+                  setSnap('half');
+                },
+              }}
+            />
+          ),
+        )}
 
-        {selectedPlace && !places.some((place) => place.id === selectedPlace.id) && (
+        {selectedPlace && (
           <Marker
             position={[selectedPlace.latitude, selectedPlace.longitude]}
             icon={placeIcon(categoryUi(selectedPlace.categoryId).color, true)}
           />
         )}
+
+        {liveVehicles.realtime &&
+          liveVehicles.vehicles.map((vehicle) => (
+            <Marker
+              key={'vehicle:' + vehicle.id}
+              position={[vehicle.latitude, vehicle.longitude]}
+              icon={liveVehicleIcon(vehicle.ref, vehicle.color, vehicle.bearing)}
+              zIndexOffset={350}
+            />
+          ))}
 
         {showStops &&
           visibleStops.map((stop) => (
