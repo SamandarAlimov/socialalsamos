@@ -28,6 +28,7 @@ import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { detectPII } from '@/hooks/useMessageSafety';
 import { useMessageDraft } from '@/hooks/useMessageDraft';
+import type { MessageSendExtras } from '@/hooks/useMessages';
 
 interface ReplyTo {
   id: string;
@@ -37,7 +38,12 @@ interface ReplyTo {
 
 interface MessageInputProps {
   conversationId: string | null;
-  onSend: (content: string, mediaUrl?: string, mediaType?: string) => Promise<any>;
+  onSend: (
+    content: string,
+    mediaUrl?: string,
+    mediaType?: string,
+    extras?: MessageSendExtras
+  ) => Promise<any>;
   onSchedule?: (
     scheduledFor: Date,
     content: string,
@@ -102,6 +108,7 @@ interface PendingAttachment {
   kind: MediaKind;
   name: string;
   size: number;
+  mimeType?: string;
   /** Yuklashdan oldingi mahalliy ko'rinish (tez preview uchun) */
   localPreview?: string;
 }
@@ -221,7 +228,23 @@ export function MessageInput({
 
     // Bitta biriktirma yoki oddiy matn
     if (pendingAttachment || (!pendingAlbum && message.trim())) {
-      const sent = await onSend(message.trim(), pendingAttachment?.url, pendingAttachment?.type);
+      const sent = await onSend(
+        message.trim(),
+        pendingAttachment?.url,
+        pendingAttachment?.type,
+        pendingAttachment
+          ? {
+              mediaFileName: pendingAttachment.name,
+              mimeType: pendingAttachment.mimeType,
+              mediaSizeBytes: pendingAttachment.size,
+              metadata: {
+                file_name: pendingAttachment.name,
+                mime_type: pendingAttachment.mimeType,
+                size_bytes: pendingAttachment.size,
+              },
+            }
+          : undefined
+      );
       if (sent === null) return;
       clearAttachment();
     }
@@ -332,6 +355,7 @@ export function MessageInput({
         kind,
         name: file.name,
         size: file.size,
+        mimeType: file.type || uploaded.type || undefined,
         localPreview,
       });
     } catch (err) {
@@ -356,7 +380,21 @@ export function MessageInput({
     const kind = detectKind(file.type, file.name);
     try {
       const uploaded = await uploadMedia(file, { type: 'chat', visibility: 'public' });
-      await onSend('', uploaded.url, asDocument ? 'document' : kind);
+      await onSend(
+        '',
+        uploaded.url,
+        asDocument ? 'document' : kind,
+        {
+          mediaFileName: file.name,
+          mimeType: file.type || uploaded.type || undefined,
+          mediaSizeBytes: file.size,
+          metadata: {
+            file_name: file.name,
+            mime_type: file.type || uploaded.type || undefined,
+            size_bytes: file.size,
+          },
+        }
+      );
     } catch (err) {
       const reason = err instanceof Error ? err.message : 'Kutilmagan xatolik';
       toast.error('"' + file.name + '" yuborilmadi: ' + reason);
