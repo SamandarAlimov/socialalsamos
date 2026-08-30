@@ -658,7 +658,7 @@ export default function MessagesPage() {
   };
 
   const handleSendMessage = async (content: string, mediaUrl?: string, mediaType?: string) => {
-    const sent = await sendMessage(content, mediaUrl, mediaType);
+    const sent = await sendMessage(content, mediaUrl, mediaType, replyTo?.id || null);
     if (sent) setReplyTo(null);
     return sent;
   };
@@ -667,10 +667,18 @@ export default function MessagesPage() {
     scheduledFor: Date,
     content: string,
     mediaUrl?: string,
-    mediaType?: string
+    mediaType?: string,
+    replyToId?: string | null
   ) => {
     if (!selectedConversation) return null;
-    return scheduleMessage(selectedConversation.id, scheduledFor, content, mediaUrl, mediaType);
+    return scheduleMessage(
+      selectedConversation.id,
+      scheduledFor,
+      content,
+      mediaUrl,
+      mediaType,
+      replyToId || null
+    );
   };
 
   // Joylashuv (oddiy va jonli)
@@ -900,6 +908,30 @@ export default function MessagesPage() {
   }, [pendingJumpMessageId, messagesLoading, messages, highlightMessage, toast]);
 
   const handleScrollToPinnedMessage = (messageId: string) => highlightMessage(messageId);
+
+  const handleJumpToMessage = useCallback(
+    async (messageId: string) => {
+      if (highlightMessage(messageId)) return;
+
+      if (hasMoreMessages && !messagesLoadingMore) {
+        await loadOlderMessages();
+        requestAnimationFrame(() => {
+          if (!highlightMessage(messageId)) {
+            setPendingJumpMessageId(messageId);
+          }
+        });
+        return;
+      }
+
+      setPendingJumpMessageId(messageId);
+    },
+    [
+      hasMoreMessages,
+      highlightMessage,
+      loadOlderMessages,
+      messagesLoadingMore,
+    ]
+  );
 
   const handleArchiveConversation = async (conversationId: string) => {
     try {
@@ -1935,6 +1967,7 @@ export default function MessagesPage() {
                                     onPin={handlePin}
                                     onSelect={handleSelectMessage}
                                     onLongPress={handleEnterSelectionMode}
+                                    onJumpToMessage={handleJumpToMessage}
                                     isPinned={isMessagePinned(message.id)}
                                     isSelected={selectedMessages.has(message.id)}
                                     isSelectionMode={isSelectionMode}
@@ -2005,6 +2038,7 @@ export default function MessagesPage() {
                                 onPin={handlePin}
                                 onSelect={handleSelectMessage}
                                 onLongPress={handleEnterSelectionMode}
+                                    onJumpToMessage={handleJumpToMessage}
                                 isPinned={isMessagePinned(message.id)}
                                 isSelected={selectedMessages.has(message.id)}
                                 isSelectionMode={isSelectionMode}
