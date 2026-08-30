@@ -1181,6 +1181,94 @@ async function searchByNameOverpass(
     .filter((place): place is MapPlace => place !== null);
 }
 
+async function searchByUnifiedGateway(
+  query: string,
+  variants: string[],
+  center?: { latitude: number; longitude: number } | null,
+  signal?: AbortSignal,
+): Promise<MapPlace[]> {
+  try {
+    const data = await fetchMapGatewayJson(
+      'search',
+      {
+        q: query,
+        variants: variants.slice(0, 5).join('|'),
+        lat: center?.latitude,
+        lng: center?.longitude,
+      },
+      { signal },
+      2300,
+    );
+
+    if (!data || !Array.isArray(data.places)) return [];
+
+    return data.places
+      .map((item: any): MapPlace | null => {
+        const latitude = Number(item?.latitude);
+        const longitude = Number(item?.longitude);
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          return null;
+        }
+
+        const source =
+          item.source === 'nominatim' || item.source === 'photon'
+            ? item.source
+            : null;
+        if (!source) return null;
+
+        const name = String(item.name || 'Nomsiz joy');
+        const rawKey =
+          typeof item.rawKey === 'string' ? item.rawKey : null;
+        const rawValue =
+          typeof item.rawValue === 'string' ? item.rawValue : null;
+        const extras: Record<string, string> =
+          item.extras && typeof item.extras === 'object'
+            ? item.extras
+            : {};
+        const tags: Record<string, string> = {
+          ...extras,
+          ...(rawKey && rawValue ? { [rawKey]: rawValue } : {}),
+        };
+        const category = providerCategory(name, tags);
+
+        return {
+          id: String(
+            item.id ||
+              source + '/' + latitude.toFixed(6) + ',' + longitude.toFixed(6),
+          ),
+          source,
+          canonicalId:
+            typeof item.canonicalId === 'string' && item.canonicalId
+              ? item.canonicalId
+              : undefined,
+          name,
+          categoryId: category?.id,
+          categoryLabel: semanticCategoryLabel(
+            name,
+            category,
+            rawKey,
+            rawValue,
+          ),
+          latitude,
+          longitude,
+          address:
+            typeof item.address === 'string' ? item.address : null,
+          phone: extras.phone || extras['contact:phone'] || null,
+          website: extras.website || extras['contact:website'] || null,
+          openingHours: extras.opening_hours || null,
+          brand: extras.brand || extras.operator || null,
+          cuisine: extras.cuisine || null,
+          wheelchair: extras.wheelchair || null,
+          tags,
+        };
+      })
+      .filter((place: MapPlace | null): place is MapPlace => place !== null);
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') throw error;
+    return [];
+  }
+}
+
 /** Nominatim - O'zbekiston bilan cheklangan zaxira qidiruv. */
 async function searchByNominatim(
   query: string,
@@ -1557,20 +1645,33 @@ export async function searchMapPlaces(
     }
   };
 
-  // Barcha muhim transliteratsiya variantlari parallel ketadi, lekin har biri
-  // 1.8-2.2 sekunddan ortiq UI'ni ushlab turmaydi.
-  const fastRequests: Promise<MapPlace[]>[] = fastTerms.map((value) =>
-    searchByPhoton(value, center, signal),
+  // Productionda bitta browser request Alsamos Search Gateway'ga boradi.
+  // Gateway Photon/Nominatim variantlarini parallel bajarib dedupe qiladi.
+  // Gateway unavailable bo'lsa direct provider fallback funksiyani saqlab qoladi.
+  const gatewayPlaces = await searchByUnifiedGateway(
+    term,
+    fastTerms,
+    center,
+    signal,
   );
-  fastRequests.push(searchByNominatim(term, center, signal));
-  if (cyrillicVariants[0]) {
-    fastRequests.push(searchByNominatim(cyrillicVariants[0], center, signal));
-  }
+  mergePlaces(gatewayPlaces);
 
-  const settledFast = await Promise.allSettled(fastRequests);
-  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-  for (const result of settledFast) {
-    if (result.status === 'fulfilled') mergePlaces(result.value);
+  if (!merged.size) {
+    const fastRequests: Promise<MapPlace[]>[] = fastTerms.map((value) =>
+      searchByPhoton(value, center, signal),
+    );
+    fastRequests.push(searchByNominatim(term, center, signal));
+    if (cyrillicVariants[0]) {
+      fastRequests.push(
+        searchByNominatim(cyrillicVariants[0], center, signal),
+      );
+    }
+
+    const settledFast = await Promise.allSettled(fastRequests);
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    for (const result of settledFast) {
+      if (result.status === 'fulfilled') mergePlaces(result.value);
+    }
   }
 
   // Faqat tez providerlar umuman natija bermasa Overpass'ga murojaat qilamiz.
