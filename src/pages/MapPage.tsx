@@ -4,6 +4,7 @@ import { MapContainer, Marker, Polyline, TileLayer, useMap, useMapEvents } from 
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
+  ArrowDownUp,
   Bike,
   Bookmark,
   Car,
@@ -25,7 +26,7 @@ import {
 import { toast } from 'sonner';
 
 import { getLayer, getOverlay, type MapLayerId } from '@/lib/mapLayers';
-import { categoryUi, meDotSvg, pinSvg, stopSvg } from '@/lib/placeIcons';
+import { categoryUi, clusterSvg, meDotSvg, pinSvg, stopSvg, vehicleSvg } from '@/lib/placeIcons';
 import type { MapPlace } from '@/lib/mapPlaces';
 import type { TransitStop } from '@/lib/transit';
 import {
@@ -42,6 +43,8 @@ import {
   usePlaceCategory,
   usePlaceSearch,
   useStopRoutes,
+  useTransitRealtimeStatus,
+  useTransitVehicles,
 } from '@/hooks/useMapPlaces';
 import { useSavedPlaces } from '@/hooks/useSavedPlaces';
 import { distanceMeters } from '@/lib/geocoding';
@@ -128,6 +131,7 @@ interface MapViewport {
   west: number;
   north: number;
   east: number;
+  zoom: number;
 }
 
 function MapViewportObserver({
@@ -147,6 +151,7 @@ function MapViewportObserver({
         west: bounds.getWest(),
         north: bounds.getNorth(),
         east: bounds.getEast(),
+        zoom: map.getZoom(),
       });
       if (!moved) return;
       const mapCenter = map.getCenter();
@@ -177,6 +182,78 @@ function MapViewportObserver({
   return null;
 }
 
+type PlaceMarkerGroup =
+  | { type: 'place'; place: MapPlace }
+  | {
+      type: 'cluster';
+      id: string;
+      latitude: number;
+      longitude: number;
+      count: number;
+    };
+
+function clusterPlaces(
+  places: MapPlace[],
+  zoom: number,
+  selectedId?: string | null,
+): PlaceMarkerGroup[] {
+  const unselected = places.filter((place) => place.id !== selectedId);
+  if (zoom >= 16 || unselected.length < 8) {
+    return unselected.map((place) => ({ type: 'place' as const, place }));
+  }
+
+  const cell =
+    zoom <= 11 ? 0.06 :
+    zoom === 12 ? 0.035 :
+    zoom === 13 ? 0.018 :
+    zoom === 14 ? 0.009 :
+    0.0045;
+
+  const buckets = new Map<string, MapPlace[]>();
+  for (const place of unselected) {
+    const key =
+      Math.floor(place.latitude / cell) + ':' + Math.floor(place.longitude / cell);
+    const list = buckets.get(key) ?? [];
+    list.push(place);
+    buckets.set(key, list);
+  }
+
+  const result: PlaceMarkerGroup[] = [];
+  for (const [key, list] of buckets) {
+    if (list.length === 1) {
+      result.push({ type: 'place', place: list[0] });
+      continue;
+    }
+    result.push({
+      type: 'cluster',
+      id: 'cluster:' + key,
+      latitude: list.reduce((sum, item) => sum + item.latitude, 0) / list.length,
+      longitude: list.reduce((sum, item) => sum + item.longitude, 0) / list.length,
+      count: list.length,
+    });
+  }
+  return result;
+}
+
+function clusterIcon(count: number) {
+  const size = count > 20 ? 42 : count > 8 ? 38 : 34;
+  return L.divIcon({
+    html: clusterSvg(count),
+    className: 'alsamos-cluster',
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  });
+}
+
+function liveVehicleIcon(ref: string, color?: string | null, bearing?: number | null) {
+  return L.divIcon({
+    html: vehicleSvg(ref, color, bearing),
+    className: 'alsamos-live-vehicle',
+    iconSize: [42, 38],
+    iconAnchor: [21, 32],
+  });
+}
+
 export default function MapPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -201,6 +278,11 @@ export default function MapPage() {
   const [routeIndex, setRouteIndex] = useState(0);
   const [routeLoading, setRouteLoading] = useState(false);
   const [destination, setDestination] = useState<MapPlace | null>(null);
+  const [routeOrigin, setRouteOrigin] = useState<{
+    latitude: number;
+    longitude: number;
+    name: string;
+  } | null>(null);
 
   const [shareTarget, setShareTarget] = useState<MapPlace | null>(null);
   const [sheetHeightPx, setSheetHeightPx] = useState(112);
@@ -218,7 +300,8 @@ export default function MapPage() {
     showStops || panel === 'stop' ? center : null,
     isBusStopFilter ? 5000 : 1500,
   );
-  const stopRoutes = useStopRoutes(selectedStop?.id ?? null);
+  const stopRoutes = useStopRoutes(selectedStop);
+  const transitStatus = useTransitRealtimeStatus();
   const saved = useSavedPlaces();
   useVisitTracking(true);
   const visits = usePlaceVisits(60);
@@ -261,7 +344,19 @@ export default function MapPage() {
       .slice(0, 100);
   }, [nearbyStops.stops, viewport]);
 
-  const transitRoutingAvailable = hasTransitRoutingProvider();
+  const transitRoutingAvailable = Boolean(transitStatus.routing);
+
+  const markerGroups = useMemo(
+    () => clusterPlaces(visiblePlaces, viewport?.zoom ?? 14, selectedPlace?.id),
+    [visiblePlaces, viewport?.zoom, selectedPlace?.id],
+  );
+
+  const liveTransitEnabled = Boolean(
+    viewport &&
+      transitStatus.vehicles &&
+      (overlays.includes('transit') || showStops || routeMode === 'transit'),
+  );
+  const liveVehicles = useTransitVehicles(viewport, liveTransitEnabled);
 
   // Joylashuvni aniqlash
   useEffect(() => {
@@ -337,8 +432,12 @@ export default function MapPage() {
   }, []);
 
   const buildRoute = useCallback(
-    async (place: MapPlace, mode: RouteMode) => {
-      const from = me ?? center;
+    async (
+      place: MapPlace,
+      mode: RouteMode,
+      fromOverride?: { latitude: number; longitude: number; name?: string } | null,
+    ) => {
+      const from = fromOverride ?? routeOrigin ?? me ?? center;
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -360,24 +459,57 @@ export default function MapPage() {
         setRouteLoading(false);
       }
     },
-    [me, center],
+    [me, center, routeOrigin],
   );
 
   const openDirections = useCallback(
     (place: MapPlace) => {
+      const origin = me
+        ? { ...me, name: 'Joriy joylashuv' }
+        : { ...center, name: 'Xarita markazi' };
+      setRouteOrigin(origin);
       setDestination(place);
       setSelectedPlace(place);
       setPanel('route');
       setSnap('half');
-      void buildRoute(place, routeMode);
+      void buildRoute(place, routeMode, origin);
     },
-    [buildRoute, routeMode],
+    [buildRoute, routeMode, me, center],
   );
 
   const changeMode = (mode: RouteMode) => {
     setRouteMode(mode);
-    if (destination) void buildRoute(destination, mode);
+    if (destination) void buildRoute(destination, mode, routeOrigin);
   };
+
+  const swapRouteEndpoints = useCallback(() => {
+    if (!destination) return;
+    const origin =
+      routeOrigin ??
+      (me
+        ? { ...me, name: 'Joriy joylashuv' }
+        : { ...center, name: 'Xarita markazi' });
+    const nextOrigin = {
+      latitude: destination.latitude,
+      longitude: destination.longitude,
+      name: destination.name,
+    };
+    const nextDestination = {
+      id: 'route-origin:' + origin.latitude + ',' + origin.longitude,
+      source: 'route',
+      name: origin.name,
+      categoryId: null,
+      categoryLabel: 'Joy',
+      latitude: origin.latitude,
+      longitude: origin.longitude,
+      address: null,
+    } as unknown as MapPlace;
+
+    setRouteOrigin(nextOrigin);
+    setDestination(nextDestination);
+    setSelectedPlace(nextDestination);
+    void buildRoute(nextDestination, routeMode, nextOrigin);
+  }, [destination, routeOrigin, me, center, buildRoute, routeMode]);
 
   const sharePlace = async (place: MapPlace) => {
     const url =
