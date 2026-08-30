@@ -4,8 +4,12 @@ type HapticType = 'light' | 'medium' | 'heavy' | 'success' | 'warning' | 'error'
 
 export function useHapticFeedback() {
   const triggerHaptic = useCallback((type: HapticType = 'light') => {
-    // Check if the Vibration API is supported
+    // Chrome blocks vibration before the first real user interaction and logs
+    // an Intervention warning. Haptics are optional, so never call vibrate until
+    // the document has received user activation.
     if (!('vibrate' in navigator)) return;
+    const activation = navigator.userActivation;
+    if (activation && !activation.hasBeenActive) return;
 
     try {
       switch (type) {
