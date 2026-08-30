@@ -20,6 +20,7 @@ export interface PlaceReview {
 export interface PlaceRef {
   id?: string | null;
   source?: string | null;
+  canonicalId?: string | null;
   name?: string | null;
   latitude: number;
   longitude: number;
@@ -27,6 +28,12 @@ export interface PlaceRef {
 
 /** Bir joyni turli manbalarda bir xil kalit bilan tanib olish. */
 export function placeKeyFor(place: PlaceRef): string {
+  if (place.canonicalId) return 'alsamos:' + place.canonicalId;
+  if (place.id && place.source) return place.source + ':' + place.id;
+  return 'geo:' + place.latitude.toFixed(5) + ',' + place.longitude.toFixed(5);
+}
+
+function legacyPlaceKeyFor(place: PlaceRef): string {
   if (place.id && place.source) return place.source + ':' + place.id;
   return 'geo:' + place.latitude.toFixed(5) + ',' + place.longitude.toFixed(5);
 }
@@ -34,6 +41,10 @@ export function placeKeyFor(place: PlaceRef): string {
 export function usePlaceReviews(place: PlaceRef | null) {
   const { user } = useAuth();
   const key = useMemo(() => (place ? placeKeyFor(place) : null), [place]);
+  const keys = useMemo(() => {
+    if (!place || !key) return [];
+    return Array.from(new Set([key, legacyPlaceKeyFor(place)]));
+  }, [place, key]);
   const [reviews, setReviews] = useState<PlaceReview[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -48,11 +59,25 @@ export function usePlaceReviews(place: PlaceRef | null) {
       const { data } = await db
         .from('place_reviews')
         .select('id, user_id, place_key, place_name, rating, comment, created_at')
-        .eq('place_key', key)
+        .in('place_key', keys)
         .order('created_at', { ascending: false })
         .limit(50);
 
-      const rows: PlaceReview[] = data ?? [];
+      const rawRows: PlaceReview[] = data ?? [];
+      const byUser = new Map<string, PlaceReview>();
+      for (const row of rawRows) {
+        const existing = byUser.get(row.user_id);
+        if (
+          !existing ||
+          row.place_key === key ||
+          (existing.place_key !== key &&
+            new Date(row.created_at).getTime() >
+              new Date(existing.created_at).getTime())
+        ) {
+          byUser.set(row.user_id, row);
+        }
+      }
+      const rows = Array.from(byUser.values());
       const authorIds = Array.from(new Set(rows.map((row) => row.user_id)));
       if (authorIds.length) {
         const { data: profiles } = await db
@@ -74,7 +99,7 @@ export function usePlaceReviews(place: PlaceRef | null) {
     } finally {
       setLoading(false);
     }
-  }, [key]);
+  }, [key, keys]);
 
   useEffect(() => {
     void load();
@@ -96,20 +121,27 @@ export function usePlaceReviews(place: PlaceRef | null) {
       if (!user || !place || !key) return false;
       setSaving(true);
       try {
-        const { error } = await db.from('place_reviews').upsert(
-          {
-            user_id: user.id,
-            place_key: key,
-            place_name: place.name ?? null,
-            latitude: place.latitude,
-            longitude: place.longitude,
-            rating,
-            comment: comment.trim() ? comment.trim() : null,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'user_id,place_key' },
-        );
-        if (error) return false;
+        const payload = {
+          user_id: user.id,
+          place_key: key,
+          place_name: place.name ?? null,
+          latitude: place.latitude,
+          longitude: place.longitude,
+          rating,
+          comment: comment.trim() ? comment.trim() : null,
+          updated_at: new Date().toISOString(),
+        };
+
+        const existing = reviews.find((review) => review.user_id === user.id);
+        const result = existing
+          ? await db
+              .from('place_reviews')
+              .update(payload)
+              .eq('id', existing.id)
+          : await db.from('place_reviews').upsert(payload, {
+              onConflict: 'user_id,place_key',
+            });
+        if (result.error) return false;
         await load();
         return true;
       } catch {
@@ -118,14 +150,18 @@ export function usePlaceReviews(place: PlaceRef | null) {
         setSaving(false);
       }
     },
-    [user, place, key, load],
+    [user, place, key, reviews, load],
   );
 
   const remove = useCallback(async () => {
     if (!user || !key) return;
-    await db.from('place_reviews').delete().eq('user_id', user.id).eq('place_key', key);
+    await db
+      .from('place_reviews')
+      .delete()
+      .eq('user_id', user.id)
+      .in('place_key', keys);
     await load();
-  }, [user, key, load]);
+  }, [user, keys, load]);
 
   return { reviews, summary, myReview, loading, saving, submit, remove, reload: load };
 }
