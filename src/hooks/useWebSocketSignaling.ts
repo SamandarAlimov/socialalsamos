@@ -2,7 +2,7 @@ import { useRef, useCallback, useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 
-type SignalType = 'join' | 'offer' | 'answer' | 'ice-candidate' | 'media-state' | 'leave' | 'call-ended';
+type SignalType = 'join' | 'offer' | 'answer' | 'ice-candidate' | 'media-state' | 'leave' | 'call-ended' | 'heartbeat';
 
 interface SignalMessage {
   type: SignalType;
@@ -49,8 +49,8 @@ export function useWebSocketSignaling(options: WebSocketSignalingOptions = {}) {
   const [isConnected, setIsConnected] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
 
-  // Callers may pass inline callback objects. Keep the latest callbacks without
-  // making the WebSocket lifecycle depend on object identity.
+  // Callback objects are frequently created inline by React callers. Keep the
+  // latest callbacks without making socket lifecycle depend on object identity.
   optionsRef.current = options;
 
   const clearReconnectTimer = useCallback(() => {
@@ -82,8 +82,8 @@ export function useWebSocketSignaling(options: WebSocketSignalingOptions = {}) {
     const url = new URL(`${origin}/functions/v1/webrtc-signaling`);
     url.searchParams.set('roomId', roomId);
     url.searchParams.set('userId', user?.id ?? '');
-    // Browser WebSocket does not let us set an arbitrary Authorization header.
-    // The Edge Function explicitly supports access_token query authentication.
+    // Browser WebSocket cannot set an arbitrary Authorization header. The
+    // signaling Edge Function explicitly supports access_token query auth.
     url.searchParams.set('access_token', accessToken);
     return url.toString();
   }, [user?.id]);
@@ -116,11 +116,7 @@ export function useWebSocketSignaling(options: WebSocketSignalingOptions = {}) {
       } catch {
         // best effort
       }
-      try {
-        ws.close(1000, 'client_disconnect');
-      } catch {
-        // best effort
-      }
+      try { ws.close(1000, 'client_disconnect'); } catch {}
     }
 
     setIsConnected(false);
@@ -169,10 +165,9 @@ export function useWebSocketSignaling(options: WebSocketSignalingOptions = {}) {
       setIsConnected(true);
       setIsReconnecting(false);
 
-      // The current Edge Function auto-registers the socket from roomId,
-      // userId and access_token in the URL. Do NOT send join here: doing so
-      // would register the same socket twice and emit duplicate user-joined
-      // events. The 'ready' fallback below supports an older server version.
+      // Current server auto-registers from URL parameters. Do not send join
+      // here because registerClient would emit a duplicate user-joined event.
+      // An older server can still be supported through the `ready` handler.
       if (wasReconnect) optionsRef.current.onReconnected?.();
     };
 
@@ -183,8 +178,6 @@ export function useWebSocketSignaling(options: WebSocketSignalingOptions = {}) {
         const data = JSON.parse(event.data) as Record<string, any>;
         switch (data.type) {
           case 'ready': {
-            // Compatibility with an older signaling function that waits for
-            // a join message instead of auto-registering from URL parameters.
             void supabase.auth.getSession().then(({ data: sessionData }) => {
               if (wsRef.current === ws && ws.readyState === WebSocket.OPEN) {
                 sendMessage({
@@ -240,10 +233,9 @@ export function useWebSocketSignaling(options: WebSocketSignalingOptions = {}) {
             if (data.userId && data.userId !== user.id) optionsRef.current.onCallEnded?.(data.userId);
             break;
           case 'ping':
-            // The server uses heartbeat messages to keep this participant
-            // alive. Respond with heartbeat, not join, so we don't emit a
-            // duplicate user-joined event every 15 seconds.
-            sendMessage({ type: 'join', roomId, userId: user.id });
+            // Edge Function expects heartbeat/heartbeat-ack here. Sending join
+            // would re-register the same socket and create duplicate events.
+            sendMessage({ type: 'heartbeat', roomId, userId: user.id });
             break;
           case 'heartbeat-ack':
             break;
@@ -258,9 +250,7 @@ export function useWebSocketSignaling(options: WebSocketSignalingOptions = {}) {
     };
 
     ws.onerror = () => {
-      if (!manuallyDisconnectedRef.current) {
-        console.warn('[WS] Signaling transport error');
-      }
+      if (!manuallyDisconnectedRef.current) console.warn('[WS] Signaling transport error');
     };
 
     ws.onclose = (event) => {
