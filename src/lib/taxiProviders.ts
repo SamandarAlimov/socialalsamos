@@ -16,6 +16,7 @@ export interface TaxiProvider {
   slug: string;
   name: string;
   emoji: string;
+  logoUrl?: string | null;
   /** Taxminiy tarif (so'm). */
   baseFare: number;
   perKm: number;
@@ -158,6 +159,7 @@ export function providerFromRow(row: TaxiProviderRow): TaxiProvider {
   const fallback = TAXI_PROVIDERS.find((provider) => provider.slug === row.slug);
   const template = row.deep_link || row.web_link || null;
   const numberOr = (value: number | string | null | undefined, fallbackValue: number) => {
+    if (value == null || value === '') return fallbackValue;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallbackValue;
   };
@@ -166,6 +168,7 @@ export function providerFromRow(row: TaxiProviderRow): TaxiProvider {
     slug: row.slug,
     name: row.name || fallback?.name || row.slug,
     emoji: fallback?.emoji || '🚕',
+    logoUrl: row.logo_url ?? fallback?.logoUrl ?? null,
     baseFare: numberOr(row.base_fare, fallback?.baseFare ?? 0),
     perKm: numberOr(row.per_km, fallback?.perKm ?? 0),
     perMin: numberOr(row.per_min, fallback?.perMin ?? 0),
