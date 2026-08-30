@@ -816,7 +816,8 @@ export function PostComposer() {
                 setFormattedContent(nextDocument);
               }}
               placeholder="Nima yangilik?"
-              className="mt-2 min-h-32 border-0 bg-transparent p-0 shadow-none sm:min-h-40"
+              compact={attachments.length > 0}
+              className="mt-2 border-0 bg-transparent p-0 shadow-none"
             />
           </div>
         </div>
@@ -1000,18 +1001,6 @@ export function PostComposer() {
                 active: Boolean(scheduledAt),
               },
               {
-                label: 'Qoralama',
-                icon: Save,
-                action: saveDraftNow,
-                disabled:
-                  content.trim().length === 0 &&
-                  attachments.length === 0 &&
-                  !poll &&
-                  !location &&
-                  !music,
-                active: Boolean(draftSavedAt),
-              },
-              {
                 label: 'Ko‘rish',
                 icon: Eye,
                 action: () => setShowPreview(true),
@@ -1035,6 +1024,27 @@ export function PostComposer() {
               </button>
             ))}
           </div>
+
+          <button
+            type="button"
+            onClick={saveDraftNow}
+            disabled={
+              content.trim().length === 0 &&
+              attachments.length === 0 &&
+              !poll &&
+              !location &&
+              !music
+            }
+            className={cn(
+              'ml-1 flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-30',
+              draftSavedAt
+                ? 'bg-muted text-foreground'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+            )}
+          >
+            <Save className="h-4 w-4" />
+            <span className="hidden sm:inline">Qoralama</span>
+          </button>
 
           <button
             type="button"
