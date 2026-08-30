@@ -37,9 +37,10 @@ export function AppLayout() {
 
   // Immersive mobile mode: no header, no bottom nav, no padding.
   // Desktop keeps the standard sidebar/layout.
+  const isMapPage = location.pathname === '/map';
   const immersiveMobile =
     location.pathname === '/create' ||
-    location.pathname === '/map';
+    isMapPage;
 
   if (isLoading) {
     return (
@@ -57,7 +58,12 @@ export function AppLayout() {
   }
 
   return (
-    <div className="min-h-screen flex w-full bg-background">
+    <div
+      className={cn(
+        'flex w-full bg-background',
+        isMapPage ? 'h-[100dvh] min-h-0 overflow-hidden' : 'min-h-screen',
+      )}
+    >
       {/* Desktop Sidebar */}
       <AppSidebar />
 
@@ -67,7 +73,8 @@ export function AppLayout() {
       {/* Main Content */}
       <main
         className={cn(
-          'flex-1 overflow-auto md:ml-0 md:pt-0 md:pb-0',
+          'flex-1 md:ml-0 md:pt-0 md:pb-0',
+          isMapPage ? 'h-full min-h-0 overflow-hidden p-0' : 'overflow-auto',
           hideHeaderOnPages ? 'pt-0' : 'pt-14',
           immersiveMobile ? 'pb-0' : 'pb-20'
         )}
