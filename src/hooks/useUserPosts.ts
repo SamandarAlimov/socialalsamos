@@ -1,6 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  isMissingStructuredPostSchemaError,
+  readStructuredPostSchemaCapability,
+  writeStructuredPostSchemaCapability,
+} from '@/lib/structuredPostSchema';
 
 export interface UserPost {
   id: string;
@@ -41,17 +46,27 @@ export function useUserPosts(userId: string | undefined) {
       // Profil faqat user_id egasining postlari emas, qabul qilingan
       // hammualliflik postlarini ham ko'rsatadi. Visibility'ni qo'lda publicga
       // kesmaymiz: posts RLS -> can_view_post canonical ruxsatni tekshiradi.
-      const { data: collaborationRows, error: collaborationError } = await supabase
-        .from('post_collaborators')
-        .select('post_id')
-        .eq('user_id', userId)
-        .eq('status', 'accepted');
+      let collaborationPostIds: string[] = [];
 
-      if (collaborationError) throw collaborationError;
+      if (readStructuredPostSchemaCapability() !== 'missing') {
+        const { data: collaborationRows, error: collaborationError } = await supabase
+          .from('post_collaborators')
+          .select('post_id')
+          .eq('user_id', userId)
+          .eq('status', 'accepted');
 
-      const collaborationPostIds = Array.from(
-        new Set((collaborationRows ?? []).map((row) => row.post_id)),
-      );
+        if (collaborationError) {
+          if (isMissingStructuredPostSchemaError(collaborationError)) {
+            writeStructuredPostSchemaCapability('missing');
+          } else {
+            throw collaborationError;
+          }
+        } else {
+          collaborationPostIds = Array.from(
+            new Set((collaborationRows ?? []).map((row) => row.post_id)),
+          );
+        }
+      }
 
       let query = supabase
         .from('posts')
@@ -81,8 +96,14 @@ export function useUserPosts(userId: string | undefined) {
 
       if (error) throw error;
 
-      const visibleData = ((data ?? []) as Array<UserPost & { post_kind?: string | null }>)
-        .filter((post) => post.post_kind !== 'story');
+      const rawData = (data ?? []) as Array<UserPost & { post_kind?: string | null }>;
+
+      if (rawData.length > 0) {
+        const hasPostKindColumn = Object.prototype.hasOwnProperty.call(rawData[0], 'post_kind');
+        writeStructuredPostSchemaCapability(hasPostKindColumn ? 'available' : 'missing');
+      }
+
+      const visibleData = rawData.filter((post) => post.post_kind !== 'story');
 
       // Get liked status for current user
       if (user && visibleData.length > 0) {
