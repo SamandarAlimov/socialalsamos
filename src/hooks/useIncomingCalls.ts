@@ -9,11 +9,12 @@
 import { useGlobalCall } from '@/contexts/GlobalCallContext';
 
 export function useIncomingCalls() {
-  const { incomingCall, handleCallHandled, declineCall } = useGlobalCall();
+  const { incomingCall, handleCallHandled, declineCall, missCall } = useGlobalCall();
 
   return {
     incomingCall,
     handleCallHandled,
     declineCall,
+    missCall,
   };
 }
