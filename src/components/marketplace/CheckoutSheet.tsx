@@ -5,6 +5,7 @@ import {
   Package, ArrowLeft, Wallet, Banknote, Plus, AlertCircle, AlertTriangle, ShoppingBag,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { CategoryIcon } from '@/components/marketplace/CategoryIcon';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -489,13 +490,22 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                       const itemShipping = getShippingCost(product, item.quantity);
                       return (
                         <div key={item.id} className="flex gap-3 p-2 rounded-xl bg-muted/20">
-                          <div className="w-14 h-14 rounded-lg overflow-hidden bg-muted shrink-0">
-                            {image ? (
-                              <img src={image} alt="" className="w-full h-full object-cover" loading="lazy" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-muted-foreground/40">
-                                <ShoppingBag className="h-4 w-4" />
-                              </div>
+                          <div className="relative w-14 h-14 rounded-lg overflow-hidden bg-muted shrink-0">
+                            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/40">
+                              <CategoryIcon
+                                slug={product.category?.slug}
+                                name={product.category?.name}
+                                className="h-4 w-4"
+                              />
+                            </div>
+                            {image && (
+                              <img
+                                src={image}
+                                alt={product.title}
+                                className="absolute inset-0 w-full h-full object-cover"
+                                loading="lazy"
+                                onError={event => { event.currentTarget.style.display = 'none'; }}
+                              />
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
@@ -613,7 +623,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                     <CheckCircle className="h-10 w-10 text-green-500" />
                   </motion.div>
                   <h2 className="text-xl font-bold mb-1">
-                    "To'lov muvaffaqiyatli!"
+                    To'lov muvaffaqiyatli!
                   </h2>
                   <p className="text-muted-foreground text-sm mb-5 max-w-xs">
                     To'lov muvaffaqiyatli yakunlandi. Kvitansiya buyurtmalar bo'limida saqlandi.
