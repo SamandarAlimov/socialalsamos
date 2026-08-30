@@ -60,6 +60,26 @@ export interface TransitJourneyRoute {
   legs?: unknown[];
 }
 
+export interface TransitStaticStopRoute {
+  id: string;
+  ref: string;
+  name: string;
+  color?: string | null;
+  mode?: 'bus' | 'trolleybus' | 'minibus' | 'tram' | 'subway' | 'train' | 'other';
+}
+
+interface StaticStopRoutesResponse {
+  configured?: boolean;
+  gtfsStopId?: string | null;
+  matchedStopName?: string | null;
+  matchedStopCode?: string | null;
+  providerName?: string | null;
+  providerUrl?: string | null;
+  authority?: 'official' | 'operator' | 'aggregator' | 'unknown';
+  authoritative?: boolean;
+  routes?: TransitStaticStopRoute[];
+}
+
 export interface TransitServiceAlert {
   id: string;
   title: string;
@@ -136,6 +156,19 @@ async function invokeTransit<T>(payload: Record<string, unknown>): Promise<T | n
 export async function fetchTransitRealtimeStatus(): Promise<TransitRealtimeStatus> {
   const data = await invokeTransit<TransitRealtimeStatus>({ action: 'status' });
   return data ?? { configured: false };
+}
+
+export async function fetchTransitStaticStopRoutes(input: {
+  stopId?: string;
+  latitude: number;
+  longitude: number;
+}): Promise<StaticStopRoutesResponse | null> {
+  return await invokeTransit<StaticStopRoutesResponse>({
+    action: 'stop-routes',
+    stopId: input.stopId,
+    latitude: input.latitude,
+    longitude: input.longitude,
+  });
 }
 
 export async function fetchTransitArrivals(input: {
