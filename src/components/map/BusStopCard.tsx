@@ -1,4 +1,4 @@
-import { AlertTriangle, Bus, Clock, ExternalLink, Loader2, Navigation, RefreshCw, Radio, ShieldCheck, Train, X } from 'lucide-react';
+import { AlertTriangle, Bus, Clock, ExternalLink, Loader2, Map as MapIcon, Navigation, RefreshCw, Radio, ShieldCheck, Train, X } from 'lucide-react';
 import type { TransitRoute, TransitStop } from '@/lib/transit';
 import type { TransitServiceAlert } from '@/lib/transitRealtime';
 import { formatArrival } from '@/lib/transit';
@@ -16,8 +16,10 @@ interface BusStopCardProps {
   authoritative?: boolean;
   staticGtfsAvailable?: boolean;
   alerts?: TransitServiceAlert[];
+  selectedRouteId?: string | null;
   highContrast?: boolean;
   onReload?: () => void;
+  onRouteSelect?: (route: TransitRoute) => void;
   onDirections?: (stop: TransitStop) => void;
   onClose?: () => void;
   className?: string;
@@ -53,8 +55,10 @@ export function BusStopCard({
   authoritative = false,
   staticGtfsAvailable = false,
   alerts = [],
+  selectedRouteId = null,
   highContrast = false,
   onReload,
+  onRouteSelect,
   onDirections,
   onClose,
   className,
@@ -215,11 +219,17 @@ export function BusStopCard({
 
         <div className={cn('divide-y', highContrast ? 'divide-white/10' : 'divide-border/50')}>
           {routes.map((route) => (
-            <div
+            <button
               key={route.id}
+              type="button"
+              onClick={() => onRouteSelect?.(route)}
+              disabled={!onRouteSelect}
               className={cn(
-                'mx-3 my-2 flex items-center gap-3 rounded-2xl px-3 py-3',
+                'mx-3 my-2 flex w-[calc(100%-1.5rem)] items-center gap-3 rounded-2xl px-3 py-3 text-left transition',
                 highContrast ? 'bg-white/[0.055]' : 'bg-muted/30',
+                onRouteSelect && 'hover:ring-1 hover:ring-primary/25',
+                selectedRouteId === route.id &&
+                  'ring-1 ring-primary/50 bg-primary/[0.08]',
               )}
             >
               <span
@@ -232,7 +242,12 @@ export function BusStopCard({
 
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">
-                  {route.to ? (route.from ? route.from + ' - ' + route.to : route.to) : route.name}
+                  {route.headsign ||
+                    (route.to
+                      ? route.from
+                        ? route.from + ' - ' + route.to
+                        : route.to
+                      : route.name)}
                 </p>
                 <p className="flex items-center gap-1 text-xs text-muted-foreground">
                   {route.intervalMin ? (
@@ -260,7 +275,11 @@ export function BusStopCard({
                   )}
                 >
                   {route.nextArrivalsMin?.length
-                    ? (route.realtime ? formatArrival(route.nextArrivalsMin[0]) : '~' + formatArrival(route.nextArrivalsMin[0]))
+                    ? route.realtime
+                      ? formatArrival(route.nextArrivalsMin[0])
+                      : route.scheduled
+                        ? formatArrival(route.nextArrivalsMin[0])
+                        : '~' + formatArrival(route.nextArrivalsMin[0])
                     : "Vaqt ma'lum emas"}
                 </span>
                 {route.nextArrivalsMin && route.nextArrivalsMin.length > 1 && (
@@ -273,11 +292,28 @@ export function BusStopCard({
                     <Radio className="h-3 w-3" />
                     real vaqt
                   </span>
+                ) : route.scheduled ? (
+                  <span className="flex items-center gap-1 text-[11px] font-medium text-sky-600 dark:text-sky-400">
+                    <Clock className="h-3 w-3" />
+                    GTFS jadval
+                  </span>
                 ) : route.intervalMin > 0 ? (
-                  <span className="text-[11px] text-muted-foreground">jadval bo'yicha</span>
+                  <span className="text-[11px] text-muted-foreground">qatnov oralig'i</span>
                 ) : null}
               </div>
-            </div>
+
+              {route.shapeCoordinates?.length ? (
+                <MapIcon
+                  className={cn(
+                    'h-4 w-4 shrink-0',
+                    selectedRouteId === route.id
+                      ? 'text-primary'
+                      : 'text-muted-foreground',
+                  )}
+                  aria-label="Marshrut chizig‘i mavjud"
+                />
+              ) : null}
+            </button>
           ))}
         </div>
       </div>
