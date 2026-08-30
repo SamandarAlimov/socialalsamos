@@ -50,6 +50,7 @@ import { PlaceCategoryBar } from '@/components/map/PlaceCategoryBar';
 import { PlaceResultsList } from '@/components/map/PlaceResultsList';
 import { PlaceDetailsCard } from '@/components/map/PlaceDetailsCard';
 import { BusStopCard } from '@/components/map/BusStopCard';
+import { BusStopResultsList } from '@/components/map/BusStopResultsList';
 import { TaxiOffersCard } from '@/components/map/TaxiOffersCard';
 import { MapLayerSwitcher } from '@/components/map/MapLayerSwitcher';
 import { SendPlaceToChatDialog } from '@/components/map/SendPlaceToChatDialog';
@@ -206,19 +207,27 @@ export default function MapPage() {
   const abortRef = useRef<AbortController | null>(null);
 
   const layer = getLayer(layerId);
-  const showStops = overlays.includes('stops');
+  const isBusStopFilter = category === 'bus_stop';
+  const showStops = overlays.includes('stops') || isBusStopFilter;
 
   const search = usePlaceSearch(query, center);
-  const categoryResults = usePlaceCategory(category, center);
-  const nearbyStops = useNearbyStops(showStops || panel === 'stop' ? center : null);
+  const categoryResults = usePlaceCategory(isBusStopFilter ? null : category, center);
+  const nearbyStops = useNearbyStops(
+    showStops || panel === 'stop' ? center : null,
+    isBusStopFilter ? 5000 : 1500,
+  );
   const stopRoutes = useStopRoutes(selectedStop?.id ?? null);
   const saved = useSavedPlaces();
   useVisitTracking(true);
   const visits = usePlaceVisits(60);
 
-  const places = query.trim() ? search.places : categoryResults.places;
-  const listLoading = query.trim() ? search.loading : categoryResults.loading;
-  const listError = query.trim() ? search.error : categoryResults.error;
+  const places = query.trim() ? search.places : isBusStopFilter ? [] : categoryResults.places;
+  const listLoading = isBusStopFilter
+    ? nearbyStops.loading
+    : query.trim()
+      ? search.loading
+      : categoryResults.loading;
+  const listError = isBusStopFilter ? null : query.trim() ? search.error : categoryResults.error;
 
   const visiblePlaces = useMemo(() => {
     if (!viewport) return places.slice(0, 80);
@@ -699,33 +708,71 @@ export default function MapPage() {
           onSelect={(id) => {
             setCategory(id);
             setQuery('');
+            setSelectedPlace(null);
+            setSelectedStop(null);
+            if (id === 'bus_stop') {
+              setOverlays((prev) => (prev.includes('stops') ? prev : [...prev, 'stops']));
+            }
             setSnap(id ? 'half' : 'peek');
           }}
-          loading={categoryResults.loading}
-          counts={category ? { [category]: categoryResults.places.length } : undefined}
+          loading={isBusStopFilter ? nearbyStops.loading : categoryResults.loading}
+          counts={
+            category
+              ? {
+                  [category]: isBusStopFilter
+                    ? nearbyStops.stops.length
+                    : categoryResults.places.length,
+                }
+              : undefined
+          }
           className="border-b border-border/60 px-2"
         />
         <div className="flex-1 overflow-y-auto">
-          <PlaceResultsList
-            places={places}
-            loading={listLoading}
-            error={listError}
-            activeId={selectedPlace?.id}
-            emptyText={
-              query.trim()
-                ? "Hech narsa topilmadi. Nomni boshqacha yozib ko'ring."
-                : 'Kategoriya tanlang yoki qidiruvdan foydalaning.'
-            }
-            onSelect={(place) => {
-              setSelectedPlace(place);
-              setCenter({ latitude: place.latitude, longitude: place.longitude });
-              setPanel('place');
-              setSnap('half');
-            }}
-            onDirections={openDirections}
-            onSendToChat={setShareTarget}
-            onSave={toggleSave}
-          />
+          {isBusStopFilter ? (
+            <BusStopResultsList
+              stops={nearbyStops.stops}
+              loading={nearbyStops.loading}
+              activeId={selectedStop?.id}
+              onSelect={(stop) => {
+                setSelectedStop(stop);
+                setSelectedPlace(null);
+                setCenter({ latitude: stop.latitude, longitude: stop.longitude });
+                setPanel('stop');
+                setSnap('half');
+              }}
+              onDirections={(stop) =>
+                openDirections({
+                  id: stop.id,
+                  source: 'transit',
+                  name: stop.name || 'Bekat',
+                  latitude: stop.latitude,
+                  longitude: stop.longitude,
+                } as unknown as MapPlace)
+              }
+            />
+          ) : (
+            <PlaceResultsList
+              places={places}
+              loading={listLoading}
+              error={listError}
+              activeId={selectedPlace?.id}
+              emptyText={
+                query.trim()
+                  ? "Hech narsa topilmadi. Nomni boshqacha yozib ko'ring."
+                  : 'Kategoriya tanlang yoki qidiruvdan foydalaning.'
+              }
+              onSelect={(place) => {
+                setSelectedPlace(place);
+                setSelectedStop(null);
+                setCenter({ latitude: place.latitude, longitude: place.longitude });
+                setPanel('place');
+                setSnap('half');
+              }}
+              onDirections={openDirections}
+              onSendToChat={setShareTarget}
+              onSave={toggleSave}
+            />
+          )}
         </div>
       </div>
     );
@@ -747,6 +794,9 @@ export default function MapPage() {
     category,
     categoryResults.loading,
     categoryResults.places.length,
+    isBusStopFilter,
+    nearbyStops.stops,
+    nearbyStops.loading,
     visits.visits,
     visits.loading,
     saved.places,
@@ -905,6 +955,10 @@ export default function MapPage() {
             onClick={() => {
               setCenter(movedCenter);
               setMovedCenter(null);
+              setSelectedPlace(null);
+              setSelectedStop(null);
+              setPanel('search');
+              if (category || query.trim()) setSnap('half');
             }}
             className="pointer-events-auto flex h-9 items-center gap-2 rounded-full border border-border/60 bg-background/95 px-3 text-xs font-semibold shadow-lg backdrop-blur"
           >
