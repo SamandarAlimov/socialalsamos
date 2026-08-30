@@ -14,11 +14,13 @@ import {
   type TransitStop,
 } from '@/lib/transit';
 import {
+  fetchTransitAlerts,
   fetchTransitArrivals,
   fetchTransitRealtimeStatus,
   fetchTransitVehicles,
   type TransitRealtimeStatus,
   type TransitRealtimeVehicle,
+  type TransitServiceAlert,
 } from '@/lib/transitRealtime';
 
 interface Center {
@@ -169,25 +171,29 @@ export function useStopRoutes(stop?: TransitStop | null) {
   const [error, setError] = useState<string | null>(null);
   const [realtimeConfigured, setRealtimeConfigured] = useState(false);
   const [realtimeFresh, setRealtimeFresh] = useState(false);
+  const [alerts, setAlerts] = useState<TransitServiceAlert[]>([]);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
       if (!stop?.id) {
         setRoutes([]);
         setRealtimeFresh(false);
+        setAlerts([]);
         return;
       }
       setLoading(true);
       setError(null);
       try {
-        const base = await fetchStopRoutes(stop.id, { signal });
+        const [base, edgeRealtime] = await Promise.all([
+          fetchStopRoutes(stop.id, { signal }),
+          fetchTransitArrivals({
+            stopId: stop.id,
+            latitude: stop.latitude,
+            longitude: stop.longitude,
+          }),
+        ]);
 
         // Asosiy realtime manba: server-side GTFS gateway.
-        const edgeRealtime = await fetchTransitArrivals({
-          stopId: stop.id,
-          latitude: stop.latitude,
-          longitude: stop.longitude,
-        });
         setRealtimeConfigured(Boolean(edgeRealtime?.configured));
         setRealtimeFresh(Boolean(edgeRealtime?.realtime && !edgeRealtime?.stale));
 
@@ -198,6 +204,14 @@ export function useStopRoutes(stop?: TransitStop | null) {
           list.push(arrival.minutes);
           byRef.set(arrival.ref, list.sort((a, b) => a - b));
         }
+
+        const edgeAlerts = await fetchTransitAlerts({
+          stopId: stop.id,
+          gtfsStopId: edgeRealtime?.gtfsStopId ?? null,
+          latitude: stop.latitude,
+          longitude: stop.longitude,
+        });
+        setAlerts(edgeAlerts?.alerts ?? []);
 
         // Eski normalized VITE adapteri backward-compatible fallback sifatida qoladi.
         const legacyRealtime =
@@ -240,6 +254,7 @@ export function useStopRoutes(stop?: TransitStop | null) {
     error,
     realtimeConfigured,
     realtimeFresh,
+    alerts,
     reload: () => void load(),
   };
 }
