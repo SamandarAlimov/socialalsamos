@@ -212,6 +212,8 @@ export function findCategory(id?: string | null): PlaceCategory | undefined {
 export interface MapPlace {
   id: string;
   source: 'overpass' | 'nominatim' | 'photon';
+  /** Providerlardan mustaqil, bir xil OSM obyektini bitta joy sifatida tanitadi. */
+  canonicalId?: string;
   name: string;
   categoryId?: PlaceCategoryId;
   categoryLabel?: string;
@@ -229,6 +231,49 @@ export interface MapPlace {
   tags?: Record<string, string>;
   /** Nom mosligi bahosi (ichki saralash uchun). */
   score?: number;
+}
+
+function normalizeOsmType(value: unknown): 'node' | 'way' | 'relation' | null {
+  const type = String(value ?? '').toLowerCase();
+  if (type === 'node' || type === 'n') return 'node';
+  if (type === 'way' || type === 'w') return 'way';
+  if (type === 'relation' || type === 'r') return 'relation';
+  return null;
+}
+
+function osmCanonicalId(type: unknown, id: unknown): string | null {
+  const normalizedType = normalizeOsmType(type);
+  const normalizedId = String(id ?? '').trim();
+  if (!normalizedType || !/^\d+$/.test(normalizedId)) return null;
+  return 'osm:' + normalizedType + ':' + normalizedId;
+}
+
+export function canonicalPlaceId(
+  place: Pick<MapPlace, 'canonicalId' | 'id' | 'name' | 'latitude' | 'longitude'>,
+): string {
+  if (place.canonicalId) return place.canonicalId;
+
+  const idMatch = String(place.id).match(
+    /(?:^|\/)(node|way|relation|n|w|r)\/(\d+)$/i,
+  );
+  if (idMatch) {
+    const osm = osmCanonicalId(idMatch[1], idMatch[2]);
+    if (osm) return osm;
+  }
+
+  const slug = normalizeQuery(place.name)
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 54);
+
+  return (
+    'geo:' +
+    place.latitude.toFixed(5) +
+    ',' +
+    place.longitude.toFixed(5) +
+    ':' +
+    (slug || 'place')
+  );
 }
 
 const OVERPASS_ENDPOINTS = [
@@ -561,6 +606,9 @@ function elementToPlace(element: any): MapPlace | null {
   return {
     id: element.type + '/' + element.id,
     source: 'overpass',
+    canonicalId:
+      osmCanonicalId(element.type, element.id) ??
+      undefined,
     name,
     categoryId: category?.id,
     categoryLabel: category?.label,
@@ -813,6 +861,9 @@ async function reverseNominatimPlace(
       '/' +
       (item.osm_id ?? item.place_id ?? point.latitude + ',' + point.longitude),
     source: 'nominatim',
+    canonicalId:
+      osmCanonicalId(item.osm_type, item.osm_id) ??
+      undefined,
     name,
     categoryId: category?.id,
     categoryLabel:
@@ -1211,6 +1262,9 @@ async function searchByNominatim(
       return {
         id: 'nominatim/' + (item.osm_type ?? 'x') + '/' + (item.osm_id ?? item.place_id),
         source: 'nominatim',
+        canonicalId:
+          osmCanonicalId(item.osm_type, item.osm_id) ??
+          undefined,
         name,
         categoryId: category?.id,
         categoryLabel: semanticCategoryLabel(name, category, rawKey, rawValue),
@@ -1284,6 +1338,9 @@ async function searchByPhoton(
       return {
         id: 'photon/' + (props.osm_id ?? coords.join(',')),
         source: 'photon',
+        canonicalId:
+          osmCanonicalId(props.osm_type, props.osm_id) ??
+          undefined,
         name,
         categoryId: category?.id,
         categoryLabel: semanticCategoryLabel(name, category, rawKey, rawValue),
@@ -1491,11 +1548,8 @@ export async function searchMapPlaces(
   const mergePlaces = (items: MapPlace[]) => {
     for (const place of items) {
       const key =
-        normalizeQuery(place.name) +
-        '@' +
-        place.latitude.toFixed(4) +
-        ',' +
-        place.longitude.toFixed(4);
+        place.canonicalId ||
+        canonicalPlaceId(place);
       const existing = merged.get(key);
       if (!existing || (existing.source !== 'overpass' && place.source === 'overpass')) {
         merged.set(key, place);
