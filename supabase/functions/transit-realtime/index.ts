@@ -1034,6 +1034,150 @@ async function alerts(payload: Record<string, any>) {
   };
 }
 
+function normalizeTransitMode(value: unknown): string {
+  const mode = String(value ?? "").toLowerCase();
+  if (mode.includes("walk") || mode === "foot") return "walk";
+  if (mode.includes("trolley")) return "trolleybus";
+  if (mode.includes("mini") || mode.includes("share_taxi")) return "minibus";
+  if (mode.includes("tram")) return "tram";
+  if (mode.includes("subway") || mode.includes("metro")) return "subway";
+  if (mode.includes("train") || mode.includes("rail")) return "train";
+  if (mode.includes("bus")) return "bus";
+  if (mode.includes("transit")) return "transit";
+  return "other";
+}
+
+function normalizeTransitJourneyLeg(leg: any) {
+  const mode = normalizeTransitMode(
+    leg?.mode ?? leg?.transportMode ?? leg?.travelMode,
+  );
+  const route = leg?.route ?? {};
+  return {
+    mode,
+    routeId:
+      String(
+        leg?.routeId ??
+          route?.id ??
+          route?.routeId ??
+          "",
+      ).trim() || null,
+    routeRef:
+      String(
+        leg?.routeRef ??
+          route?.ref ??
+          route?.shortName ??
+          route?.routeShortName ??
+          "",
+      ).trim() || null,
+    routeName:
+      String(
+        leg?.routeName ??
+          route?.name ??
+          route?.longName ??
+          route?.routeLongName ??
+          "",
+      ).trim() || null,
+    color:
+      String(
+        leg?.color ??
+          route?.color ??
+          "",
+      ).trim() || null,
+    headsign:
+      String(
+        leg?.headsign ??
+          leg?.tripHeadsign ??
+          leg?.toHeadsign ??
+          "",
+      ).trim() || null,
+    from:
+      String(
+        leg?.from?.name ??
+          leg?.fromName ??
+          leg?.origin?.name ??
+          leg?.from ??
+          "",
+      ).trim() || null,
+    to:
+      String(
+        leg?.to?.name ??
+          leg?.toName ??
+          leg?.destination?.name ??
+          leg?.to ??
+          "",
+      ).trim() || null,
+    distanceM: Number(
+      leg?.distanceM ??
+        leg?.distance ??
+        leg?.distanceInMeters ??
+        0,
+    ) || 0,
+    durationS: Number(
+      leg?.durationS ??
+        leg?.duration ??
+        leg?.travelTimeS ??
+        leg?.travelTimeInSeconds ??
+        0,
+    ) || 0,
+    waitTimeS: Number(
+      leg?.waitTimeS ??
+        leg?.waitTime ??
+        leg?.waitingTimeInSeconds ??
+        0,
+    ) || 0,
+    departureTime:
+      String(
+        leg?.departureTime ??
+          leg?.departure ??
+          "",
+      ).trim() || null,
+    arrivalTime:
+      String(
+        leg?.arrivalTime ??
+          leg?.arrival ??
+          "",
+      ).trim() || null,
+    stops:
+      Number.isFinite(
+        Number(leg?.stops ?? leg?.numStops),
+      )
+        ? Number(leg?.stops ?? leg?.numStops)
+        : null,
+    realtime: Boolean(
+      leg?.realtime ??
+        leg?.realTime ??
+        leg?.realtimeState === "UPDATED",
+    ),
+  };
+}
+
+function normalizeTransitFare(value: any) {
+  if (value == null) return null;
+  if (
+    typeof value === "string" ||
+    typeof value === "number"
+  ) {
+    return value;
+  }
+  const amount = Number(
+    value?.amount ??
+      value?.value ??
+      value?.price,
+  );
+  const currency = String(
+    value?.currency ??
+      value?.currencyCode ??
+      "",
+  ).trim();
+  if (Number.isFinite(amount)) {
+    return {
+      amount,
+      currency: currency || null,
+    };
+  }
+  return null;
+}
+
 async function journeyRoute(payload: Record<string, any>) {
   const router = env("TRANSIT_ROUTER_URL").replace(/\/+$/, "");
   if (!router) {
@@ -1079,17 +1223,72 @@ async function journeyRoute(payload: Record<string, any>) {
   return {
     ...providerMeta(),
     configured: true,
-    routes: routes.slice(0, 4).map((route: any, index: number) => ({
-      mode: "transit",
-      durationS: Number(route.durationS ?? route.duration ?? 0),
-      distanceM: Number(route.distanceM ?? route.distance ?? 0),
-      coordinates: Array.isArray(route.coordinates) ? route.coordinates : [],
-      steps: Array.isArray(route.steps) ? route.steps : [],
-      label: String(route.label || (index === 0 ? "Eng tez transport" : "Muqobil transport")),
-      transfers: Number(route.transfers ?? 0),
-      fare: route.fare ?? null,
-      legs: Array.isArray(route.legs) ? route.legs : [],
-    })),
+    routes: routes.slice(0, 4).map((route: any, index: number) => {
+      const legs = Array.isArray(route.legs)
+        ? route.legs.map(normalizeTransitJourneyLeg)
+        : [];
+      const walkingDistanceM =
+        Number(
+          route.walkingDistanceM ??
+            route.walkDistanceM,
+        ) ||
+        legs
+          .filter((leg: any) => leg.mode === "walk")
+          .reduce(
+            (sum: number, leg: any) =>
+              sum + (Number(leg.distanceM) || 0),
+            0,
+          );
+      return {
+        mode: "transit",
+        durationS: Number(route.durationS ?? route.duration ?? 0),
+        distanceM: Number(route.distanceM ?? route.distance ?? 0),
+        coordinates: Array.isArray(route.coordinates)
+          ? route.coordinates
+          : [],
+        steps: Array.isArray(route.steps) ? route.steps : [],
+        label: String(
+          route.label ||
+            (index === 0
+              ? "Eng tez transport"
+              : "Muqobil transport"),
+        ),
+        transfers: Math.max(
+          0,
+          Number(
+            route.transfers ??
+              Math.max(
+                0,
+                legs.filter(
+                  (leg: any) =>
+                    leg.mode !== "walk" &&
+                    leg.mode !== "other",
+                ).length - 1,
+              ),
+          ) || 0,
+        ),
+        fare: normalizeTransitFare(route.fare),
+        walkingDistanceM,
+        departureTime:
+          String(
+            route.departureTime ??
+              route.startTime ??
+              "",
+          ).trim() || null,
+        arrivalTime:
+          String(
+            route.arrivalTime ??
+              route.endTime ??
+              "",
+          ).trim() || null,
+        realtime: Boolean(
+          route.realtime ??
+            route.realTime ??
+            legs.some((leg: any) => leg.realtime),
+        ),
+        legs,
+      };
+    }),
   };
 }
 
