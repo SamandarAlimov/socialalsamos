@@ -87,7 +87,17 @@ import {
 import { useNavigationVoice } from '@/hooks/useNavigationVoice';
 import { ActiveNavigationPanel } from '@/components/map/ActiveNavigationPanel';
 import { LeafletEngineBridge } from '@/components/map/engine/LeafletEngineBridge';
-import type { MapEngineController } from '@/lib/mapEngine';
+import { VectorMapSurface } from '@/components/map/engine/VectorMapSurface';
+import {
+  readPreferredMapEngine,
+  vectorStyleUrl,
+  writePreferredMapEngine,
+  type MapEngineController,
+  type MapEngineId,
+  type MapSceneLine,
+  type MapSceneMarker,
+  type VectorRenderedFeature,
+} from '@/lib/mapEngine';
 import {
   readNavigationSession,
   writeNavigationSession,
