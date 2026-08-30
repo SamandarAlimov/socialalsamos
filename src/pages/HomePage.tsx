@@ -97,7 +97,7 @@ export default function HomePage() {
         const { data } = await supabase
           .from('posts')
           .select(`
-            id, content, media_urls, media_type, likes_count, comments_count, is_pinned, created_at, user_id,
+            id, content, formatted_content, media_urls, media_type, likes_count, comments_count, is_pinned, created_at, user_id,
             profile:profiles!posts_user_id_fkey (id, username, display_name, avatar_url, is_verified)
           `)
           .eq('id', postId)
