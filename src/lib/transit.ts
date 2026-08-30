@@ -20,6 +20,8 @@ export interface TransitStop {
   kind: 'bus' | 'trolleybus' | 'tram' | 'subway' | 'station';
   shelter?: boolean;
   bench?: boolean;
+  code?: string | null;
+  gtfsStopId?: string | null;
   distanceM?: number;
 }
 
@@ -104,6 +106,12 @@ export async function fetchNearbyStops(
         kind: stopKind(tags),
         shelter: tags.shelter === 'yes',
         bench: tags.bench === 'yes',
+        code: tags.ref || tags.local_ref || null,
+        gtfsStopId:
+          tags['gtfs:stop_id'] ||
+          tags['ref:gtfs'] ||
+          tags['gtfs_id'] ||
+          null,
         distanceM: distanceMeters(center.latitude, center.longitude, lat, lon),
       };
     })
