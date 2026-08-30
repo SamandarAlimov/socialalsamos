@@ -48,6 +48,33 @@ export interface TransitJourneyStep {
   to?: string;
 }
 
+export interface TransitJourneyLeg {
+  mode:
+    | 'walk'
+    | 'bus'
+    | 'trolleybus'
+    | 'minibus'
+    | 'tram'
+    | 'subway'
+    | 'train'
+    | 'transit'
+    | 'other';
+  routeId?: string | null;
+  routeRef?: string | null;
+  routeName?: string | null;
+  color?: string | null;
+  headsign?: string | null;
+  from?: string | null;
+  to?: string | null;
+  distanceM: number;
+  durationS: number;
+  waitTimeS?: number;
+  departureTime?: string | null;
+  arrivalTime?: string | null;
+  stops?: number | null;
+  realtime?: boolean;
+}
+
 export interface TransitJourneyRoute {
   mode: 'transit';
   durationS: number;
@@ -57,7 +84,11 @@ export interface TransitJourneyRoute {
   label: string;
   transfers?: number;
   fare?: unknown;
-  legs?: unknown[];
+  walkingDistanceM?: number;
+  departureTime?: string | null;
+  arrivalTime?: string | null;
+  realtime?: boolean;
+  legs?: TransitJourneyLeg[];
 }
 
 export interface TransitStaticStopRoute {
