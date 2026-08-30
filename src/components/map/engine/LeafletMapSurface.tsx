@@ -95,7 +95,10 @@ function markerIcon(marker: MapSceneMarker) {
 
   if (marker.kind === 'incident') {
     return L.divIcon({
-      html: incidentSvg(marker.label || 'incident', marker.color || '#F97316'),
+      html: incidentSvg(
+        marker.variant || 'incident',
+        marker.color || '#F97316',
+      ),
       className: 'alsamos-traffic-incident',
       iconSize: [32, 32],
       iconAnchor: [16, 16],
