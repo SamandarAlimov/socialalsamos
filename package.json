@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit",
     "typecheck:create": "tsc -p tsconfig.create.json --noEmit",
+    "typecheck:api": "tsc -p tsconfig.api.json --noEmit",
     "test:map": "vitest run src/lib/routing.test.ts src/lib/taxiProviders.test.ts",
     "test:messages": "vitest run src/lib/messagePipeline.test.ts src/lib/videoNoteLayout.test.ts",
     "typecheck:messages": "tsc -p tsconfig.messages.json --noEmit",
