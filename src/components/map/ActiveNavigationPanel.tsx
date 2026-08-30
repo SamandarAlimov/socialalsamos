@@ -424,24 +424,37 @@ export function ActiveNavigationPanel({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onRecenter}
-            className={cn(
-              'flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl shadow-sm transition hover:shadow-md',
-              following
-                ? highContrast
-                  ? 'bg-white/[0.08] text-white/[0.72]'
-                  : 'bg-muted text-muted-foreground'
-                : 'bg-primary text-primary-foreground ring-4 ring-primary/[0.14]',
-            )}
-            aria-label={
-              following ? 'Joylashuv markazda' : 'Joylashuvga qaytish'
-            }
-            title={following ? 'Joylashuv markazda' : 'Joylashuvga qaytish'}
-          >
-            <Crosshair className="h-5 w-5" />
-          </button>
+          {snapshot.arrived ? (
+            <button
+              type="button"
+              onClick={onStop}
+              className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 text-xs font-extrabold text-white shadow-sm transition hover:shadow-md"
+            >
+              <Flag className="h-4 w-4" />
+              Yakunlash
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onRecenter}
+              className={cn(
+                'flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl shadow-sm transition hover:shadow-md',
+                following
+                  ? highContrast
+                    ? 'bg-white/[0.08] text-white/[0.72]'
+                    : 'bg-muted text-muted-foreground'
+                  : 'bg-primary text-primary-foreground ring-4 ring-primary/[0.14]',
+              )}
+              aria-label={
+                following ? 'Joylashuv markazda' : 'Joylashuvga qaytish'
+              }
+              title={
+                following ? 'Joylashuv markazda' : 'Joylashuvga qaytish'
+              }
+            >
+              <Crosshair className="h-5 w-5" />
+            </button>
+          )}
         </div>
       </div>
     </>
