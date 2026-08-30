@@ -47,7 +47,8 @@ export function AppLayout() {
     location.pathname.startsWith('/marketplace/product/');
 
   const isMapPage = location.pathname === '/map';
-  const immersiveMobile = location.pathname === '/create' || isMapPage;
+  const isCreatePage = location.pathname === '/create';
+  const immersiveMobile = isCreatePage || isMapPage;
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-background"><div className="flex flex-col items-center gap-4"><Loader2 className="h-10 w-10 animate-spin text-primary" /><p className="text-muted-foreground">Loading...</p></div></div>;
@@ -56,14 +57,23 @@ export function AppLayout() {
   if (!isAuthenticated) return <Navigate to="/" replace />;
 
   return (
-    <div className={cn('flex w-full bg-background', isMapPage ? 'h-[100dvh] min-h-0 overflow-hidden' : 'min-h-screen')}>
+    <div
+      className={cn(
+        'flex w-full bg-background',
+        isMapPage || isCreatePage
+          ? 'h-[100dvh] min-h-0 overflow-hidden'
+          : 'min-h-screen',
+      )}
+    >
       <AppSidebar collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
 
       {!hideHeaderOnPages && <MobileHeader />}
 
       <main className={cn(
         'flex-1 md:ml-0 md:pt-0 md:pb-0',
-        isMapPage ? 'h-full min-h-0 overflow-hidden p-0' : 'alsamos-scrollbar overflow-auto',
+        isMapPage || isCreatePage
+          ? 'h-full min-h-0 overflow-hidden p-0'
+          : 'alsamos-scrollbar overflow-auto',
         hideHeaderOnPages ? 'pt-0' : 'pt-14',
         immersiveMobile ? 'pb-0' : 'pb-20'
       )}>
