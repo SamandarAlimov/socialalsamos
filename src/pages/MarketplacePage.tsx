@@ -163,8 +163,10 @@ export default function MarketplacePage() {
 
   const handleOrderProductSelect = useCallback(async (productId: string) => {
     const product = await fetchMarketplaceProductById(productId);
-    if (product) handleProductSelect(product);
-  }, []);
+    if (!product) return;
+    triggerHaptic('light');
+    setSelectedProduct(product);
+  }, [triggerHaptic]);
 
   /** Real "Sotib olish": the item is in the cart, so go straight to checkout. */
   const handleBuyNow = useCallback(async () => {
