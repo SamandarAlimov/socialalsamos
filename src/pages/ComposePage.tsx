@@ -103,7 +103,7 @@ const MODE_META: Record<
     subtitle: '9:16 media, camera va interaktiv stikerlar — xavfsiz draft oqimida',
     sectionTitle: 'Yangi Story yarating',
     sectionDescription:
-      'Flutter’dagi media-first sahnaga mos 9:16 preview va real sticker lifecycle.',
+      'Web uchun kengroq 9:16 studio, real sticker lifecycle va responsive boshqaruvlar.',
     icon: UserCircle2,
   },
 };
@@ -111,11 +111,9 @@ const MODE_META: Record<
 /**
  * Canonical production Create shell.
  *
- * Web va Flutter bir xil interaction modelni kuzatadi:
- * - yuqorida compact title/action,
- * - asosiy media/composer sahnasi,
- * - pastda floating mode switch,
- * - faqat real ishlaydigan mode'lar ko'rsatiladi.
+ * Web va Flutter bir xil product contractni kuzatadi, lekin UI platformaga mos.
+ * Web desktopda kengroq workbench, mobileda esa compact immersive oqim ishlatadi.
+ * Faqat real ishlaydigan mode'lar ko'rsatiladi.
  */
 export default function ComposePage() {
   const navigate = useNavigate();
@@ -233,8 +231,8 @@ export default function ComposePage() {
                 <div className="flex items-start gap-2.5">
                   <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
                   <p className="text-xs leading-relaxed text-muted-foreground">
-                    Web va Flutter bir xil Create v1 contract, visibility va lifecycle
-                    RPC’lardan foydalanadi.
+                    Web va Flutter bir xil Create v1 data contract, visibility va lifecycle
+                    RPC’lardan foydalanadi. Layout esa platformaga mos erkin rivojlanadi.
                   </p>
                 </div>
               </div>
