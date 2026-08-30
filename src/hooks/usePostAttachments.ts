@@ -221,6 +221,58 @@ export function usePostAttachments(options?: {
     [patch],
   );
 
+  const replaceAllWithRenderedFile = useCallback(
+    async (
+      file: File,
+      editState?: Record<string, unknown>,
+    ): Promise<Attachment | null> => {
+      const current = attachmentsRef.current;
+      const target = current[0];
+      if (!target) return null;
+
+      abortControllers.current.forEach((controller) => controller.abort());
+      abortControllers.current.clear();
+
+      const previewUrl = isPreviewable(target.kind)
+        ? URL.createObjectURL(file)
+        : undefined;
+      const meta = previewUrl
+        ? await readMediaMetadata(target.kind, previewUrl)
+        : {};
+
+      revokePreviewUrls(current.map((item) => item.previewUrl));
+      for (const item of current) {
+        void cleanupUploadedObjects(item);
+      }
+
+      const next: Attachment = {
+        ...target,
+        file,
+        previewUrl,
+        status: 'pending',
+        progress: 0,
+        error: undefined,
+        uploadedUrl: undefined,
+        storageUrl: undefined,
+        storageBucket: undefined,
+        storageKey: undefined,
+        thumbnailUrl: undefined,
+        thumbnailStorageUrl: undefined,
+        thumbnailBucket: undefined,
+        thumbnailKey: undefined,
+        uploadedVisibility: undefined,
+        editState,
+        ...meta,
+      };
+
+      attachmentsRef.current = [next];
+      publishedAttachmentIds.current.clear();
+      setAttachments([next]);
+      return next;
+    },
+    [],
+  );
+
   const markAttachmentsPublished = useCallback(() => {
     for (const item of attachmentsRef.current) {
       publishedAttachmentIds.current.add(item.id);
@@ -464,6 +516,7 @@ export function usePostAttachments(options?: {
     setEditState,
     setAltText,
     replaceAttachmentFile,
+    replaceAllWithRenderedFile,
     markAttachmentsPublished,
     uploadAll,
   };
