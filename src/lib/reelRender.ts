@@ -1,6 +1,7 @@
 export interface ReelSequenceClip {
   file: File;
   durationSeconds?: number | null;
+  playbackRate?: number | null;
 }
 
 export interface ReelSequenceRenderOptions {
@@ -99,8 +100,8 @@ export async function renderReelSequence(
   clips: ReelSequenceClip[],
   options: ReelSequenceRenderOptions = {},
 ): Promise<File> {
-  if (clips.length < 2) {
-    throw new Error('Kamida 2 ta video kerak');
+  if (clips.length < 1) {
+    throw new Error('Video topilmadi');
   }
 
   const format = pickFormat();
@@ -160,9 +161,14 @@ export async function renderReelSequence(
     if (event.data.size > 0) chunks.push(event.data);
   });
 
-  const expectedDurations = clips.map((clip) =>
-    Math.max(0.1, Number(clip.durationSeconds) || 1),
-  );
+  const expectedDurations = clips.map((clip) => {
+    const sourceDuration = Math.max(0.1, Number(clip.durationSeconds) || 1);
+    const playbackRate = Math.max(
+      0.25,
+      Math.min(4, Number(clip.playbackRate) || 1),
+    );
+    return sourceDuration / playbackRate;
+  });
   const expectedTotal = expectedDurations.reduce((sum, value) => sum + value, 0);
   let completedExpected = 0;
   let animationFrame = 0;
@@ -188,7 +194,13 @@ export async function renderReelSequence(
         const actualDuration =
           Number.isFinite(video.duration) && video.duration > 0
             ? video.duration
-            : expectedDurations[index];
+            : Math.max(0.1, Number(clip.durationSeconds) || 1);
+        const playbackRate = Math.max(
+          0.25,
+          Math.min(4, Number(clip.playbackRate) || 1),
+        );
+        video.playbackRate = playbackRate;
+        video.defaultPlaybackRate = playbackRate;
 
         const ended = waitForMedia(video, 'ended');
 
