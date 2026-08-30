@@ -48,7 +48,10 @@ import { startLiveLocationSharing } from '@/lib/liveLocationSharing';
 import { parseStorageReference } from '@/lib/mediaUpload';
 import { supabase } from '@/integrations/supabase/client';
 import { RichTextComposer } from '@/components/create/RichTextComposer';
-import type { AlsamosRichTextDocument } from '@/lib/richTextDocument';
+import {
+  normalizeAlsamosRichTextDocument,
+  type AlsamosRichTextDocument,
+} from '@/lib/richTextDocument';
 
 /** MentionCollaborator ichidagi Profile bilan bir xil shakl. */
 interface CollaboratorProfile {
@@ -77,6 +80,92 @@ function formatScheduledDate(date: Date): string {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);
+}
+
+
+const POST_DRAFT_VERSION = 1;
+const POST_DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+interface StoredPostDraft {
+  version: number;
+  savedAt: number;
+  content: string;
+  formattedContent: AlsamosRichTextDocument | null;
+  visibility: PostVisibility;
+  poll: PollInput | null;
+  location: PostLocationInput | null;
+  music: PostMusicInput | null;
+  collaborators: CollaboratorProfile[];
+  scheduledAt: string | null;
+  hadMedia: boolean;
+}
+
+function postDraftKey(userId: string): string {
+  return `alsamos.create.post.draft.v${POST_DRAFT_VERSION}:${userId}`;
+}
+
+function readStoredPostDraft(userId: string): StoredPostDraft | null {
+  try {
+    const raw = localStorage.getItem(postDraftKey(userId));
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as Partial<StoredPostDraft>;
+    if (
+      parsed.version !== POST_DRAFT_VERSION ||
+      typeof parsed.savedAt !== 'number' ||
+      Date.now() - parsed.savedAt > POST_DRAFT_TTL_MS
+    ) {
+      localStorage.removeItem(postDraftKey(userId));
+      return null;
+    }
+
+    return {
+      version: POST_DRAFT_VERSION,
+      savedAt: parsed.savedAt,
+      content: typeof parsed.content === 'string' ? parsed.content : '',
+      formattedContent: normalizeAlsamosRichTextDocument(parsed.formattedContent),
+      visibility:
+        parsed.visibility === 'friends' || parsed.visibility === 'private'
+          ? parsed.visibility
+          : 'public',
+      poll: parsed.poll ?? null,
+      location: parsed.location ?? null,
+      // Device audio binary lifecycle localStorage bilan ishonchli tiklanmaydi.
+      music:
+        parsed.music?.track?.source === 'device'
+          ? null
+          : (parsed.music ?? null),
+      collaborators: Array.isArray(parsed.collaborators)
+        ? parsed.collaborators.filter(
+            (item): item is CollaboratorProfile =>
+              Boolean(item) &&
+              typeof item.id === 'string' &&
+              typeof item.username === 'string',
+          )
+        : [],
+      scheduledAt:
+        typeof parsed.scheduledAt === 'string' ? parsed.scheduledAt : null,
+      hadMedia: Boolean(parsed.hadMedia),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredPostDraft(userId: string, draft: StoredPostDraft): void {
+  try {
+    localStorage.setItem(postDraftKey(userId), JSON.stringify(draft));
+  } catch {
+    // Storage quota yoki private mode draftni bloklasa Create ishlashda davom etadi.
+  }
+}
+
+function clearStoredPostDraft(userId: string): void {
+  try {
+    localStorage.removeItem(postDraftKey(userId));
+  } catch {
+    // no-op
+  }
 }
 
 function draftMusicObject(input?: PostMusicInput | null): { bucket: string; key: string } | null {
@@ -116,12 +205,13 @@ async function cleanupDraftMusic(input?: PostMusicInput | null): Promise<void> {
 export function PostComposer() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const { createPost } = usePosts();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const musicRef = useRef<PostMusicInput | null>(null);
   const dragDepthRef = useRef(0);
+  const hydratedDraftOwnerRef = useRef<string | null>(null);
 
   const [content, setContent] = useState('');
   const [formattedContent, setFormattedContent] = useState<AlsamosRichTextDocument | null>(null);
@@ -139,6 +229,8 @@ export function PostComposer() {
   const [showMusic, setShowMusic] = useState(false);
   const [showCollaborators, setShowCollaborators] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
+  const [draftHydrated, setDraftHydrated] = useState(false);
+  const [richEditorVersion, setRichEditorVersion] = useState(0);
 
   /** Media editor targetlari sticker qatlamidan alohida boshqariladi. */
   const [imageTargetId, setImageTargetId] = useState<string | null>(null);
@@ -164,6 +256,96 @@ export function PostComposer() {
     markAttachmentsPublished,
     uploadAll,
   } = usePostAttachments({ visibility });
+
+  const draftOwnerId = user?.id ?? profile?.id ?? null;
+
+  useEffect(() => {
+    if (!draftOwnerId || hydratedDraftOwnerRef.current === draftOwnerId) return;
+
+    hydratedDraftOwnerRef.current = draftOwnerId;
+    const draft = readStoredPostDraft(draftOwnerId);
+
+    if (draft) {
+      setContent(draft.content);
+      setFormattedContent(draft.formattedContent);
+      setVisibility(draft.visibility);
+      setPoll(draft.poll);
+      setLocation(draft.location);
+      setMusic(draft.music);
+      musicRef.current = draft.music;
+      setCollaborators(draft.collaborators.slice(0, MAX_COLLABORATORS));
+
+      if (draft.scheduledAt) {
+        const scheduled = new Date(draft.scheduledAt);
+        setScheduledAt(Number.isNaN(scheduled.getTime()) ? null : scheduled);
+      } else {
+        setScheduledAt(null);
+      }
+
+      setRichEditorVersion((current) => current + 1);
+
+      if (draft.hadMedia) {
+        toast({
+          title: 'Qoralama tiklandi',
+          description:
+            'Matn va sozlamalar tiklandi. Xavfsizlik sabab media fayllarni qayta tanlang.',
+        });
+      }
+    }
+
+    setDraftHydrated(true);
+  }, [draftOwnerId, toast]);
+
+  useEffect(() => {
+    if (!draftHydrated || !draftOwnerId) return;
+
+    const hasDraftContent =
+      content.trim().length > 0 ||
+      Boolean(formattedContent) ||
+      Boolean(poll) ||
+      Boolean(location) ||
+      Boolean(music) ||
+      collaborators.length > 0 ||
+      Boolean(scheduledAt) ||
+      attachments.length > 0 ||
+      visibility !== 'public';
+
+    const timer = window.setTimeout(() => {
+      if (!hasDraftContent) {
+        clearStoredPostDraft(draftOwnerId);
+        return;
+      }
+
+      writeStoredPostDraft(draftOwnerId, {
+        version: POST_DRAFT_VERSION,
+        savedAt: Date.now(),
+        content,
+        formattedContent,
+        visibility,
+        poll,
+        location,
+        // Device audio refresh lifecycle binary obyektga bog'liq; katalog musiqa persist bo'ladi.
+        music: music?.track?.source === 'device' ? null : music,
+        collaborators,
+        scheduledAt: scheduledAt?.toISOString() ?? null,
+        hadMedia: attachments.length > 0,
+      });
+    }, 450);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    attachments.length,
+    collaborators,
+    content,
+    draftHydrated,
+    draftOwnerId,
+    formattedContent,
+    location,
+    music,
+    poll,
+    scheduledAt,
+    visibility,
+  ]);
 
   useEffect(() => {
     musicRef.current = music;
@@ -432,6 +614,7 @@ export function PostComposer() {
       setCollaborators([]);
       setScheduledAt(null);
       setStickerDrafts({});
+      if (draftOwnerId) clearStoredPostDraft(draftOwnerId);
       navigate('/home');
     } finally {
       setIsPosting(false);
@@ -452,6 +635,7 @@ export function PostComposer() {
     clearAttachments,
     markAttachmentsPublished,
     navigate,
+    draftOwnerId,
   ]);
 
   return (
@@ -539,6 +723,7 @@ export function PostComposer() {
             </div>
             <div className="p-3 sm:p-4">
               <RichTextComposer
+                key={richEditorVersion}
                 value={formattedContent}
                 onChange={({ plainText, formattedContent: nextDocument }) => {
                   setContent(plainText);
