@@ -85,6 +85,7 @@ interface RichTextComposerProps {
   onChange: (value: RichTextComposerValue) => void;
   placeholder?: string;
   className?: string;
+  compact?: boolean;
 }
 
 type BlockType = 'paragraph' | 'h1' | 'h2' | 'h3' | 'quote' | 'bullet';
@@ -508,6 +509,7 @@ export function RichTextComposer({
   onChange,
   placeholder = 'Nima yangilik?',
   className,
+  compact = false,
 }: RichTextComposerProps) {
   const editorRef = useRef<LexicalEditor | null>(null);
   const initialValueRef = useRef<AlsamosRichTextDocument | null | undefined>(value);
@@ -591,11 +593,14 @@ export function RichTextComposer({
     <LexicalComposer initialConfig={initialConfig}>
       <div className={cn('relative p-0', className)}>
         <RichToolbar />
-        <div className="relative mt-2 min-h-[130px]">
+        <div className={cn('relative mt-2', compact ? 'min-h-[76px]' : 'min-h-[130px]')}>
           <RichTextPlugin
             contentEditable={
               <ContentEditable
-                className="min-h-[130px] w-full whitespace-pre-wrap break-words bg-transparent text-sm leading-relaxed outline-none"
+                className={cn(
+                  'w-full whitespace-pre-wrap break-words bg-transparent text-sm leading-relaxed outline-none',
+                  compact ? 'min-h-[76px]' : 'min-h-[130px]',
+                )}
                 aria-label={placeholder}
                 spellCheck
               />
