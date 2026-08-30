@@ -60,7 +60,6 @@ import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { MapBottomSheet, type MapSheetSnap } from '@/components/map/MapBottomSheet';
 import { MapOverviewPanel } from '@/components/map/MapOverviewPanel';
-import { MapDataCredit } from '@/components/map/MapDataCredit';
 
 const DEFAULT_CENTER = { latitude: 41.311081, longitude: 69.240562 };
 
@@ -1459,13 +1458,6 @@ export default function MapPage() {
         </button>
       </div>
 
-      <MapDataCredit
-        layerId={layerId}
-        overlays={overlays}
-        className="right-2 md:bottom-2"
-        style={isMobile ? { bottom: sheetHeightPx + 4 } : undefined}
-      />
-
       {/* Pastdagi suzuvchi panel */}
       <MapBottomSheet snap={snap} onSnapChange={setSnap} onHeightChange={setSheetHeightPx}>
         {snap === 'peek' && panel === 'search' ? (
@@ -1482,7 +1474,7 @@ export default function MapPage() {
 
         <div
           className={cn(
-            'min-h-0 flex-1',
+            'min-h-0 flex-1 overflow-hidden',
             snap === 'peek' && panel === 'search' ? 'hidden md:block' : 'block',
           )}
         >
