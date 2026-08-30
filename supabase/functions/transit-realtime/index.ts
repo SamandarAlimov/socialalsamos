@@ -42,11 +42,46 @@ type StaticRoute = {
   mode: "bus" | "trolleybus" | "minibus" | "tram" | "subway" | "train" | "other";
 };
 
+type StaticTrip = {
+  id: string;
+  routeId: string;
+  serviceId: string;
+  shapeId: string | null;
+  headsign: string | null;
+  directionId: string | null;
+};
+
+type StaticDeparture = {
+  tripId: string;
+  timeS: number;
+  stopSequence: number;
+};
+
+type CalendarService = {
+  startDate: string;
+  endDate: string;
+  weekdays: [
+    boolean,
+    boolean,
+    boolean,
+    boolean,
+    boolean,
+    boolean,
+    boolean,
+  ];
+};
+
 type StaticData = {
   stops: StaticStop[];
   routes: Map<string, StaticRoute>;
+  trips: Map<string, StaticTrip>;
   tripRoute: Map<string, string>;
   stopRoutes: Map<string, string[]>;
+  stopDepartures: Map<string, StaticDeparture[]>;
+  shapes: Map<string, [number, number][]>;
+  calendar: Map<string, CalendarService>;
+  calendarDates: Map<string, Map<string, 1 | 2>>;
+  timezone: string;
   loadedAt: number;
 };
 
@@ -253,6 +288,133 @@ function gtfsRouteMode(
   return "other";
 }
 
+function parseGtfsTimeSeconds(value: string): number | null {
+  const match = String(value || "").match(/^(\d{1,3}):(\d{2}):(\d{2})$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const seconds = Number(match[3]);
+  if (
+    !Number.isFinite(hours) ||
+    minutes < 0 ||
+    minutes > 59 ||
+    seconds < 0 ||
+    seconds > 59
+  ) {
+    return null;
+  }
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
+function gtfsDateShift(dateKey: string, days: number): string {
+  if (!/^\d{8}$/.test(dateKey)) return dateKey;
+  const year = Number(dateKey.slice(0, 4));
+  const month = Number(dateKey.slice(4, 6));
+  const day = Number(dateKey.slice(6, 8));
+  const date = new Date(Date.UTC(year, month - 1, day + days, 12, 0, 0));
+  return [
+    date.getUTCFullYear(),
+    String(date.getUTCMonth() + 1).padStart(2, "0"),
+    String(date.getUTCDate()).padStart(2, "0"),
+  ].join("");
+}
+
+function gtfsWeekdayIndex(dateKey: string): number {
+  if (!/^\d{8}$/.test(dateKey)) return 0;
+  const date = new Date(Date.UTC(
+    Number(dateKey.slice(0, 4)),
+    Number(dateKey.slice(4, 6)) - 1,
+    Number(dateKey.slice(6, 8)),
+    12,
+    0,
+    0,
+  ));
+  // JS Sunday=0; GTFS array below Monday=0.
+  return (date.getUTCDay() + 6) % 7;
+}
+
+function localClock(
+  timeZone: string,
+  timestampMs = Date.now(),
+): { dateKey: string; secondsOfDay: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(timestampMs));
+  const part = (type: string) =>
+    parts.find((item) => item.type === type)?.value || "00";
+  return {
+    dateKey: part("year") + part("month") + part("day"),
+    secondsOfDay:
+      Number(part("hour")) * 3600 +
+      Number(part("minute")) * 60 +
+      Number(part("second")),
+  };
+}
+
+function serviceRunsOn(
+  data: StaticData,
+  serviceId: string,
+  dateKey: string,
+): boolean {
+  const exception = data.calendarDates.get(dateKey)?.get(serviceId);
+  if (exception === 1) return true;
+  if (exception === 2) return false;
+
+  const service = data.calendar.get(serviceId);
+  if (!service) return false;
+  if (dateKey < service.startDate || dateKey > service.endDate) return false;
+  return Boolean(service.weekdays[gtfsWeekdayIndex(dateKey)]);
+}
+
+function scheduledArrivals(
+  data: StaticData,
+  stopId: string,
+  limit = 60,
+) {
+  const departures = data.stopDepartures.get(stopId) ?? [];
+  if (!departures.length) return [];
+
+  const now = localClock(data.timezone);
+  const result: any[] = [];
+
+  for (const dayOffset of [-1, 0, 1]) {
+    const serviceDate = gtfsDateShift(now.dateKey, dayOffset);
+    for (const departure of departures) {
+      const trip = data.trips.get(departure.tripId);
+      if (!trip || !serviceRunsOn(data, trip.serviceId, serviceDate)) continue;
+      const deltaS =
+        dayOffset * 86400 +
+        departure.timeS -
+        now.secondsOfDay;
+      if (deltaS < -60 || deltaS > 4 * 60 * 60) continue;
+
+      const route = data.routes.get(trip.routeId);
+      if (!route) continue;
+      result.push({
+        routeId: route.id,
+        ref: route.ref,
+        name: route.name,
+        color: route.color,
+        tripId: trip.id,
+        headsign: trip.headsign,
+        directionId: trip.directionId,
+        minutes: Math.max(0, Math.ceil(deltaS / 60)),
+        scheduled: true,
+      });
+    }
+  }
+
+  result.sort((a, b) => a.minutes - b.minutes);
+  return result.slice(0, limit);
+}
+
 async function loadStatic(): Promise<StaticData | null> {
   const url = env("TRANSIT_GTFS_STATIC_URL");
   if (!url) return null;
@@ -288,23 +450,117 @@ async function loadStatic(): Promise<StaticData | null> {
     });
   }
 
+  const trips = new Map<string, StaticTrip>();
   const tripRoute = new Map<string, string>();
   for (const row of records(read("trips.txt"))) {
-    if (row.trip_id && row.route_id) tripRoute.set(row.trip_id, row.route_id);
+    if (!row.trip_id || !row.route_id) continue;
+    tripRoute.set(row.trip_id, row.route_id);
+    trips.set(row.trip_id, {
+      id: row.trip_id,
+      routeId: row.route_id,
+      serviceId: row.service_id || "",
+      shapeId: row.shape_id || null,
+      headsign: row.trip_headsign || null,
+      directionId: row.direction_id || null,
+    });
+  }
+
+  const agency = records(read("agency.txt"))[0] ?? {};
+  const timezone =
+    env("TRANSIT_TIMEZONE") ||
+    agency.agency_timezone ||
+    "UTC";
+
+  const calendar = new Map<string, CalendarService>();
+  for (const row of records(read("calendar.txt"))) {
+    if (!row.service_id) continue;
+    calendar.set(row.service_id, {
+      startDate: row.start_date || "00000000",
+      endDate: row.end_date || "99999999",
+      weekdays: [
+        row.monday === "1",
+        row.tuesday === "1",
+        row.wednesday === "1",
+        row.thursday === "1",
+        row.friday === "1",
+        row.saturday === "1",
+        row.sunday === "1",
+      ],
+    });
+  }
+
+  const calendarDates = new Map<string, Map<string, 1 | 2>>();
+  for (const row of records(read("calendar_dates.txt"))) {
+    if (!row.service_id || !/^\d{8}$/.test(row.date || "")) continue;
+    const exception = Number(row.exception_type) === 2 ? 2 : 1;
+    const byService =
+      calendarDates.get(row.date) ?? new Map<string, 1 | 2>();
+    byService.set(row.service_id, exception);
+    calendarDates.set(row.date, byService);
+  }
+
+  const shapesRaw = new Map<
+    string,
+    { sequence: number; coordinate: [number, number] }[]
+  >();
+  const shapesText = read("shapes.txt");
+  if (shapesText) {
+    forEachRecord(shapesText, (row) => {
+      const latitude = Number(row.shape_pt_lat);
+      const longitude = Number(row.shape_pt_lon);
+      if (
+        !row.shape_id ||
+        !Number.isFinite(latitude) ||
+        !Number.isFinite(longitude)
+      ) {
+        return;
+      }
+      const list = shapesRaw.get(row.shape_id) ?? [];
+      list.push({
+        sequence: Number(row.shape_pt_sequence) || list.length,
+        coordinate: [latitude, longitude],
+      });
+      shapesRaw.set(row.shape_id, list);
+    });
+  }
+  const shapes = new Map<string, [number, number][]>();
+  for (const [shapeId, points] of shapesRaw) {
+    points.sort((a, b) => a.sequence - b.sequence);
+    shapes.set(
+      shapeId,
+      points.map((point) => point.coordinate),
+    );
   }
 
   const stopRouteSets = new Map<string, Set<string>>();
+  const stopDepartures = new Map<string, StaticDeparture[]>();
   // stop_times.txt odatda feedning eng katta fayli. Uni to‘liq rows[]
   // ko‘rinishida xotiraga ko‘tarmaymiz; bitta recorddan oqim kabi o‘tamiz.
   forEachRecord(read("stop_times.txt"), (row) => {
     if (!row.stop_id || !row.trip_id) return;
     const routeId = tripRoute.get(row.trip_id);
     if (!routeId) return;
+
     const set =
       stopRouteSets.get(row.stop_id) ?? new Set<string>();
     set.add(routeId);
     stopRouteSets.set(row.stop_id, set);
+
+    const timeS = parseGtfsTimeSeconds(
+      row.departure_time || row.arrival_time,
+    );
+    if (timeS == null) return;
+    const list = stopDepartures.get(row.stop_id) ?? [];
+    list.push({
+      tripId: row.trip_id,
+      timeS,
+      stopSequence: Number(row.stop_sequence) || 0,
+    });
+    stopDepartures.set(row.stop_id, list);
   });
+  for (const list of stopDepartures.values()) {
+    list.sort((a, b) => a.timeS - b.timeS);
+  }
   const stopRoutes = new Map<string, string[]>(
     Array.from(stopRouteSets.entries()).map(([stopId, set]) => [
       stopId,
@@ -315,8 +571,14 @@ async function loadStatic(): Promise<StaticData | null> {
   staticCache = {
     stops,
     routes,
+    trips,
     tripRoute,
     stopRoutes,
+    stopDepartures,
+    shapes,
+    calendar,
+    calendarDates,
+    timezone,
     loadedAt: Date.now(),
   };
   return staticCache;
@@ -506,16 +768,44 @@ async function staticStopRoutes(payload: Record<string, any>) {
   }
 
   const routeIds = staticData.stopRoutes.get(stopId) ?? [];
+  const departures = staticData.stopDepartures.get(stopId) ?? [];
   const routes = routeIds
     .map((routeId) => staticData.routes.get(routeId))
     .filter((route): route is StaticRoute => Boolean(route))
-    .map((route) => ({
-      id: route.id,
-      ref: route.ref,
-      name: route.name,
-      color: route.color,
-      mode: route.mode,
-    }));
+    .map((route) => {
+      const representative = departures
+        .map((departure) => staticData.trips.get(departure.tripId))
+        .find(
+          (trip): trip is StaticTrip =>
+            Boolean(
+              trip &&
+              trip.routeId === route.id &&
+              trip.shapeId &&
+              staticData.shapes.has(trip.shapeId),
+            ),
+        );
+      const fallbackTrip = departures
+        .map((departure) => staticData.trips.get(departure.tripId))
+        .find(
+          (trip): trip is StaticTrip =>
+            Boolean(trip && trip.routeId === route.id),
+        );
+      const trip = representative ?? fallbackTrip ?? null;
+      return {
+        id: route.id,
+        ref: route.ref,
+        name: route.name,
+        color: route.color,
+        mode: route.mode,
+        headsign: trip?.headsign ?? null,
+        directionId: trip?.directionId ?? null,
+        shapeId: trip?.shapeId ?? null,
+        shapeCoordinates:
+          trip?.shapeId && staticData.shapes.has(trip.shapeId)
+            ? staticData.shapes.get(trip.shapeId)
+            : [],
+      };
+    });
 
   return {
     ...providerMeta(),
@@ -532,9 +822,37 @@ async function arrivals(payload: Record<string, any>) {
   if (normalized) return { ...providerMeta(), ...normalized };
 
   const tripUpdatesUrl = env("TRANSIT_GTFS_RT_TRIP_UPDATES_URL");
-  if (!tripUpdatesUrl) return { ...providerMeta(), configured: false, realtime: false, arrivals: [] };
-
   const staticData = await loadStatic();
+  const lat = Number(payload.latitude);
+  const lng = Number(payload.longitude);
+  const matched = staticData && Number.isFinite(lat) && Number.isFinite(lng)
+    ? nearestStop(
+          staticData,
+          lat,
+          lng,
+          String(payload.stopName || ""),
+        )
+    : null;
+  const requestedStopId = String(payload.gtfsStopId || "");
+  const stopId = requestedStopId || matched?.id || "";
+  const schedule =
+    staticData && stopId
+      ? scheduledArrivals(staticData, stopId)
+      : [];
+
+  if (!tripUpdatesUrl) {
+    return {
+      ...providerMeta(),
+      configured: false,
+      realtime: false,
+      gtfsStopId: stopId || null,
+      matchedStopName: matched?.name ?? null,
+      arrivals: [],
+      scheduledArrivals: schedule,
+    };
+  }
+
+
   const lat = Number(payload.latitude);
   const lng = Number(payload.longitude);
   const matched = staticData && Number.isFinite(lat) && Number.isFinite(lng)
@@ -550,12 +868,21 @@ async function arrivals(payload: Record<string, any>) {
       realtime: false,
       reason: "GTFS stop mosligi topilmadi",
       arrivals: [],
+      scheduledArrivals: [],
     };
   }
 
   const feed = await decodeFeed(tripUpdatesUrl);
   if (!feedFresh(feed)) {
-    return { ...providerMeta(), configured: true, realtime: false, stale: true, arrivals: [], gtfsStopId: stopId };
+    return {
+      ...providerMeta(),
+      configured: true,
+      realtime: false,
+      stale: true,
+      arrivals: [],
+      scheduledArrivals: schedule,
+      gtfsStopId: stopId,
+    };
   }
 
   const nowSeconds = Date.now() / 1000;
@@ -594,6 +921,7 @@ async function arrivals(payload: Record<string, any>) {
     gtfsStopId: stopId,
     matchedStopName: matched?.name ?? null,
     arrivals: result.slice(0, 40),
+    scheduledArrivals: schedule,
   };
 }
 
