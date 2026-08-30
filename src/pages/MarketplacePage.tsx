@@ -39,6 +39,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Slider } from '@/components/ui/slider';
 import { formatPrice } from '@/lib/marketplace';
 import { cn } from '@/lib/utils';
+import { marketplaceUz } from '@/i18n/marketplace';
 
 const SEARCH_DEBOUNCE_MS = 350;
 
@@ -86,7 +87,7 @@ export default function MarketplacePage() {
   const [sellingView, setSellingView] = useState<'products' | 'orders'>('products');
 
   // /marketplace?product=<id> — xaritadagi yaqin e'lon kartasidan kelganda
-  // mahsulot oynasini to'g'ridan-to'g'ri ochamiz.
+  // {marketplaceUz.page.products} oynasini to'g'ridan-to'g'ri ochamiz.
   useEffect(() => {
     const productId = searchParams.get('product');
     if (!productId) return;
@@ -256,7 +257,7 @@ export default function MarketplacePage() {
                   size="icon"
                   className="relative h-10 w-10 rounded-xl bg-muted/50 hover:bg-muted"
                   onClick={() => setShowCart(true)}
-                  aria-label={itemCount > 0 ? `Savat, ${itemCount} dona mahsulot` : 'Savat'}
+                  aria-label={itemCount > 0 ? `Savat, ${itemCount} dona {marketplaceUz.page.products}` : 'Savat'}
                 >
                   <ShoppingBag className="h-5 w-5" />
                   {itemCount > 0 && (
@@ -289,8 +290,8 @@ export default function MarketplacePage() {
                   onChange={(e) => setSearchInput(e.target.value)}
                   onFocus={() => setSearchFocused(true)}
                   onBlur={() => setSearchFocused(false)}
-                  placeholder="Mahsulot, do'kon izlash..."
-                  aria-label="Mahsulot izlash"
+                  placeholder={marketplaceUz.page.searchPlaceholder}
+                  aria-label={marketplaceUz.page.searchLabel}
                   className={cn(
                     'pl-10 pr-9 h-11 rounded-xl border-border/50 bg-muted/40 backdrop-blur-sm',
                     'focus:bg-background focus:border-primary/30 focus:ring-2 focus:ring-primary/10',
@@ -301,7 +302,7 @@ export default function MarketplacePage() {
                   <button
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                     onClick={() => setSearchInput('')}
-                    aria-label="Qidiruvni tozalash"
+                    aria-label={marketplaceUz.page.clearSearch}
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -315,7 +316,7 @@ export default function MarketplacePage() {
                   priceFilterActive && 'border-primary/50 text-primary',
                 )}
                 onClick={() => setShowFilters(true)}
-                aria-label="Filtrlar"
+                aria-label={marketplaceUz.page.filters}
               >
                 <SlidersHorizontal className="h-4 w-4" />
                 {priceFilterActive && (
@@ -387,7 +388,7 @@ export default function MarketplacePage() {
                       setSearchParams(next, { replace: true });
                     }}
                   >
-                    Barchasi
+                    {marketplaceUz.page.all}
                   </button>
                 </div>
               )}
@@ -406,7 +407,7 @@ export default function MarketplacePage() {
                     )}
                   >
                     <Sparkles className="h-3.5 w-3.5" />
-                    Barchasi
+                    {marketplaceUz.page.all}
                   </button>
                   {categories.map((cat) => (
                     <button
@@ -435,20 +436,20 @@ export default function MarketplacePage() {
                     <div className="flex-1 space-y-2">
                       <div className="flex items-center gap-2">
                         <Crown className="h-4 w-4 text-primary" />
-                        <span className="text-xs font-semibold text-primary uppercase tracking-wider">Tanlangan</span>
+                        <span className="text-xs font-semibold text-primary uppercase tracking-wider">{marketplaceUz.page.selected}</span>
                       </div>
                       <h2 className="text-lg font-bold leading-tight">
-                        Premium mahsulotlarni kashf eting
+                        {marketplaceUz.page.heroTitle}
                       </h2>
                       <p className="text-sm text-muted-foreground">
-                        Eng yaxshi sotuvchilardan tanlangan mahsulotlar
+                        {marketplaceUz.page.heroDescription}
                       </p>
                       <Button
                         size="sm"
                         className="mt-2 rounded-lg shadow-lg shadow-primary/20"
                         onClick={() => handleProductSelect(featuredProducts[0])}
                       >
-                        Ko'rish
+                        {marketplaceUz.page.view}
                         <ChevronRight className="h-3.5 w-3.5 ml-1" />
                       </Button>
                     </div>
@@ -476,7 +477,7 @@ export default function MarketplacePage() {
                       <div className="p-1.5 rounded-lg bg-orange-500/10">
                         <Flame className="h-4 w-4 text-orange-500" />
                       </div>
-                      <h3 className="font-bold">Trendda</h3>
+                      <h3 className="font-bold">{marketplaceUz.page.trending}</h3>
                     </div>
                     <Button
                       variant="ghost"
@@ -484,7 +485,7 @@ export default function MarketplacePage() {
                       className="text-xs text-muted-foreground"
                       onClick={() => { setSortBy('popular'); setPriceRange(null); }}
                     >
-                      Barchasi <ChevronRight className="h-3 w-3 ml-0.5" />
+                      {marketplaceUz.page.all} <ChevronRight className="h-3 w-3 ml-0.5" />
                     </Button>
                   </div>
                   <ScrollArea className="w-full">
@@ -526,7 +527,7 @@ export default function MarketplacePage() {
               {/* Sort & Layout Controls */}
               <div className="flex items-center justify-between">
                 <div className="text-sm text-muted-foreground">
-                  <span className="font-semibold text-foreground tabular-nums">{sortedProducts.length}</span> mahsulot
+                  <span className="font-semibold text-foreground tabular-nums">{sortedProducts.length}</span> {marketplaceUz.page.products}
                   {hiddenByPriceFilter > 0 && (
                     <button
                       className="ml-2 text-xs text-primary font-medium hover:underline"
@@ -542,7 +543,7 @@ export default function MarketplacePage() {
                     size="icon"
                     className={cn('h-8 w-8 rounded-lg', gridLayout === 'grid' && 'bg-muted')}
                     onClick={() => setGridLayout('grid')}
-                    aria-label="Katakcha ko'rinish"
+                    aria-label={marketplaceUz.page.gridView}
                     aria-pressed={gridLayout === 'grid'}
                   >
                     <Grid3X3 className="h-3.5 w-3.5" />
@@ -552,7 +553,7 @@ export default function MarketplacePage() {
                     size="icon"
                     className={cn('h-8 w-8 rounded-lg', gridLayout === 'list' && 'bg-muted')}
                     onClick={() => setGridLayout('list')}
-                    aria-label="Ro'yxat ko'rinish"
+                    aria-label={marketplaceUz.page.listView}
                     aria-pressed={gridLayout === 'list'}
                   >
                     <LayoutList className="h-3.5 w-3.5" />
@@ -566,11 +567,11 @@ export default function MarketplacePage() {
                   <div className="w-16 h-16 rounded-2xl bg-destructive/10 flex items-center justify-center mb-4">
                     <AlertTriangle className="h-8 w-8 text-destructive" />
                   </div>
-                  <h3 className="font-semibold text-lg mb-1">Mahsulotlar yuklanmadi</h3>
+                  <h3 className="font-semibold text-lg mb-1">{marketplaceUz.page.loadFailed}</h3>
                   <p className="text-sm text-muted-foreground max-w-xs mb-4">{productsError}</p>
                   <Button variant="outline" className="rounded-xl" onClick={() => refreshProducts()}>
                     <RotateCcw className="h-4 w-4 mr-2" />
-                    Qayta urinish
+                    {marketplaceUz.page.retry}
                   </Button>
                 </div>
               ) : productsLoading ? (
@@ -614,13 +615,13 @@ export default function MarketplacePage() {
               ) : (
                 <EmptyState
                   icon={<Package className="h-16 w-16" />}
-                  title="Mahsulot topilmadi"
+                  title={marketplaceUz.page.notFound}
                   description={
                     searchQuery
                       ? "Boshqa so'z bilan izlab ko'ring"
                       : priceFilterActive
                         ? "Narx filtri juda tor — filtrni tozalab ko'ring"
-                        : "Birinchi bo'lib mahsulot joylashtiring!"
+                        : "Birinchi bo'lib {marketplaceUz.page.products} joylashtiring!"
                   }
                 />
               )}
@@ -639,8 +640,8 @@ export default function MarketplacePage() {
               {!user ? (
                 <EmptyState
                   icon={<ClipboardList className="h-16 w-16" />}
-                  title="Tizimga kiring"
-                  description="Buyurtmalarni ko'rish uchun tizimga kiring"
+                  title={marketplaceUz.page.signIn}
+                  description={marketplaceUz.page.ordersSignIn}
                 />
               ) : (
                 <OrdersView onProductSelect={handleProductSelect} />
@@ -660,8 +661,8 @@ export default function MarketplacePage() {
               {!user ? (
                 <EmptyState
                   icon={<Store className="h-16 w-16" />}
-                  title="Tizimga kiring"
-                  description="Mahsulot sotish uchun ro'yxatdan o'ting"
+                  title={marketplaceUz.page.signIn}
+                  description={marketplaceUz.page.sellingSignIn}
                 />
               ) : !seller ? (
                 <BecomeSeller onSuccess={refreshSeller} />
@@ -678,8 +679,8 @@ export default function MarketplacePage() {
                   <div className="grid grid-cols-3 gap-3">
                     {[
                       { value: sellerProducts.length, label: 'Mahsulotlar', color: 'from-blue-500/10 to-blue-500/5' },
-                      { value: seller.total_sales ?? 0, label: 'Sotuvlar', color: 'from-green-500/10 to-green-500/5' },
-                      { value: (seller.rating ?? 0) > 0 ? seller.rating.toFixed(1) : '—', label: 'Reyting', color: 'from-amber-500/10 to-amber-500/5' },
+                      { value: seller.total_sales ?? 0, label: marketplaceUz.page.sales, color: 'from-green-500/10 to-green-500/5' },
+                      { value: (seller.rating ?? 0) > 0 ? seller.rating.toFixed(1) : '—', label: marketplaceUz.page.rating, color: 'from-amber-500/10 to-amber-500/5' },
                     ].map((stat, i) => (
                       <div key={i} className={cn(
                         'rounded-2xl p-4 text-center border border-border/30',
@@ -738,7 +739,7 @@ export default function MarketplacePage() {
                         onClick={() => setShowCreateProduct(true)}
                       >
                         <Plus className="h-4 w-4 mr-2" />
-                        Yangi mahsulot qo'shish
+                        Yangi {marketplaceUz.page.products} qo'shish
                       </Button>
 
                       {sellerLoading ? (
@@ -757,7 +758,7 @@ export default function MarketplacePage() {
                         <EmptyState
                           icon={<Package className="h-12 w-12" />}
                           title="Mahsulotlar yo'q"
-                          description="Birinchi mahsulotingizni joylashtiring!"
+                          description="Birinchi {marketplaceUz.page.products}ingizni joylashtiring!"
                         />
                       )}
                     </>
@@ -779,8 +780,8 @@ export default function MarketplacePage() {
               {!user ? (
                 <EmptyState
                   icon={<Heart className="h-16 w-16" />}
-                  title="Tizimga kiring"
-                  description="Saqlangan mahsulotlarni ko'rish uchun tizimga kiring"
+                  title={marketplaceUz.page.signIn}
+                  description="Saqlangan {marketplaceUz.page.products}larni ko'rish uchun tizimga kiring"
                 />
               ) : savedLoading ? (
                 <div className="grid grid-cols-2 gap-3">
@@ -802,8 +803,8 @@ export default function MarketplacePage() {
               ) : (
                 <EmptyState
                   icon={<Heart className="h-16 w-16" />}
-                  title="Saqlangan mahsulotlar yo'q"
-                  description="Yoqtirgan mahsulotlaringizni saqlang"
+                  title="Saqlangan {marketplaceUz.page.products}lar yo'q"
+                  description="Yoqtirgan {marketplaceUz.page.products}laringizni saqlang"
                 />
               )}
             </motion.div>

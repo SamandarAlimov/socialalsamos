@@ -22,6 +22,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { formatPrice, getShippingCost, checkoutErrorMessage } from '@/lib/marketplace';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { marketplaceUz } from '@/i18n/marketplace';
 import { toast } from 'sonner';
 
 interface CheckoutSheetProps {
@@ -276,12 +277,12 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                 </Button>
               )}
               <SheetTitle className="flex-1 text-left">
-                {step === 'address' && 'Yetkazib berish manzili'}
-                {step === 'payment' && "To'lov usuli"}
-                {step === 'review' && 'Buyurtmani tasdiqlash'}
-                {step === 'pending' && "To'lov kutilmoqda"}
-                {step === 'success' && "To'lov muvaffaqiyatli!"}
-                {step === 'failed' && "To'lov amalga oshmadi"}
+                {step === 'address' && marketplaceUz.checkout.addressTitle}
+                {step === 'payment' && marketplaceUz.checkout.paymentTitle}
+                {step === 'review' && marketplaceUz.checkout.reviewTitle}
+                {step === 'pending' && marketplaceUz.checkout.pendingTitle}
+                {step === 'success' && marketplaceUz.checkout.successTitle}
+                {step === 'failed' && marketplaceUz.checkout.failedTitle}
               </SheetTitle>
             </div>
             {step !== 'success' && step !== 'pending' && step !== 'failed' && (
@@ -309,7 +310,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   {cartItems.length === 0 && (
                     <div className="flex items-start gap-2 p-3 rounded-xl bg-muted/40 text-sm text-muted-foreground">
                       <ShoppingBag className="h-4 w-4 mt-0.5 shrink-0" />
-                      <span>Savat bo'sh. Buyurtma berish uchun mahsulot qo'shing.</span>
+                      <span>{marketplaceUz.checkout.emptyCart}</span>
                     </div>
                   )}
                   {unavailableItems.length > 0 && (
@@ -322,10 +323,10 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                     </div>
                   )}
                   <div className="space-y-3">
-                    <Field label="To'liq ism *">
+                    <Field label={marketplaceUz.checkout.fullName}>
                       <Input value={address.full_name} onChange={e => setAddress(p => ({ ...p, full_name: e.target.value }))} placeholder="Ism Familiya" className="rounded-xl h-11" />
                     </Field>
-                    <Field label="Telefon raqam *">
+                    <Field label={marketplaceUz.checkout.phone}>
                       <Input
                         value={address.phone}
                         onChange={e => setAddress(p => ({ ...p, phone: e.target.value }))}
@@ -334,21 +335,21 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                         className="rounded-xl h-11"
                       />
                       {address.phone.length > 0 && !isValidPhone(address.phone) && (
-                        <p className="text-[11px] text-destructive">Telefon raqam to'liq emas</p>
+                        <p className="text-[11px] text-destructive">{marketplaceUz.checkout.phoneInvalid}</p>
                       )}
                     </Field>
-                    <Field label="Ko'cha, uy *">
+                    <Field label={marketplaceUz.checkout.street}>
                       <Input value={address.street} onChange={e => setAddress(p => ({ ...p, street: e.target.value }))} placeholder="Ko'cha nomi, uy raqami" className="rounded-xl h-11" />
                     </Field>
                     <div className="grid grid-cols-2 gap-3">
-                      <Field label="Shahar *">
+                      <Field label={marketplaceUz.checkout.city}>
                         <Input value={address.city} onChange={e => setAddress(p => ({ ...p, city: e.target.value }))} placeholder="Toshkent" className="rounded-xl h-11" />
                       </Field>
-                      <Field label="Viloyat">
+                      <Field label={marketplaceUz.checkout.region}>
                         <Input value={address.region} onChange={e => setAddress(p => ({ ...p, region: e.target.value }))} placeholder="Toshkent sh." className="rounded-xl h-11" />
                       </Field>
                     </div>
-                    <Field label="Izoh (ixtiyoriy)">
+                    <Field label={marketplaceUz.checkout.note}>
                       <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Qo'shimcha izoh..." className="rounded-xl resize-none" rows={2} />
                     </Field>
                   </div>
@@ -374,7 +375,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                       />
                       {provider.id === 'wallet' && (
                         <div className="mx-2 flex items-center justify-between rounded-xl bg-muted/30 px-3 py-2 text-xs">
-                          <span className="text-muted-foreground">Mavjud balans</span>
+                          <span className="text-muted-foreground">{marketplaceUz.checkout.availableBalance}</span>
                           <span className="font-bold tabular-nums">
                             {walletLoading ? '…' : formatPrice(walletBalance ?? 0, currency)}
                           </span>
@@ -383,7 +384,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                       {provider.id === 'wallet' && walletInsufficient && (
                         <div className="mx-2 flex items-center gap-2 rounded-xl bg-destructive/10 p-2.5 text-xs text-destructive">
                           <AlertCircle className="h-4 w-4 shrink-0" />
-                          <span className="flex-1">Balans yetarli emas. To'ldiring yoki boshqa usul tanlang.</span>
+                          <span className="flex-1">{marketplaceUz.checkout.insufficientBalance}</span>
                           <button
                             type="button"
                             onClick={goToPaymentSettings}
@@ -399,7 +400,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   {PENDING_PAYMENT_PROVIDERS.length > 0 && (
                     <div className="space-y-2 pt-2">
                       <p className="px-1 text-xs font-semibold text-muted-foreground">
-                        Tez orada ulanadi
+                        {marketplaceUz.checkout.comingSoon}
                       </p>
                       {PENDING_PAYMENT_PROVIDERS.map(provider => (
                         <div
@@ -413,7 +414,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-semibold">{provider.label}</p>
                             <p className="mt-0.5 text-xs text-muted-foreground">
-                              {provider.unavailableReason || "Hozircha mavjud emas"}
+                              {provider.unavailableReason || marketplaceUz.checkout.unavailable}
                             </p>
                           </div>
                         </div>
@@ -429,7 +430,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   >
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Plus className="h-4 w-4" />
-                      To'lov usullarini boshqarish
+                      {marketplaceUz.checkout.manageMethods}
                     </div>
                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
                   </button>
@@ -482,7 +483,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   </div>
 
                   <div className="space-y-2">
-                    <h4 className="text-sm font-medium">Mahsulotlar ({cartItems.length})</h4>
+                    <h4 className="text-sm font-medium">{marketplaceUz.checkout.products} ({cartItems.length})</h4>
                     {cartItems.map(item => {
                       const product = item.product;
                       if (!product) return null;
@@ -529,18 +530,18 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
 
                   <div className="p-3 rounded-xl bg-muted/30 border border-border/20 space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Mahsulotlar</span>
+                      <span className="text-muted-foreground">{marketplaceUz.checkout.products}</span>
                       <span className="tabular-nums">{formatPrice(cartTotal, currency)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Yetkazib berish</span>
+                      <span className="text-muted-foreground">{marketplaceUz.checkout.delivery}</span>
                       <span className="tabular-nums">
                         {shippingCost > 0 ? formatPrice(shippingCost, currency) : 'Bepul'}
                       </span>
                     </div>
                     <div className="h-px bg-border/30" />
                     <div className="flex justify-between font-bold">
-                      <span>Jami</span>
+                      <span>{marketplaceUz.checkout.total}</span>
                       <span className="text-primary text-lg tabular-nums">{formatPrice(grandTotal, currency)}</span>
                     </div>
                   </div>
@@ -568,7 +569,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
                     <Truck className="h-10 w-10 text-primary" />
                   </div>
-                  <h2 className="mb-1 text-xl font-bold">Buyurtma qabul qilindi</h2>
+                  <h2 className="mb-1 text-xl font-bold">{marketplaceUz.checkout.orderAccepted}</h2>
                   <p className="mb-5 max-w-xs text-sm text-muted-foreground">
                     {selectedProvider?.settlement === 'on_delivery'
                       ? "To'lov mahsulot yetkazilganda olinadi. Buyurtma holatini kuzatishingiz mumkin."
@@ -576,15 +577,15 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   </p>
                   <div className="mb-5 w-full rounded-2xl border border-border/50 bg-muted/20 p-4 text-left">
                     <div className="mb-2 flex justify-between text-sm">
-                      <span className="text-muted-foreground">Buyurtmalar</span>
+                      <span className="text-muted-foreground">{marketplaceUz.checkout.orders}</span>
                       <span className="font-semibold tabular-nums">{lastResult?.order_ids?.length ?? 0}</span>
                     </div>
                     <div className="mb-2 flex justify-between text-sm">
-                      <span className="text-muted-foreground">To'lov usuli</span>
+                      <span className="text-muted-foreground">{marketplaceUz.checkout.paymentMethod}</span>
                       <span className="font-semibold">{selectedProvider?.label}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Umumiy</span>
+                      <span className="text-muted-foreground">{marketplaceUz.checkout.overall}</span>
                       <span className="font-bold text-primary tabular-nums">{formatPrice(paidTotal, currency)}</span>
                     </div>
                   </div>
@@ -594,7 +595,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                       onClick={() => { onSuccess?.(); resetAndClose(); navigate('/marketplace?tab=orders'); }}
                     >
                       <Package className="mr-2 h-4 w-4" />
-                      Buyurtmalarim
+                      {marketplaceUz.checkout.myOrders}
                     </Button>
                     <Button
                       variant="ghost"
@@ -623,22 +624,22 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                     <CheckCircle className="h-10 w-10 text-green-500" />
                   </motion.div>
                   <h2 className="text-xl font-bold mb-1">
-                    To'lov muvaffaqiyatli!
+                    {marketplaceUz.checkout.successTitle}
                   </h2>
                   <p className="text-muted-foreground text-sm mb-5 max-w-xs">
                     To'lov muvaffaqiyatli yakunlandi. Kvitansiya buyurtmalar bo'limida saqlandi.
                   </p>
                   <div className="w-full rounded-2xl border border-border/50 bg-muted/20 p-4 mb-5 text-left">
                     <div className="flex justify-between text-sm mb-2">
-                      <span className="text-muted-foreground">Buyurtmalar</span>
+                      <span className="text-muted-foreground">{marketplaceUz.checkout.orders}</span>
                       <span className="font-semibold tabular-nums">{lastResult?.order_ids?.length ?? 0}</span>
                     </div>
                     <div className="flex justify-between text-sm mb-2">
-                      <span className="text-muted-foreground">To'lov usuli</span>
+                      <span className="text-muted-foreground">{marketplaceUz.checkout.paymentMethod}</span>
                       <span className="font-semibold">{selectedProvider?.label || "To'lov usuli"}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Umumiy</span>
+                      <span className="text-muted-foreground">{marketplaceUz.checkout.overall}</span>
                       <span className="font-bold text-primary tabular-nums">{formatPrice(paidTotal, currency)}</span>
                     </div>
                   </div>
@@ -648,7 +649,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                       onClick={() => { onSuccess?.(); resetAndClose(); navigate('/marketplace?tab=orders'); }}
                     >
                       <Package className="h-4 w-4 mr-2" />
-                      Buyurtmalarim
+                      {marketplaceUz.checkout.myOrders}
                     </Button>
                     <Button
                       variant="ghost"
@@ -671,7 +672,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   <div className="w-20 h-20 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
                     <AlertCircle className="h-10 w-10 text-destructive" />
                   </div>
-                  <h2 className="text-xl font-bold mb-1">Buyurtma amalga oshmadi</h2>
+                  <h2 className="text-xl font-bold mb-1">{marketplaceUz.checkout.failedOrder}</h2>
                   <p className="text-muted-foreground text-sm mb-5 max-w-xs">
                     {checkoutErrorMessage(lastResult?.error)}
                   </p>
@@ -682,7 +683,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                     {(selectedProvider?.id === 'wallet' || lastResult?.error === 'insufficient_balance') && (
                       <Button variant="outline" className="rounded-xl h-11" onClick={goToPaymentSettings}>
                         <Wallet className="h-4 w-4 mr-2" />
-                        Hamyonni to'ldirish
+                        {marketplaceUz.checkout.topUpWallet}
                       </Button>
                     )}
                     <Button variant="ghost" className="rounded-xl h-11" onClick={resetAndClose}>
@@ -702,7 +703,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   disabled={!isAddressValid || cartItems.length === 0 || unavailableItems.length > 0}
                   onClick={() => setStep('payment')}
                 >
-                  Davom etish
+                  {marketplaceUz.checkout.continue}
                   <ChevronRight className="h-4 w-4 ml-2" />
                 </Button>
               )}
@@ -712,7 +713,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   disabled={walletInsufficient || !selectedProvider}
                   onClick={() => setStep('review')}
                 >
-                  Ko'rib chiqish
+                  {marketplaceUz.checkout.review}
                   <ChevronRight className="h-4 w-4 ml-2" />
                 </Button>
               )}
@@ -723,9 +724,9 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   onClick={handlePlaceOrder}
                 >
                   {isProcessing ? (
-                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Buyurtma berilmoqda...</>
+                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> {marketplaceUz.checkout.placing}</>
                   ) : (
-                    <>Buyurtma berish — {formatPrice(grandTotal, currency)}</>
+                    <>{marketplaceUz.checkout.placeOrder} — {formatPrice(grandTotal, currency)}</>
                   )}
                 </Button>
               )}

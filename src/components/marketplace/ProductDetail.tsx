@@ -21,6 +21,7 @@ import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useToast } from '@/hooks/use-toast';
 import { conditionLabel, formatPrice, getDiscount, getStockState } from '@/lib/marketplace';
 import { cn } from '@/lib/utils';
+import { marketplaceUz } from '@/i18n/marketplace';
 
 interface ProductDetailProps {
   product: Product | null;
@@ -236,8 +237,8 @@ export function ProductDetail({
     }
 
     toast({
-      title: "Savatga qo'shildi",
-      description: "Buyurtmani yakunlash uchun savatga o'ting",
+      title: marketplaceUz.productDetail.cartAdded,
+      description: marketplaceUz.productDetail.finishInCart,
     });
     onClose();
   };
@@ -253,7 +254,7 @@ export function ProductDetail({
       if (navigator.share) await navigator.share(shareData);
       else {
         await navigator.clipboard.writeText(shareData.url);
-        toast({ title: 'Havola nusxalandi' });
+        toast({ title: marketplaceUz.productDetail.linkCopied });
       }
     } catch {
       // Foydalanuvchi ulashishni bekor qilishi mumkin.
@@ -275,9 +276,9 @@ export function ProductDetail({
   const copyProductId = async () => {
     try {
       await navigator.clipboard.writeText(product.id);
-      toast({ title: 'Mahsulot ID nusxalandi' });
+      toast({ title: marketplaceUz.productDetail.idCopied });
     } catch {
-      toast({ title: 'Nusxalab bo‘lmadi', variant: 'destructive' });
+      toast({ title: marketplaceUz.productDetail.copyFailed, variant: 'destructive' });
     }
   };
 
@@ -287,19 +288,19 @@ export function ProductDetail({
       label: product.shipping_available
         ? shippingCost > 0
           ? `Yetkazish ${formatPrice(shippingCost, currency)}`
-          : 'Bepul yetkazish'
-        : 'Olib ketish',
+          : marketplaceUz.productDetail.freeDelivery
+        : marketplaceUz.productDetail.pickup,
       accent: 'text-emerald-500',
     },
     {
       icon: RotateCcw,
-      label: product.condition === 'new' ? '14 kun qaytarish' : 'Kelishuv asosida qaytarish',
+      label: product.condition === 'new' ? marketplaceUz.productDetail.returnNew : marketplaceUz.productDetail.returnAgreement,
       accent: 'text-blue-500',
     },
-    { icon: Lock, label: "Xavfsiz to'lov", accent: 'text-violet-500' },
+    { icon: Lock, label: marketplaceUz.productDetail.securePayment, accent: 'text-violet-500' },
     {
       icon: BadgeCheck,
-      label: product.seller?.is_verified ? 'Tasdiqlangan sotuvchi' : 'Xaridor himoyasi',
+      label: product.seller?.is_verified ? marketplaceUz.productDetail.verifiedSeller : marketplaceUz.productDetail.buyerProtection,
       accent: 'text-amber-500',
     },
   ];
@@ -438,7 +439,7 @@ export function ProductDetail({
                 {showFallback ? (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground/50">
                     <CategoryIcon slug={product.category?.slug} name={product.category?.name} className="h-12 w-12" />
-                    <span className="text-xs">Rasm mavjud emas</span>
+                    <span className="text-xs">{marketplaceUz.productDetail.noImage}</span>
                   </div>
                 ) : (
                   <AnimatePresence mode="wait">
@@ -601,13 +602,13 @@ export function ProductDetail({
                         'rounded-md px-2 py-1 font-medium',
                         isLowStock ? 'bg-orange-500/10 text-orange-600' : 'bg-emerald-500/10 text-emerald-600',
                       )}>
-                        {isLowStock ? `Faqat ${stock} ta qoldi` : 'Sotuvda mavjud'}
+                        {isLowStock ? `Faqat ${stock} ta qoldi` : marketplaceUz.productDetail.inStock}
                       </span>
                     ) : (
-                      <span className="rounded-md bg-muted px-2 py-1 text-muted-foreground">Sotilgan</span>
+                      <span className="rounded-md bg-muted px-2 py-1 text-muted-foreground">{marketplaceUz.productDetail.sold}</span>
                     )}
                     {product.is_negotiable && (
-                      <span className="rounded-md bg-primary/10 px-2 py-1 font-medium text-primary">Narx kelishiladi</span>
+                      <span className="rounded-md bg-primary/10 px-2 py-1 font-medium text-primary">{marketplaceUz.productDetail.negotiable}</span>
                     )}
                   </div>
                 </div>
@@ -615,8 +616,8 @@ export function ProductDetail({
                 {!isSoldOut && (
                   <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/40 p-3">
                     <div>
-                      <p className="text-sm font-semibold">Soni</p>
-                      <p className="text-[11px] text-muted-foreground">Omborda {stock} dona</p>
+                      <p className="text-sm font-semibold">{marketplaceUz.productDetail.quantity}</p>
+                      <p className="text-[11px] text-muted-foreground">{marketplaceUz.productDetail.warehouse(stock)}</p>
                     </div>
                     <div className="flex items-center gap-1 rounded-xl bg-muted/50 p-1">
                       <Button
@@ -645,7 +646,7 @@ export function ProductDetail({
                 <div className="rounded-2xl border border-border/40 bg-muted/20 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-sm text-muted-foreground">
-                      {shippingApplies ? `Mahsulot + yetkazish (${quantity} ta)` : `Jami (${quantity} ta)`}
+                      {shippingApplies ? marketplaceUz.productDetail.productDeliveryTotal(quantity) : marketplaceUz.productDetail.total(quantity)}
                     </span>
                     <span className="text-lg font-extrabold text-primary">
                       {formatPrice(grandTotal, currency)}
@@ -653,8 +654,8 @@ export function ProductDetail({
                   </div>
                   {shippingApplies && (
                     <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
-                      <span>Mahsulot: {formatPrice(lineTotal, currency)}</span>
-                      <span>Yetkazish: {formatPrice(shippingCost * quantity, currency)}</span>
+                      <span>{marketplaceUz.productDetail.product}: {formatPrice(lineTotal, currency)}</span>
+                      <span>{marketplaceUz.productDetail.delivery}: {formatPrice(shippingCost * quantity, currency)}</span>
                     </div>
                   )}
                 </div>
@@ -664,7 +665,7 @@ export function ProductDetail({
                     <CalendarClock className="h-5 w-5" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold">Taxminiy yetkazish</p>
+                    <p className="text-sm font-semibold">{marketplaceUz.productDetail.estimatedDelivery}</p>
                     <p className="text-xs text-muted-foreground">{deliveryFrom} — {deliveryTo}</p>
                   </div>
                 </div>
@@ -678,7 +679,7 @@ export function ProductDetail({
                       disabled={!product.seller || !onMessageSeller}
                       onClick={() => product.seller && onMessageSeller?.(product.seller.id)}
                     >
-                      <MessageCircle className="mr-2 h-4 w-4" /> Narx taklif qilish
+                      <MessageCircle className="mr-2 h-4 w-4" /> {marketplaceUz.productDetail.makeOffer}
                     </Button>
                   )}
                 </div>
@@ -734,7 +735,7 @@ export function ProductDetail({
 
                 {product.description && (
                   <div className="space-y-2">
-                    <h3 className="text-sm font-semibold">Tavsif</h3>
+                    <h3 className="text-sm font-semibold">{marketplaceUz.productDetail.description}</h3>
                     <div className={cn(
                       'relative whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground',
                       !descExpanded && 'max-h-32 overflow-hidden',
@@ -746,27 +747,27 @@ export function ProductDetail({
                     </div>
                     {product.description.length > 220 && (
                       <button type="button" onClick={() => setDescExpanded(value => !value)} className="text-xs font-semibold text-primary">
-                        {descExpanded ? 'Yopish' : 'To‘liq o‘qish'}
+                        {descExpanded ? marketplaceUz.productDetail.collapse : marketplaceUz.productDetail.readAll}
                       </button>
                     )}
                   </div>
                 )}
 
                 <div className="space-y-2">
-                  <h3 className="text-sm font-semibold">Xususiyatlar</h3>
+                  <h3 className="text-sm font-semibold">{marketplaceUz.productDetail.properties}</h3>
                   <div className="overflow-hidden rounded-xl border border-border/30">
                     {[
-                      { label: 'Holati', value: conditionLabel(product.condition) },
-                      { label: 'Mavjud', value: `${stock} dona` },
-                      { label: 'Kategoriya', value: product.category?.name || '—' },
+                      { label: marketplaceUz.productDetail.condition, value: conditionLabel(product.condition) },
+                      { label: marketplaceUz.productDetail.available, value: `${stock} dona` },
+                      { label: marketplaceUz.productDetail.category, value: product.category?.name || '—' },
                       {
-                        label: 'Yetkazish',
+                        label: marketplaceUz.productDetail.delivery,
                         value: product.shipping_available
                           ? (shippingCost > 0 ? formatPrice(shippingCost, currency) : 'Bepul')
                           : 'Olib ketish',
                       },
                       {
-                        label: 'Joylangan',
+                        label: marketplaceUz.productDetail.posted,
                         value: product.created_at
                           ? `${formatDistanceToNow(new Date(product.created_at), { locale: uz })} oldin`
                           : '—',
@@ -790,9 +791,9 @@ export function ProductDetail({
                 <section className="space-y-4 rounded-2xl border border-border/30 bg-muted/10 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <h3 className="text-base font-semibold">Xaridorlar sharhlari</h3>
+                      <h3 className="text-base font-semibold">{marketplaceUz.productDetail.reviewsTitle}</h3>
                       <p className="text-xs text-muted-foreground">
-                        Faqat yetkazilgan buyurtmalar tasdiqlangan xaridor sharhi sifatida qabul qilinadi.
+                        {marketplaceUz.productDetail.verifiedReviewHint}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 rounded-xl bg-background px-3 py-2 shadow-sm">
@@ -801,7 +802,7 @@ export function ProductDetail({
                         <p className="text-lg font-extrabold leading-none">
                           {reviewCount > 0 ? averageRating.toFixed(1) : '—'}
                         </p>
-                        <p className="mt-1 text-[10px] text-muted-foreground">{reviewCount} ta sharh</p>
+                        <p className="mt-1 text-[10px] text-muted-foreground">{marketplaceUz.productDetail.reviewCount(reviewCount)}</p>
                       </div>
                     </div>
                   </div>
@@ -809,7 +810,7 @@ export function ProductDetail({
                   {reviewEligibility === 'eligible' && (
                     <div className="space-y-3 rounded-xl border border-primary/20 bg-primary/[0.03] p-3">
                       <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-semibold">Baholang</p>
+                        <p className="text-sm font-semibold">{marketplaceUz.productDetail.rate}</p>
                         <div className="flex gap-1">
                           {[1, 2, 3, 4, 5].map(value => (
                             <button
@@ -834,14 +835,14 @@ export function ProductDetail({
                       <Input
                         value={reviewTitle}
                         onChange={event => setReviewTitle(event.target.value)}
-                        placeholder="Sarlavha (ixtiyoriy)"
+                        placeholder={marketplaceUz.productDetail.reviewTitlePlaceholder}
                         maxLength={120}
                         className="rounded-xl"
                       />
                       <Textarea
                         value={reviewContent}
                         onChange={event => setReviewContent(event.target.value)}
-                        placeholder="Mahsulot haqida fikringiz"
+                        placeholder={marketplaceUz.productDetail.reviewContentPlaceholder}
                         maxLength={2000}
                         rows={3}
                         className="resize-none rounded-xl"
@@ -852,9 +853,9 @@ export function ProductDetail({
                         disabled={isSubmittingReview || reviewContent.trim().length < 3}
                       >
                         {isSubmittingReview ? (
-                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saqlanmoqda</>
+                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {marketplaceUz.productDetail.saving}</>
                         ) : (
-                          'Sharhni e’lon qilish'
+                          marketplaceUz.productDetail.publishReview
                         )}
                       </Button>
                     </div>
@@ -862,17 +863,17 @@ export function ProductDetail({
 
                   {reviewEligibility === 'already_reviewed' && (
                     <p className="rounded-xl bg-muted/40 p-3 text-xs text-muted-foreground">
-                      Bu mahsulot uchun sharhingiz allaqachon mavjud.
+                      {marketplaceUz.productDetail.alreadyReviewed}
                     </p>
                   )}
                   {reviewEligibility === 'not_delivered' && (
                     <p className="rounded-xl bg-muted/40 p-3 text-xs text-muted-foreground">
-                      Sharh yozish uchun shu mahsulot qatnashgan buyurtma avval yetkazilgan bo‘lishi kerak.
+                      {marketplaceUz.productDetail.deliveredRequired}
                     </p>
                   )}
                   {reviewEligibility === 'signed_out' && (
                     <p className="rounded-xl bg-muted/40 p-3 text-xs text-muted-foreground">
-                      Sharh yozish uchun tizimga kiring. Xarid tasdiqlangan buyurtma orqali tekshiriladi.
+                      {marketplaceUz.productDetail.signInReview}
                     </p>
                   )}
 
@@ -958,13 +959,13 @@ export function ProductDetail({
                     </div>
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      Hozircha sharh yo‘q. Birinchi tasdiqlangan sharh shu yerda ko‘rinadi.
+                      {marketplaceUz.productDetail.noReviews}
                     </p>
                   )}
                 </section>
 
                 <div className="space-y-3">
-                  <h3 className="text-sm font-semibold">O‘xshash mahsulotlar</h3>
+                  <h3 className="text-sm font-semibold">{marketplaceUz.productDetail.related}</h3>
                   {relatedLoading ? (
                     <div className="flex gap-3 overflow-hidden">
                       {[0, 1, 2].map(item => <div key={item} className="h-52 w-40 shrink-0 animate-pulse rounded-2xl bg-muted" />)}
@@ -978,14 +979,14 @@ export function ProductDetail({
                       ))}
                     </div>
                   ) : (
-                    <p className="text-xs text-muted-foreground">Hozircha o‘xshash mahsulot topilmadi.</p>
+                    <p className="text-xs text-muted-foreground">{marketplaceUz.productDetail.noRelated}</p>
                   )}
                 </div>
 
                 <div className="flex items-center justify-between border-t border-border/30 pt-3 text-[11px] text-muted-foreground">
                   <span className="flex items-center gap-1.5"><Clock className="h-3 w-3" /> ID: {product.id.slice(0, 8)}</span>
                   <Button variant="ghost" size="sm" className="h-8 rounded-lg px-2 text-xs" onClick={copyProductId}>
-                    <Copy className="mr-1.5 h-3.5 w-3.5" /> Nusxalash
+                    <Copy className="mr-1.5 h-3.5 w-3.5" /> {marketplaceUz.productDetail.copy}
                   </Button>
                 </div>
               </div>
