@@ -1524,7 +1524,7 @@ export default function MapPage() {
 
         <div
           className={cn(
-            'min-h-0 flex-1 overflow-hidden',
+            'h-full min-h-0 flex-1 overflow-hidden',
             snap === 'peek' && panel === 'search' ? 'hidden md:block' : 'block',
           )}
         >
