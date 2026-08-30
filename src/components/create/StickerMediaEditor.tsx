@@ -64,86 +64,150 @@ export function StickerMediaEditor({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="flex max-h-[92vh] w-[calc(100vw-1.5rem)] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:w-full">
-          <DialogHeader className="shrink-0 border-b border-border px-4 pb-3 pt-4">
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <StickerIcon className="h-4 w-4" />
+        <DialogContent className="flex h-[88dvh] max-h-[860px] w-[calc(100vw-1rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:w-full">
+          <DialogHeader className="shrink-0 border-b border-border/60 bg-background/90 px-5 py-4 backdrop-blur">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <StickerIcon className="h-5 w-5" />
               </span>
-              Stiker qo‘yish
-            </DialogTitle>
+              <div className="min-w-0">
+                <DialogTitle className="text-base">Stiker Studio</DialogTitle>
+                <p className="mt-1 truncate text-xs text-muted-foreground">
+                  Drag · scale · rotate · {placements.length}/{MAX_STICKERS_PER_MEDIA}
+                </p>
+              </div>
+            </div>
           </DialogHeader>
 
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
-            <div className="relative mx-auto w-full overflow-hidden rounded-2xl bg-black/90">
-              {/* Media — tahrir maydonining o‘lchov asosi */}
-              {previewUrl ? (
-                isVideo ? (
-                  <video
-                    src={previewUrl}
-                    muted
-                    loop
-                    autoPlay
-                    playsInline
-                    className="max-h-[52vh] w-full object-contain"
-                  />
+          <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <section className="relative flex min-h-[360px] items-center justify-center overflow-hidden bg-black p-4 sm:p-6">
+              <div className="relative mx-auto max-h-full max-w-full overflow-hidden rounded-2xl shadow-2xl">
+                {previewUrl ? (
+                  isVideo ? (
+                    <video
+                      src={previewUrl}
+                      muted
+                      loop
+                      autoPlay
+                      playsInline
+                      className="max-h-[68dvh] max-w-full object-contain"
+                    />
+                  ) : (
+                    <img
+                      src={previewUrl}
+                      alt="Tahrirlanayotgan media"
+                      className="max-h-[68dvh] max-w-full object-contain"
+                    />
+                  )
                 ) : (
-                  <img
-                    src={previewUrl}
-                    alt="Tahrirlanayotgan media"
-                    className="max-h-[52vh] w-full object-contain"
-                  />
-                )
-              ) : (
-                <div className="flex aspect-square w-full items-center justify-center text-sm text-white/60">
-                  Ko‘rib bo‘lmaydigan fayl
-                </div>
-              )}
+                  <div className="flex aspect-square min-w-[280px] items-center justify-center text-sm text-white/60">
+                    Ko‘rib bo‘lmaydigan fayl
+                  </div>
+                )}
 
-              {/* Stiker qatlami */}
-              <StickerLayer placements={placements} onChange={setPlacements} />
-            </div>
+                <StickerLayer placements={placements} onChange={setPlacements} />
+              </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="gap-1.5 rounded-xl"
-                disabled={placements.length >= MAX_STICKERS_PER_MEDIA}
-                onClick={() => setShowStudio(true)}
-              >
-                <StickerIcon className="h-4 w-4" /> Stiker tanlash
-              </Button>
-
-              {placements.length > 0 && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1.5 rounded-xl text-muted-foreground"
-                  onClick={() => setPlacements([])}
-                >
-                  <Eraser className="h-4 w-4" /> Tozalash
-                </Button>
-              )}
-
-              <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
-                <Layers className="h-3.5 w-3.5" />
-                {placements.length}/{MAX_STICKERS_PER_MEDIA}
+              <span className="pointer-events-none absolute left-4 top-4 rounded-full border border-white/10 bg-black/50 px-2.5 py-1 text-[10px] font-semibold text-white backdrop-blur">
+                {isVideo ? 'Video layer' : 'Image layer'}
               </span>
-            </div>
+            </section>
 
-            <p className="mt-2 text-xs text-muted-foreground">
-              Stikerni surib joylashtiring. O‘ng-past burchakdagi dasta bilan burang va
-              o‘lchamini o‘zgartiring, ikki barmoq bilan ham masshtablash ishlaydi.
-            </p>
+            <aside className="min-h-0 overflow-y-auto border-t border-border/60 bg-card lg:border-l lg:border-t-0">
+              <div className="space-y-4 p-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Layers className="h-4 w-4 text-primary" />
+                    <h4 className="text-sm font-semibold">Stiker qatlamlari</h4>
+                  </div>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    Stikerlar media ustida alohida layer sifatida saqlanadi va feedda aynan shu koordinatada chiziladi.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    className="h-11 rounded-xl"
+                    disabled={placements.length >= MAX_STICKERS_PER_MEDIA}
+                    onClick={() => setShowStudio(true)}
+                  >
+                    <StickerIcon className="mr-2 h-4 w-4" />
+                    Stiker tanlash
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11 rounded-xl"
+                    disabled={placements.length === 0}
+                    onClick={() => setPlacements([])}
+                  >
+                    <Eraser className="mr-2 h-4 w-4" />
+                    Tozalash
+                  </Button>
+                </div>
+
+                <div className="rounded-3xl border border-border/60 bg-background p-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold">Layer holati</p>
+                    <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-semibold text-primary">
+                      {placements.length}/{MAX_STICKERS_PER_MEDIA}
+                    </span>
+                  </div>
+
+                  {placements.length === 0 ? (
+                    <div className="mt-4 flex flex-col items-center gap-2 py-6 text-center text-muted-foreground">
+                      <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-muted">
+                        <StickerIcon className="h-5 w-5" />
+                      </span>
+                      <p className="text-xs">Hali stiker qo‘yilmagan</p>
+                    </div>
+                  ) : (
+                    <div className="mt-3 space-y-2">
+                      {placements.map((placement, index) => (
+                        <div
+                          key={placement.id}
+                          className="flex items-center gap-2 rounded-2xl bg-muted/40 px-3 py-2.5"
+                        >
+                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-background text-[10px] font-semibold">
+                            {index + 1}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate text-xs font-medium">
+                            {placement.stickerId}
+                          </span>
+                          <button
+                            type="button"
+                            className="text-[10px] text-muted-foreground transition hover:text-destructive"
+                            onClick={() =>
+                              setPlacements((current) =>
+                                current.filter((item) => item.id !== placement.id),
+                              )
+                            }
+                          >
+                            O‘chirish
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-2xl bg-muted/40 p-3 text-[11px] leading-relaxed text-muted-foreground">
+                  Stikerni surib joylashtiring. O‘ng-past dasta bilan burish/o‘lcham, touch qurilmalarda pinch gesture ishlaydi.
+                </div>
+
+                <div className="rounded-2xl border border-primary/15 bg-primary/[0.045] p-3 text-[11px] leading-relaxed text-muted-foreground">
+                  Video stikerlari hozir edit graph sifatida saqlanadi; final video render media engine bosqichida bajariladi.
+                </div>
+              </div>
+            </aside>
           </div>
 
-          <DialogFooter className="shrink-0 gap-2 border-t border-border px-4 py-3">
+          <DialogFooter className="shrink-0 gap-2 border-t border-border/60 bg-background px-5 py-4">
             <Button
               type="button"
-              variant="ghost"
+              variant="outline"
               className="rounded-xl"
               onClick={() => onOpenChange(false)}
             >
