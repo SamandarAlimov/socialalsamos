@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Messages regression tests
+        run: npm run test:messages
+
       - name: Typecheck
         run: npm run typecheck:create
 
