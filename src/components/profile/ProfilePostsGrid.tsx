@@ -41,12 +41,14 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { PollDisplay, parsePollFromContent } from '@/components/PollDisplay';
 import { PostMusicCard } from '@/components/PostMusicCard';
+import { RichText } from '@/components/RichText';
 import { useToast } from '@/hooks/use-toast';
 import { formatCompactCount, parseMusicFromContent } from '@/lib/postMarkers';
 
 interface Post {
   id: string;
   content: string | null;
+  formatted_content?: unknown;
   media_urls: string[] | null;
   media_type: string | null;
   likes_count: number;
@@ -499,11 +501,13 @@ export function ProfilePostsGrid({
                 </div>
 
                 {/* Matn */}
-                {textContent && (
+                {(textContent || post.formatted_content) && (
                   <div className="px-4 pb-3">
-                    <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-foreground">
-                      {textContent}
-                    </p>
+                    <RichText
+                      content={textContent}
+                      formattedContent={post.formatted_content}
+                      className="text-[15px] leading-relaxed text-foreground"
+                    />
                   </div>
                 )}
 
