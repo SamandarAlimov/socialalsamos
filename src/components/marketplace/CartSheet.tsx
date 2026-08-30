@@ -3,9 +3,11 @@ import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, ShieldCheck, Truck, Alert
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { useCart, CartItem } from '@/hooks/useMarketplace';
+import {
+  useCart, CartItem, getCartItemStock, getCartItemUnitPrice, getVariantOptionsLabel,
+} from '@/hooks/useMarketplace';
 import { CheckoutSheet } from '@/components/marketplace/CheckoutSheet';
-import { formatPrice, getShippingCost, getStockState } from '@/lib/marketplace';
+import { formatPrice, getShippingCost } from '@/lib/marketplace';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { marketplaceUz } from '@/i18n/marketplace';
@@ -165,10 +167,16 @@ function CartItemCard({ item, onUpdateQuantity, onRemove }: {
   const product = item.product;
   if (!product) return null;
 
-  const image = product.images?.[0]?.url;
+  const image = item.variant?.image_url || product.images?.[0]?.url;
   const currency = product.currency || 'USD';
-  const { isSoldOut, stock } = getStockState(product);
-  const itemTotal = product.price * item.quantity;
+  const stock = getCartItemStock(item);
+  const unitPrice = getCartItemUnitPrice(item);
+  const isSoldOut =
+    product.status !== 'active' ||
+    stock <= 0 ||
+    (item.product_variant_id != null && (!item.variant || !item.variant.is_active));
+  const itemTotal = unitPrice * item.quantity;
+  const variantLabel = getVariantOptionsLabel(item.variant);
   const itemShipping = getShippingCost(product, item.quantity);
   const exceedsStock = !isSoldOut && item.quantity > stock;
 
@@ -201,6 +209,11 @@ function CartItemCard({ item, onUpdateQuantity, onRemove }: {
           <p className="text-[11px] text-muted-foreground mt-0.5">
             {product.seller?.business_name}
           </p>
+          {variantLabel && (
+            <p className="mt-0.5 line-clamp-1 text-[11px] font-medium text-foreground/75">
+              {variantLabel}
+            </p>
+          )}
           {isSoldOut ? (
             <p className="text-[11px] font-medium text-destructive mt-0.5">{marketplaceUz.cart.soldOut}</p>
           ) : exceedsStock ? (
