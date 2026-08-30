@@ -521,8 +521,15 @@ export default function MapPage() {
             {activeRoute && destination && routeMode === 'car' && (
               <TaxiOffersCard
                 className="mt-3"
-                from={me ?? center}
-                to={{ latitude: destination.latitude, longitude: destination.longitude }}
+                from={{
+                  ...(me ?? center),
+                  label: me ? 'Joriy joylashuv' : 'Boshlanish nuqtasi',
+                }}
+                to={{
+                  latitude: destination.latitude,
+                  longitude: destination.longitude,
+                  label: destination.name,
+                }}
                 distanceKm={activeRoute.distanceM / 1000}
                 durationMin={activeRoute.durationS / 60}
               />
