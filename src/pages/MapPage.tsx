@@ -820,6 +820,7 @@ export default function MapPage() {
       (me
         ? { ...me, name: 'Joriy joylashuv' }
         : { ...center, name: 'Xarita markazi' });
+
     const nextOrigin = {
       latitude: destination.latitude,
       longitude: destination.longitude,
@@ -835,33 +836,150 @@ export default function MapPage() {
       longitude: origin.longitude,
       address: null,
     } as unknown as MapPlace;
+    const nextWaypoints = [...routeWaypoints].reverse();
 
     setRouteOrigin(nextOrigin);
+    setRouteWaypoints(nextWaypoints);
     setDestination(nextDestination);
     setSelectedPlace(nextDestination);
-    void buildRoute(nextDestination, routeMode, nextOrigin);
-  }, [destination, routeOrigin, me, center, buildRoute, routeMode]);
+    void buildRoute(
+      nextDestination,
+      routeMode,
+      nextOrigin,
+      nextWaypoints,
+    );
+  }, [
+    destination,
+    routeOrigin,
+    routeWaypoints,
+    me,
+    center,
+    buildRoute,
+    routeMode,
+  ]);
 
-  const selectRouteEndpoint = useCallback(
-    (place: MapPlace) => {
-      if (routeEditField === 'origin') {
+  const applyRouteEndpoint = useCallback(
+    (place: MapPlace, target: RouteEditTarget) => {
+      if (target === 'origin') {
         const nextOrigin = {
           latitude: place.latitude,
           longitude: place.longitude,
           name: place.name,
         };
         setRouteOrigin(nextOrigin);
-        if (destination) void buildRoute(destination, routeMode, nextOrigin);
-      } else if (routeEditField === 'destination') {
+        if (destination) {
+          void buildRoute(
+            destination,
+            routeMode,
+            nextOrigin,
+            routeWaypoints,
+          );
+        }
+      } else if (target === 'destination') {
         setDestination(place);
         setSelectedPlace(place);
-        void buildRoute(place, routeMode, routeOrigin);
+        void buildRoute(
+          place,
+          routeMode,
+          routeOrigin,
+          routeWaypoints,
+        );
+      } else if (target === 'append') {
+        const nextWaypoints = destination
+          ? [...routeWaypoints, destination]
+          : routeWaypoints;
+        setRouteWaypoints(nextWaypoints);
+        setDestination(place);
+        setSelectedPlace(place);
+        void buildRoute(
+          place,
+          routeMode,
+          routeOrigin,
+          nextWaypoints,
+        );
+      } else if (target.startsWith('waypoint:')) {
+        const index = Number(target.split(':')[1]);
+        if (!Number.isInteger(index) || index < 0) return;
+        const nextWaypoints = routeWaypoints.map((item, itemIndex) =>
+          itemIndex === index ? place : item,
+        );
+        setRouteWaypoints(nextWaypoints);
+        if (destination) {
+          void buildRoute(
+            destination,
+            routeMode,
+            routeOrigin,
+            nextWaypoints,
+          );
+        }
       }
+
       setRouteEditField(null);
       setRouteEditQuery('');
+      setRouteMapPickTarget(null);
     },
-    [routeEditField, destination, routeMode, routeOrigin, buildRoute],
+    [
+      destination,
+      routeMode,
+      routeOrigin,
+      routeWaypoints,
+      buildRoute,
+    ],
   );
+
+  const selectRouteEndpoint = useCallback(
+    (place: MapPlace) => {
+      if (!routeEditField) return;
+      applyRouteEndpoint(place, routeEditField);
+    },
+    [routeEditField, applyRouteEndpoint],
+  );
+
+  const removeRouteWaypoint = useCallback(
+    (index: number) => {
+      const nextWaypoints = routeWaypoints.filter(
+        (_, itemIndex) => itemIndex !== index,
+      );
+      setRouteWaypoints(nextWaypoints);
+      if (destination) {
+        void buildRoute(
+          destination,
+          routeMode,
+          routeOrigin,
+          nextWaypoints,
+        );
+      }
+    },
+    [
+      routeWaypoints,
+      destination,
+      routeMode,
+      routeOrigin,
+      buildRoute,
+    ],
+  );
+
+  const removeFinalDestination = useCallback(() => {
+    if (routeWaypoints.length) {
+      const nextWaypoints = routeWaypoints.slice(0, -1);
+      const nextDestination =
+        routeWaypoints[routeWaypoints.length - 1];
+      setRouteWaypoints(nextWaypoints);
+      setDestination(nextDestination);
+      setSelectedPlace(nextDestination);
+      void buildRoute(
+        nextDestination,
+        routeMode,
+        routeOrigin,
+        nextWaypoints,
+      );
+      return;
+    }
+
+    setDestination(null);
+    setRoutes([]);
+    setSelectedPlace(null);
+  }, [routeWaypoints, routeMode, routeOrigin, buildRoute]);
 
   const useCurrentLocationAsOrigin = useCallback(() => {
     if (!me) {
@@ -872,8 +990,77 @@ export default function MapPage() {
     setRouteOrigin(nextOrigin);
     setRouteEditField(null);
     setRouteEditQuery('');
-    if (destination) void buildRoute(destination, routeMode, nextOrigin);
-  }, [me, destination, routeMode, buildRoute, centerOnMe]);
+    setRouteMapPickTarget(null);
+    if (destination) {
+      void buildRoute(
+        destination,
+        routeMode,
+        nextOrigin,
+        routeWaypoints,
+      );
+    }
+  }, [
+    me,
+    destination,
+    routeMode,
+    routeWaypoints,
+    buildRoute,
+    centerOnMe,
+  ]);
+
+  const beginMapEndpointPick = useCallback(
+    (target: RouteEditTarget) => {
+      setRouteEditField(null);
+      setRouteEditQuery('');
+      setRouteMapPickTarget(target);
+      setSearchFocused(false);
+      setLayerOpen(false);
+      toast('Xaritada kerakli nuqtani bosing.');
+    },
+    [],
+  );
+
+  const handleRouteMapPick = useCallback(
+    async (
+      point: { latitude: number; longitude: number },
+      zoom: number,
+    ) => {
+      if (!routeMapPickTarget) return;
+
+      const target = routeMapPickTarget;
+      const provisional = {
+        id:
+          'route-map:' +
+          point.latitude.toFixed(6) +
+          ',' +
+          point.longitude.toFixed(6),
+        source: 'route',
+        name: 'Xaritadan tanlangan nuqta',
+        categoryLabel: 'Joy',
+        latitude: point.latitude,
+        longitude: point.longitude,
+        address: null,
+        tags: {},
+      } as unknown as MapPlace;
+
+      applyRouteEndpoint(provisional, target);
+
+      try {
+        const resolved = await resolveMapClickPlace(point, zoom);
+        if (resolved) {
+          applyRouteEndpoint(withUserDistance(resolved), target);
+        }
+      } catch {
+        // Provisional coordinate marshrut uchun yetarli.
+      }
+    },
+    [
+      routeMapPickTarget,
+      applyRouteEndpoint,
+      withUserDistance,
+    ],
+  );
+
 
   const buildPlaceUrl = useCallback((place: MapPlace) => {
     const url = new URL('/map', window.location.origin);
