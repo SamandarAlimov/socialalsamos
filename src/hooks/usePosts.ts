@@ -64,6 +64,18 @@ async function cleanupUnpublishedMedia(items: PostMediaInput[]): Promise<void> {
   );
 }
 
+async function cleanupUnpublishedMusic(input?: PostMusicInput | null): Promise<void> {
+  if (!input || input.trackId || !input.track) return;
+
+  const bucket = input.track.storageBucket;
+  const key = input.track.storageKey;
+  if (!bucket || !key) return;
+  if (bucket !== MEDIA_BUCKET && bucket !== PRIVATE_MEDIA_BUCKET) return;
+
+  const { error } = await supabase.storage.from(bucket).remove([key]);
+  if (error) console.warn('Yarim qolgan music uploadni tozalab bo‘lmadi:', error);
+}
+
 /** Post yaratishda qo'shimcha strukturali ma'lumotlar. */
 export interface CreatePostOptions {
   /** MUHIM: ilgari bu qiymat saqlanmasdan tushib qolar edi (maxfiylik bug'i). */
@@ -292,7 +304,10 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
       if (publishError || !postId) {
         // Binary upload DB transaction ichida emas. DB publish yiqilsa
         // hech qayerga bog'lanmagan Supabase obyektlarini best-effort tozalaymiz.
-        await cleanupUnpublishedMedia(options.media ?? []);
+        await Promise.all([
+          cleanupUnpublishedMedia(options.media ?? []),
+          cleanupUnpublishedMusic(options.music),
+        ]);
         throw publishError ?? new Error('Post identifikatori qaytmadi');
       }
 
