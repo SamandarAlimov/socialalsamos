@@ -18,7 +18,7 @@ import { useToast } from '@/hooks/use-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface TelegramMediaRecorderProps {
-  onSend: (url: string, duration: number, type: 'audio' | 'video') => void;
+  onSend: (url: string, duration: number, type: 'audio' | 'video') => void | Promise<unknown>;
   onCancel?: () => void;
 }
 
@@ -63,6 +63,8 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
   const autoSendRef = useRef(false);
   const lockedRef = useRef(false);
   const cancelledRef = useRef(false);
+  const holdActiveRef = useRef(false);
+  const releaseBeforeRecorderRef = useRef(false);
 
   const stopVisualization = useCallback(() => {
     if (animationFrameRef.current) {
@@ -125,7 +127,6 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     setIsLocked(false);
     lockedRef.current = false;
     autoSendRef.current = false;
-    cancelledRef.current = false;
   }, [cleanup]);
 
   const formatDuration = (seconds: number): string => {
@@ -142,7 +143,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         'video/webm',
         'video/mp4',
       ];
-      return videoTypes.find((type) => MediaRecorder.isTypeSupported(type)) || 'video/webm';
+      return videoTypes.find((type) => MediaRecorder.isTypeSupported(type)) || '';
     }
     const audioTypes = [
       'audio/webm;codecs=opus',
@@ -150,7 +151,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
       'audio/ogg;codecs=opus',
       'audio/mp4',
     ];
-    return audioTypes.find((type) => MediaRecorder.isTypeSupported(type)) || 'audio/webm';
+    return audioTypes.find((type) => MediaRecorder.isTypeSupported(type)) || '';
   };
 
   const extensionFor = (mimeType: string): string => {
@@ -180,7 +181,14 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
           type: 'chat',
           visibility: 'public',
         });
-        onSend(uploaded.url, Math.max(1, seconds), recordMode === 'video' ? 'video' : 'audio');
+        const sent = await onSend(
+          uploaded.storageUrl || uploaded.url,
+          Math.max(1, seconds),
+          recordMode === 'video' ? 'video' : 'audio'
+        );
+        if (sent === null) {
+          throw new Error('Xabar serverga yozilmadi');
+        }
         resetAll();
       } catch (error) {
         console.error('Media message upload failed:', error);
@@ -291,9 +299,12 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
           }
         }
 
-        const mimeType = getSupportedMimeType(isVideo);
-        mimeTypeRef.current = mimeType;
-        const recorder = new MediaRecorder(stream, { mimeType });
+        const preferredMimeType = getSupportedMimeType(isVideo);
+        const recorder = preferredMimeType
+          ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+          : new MediaRecorder(stream);
+        mimeTypeRef.current =
+          recorder.mimeType || preferredMimeType || (isVideo ? 'video/webm' : 'audio/webm');
         mediaRecorderRef.current = recorder;
 
         recorder.ondataavailable = (e) => {
@@ -334,6 +345,18 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         startedAtRef.current = Date.now();
 
         if (!isVideo) setState('recording');
+
+        if (!isVideo && releaseBeforeRecorderRef.current) {
+          releaseBeforeRecorderRef.current = false;
+          cancelledRef.current = true;
+          recorder.stop();
+          setState('idle');
+          toast({
+            title: 'Juda qisqa',
+            description: 'Ruxsat berilgach, yozish uchun tugmani yana bosib turing.',
+          });
+          return;
+        }
 
         clearTimer();
         timerRef.current = setInterval(() => {
@@ -430,21 +453,19 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     if (state !== 'recording') return;
 
     const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
-    setFacingMode(newFacingMode);
+    const videoTrack = streamRef.current?.getVideoTracks()[0];
+    if (!videoTrack) return;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: newFacingMode, width: { ideal: 720 }, height: { ideal: 720 } },
-        audio: { echoCancellation: true, noiseSuppression: true },
-      });
-
-      if (streamRef.current) {
-        streamRef.current.getVideoTracks().forEach((track) => track.stop());
+      try {
+        await videoTrack.applyConstraints({ facingMode: { exact: newFacingMode } });
+      } catch {
+        await videoTrack.applyConstraints({ facingMode: newFacingMode });
       }
-      streamRef.current = stream;
+      setFacingMode(newFacingMode);
 
-      if (videoPreviewRef.current) {
-        videoPreviewRef.current.srcObject = stream;
+      if (videoPreviewRef.current && streamRef.current) {
+        videoPreviewRef.current.srcObject = streamRef.current;
         void videoPreviewRef.current.play();
       }
     } catch (error) {
@@ -464,6 +485,8 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
 
   const handleHoldStart = () => {
     if (state !== 'idle') return;
+    holdActiveRef.current = true;
+    releaseBeforeRecorderRef.current = false;
     holdTriggeredRef.current = false;
     setIsHolding(true);
     clearHoldTimer();
@@ -474,27 +497,49 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
   };
 
   const handleHoldEnd = () => {
+    if (!holdActiveRef.current) return;
+    holdActiveRef.current = false;
     setIsHolding(false);
     clearHoldTimer();
+
     if (!holdTriggeredRef.current) {
       // Bir marta bosish rejimni almashtiradi (mikrofon <-> video xabar)
       setMode((prev) => (prev === 'voice' ? 'video' : 'voice'));
+    } else if (modeRef.current === 'voice' && !lockedRef.current) {
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== 'inactive') {
+        finishAndSend();
+      } else {
+        // Permission prompt ochiq paytda pointer-up yo'qolib ketmasin.
+        releaseBeforeRecorderRef.current = true;
+      }
     }
+
     holdTriggeredRef.current = false;
   };
 
   const handleHoldCancel = () => {
+    if (!holdActiveRef.current) return;
+    holdActiveRef.current = false;
     setIsHolding(false);
     clearHoldTimer();
     holdTriggeredRef.current = false;
   };
 
-  /* ---------- Ovoz yozish paytidagi pointer (qo'yib yuborilsa jo'natiladi) ---------- */
+  useEffect(() => {
+    if (!isHolding) return;
 
-  const handleRecordingPointerUp = () => {
-    if (state !== 'recording' || modeRef.current !== 'voice' || lockedRef.current) return;
-    finishAndSend();
-  };
+    const handleWindowPointerUp = () => handleHoldEnd();
+    const handleWindowPointerCancel = () => handleHoldCancel();
+
+    window.addEventListener('pointerup', handleWindowPointerUp);
+    window.addEventListener('pointercancel', handleWindowPointerCancel);
+
+    return () => {
+      window.removeEventListener('pointerup', handleWindowPointerUp);
+      window.removeEventListener('pointercancel', handleWindowPointerCancel);
+    };
+  }, [isHolding, state]);
 
   const lockRecording = () => {
     lockedRef.current = true;
@@ -728,7 +773,6 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         className="flex items-center gap-2"
-        onPointerUp={handleRecordingPointerUp}
       >
         <Button
           variant="ghost"
