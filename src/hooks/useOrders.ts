@@ -57,7 +57,7 @@ export interface Order {
 
 export type OrderStatus = 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
 
-const ORDER_SELECT = `
+const ORDER_SELECT_VARIANTS = `
   *,
   seller:sellers(business_name, logo_url, is_verified),
   items:order_items(
@@ -65,6 +65,44 @@ const ORDER_SELECT = `
     product:products(images:product_images(url))
   )
 `;
+
+const ORDER_SELECT_LEGACY = `
+  *,
+  seller:sellers(business_name, logo_url, is_verified),
+  items:order_items(
+    id, product_id, title, quantity, price, total,
+    product:products(images:product_images(url))
+  )
+`;
+
+const SELLER_ORDER_SELECT_VARIANTS = `
+  *,
+  buyer:profiles!orders_buyer_id_fkey(username, display_name, avatar_url),
+  items:order_items(
+    id, product_id, product_variant_id, variant_options, title, quantity, price, total,
+    product:products(images:product_images(url))
+  )
+`;
+
+const SELLER_ORDER_SELECT_LEGACY = `
+  *,
+  buyer:profiles!orders_buyer_id_fkey(username, display_name, avatar_url),
+  items:order_items(
+    id, product_id, title, quantity, price, total,
+    product:products(images:product_images(url))
+  )
+`;
+
+function normalizeOrderItems(items: any[]): OrderItem[] {
+  return (items || []).map(item => ({
+    ...item,
+    product_variant_id: item.product_variant_id ?? null,
+    variant_options:
+      item.variant_options && typeof item.variant_options === 'object'
+        ? item.variant_options
+        : null,
+  })) as OrderItem[];
+}
 
 /** Orders placed by the signed-in user. */
 export function useOrders() {
@@ -83,19 +121,27 @@ export function useOrders() {
     setIsLoading(true);
     setError(null);
 
-    const { data, error: queryError } = await supabase
+    const variantResult = await supabase
       .from('orders')
-      .select(ORDER_SELECT)
+      .select(ORDER_SELECT_VARIANTS)
       .eq('buyer_id', user.id)
       .order('created_at', { ascending: false });
 
-    if (queryError) {
-      setError(queryError.message);
-    } else if (data) {
-      setOrders(data.map(o => ({
+    const result = variantResult.error
+      ? await supabase
+          .from('orders')
+          .select(ORDER_SELECT_LEGACY)
+          .eq('buyer_id', user.id)
+          .order('created_at', { ascending: false })
+      : variantResult;
+
+    if (result.error) {
+      setError(result.error.message);
+    } else if (result.data) {
+      setOrders(result.data.map((o: any) => ({
         ...o,
         seller: o.seller as any,
-        items: (o.items as any[]) || [],
+        items: normalizeOrderItems((o.items as any[]) || []),
       })) as Order[]);
     }
 
@@ -146,26 +192,27 @@ export function useSellerOrders() {
 
     setSellerId(seller.id);
 
-    const { data, error: queryError } = await supabase
+    const variantResult = await supabase
       .from('orders')
-      .select(`
-        *,
-        buyer:profiles!orders_buyer_id_fkey(username, display_name, avatar_url),
-        items:order_items(
-          id, product_id, title, quantity, price, total,
-          product:products(images:product_images(url))
-        )
-      `)
+      .select(SELLER_ORDER_SELECT_VARIANTS)
       .eq('seller_id', seller.id)
       .order('created_at', { ascending: false });
 
-    if (queryError) {
-      setError(queryError.message);
-    } else if (data) {
-      setOrders(data.map(o => ({
+    const result = variantResult.error
+      ? await supabase
+          .from('orders')
+          .select(SELLER_ORDER_SELECT_LEGACY)
+          .eq('seller_id', seller.id)
+          .order('created_at', { ascending: false })
+      : variantResult;
+
+    if (result.error) {
+      setError(result.error.message);
+    } else if (result.data) {
+      setOrders(result.data.map((o: any) => ({
         ...o,
         buyer: o.buyer as any,
-        items: (o.items as any[]) || [],
+        items: normalizeOrderItems((o.items as any[]) || []),
       })) as Order[]);
     }
 
