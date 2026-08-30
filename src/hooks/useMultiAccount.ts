@@ -139,7 +139,7 @@ async function probeOwnIdentity(userId: string): Promise<{
   return promise;
 }
 
-export function useMultiAccount() {
+export function useMultiAccount(enabled = true) {
   const { user } = useAuth();
   const [accounts, setAccounts] = useState<LinkedAccount[]>([]);
   const [identityEmail, setIdentityEmail] = useState<string | null>(null);
@@ -252,9 +252,9 @@ export function useMultiAccount() {
   }, [user]);
 
   useEffect(() => {
-    if (!isSupported) return;
-    refresh();
-  }, [refresh, isSupported]);
+    if (!enabled || !isSupported) return;
+    void refresh();
+  }, [enabled, refresh, isSupported]);
 
   const canAddAccount = isSupported && accounts.length < maxAccounts;
 
