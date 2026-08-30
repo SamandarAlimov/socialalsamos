@@ -282,6 +282,8 @@ export default function MapPage() {
     longitude: number;
     name: string;
   } | null>(null);
+  const [routeEditField, setRouteEditField] = useState<'origin' | 'destination' | null>(null);
+  const [routeEditQuery, setRouteEditQuery] = useState('');
 
   const [shareTarget, setShareTarget] = useState<MapPlace | null>(null);
   const [sheetHeightPx, setSheetHeightPx] = useState(112);
@@ -294,6 +296,17 @@ export default function MapPage() {
   const showStops = overlays.includes('stops') || isBusStopFilter;
 
   const search = usePlaceSearch(query, center);
+  const routeSearchCenter =
+    routeEditField === 'origin'
+      ? routeOrigin ?? center
+      : routeEditField === 'destination'
+        ? destination ?? center
+        : center;
+  const routeEndpointSearch = usePlaceSearch(
+    routeEditField ? routeEditQuery : '',
+    routeSearchCenter,
+    240,
+  );
   const categoryResults = usePlaceCategory(isBusStopFilter ? null : category, center);
   const nearbyStops = useNearbyStops(
     showStops || panel === 'stop' ? center : null,
@@ -510,6 +523,39 @@ export default function MapPage() {
     void buildRoute(nextDestination, routeMode, nextOrigin);
   }, [destination, routeOrigin, me, center, buildRoute, routeMode]);
 
+  const selectRouteEndpoint = useCallback(
+    (place: MapPlace) => {
+      if (routeEditField === 'origin') {
+        const nextOrigin = {
+          latitude: place.latitude,
+          longitude: place.longitude,
+          name: place.name,
+        };
+        setRouteOrigin(nextOrigin);
+        if (destination) void buildRoute(destination, routeMode, nextOrigin);
+      } else if (routeEditField === 'destination') {
+        setDestination(place);
+        setSelectedPlace(place);
+        void buildRoute(place, routeMode, routeOrigin);
+      }
+      setRouteEditField(null);
+      setRouteEditQuery('');
+    },
+    [routeEditField, destination, routeMode, routeOrigin, buildRoute],
+  );
+
+  const useCurrentLocationAsOrigin = useCallback(() => {
+    if (!me) {
+      centerOnMe();
+      return;
+    }
+    const nextOrigin = { ...me, name: 'Joriy joylashuv' };
+    setRouteOrigin(nextOrigin);
+    setRouteEditField(null);
+    setRouteEditQuery('');
+    if (destination) void buildRoute(destination, routeMode, nextOrigin);
+  }, [me, destination, routeMode, buildRoute, centerOnMe]);
+
   const sharePlace = async (place: MapPlace) => {
     const url =
       window.location.origin +
@@ -617,18 +663,64 @@ export default function MapPage() {
                   <span className="w-10 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                     From
                   </span>
-                  <span className="truncate text-sm font-medium">
-                    {routeOrigin?.name || (me ? 'Joriy joylashuv' : 'Xarita markazi')}
-                  </span>
+                  {routeEditField === 'origin' ? (
+                    <input
+                      autoFocus
+                      value={routeEditQuery}
+                      onChange={(event) => setRouteEditQuery(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Escape') {
+                          setRouteEditField(null);
+                          setRouteEditQuery('');
+                        }
+                      }}
+                      placeholder="Boshlanish joyini qidiring"
+                      className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-muted-foreground"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRouteEditField('origin');
+                        setRouteEditQuery('');
+                      }}
+                      className="min-w-0 flex-1 truncate text-left text-sm font-medium"
+                    >
+                      {routeOrigin?.name || (me ? 'Joriy joylashuv' : 'Xarita markazi')}
+                    </button>
+                  )}
                 </div>
                 <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-border/45 bg-background/55 px-3">
                   <MapPin className="h-4 w-4 shrink-0 text-destructive" />
                   <span className="w-10 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                     To
                   </span>
-                  <span className="truncate text-sm font-semibold">
-                    {destination?.name || 'Manzil tanlanmagan'}
-                  </span>
+                  {routeEditField === 'destination' ? (
+                    <input
+                      autoFocus
+                      value={routeEditQuery}
+                      onChange={(event) => setRouteEditQuery(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Escape') {
+                          setRouteEditField(null);
+                          setRouteEditQuery('');
+                        }
+                      }}
+                      placeholder="Manzilni qidiring"
+                      className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-muted-foreground"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRouteEditField('destination');
+                        setRouteEditQuery('');
+                      }}
+                      className="min-w-0 flex-1 truncate text-left text-sm font-semibold"
+                    >
+                      {destination?.name || 'Manzil tanlanmagan'}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -655,6 +747,55 @@ export default function MapPage() {
                 </button>
               </div>
             </div>
+
+            {routeEditField && (
+              <div className="mt-2 overflow-hidden rounded-2xl border border-border/45 bg-background/88 shadow-xl backdrop-blur-2xl">
+                {routeEditField === 'origin' && (
+                  <button
+                    type="button"
+                    onClick={useCurrentLocationAsOrigin}
+                    className="flex w-full items-center gap-2.5 border-b border-border/40 px-3 py-2.5 text-left text-sm hover:bg-muted/50"
+                  >
+                    <Crosshair className="h-4 w-4 text-primary" />
+                    <span className="font-medium">Joriy joylashuv</span>
+                  </button>
+                )}
+
+                {routeEndpointSearch.loading && (
+                  <div className="flex items-center gap-2 px-3 py-3 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Qidirilmoqda...
+                  </div>
+                )}
+
+                {!routeEndpointSearch.loading &&
+                  routeEditQuery.trim().length >= 2 &&
+                  routeEndpointSearch.places.slice(0, 5).map((place) => (
+                    <button
+                      key={'route-search:' + place.id}
+                      type="button"
+                      onClick={() => selectRouteEndpoint(place)}
+                      className="flex w-full items-start gap-2.5 border-b border-border/35 px-3 py-2.5 text-left last:border-0 hover:bg-muted/50"
+                    >
+                      <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">{place.name}</span>
+                        <span className="block truncate text-[11px] text-muted-foreground">
+                          {place.address || place.categoryLabel || 'Joy'}
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+
+                {!routeEndpointSearch.loading &&
+                  routeEditQuery.trim().length >= 2 &&
+                  routeEndpointSearch.places.length === 0 && (
+                    <div className="px-3 py-3 text-xs text-muted-foreground">
+                      Joy topilmadi. Boshqacha yozib ko‘ring.
+                    </div>
+                  )}
+              </div>
+            )}
 
             <div className="mt-2.5 grid grid-cols-4 gap-1 rounded-2xl bg-muted/40 p-1">
               {MODES.map((mode) => (
@@ -1043,6 +1184,12 @@ export default function MapPage() {
     swapRouteEndpoints,
     stopRoutes.realtimeConfigured,
     stopRoutes.realtimeFresh,
+    routeEditField,
+    routeEditQuery,
+    routeEndpointSearch.loading,
+    routeEndpointSearch.places,
+    selectRouteEndpoint,
+    useCurrentLocationAsOrigin,
   ]);
 
   return (
