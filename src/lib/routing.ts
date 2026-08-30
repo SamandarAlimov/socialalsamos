@@ -1,4 +1,8 @@
-import { fetchTransitJourneyRoutes } from './transitRealtime';
+import {
+  fetchTransitJourneyRoutes,
+  type TransitJourneyLeg,
+  type TransitJourneyRoute,
+} from './transitRealtime';
 import {
   fetchTrafficAwareRoutes,
   type TrafficAwareRouteSection,
@@ -61,6 +65,14 @@ export interface RouteResult {
   liveTrafficDurationS?: number | null;
   trafficSections?: TrafficAwareRouteSection[];
   trafficProvider?: string | null;
+  /** Transit-router metadata; only populated for real multimodal routes. */
+  transitTransfers?: number;
+  transitFare?: unknown;
+  transitWalkingDistanceM?: number;
+  transitDepartureTime?: string | null;
+  transitArrivalTime?: string | null;
+  transitRealtime?: boolean;
+  transitLegs?: TransitJourneyLeg[];
 }
 
 const PROFILE: Record<Exclude<RouteMode, 'transit'>, { prefix: string; profile: string }> = {
@@ -317,17 +329,149 @@ function mapTrafficAwareRoutes(
   });
 }
 
+function transitRouteSteps(
+  route: TransitJourneyRoute,
+): RouteStep[] {
+  if (route.steps?.length) {
+    return route.steps.map((step) => ({
+      distanceM: Number(step.distanceM) || 0,
+      durationS: Number(step.durationS) || 0,
+      name: step.name ?? step.routeRef ?? '',
+      maneuver: step.maneuver ?? step.mode ?? 'transit',
+      modifier: step.modifier,
+      instruction:
+        step.instruction ??
+        [
+          step.routeRef,
+          step.from && step.to
+            ? step.from + ' → ' + step.to
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' · ') ??
+        'Jamoat transportida davom eting',
+    }));
+  }
+
+  return (route.legs ?? []).map((leg) => {
+    const routeName =
+      leg.routeRef || leg.routeName || leg.headsign || '';
+    const endpoints =
+      leg.from && leg.to
+        ? leg.from + ' → ' + leg.to
+        : leg.to || leg.from || '';
+    const instruction =
+      leg.mode === 'walk'
+        ? endpoints
+          ? 'Piyoda · ' + endpoints
+          : 'Piyoda davom eting'
+        : [routeName, endpoints].filter(Boolean).join(' · ') ||
+          'Jamoat transportida davom eting';
+
+    return {
+      distanceM: Number(leg.distanceM) || 0,
+      durationS: Number(leg.durationS) || 0,
+      name: routeName,
+      maneuver: leg.mode || 'transit',
+      instruction,
+    };
+  });
+}
+
+function mapTransitJourneyAlternatives(
+  routes: TransitJourneyRoute[],
+  points: RoutePoint[],
+): RouteResult[] {
+  return routes.slice(0, 4).flatMap((route, index) => {
+    const coordinates = (route.coordinates ?? []).filter(
+      (pair): pair is [number, number] =>
+        Array.isArray(pair) &&
+        pair.length >= 2 &&
+        Number.isFinite(Number(pair[0])) &&
+        Number.isFinite(Number(pair[1])),
+    );
+    if (!coordinates.length) return [];
+
+    return [
+      {
+        mode: 'transit' as const,
+        distanceM: Number(route.distanceM) || 0,
+        durationS: Number(route.durationS) || 0,
+        coordinates,
+        steps: transitRouteSteps(route),
+        label:
+          route.label ||
+          (index === 0
+            ? 'Eng qulay transport'
+            : 'Muqobil transport'),
+        checkpointIndices: nearestCheckpointIndices(
+          coordinates,
+          points,
+        ),
+        legs:
+          points.length === 2
+            ? [
+                {
+                  fromIndex: 0,
+                  toIndex: 1,
+                  distanceM: Number(route.distanceM) || 0,
+                  durationS: Number(route.durationS) || 0,
+                },
+              ]
+            : undefined,
+        transitTransfers: Math.max(
+          0,
+          Number(route.transfers) || 0,
+        ),
+        transitFare: route.fare ?? null,
+        transitWalkingDistanceM: Math.max(
+          0,
+          Number(route.walkingDistanceM) || 0,
+        ),
+        transitDepartureTime: route.departureTime ?? null,
+        transitArrivalTime: route.arrivalTime ?? null,
+        transitRealtime: Boolean(route.realtime),
+        transitLegs: route.legs ?? [],
+      },
+    ];
+  });
+}
+
 async function fetchTransitThrough(
   points: RoutePoint[],
 ): Promise<RouteResult[]> {
   if (points.length < 2) return [];
 
+  if (points.length === 2) {
+    const response = await fetchTransitJourneyRoutes({
+      from: {
+        latitude: points[0].latitude,
+        longitude: points[0].longitude,
+      },
+      to: {
+        latitude: points[1].latitude,
+        longitude: points[1].longitude,
+      },
+    });
+    return mapTransitJourneyAlternatives(
+      response?.routes ?? [],
+      points,
+    );
+  }
+
   let totalDistanceM = 0;
   let totalDurationS = 0;
+  let totalTransfers = 0;
+  let walkingDistanceM = 0;
   const coordinates: [number, number][] = [];
   const steps: RouteStep[] = [];
   const checkpointIndices: number[] = [0];
   const legs: RouteLeg[] = [];
+  const transitLegs: TransitJourneyLeg[] = [];
+  let fare: unknown = null;
+  let departureTime: string | null = null;
+  let arrivalTime: string | null = null;
+  let realtime = false;
 
   for (let index = 0; index < points.length - 1; index += 1) {
     const response = await fetchTransitJourneyRoutes({
@@ -347,6 +491,20 @@ async function fetchTransitThrough(
     const legDurationS = Number(route.durationS) || 0;
     totalDistanceM += legDistanceM;
     totalDurationS += legDurationS;
+    totalTransfers += Math.max(
+      0,
+      Number(route.transfers) || 0,
+    );
+    walkingDistanceM += Math.max(
+      0,
+      Number(route.walkingDistanceM) || 0,
+    );
+    fare ??= route.fare ?? null;
+    departureTime ??= route.departureTime ?? null;
+    arrivalTime = route.arrivalTime ?? arrivalTime;
+    realtime = realtime || Boolean(route.realtime);
+    transitLegs.push(...(route.legs ?? []));
+
     legs.push({
       fromIndex: index,
       toIndex: index + 1,
@@ -362,25 +520,14 @@ async function fetchTransitThrough(
         Number.isFinite(Number(pair[1])),
     );
 
-    if (coordinates.length && legCoordinates.length) legCoordinates.shift();
+    if (coordinates.length && legCoordinates.length) {
+      legCoordinates.shift();
+    }
     coordinates.push(...legCoordinates);
-    checkpointIndices.push(Math.max(0, coordinates.length - 1));
-
-    steps.push(
-      ...(route.steps ?? []).map((step) => ({
-        distanceM: Number(step.distanceM) || 0,
-        durationS: Number(step.durationS) || 0,
-        name: step.name ?? step.routeRef ?? '',
-        maneuver: step.maneuver ?? step.mode ?? 'transit',
-        modifier: step.modifier,
-        instruction:
-          step.instruction ??
-          [step.routeRef, step.from && step.to ? step.from + ' → ' + step.to : null]
-            .filter(Boolean)
-            .join(' · ') ??
-          'Jamoat transportida davom eting',
-      })),
+    checkpointIndices.push(
+      Math.max(0, coordinates.length - 1),
     );
+    steps.push(...transitRouteSteps(route));
   }
 
   return [
@@ -390,9 +537,16 @@ async function fetchTransitThrough(
       durationS: totalDurationS,
       coordinates,
       steps,
-      label: 'Eng qulay yo‘l',
+      label: 'Eng qulay transport',
       checkpointIndices,
       legs,
+      transitTransfers: totalTransfers,
+      transitFare: fare,
+      transitWalkingDistanceM: walkingDistanceM,
+      transitDepartureTime: departureTime,
+      transitArrivalTime: arrivalTime,
+      transitRealtime: realtime,
+      transitLegs,
     },
   ];
 }
