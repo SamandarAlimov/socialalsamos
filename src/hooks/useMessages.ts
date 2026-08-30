@@ -4,6 +4,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { unreadMessagesEmitter } from './useUnreadMessages';
+import db from '@/lib/supabaseAny';
+import { messageDraftsEmitter } from '@/lib/messageDrafts';
 
 export interface LastMessageMeta {
   /** Oxirgi xabar id - o'qilganlik holatini aniqlash uchun kerak */
@@ -32,6 +34,8 @@ export interface Conversation {
   created_at: string;
   last_message?: string;
   last_message_meta?: LastMessageMeta;
+  draft?: string | null;
+  draft_updated_at?: string | null;
   unread_count?: number;
   is_pinned?: boolean;
   is_muted?: boolean;
@@ -251,6 +255,27 @@ export function useConversations(
         });
       }
 
+      // 3c) Telegram-style per-chat draftlar. Migration hali deploy qilinmagan
+      // muhitda chat ro'yxatini sindirmaslik uchun xato graceful fallback qiladi.
+      const draftMap = new Map<string, { content: string; updated_at: string | null }>();
+      const { data: draftRows, error: draftError } = await db
+        .from('message_drafts')
+        .select('conversation_id, content, updated_at')
+        .eq('user_id', user.id)
+        .in('conversation_id', ids);
+
+      if (draftError) {
+        console.warn('Message drafts are not available yet:', draftError);
+      } else {
+        for (const row of draftRows || []) {
+          if (typeof row.content !== 'string' || !row.content.trim()) continue;
+          draftMap.set(row.conversation_id, {
+            content: row.content,
+            updated_at: row.updated_at ?? null,
+          });
+        }
+      }
+
       // 4) O'qilmagan xabarlar - bitta so'rov
       const unreadMap = new Map<string, number>();
       const readTimes = ids
@@ -291,6 +316,7 @@ export function useConversations(
             ? profileMap.get(otherId) || null
             : null;
         const meta = lastMessageMap.get(conv.id);
+        const draft = draftMap.get(conv.id);
 
         return {
           ...conv,
@@ -298,6 +324,8 @@ export function useConversations(
           other_participant: otherParticipant,
           last_message: meta?.content ?? null,
           last_message_meta: meta,
+          draft: draft?.content ?? null,
+          draft_updated_at: draft?.updated_at ?? null,
           unread_count: isSelfChat ? 0 : unreadMap.get(conv.id) || 0,
           is_pinned: settings?.is_pinned ?? false,
           is_muted: settings?.is_muted ?? false,
@@ -543,6 +571,9 @@ export function useConversations(
     const unsubscribeEmitter = unreadMessagesEmitter.subscribe(() => {
       scheduleRefresh();
     });
+    const unsubscribeDrafts = messageDraftsEmitter.subscribe(() => {
+      scheduleRefresh();
+    });
 
     channelRef.current = supabase
       .channel(`conversations-list-${user.id}-${showArchived ? 'arch' : 'live'}-${type || 'all'}`)
@@ -573,6 +604,7 @@ export function useConversations(
 
     return () => {
       unsubscribeEmitter();
+      unsubscribeDrafts();
       if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
       if (channelRef.current) supabase.removeChannel(channelRef.current);
     };
