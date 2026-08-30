@@ -1245,16 +1245,20 @@ export default function MapPage() {
         className="h-full w-full"
       >
         <TileLayer
+          key={'base:' + layer.id}
           url={layer.url}
           attribution={layer.attribution}
           maxZoom={layer.maxZoom}
+          maxNativeZoom={layer.maxNativeZoom}
           updateWhenIdle
           keepBuffer={3}
         />
         {layer.labelsUrl && (
           <TileLayer
+            key={'labels:' + layer.id}
             url={layer.labelsUrl}
             attribution={layer.attribution}
+            maxZoom={layer.maxZoom}
             updateWhenIdle
             keepBuffer={2}
           />
