@@ -1,0 +1,63 @@
+name: Map quality
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/pages/MapPage.tsx'
+      - 'src/components/map/**'
+      - 'src/hooks/useActiveNavigation.ts'
+      - 'src/hooks/useNavigationVoice.ts'
+      - 'src/hooks/useMapPlaces.ts'
+      - 'src/lib/mapPlaces.ts'
+      - 'src/lib/routing.ts'
+      - 'src/lib/taxiProviders.ts'
+      - 'src/lib/placeIcons.tsx'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/map-quality.yml'
+  pull_request:
+    paths:
+      - 'src/pages/MapPage.tsx'
+      - 'src/components/map/**'
+      - 'src/hooks/useActiveNavigation.ts'
+      - 'src/hooks/useNavigationVoice.ts'
+      - 'src/hooks/useMapPlaces.ts'
+      - 'src/lib/mapPlaces.ts'
+      - 'src/lib/routing.ts'
+      - 'src/lib/taxiProviders.ts'
+      - 'src/lib/placeIcons.tsx'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/map-quality.yml'
+
+concurrency:
+  group: map-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-map:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Map regression tests
+        run: npm run test:map
+
+      - name: Production build
+        run: npm run build
