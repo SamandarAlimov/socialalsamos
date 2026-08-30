@@ -770,6 +770,7 @@ Deno.serve(async (req) => {
       return jsonResponse(req, {
         ...providerMeta(),
         configured: Boolean(
+          env("TRANSIT_GTFS_STATIC_URL") ||
           normalizedConfigured ||
           tripUrl ||
           vehiclesUrl ||
