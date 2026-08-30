@@ -116,29 +116,14 @@ function placeIcon(color: string, active: boolean) {
   });
 }
 
-function routeOriginIcon() {
+function routeLocationIcon(color = '#2F6FED', active = false) {
+  const size = active ? 38 : 34;
+  const height = Math.round(size * 1.4);
   return L.divIcon({
-    html:
-      '<div style="width:30px;height:30px;border-radius:999px;background:#ffffff;border:3px solid #2F6FED;box-shadow:0 4px 12px rgba(0,0,0,.22);display:flex;align-items:center;justify-content:center;color:#2F6FED;font:800 12px/1 system-ui">A</div>',
-    className: 'alsamos-route-origin',
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
-  });
-}
-
-function routeCheckpointIcon(index: number, final = false) {
-  const label = final ? '✓' : String(index + 1);
-  const background = final ? '#ef4444' : '#2F6FED';
-  return L.divIcon({
-    html:
-      '<div style="width:30px;height:30px;border-radius:999px;background:' +
-      background +
-      ';border:3px solid white;box-shadow:0 4px 12px rgba(0,0,0,.22);display:flex;align-items:center;justify-content:center;color:white;font:800 12px/1 system-ui">' +
-      label +
-      '</div>',
-    className: 'alsamos-route-checkpoint',
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
+    html: pinSvg(color, { size, active }),
+    className: 'alsamos-route-location',
+    iconSize: [size, height],
+    iconAnchor: [size / 2, height],
   });
 }
 
@@ -2924,12 +2909,12 @@ export default function MapPage() {
         {!navigationActive && panel === 'route' && routeOrigin && (
           <Marker
             position={[routeOrigin.latitude, routeOrigin.longitude]}
-            icon={routeOriginIcon()}
+            icon={routeLocationIcon('#2F6FED')}
             zIndexOffset={710}
           >
             <Tooltip
               direction="top"
-              offset={[0, -14]}
+              offset={[0, -28]}
               opacity={1}
               className={cn(
                 'alsamos-map-tooltip',
@@ -2949,12 +2934,12 @@ export default function MapPage() {
             <Marker
               key={'route-waypoint-marker:' + waypoint.id + ':' + index}
               position={[waypoint.latitude, waypoint.longitude]}
-              icon={routeCheckpointIcon(index)}
+              icon={routeLocationIcon('#2F6FED')}
               zIndexOffset={700}
             >
               <Tooltip
                 direction="top"
-                offset={[0, -14]}
+                offset={[0, -28]}
                 opacity={1}
                 className={cn(
                   'alsamos-map-tooltip',
@@ -2971,12 +2956,12 @@ export default function MapPage() {
         {!navigationActive && panel === 'route' && destination && (
           <Marker
             position={[destination.latitude, destination.longitude]}
-            icon={routeCheckpointIcon(routeWaypoints.length, true)}
+            icon={routeLocationIcon('#ef4444', true)}
             zIndexOffset={720}
           >
             <Tooltip
               direction="top"
-              offset={[0, -14]}
+              offset={[0, -28]}
               opacity={1}
               className={cn(
                 'alsamos-map-tooltip',
