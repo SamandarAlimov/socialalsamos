@@ -1504,50 +1504,6 @@ export default function MapPage() {
     activateNavigationAt,
   ]);
 
-  const skipNextNavigationStop = useCallback(async () => {
-    if (!destination || !navigation.position) return;
-
-    const nextIndex = navigation.snapshot.nextCheckpointIndex;
-    if (
-      nextIndex == null ||
-      nextIndex < 0 ||
-      nextIndex >= routeWaypoints.length
-    ) {
-      return;
-    }
-
-    const nextWaypoints = routeWaypoints.slice(nextIndex + 1);
-    const point = {
-      latitude: navigation.position.latitude,
-      longitude: navigation.position.longitude,
-    };
-
-    setRouteLoading(true);
-    try {
-      const result = await fetchRoutesThrough(
-        routeMode,
-        [point, ...nextWaypoints, destination],
-      );
-      if (!result.length) return;
-
-      setRouteOrigin({ ...point, name: 'Joriy joylashuv' });
-      setRouteWaypoints(nextWaypoints);
-      setRoutes(result);
-      setRouteIndex(0);
-      setReachedNavigationStop(null);
-      toast.success('Oraliq manzil o‘tkazib yuborildi.');
-    } catch {
-      toast.error('Keyingi marshrutni hisoblab bo‘lmadi.');
-    } finally {
-      setRouteLoading(false);
-    }
-  }, [
-    destination,
-    navigation.position,
-    navigation.snapshot.nextCheckpointIndex,
-    routeWaypoints,
-    routeMode,
-  ]);
 
 
   useEffect(() => {
@@ -1619,6 +1575,52 @@ export default function MapPage() {
     active: navigationActive,
     snapshot: navigation.snapshot,
   });
+
+  const skipNextNavigationStop = useCallback(async () => {
+    if (!destination || !navigation.position) return;
+
+    const nextIndex = navigation.snapshot.nextCheckpointIndex;
+    if (
+      nextIndex == null ||
+      nextIndex < 0 ||
+      nextIndex >= routeWaypoints.length
+    ) {
+      return;
+    }
+
+    const nextWaypoints = routeWaypoints.slice(nextIndex + 1);
+    const point = {
+      latitude: navigation.position.latitude,
+      longitude: navigation.position.longitude,
+    };
+
+    setRouteLoading(true);
+    try {
+      const result = await fetchRoutesThrough(
+        routeMode,
+        [point, ...nextWaypoints, destination],
+      );
+      if (!result.length) return;
+
+      setRouteOrigin({ ...point, name: 'Joriy joylashuv' });
+      setRouteWaypoints(nextWaypoints);
+      setRoutes(result);
+      setRouteIndex(0);
+      setReachedNavigationStop(null);
+      toast.success('Oraliq manzil o‘tkazib yuborildi.');
+    } catch {
+      toast.error('Keyingi marshrutni hisoblab bo‘lmadi.');
+    } finally {
+      setRouteLoading(false);
+    }
+  }, [
+    destination,
+    navigation.position,
+    navigation.snapshot.nextCheckpointIndex,
+    routeWaypoints,
+    routeMode,
+  ]);
+
   const fitTo =
     navigationActive || !activeRoute?.coordinates?.length
       ? null
