@@ -1567,8 +1567,23 @@ export default function MapPage() {
     destination: destination
       ? { latitude: destination.latitude, longitude: destination.longitude }
       : null,
+    checkpoints: destination
+      ? [
+          ...routeWaypoints.map((place) => ({
+            latitude: place.latitude,
+            longitude: place.longitude,
+            name: place.name,
+          })),
+          {
+            latitude: destination.latitude,
+            longitude: destination.longitude,
+            name: destination.name,
+          },
+        ]
+      : [],
     onPosition: handleNavigationPosition,
     onReroute: rerouteNavigation,
+    onCheckpoint: handleNavigationCheckpoint,
     onArrive: handleNavigationArrive,
   });
   const navigationVoice = useNavigationVoice({
