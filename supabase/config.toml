@@ -120,3 +120,10 @@ verify_jwt = false
 # in Supabase secrets; the function exposes only normalized transport data.
 [functions.transit-realtime]
 verify_jwt = false
+
+
+# --- First-party Global Search crawler --------------------------------------
+# Search results are built from Alsamos' own crawler/index. The crawler is
+# called by a scheduler/admin process and authenticates with CRAWLER_SECRET.
+[functions.web-crawler]
+verify_jwt = false
