@@ -12,6 +12,14 @@
     "src/components/messages/EnhancedMessageBubble.tsx",
     "src/components/messages/TelegramMediaRecorder.tsx",
     "src/lib/videoNoteLayout.ts",
-    "src/lib/videoNoteLayout.test.ts"
+    "src/lib/videoNoteLayout.test.ts",
+    "src/lib/messageStructuredPayload.ts",
+    "src/lib/messageStructuredPayload.test.ts",
+    "src/components/chat/RichComposer.tsx",
+    "src/components/chat/RichComposer.test.ts",
+    "src/components/messages/MessagePoll.tsx",
+    "src/components/messages/TelegramAttachSheet.tsx",
+    "src/components/messages/MessageInput.tsx",
+    "src/pages/MessagesPage.tsx"
   ]
 }
