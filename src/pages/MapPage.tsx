@@ -1369,7 +1369,7 @@ export default function MapPage() {
             className={cn(
               'flex h-11 flex-1 items-center gap-2 rounded-[18px] px-3 shadow-xl ring-1 backdrop-blur-2xl transition focus-within:ring-primary/25',
               imageryLayer
-                ? 'bg-background/96 text-foreground ring-border/70 focus-within:bg-background'
+                ? 'map-imagery-search ring-white/15'
                 : 'bg-background/84 ring-border/45 focus-within:bg-background/94',
             )}
           >
@@ -1442,7 +1442,7 @@ export default function MapPage() {
         className={cn(
           'absolute right-3 z-[1100] flex flex-col gap-1.5 rounded-[18px] border p-1.5 text-foreground shadow-xl backdrop-blur-2xl transition-[bottom] duration-300 md:bottom-auto md:top-1/2 md:-translate-y-1/2',
           imageryLayer
-            ? 'border-border/65 bg-background/94'
+            ? 'map-imagery-controls border-white/15'
             : 'border-border/35 bg-background/55',
         )}
         style={isMobile ? { bottom: sheetHeightPx + 16 } : undefined}
@@ -1529,7 +1529,7 @@ export default function MapPage() {
         snap={snap}
         onSnapChange={setSnap}
         onHeightChange={setSheetHeightPx}
-        className={imageryLayer ? 'md:border-border/70 md:bg-background/96 md:ring-black/5' : undefined}
+        className={imageryLayer ? 'map-imagery-panel md:ring-black/10' : undefined}
       >
         {snap === 'peek' && panel === 'search' ? (
           <button
