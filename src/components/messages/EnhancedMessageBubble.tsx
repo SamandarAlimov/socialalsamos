@@ -436,9 +436,9 @@ export function EnhancedMessageBubble({
             <AlertCircle className="h-3 w-3 text-destructive" />
           ) : message.status === 'read' || message.is_read ? (
             <CheckCheck className="h-3.5 w-3.5 text-[#0095F6]" />
-          ) : message.status === 'delivered' ? (
-            <CheckCheck className="h-3.5 w-3.5" />
           ) : (
+            // Telegram: serverga muvaffaqiyatli yuborilgan xabar bitta ptichka.
+            // Legacy `delivered` qiymati ham shu ko'rinishga tushadi.
             <Check className="h-3 w-3" />
           )}
         </span>
