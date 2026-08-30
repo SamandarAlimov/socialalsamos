@@ -456,7 +456,7 @@ export function PostComposer() {
 
   return (
     <div
-      className="relative mx-auto flex w-full max-w-2xl flex-col gap-4 px-4 pb-8 pt-4"
+      className="relative mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 pb-8 pt-4 sm:px-5 lg:px-6"
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -477,9 +477,9 @@ export function PostComposer() {
           </div>
         </div>
       )}
-      {/* Flutter bilan bir xil identity-first composer header */}
-      <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/20 p-3">
-        <Avatar className="h-12 w-12 shrink-0 border border-border/60">
+      {/* Web uchun ixcham identity-first composer header */}
+      <div className="flex items-center gap-3 rounded-3xl border border-border/60 bg-gradient-to-br from-card via-card to-primary/[0.045] p-3.5 shadow-sm sm:p-4">
+        <Avatar className="h-12 w-12 shrink-0 border-2 border-background shadow-sm ring-1 ring-border/60 sm:h-14 sm:w-14">
           <AvatarImage src={profile?.avatar_url ?? ''} />
           <AvatarFallback className="font-semibold">
             {(profile?.display_name || profile?.username || 'U').charAt(0).toUpperCase()}
