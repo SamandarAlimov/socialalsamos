@@ -50,6 +50,7 @@ import { CreateChatDialog } from '@/components/messages/CreateChatDialog';
 import { CreateGroupChannelDialog } from '@/components/messages/CreateGroupChannelDialog';
 import { VideoCallOverlay } from '@/components/messages/VideoCallOverlay';
 import { AddPeopleDialog, type CallContact } from '@/components/calls/AddPeopleDialog';
+import { CallPreflightDialog } from '@/components/calls/CallPreflightDialog';
 import { TelegramForwardDialog } from '@/components/messages/TelegramForwardDialog';
 import { MessageSearch } from '@/components/messages/MessageSearch';
 import { GlobalSearchResults } from '@/components/messages/GlobalSearchResults';
@@ -168,6 +169,8 @@ export default function MessagesPage() {
   const [callType, setCallType] = useState<'audio' | 'video'>('video');
   const [activeCallId, setActiveCallId] = useState<string | null>(null);
   const [showAddPeople, setShowAddPeople] = useState(false);
+  const [showCallPreflight, setShowCallPreflight] = useState(false);
+  const [preflightType, setPreflightType] = useState<'audio' | 'video'>('audio');
   const [callContacts, setCallContacts] = useState<CallContact[]>([]);
   const [callContactsLoading, setCallContactsLoading] = useState(false);
   const hasJoinedRoomRef = useRef(false);
@@ -1310,7 +1313,21 @@ export default function MessagesPage() {
     }
   }, [activeCallId, callType, toast]);
 
-  const startCall = async (type: 'audio' | 'video') => {
+  const startCall = (type: 'audio' | 'video') => {
+    if (!selectedConversation) {
+      toast({ title: 'Xatolik', description: 'Suhbat tanlanmagan', variant: 'destructive' });
+      return;
+    }
+    if (isInCall) {
+      toast({ title: "Avval joriy qo'ng'iroqni tugating" });
+      return;
+    }
+
+    setPreflightType(type);
+    setShowCallPreflight(true);
+  };
+
+  const beginCall = async (type: 'audio' | 'video') => {
     if (!selectedConversation) {
       toast({ title: 'Xatolik', description: 'Suhbat tanlanmagan', variant: 'destructive' });
       return;
@@ -2382,6 +2399,15 @@ export default function MessagesPage() {
           peerAvatar={activeCallPeerAvatar}
         />
       )}
+
+      <CallPreflightDialog
+        open={showCallPreflight && !isInCall}
+        onOpenChange={setShowCallPreflight}
+        peerName={activeCallPeerName}
+        peerAvatar={activeCallPeerAvatar}
+        initialType={preflightType}
+        onStart={beginCall}
+      />
 
       {/* Kiruvchi qo'ng'iroq */}
       <IncomingCallDialog
