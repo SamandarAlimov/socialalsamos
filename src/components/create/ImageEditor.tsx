@@ -210,12 +210,7 @@ export function ImageEditor({
       <DialogContent className="flex h-[88dvh] max-h-[880px] max-w-5xl flex-col overflow-hidden p-0">
         <DialogHeader className="shrink-0 border-b border-border/60 bg-background/90 px-5 py-4 backdrop-blur">
           <div className="flex items-center justify-between gap-3">
-            <div>
-              <DialogTitle className="text-base">Rasmni tahrirlash</DialogTitle>
-              <p className="mt-1 truncate text-xs text-muted-foreground">
-                {attachment.file.name} · real Canvas render
-              </p>
-            </div>
+            <DialogTitle className="text-base">Rasmni tahrirlash</DialogTitle>
             <Button
               type="button"
               variant="ghost"
@@ -272,9 +267,7 @@ export function ImageEditor({
                   <SlidersHorizontal className="h-4 w-4 text-primary" />
                   <h4 className="text-sm font-semibold">Format va transform</h4>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Aspect, burilish va akslantirish.
-                </p>
+
               </div>
 
               <div>
@@ -332,12 +325,7 @@ export function ImageEditor({
 
               <div className="h-px bg-border/60" />
 
-              <div>
-                <h4 className="text-sm font-semibold">Rang sozlamalari</h4>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Preview va final Canvas render bir xil qiymatlarni ishlatadi.
-                </p>
-              </div>
+              <h4 className="text-sm font-semibold">Rang</h4>
 
               {[
                 ['Yorqinlik', brightness, setBrightness, SunMedium],
@@ -367,9 +355,7 @@ export function ImageEditor({
                 );
               })}
 
-              <div className="rounded-2xl bg-muted/40 p-3 text-[11px] leading-relaxed text-muted-foreground">
-                Saqlashda yangi real rasm fayli render qilinadi; original attachment o‘rniga shu fayl ishlatiladi.
-              </div>
+
             </div>
           </aside>
         </div>
@@ -395,7 +381,7 @@ export function ImageEditor({
             ) : (
               <Check className="mr-2 h-4 w-4" />
             )}
-            Render va saqlash
+            Saqlash
           </Button>
         </DialogFooter>
       </DialogContent>
