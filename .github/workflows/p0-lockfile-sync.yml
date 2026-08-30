@@ -6,6 +6,11 @@ on:
       - refactor/create-p0-foundation
     paths:
       - package.json
+  pull_request:
+    branches:
+      - main
+    paths:
+      - package.json
 
 permissions:
   contents: write
