@@ -13,6 +13,12 @@ export interface RoutePoint {
   longitude: number;
 }
 
+export interface RouteLane {
+  indications: string[];
+  valid: boolean;
+  active?: boolean;
+}
+
 export interface RouteStep {
   distanceM: number;
   durationS: number;
@@ -20,6 +26,8 @@ export interface RouteStep {
   name: string;
   maneuver: string;
   modifier?: string;
+  exit?: number;
+  lanes?: RouteLane[];
 }
 
 export interface RouteLeg {
@@ -64,6 +72,7 @@ export function maneuverText(step: {
   maneuver?: string;
   modifier?: string;
   name?: string;
+  exit?: number;
 }): string {
   const name = step.name ? ' - ' + step.name : '';
   switch (step.maneuver) {
@@ -111,7 +120,14 @@ interface OsrmStep {
   distance: number;
   duration: number;
   name?: string;
-  maneuver?: { type?: string; modifier?: string };
+  maneuver?: { type?: string; modifier?: string; exit?: number };
+  intersections?: {
+    lanes?: {
+      indications?: string[];
+      valid?: boolean;
+      active?: boolean;
+    }[];
+  }[];
 }
 
 interface OsrmRoute {
@@ -189,18 +205,34 @@ function mapOsrmRoutes(
       durationS: route.duration,
       coordinates,
       steps: (route.legs ?? []).flatMap((leg) =>
-        (leg.steps ?? []).map((step) => ({
-          distanceM: step.distance,
-          durationS: step.duration,
-          name: step.name ?? '',
-          maneuver: step.maneuver?.type ?? 'continue',
-          modifier: step.maneuver?.modifier,
-          instruction: maneuverText({
-            maneuver: step.maneuver?.type,
+        (leg.steps ?? []).map((step) => {
+          const laneIntersection = (step.intersections ?? []).find(
+            (intersection) => intersection.lanes?.length,
+          );
+          const lanes = laneIntersection?.lanes?.map((lane) => ({
+            indications: Array.isArray(lane.indications)
+              ? lane.indications
+              : [],
+            valid: Boolean(lane.valid),
+            active: Boolean(lane.active),
+          }));
+
+          return {
+            distanceM: step.distance,
+            durationS: step.duration,
+            name: step.name ?? '',
+            maneuver: step.maneuver?.type ?? 'continue',
             modifier: step.maneuver?.modifier,
-            name: step.name,
-          }),
-        })),
+            exit: step.maneuver?.exit,
+            lanes,
+            instruction: maneuverText({
+              maneuver: step.maneuver?.type,
+              modifier: step.maneuver?.modifier,
+              name: step.name,
+              exit: step.maneuver?.exit,
+            }),
+          };
+        }),
       ),
       label: labelFor(mode, index),
       checkpointIndices: nearestCheckpointIndices(coordinates, points),
