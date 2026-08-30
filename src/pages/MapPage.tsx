@@ -1873,6 +1873,254 @@ export default function MapPage() {
     return activeRoute.coordinates.slice(0, end);
   }, [navigationActive, activeRoute, navigation.snapshot.nearestRouteIndex]);
 
+  const vectorLayerCompatible =
+    layerId === 'map' || layerId === 'night';
+  const effectiveMapEngine: MapEngineId =
+    mapEngine === 'vector' && vectorLayerCompatible ? 'vector' : 'raster';
+
+  useEffect(() => {
+    writePreferredMapEngine(mapEngine);
+  }, [mapEngine]);
+
+  const vectorSceneMarkers = useMemo<MapSceneMarker[]>(() => {
+    const markers: MapSceneMarker[] = [];
+
+    if (me && !navigationActive) {
+      markers.push({
+        id: 'me',
+        kind: 'me',
+        latitude: me.latitude,
+        longitude: me.longitude,
+        label: 'Joriy joylashuv',
+      });
+    }
+
+    if (navigationActive && navigation.position) {
+      markers.push({
+        id: 'navigation',
+        kind: 'navigation',
+        latitude: navigation.position.latitude,
+        longitude: navigation.position.longitude,
+        bearing: navigation.position.heading,
+        label: 'Joriy joylashuv',
+      });
+    }
+
+    if (!navigationActive) {
+      for (const group of markerGroups) {
+        if (group.type === 'cluster') {
+          markers.push({
+            id: 'cluster|' + group.id,
+            kind: 'cluster',
+            latitude: group.latitude,
+            longitude: group.longitude,
+            count: group.count,
+            label: group.count + ' ta joy',
+          });
+        } else {
+          markers.push({
+            id: 'place|' + group.place.id,
+            kind: 'place',
+            latitude: group.place.latitude,
+            longitude: group.place.longitude,
+            color: categoryUi(group.place.categoryId).color,
+            label: group.place.name,
+          });
+        }
+      }
+
+      if (panel === 'route' && routeOrigin) {
+        markers.push({
+          id: 'route-origin',
+          kind: 'route-origin',
+          latitude: routeOrigin.latitude,
+          longitude: routeOrigin.longitude,
+          color: '#2F6FED',
+          label: 'From · ' + routeOrigin.name,
+        });
+      }
+
+      if (panel === 'route') {
+        routeWaypoints.forEach((waypoint, index) => {
+          markers.push({
+            id: 'route-stop|' + index,
+            kind: 'route-stop',
+            latitude: waypoint.latitude,
+            longitude: waypoint.longitude,
+            color: '#2F6FED',
+            label: waypoint.name,
+          });
+        });
+      }
+
+      if (panel === 'route' && destination) {
+        markers.push({
+          id: 'route-destination',
+          kind: 'route-destination',
+          latitude: destination.latitude,
+          longitude: destination.longitude,
+          color: '#ef4444',
+          active: true,
+          label: destination.name,
+        });
+      }
+
+      if (selectedPlace && panel !== 'route') {
+        markers.push({
+          id: 'selected|' + selectedPlace.id,
+          kind: 'selected',
+          latitude: selectedPlace.latitude,
+          longitude: selectedPlace.longitude,
+          color: categoryUi(selectedPlace.categoryId).color,
+          active: true,
+          label: selectedPlace.name,
+        });
+      }
+
+      if (liveVehicles.realtime) {
+        liveVehicles.vehicles.forEach((vehicle) => {
+          markers.push({
+            id: 'vehicle|' + vehicle.id,
+            kind: 'vehicle',
+            latitude: vehicle.latitude,
+            longitude: vehicle.longitude,
+            color: vehicle.color,
+            bearing: vehicle.bearing,
+            label: vehicle.ref,
+          });
+        });
+      }
+
+      if (showStops) {
+        visibleStops.forEach((stop) => {
+          markers.push({
+            id: 'stop|' + stop.id,
+            kind: 'stop',
+            latitude: stop.latitude,
+            longitude: stop.longitude,
+            label: stop.name || 'Bekat',
+          });
+        });
+      }
+    }
+
+    return markers;
+  }, [
+    me,
+    navigationActive,
+    navigation.position,
+    markerGroups,
+    panel,
+    routeOrigin,
+    routeWaypoints,
+    destination,
+    selectedPlace,
+    liveVehicles.realtime,
+    liveVehicles.vehicles,
+    showStops,
+    visibleStops,
+  ]);
+
+  const vectorSceneLines = useMemo<MapSceneLine[]>(() => {
+    if (!activeRoute || activeRoute.coordinates.length < 2) return [];
+
+    const currentCoordinates = navigationActive
+      ? navigationRemainingCoordinates
+      : activeRoute.coordinates;
+    const lines: MapSceneLine[] = [];
+
+    if (
+      navigationActive &&
+      navigationTravelledCoordinates.length > 1
+    ) {
+      lines.push({
+        id: 'travelled',
+        coordinates: navigationTravelledCoordinates,
+        color: '#7B8494',
+        width: 5,
+        opacity: 0.55,
+      });
+    }
+
+    if (currentCoordinates.length > 1) {
+      lines.push({
+        id: 'route-outline',
+        coordinates: currentCoordinates,
+        color: '#ffffff',
+        width: 9,
+        opacity: 0.9,
+      });
+      lines.push({
+        id: 'route-active',
+        coordinates: currentCoordinates,
+        color: '#2F6FED',
+        width: 5,
+        opacity: 1,
+      });
+    }
+
+    return lines;
+  }, [
+    activeRoute,
+    navigationActive,
+    navigationRemainingCoordinates,
+    navigationTravelledCoordinates,
+  ]);
+
+  const handleVectorMarkerClick = useCallback(
+    (markerId: string) => {
+      if (markerId.startsWith('cluster|')) {
+        const rawId = markerId.slice('cluster|'.length);
+        const group = markerGroups.find(
+          (item) => item.type === 'cluster' && item.id === rawId,
+        );
+        if (!group || group.type !== 'cluster') return;
+        const map = mapRef.current;
+        if (!map) return;
+        map.setView(
+          [group.latitude, group.longitude],
+          Math.min(18, Math.max(map.getZoom() + 2, 15)),
+          { animate: true },
+        );
+        return;
+      }
+
+      if (markerId.startsWith('place|')) {
+        const placeId = markerId.slice('place|'.length);
+        const group = markerGroups.find(
+          (item) => item.type === 'place' && item.place.id === placeId,
+        );
+        if (!group || group.type !== 'place') return;
+        const selected = withUserDistance(group.place);
+        setSelectedPlace(selected);
+        setSelectedStop(null);
+        setMovedCenter(null);
+        setCenter({
+          latitude: selected.latitude,
+          longitude: selected.longitude,
+        });
+        setPanel('place');
+        setSnap('half');
+        return;
+      }
+
+      if (markerId.startsWith('stop|')) {
+        const stopId = markerId.slice('stop|'.length);
+        const stop = visibleStops.find((item) => item.id === stopId);
+        if (!stop) return;
+        setSelectedStop(stop);
+        setSelectedPlace(null);
+        setCenter({
+          latitude: stop.latitude,
+          longitude: stop.longitude,
+        });
+        setPanel('stop');
+        setSnap('half');
+      }
+    },
+    [markerGroups, visibleStops, withUserDistance],
+  );
+
   const panelBody = useMemo(() => {
     if (panel === 'place' && selectedPlace) {
       return (
