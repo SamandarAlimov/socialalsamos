@@ -1,11 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Bookmark,
   BookmarkCheck,
   Clock,
   Copy,
+  CreditCard,
   Globe,
   ImagePlus,
+  Mail,
   MapPin,
   MessageCircle,
   Navigation,
@@ -14,6 +16,9 @@ import {
   Share2,
   ShoppingBag,
   Star,
+  Trees,
+  UtensilsCrossed,
+  Wifi,
   X,
 } from 'lucide-react';
 import type { MapPlace } from '@/lib/mapPlaces';
@@ -96,6 +101,62 @@ function InfoRow({
   );
 }
 
+function resolvePlaceImage(place: MapPlace): string | null {
+  const direct = place.tags?.image?.trim();
+  if (direct && /^https?:\/\//i.test(direct)) return direct;
+
+  const commons = place.tags?.wikimedia_commons?.trim();
+  if (commons?.toLowerCase().startsWith('file:')) {
+    const filename = commons.slice(5).trim();
+    if (filename) {
+      return (
+        'https://commons.wikimedia.org/wiki/Special:Redirect/file/' +
+        encodeURIComponent(filename)
+      );
+    }
+  }
+
+  return null;
+}
+
+type AmenityChip = {
+  label: string;
+  icon: React.ReactNode;
+};
+
+function amenityChips(tags?: Record<string, string>): AmenityChip[] {
+  if (!tags) return [];
+  const chips: AmenityChip[] = [];
+
+  const yes = (key: string) => ['yes', 'designated', 'customers', 'permissive'].includes((tags[key] ?? '').toLowerCase());
+
+  if (yes('internet_access') || ['wlan', 'wifi'].includes((tags.internet_access ?? '').toLowerCase())) {
+    chips.push({ label: 'Wi‑Fi', icon: <Wifi className="h-3.5 w-3.5" /> });
+  }
+  if (yes('outdoor_seating')) {
+    chips.push({ label: 'Ochiq joy', icon: <Trees className="h-3.5 w-3.5" /> });
+  }
+  if (yes('takeaway') || tags.takeaway === 'only') {
+    chips.push({ label: 'Olib ketish', icon: <ShoppingBag className="h-3.5 w-3.5" /> });
+  }
+  if (yes('delivery')) {
+    chips.push({ label: 'Yetkazib berish', icon: <Navigation className="h-3.5 w-3.5" /> });
+  }
+  if (
+    yes('payment:cards') ||
+    yes('payment:visa') ||
+    yes('payment:mastercard') ||
+    yes('payment:contactless')
+  ) {
+    chips.push({ label: 'Karta', icon: <CreditCard className="h-3.5 w-3.5" /> });
+  }
+  if (yes('wheelchair')) {
+    chips.push({ label: 'Aravacha uchun mos', icon: <PersonStanding className="h-3.5 w-3.5" /> });
+  }
+
+  return chips.slice(0, 8);
+}
+
 export function PlaceDetailsCard({
   place,
   saved,
@@ -124,9 +185,18 @@ export function PlaceDetailsCard({
   );
 
   const { summary } = usePlaceReviews(placeRef);
-  const heroImage = typeof place.tags?.image === 'string' ? place.tags.image : null;
+  const heroImage = resolvePlaceImage(place);
+  const [imageFailed, setImageFailed] = useState(false);
+  const amenities = useMemo(() => amenityChips(place.tags), [place.tags]);
+  const email = place.tags?.email || place.tags?.['contact:email'] || null;
+  const instagram = place.tags?.['contact:instagram'] || place.tags?.instagram || null;
+  const telegram = place.tags?.['contact:telegram'] || place.tags?.telegram || null;
   const displayAddress =
     place.address || place.latitude.toFixed(5) + ', ' + place.longitude.toFixed(5);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [heroImage, place.id]);
 
   const copyAddress = async () => {
     try {
@@ -150,9 +220,16 @@ export function PlaceDetailsCard({
       )}
     >
       <div className="relative shrink-0 overflow-hidden">
-        {heroImage ? (
+        {heroImage && !imageFailed ? (
           <>
-            <img src={heroImage} alt={place.name} className="h-40 w-full object-cover" />
+            <img
+              src={heroImage}
+              alt={place.name}
+              className="h-40 w-full object-cover"
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onError={() => setImageFailed(true)}
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/5 to-black/20" />
           </>
         ) : (
@@ -380,6 +457,42 @@ export function PlaceDetailsCard({
               )}
             </div>
 
+            {amenities.length > 0 && (
+              <div
+                className={cn(
+                  'rounded-2xl border p-3',
+                  highContrast
+                    ? 'border-white/10 bg-white/[0.045]'
+                    : 'border-border/50 bg-muted/25',
+                )}
+              >
+                <p
+                  className={cn(
+                    'mb-2 text-[11px] font-semibold uppercase tracking-wide',
+                    highContrast ? 'text-white/[0.45]' : 'text-muted-foreground',
+                  )}
+                >
+                  Qulayliklar
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {amenities.map((amenity) => (
+                    <span
+                      key={amenity.label}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px] font-semibold',
+                        highContrast
+                          ? 'bg-white/[0.07] text-white/[0.78]'
+                          : 'bg-background text-foreground/80 shadow-sm ring-1 ring-border/40',
+                      )}
+                    >
+                      {amenity.icon}
+                      {amenity.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <NearbyListingsCard
               latitude={place.latitude}
               longitude={place.longitude}
@@ -426,8 +539,56 @@ export function PlaceDetailsCard({
               </InfoRow>
             )}
             {place.cuisine && (
-              <InfoRow title="Taomlar" icon={<ui.Icon className="h-4 w-4" />} highContrast={highContrast}>
+              <InfoRow title="Taomlar" icon={<UtensilsCrossed className="h-4 w-4" />} highContrast={highContrast}>
                 {place.cuisine}
+              </InfoRow>
+            )}
+            {email && (
+              <InfoRow
+                title="Email"
+                icon={<Mail className="h-4 w-4" />}
+                highContrast={highContrast}
+                onClick={() => window.open('mailto:' + email, '_self')}
+              >
+                <span className="block truncate">{email}</span>
+              </InfoRow>
+            )}
+            {instagram && (
+              <InfoRow
+                title="Instagram"
+                icon={<Globe className="h-4 w-4" />}
+                highContrast={highContrast}
+                onClick={() => {
+                  const value = String(instagram).replace(/^@/, '');
+                  window.open(
+                    /^https?:\/\//i.test(value)
+                      ? value
+                      : 'https://instagram.com/' + value,
+                    '_blank',
+                    'noopener',
+                  );
+                }}
+              >
+                <span className="block truncate">{instagram}</span>
+              </InfoRow>
+            )}
+            {telegram && (
+              <InfoRow
+                title="Telegram"
+                icon={<Globe className="h-4 w-4" />}
+                highContrast={highContrast}
+                onClick={() => {
+                  const value = String(telegram).replace(/^@/, '');
+                  window.open(
+                    /^https?:\/\//i.test(value)
+                      ? value
+                      : 'https://t.me/' + value,
+                    '_blank',
+                    'noopener',
+                  );
+                }}
+              >
+                <span className="block truncate">{telegram}</span>
               </InfoRow>
             )}
             {place.wheelchair && (
