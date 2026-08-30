@@ -44,16 +44,29 @@ export function usePlaceCategory(categoryId: PlaceCategoryId | null, center?: Ce
     setLoading(true);
     setError(null);
 
+    const safetyTimer = window.setTimeout(() => {
+      controller.abort();
+      setLoading(false);
+      setError('Xarita provayderi sekin javob bermoqda. Qayta urinib ko\u2018ring.');
+    }, 10000);
+
     fetchPlacesByCategory(categoryId, center, { signal: controller.signal })
-      .then((result) => setPlaces(result))
+      .then((result) => {
+        window.clearTimeout(safetyTimer);
+        setPlaces(result);
+      })
       .catch((err: Error) => {
         if (err.name === 'AbortError') return;
+        window.clearTimeout(safetyTimer);
         setError('Joylar yuklanmadi. Qayta urinib ko\u2018ring.');
         setPlaces([]);
       })
       .finally(() => setLoading(false));
 
-    return () => controller.abort();
+    return () => {
+      window.clearTimeout(safetyTimer);
+      controller.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryId, center?.latitude, center?.longitude]);
 
@@ -85,23 +98,37 @@ export function usePlaceSearch(query: string, center?: Center | null, delayMs = 
     setLoading(true);
     setError(null);
 
-    const timer = setTimeout(() => {
+    const safetyTimer = window.setTimeout(() => {
+      if (controllerRef.current !== controller) return;
+      controller.abort();
+      setLoading(false);
+      setError('Qidiruv provayderi javob bermadi. Qayta urinib ko\u2018ring.');
+    }, 9000);
+
+    const timer = window.setTimeout(() => {
       searchMapPlaces(term, center, controller.signal)
         .then((result) => {
+          window.clearTimeout(safetyTimer);
+          if (controllerRef.current !== controller) return;
           setPlaces(result.places);
           setCategory(result.category);
         })
         .catch((err: Error) => {
           if (err.name === 'AbortError') return;
+          window.clearTimeout(safetyTimer);
+          if (controllerRef.current !== controller) return;
           setError('Qidiruv ishlamadi. Internetni tekshiring.');
         })
         .finally(() => {
-          if (!controller.signal.aborted) setLoading(false);
+          if (controllerRef.current === controller && !controller.signal.aborted) {
+            setLoading(false);
+          }
         });
     }, delayMs);
 
     return () => {
-      clearTimeout(timer);
+      window.clearTimeout(timer);
+      window.clearTimeout(safetyTimer);
       controller.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
