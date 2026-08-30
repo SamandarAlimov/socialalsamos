@@ -84,6 +84,7 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
             is_verified
           )
         `)
+        .neq('post_kind', 'story')
         .order('created_at', { ascending: false })
         .range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1);
 
@@ -317,7 +318,11 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
         console.warn('Post yaratildi, lekin UI refetch bajarilmadi:', error);
       }
 
-      if (!isScheduled && visibility === 'public') {
+      if (
+        !isScheduled &&
+        visibility === 'public' &&
+        (options.postKind ?? 'post') !== 'story'
+      ) {
         setPosts((prev) => [createdPost, ...prev]);
       }
 
@@ -417,6 +422,8 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
           table: 'posts',
         },
         async (payload) => {
+          if (payload.new.post_kind === 'story') return;
+
           // Fetch the full post with profile
           const { data } = await supabase
             .from('posts')
