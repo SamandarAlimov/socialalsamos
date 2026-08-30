@@ -49,6 +49,7 @@ import { MessageInput } from '@/components/messages/MessageInput';
 import { CreateChatDialog } from '@/components/messages/CreateChatDialog';
 import { CreateGroupChannelDialog } from '@/components/messages/CreateGroupChannelDialog';
 import { VideoCallOverlay } from '@/components/messages/VideoCallOverlay';
+import { AddPeopleDialog, type CallContact } from '@/components/calls/AddPeopleDialog';
 import { TelegramForwardDialog } from '@/components/messages/TelegramForwardDialog';
 import { MessageSearch } from '@/components/messages/MessageSearch';
 import { GlobalSearchResults } from '@/components/messages/GlobalSearchResults';
@@ -166,6 +167,9 @@ export default function MessagesPage() {
   const [isInCall, setIsInCall] = useState(false);
   const [callType, setCallType] = useState<'audio' | 'video'>('video');
   const [activeCallId, setActiveCallId] = useState<string | null>(null);
+  const [showAddPeople, setShowAddPeople] = useState(false);
+  const [callContacts, setCallContacts] = useState<CallContact[]>([]);
+  const [callContactsLoading, setCallContactsLoading] = useState(false);
   const hasJoinedRoomRef = useRef(false);
   const processedCallLinkRef = useRef<string | null>(null);
 
@@ -255,22 +259,26 @@ export default function MessagesPage() {
     subscribeToParticipants,
   } = useVideoCall();
 
-  const { incomingCall, handleCallHandled, declineCall } = useIncomingCalls();
+  const { incomingCall, handleCallHandled, declineCall, missCall } = useIncomingCalls();
 
   const {
     localStream,
     participants: webrtcParticipants,
     isConnected,
+    isReconnecting,
     isMuted,
     isVideoOn,
     isScreenSharing,
     isHandRaised,
+    error: callConnectionError,
+    connectionQuality,
     joinRoom,
     leaveRoom,
     closePeer,
     toggleMute,
     toggleVideo,
     toggleScreenShare,
+    switchCamera,
     toggleHandRaise,
   } = useWebRTC(activeCallId);
 
@@ -1191,6 +1199,115 @@ export default function MessagesPage() {
     }
   };
 
+  const loadCallContacts = useCallback(async () => {
+    if (!selectedConversation || !activeCallId || !user?.id) {
+      setCallContacts([]);
+      return;
+    }
+
+    setCallContactsLoading(true);
+    try {
+      const { data: memberRows, error: membersError } = await supabase
+        .from('conversation_participants')
+        .select('user_id')
+        .eq('conversation_id', selectedConversation.id);
+
+      if (membersError) throw membersError;
+
+      const activeIds = new Set(
+        callParticipants.filter((item) => !item.left_at).map((item) => item.user_id)
+      );
+      activeIds.add(user.id);
+
+      const candidateIds = (memberRows || [])
+        .map((row) => row.user_id)
+        .filter((id) => id && !activeIds.has(id));
+
+      if (candidateIds.length === 0) {
+        setCallContacts([]);
+        return;
+      }
+
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, username, display_name, avatar_url, last_seen')
+        .in('id', candidateIds);
+
+      if (profilesError) throw profilesError;
+
+      setCallContacts(
+        (profiles || []).map((profile) => ({
+          id: profile.id,
+          name: profile.display_name || profile.username || 'Foydalanuvchi',
+          avatarUrl: profile.avatar_url,
+          status: profile.last_seen ? 'Yaqinda faol bo‘lgan' : "Qo‘ng‘iroqqa taklif qilish",
+        }))
+      );
+    } catch (contactsError) {
+      console.error('[Calls] Failed to load invite contacts:', contactsError);
+      setCallContacts([]);
+      toast({
+        title: 'Kontaktlarni yuklab bo‘lmadi',
+        variant: 'destructive',
+      });
+    } finally {
+      setCallContactsLoading(false);
+    }
+  }, [activeCallId, callParticipants, selectedConversation, toast, user?.id]);
+
+  const openAddPeople = useCallback(() => {
+    setShowAddPeople(true);
+    void loadCallContacts();
+  }, [loadCallContacts]);
+
+  const inviteCallContact = useCallback(
+    async (contact: CallContact, withVideo: boolean) => {
+      if (!activeCallId) return;
+
+      const { error } = await supabase.rpc(
+        'invite_to_video_call' as never,
+        {
+          p_call_id: activeCallId,
+          p_invitee_id: contact.id,
+          p_call_type: withVideo ? 'video' : 'audio',
+        } as never
+      );
+
+      if (error) {
+        toast({
+          title: 'Taklif yuborilmadi',
+          description: error.message || 'Qayta urinib ko‘ring',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      setCallContacts((previous) => previous.filter((item) => item.id !== contact.id));
+      toast({
+        title: 'Taklif yuborildi',
+        description: contact.name,
+      });
+    },
+    [activeCallId, toast]
+  );
+
+  const copyCallInviteLink = useCallback(async () => {
+    if (!activeCallId) return;
+    const url = `${window.location.origin}/messages?call=${encodeURIComponent(
+      activeCallId
+    )}&type=${callType}`;
+
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({ title: 'Qo‘ng‘iroq havolasi nusxalandi' });
+    } catch {
+      toast({
+        title: 'Havolani nusxalab bo‘lmadi',
+        variant: 'destructive',
+      });
+    }
+  }, [activeCallId, callType, toast]);
+
   const startCall = async (type: 'audio' | 'video') => {
     if (!selectedConversation) {
       toast({ title: 'Xatolik', description: 'Suhbat tanlanmagan', variant: 'destructive' });
@@ -1444,6 +1561,18 @@ export default function MessagesPage() {
     },
     [messageGroups, highlightMessage, toast]
   );
+
+  const activeCallPeerName =
+    selectedConversation?.type === 'private'
+      ? selectedConversation.other_participant?.display_name ||
+        selectedConversation.other_participant?.username ||
+        'Suhbatdosh'
+      : selectedConversation?.name || "Guruh qo'ng'irog'i";
+
+  const activeCallPeerAvatar =
+    selectedConversation?.type === 'private'
+      ? selectedConversation.other_participant?.avatar_url || undefined
+      : selectedConversation?.avatar_url || undefined;
 
   // 1:1 chatda suhbatdoshning avatar ikonkasi ko'rsatilmaydi (Telegramdek)
   const showBubbleAvatars = selectedConversation?.type !== 'private';
@@ -2234,12 +2363,19 @@ export default function MessagesPage() {
           callType={callType}
           callStartedAt={currentCall?.started_at ?? null}
           isCallConnected={isConnected}
+          isReconnecting={isReconnecting}
+          error={callConnectionError}
+          connectionQuality={connectionQuality}
           onToggleMute={toggleMute}
           onToggleVideo={toggleVideo}
           onToggleScreenShare={toggleScreenShare}
           onToggleHandRaise={toggleHandRaise}
+          onSwitchCamera={switchCamera}
+          onAddPeople={selectedConversation?.type === 'group' ? openAddPeople : undefined}
           onEndCall={endCall}
           currentUserName={user?.email?.split('@')[0]}
+          peerName={activeCallPeerName}
+          peerAvatar={activeCallPeerAvatar}
         />
       )}
 
@@ -2255,6 +2391,16 @@ export default function MessagesPage() {
         callType={incomingCall?.call_type || 'video'}
         onAccept={acceptIncomingCall}
         onDecline={declineCall}
+        onMissed={missCall}
+      />
+
+      <AddPeopleDialog
+        open={showAddPeople && isInCall}
+        onOpenChange={setShowAddPeople}
+        contacts={callContacts}
+        loading={callContactsLoading}
+        onAdd={inviteCallContact}
+        onInviteLink={copyCallInviteLink}
       />
 
       {/* Mobil ko'rinish */}
