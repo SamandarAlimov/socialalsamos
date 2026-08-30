@@ -1056,12 +1056,7 @@ export default function MapPage() {
         </button>
         <button
           type="button"
-          onClick={() => {
-            if (me) {
-              setCenter({ ...me });
-              setMovedCenter(null);
-            } else toast.error('Joylashuv aniqlanmadi.');
-          }
+          onClick={centerOnMe}
           className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/95 text-foreground shadow-md ring-1 ring-border/60 backdrop-blur"
           aria-label="Mening joylashuvim"
         >
