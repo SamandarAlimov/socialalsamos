@@ -1003,6 +1003,9 @@ export default function MapPage() {
       setRouteOrigin(origin);
       setRouteWaypoints([]);
       setDestination(place);
+      setSelectedTransitRoute(null);
+      setSelectedIncident(null);
+      setSelectedStop(null);
       setSelectedPlace(place);
       setPanel('route');
       setSnap('half');
