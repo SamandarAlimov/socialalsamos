@@ -29,6 +29,10 @@ type RecordingMode = 'voice' | 'video';
 const HOLD_TO_RECORD_MS = 260;
 /** Shundan qisqa yozuvlar bekor qilinadi (Telegramdek). */
 const MIN_DURATION_MS = 700;
+/** Telegram video-note maksimal davomiyligi. */
+const VIDEO_NOTE_MAX_SECONDS = 60;
+const VIDEO_RING_RADIUS = 47;
+const VIDEO_RING_CIRCUMFERENCE = 2 * Math.PI * VIDEO_RING_RADIUS;
 
 export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorderProps) {
   const { toast } = useToast();
@@ -360,7 +364,20 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
 
         clearTimer();
         timerRef.current = setInterval(() => {
-          setDuration(Math.round((Date.now() - startedAtRef.current) / 1000));
+          const elapsedMs = Date.now() - startedAtRef.current;
+          const elapsedSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
+          setDuration(elapsedSeconds);
+
+          // Telegram video-note 60 soniyada avtomatik previewga o'tadi.
+          if (
+            isVideo &&
+            elapsedMs >= VIDEO_NOTE_MAX_SECONDS * 1000 &&
+            mediaRecorderRef.current?.state !== 'inactive'
+          ) {
+            autoSendRef.current = false;
+            mediaRecorderRef.current.stop();
+            clearTimer();
+          }
         }, 250);
       } catch (error) {
         console.error('Failed to start recording:', error);
@@ -546,6 +563,9 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     setIsLocked(true);
   };
 
+  const videoRingProgress = Math.min(duration / VIDEO_NOTE_MAX_SECONDS, 1);
+  const videoRingOffset = VIDEO_RING_CIRCUMFERENCE * (1 - videoRingProgress);
+
   /* ---------------------------- Yuborilmoqda ---------------------------- */
 
   if (state === 'sending') {
@@ -564,57 +584,100 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
   if (state === 'preview' && mode === 'video' && mediaUrl) {
     return (
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="fixed inset-0 z-50 flex flex-col bg-black"
+        initial={{ opacity: 0, y: 10, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 8, scale: 0.97 }}
+        className="absolute bottom-[calc(100%+0.5rem)] right-2 z-40 flex w-[min(88vw,300px)] flex-col items-center gap-3 rounded-[28px] border border-border/80 bg-card/95 p-3 shadow-2xl backdrop-blur-xl sm:right-3"
       >
-        <video
-          ref={videoPlaybackRef}
-          src={mediaUrl}
-          className="flex-1 object-contain"
-          playsInline
-          loop
-          onEnded={() => setIsPlaying(false)}
-        />
-
-        <div className="safe-area-bottom absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-6">
-          <div className="flex items-center justify-center gap-6">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-14 w-14 rounded-full bg-white/10 text-white hover:bg-white/20"
-              onClick={cancelRecording}
-              aria-label="O'chirish"
-            >
-              <Trash2 className="h-6 w-6" />
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-16 w-16 rounded-full border-2 border-white/30 bg-white/10"
-              onClick={togglePlayback}
-              aria-label="Ko'rish"
-            >
-              {isPlaying ? (
-                <Pause className="h-7 w-7 text-white" />
-              ) : (
-                <Play className="ml-1 h-7 w-7 text-white" />
-              )}
-            </Button>
-
-            <Button
-              variant="default"
-              size="icon"
-              className="h-14 w-14 rounded-full bg-primary hover:bg-primary/90"
-              onClick={handleSendFromPreview}
-              aria-label="Jo'natish"
-            >
-              <Send className="h-6 w-6" />
-            </Button>
+        <div className="relative h-[clamp(180px,48vw,240px)] w-[clamp(180px,48vw,240px)] shrink-0">
+          <div className="absolute inset-[5px] overflow-hidden rounded-full bg-black shadow-inner">
+            <video
+              ref={videoPlaybackRef}
+              src={mediaUrl}
+              className="h-full w-full object-cover"
+              playsInline
+              loop
+              preload="metadata"
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onEnded={() => setIsPlaying(false)}
+            />
           </div>
 
-          <p className="mt-4 text-center text-sm text-white/60">{formatDuration(duration)}</p>
+          <svg
+            className="pointer-events-none absolute inset-0 h-full w-full -rotate-90 text-primary"
+            viewBox="0 0 100 100"
+            aria-hidden="true"
+          >
+            <circle
+              cx="50"
+              cy="50"
+              r={VIDEO_RING_RADIUS}
+              fill="none"
+              stroke="currentColor"
+              strokeOpacity="0.18"
+              strokeWidth="2.5"
+            />
+            <circle
+              cx="50"
+              cy="50"
+              r={VIDEO_RING_RADIUS}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeDasharray={VIDEO_RING_CIRCUMFERENCE}
+              strokeDashoffset={videoRingOffset}
+            />
+          </svg>
+
+          <button
+            type="button"
+            onClick={togglePlayback}
+            aria-label={isPlaying ? "To'xtatish" : "Ko'rish"}
+            className="absolute inset-0 m-auto flex h-14 w-14 items-center justify-center rounded-full bg-black/45 text-white shadow-lg backdrop-blur-sm transition-transform active:scale-95"
+          >
+            {isPlaying ? (
+              <Pause className="h-6 w-6" />
+            ) : (
+              <Play className="ml-0.5 h-6 w-6" fill="currentColor" />
+            )}
+          </button>
+
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-medium tabular-nums text-white backdrop-blur-sm">
+            {formatDuration(duration)}
+          </div>
+        </div>
+
+        <div className="flex w-full items-center justify-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 rounded-full text-destructive hover:bg-destructive/10"
+            onClick={cancelRecording}
+            aria-label="O'chirish"
+            title="O'chirish"
+          >
+            <Trash2 className="h-4.5 w-4.5" />
+          </Button>
+
+          <div className="min-w-0 flex-1 text-center">
+            <p className="text-xs font-medium text-foreground">Video xabar tayyor</p>
+            <p className="text-[11px] text-muted-foreground">
+              Ko'rib chiqing yoki jo'nating
+            </p>
+          </div>
+
+          <Button
+            variant="default"
+            size="icon"
+            className="h-10 w-10 rounded-full"
+            onClick={handleSendFromPreview}
+            aria-label="Jo'natish"
+            title="Jo'natish"
+          >
+            <Send className="h-4.5 w-4.5" />
+          </Button>
         </div>
       </motion.div>
     );
@@ -625,73 +688,110 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
   if (state === 'recording' && mode === 'video') {
     return (
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="fixed inset-0 z-50 flex flex-col bg-black"
+        initial={{ opacity: 0, y: 10, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 8, scale: 0.97 }}
+        className="absolute bottom-[calc(100%+0.5rem)] right-2 z-40 flex w-[min(88vw,300px)] flex-col items-center gap-3 rounded-[28px] border border-border/80 bg-card/95 p-3 shadow-2xl backdrop-blur-xl sm:right-3"
       >
-        <video
-          ref={videoPreviewRef}
-          className="flex-1 object-cover"
-          style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
-          playsInline
-          muted
-          autoPlay
-        />
+        <div className="relative h-[clamp(180px,48vw,240px)] w-[clamp(180px,48vw,240px)] shrink-0">
+          <div className="absolute inset-[5px] overflow-hidden rounded-full bg-black shadow-inner">
+            <video
+              ref={videoPreviewRef}
+              className="h-full w-full object-cover"
+              style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
+              playsInline
+              muted
+              autoPlay
+            />
+          </div>
 
-        {/* Yozish indikatori */}
-        <div className="safe-area-top absolute left-1/2 top-4 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/60 px-4 py-2 backdrop-blur-sm">
-          <motion.div
-            animate={{ opacity: [1, 0.3, 1] }}
-            transition={{ duration: 1, repeat: Infinity }}
-            className="h-3 w-3 rounded-full bg-destructive"
-          />
-          <span className="font-medium tabular-nums text-white">{formatDuration(duration)}</span>
+          <svg
+            className="pointer-events-none absolute inset-0 h-full w-full -rotate-90 text-primary"
+            viewBox="0 0 100 100"
+            aria-hidden="true"
+          >
+            <circle
+              cx="50"
+              cy="50"
+              r={VIDEO_RING_RADIUS}
+              fill="none"
+              stroke="currentColor"
+              strokeOpacity="0.18"
+              strokeWidth="2.5"
+            />
+            <motion.circle
+              cx="50"
+              cy="50"
+              r={VIDEO_RING_RADIUS}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeDasharray={VIDEO_RING_CIRCUMFERENCE}
+              animate={{ strokeDashoffset: videoRingOffset }}
+              transition={{ duration: 0.2, ease: 'linear' }}
+            />
+          </svg>
+
+          <div className="absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-medium tabular-nums text-white backdrop-blur-sm">
+            <motion.span
+              animate={{ opacity: [1, 0.35, 1] }}
+              transition={{ duration: 1, repeat: Infinity }}
+              className="h-2 w-2 rounded-full bg-destructive"
+            />
+            {formatDuration(duration)}
+          </div>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute right-3 top-3 h-9 w-9 rounded-full bg-black/55 text-white hover:bg-black/70 hover:text-white"
+            onClick={switchCamera}
+            aria-label="Kamerani almashtirish"
+            title="Kamerani almashtirish"
+          >
+            <SwitchCamera className="h-4 w-4" />
+          </Button>
         </div>
 
-        {/* Kamerani almashtirish */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="safe-area-top absolute right-4 top-4 h-11 w-11 rounded-full bg-black/60 text-white"
-          onClick={switchCamera}
-          aria-label="Kamerani almashtirish"
-        >
-          <SwitchCamera className="h-5 w-5" />
-        </Button>
+        <div className="flex w-full items-center justify-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 rounded-full text-destructive hover:bg-destructive/10"
+            onClick={cancelRecording}
+            aria-label="Bekor qilish"
+            title="Bekor qilish"
+          >
+            <X className="h-4.5 w-4.5" />
+          </Button>
 
-        {/* Boshqaruv */}
-        <div className="safe-area-bottom absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-6">
-          <div className="flex items-center justify-center gap-6">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-14 w-14 rounded-full bg-white/10 text-white hover:bg-white/20"
-              onClick={cancelRecording}
-              aria-label="Bekor qilish"
-            >
-              <X className="h-6 w-6" />
-            </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-11 w-11 rounded-full"
+            onClick={stopToPreview}
+            aria-label="To'xtatib ko'rish"
+            title="To'xtatib ko'rish"
+          >
+            <Square className="h-4 w-4 fill-current" />
+          </Button>
 
-            <Button
-              variant="default"
-              size="icon"
-              className="h-16 w-16 rounded-full bg-destructive hover:bg-destructive/90"
-              onClick={stopToPreview}
-              aria-label="To'xtatish"
-            >
-              <Square className="h-6 w-6 fill-current" />
-            </Button>
+          <Button
+            variant="default"
+            size="icon"
+            className="h-10 w-10 rounded-full"
+            onClick={finishAndSend}
+            aria-label="Darhol jo'natish"
+            title="Darhol jo'natish"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
 
-            <Button
-              variant="default"
-              size="icon"
-              className="h-14 w-14 rounded-full bg-primary hover:bg-primary/90"
-              onClick={finishAndSend}
-              aria-label="Darhol jo'natish"
-            >
-              <Send className="h-6 w-6" />
-            </Button>
-          </div>
+        <div className="flex w-full items-center justify-between px-1 text-[10px] text-muted-foreground">
+          <span>Video xabar</span>
+          <span>{VIDEO_NOTE_MAX_SECONDS} soniyagacha</span>
         </div>
       </motion.div>
     );
