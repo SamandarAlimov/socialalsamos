@@ -15,9 +15,6 @@
  */
 
 const SUPABASE_URL: string = (import.meta.env.VITE_SUPABASE_URL as string) || '';
-const SUPABASE_KEY: string =
-  (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string) || '';
-
 const YT_EMBED = 'https://' + 'www.youtube-nocookie.com/embed/';
 const YT_THUMB = 'https://' + 'img.youtube.com/vi/';
 const IG_BASE = 'https://' + 'www.instagram.com/';
@@ -305,19 +302,16 @@ function functionUrl(name: string): string | null {
 }
 
 async function requestMeta(url: string): Promise<LinkMeta | null> {
-  const endpoint = functionUrl('link-preview');
-  if (!endpoint) return null;
-
+  // Same-origin Vercel endpoint avoids browser -> Supabase Edge Function CORS
+  // entirely. The local card still renders instantly if the endpoint is down.
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), META_TIMEOUT_MS);
   try {
-    const res = await fetch(endpoint, {
+    const res = await fetch('/api/link-preview', {
       method: 'POST',
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
-        apikey: SUPABASE_KEY,
-        Authorization: 'Bearer ' + SUPABASE_KEY,
       },
       body: JSON.stringify({ url }),
     });
