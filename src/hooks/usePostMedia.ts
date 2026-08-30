@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { db } from '@/lib/db';
 import type { MediaKind } from '@/lib/postComposer';
+import { resolveStorageUrl } from '@/lib/mediaUpload';
 
 export interface PostMediaItem {
   id: string;
@@ -8,7 +9,11 @@ export interface PostMediaItem {
   position: number;
   kind: MediaKind;
   storage_url: string;
+  storage_bucket: string | null;
+  storage_key: string | null;
   thumbnail_url: string | null;
+  thumbnail_bucket: string | null;
+  thumbnail_key: string | null;
   mime_type: string | null;
   file_name: string | null;
   file_size: number | null;
@@ -48,7 +53,27 @@ export function usePostMedia(postId: string | null, enabled = true) {
         .order('position', { ascending: true });
 
       if (queryError) throw queryError;
-      setMedia((data as PostMediaItem[]) ?? []);
+
+      const rows = ((data ?? []) as PostMediaItem[]);
+      const resolved = await Promise.all(
+        rows.map(async (item) => ({
+          ...item,
+          storage_url: await resolveStorageUrl(
+            item.storage_url,
+            item.storage_bucket,
+            item.storage_key,
+          ),
+          thumbnail_url: item.thumbnail_url
+            ? await resolveStorageUrl(
+                item.thumbnail_url,
+                item.thumbnail_bucket,
+                item.thumbnail_key,
+              )
+            : null,
+        })),
+      );
+
+      setMedia(resolved);
     } catch (loadError) {
       console.error('Post fayllarini yuklashda xatolik:', loadError);
       setError('Fayllarni yuklab bo\u2018lmadi');
