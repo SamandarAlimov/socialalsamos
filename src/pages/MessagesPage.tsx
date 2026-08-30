@@ -739,9 +739,24 @@ export default function MessagesPage() {
   }, [liveLocation.isSharing]);
 
   const handleReply = (message: Message) => {
+    const mediaFallback =
+      message.media_type === 'audio'
+        ? 'Ovozli xabar'
+        : message.media_type === 'video'
+          ? 'Video xabar'
+          : message.media_type === 'image'
+            ? 'Rasm'
+            : message.media_type === 'sticker'
+              ? 'Stiker'
+              : message.media_type === 'gif'
+                ? 'GIF'
+                : message.media_url
+                  ? 'Fayl'
+                  : 'Xabar';
+
     setReplyTo({
       id: message.id,
-      content: message.content || '',
+      content: message.is_deleted ? "Xabar o'chirilgan" : message.content || mediaFallback,
       sender_name:
         message.sender?.display_name || message.sender?.username || 'Foydalanuvchi',
     });
