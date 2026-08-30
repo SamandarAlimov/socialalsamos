@@ -113,3 +113,10 @@ verify_jwt = false
 # sso-session exchanges a short-lived token between *.alsamos.com apps.
 [functions.sso-session]
 verify_jwt = false
+
+
+# --- Public transport realtime --------------------------------------------
+# Public read gateway for map clients. Upstream GTFS/GTFS-RT credentials stay
+# in Supabase secrets; the function exposes only normalized transport data.
+[functions.transit-realtime]
+verify_jwt = false
