@@ -8,7 +8,10 @@ import type { MediaKind } from '@/lib/postComposer';
  */
 
 export interface PostMediaInput {
+  /** Public URL yoki stable storage://bucket/key reference. */
   storageUrl: string;
+  storageBucket?: string | null;
+  storageKey?: string | null;
   kind: MediaKind;
   mimeType?: string | null;
   fileName?: string | null;
@@ -17,6 +20,8 @@ export interface PostMediaInput {
   height?: number | null;
   durationSeconds?: number | null;
   thumbnailUrl?: string | null;
+  thumbnailBucket?: string | null;
+  thumbnailKey?: string | null;
   aspectRatio?: string | null;
   altText?: string | null;
   /** Qo'llanilgan filtr/crop/trim/overlay holati. */
@@ -73,7 +78,11 @@ export async function savePostMedia(postId: string, items: PostMediaInput[]): Pr
       position,
       kind: item.kind,
       storage_url: item.storageUrl,
+      storage_bucket: item.storageBucket ?? null,
+      storage_key: item.storageKey ?? null,
       thumbnail_url: item.thumbnailUrl ?? null,
+      thumbnail_bucket: item.thumbnailBucket ?? null,
+      thumbnail_key: item.thumbnailKey ?? null,
       mime_type: item.mimeType ?? null,
       file_name: item.fileName ?? null,
       file_size: item.fileSize ?? null,
