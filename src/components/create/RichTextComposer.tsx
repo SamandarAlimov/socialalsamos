@@ -9,6 +9,7 @@ import {
   FORMAT_TEXT_COMMAND,
   SELECTION_CHANGE_COMMAND,
   COMMAND_PRIORITY_LOW,
+  type EditorState,
   type ElementNode,
   type LexicalEditor,
   type LexicalNode,
@@ -20,6 +21,7 @@ import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
 import { ListPlugin } from '@lexical/react/LexicalListPlugin';
 import { OnChangePlugin } from '@lexical/react/LexicalOnChangePlugin';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
+import LexicalErrorBoundary from '@lexical/react/LexicalErrorBoundary';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import {
   $createHeadingNode,
@@ -155,7 +157,7 @@ function blockFromElement(node: LexicalNode): RichBlock[] {
   return [{ type: 'paragraph', tokens }];
 }
 
-function serializeEditorState(editorState: Parameters<RichTextComposerProps['onChange']>[0] extends never ? never : any) {
+function serializeEditorState(editorState: EditorState): RichTextComposerValue {
   const blocks: RichBlock[] = [];
 
   editorState.read(() => {
@@ -218,7 +220,7 @@ function ToolbarButton({
 
 function RichToolbar() {
   const [editor] = useLexicalComposerContext();
-  const [formats, setFormats] = useState<Record<TextFormatType, boolean>>({} as Record<TextFormatType, boolean>);
+  const [formats, setFormats] = useState<Partial<Record<TextFormatType, boolean>>>({});
   const [blockType, setBlockType] = useState<BlockType>('paragraph');
   const [color, setColor] = useState<string>('');
 
@@ -232,13 +234,7 @@ function RichToolbar() {
       underline: selection.hasFormat('underline'),
       strikethrough: selection.hasFormat('strikethrough'),
       code: selection.hasFormat('code'),
-      subscript: selection.hasFormat('subscript'),
-      superscript: selection.hasFormat('superscript'),
-      lowercase: selection.hasFormat('lowercase'),
-      uppercase: selection.hasFormat('uppercase'),
-      capitalize: selection.hasFormat('capitalize'),
-      highlight: selection.hasFormat('highlight'),
-    } as Record<TextFormatType, boolean>);
+    });
 
     setColor($getSelectionStyleValueForProperty(selection, 'color', ''));
 
@@ -298,7 +294,10 @@ function RichToolbar() {
       } else if (target === 'quote') {
         $setBlocksType(selection, () => $createQuoteNode());
       } else {
-        $setBlocksType(selection, () => $createHeadingNode(target));
+        $setBlocksType(
+          selection,
+          () => $createHeadingNode(target as 'h1' | 'h2' | 'h3'),
+        );
       }
     });
   };
@@ -407,7 +406,7 @@ export function RichTextComposer({
   );
 
   const handleChange = useCallback(
-    (editorState: any) => {
+    (editorState: EditorState) => {
       const serialized = serializeEditorState(editorState);
       onChange(serialized);
 
@@ -479,7 +478,7 @@ export function RichTextComposer({
                 {placeholder}
               </div>
             }
-            ErrorBoundary={({ children }) => <>{children}</>}
+            ErrorBoundary={LexicalErrorBoundary}
           />
           <HistoryPlugin />
           <ListPlugin />
