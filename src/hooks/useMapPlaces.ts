@@ -297,15 +297,22 @@ export function useStopRoutes(stop?: TransitStop | null) {
 }
 
 export function useTransitRealtimeStatus() {
-  const [status, setStatus] = useState<TransitRealtimeStatus>({ configured: false });
+  const [status, setStatus] = useState<TransitRealtimeStatus>({
+    configured: false,
+  });
 
   useEffect(() => {
     let cancelled = false;
-    void fetchTransitRealtimeStatus().then((next) => {
+    const load = async () => {
+      const next = await fetchTransitRealtimeStatus();
       if (!cancelled) setStatus(next);
-    });
+    };
+
+    void load();
+    const timer = window.setInterval(() => void load(), 30_000);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
     };
   }, []);
 
