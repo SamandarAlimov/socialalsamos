@@ -28,6 +28,7 @@ import { corsHeaders, jsonResponse, preflight } from "../_shared/guard.ts";
 
 type StaticStop = {
   id: string;
+  code: string | null;
   name: string;
   lat: number;
   lng: number;
@@ -38,12 +39,14 @@ type StaticRoute = {
   ref: string;
   name: string;
   color: string | null;
+  mode: "bus" | "trolleybus" | "minibus" | "tram" | "subway" | "train" | "other";
 };
 
 type StaticData = {
   stops: StaticStop[];
   routes: Map<string, StaticRoute>;
   tripRoute: Map<string, string>;
+  stopRoutes: Map<string, string[]>;
   loadedAt: number;
 };
 
@@ -183,6 +186,19 @@ async function fetchBytes(url: string): Promise<Uint8Array> {
   return new Uint8Array(await response.arrayBuffer());
 }
 
+function gtfsRouteMode(
+  routeType: string,
+): StaticRoute["mode"] {
+  const type = Number(routeType);
+  if (type === 0) return "tram";
+  if (type === 1) return "subway";
+  if (type === 2) return "train";
+  if (type === 3) return "bus";
+  if (type === 11) return "trolleybus";
+  if (type === 200 || type === 700 || type === 800) return "bus";
+  return "other";
+}
+
 async function loadStatic(): Promise<StaticData | null> {
   const url = env("TRANSIT_GTFS_STATIC_URL");
   if (!url) return null;
@@ -199,6 +215,7 @@ async function loadStatic(): Promise<StaticData | null> {
   const stops: StaticStop[] = records(read("stops.txt"))
     .map((row) => ({
       id: row.stop_id,
+      code: row.stop_code || null,
       name: row.stop_name || row.stop_code || row.stop_id,
       lat: Number(row.stop_lat),
       lng: Number(row.stop_lon),
@@ -213,6 +230,7 @@ async function loadStatic(): Promise<StaticData | null> {
       ref: row.route_short_name || row.route_id,
       name: row.route_long_name || row.route_short_name || row.route_id,
       color: row.route_color ? "#" + row.route_color.replace(/^#/, "") : null,
+      mode: gtfsRouteMode(row.route_type),
     });
   }
 
@@ -221,7 +239,29 @@ async function loadStatic(): Promise<StaticData | null> {
     if (row.trip_id && row.route_id) tripRoute.set(row.trip_id, row.route_id);
   }
 
-  staticCache = { stops, routes, tripRoute, loadedAt: Date.now() };
+  const stopRouteSets = new Map<string, Set<string>>();
+  for (const row of records(read("stop_times.txt"))) {
+    if (!row.stop_id || !row.trip_id) continue;
+    const routeId = tripRoute.get(row.trip_id);
+    if (!routeId) continue;
+    const set = stopRouteSets.get(row.stop_id) ?? new Set<string>();
+    set.add(routeId);
+    stopRouteSets.set(row.stop_id, set);
+  }
+  const stopRoutes = new Map<string, string[]>(
+    Array.from(stopRouteSets.entries()).map(([stopId, set]) => [
+      stopId,
+      Array.from(set),
+    ]),
+  );
+
+  staticCache = {
+    stops,
+    routes,
+    tripRoute,
+    stopRoutes,
+    loadedAt: Date.now(),
+  };
   return staticCache;
 }
 
@@ -326,6 +366,56 @@ async function normalizedRequest(action: string, payload: Record<string, unknown
   });
   if (!response.ok) throw new Error("Normalized transit provider HTTP " + response.status);
   return await response.json();
+}
+
+async function staticStopRoutes(payload: Record<string, any>) {
+  const staticData = await loadStatic();
+  if (!staticData) {
+    return {
+      ...providerMeta(),
+      configured: false,
+      gtfsStopId: null,
+      routes: [],
+    };
+  }
+
+  const lat = Number(payload.latitude);
+  const lng = Number(payload.longitude);
+  const matched =
+    Number.isFinite(lat) && Number.isFinite(lng)
+      ? nearestStop(staticData, lat, lng)
+      : null;
+  const requestedStopId = String(payload.gtfsStopId || "");
+  const stopId = requestedStopId || matched?.id || "";
+  if (!stopId) {
+    return {
+      ...providerMeta(),
+      configured: true,
+      gtfsStopId: null,
+      routes: [],
+    };
+  }
+
+  const routeIds = staticData.stopRoutes.get(stopId) ?? [];
+  const routes = routeIds
+    .map((routeId) => staticData.routes.get(routeId))
+    .filter((route): route is StaticRoute => Boolean(route))
+    .map((route) => ({
+      id: route.id,
+      ref: route.ref,
+      name: route.name,
+      color: route.color,
+      mode: route.mode,
+    }));
+
+  return {
+    ...providerMeta(),
+    configured: true,
+    gtfsStopId: stopId,
+    matchedStopName: matched?.name ?? null,
+    matchedStopCode: matched?.code ?? null,
+    routes,
+  };
 }
 
 async function arrivals(payload: Record<string, any>) {
@@ -698,6 +788,12 @@ Deno.serve(async (req) => {
           alerts: alertHealth,
         },
       }, 200, { "Cache-Control": "public, max-age=20" });
+    }
+
+    if (action === "stop-routes") {
+      return jsonResponse(req, await staticStopRoutes(payload), 200, {
+        "Cache-Control": "public, max-age=300",
+      });
     }
 
     if (action === "arrivals") {
