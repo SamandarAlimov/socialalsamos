@@ -2,6 +2,7 @@
   "extends": "./tsconfig.app.json",
   "compilerOptions": {
     "lib": ["ES2021", "DOM", "DOM.Iterable"],
+    "types": ["node", "vitest/globals", "vite/client"],
     "noEmit": true
   },
   "include": [
