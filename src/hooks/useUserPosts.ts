@@ -65,6 +65,7 @@ export function useUserPosts(userId: string | undefined) {
             is_verified
           )
         `)
+        .neq('post_kind', 'story')
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
 
