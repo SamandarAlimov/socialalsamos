@@ -131,12 +131,7 @@ export function PostDraftPreview({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[92dvh] max-w-2xl flex-col overflow-hidden p-0">
         <DialogHeader className="shrink-0 border-b border-border/60 bg-background/90 px-5 py-4 backdrop-blur">
-          <div>
-            <DialogTitle className="text-base">Post preview</DialogTitle>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Publishdan oldingi lokal ko‘rinish. Hech narsa serverga yuborilmaydi.
-            </p>
-          </div>
+          <DialogTitle className="text-base">Ko‘rish</DialogTitle>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto bg-muted/25 p-3 sm:p-5">
