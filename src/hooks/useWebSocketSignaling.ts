@@ -169,19 +169,10 @@ export function useWebSocketSignaling(options: WebSocketSignalingOptions = {}) {
       setIsConnected(true);
       setIsReconnecting(false);
 
-      // The room/user/token are already authenticated through the URL. Sending
-      // join as well keeps compatibility with the current Edge Function and
-      // makes reconnects explicit.
-      void supabase.auth.getSession().then(({ data }) => {
-        if (wsRef.current !== ws || ws.readyState !== WebSocket.OPEN) return;
-        sendMessage({
-          type: 'join',
-          roomId,
-          userId: user.id,
-          accessToken: data.session?.access_token,
-        });
-      });
-
+      // The current Edge Function auto-registers the socket from roomId,
+      // userId and access_token in the URL. Do NOT send join here: doing so
+      // would register the same socket twice and emit duplicate user-joined
+      // events. The 'ready' fallback below supports an older server version.
       if (wasReconnect) optionsRef.current.onReconnected?.();
     };
 
@@ -191,8 +182,21 @@ export function useWebSocketSignaling(options: WebSocketSignalingOptions = {}) {
       try {
         const data = JSON.parse(event.data) as Record<string, any>;
         switch (data.type) {
-          case 'ready':
+          case 'ready': {
+            // Compatibility with an older signaling function that waits for
+            // a join message instead of auto-registering from URL parameters.
+            void supabase.auth.getSession().then(({ data: sessionData }) => {
+              if (wsRef.current === ws && ws.readyState === WebSocket.OPEN) {
+                sendMessage({
+                  type: 'join',
+                  roomId,
+                  userId: user.id,
+                  accessToken: sessionData.session?.access_token,
+                });
+              }
+            });
             break;
+          }
           case 'joined':
           case 'room-joined': {
             const participants = Array.isArray(data.participants)
@@ -236,7 +240,9 @@ export function useWebSocketSignaling(options: WebSocketSignalingOptions = {}) {
             if (data.userId && data.userId !== user.id) optionsRef.current.onCallEnded?.(data.userId);
             break;
           case 'ping':
-            // The Edge Function uses this heartbeat to keep the participant alive.
+            // The server uses heartbeat messages to keep this participant
+            // alive. Respond with heartbeat, not join, so we don't emit a
+            // duplicate user-joined event every 15 seconds.
             sendMessage({ type: 'join', roomId, userId: user.id });
             break;
           case 'heartbeat-ack':
