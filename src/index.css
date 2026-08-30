@@ -272,6 +272,27 @@
     background-color: rgb(255 255 255 / 0.14) !important;
   }
 
+
+  .map-imagery-card {
+    color: rgb(255 255 255 / 0.96) !important;
+  }
+
+  .map-imagery-card .text-muted-foreground {
+    color: rgb(255 255 255 / 0.62) !important;
+  }
+
+  .map-imagery-card .text-foreground {
+    color: rgb(255 255 255 / 0.96) !important;
+  }
+
+  .map-imagery-card [class*="border-border/"] {
+    border-color: rgb(255 255 255 / 0.14) !important;
+  }
+
+  .map-imagery-card [class*="bg-muted/"] {
+    background-color: rgb(255 255 255 / 0.065) !important;
+  }
+
   .map-imagery-search {
     background: rgb(15 23 42 / 0.86) !important;
     border-color: rgb(255 255 255 / 0.18) !important;
