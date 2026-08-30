@@ -316,6 +316,60 @@ export async function fetchRoutesThrough(
   return mapOsrmRoutes(raw, mode, points);
 }
 
+export async function optimizeRouteWaypoints<T extends RoutePoint>(
+  mode: RouteMode,
+  origin: RoutePoint,
+  waypoints: T[],
+  destination: RoutePoint,
+  signal?: AbortSignal,
+): Promise<T[]> {
+  if (waypoints.length < 2 || mode === 'transit') return waypoints;
+
+  const config = PROFILE[mode];
+  const points = [origin, ...waypoints, destination];
+  const coords = points
+    .map((point) => point.longitude + ',' + point.latitude)
+    .join(';');
+  const url =
+    PRIMARY +
+    '/' +
+    config.prefix +
+    '/trip/v1/' +
+    config.profile +
+    '/' +
+    coords +
+    '?roundtrip=false&source=first&destination=last&overview=false&steps=false';
+
+  try {
+    const response = await fetch(url, { signal });
+    if (!response.ok) return waypoints;
+    const data = (await response.json()) as {
+      waypoints?: { waypoint_index?: number }[];
+    };
+    if (
+      !Array.isArray(data.waypoints) ||
+      data.waypoints.length !== points.length
+    ) {
+      return waypoints;
+    }
+
+    // OSRM waypoints input tartibida qaytadi; waypoint_index esa
+    // optimallashgan safardagi pozitsiyani ko'rsatadi.
+    const ordered = waypoints
+      .map((waypoint, index) => ({
+        waypoint,
+        order: Number(data.waypoints?.[index + 1]?.waypoint_index),
+      }))
+      .filter((item) => Number.isFinite(item.order))
+      .sort((a, b) => a.order - b.order)
+      .map((item) => item.waypoint);
+
+    return ordered.length === waypoints.length ? ordered : waypoints;
+  } catch {
+    return waypoints;
+  }
+}
+
 export async function fetchRoutes(
   mode: RouteMode,
   from: RoutePoint,
