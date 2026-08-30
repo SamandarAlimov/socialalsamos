@@ -76,6 +76,18 @@ function formatSeconds(value: number): string {
   return `${minutes}:${String(total % 60).padStart(2, '0')}`;
 }
 
+const REEL_SPEEDS = [0.5, 1, 1.5, 2] as const;
+
+function clipPlaybackRate(
+  item: { editState?: Record<string, unknown> } | null | undefined,
+): number {
+  const reelClip = (item?.editState?.reelClip ?? {}) as Record<string, unknown>;
+  const speed = Number(reelClip.speed);
+  return REEL_SPEEDS.includes(speed as (typeof REEL_SPEEDS)[number])
+    ? speed
+    : 1;
+}
+
 function draftMusicObject(
   input?: PostMusicInput | null,
 ): { bucket: string; key: string } | null {
@@ -161,12 +173,14 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
 
   const totalDuration = useMemo(
     () =>
-      attachments.reduce(
-        (sum, item) => sum + Math.max(0, item.durationSeconds ?? 0),
-        0,
-      ),
+      attachments.reduce((sum, item) => {
+        const sourceDuration = Math.max(0, item.durationSeconds ?? 0);
+        return sum + sourceDuration / clipPlaybackRate(item);
+      }, 0),
     [attachments],
   );
+
+  const activeSpeed = clipPlaybackRate(activeClip);
 
   useEffect(() => {
     if (totalDuration <= 0) {
@@ -194,19 +208,25 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
         let localSecond = Math.max(0, target.durationSeconds ?? 0) * 0.5;
 
         for (const clip of attachments) {
-          const duration = Math.max(0, clip.durationSeconds ?? 0);
-          if (remaining <= duration || clip === attachments[attachments.length - 1]) {
+          const sourceDuration = Math.max(0, clip.durationSeconds ?? 0);
+          const speed = clipPlaybackRate(clip);
+          const outputDuration = sourceDuration / speed;
+
+          if (
+            remaining <= outputDuration ||
+            clip === attachments[attachments.length - 1]
+          ) {
             target = clip;
             localSecond = Math.max(
               0,
               Math.min(
-                Math.max(0, duration - 0.05),
-                remaining,
+                Math.max(0, sourceDuration - 0.05),
+                remaining * speed,
               ),
             );
             break;
           }
-          remaining -= duration;
+          remaining -= outputDuration;
         }
 
         if (!target.previewUrl) return;
@@ -357,7 +377,11 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
 
     setIsPosting(true);
     try {
-      if (attachments.length > 1) {
+      const needsSequenceRender =
+        attachments.length > 1 ||
+        attachments.some((item) => clipPlaybackRate(item) !== 1);
+
+      if (needsSequenceRender) {
         if (!canRenderReelSequence()) {
           toast.error('Bu brauzerda multi-clip render mavjud emas');
           return;
@@ -371,6 +395,7 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
           attachments.map((item) => ({
             file: item.file,
             durationSeconds: item.durationSeconds,
+            playbackRate: clipPlaybackRate(item),
           })),
           {
             width: 720,
@@ -388,6 +413,9 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
           },
           reelCover: {
             second: coverSecond,
+          },
+          reelSpeed: {
+            rendered: true,
           },
         });
 
@@ -665,6 +693,34 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
+                  </div>
+                )}
+
+                {activeClip && (
+                  <div className="flex items-center gap-1 rounded-xl bg-muted/40 p-1">
+                    {REEL_SPEEDS.map((speed) => (
+                      <button
+                        key={speed}
+                        type="button"
+                        onClick={() =>
+                          setEditState(activeClip.id, {
+                            ...(activeClip.editState ?? {}),
+                            reelClip: {
+                              ...((activeClip.editState?.reelClip ?? {}) as Record<string, unknown>),
+                              speed,
+                            },
+                          })
+                        }
+                        className={cn(
+                          'h-8 flex-1 rounded-lg text-[10px] font-semibold transition',
+                          activeSpeed === speed
+                            ? 'bg-background text-primary shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground',
+                        )}
+                      >
+                        {speed}×
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
