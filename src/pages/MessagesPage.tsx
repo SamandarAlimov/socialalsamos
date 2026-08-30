@@ -278,6 +278,8 @@ export default function MessagesPage() {
     toggleMute,
     toggleVideo,
     toggleScreenShare,
+    selectCamera,
+    selectMicrophone,
     switchCamera,
     toggleHandRaise,
   } = useWebRTC(activeCallId);
@@ -2371,6 +2373,8 @@ export default function MessagesPage() {
           onToggleScreenShare={toggleScreenShare}
           onToggleHandRaise={toggleHandRaise}
           onSwitchCamera={switchCamera}
+          onCameraChange={selectCamera}
+          onMicrophoneChange={selectMicrophone}
           onAddPeople={selectedConversation?.type === 'group' ? openAddPeople : undefined}
           onEndCall={endCall}
           currentUserName={user?.email?.split('@')[0]}
