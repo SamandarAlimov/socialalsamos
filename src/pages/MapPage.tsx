@@ -444,6 +444,14 @@ export default function MapPage() {
   const [navigationFollowing, setNavigationFollowing] = useState(
     restoredNavigation?.following ?? true,
   );
+  const [pendingNavigationStart, setPendingNavigationStart] = useState<{
+    point: { latitude: number; longitude: number };
+    originDistanceM: number;
+  } | null>(null);
+  const [reachedNavigationStop, setReachedNavigationStop] = useState<{
+    index: number;
+    name: string;
+  } | null>(null);
 
   const [sheetHeightPx, setSheetHeightPx] = useState(112);
   const [movedCenter, setMovedCenter] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -1298,6 +1306,8 @@ export default function MapPage() {
   const stopNavigation = useCallback(() => {
     setNavigationActive(false);
     setNavigationFollowing(true);
+    setPendingNavigationStart(null);
+    setReachedNavigationStop(null);
     setPanel('route');
     setSnap('half');
   }, []);
@@ -1315,50 +1325,27 @@ export default function MapPage() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [navigationActive, stopNavigation]); // Escape ham navigationdan chiqadi
 
+  const handleNavigationCheckpoint = useCallback(
+    (index: number, checkpoint: { name?: string }) => {
+      const name =
+        checkpoint.name ||
+        routeWaypoints[index]?.name ||
+        'Oraliq manzil';
+      setReachedNavigationStop({ index, name });
+      toast.success(name + ' manziliga yetib keldingiz.');
+    },
+    [routeWaypoints],
+  );
+
   const handleNavigationArrive = useCallback(() => {
+    setReachedNavigationStop(null);
     toast.success('Manzilga yetib keldingiz.');
   }, []);
 
-  const startNavigation = useCallback(async () => {
-    if (!destination || !routes[routeIndex]) {
-      toast.error('Avval marshrutni tanlang.');
-      return;
-    }
-    if (routeMode === 'transit') {
-      toast.error('Active navigation hozircha avtomobil, piyoda va velosiped uchun.');
-      return;
-    }
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      toast.error('Navigatsiya uchun joylashuv xizmati kerak.');
-      return;
-    }
-
-    const begin = async (point: { latitude: number; longitude: number }) => {
-      const originDistance = routeOrigin
-        ? distanceMeters(
-            point.latitude,
-            point.longitude,
-            routeOrigin.latitude,
-            routeOrigin.longitude,
-          )
-        : 0;
-
-      if (originDistance > 150) {
-        try {
-          const result = await fetchRoutesThrough(
-            routeMode,
-            [point, ...routeWaypoints, destination],
-          );
-          if (result.length) {
-            setRouteOrigin({ ...point, name: 'Joriy joylashuv' });
-            setRoutes(result);
-            setRouteIndex(0);
-          }
-        } catch {
-          // Existing route bilan navigation boshlanadi; hook off-route bo'lsa reroute qiladi.
-        }
-      }
-
+  const activateNavigationAt = useCallback(
+    (point: { latitude: number; longitude: number }) => {
+      setPendingNavigationStart(null);
+      setReachedNavigationStop(null);
       setMe(point);
       setCenter(point);
       setNavigationFollowing(true);
@@ -1371,6 +1358,116 @@ export default function MapPage() {
       if (map) {
         map.setView([point.latitude, point.longitude], 17, { animate: true });
       }
+    },
+    [],
+  );
+
+  const rebuildAndActivateNavigation = useCallback(
+    async (
+      point: { latitude: number; longitude: number },
+      strategy: 'current' | 'via-origin',
+    ) => {
+      if (!destination) return;
+
+      let nextWaypoints = routeWaypoints;
+      if (strategy === 'via-origin' && routeOrigin) {
+        const originalOrigin = {
+          id:
+            'route-origin-stop:' +
+            routeOrigin.latitude.toFixed(6) +
+            ',' +
+            routeOrigin.longitude.toFixed(6),
+          source: 'route',
+          name: routeOrigin.name || 'Boshlanish nuqtasi',
+          categoryLabel: 'Joy',
+          latitude: routeOrigin.latitude,
+          longitude: routeOrigin.longitude,
+          address: null,
+          tags: {},
+        } as unknown as MapPlace;
+        nextWaypoints = [originalOrigin, ...routeWaypoints];
+      }
+
+      setRouteLoading(true);
+      try {
+        const result = await fetchRoutesThrough(
+          routeMode,
+          [point, ...nextWaypoints, destination],
+        );
+        if (!result.length) {
+          toast.error('Marshrut topilmadi.');
+          return;
+        }
+
+        setRouteOrigin({ ...point, name: 'Joriy joylashuv' });
+        setRouteWaypoints(nextWaypoints);
+        setRoutes(result);
+        setRouteIndex(0);
+        activateNavigationAt(point);
+      } catch {
+        toast.error('Navigatsiya uchun marshrutni qayta hisoblab bo‘lmadi.');
+      } finally {
+        setRouteLoading(false);
+      }
+    },
+    [
+      destination,
+      routeWaypoints,
+      routeOrigin,
+      routeMode,
+      activateNavigationAt,
+    ],
+  );
+
+  const confirmNavigationStart = useCallback(
+    async (strategy: 'current' | 'via-origin') => {
+      const pending = pendingNavigationStart;
+      if (!pending) return;
+      await rebuildAndActivateNavigation(pending.point, strategy);
+    },
+    [pendingNavigationStart, rebuildAndActivateNavigation],
+  );
+
+  const startNavigation = useCallback(async () => {
+    if (!destination || !routes[routeIndex]) {
+      toast.error('Avval marshrutni tanlang.');
+      return;
+    }
+    if (routeMode === 'transit') {
+      toast.error(
+        'Active navigation hozircha avtomobil, piyoda va velosiped uchun.',
+      );
+      return;
+    }
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      toast.error('Navigatsiya uchun joylashuv xizmati kerak.');
+      return;
+    }
+
+    const begin = async (point: {
+      latitude: number;
+      longitude: number;
+    }) => {
+      const originDistance = routeOrigin
+        ? distanceMeters(
+            point.latitude,
+            point.longitude,
+            routeOrigin.latitude,
+            routeOrigin.longitude,
+          )
+        : 0;
+
+      if (routeOrigin && originDistance > 150) {
+        setPendingNavigationStart({
+          point,
+          originDistanceM: originDistance,
+        });
+        setPanel('route');
+        setSnap('half');
+        return;
+      }
+
+      activateNavigationAt(point);
     };
 
     if (me) {
@@ -1403,9 +1500,55 @@ export default function MapPage() {
     routeIndex,
     routeMode,
     routeOrigin,
-    routeWaypoints,
     me,
+    activateNavigationAt,
   ]);
+
+  const skipNextNavigationStop = useCallback(async () => {
+    if (!destination || !navigation.position) return;
+
+    const nextIndex = navigation.snapshot.nextCheckpointIndex;
+    if (
+      nextIndex == null ||
+      nextIndex < 0 ||
+      nextIndex >= routeWaypoints.length
+    ) {
+      return;
+    }
+
+    const nextWaypoints = routeWaypoints.slice(nextIndex + 1);
+    const point = {
+      latitude: navigation.position.latitude,
+      longitude: navigation.position.longitude,
+    };
+
+    setRouteLoading(true);
+    try {
+      const result = await fetchRoutesThrough(
+        routeMode,
+        [point, ...nextWaypoints, destination],
+      );
+      if (!result.length) return;
+
+      setRouteOrigin({ ...point, name: 'Joriy joylashuv' });
+      setRouteWaypoints(nextWaypoints);
+      setRoutes(result);
+      setRouteIndex(0);
+      setReachedNavigationStop(null);
+      toast.success('Oraliq manzil o‘tkazib yuborildi.');
+    } catch {
+      toast.error('Keyingi marshrutni hisoblab bo‘lmadi.');
+    } finally {
+      setRouteLoading(false);
+    }
+  }, [
+    destination,
+    navigation.position,
+    navigation.snapshot.nextCheckpointIndex,
+    routeWaypoints,
+    routeMode,
+  ]);
+
 
   useEffect(() => {
     if (!destination || !routes.length) return;
