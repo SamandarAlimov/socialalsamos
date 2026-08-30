@@ -1,0 +1,38 @@
+{
+  "schema": "alsamos.create.contract",
+  "version": 1,
+  "updatedAt": "2026-08-30",
+  "modes": ["post", "story", "reel", "live"],
+  "visibility": ["public", "friends", "private"],
+  "limits": {
+    "postFiles": 10,
+    "postCollaborators": 10,
+    "storyMedia": 1
+  },
+  "story": {
+    "aspectRatio": "9:16",
+    "lifetimeHours": 24,
+    "sourceOfTruth": "posts+post_media",
+    "viewerIndex": "stories",
+    "draftLifecycle": ["create_story_draft", "activate_story_draft", "discard_story_draft"]
+  },
+  "collaboration": {
+    "statuses": ["pending", "accepted", "declined"],
+    "inviteRpc": "invite_post_collaborator",
+    "respondRpc": "respond_post_collaboration",
+    "removeRpc": "remove_post_collaborator",
+    "leaveRpc": "leave_post_collaboration"
+  },
+  "publish": {
+    "postRpc": "publish_post_draft",
+    "storyRpc": "publish_story_draft",
+    "formattedContentField": "formatted_content",
+    "postKindField": "post_kind"
+  },
+  "ui": {
+    "modeSwitcher": "floating-bottom",
+    "mediaFirstDesktop": true,
+    "mobileViewport": "100dvh",
+    "fakeControlsAllowed": false
+  }
+}
