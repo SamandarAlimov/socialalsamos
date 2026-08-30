@@ -1542,6 +1542,59 @@ export default function MapPage() {
                     </button>
                   )}
                 </div>
+                {routeWaypoints.map((waypoint, index) => {
+                  const target = `waypoint:${index}` as RouteEditTarget;
+                  return (
+                    <div
+                      key={'route-waypoint:' + waypoint.id + ':' + index}
+                      className="flex min-h-10 items-center gap-2 rounded-2xl border border-border/[0.45] bg-background/[0.55] px-3"
+                    >
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/[0.12] text-[10px] font-extrabold text-primary">
+                        {index + 1}
+                      </span>
+                      <span className="w-10 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        To
+                      </span>
+                      {routeEditField === target ? (
+                        <input
+                          autoFocus
+                          value={routeEditQuery}
+                          onChange={(event) =>
+                            setRouteEditQuery(event.target.value)
+                          }
+                          onKeyDown={(event) => {
+                            if (event.key === 'Escape') {
+                              setRouteEditField(null);
+                              setRouteEditQuery('');
+                            }
+                          }}
+                          placeholder="Oraliq manzilni qidiring"
+                          className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-muted-foreground"
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRouteEditField(target);
+                            setRouteEditQuery('');
+                          }}
+                          className="min-w-0 flex-1 truncate text-left text-sm font-medium"
+                        >
+                          {waypoint.name}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeRouteWaypoint(index)}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-destructive"
+                        aria-label="Oraliq manzilni olib tashlash"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+
                 <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-border/[0.45] bg-background/[0.55] px-3">
                   <MapPin className="h-4 w-4 shrink-0 text-destructive" />
                   <span className="w-10 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -1573,7 +1626,54 @@ export default function MapPage() {
                       {destination?.name || 'Manzil tanlanmagan'}
                     </button>
                   )}
+                  {destination && (
+                    <button
+                      type="button"
+                      onClick={removeFinalDestination}
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-destructive"
+                      aria-label="Oxirgi manzilni olib tashlash"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
+
+                {routeEditField === 'append' ? (
+                  <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-primary/[0.35] bg-primary/[0.05] px-3">
+                    <Plus className="h-4 w-4 shrink-0 text-primary" />
+                    <span className="w-10 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      To
+                    </span>
+                    <input
+                      autoFocus
+                      value={routeEditQuery}
+                      onChange={(event) => setRouteEditQuery(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Escape') {
+                          setRouteEditField(null);
+                          setRouteEditQuery('');
+                        }
+                      }}
+                      placeholder="Keyingi manzilni qidiring"
+                      className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-muted-foreground"
+                    />
+                  </div>
+                ) : (
+                  destination &&
+                  routeWaypoints.length < 7 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRouteEditField('append');
+                        setRouteEditQuery('');
+                      }}
+                      className="flex min-h-9 w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-bold text-primary transition hover:bg-primary/[0.06]"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Yana manzil qo‘shish
+                    </button>
+                  )
+                )}
               </div>
 
               <div className="flex shrink-0 flex-col gap-1.5">
