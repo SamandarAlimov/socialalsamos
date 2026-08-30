@@ -1,7 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  addDays,
+  addHours,
+  format,
+  isBefore,
+  setHours,
+  setMinutes,
+  startOfDay,
+} from 'date-fns';
+import { CalendarClock, Check, Clock3, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Calendar } from '@/components/ui/calendar';
 import {
   Dialog,
   DialogContent,
@@ -9,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -16,144 +27,183 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Calendar } from '@/components/ui/calendar';
-import { CalendarClock, Clock, Check, X } from 'lucide-react';
-import { format, addDays, addHours, setHours, setMinutes, isBefore, startOfDay } from 'date-fns';
-import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
 
 interface SchedulePostDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSchedule: (scheduledDate: Date) => void;
+  currentDate?: Date | null;
 }
 
 const QUICK_OPTIONS = [
-  { label: 'In 1 hour', getValue: () => addHours(new Date(), 1) },
-  { label: 'In 3 hours', getValue: () => addHours(new Date(), 3) },
-  { label: 'In 6 hours', getValue: () => addHours(new Date(), 6) },
-  { label: 'Tomorrow 9 AM', getValue: () => setMinutes(setHours(addDays(new Date(), 1), 9), 0) },
-  { label: 'Tomorrow 12 PM', getValue: () => setMinutes(setHours(addDays(new Date(), 1), 12), 0) },
-  { label: 'Tomorrow 6 PM', getValue: () => setMinutes(setHours(addDays(new Date(), 1), 18), 0) },
+  { label: '1 soatdan keyin', getValue: () => addHours(new Date(), 1) },
+  { label: '3 soatdan keyin', getValue: () => addHours(new Date(), 3) },
+  { label: '6 soatdan keyin', getValue: () => addHours(new Date(), 6) },
+  {
+    label: 'Ertaga 09:00',
+    getValue: () => setMinutes(setHours(addDays(new Date(), 1), 9), 0),
+  },
+  {
+    label: 'Ertaga 12:00',
+    getValue: () => setMinutes(setHours(addDays(new Date(), 1), 12), 0),
+  },
+  {
+    label: 'Ertaga 18:00',
+    getValue: () => setMinutes(setHours(addDays(new Date(), 1), 18), 0),
+  },
 ];
 
-const HOURS = Array.from({ length: 24 }, (_, i) => ({
-  value: i.toString(),
-  label: i.toString().padStart(2, '0')
+const HOURS = Array.from({ length: 24 }, (_, index) => ({
+  value: String(index),
+  label: String(index).padStart(2, '0'),
 }));
 
-const MINUTES = Array.from({ length: 60 }, (_, i) => ({
-  value: i.toString(),
-  label: i.toString().padStart(2, '0')
+const MINUTES = Array.from({ length: 60 }, (_, index) => ({
+  value: String(index),
+  label: String(index).padStart(2, '0'),
 }));
 
-export function SchedulePostDialog({ open, onOpenChange, onSchedule }: SchedulePostDialogProps) {
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(addDays(new Date(), 1));
-  const [selectedHour, setSelectedHour] = useState('12');
-  const [selectedMinute, setSelectedMinute] = useState('00');
+function dateParts(date: Date) {
+  return {
+    day: startOfDay(date),
+    hour: String(date.getHours()),
+    minute: String(date.getMinutes()),
+  };
+}
+
+export function SchedulePostDialog({
+  open,
+  onOpenChange,
+  onSchedule,
+  currentDate,
+}: SchedulePostDialogProps) {
+  const defaultDate = useMemo(
+    () => currentDate ?? setMinutes(setHours(addDays(new Date(), 1), 12), 0),
+    [currentDate],
+  );
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(
+    () => dateParts(defaultDate).day,
+  );
+  const [selectedHour, setSelectedHour] = useState(
+    () => dateParts(defaultDate).hour,
+  );
+  const [selectedMinute, setSelectedMinute] = useState(
+    () => dateParts(defaultDate).minute,
+  );
   const [showCalendar, setShowCalendar] = useState(false);
 
-  const getScheduledDateTime = () => {
-    if (!selectedDate) return null;
-    return setMinutes(setHours(selectedDate, parseInt(selectedHour)), parseInt(selectedMinute));
-  };
+  useEffect(() => {
+    if (!open) return;
+    const next = currentDate ?? setMinutes(setHours(addDays(new Date(), 1), 12), 0);
+    const parts = dateParts(next);
+    setSelectedDate(parts.day);
+    setSelectedHour(parts.hour);
+    setSelectedMinute(parts.minute);
+    setShowCalendar(false);
+  }, [currentDate, open]);
 
-  const handleQuickOption = (option: typeof QUICK_OPTIONS[0]) => {
-    const date = option.getValue();
-    setSelectedDate(startOfDay(date));
-    setSelectedHour(date.getHours().toString());
-    setSelectedMinute(date.getMinutes().toString());
+  const scheduledDateTime = useMemo(() => {
+    if (!selectedDate) return null;
+    return setMinutes(
+      setHours(selectedDate, Number(selectedHour)),
+      Number(selectedMinute),
+    );
+  }, [selectedDate, selectedHour, selectedMinute]);
+
+  const handleQuickOption = (option: (typeof QUICK_OPTIONS)[number]) => {
+    const value = option.getValue();
+    const parts = dateParts(value);
+    setSelectedDate(parts.day);
+    setSelectedHour(parts.hour);
+    setSelectedMinute(parts.minute);
     setShowCalendar(false);
   };
 
   const handleSchedule = () => {
-    const scheduledDate = getScheduledDateTime();
-    
-    if (!scheduledDate) {
-      toast.error('Please select a date and time');
+    if (!scheduledDateTime) {
+      toast.error('Sana va vaqtni tanlang');
       return;
     }
-    
-    if (isBefore(scheduledDate, new Date())) {
-      toast.error('Scheduled time must be in the future');
+
+    if (isBefore(scheduledDateTime, new Date())) {
+      toast.error('Joylash vaqti kelajakda bo‘lishi kerak');
       return;
     }
-    
-    onSchedule(scheduledDate);
+
+    onSchedule(scheduledDateTime);
     onOpenChange(false);
   };
 
-  const scheduledDateTime = getScheduledDateTime();
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto overscroll-contain">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[92dvh] max-w-md flex-col overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b border-border/60 px-5 pb-4 pt-5">
           <DialogTitle className="flex items-center gap-2">
-            <CalendarClock className="h-5 w-5" />
-            Schedule Post
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <CalendarClock className="h-4 w-4" />
+            </span>
+            Postni rejalashtirish
           </DialogTitle>
           <DialogDescription>
-            Choose when you want your post to be published
+            Post qachon avtomatik e’lon qilinishini belgilang.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6">
-          {/* Quick Options */}
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-5 py-4">
           <div className="space-y-2">
-            <Label className="text-muted-foreground text-xs">Quick Options</Label>
+            <Label className="text-xs text-muted-foreground">Tez tanlash</Label>
             <div className="grid grid-cols-2 gap-2">
               {QUICK_OPTIONS.map((option) => (
                 <Button
                   key={option.label}
+                  type="button"
                   variant="outline"
                   size="sm"
+                  className="h-9 justify-start rounded-xl text-xs"
                   onClick={() => handleQuickOption(option)}
-                  className="text-xs"
                 >
+                  <Clock3 className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
                   {option.label}
                 </Button>
               ))}
             </div>
           </div>
 
-          {/* Custom Date/Time */}
-          <div className="space-y-4">
-            <Label className="text-muted-foreground text-xs">Or choose custom date & time</Label>
-            
-            {/* Date Picker */}
-            <div>
-              <Button
-                variant="outline"
-                className="w-full justify-start"
-                onClick={() => setShowCalendar(!showCalendar)}
-              >
-                <CalendarClock className="h-4 w-4 mr-2" />
-                {selectedDate ? format(selectedDate, 'EEEE, MMMM d, yyyy') : 'Select date'}
-              </Button>
-              
-              {showCalendar && (
-                <div className="mt-2 border rounded-lg p-2">
-                  <Calendar
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={(date) => {
-                      setSelectedDate(date);
-                      setShowCalendar(false);
-                    }}
-                    disabled={(date) => isBefore(date, startOfDay(new Date()))}
-                    className="pointer-events-auto"
-                  />
-                </div>
-              )}
-            </div>
+          <div className="space-y-3">
+            <Label className="text-xs text-muted-foreground">Aniq sana va vaqt</Label>
 
-            {/* Time Picker */}
-            <div className="flex gap-2 items-center">
-              <Clock className="h-4 w-4 text-muted-foreground" />
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 w-full justify-start rounded-xl"
+              onClick={() => setShowCalendar((current) => !current)}
+            >
+              <CalendarClock className="mr-2 h-4 w-4 text-primary" />
+              {selectedDate
+                ? format(selectedDate, 'dd.MM.yyyy')
+                : 'Sanani tanlang'}
+            </Button>
+
+            {showCalendar && (
+              <div className="rounded-2xl border border-border/60 p-2">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(date) => {
+                    setSelectedDate(date);
+                    if (date) setShowCalendar(false);
+                  }}
+                  disabled={(date) => isBefore(date, startOfDay(new Date()))}
+                  className="pointer-events-auto"
+                />
+              </div>
+            )}
+
+            <div className="flex items-center gap-2">
+              <Clock3 className="h-4 w-4 shrink-0 text-muted-foreground" />
               <Select value={selectedHour} onValueChange={setSelectedHour}>
-                <SelectTrigger className="w-24">
-                  <SelectValue placeholder="Hour" />
+                <SelectTrigger className="w-24 rounded-xl">
+                  <SelectValue placeholder="Soat" />
                 </SelectTrigger>
                 <SelectContent>
                   {HOURS.map((hour) => (
@@ -163,10 +213,10 @@ export function SchedulePostDialog({ open, onOpenChange, onSchedule }: ScheduleP
                   ))}
                 </SelectContent>
               </Select>
-              <span className="text-xl font-semibold">:</span>
+              <span className="font-semibold text-muted-foreground">:</span>
               <Select value={selectedMinute} onValueChange={setSelectedMinute}>
-                <SelectTrigger className="w-24">
-                  <SelectValue placeholder="Min" />
+                <SelectTrigger className="w-24 rounded-xl">
+                  <SelectValue placeholder="Daqiqa" />
                 </SelectTrigger>
                 <SelectContent>
                   {MINUTES.map((minute) => (
@@ -179,27 +229,37 @@ export function SchedulePostDialog({ open, onOpenChange, onSchedule }: ScheduleP
             </div>
           </div>
 
-          {/* Preview */}
           {scheduledDateTime && (
-            <div className="p-4 rounded-xl bg-primary/10 border border-primary/20">
-              <p className="text-sm text-muted-foreground mb-1">Your post will be published:</p>
-              <p className="font-semibold text-primary">
-                {format(scheduledDateTime, "EEEE, MMMM d, yyyy 'at' h:mm a")}
+            <div className="rounded-2xl border border-primary/20 bg-primary/[0.06] p-4">
+              <p className="text-xs text-muted-foreground">E’lon qilinadi</p>
+              <p className="mt-1 text-sm font-semibold text-primary">
+                {format(scheduledDateTime, 'dd.MM.yyyy · HH:mm')}
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Shu vaqtgacha post scheduled holatda qoladi va global lentaga chiqmaydi.
               </p>
             </div>
           )}
+        </div>
 
-          {/* Actions */}
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
-              <X className="h-4 w-4 mr-2" />
-              Cancel
-            </Button>
-            <Button onClick={handleSchedule} className="flex-1">
-              <Check className="h-4 w-4 mr-2" />
-              Schedule
-            </Button>
-          </div>
+        <div className="flex shrink-0 gap-2 border-t border-border/60 px-5 py-4">
+          <Button
+            type="button"
+            variant="outline"
+            className="flex-1 rounded-xl"
+            onClick={() => onOpenChange(false)}
+          >
+            <X className="mr-2 h-4 w-4" />
+            Bekor qilish
+          </Button>
+          <Button
+            type="button"
+            className="flex-1 rounded-xl"
+            onClick={handleSchedule}
+          >
+            <Check className="mr-2 h-4 w-4" />
+            Saqlash
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
