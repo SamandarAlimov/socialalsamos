@@ -4,8 +4,10 @@ import { formatBytes, mediaKindLabel } from '@/lib/postComposer';
 import { formatDuration } from '@/lib/mediaMetadata';
 import { usePostMedia, type PostMediaItem } from '@/hooks/usePostMedia';
 import { usePostLocation } from '@/hooks/usePostLocation';
+import { usePostMusic } from '@/hooks/usePostMusic';
 import { PollCard } from '@/components/PollCard';
 import { PostLocationCard } from '@/components/PostLocationCard';
+import { PostMusicCard } from '@/components/PostMusicCard';
 import { PostMediaCarousel } from '@/components/PostMediaCarousel';
 import { MediaStickerOverlay } from '@/components/stickers/MediaStickerOverlay';
 import type { WithEditState } from '@/lib/stickerPlacements';
@@ -96,6 +98,7 @@ export function PostExtras({
 }: PostExtrasProps) {
   const { media } = usePostMedia(postId);
   const { location } = usePostLocation(postId);
+  const { music } = usePostMusic(postId);
 
   const visuals = media.filter((item) => item.kind === 'image' || item.kind === 'video');
   const others = media.filter((item) => item.kind !== 'image' && item.kind !== 'video');
@@ -104,7 +107,11 @@ export function PostExtras({
   const legacy = media.length === 0 ? (legacyMediaUrls ?? []) : [];
 
   const hasAnything =
-    media.length > 0 || legacy.length > 0 || Boolean(location) || Boolean(hasPoll);
+    media.length > 0 ||
+    legacy.length > 0 ||
+    Boolean(location) ||
+    Boolean(music) ||
+    Boolean(hasPoll);
   if (!hasAnything) return null;
 
   return (
@@ -169,6 +176,22 @@ export function PostExtras({
         ) : (
           <DocumentCard key={item.id} item={item} />
         ),
+      )}
+
+      {/* Strukturali post musiqasi */}
+      {music?.track && music.playback_url && (
+        <PostMusicCard
+          music={{
+            title: music.track.title,
+            artist: music.track.artist,
+            coverUrl: music.track.cover_url,
+            audioUrl: music.playback_url,
+            durationSeconds: music.track.duration_seconds,
+          }}
+          startSeconds={music.start_seconds}
+          endSeconds={music.end_seconds}
+          volume={music.volume}
+        />
       )}
 
       {/* So‘rovnoma */}
