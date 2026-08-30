@@ -904,6 +904,96 @@ export function useMessages(conversationId: string | null) {
     [conversationId, user, toast]
   );
 
+  const retryMessage = useCallback(
+    async (messageId: string) => {
+      if (!conversationId || !user) return null;
+
+      const failedMessage = messages.find(
+        (message) =>
+          (message.tempId === messageId || message.id === messageId) &&
+          message.status === 'failed'
+      );
+      if (!failedMessage) return null;
+
+      const optimisticId = failedMessage.tempId || failedMessage.id;
+
+      setMessages((prev) =>
+        prev.map((message) =>
+          (message.tempId || message.id) === optimisticId
+            ? { ...message, status: 'sending' as const }
+            : message
+        )
+      );
+
+      try {
+        const insertPayload = buildMessageInsertPayload({
+          conversationId,
+          senderId: user.id,
+          content: failedMessage.content || '',
+          mediaUrl: failedMessage.media_url || undefined,
+          mediaType: failedMessage.media_type || undefined,
+          replyToId: failedMessage.reply_to_id || null,
+        });
+
+        const insertResult = await insertMessageWithReplyFallback(
+          insertPayload,
+          async (payload) => {
+            const { data, error } = await supabase
+              .from('messages')
+              .insert(payload as any)
+              .select(BASE_MESSAGE_SELECT)
+              .single();
+            return { data, error };
+          }
+        );
+
+        const { data, error } = insertResult;
+        if (error || !data) throw error ?? new Error('Xabar serverdan qaytmadi');
+
+        const [hydratedData] = await hydrateReplyTargets([data as any], async (replyIds) => {
+          const { data: replies, error: replyError } = await supabase
+            .from('messages')
+            .select(BASE_MESSAGE_SELECT)
+            .in('id', replyIds);
+          return { data: (replies || []) as any[], error: replyError };
+        });
+        const persisted = hydratedData ?? data;
+
+        processedMessageIds.current.add(persisted.id);
+        setMessages((prev) =>
+          replaceOptimisticMessage(prev, optimisticId, {
+            ...persisted,
+            status: 'sent' as const,
+          } as Message)
+        );
+
+        void supabase
+          .from('conversations')
+          .update({ last_message_at: new Date().toISOString() })
+          .eq('id', conversationId)
+          .then(() => {});
+
+        return persisted;
+      } catch (error) {
+        console.error('Error retrying message:', error);
+        setMessages((prev) =>
+          prev.map((message) =>
+            (message.tempId || message.id) === optimisticId
+              ? { ...message, status: 'failed' as const }
+              : message
+          )
+        );
+        toast({
+          title: 'Xatolik',
+          description: "Xabar qayta yuborilmadi - yana urinib ko'ring",
+          variant: 'destructive',
+        });
+        return null;
+      }
+    },
+    [conversationId, messages, toast, user]
+  );
+
   const editMessage = useCallback(
     async (messageId: string, content: string) => {
       try {
@@ -1179,6 +1269,7 @@ export function useMessages(conversationId: string | null) {
     loadOlder,
     typingUsers,
     sendMessage,
+    retryMessage,
     editMessage,
     deleteMessage,
     deleteMessageForMe,
