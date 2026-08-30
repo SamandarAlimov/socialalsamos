@@ -238,6 +238,44 @@ const mapSearchCache = new Map<string, { at: number; data: SearchResult }>();
 const SEARCH_CACHE_TTL_MS = 3 * 60 * 1000;
 const SEARCH_CACHE_MAX = 80;
 
+
+/**
+ * Public geocoder/Overpass endpointlari ba'zan TCP/fetch darajasida javobsiz
+ * qoladi. Oddiy AbortController faqat query o'zgarganda ishlardi, shu sabab UI
+ * loading holatida cheksiz qolib ketishi mumkin edi.
+ */
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs = 6500,
+): Promise<Response> {
+  const controller = new AbortController();
+  let timedOut = false;
+  const parentSignal = init.signal;
+
+  const abortFromParent = () => controller.abort();
+  if (parentSignal?.aborted) {
+    throw new DOMException('Aborted', 'AbortError');
+  }
+  parentSignal?.addEventListener('abort', abortFromParent, { once: true });
+
+  const timer = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (parentSignal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    if (timedOut) throw new Error('Map provider timeout');
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+    parentSignal?.removeEventListener('abort', abortFromParent);
+  }
+}
+
 function searchCacheKey(
   query: string,
   center?: { latitude: number; longitude: number } | null,
@@ -270,14 +308,25 @@ async function overpass(query: string, signal?: AbortSignal): Promise<any> {
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.data;
 
   let lastError: unknown = null;
+  const startedAt = Date.now();
+  const totalBudgetMs = 8000;
+
   for (const endpoint of OVERPASS_ENDPOINTS) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    const remaining = totalBudgetMs - (Date.now() - startedAt);
+    if (remaining <= 0) break;
+
     try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'data=' + encodeURIComponent(query),
-        signal,
-      });
+      const response = await fetchWithTimeout(
+        endpoint,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'data=' + encodeURIComponent(query),
+          signal,
+        },
+        Math.min(4000, remaining),
+      );
       if (!response.ok) throw new Error('Overpass ' + response.status);
       const data = await response.json();
       overpassCache.set(query, { at: Date.now(), data });
@@ -391,7 +440,7 @@ export async function fetchPlacesByCategory(
   if (!category) return [];
 
   const limit = options?.limit ?? 60;
-  const radii = options?.radiusM ? [options.radiusM] : [3000, 10000, 30000];
+  const radii = options?.radiusM ? [options.radiusM] : [5000, 20000];
 
   for (const radius of radii) {
     const body = category.filters
@@ -579,9 +628,10 @@ async function searchByNominatim(
     );
   }
 
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     'https://nominatim.openstreetmap.org/search?' + params.toString(),
     { signal, headers: { Accept: 'application/json' } },
+    5500,
   );
   if (!response.ok) return [];
   const data = await response.json();
@@ -613,10 +663,14 @@ async function searchByPhoton(
     params.set('lat', String(center.latitude));
     params.set('lon', String(center.longitude));
   }
-  const response = await fetch('https://photon.komoot.io/api/?' + params.toString(), {
-    signal,
-    headers: { Accept: 'application/json' },
-  });
+  const response = await fetchWithTimeout(
+    'https://photon.komoot.io/api/?' + params.toString(),
+    {
+      signal,
+      headers: { Accept: 'application/json' },
+    },
+    5000,
+  );
   if (!response.ok) return [];
   const data = await response.json();
 
