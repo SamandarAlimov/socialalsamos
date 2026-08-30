@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "lib": ["ES2021", "DOM", "DOM.Iterable"],
+    "noEmit": true
+  },
+  "include": [
+    "src/pages/ComposePage.tsx"
+  ]
+}
