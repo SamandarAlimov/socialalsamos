@@ -174,6 +174,9 @@ export function usePostAttachments(options?: {
     revokePreviewUrls([target?.previewUrl]);
     void cleanupUploadedObjects(target);
 
+    // Keyingi addFiles shu event ichida chaqirilsa ham eski countni ko'rmasin.
+    attachmentsRef.current = attachmentsRef.current.filter((item) => item.id !== id);
+    publishedAttachmentIds.current.delete(id);
     setAttachments((current) => current.filter((item) => item.id !== id));
   }, []);
 
@@ -228,6 +231,8 @@ export function usePostAttachments(options?: {
     abortControllers.current.forEach((controller) => controller.abort());
     abortControllers.current.clear();
     revokePreviewUrls(attachmentsRef.current.map((item) => item.previewUrl));
+    attachmentsRef.current = [];
+    publishedAttachmentIds.current.clear();
     setAttachments([]);
   }, []);
 
