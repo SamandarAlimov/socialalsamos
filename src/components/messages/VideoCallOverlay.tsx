@@ -8,6 +8,7 @@ import {
   Monitor,
   PhoneOff,
   RotateCcw,
+  Settings2,
   Users,
   Video,
   VideoOff,
@@ -20,6 +21,7 @@ import { callPhaseLabel, deriveCallUiPhase, formatCallDuration } from '@/lib/cal
 import { NetworkQualityIndicator } from './NetworkQualityIndicator';
 import { CallDebugPanel } from './CallDebugPanel';
 import type { CallStats, ICEDebugInfo } from '@/hooks/useCallStats';
+import { CallDeviceSettingsDialog } from '@/components/calls/CallDeviceSettingsDialog';
 
 interface Participant {
   id: string;
@@ -59,6 +61,8 @@ interface VideoCallOverlayProps {
   onToggleScreenShare: () => void;
   onToggleHandRaise: () => void;
   onSwitchCamera?: () => Promise<boolean> | boolean | void;
+  onCameraChange?: (deviceId: string) => Promise<boolean> | boolean;
+  onMicrophoneChange?: (deviceId: string) => Promise<boolean> | boolean;
   onAddPeople?: () => void;
   onEndCall: () => void;
   currentUserName?: string;
@@ -71,17 +75,27 @@ function MediaElement({
   stream,
   showVideo,
   className,
+  outputDeviceId,
 }: {
   stream: MediaStream;
   showVideo: boolean;
   className?: string;
+  outputDeviceId?: string;
 }) {
   const ref = useRef<HTMLVideoElement | HTMLAudioElement>(null);
 
   useEffect(() => {
     const element = ref.current;
-    if (element && element.srcObject !== stream) element.srcObject = stream;
-  }, [stream]);
+    if (!element) return;
+    if (element.srcObject !== stream) element.srcObject = stream;
+
+    if (outputDeviceId) {
+      const sinkElement = element as HTMLMediaElement & {
+        setSinkId?: (deviceId: string) => Promise<void>;
+      };
+      void sinkElement.setSinkId?.(outputDeviceId).catch(() => {});
+    }
+  }, [outputDeviceId, stream]);
 
   if (showVideo) {
     return (
@@ -164,6 +178,8 @@ export function VideoCallOverlay({
   onToggleScreenShare,
   onToggleHandRaise,
   onSwitchCamera,
+  onCameraChange,
+  onMicrophoneChange,
   onAddPeople,
   onEndCall,
   currentUserName,
@@ -179,6 +195,14 @@ export function VideoCallOverlay({
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [showDeviceSettings, setShowDeviceSettings] = useState(false);
+  const [outputDeviceId, setOutputDeviceId] = useState(() => {
+    try {
+      return window.localStorage.getItem('alsamos.call-output-device') || '';
+    } catch {
+      return '';
+    }
+  });
   const [showControls, setShowControls] = useState(true);
   const [callDuration, setCallDuration] = useState(0);
   const [pipPosition, setPipPosition] = useState({ x: 16, y: 16 });
@@ -188,6 +212,20 @@ export function VideoCallOverlay({
   const displayName = primaryParticipant?.name || peerName || 'Suhbatdosh';
   const displayAvatar = primaryParticipant?.avatarUrl || peerAvatar;
   const isGroupCall = participants.length > 1;
+
+  const changeOutputDevice = useCallback((deviceId: string) => {
+    setOutputDeviceId(deviceId);
+    try {
+      if (deviceId) {
+        window.localStorage.setItem('alsamos.call-output-device', deviceId);
+      } else {
+        window.localStorage.removeItem('alsamos.call-output-device');
+      }
+    } catch {
+      // Device preference is optional.
+    }
+  }, []);
+
   const hasRemoteVideo = Boolean(
     primaryParticipant?.stream && primaryParticipant?.isVideoOn && callType === 'video'
   );
@@ -328,6 +366,7 @@ export function VideoCallOverlay({
             stream={primaryParticipant.stream}
             showVideo={Boolean(primaryParticipant.isVideoOn && callType === 'video')}
             className="absolute inset-0 h-full w-full object-cover opacity-25"
+            outputDeviceId={outputDeviceId}
           />
         )}
         <div className="relative flex items-center gap-3 p-3">
@@ -405,6 +444,7 @@ export function VideoCallOverlay({
               stream={primaryParticipant.stream}
               showVideo={Boolean(primaryParticipant.isVideoOn && callType === 'video')}
               className="h-full w-full bg-black object-contain"
+              outputDeviceId={outputDeviceId}
             />
           ) : null
         ) : participants.length > 1 ? (
@@ -430,6 +470,7 @@ export function VideoCallOverlay({
                     stream={participant.stream}
                     showVideo={Boolean(participant.isVideoOn && callType === 'video')}
                     className="h-full w-full object-cover"
+                    outputDeviceId={outputDeviceId}
                   />
                 ) : null}
                 {(!participant.stream || !participant.isVideoOn || callType === 'audio') && (
@@ -531,6 +572,15 @@ export function VideoCallOverlay({
             bitrate={callStats?.bitrate ?? connectionQuality?.bitrate ?? 0}
             isReconnecting={isReconnecting}
           />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 rounded-full bg-black/20 text-white hover:bg-white/15 hover:text-white"
+            onClick={() => setShowDeviceSettings(true)}
+            aria-label="Qo'ng'iroq qurilmalari"
+          >
+            <Settings2 className="h-4 w-4" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -662,6 +712,16 @@ export function VideoCallOverlay({
           </PremiumControl>
         </div>
       </div>
+
+      <CallDeviceSettingsDialog
+        open={showDeviceSettings}
+        onOpenChange={setShowDeviceSettings}
+        localStream={localStream}
+        outputDeviceId={outputDeviceId}
+        onOutputDeviceChange={changeOutputDevice}
+        onCameraChange={onCameraChange}
+        onMicrophoneChange={onMicrophoneChange}
+      />
     </div>
   );
 }
