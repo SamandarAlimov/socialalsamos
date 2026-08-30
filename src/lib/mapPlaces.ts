@@ -310,35 +310,65 @@ async function overpass(
 ): Promise<any> {
   const cached = overpassCache.get(query);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.data;
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
-  let lastError: unknown = null;
-  const startedAt = Date.now();
-  for (const endpoint of OVERPASS_ENDPOINTS) {
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    const remaining = totalBudgetMs - (Date.now() - startedAt);
-    if (remaining <= 0) break;
+  const raceController = new AbortController();
+  const abortFromParent = () => raceController.abort();
+  signal?.addEventListener('abort', abortFromParent, { once: true });
 
-    try {
-      const response = await fetchWithTimeout(
-        endpoint,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: 'data=' + encodeURIComponent(query),
-          signal,
+  const request = async (endpoint: string, timeoutMs: number) => {
+    const response = await fetchWithTimeout(
+      endpoint,
+      {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
         },
-        Math.min(4000, remaining),
-      );
-      if (!response.ok) throw new Error('Overpass ' + response.status);
-      const data = await response.json();
-      overpassCache.set(query, { at: Date.now(), data });
-      return data;
-    } catch (error) {
-      if ((error as Error).name === 'AbortError') throw error;
-      lastError = error;
+        body: 'data=' + encodeURIComponent(query),
+        signal: raceController.signal,
+      },
+      timeoutMs,
+    );
+    if (!response.ok) throw new Error('Overpass ' + response.status);
+    const data = await response.json();
+    if (!data || !Array.isArray(data.elements)) {
+      throw new Error('Overpass noto\u2018g\u2018ri javob berdi');
     }
+    return data;
+  };
+
+  try {
+    // Public Overpass mirrorlar vaqti-vaqti bilan sekinlashadi yoki bitta regionda
+    // bloklanadi. Birinchi ikkita mirrorni parallel sinab, birinchi sog'lom
+    // javobni olamiz. Bu foydalanuvchini 8-10 sekund ketma-ket kutishdan saqlaydi.
+    const primaryTimeout = Math.min(5200, totalBudgetMs);
+    let data: any;
+    try {
+      data = await Promise.any(
+        OVERPASS_ENDPOINTS.slice(0, 2).map((endpoint) =>
+          request(endpoint, primaryTimeout),
+        ),
+      );
+    } catch (primaryError) {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      const fallbackEndpoint = OVERPASS_ENDPOINTS[2];
+      if (!fallbackEndpoint) throw primaryError;
+      data = await request(
+        fallbackEndpoint,
+        Math.max(2200, Math.min(4200, totalBudgetMs)),
+      );
+    }
+
+    overpassCache.set(query, { at: Date.now(), data });
+    return data;
+  } catch (error) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    throw error;
+  } finally {
+    raceController.abort();
+    signal?.removeEventListener('abort', abortFromParent);
   }
-  throw lastError ?? new Error('Overpass javob bermadi');
 }
 
 /** OSM elementidan koordinata olish (node -> lat/lon, way/relation -> center). */
@@ -442,32 +472,31 @@ export async function fetchPlacesByCategory(
   if (!category) return [];
 
   const limit = options?.limit ?? 60;
-  const radii = options?.radiusM ? [options.radiusM] : [15000];
+  const radius = options?.radiusM ?? 15000;
+  const body = category.filters
+    .map((filter) => {
+      const selector = filterParts(filter)
+        .map(([key, value]) => '["' + key + '"="' + value + '"]')
+        .join('');
+      return (
+        'nwr' +
+        selector +
+        '(around:' +
+        radius +
+        ',' +
+        center.latitude +
+        ',' +
+        center.longitude +
+        ');'
+      );
+    })
+    .join('\n');
 
-  for (const radius of radii) {
-    const body = category.filters
-      .map((filter) => {
-        const selector = filterParts(filter)
-          .map(([key, value]) => '["' + key + '"="' + value + '"]')
-          .join('');
-        return (
-          'nwr' +
-          selector +
-          '(around:' +
-          radius +
-          ',' +
-          center.latitude +
-          ',' +
-          center.longitude +
-          ');'
-        );
-      })
-      .join('\n');
+  const query =
+    '[out:json][timeout:20];\n(\n' + body + '\n);\nout tags center ' + limit + ';';
 
-    const query =
-      '[out:json][timeout:25];\n(\n' + body + '\n);\nout tags center ' + limit + ';';
-
-    const data = await overpass(query, options?.signal);
+  try {
+    const data = await overpass(query, options?.signal, 7600);
     const places = ((data?.elements ?? []) as any[])
       .map(elementToPlace)
       .filter((place): place is MapPlace => place !== null)
@@ -478,13 +507,56 @@ export async function fetchPlacesByCategory(
       }));
 
     if (places.length > 0) {
-      return withDistance(places, center).sort(
-        (a, b) => (a.distanceM ?? 0) - (b.distanceM ?? 0),
+      return withDistance(places, center)
+        .filter((place) => (place.distanceM ?? 0) <= radius * 1.25)
+        .sort((a, b) => (a.distanceM ?? 0) - (b.distanceM ?? 0))
+        .slice(0, limit);
+    }
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') throw error;
+    // Overpass vaqtincha ishlamasa kategoriyani butunlay yiqitmaymiz.
+    // Quyidagi geocoder fallback foydalanuvchiga hech bo'lmasa real yaqin
+    // natijalarni beradi; uydirma POI yaratilmaydi.
+  }
+
+  const fallbackTerm = category.id.replace(/_/g, ' ');
+  const settled = await Promise.allSettled([
+    searchByPhoton(fallbackTerm, center, options?.signal),
+    searchByNominatim(fallbackTerm, center, options?.signal),
+  ]);
+  if (options?.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+  const merged = new Map<string, MapPlace>();
+  for (const result of settled) {
+    if (result.status !== 'fulfilled') continue;
+    for (const place of result.value) {
+      const distanceM = distanceMeters(
+        center.latitude,
+        center.longitude,
+        place.latitude,
+        place.longitude,
       );
+      if (distanceM > radius * 1.5) continue;
+      const key =
+        normalizeQuery(place.name) +
+        '@' +
+        place.latitude.toFixed(4) +
+        ',' +
+        place.longitude.toFixed(4);
+      if (!merged.has(key)) {
+        merged.set(key, {
+          ...place,
+          categoryId: category.id,
+          categoryLabel: category.label,
+          distanceM,
+        });
+      }
     }
   }
 
-  return [];
+  return Array.from(merged.values())
+    .sort((a, b) => (a.distanceM ?? 0) - (b.distanceM ?? 0))
+    .slice(0, limit);
 }
 
 /** Apostrof/harf variantlarini bir xillashtirish: o\u2018zbek -> o'zbek. */
