@@ -554,12 +554,19 @@ function searchQueryVariants(value: string): string[] {
 export function detectCategoryFromQuery(query: string): PlaceCategory | undefined {
   const normalized = normalizeQuery(query);
   if (!normalized) return undefined;
-  return PLACE_CATEGORIES.find((category) =>
+
+  const exact = PLACE_CATEGORIES.find((category) =>
     category.keywords.some((keyword) => {
       const key = normalizeQuery(keyword);
       return normalized === key || normalized.includes(key);
     }),
   );
+  if (exact) return exact;
+
+  // "restorann", "darixona", "parkofka" kabi yozuv xatolarida ham kategoriya
+  // ni sezamiz. Uzoq, ko'p-so'zli nomlarda threshold sabab bu fallback ishga
+  // tushmaydi va joy nomi qidiruvi ustun qoladi.
+  return searchCategorySuggestions(normalized, 1)[0];
 }
 
 function tokens(value: string): string[] {
