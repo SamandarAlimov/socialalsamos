@@ -53,6 +53,7 @@ export function useWebRTC(roomId: string | null) {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isReconnecting, setIsReconnecting] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
@@ -69,8 +70,12 @@ export function useWebRTC(roomId: string | null) {
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const pendingCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
   const qualityIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const qualityPreviousRef = useRef<Map<string, { bytes: number; at: number }>>(new Map());
   const currentRoomRef = useRef<string | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const leavingRoomRef = useRef(false);
+  const reconnectTimersRef = useRef<Map<string, number>>(new Map());
+  const restartAttemptsRef = useRef<Map<string, number>>(new Map());
 
   // Perfect-negotiation helpers
   const makingOfferRef = useRef<Map<string, boolean>>(new Map());
