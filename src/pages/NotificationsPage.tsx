@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { isToday, isYesterday, isThisWeek, isThisMonth, differenceInMinutes } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 import { formatRelative, formatDate } from '@/lib/i18n-format';
-import { Heart, MessageCircle, UserPlus, AtSign, Check, Bell, BellOff, Settings, Trash2, MoreHorizontal, ChevronRight, Sparkles, Users } from 'lucide-react';
+import { Heart, MessageCircle, UserPlus, AtSign, Check, X, Bell, BellOff, Settings, Trash2, MoreHorizontal, ChevronRight, Sparkles, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { toast } from 'sonner';
 
 type NotificationFilter = 'all' | 'likes' | 'comments' | 'follows' | 'mentions' | 'collaborations';
 
@@ -78,6 +79,10 @@ const NotificationIcon = ({ type, className, size = 'default' }: { type: Notific
       );
     case 'collaboration_invite':
     case 'collaboration_accepted':
+    case 'collaboration_declined':
+    case 'collaboration_revoked':
+    case 'collaboration_removed':
+    case 'collaboration_left':
       return (
         <div className="h-8 w-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center shadow-lg shadow-orange-500/25">
           <Users className={cn(iconClass, 'text-white')} />
@@ -109,10 +114,16 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
     
     const postThumbnail = post?.media_urls?.[0];
     
-    const groupKey = notification.type === 'follow' 
+    const baseGroupKey = notification.type === 'follow'
       ? `follow-${notification.type}`
       : `${notification.type}-${postId || 'no-post'}`;
-    
+    const canConsolidate =
+      notification.type === 'like' ||
+      notification.type === 'comment' ||
+      notification.type === 'follow' ||
+      notification.type === 'mention';
+    const groupKey = canConsolidate ? baseGroupKey : `${baseGroupKey}-${notification.id}`;
+
     const existing = groups.get(groupKey);
     
     if (existing) {
@@ -135,7 +146,7 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
       }
     }
     
-    groups.set(`${groupKey}-${notification.id}`, {
+    groups.set(groupKey, {
       id: notification.id,
       type: notification.type,
       notifications: [notification],
@@ -160,24 +171,40 @@ function GroupedNotificationItem({
   group, 
   onMarkAsRead,
   onDelete,
+  onRespondCollaboration,
   index,
-}: { 
+}: {
   group: GroupedNotification;
   onMarkAsRead: (id: string) => void;
   onDelete: (id: string) => void;
+  onRespondCollaboration: (collaborationId: string, accept: boolean) => Promise<void>;
   index: number;
 }) {
   const navigate = useNavigate();
   const hasUnread = group.notifications.some(n => !n.is_read);
   const firstActor = group.actors[0];
   const otherActorsCount = group.actors.length - 1;
+  const [collaborationBusy, setCollaborationBusy] = useState<'accept' | 'decline' | null>(null);
+  const collaborationId = group.notifications[0]?.data?.collaboration_id as string | undefined;
   
   const handleItemClick = () => {
     group.notifications.forEach(n => {
       if (!n.is_read) onMarkAsRead(n.id);
     });
     
-    if ((group.type === 'like' || group.type === 'comment' || group.type === 'mention') && group.postId) {
+    if (
+      (
+        group.type === 'like' ||
+        group.type === 'comment' ||
+        group.type === 'mention' ||
+        group.type === 'collaboration_accepted' ||
+        group.type === 'collaboration_declined' ||
+        group.type === 'collaboration_revoked' ||
+        group.type === 'collaboration_removed' ||
+        group.type === 'collaboration_left'
+      ) &&
+      group.postId
+    ) {
       navigate(`/home?post=${group.postId}`);
     } else if (group.type === 'follow' && firstActor) {
       navigate(`/user/${firstActor.username || firstActor.id}`);
@@ -207,6 +234,25 @@ function GroupedNotificationItem({
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
     group.notifications.forEach(n => onDelete(n.id));
+  };
+
+  const handleCollaborationResponse = async (
+    event: React.MouseEvent,
+    accept: boolean,
+  ) => {
+    event.stopPropagation();
+    if (!collaborationId || collaborationBusy) return;
+
+    setCollaborationBusy(accept ? 'accept' : 'decline');
+    try {
+      await onRespondCollaboration(collaborationId, accept);
+      toast.success(accept ? 'Hammualliflik qabul qilindi' : 'Taklif rad etildi');
+    } catch (error) {
+      console.error('Collaboration javob xatosi:', error);
+      toast.error('Hammualliflik taklifiga javob berib bo‘lmadi');
+    } finally {
+      setCollaborationBusy(null);
+    }
   };
 
   const { i18n: i18nInst } = useTranslation();
@@ -266,7 +312,15 @@ function GroupedNotificationItem({
       case 'collaboration_invite':
         return <>{usernameElement} <span className="text-muted-foreground">wants to collaborate with you</span></>;
       case 'collaboration_accepted':
-        return <>{usernameElement} <span className="text-muted-foreground">accepted your collaboration request</span></>;
+        return <>{usernameElement} <span className="text-muted-foreground">hammualliflik taklifingizni qabul qildi</span></>;
+      case 'collaboration_declined':
+        return <>{usernameElement} <span className="text-muted-foreground">hammualliflik taklifingizni rad etdi</span></>;
+      case 'collaboration_revoked':
+        return <>{usernameElement} <span className="text-muted-foreground">hammualliflik taklifini bekor qildi</span></>;
+      case 'collaboration_removed':
+        return <>{usernameElement} <span className="text-muted-foreground">sizni hammualliflikdan olib tashladi</span></>;
+      case 'collaboration_left':
+        return <>{usernameElement} <span className="text-muted-foreground">post hammuallifligidan chiqdi</span></>;
       default:
         return usernameElement;
     }
@@ -340,6 +394,43 @@ function GroupedNotificationItem({
             <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
           )}
         </p>
+
+        {group.type === 'collaboration_invite' && collaborationId && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 rounded-full px-4"
+              disabled={collaborationBusy !== null}
+              onClick={(event) => void handleCollaborationResponse(event, true)}
+            >
+              <Check className="mr-1.5 h-3.5 w-3.5" />
+              {collaborationBusy === 'accept' ? 'Qabul qilinmoqda...' : 'Qabul qilish'}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 rounded-full px-4"
+              disabled={collaborationBusy !== null}
+              onClick={(event) => void handleCollaborationResponse(event, false)}
+            >
+              <X className="mr-1.5 h-3.5 w-3.5" />
+              {collaborationBusy === 'decline' ? 'Rad etilmoqda...' : 'Rad etish'}
+            </Button>
+            {group.postId && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-8 rounded-full px-3"
+                onClick={handlePostClick}
+              >
+                Postni ko‘rish
+              </Button>
+            )}
+          </div>
+        )}
       </div>
       
       {/* Post thumbnail */}
@@ -425,12 +516,14 @@ function NotificationGroup({
   groups,
   onMarkAsRead,
   onDelete,
+  onRespondCollaboration,
   startIndex,
-}: { 
+}: {
   title: string;
   groups: GroupedNotification[];
   onMarkAsRead: (id: string) => void;
   onDelete: (id: string) => void;
+  onRespondCollaboration: (collaborationId: string, accept: boolean) => Promise<void>;
   startIndex: number;
 }) {
   if (groups.length === 0) return null;
@@ -450,6 +543,7 @@ function NotificationGroup({
             group={group}
             onMarkAsRead={onMarkAsRead}
             onDelete={onDelete}
+            onRespondCollaboration={onRespondCollaboration}
             index={startIndex + i}
           />
         ))}
@@ -524,6 +618,7 @@ export default function NotificationsPage() {
     markAsRead, 
     markAllAsRead, 
     deleteNotification,
+    respondToCollaboration,
     refetch,
   } = useNotifications();
   const [filter, setFilter] = useState<NotificationFilter>('all');
@@ -544,7 +639,14 @@ export default function NotificationsPage() {
       comments: ['comment'],
       follows: ['follow'],
       mentions: ['mention'],
-      collaborations: ['collaboration_invite', 'collaboration_accepted'],
+      collaborations: [
+        'collaboration_invite',
+        'collaboration_accepted',
+        'collaboration_declined',
+        'collaboration_revoked',
+        'collaboration_removed',
+        'collaboration_left',
+      ],
     };
     
     return notifications.filter((n) => typeMap[filter].includes(n.type));
@@ -590,7 +692,14 @@ export default function NotificationsPage() {
     comments: notifications.filter(n => n.type === 'comment').length,
     follows: notifications.filter(n => n.type === 'follow').length,
     mentions: notifications.filter(n => n.type === 'mention').length,
-    collaborations: notifications.filter(n => n.type === 'collaboration_invite' || n.type === 'collaboration_accepted').length,
+    collaborations: notifications.filter(n =>
+      n.type === 'collaboration_invite' ||
+      n.type === 'collaboration_accepted' ||
+      n.type === 'collaboration_declined' ||
+      n.type === 'collaboration_revoked' ||
+      n.type === 'collaboration_removed' ||
+      n.type === 'collaboration_left'
+    ).length,
   }), [notifications]);
 
   // Calculate start indices for animation
@@ -707,6 +816,7 @@ export default function NotificationsPage() {
                 groups={groupedNotifications.today}
                 onMarkAsRead={markAsRead}
                 onDelete={deleteNotification}
+                onRespondCollaboration={respondToCollaboration}
                 startIndex={getStartIndex(groupedNotifications.today)}
               />
               <NotificationGroup 
@@ -714,6 +824,7 @@ export default function NotificationsPage() {
                 groups={groupedNotifications.yesterday}
                 onMarkAsRead={markAsRead}
                 onDelete={deleteNotification}
+                onRespondCollaboration={respondToCollaboration}
                 startIndex={getStartIndex(groupedNotifications.yesterday)}
               />
               <NotificationGroup 
@@ -721,6 +832,7 @@ export default function NotificationsPage() {
                 groups={groupedNotifications.thisWeek}
                 onMarkAsRead={markAsRead}
                 onDelete={deleteNotification}
+                onRespondCollaboration={respondToCollaboration}
                 startIndex={getStartIndex(groupedNotifications.thisWeek)}
               />
               <NotificationGroup 
@@ -728,6 +840,7 @@ export default function NotificationsPage() {
                 groups={groupedNotifications.thisMonth}
                 onMarkAsRead={markAsRead}
                 onDelete={deleteNotification}
+                onRespondCollaboration={respondToCollaboration}
                 startIndex={getStartIndex(groupedNotifications.thisMonth)}
               />
               <NotificationGroup 
@@ -735,6 +848,7 @@ export default function NotificationsPage() {
                 groups={groupedNotifications.older}
                 onMarkAsRead={markAsRead}
                 onDelete={deleteNotification}
+                onRespondCollaboration={respondToCollaboration}
                 startIndex={getStartIndex(groupedNotifications.older)}
               />
             </AnimatePresence>
