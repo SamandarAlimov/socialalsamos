@@ -359,9 +359,9 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
     !isCreatingDraft;
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-0 pb-8 sm:px-4 sm:pt-4">
-      <section className="overflow-hidden border-y border-border/60 bg-background sm:rounded-2xl sm:border">
-        <div className="flex items-center gap-3 px-4 py-3 sm:px-5">
+    <div className="mx-auto w-full max-w-3xl px-0 pb-8 sm:px-4 sm:pt-4 lg:max-w-6xl">
+      <section className="overflow-hidden border-y border-border/60 bg-background sm:rounded-2xl sm:border lg:grid lg:h-[calc(100dvh-7.5rem)] lg:grid-cols-[minmax(320px,440px)_minmax(320px,1fr)] lg:grid-rows-[auto_minmax(0,1fr)_auto]">
+        <div className="flex items-center gap-3 px-4 py-3 sm:px-5 lg:col-start-2 lg:row-start-1">
           <Avatar className="h-10 w-10 shrink-0">
             <AvatarImage src={profile?.avatar_url ?? ''} />
             <AvatarFallback className="font-semibold">
@@ -395,10 +395,10 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
           </Select>
         </div>
 
-        <div className="border-t border-border/50 p-3 sm:p-4">
+        <div className="border-t border-border/50 p-3 sm:p-4 lg:col-start-1 lg:row-start-1 lg:row-span-3 lg:flex lg:min-h-0 lg:items-center lg:justify-center lg:border-r lg:border-t-0">
           <div
             className={cn(
-              'relative mx-auto aspect-[9/16] w-full max-w-[390px] overflow-hidden rounded-xl bg-black',
+              'relative mx-auto aspect-[9/16] w-full max-w-[390px] overflow-hidden rounded-xl bg-black lg:h-full lg:max-h-[calc(100dvh-9rem)] lg:w-auto lg:max-w-full',
               isDragging && 'ring-2 ring-primary',
             )}
             onDragEnter={(event) => {
@@ -457,7 +457,7 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
           </div>
         </div>
 
-        <div className="border-t border-border/50 px-4 py-3 sm:px-5">
+        <div className="border-t border-border/50 px-4 py-3 sm:px-5 lg:col-start-2 lg:row-start-2 lg:min-h-0 lg:overflow-y-auto">
           <textarea
             value={caption}
             disabled={Boolean(storyDraft)}
@@ -468,7 +468,7 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
           />
         </div>
 
-        <div className="flex items-center gap-1 border-t border-border/50 px-3 py-2 sm:px-4">
+        <div className="flex items-center gap-1 border-t border-border/50 px-3 py-2 sm:px-4 lg:col-start-2 lg:row-start-3">
           {!storyDraft ? (
             <>
               <div className="flex min-w-0 flex-1 items-center gap-1">
