@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { formatBytes, mediaKindLabel } from '@/lib/postComposer';
 import { formatDuration } from '@/lib/mediaMetadata';
 import { usePostMedia, type PostMediaItem } from '@/hooks/usePostMedia';
-import { usePostLocation } from '@/hooks/usePostLocation';
+import { usePostLocation, type PostLocation } from '@/hooks/usePostLocation';
 import { usePostMusic } from '@/hooks/usePostMusic';
 import { PollCard } from '@/components/PollCard';
 import { PostLocationCard } from '@/components/PostLocationCard';
@@ -11,6 +11,7 @@ import { PostMusicCard } from '@/components/PostMusicCard';
 import { PostMediaCarousel } from '@/components/PostMediaCarousel';
 import { MediaStickerOverlay } from '@/components/stickers/MediaStickerOverlay';
 import type { WithEditState } from '@/lib/stickerPlacements';
+import type { LegacyPostLocation } from '@/lib/postMarkers';
 
 interface PostExtrasProps {
   postId: string;
@@ -25,6 +26,8 @@ interface PostExtrasProps {
    */
   legacyMediaUrls?: string[] | null;
   legacyMediaType?: string | null;
+  /** Production structured schema hali deploy bo'lmaganda content markeridan tiklanadi. */
+  legacyLocation?: LegacyPostLocation | null;
   className?: string;
 }
 
@@ -94,11 +97,38 @@ export function PostExtras({
   isOwner,
   legacyMediaUrls,
   legacyMediaType,
+  legacyLocation,
   className,
 }: PostExtrasProps) {
   const { media } = usePostMedia(postId);
   const { location } = usePostLocation(postId);
   const { music } = usePostMusic(postId);
+
+  const fallbackLocation: PostLocation | null = legacyLocation
+    ? {
+        id: 'legacy-location:' + postId,
+        post_id: postId,
+        place_id: null,
+        // Legacy fallback serverda realtime yangilanmaydi, shuning uchun static place sifatida ko'rsatiladi.
+        mode: 'place',
+        label: legacyLocation.label,
+        latitude: legacyLocation.latitude,
+        longitude: legacyLocation.longitude,
+        accuracy_m: legacyLocation.accuracyM,
+        live_until: null,
+        updated_at: new Date(0).toISOString(),
+        place: legacyLocation.place
+          ? {
+              id: 'legacy-place:' + postId,
+              name: legacyLocation.place.name,
+              address: legacyLocation.place.address,
+              category: legacyLocation.place.category,
+            }
+          : null,
+      }
+    : null;
+
+  const displayLocation = location ?? fallbackLocation;
 
   const visuals = media.filter((item) => item.kind === 'image' || item.kind === 'video');
   const others = media.filter((item) => item.kind !== 'image' && item.kind !== 'video');
@@ -109,7 +139,7 @@ export function PostExtras({
   const hasAnything =
     media.length > 0 ||
     legacy.length > 0 ||
-    Boolean(location) ||
+    Boolean(displayLocation) ||
     Boolean(music) ||
     Boolean(hasPoll);
   if (!hasAnything) return null;
@@ -198,7 +228,12 @@ export function PostExtras({
       {hasPoll && <PollCard postId={postId} />}
 
       {/* Joylashuv */}
-      {location && <PostLocationCard location={location} isOwner={isOwner} />}
+      {displayLocation && (
+        <PostLocationCard
+          location={displayLocation}
+          isOwner={Boolean(location) && isOwner}
+        />
+      )}
     </div>
   );
 }
