@@ -80,13 +80,15 @@ export function AppLayout() {
         <Outlet />
       </main>
 
-      {/* Keep the collapse control above normal page content, but below dialogs.
-          Modal backdrops/dialogs must be able to cover this control. */}
+      {/* Global desktop/tablet collapse control.
+          AppSidebar itself is z-50, so the button must share that layer; because it
+          renders after the sidebar it stays fully visible on the sidebar edge on
+          every page instead of having its left half covered by the sidebar. */}
       <button
         type="button"
         aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         onClick={() => setSidebarCollapsed(value => !value)}
-        className="hidden md:flex fixed top-20 z-40 h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full bg-background border border-border shadow-md hover:bg-accent transition-colors pointer-events-auto"
+        className="hidden md:flex fixed top-20 z-50 h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-sidebar-border bg-background/95 shadow-lg backdrop-blur-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 pointer-events-auto"
         style={{ left: sidebarCollapsed ? '72px' : '256px' }}
       >
         {sidebarCollapsed ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronLeft className="h-4 w-4 text-muted-foreground" />}
