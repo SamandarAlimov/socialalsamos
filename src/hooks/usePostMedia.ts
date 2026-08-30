@@ -2,6 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { db } from '@/lib/db';
 import type { MediaKind } from '@/lib/postComposer';
 import { resolveStorageUrl } from '@/lib/mediaUpload';
+import {
+  isMissingStructuredPostSchemaError,
+  readStructuredPostSchemaCapability,
+  writeStructuredPostSchemaCapability,
+} from '@/lib/structuredPostSchema';
 
 export interface PostMediaItem {
   id: string;
@@ -32,12 +37,13 @@ export interface PostMediaItem {
  * o'lchami, davomiyligi va tartibi yo'q edi.
  */
 export function usePostMedia(postId: string | null, enabled = true) {
+  const schemaEnabled = enabled && readStructuredPostSchemaCapability() !== 'missing';
   const [media, setMedia] = useState<PostMediaItem[]>([]);
-  const [isLoading, setIsLoading] = useState(Boolean(postId) && enabled);
+  const [isLoading, setIsLoading] = useState(Boolean(postId) && schemaEnabled);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!postId || !enabled) {
+    if (!postId || !schemaEnabled) {
       setMedia([]);
       setIsLoading(false);
       return;
@@ -54,6 +60,7 @@ export function usePostMedia(postId: string | null, enabled = true) {
         .order('position', { ascending: true });
 
       if (queryError) throw queryError;
+      writeStructuredPostSchemaCapability('available');
 
       const rows = ((data ?? []) as PostMediaItem[]);
       const resolved = await Promise.all(
@@ -76,13 +83,17 @@ export function usePostMedia(postId: string | null, enabled = true) {
 
       setMedia(resolved);
     } catch (loadError) {
-      console.error('Post fayllarini yuklashda xatolik:', loadError);
-      setError('Fayllarni yuklab bo\u2018lmadi');
+      if (isMissingStructuredPostSchemaError(loadError)) {
+        writeStructuredPostSchemaCapability('missing');
+      } else {
+        console.error('Post fayllarini yuklashda xatolik:', loadError);
+        setError('Fayllarni yuklab bo\u2018lmadi');
+      }
       setMedia([]);
     } finally {
       setIsLoading(false);
     }
-  }, [postId, enabled]);
+  }, [postId, schemaEnabled]);
 
   useEffect(() => {
     load();
