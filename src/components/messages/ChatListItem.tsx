@@ -14,6 +14,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { parseArticlePayload, stripFormatting } from '@/lib/messageFormat';
 import { albumPreviewText, parseAlbumPayload } from '@/lib/mediaAlbum';
+import { resolveAttachmentFileName } from '@/lib/attachmentPreview';
 
 interface ChatListItemProps {
   conversation: Conversation & { is_self_chat?: boolean };
@@ -68,7 +69,6 @@ const MD_LINK_ANY = /\[([^\]\n]+)\]\(([^)\s]*)\)/g;
 const FILE_TOKEN_REGEX = /^\[?\s*([^\[\]\/\\]+?)\.([a-z0-9]{2,5})\s*\]?$/i;
 const HTTP_URL_REGEX = /https?:\/\/[^\s]+/gi;
 const SCHEME_TOKEN_REGEX = /\b[a-z][a-z0-9+.-]*:\/\/[^\s]+/gi;
-const OPAQUE_NAME_REGEX = /^[0-9a-f][0-9a-f-]{7,}$/i;
 
 const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'heic', 'heif', 'avif', 'bmp', 'svg'];
 const VIDEO_EXTS = ['mp4', 'mov', 'webm', 'mkv', 'm4v', '3gp', 'avi'];
@@ -100,9 +100,8 @@ function cleanPreview(raw: string): { text: string; kind: PreviewKind } {
     if (VIDEO_EXTS.includes(ext)) return { text: 'Video', kind: 'video' };
     if (AUDIO_EXTS.includes(ext)) return { text: 'Ovozli xabar', kind: 'audio' };
 
-    // Ichki (UUID kabi) nom foydalanuvchiga hech narsa bermaydi
-    const isOpaque = OPAQUE_NAME_REGEX.test(name) || name.length > 28;
-    return { text: isOpaque ? 'Fayl' : name + '.' + ext, kind: 'file' };
+    // Document/file uchun Telegramdek original nom ko'rinadi.
+    return { text: name + '.' + ext, kind: 'file' };
   }
 
   const urls = text.match(HTTP_URL_REGEX);
@@ -327,6 +326,7 @@ export function ChatListItem({
     const rawCaption = hasRealContent && !message.startsWith('{') ? message : null;
     // Caption ham tozalanadi: ichki fayl nomi caption sifatida kelib qolmasin
     const caption = rawCaption ? cleanPreview(stripFormatting(rawCaption) || rawCaption).text || null : null;
+    const attachmentFileName = resolveAttachmentFileName(meta);
 
     // Maqola (article) xabari - Telegramdek alohida yorliq bilan
     if (hasRealContent) {
@@ -359,7 +359,10 @@ export function ChatListItem({
           return { text: caption || 'Videoxabar', icon: <Video className={PREVIEW_ICON} /> };
         case 'file':
         case 'document':
-          return { text: caption || meta?.media_file_name || 'Fayl', icon: <FileText className={PREVIEW_ICON} /> };
+          return {
+            text: attachmentFileName || caption || 'Fayl',
+            icon: <FileText className={PREVIEW_ICON} />,
+          };
         case 'location':
           return { text: caption || 'Joylashuv', icon: <MapPin className={PREVIEW_ICON} /> };
         case 'poll':
@@ -367,7 +370,10 @@ export function ChatListItem({
         case 'sticker':
           return { text: caption || 'Stiker', icon: <Sticker className={PREVIEW_ICON} /> };
         case 'music':
-          return { text: caption || meta?.media_file_name || 'Musiqa', icon: <Music className={PREVIEW_ICON} /> };
+          return {
+            text: caption || attachmentFileName || 'Musiqa',
+            icon: <Music className={PREVIEW_ICON} />,
+          };
         case 'call_history':
           break;
         default:
