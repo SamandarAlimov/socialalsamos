@@ -22,7 +22,10 @@ import {
   X,
 } from 'lucide-react';
 import type { MapPlace } from '@/lib/mapPlaces';
-import { isProbablyOpen } from '@/lib/mapPlaces';
+import {
+  canonicalPlaceId,
+  isProbablyOpen,
+} from '@/lib/mapPlaces';
 import { formatDistance } from '@/lib/geocoding';
 import { categoryUi } from '@/lib/placeIcons';
 import { usePlaceReviews } from '@/hooks/usePlaceReviews';
@@ -209,6 +212,7 @@ export function PlaceDetailsCard({
     () => ({
       id: place.id,
       source: place.source,
+      canonicalId: canonicalPlaceId(place),
       name: place.name,
       latitude: place.latitude,
       longitude: place.longitude,
