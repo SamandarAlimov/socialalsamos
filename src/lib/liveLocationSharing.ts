@@ -8,49 +8,73 @@ interface ActiveShare {
   sending: boolean;
 }
 
+interface PersistedShare {
+  postId: string;
+  liveUntil: string;
+}
+
 const activeShares = new Map<string, ActiveShare>();
 const MIN_UPDATE_INTERVAL_MS = 8_000;
-const LIVE_RESUME_SCHEMA_KEY = 'alsamos.live-location-resume-schema-missing-at';
-const LIVE_RESUME_RETRY_MS = 10 * 60 * 1000;
+const LIVE_SHARES_STORAGE_KEY = 'alsamos.live-location.active.v1';
 
-function isMissingResumeRpc(error: unknown): boolean {
-  const code = String((error as { code?: string } | null)?.code ?? '');
-  const message = String((error as { message?: string } | null)?.message ?? '');
-  return (
-    code === 'PGRST202' ||
-    code === '42883' ||
-    /my_active_live_locations|schema cache|could not find the function|does not exist/i.test(message)
-  );
-}
-
-function resumeProbeSuppressed(): boolean {
+function readPersistedShares(): PersistedShare[] {
   try {
-    const at = Number(sessionStorage.getItem(LIVE_RESUME_SCHEMA_KEY) || '0');
-    return Number.isFinite(at) && at > 0 && Date.now() - at < LIVE_RESUME_RETRY_MS;
+    const raw = localStorage.getItem(LIVE_SHARES_STORAGE_KEY);
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    const now = Date.now();
+    return parsed.filter((item): item is PersistedShare => {
+      if (!item || typeof item.postId !== 'string' || typeof item.liveUntil !== 'string') {
+        return false;
+      }
+      const until = new Date(item.liveUntil).getTime();
+      return Number.isFinite(until) && until > now;
+    });
   } catch {
-    return false;
+    return [];
   }
 }
 
-function markResumeSchemaMissing() {
+function writePersistedShares(shares: PersistedShare[]) {
   try {
-    sessionStorage.setItem(LIVE_RESUME_SCHEMA_KEY, String(Date.now()));
+    if (shares.length === 0) {
+      localStorage.removeItem(LIVE_SHARES_STORAGE_KEY);
+      return;
+    }
+    localStorage.setItem(LIVE_SHARES_STORAGE_KEY, JSON.stringify(shares));
   } catch {
-    // Optional optimization only.
+    // Live sharing itself can continue even if browser storage is unavailable.
   }
 }
 
-function clearShare(postId: string) {
+function rememberShare(postId: string, liveUntil: string) {
+  const shares = readPersistedShares().filter((item) => item.postId !== postId);
+  shares.push({ postId, liveUntil });
+  writePersistedShares(shares);
+}
+
+function forgetShare(postId: string) {
+  writePersistedShares(readPersistedShares().filter((item) => item.postId !== postId));
+}
+
+function clearShare(postId: string, forget = true) {
   const active = activeShares.get(postId);
-  if (!active) return;
-
-  navigator.geolocation.clearWatch(active.watchId);
-  window.clearTimeout(active.stopTimer);
-  activeShares.delete(postId);
+  if (active) {
+    navigator.geolocation.clearWatch(active.watchId);
+    window.clearTimeout(active.stopTimer);
+    activeShares.delete(postId);
+  }
+  if (forget) forgetShare(postId);
 }
 
 export function stopLiveLocationSharing(postId: string) {
-  if (!('geolocation' in navigator)) return;
+  if (!('geolocation' in navigator)) {
+    forgetShare(postId);
+    return;
+  }
   clearShare(postId);
 }
 
@@ -63,11 +87,15 @@ export function startLiveLocationSharing(postId: string, liveUntil: string | nul
     return false;
   }
 
-  clearShare(postId);
+  // Existing watcher is replaced, but the persisted session is written again below.
+  clearShare(postId, false);
 
   const share: ActiveShare = {
     watchId: -1,
-    stopTimer: window.setTimeout(() => clearShare(postId), Math.max(0, liveUntilMs - Date.now())),
+    stopTimer: window.setTimeout(
+      () => clearShare(postId),
+      Math.max(0, liveUntilMs - Date.now()),
+    ),
     liveUntilMs,
     lastSentAt: 0,
     sending: false,
@@ -121,28 +149,23 @@ export function startLiveLocationSharing(postId: string, liveUntil: string | nul
 
   share.watchId = watchId;
   activeShares.set(postId, share);
+  rememberShare(postId, liveUntil);
   return true;
 }
 
+/**
+ * Route reload qilinganda shu brauzerda boshlangan live-location sessiyalarini
+ * localStorage'dan tiklaydi. Serverdagi my_active_live_locations RPC'ga startup
+ * probe yuborilmaydi: production migration kechiksa foydalanuvchining har bir
+ * sahifa ochishida 404/PGRST202 console xatosi paydo bo'lmasin.
+ */
 export async function resumeMyLiveLocationSharing() {
-  if (!('geolocation' in navigator) || resumeProbeSuppressed()) return;
+  if (!('geolocation' in navigator)) return;
 
-  try {
-    const { data, error } = await db.rpc('my_active_live_locations');
-    if (error) throw error;
+  const shares = readPersistedShares();
+  writePersistedShares(shares);
 
-    for (const row of Array.isArray(data) ? data : []) {
-      if (row?.post_id && row?.live_until) {
-        startLiveLocationSharing(String(row.post_id), String(row.live_until));
-      }
-    }
-  } catch (error) {
-    // Missing migration is a capability gap, not a runtime failure. Remember it
-    // for this tab so every route mount does not hammer PostgREST with 404s.
-    if (isMissingResumeRpc(error)) {
-      markResumeSchemaMissing();
-      return;
-    }
-    console.warn('Aktiv jonli joylashuvlarni tiklab bo‘lmadi:', error);
+  for (const share of shares) {
+    startLiveLocationSharing(share.postId, share.liveUntil);
   }
 }
