@@ -14,7 +14,9 @@ import {
   History,
   Loader2,
   MapPin,
+  MapPinned,
   Navigation,
+  Plus,
   PersonStanding,
   Search,
   Bus,
@@ -40,6 +42,7 @@ import type { TransitStop } from '@/lib/transit';
 import {
   arrivalTime,
   fetchRoutes,
+  fetchRoutesThrough,
   formatKm,
   formatMinutes,
   type RouteMode,
@@ -83,6 +86,11 @@ import {
 const DEFAULT_CENTER = { latitude: 41.311081, longitude: 69.240562 };
 
 type PanelMode = 'search' | 'place' | 'stop' | 'route' | 'history' | 'saved';
+type RouteEditTarget =
+  | 'origin'
+  | 'destination'
+  | 'append'
+  | `waypoint:${number}`;
 
 const MODES: { id: RouteMode; label: string; Icon: typeof Car }[] = [
   { id: 'car', label: 'Avtomobil', Icon: Car },
@@ -387,13 +395,19 @@ export default function MapPage() {
   const [destination, setDestination] = useState<MapPlace | null>(
     restoredNavigation?.destination ?? null,
   );
+  const [routeWaypoints, setRouteWaypoints] = useState<MapPlace[]>(
+    restoredNavigation?.routeWaypoints ?? [],
+  );
   const [routeOrigin, setRouteOrigin] = useState<{
     latitude: number;
     longitude: number;
     name: string;
   } | null>(restoredNavigation?.routeOrigin ?? null);
-  const [routeEditField, setRouteEditField] = useState<'origin' | 'destination' | null>(null);
+  const [routeEditField, setRouteEditField] =
+    useState<RouteEditTarget | null>(null);
   const [routeEditQuery, setRouteEditQuery] = useState('');
+  const [routeMapPickTarget, setRouteMapPickTarget] =
+    useState<RouteEditTarget | null>(null);
   const [navigationActive, setNavigationActive] = useState(
     restoredNavigation?.active ?? false,
   );
@@ -416,12 +430,15 @@ export default function MapPage() {
 
   const mapQueryCenter = movedCenter ?? center;
   const search = usePlaceSearch(query, mapQueryCenter, 180);
-  const routeSearchCenter =
-    routeEditField === 'origin'
-      ? routeOrigin ?? center
-      : routeEditField === 'destination'
-        ? destination ?? center
-        : center;
+  const routeSearchCenter = useMemo(() => {
+    if (routeEditField === 'origin') return routeOrigin ?? center;
+    if (routeEditField === 'destination') return destination ?? center;
+    if (routeEditField?.startsWith('waypoint:')) {
+      const index = Number(routeEditField.split(':')[1]);
+      return routeWaypoints[index] ?? center;
+    }
+    return center;
+  }, [routeEditField, routeOrigin, destination, routeWaypoints, center]);
   const routeEndpointSearch = usePlaceSearch(
     routeEditField ? routeEditQuery : '',
     routeSearchCenter,
@@ -728,14 +745,20 @@ export default function MapPage() {
       place: MapPlace,
       mode: RouteMode,
       fromOverride?: { latitude: number; longitude: number; name?: string } | null,
+      waypointsOverride?: MapPlace[],
     ) => {
       const from = fromOverride ?? routeOrigin ?? me ?? center;
+      const waypoints = waypointsOverride ?? routeWaypoints;
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
       setRouteLoading(true);
       try {
-        const result = await fetchRoutes(mode, from, place, controller.signal);
+        const result = await fetchRoutesThrough(
+          mode,
+          [from, ...waypoints, place],
+          controller.signal,
+        );
         setRoutes(result);
         setRouteIndex(0);
         if (!result.length) {
@@ -751,7 +774,7 @@ export default function MapPage() {
         setRouteLoading(false);
       }
     },
-    [me, center, routeOrigin],
+    [me, center, routeOrigin, routeWaypoints],
   );
 
   const selectSearchPlace = useCallback(
@@ -775,6 +798,7 @@ export default function MapPage() {
         ? { ...me, name: 'Joriy joylashuv' }
         : { ...center, name: 'Xarita markazi' };
       setRouteOrigin(origin);
+      setRouteWaypoints([]);
       setDestination(place);
       setSelectedPlace(place);
       setPanel('route');
