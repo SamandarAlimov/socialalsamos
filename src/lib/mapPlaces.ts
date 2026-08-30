@@ -1327,3 +1327,22 @@ export async function searchMapPlaces(
   return result;
 }
 
+
+
+/** Ochiq/yopiq holatini `opening_hours` dan taxminiy aniqlash. */
+export function isProbablyOpen(openingHours?: string | null): boolean | null {
+  if (!openingHours) return null;
+  const value = openingHours.toLowerCase();
+  if (value.includes('24/7')) return true;
+
+  const match = value.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+
+  const now = new Date();
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  const from = Number(match[1]) * 60 + Number(match[2]);
+  const to = Number(match[3]) * 60 + Number(match[4]);
+
+  if (to <= from) return minutes >= from || minutes <= to;
+  return minutes >= from && minutes <= to;
+}
