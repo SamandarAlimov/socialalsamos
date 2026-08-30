@@ -87,7 +87,7 @@ export default function MarketplacePage() {
   const [sellingView, setSellingView] = useState<'products' | 'orders'>('products');
 
   // /marketplace?product=<id> — xaritadagi yaqin e'lon kartasidan kelganda
-  // {marketplaceUz.page.products} oynasini to'g'ridan-to'g'ri ochamiz.
+  // Mahsulot oynasini to'g'ridan-to'g'ri ochamiz.
   useEffect(() => {
     const productId = searchParams.get('product');
     if (!productId) return;
@@ -257,7 +257,7 @@ export default function MarketplacePage() {
                   size="icon"
                   className="relative h-10 w-10 rounded-xl bg-muted/50 hover:bg-muted"
                   onClick={() => setShowCart(true)}
-                  aria-label={itemCount > 0 ? `Savat, ${itemCount} dona {marketplaceUz.page.products}` : 'Savat'}
+                  aria-label={itemCount > 0 ? `Savat, ${itemCount} dona ${marketplaceUz.page.products}` : 'Savat'}
                 >
                   <ShoppingBag className="h-5 w-5" />
                   {itemCount > 0 && (
@@ -621,7 +621,7 @@ export default function MarketplacePage() {
                       ? "Boshqa so'z bilan izlab ko'ring"
                       : priceFilterActive
                         ? "Narx filtri juda tor — filtrni tozalab ko'ring"
-                        : "Birinchi bo'lib {marketplaceUz.page.products} joylashtiring!"
+                        : marketplaceUz.page.firstListing
                   }
                 />
               )}
@@ -731,7 +731,7 @@ export default function MarketplacePage() {
                         onClick={() => setShowDashboard(true)}
                       >
                         <LayoutDashboard className="h-4 w-4 mr-2" />
-                        Sotuvchi paneli
+                        {marketplaceUz.page.sellerDashboard}
                       </Button>
 
                       <Button
@@ -739,7 +739,7 @@ export default function MarketplacePage() {
                         onClick={() => setShowCreateProduct(true)}
                       >
                         <Plus className="h-4 w-4 mr-2" />
-                        Yangi {marketplaceUz.page.products} qo'shish
+                        {marketplaceUz.page.addProduct}
                       </Button>
 
                       {sellerLoading ? (
@@ -757,8 +757,8 @@ export default function MarketplacePage() {
                       ) : (
                         <EmptyState
                           icon={<Package className="h-12 w-12" />}
-                          title="Mahsulotlar yo'q"
-                          description="Birinchi {marketplaceUz.page.products}ingizni joylashtiring!"
+                          title={marketplaceUz.page.emptyProductsTitle}
+                          description={marketplaceUz.page.firstProduct}
                         />
                       )}
                     </>
@@ -781,7 +781,7 @@ export default function MarketplacePage() {
                 <EmptyState
                   icon={<Heart className="h-16 w-16" />}
                   title={marketplaceUz.page.signIn}
-                  description="Saqlangan {marketplaceUz.page.products}larni ko'rish uchun tizimga kiring"
+                  description={marketplaceUz.page.savedSignIn}
                 />
               ) : savedLoading ? (
                 <div className="grid grid-cols-2 gap-3">
@@ -803,8 +803,8 @@ export default function MarketplacePage() {
               ) : (
                 <EmptyState
                   icon={<Heart className="h-16 w-16" />}
-                  title="Saqlangan {marketplaceUz.page.products}lar yo'q"
-                  description="Yoqtirgan {marketplaceUz.page.products}laringizni saqlang"
+                  title={marketplaceUz.page.savedEmptyTitle}
+                  description={marketplaceUz.page.savedEmptyDescription}
                 />
               )}
             </motion.div>

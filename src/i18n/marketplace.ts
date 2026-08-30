@@ -224,6 +224,13 @@ export const marketplaceUz = {
     savedSignIn: "Saqlangan mahsulotlarni ko'rish uchun tizimga kiring",
     gridView: "Katakcha ko'rinish",
     listView: "Ro'yxat ko'rinish",
+    firstListing: "Birinchi bo'lib mahsulot joylashtiring!",
+    sellerDashboard: 'Sotuvchi paneli',
+    addProduct: "Yangi mahsulot qo'shish",
+    emptyProductsTitle: "Mahsulotlar yo'q",
+    firstProduct: 'Birinchi mahsulotingizni joylashtiring!',
+    savedEmptyTitle: "Saqlangan mahsulotlar yo'q",
+    savedEmptyDescription: 'Yoqtirgan mahsulotlaringizni saqlang',
   },
 
 } as const;
