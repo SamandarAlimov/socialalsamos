@@ -458,11 +458,9 @@ export default function MarketplacePage() {
                         onClick={() => handleProductSelect(featuredProducts[0])}
                         aria-label={featuredProducts[0].title}
                       >
-                        <img
-                          src={featuredProducts[0].images[0].url}
-                          alt={featuredProducts[0].title}
+                        <MarketplaceProductImage
+                          product={featuredProducts[0]}
                           className="w-full h-full object-cover"
-                          loading="lazy"
                         />
                       </button>
                     )}
@@ -499,11 +497,9 @@ export default function MarketplacePage() {
                         >
                           <div className="aspect-square rounded-xl overflow-hidden bg-muted mb-2 ring-1 ring-border/30 group-hover:ring-primary/30 transition-all">
                             {product.images?.[0]?.url ? (
-                              <img
-                                src={product.images[0].url}
-                                alt={product.title}
+                              <MarketplaceProductImage
+                                product={product}
                                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                loading="lazy"
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-muted-foreground/40">
@@ -928,6 +924,40 @@ export default function MarketplacePage() {
   }
 
   return pageContent;
+}
+
+function MarketplaceProductImage({
+  product,
+  className,
+}: {
+  product: Product;
+  className?: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  const src = product.images?.[0]?.url;
+
+  if (!src || failed) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-muted text-muted-foreground/40">
+        <CategoryIcon
+          slug={product.category?.slug}
+          name={product.category?.name}
+          className="h-7 w-7"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={product.title}
+      className={className}
+      loading="lazy"
+      decoding="async"
+      onError={() => setFailed(true)}
+    />
+  );
 }
 
 function EmptyState({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
