@@ -66,6 +66,10 @@ export interface TransitStaticStopRoute {
   name: string;
   color?: string | null;
   mode?: 'bus' | 'trolleybus' | 'minibus' | 'tram' | 'subway' | 'train' | 'other';
+  headsign?: string | null;
+  directionId?: string | null;
+  shapeId?: string | null;
+  shapeCoordinates?: [number, number][];
 }
 
 interface StaticStopRoutesResponse {
@@ -115,6 +119,13 @@ interface ArrivalsResponse {
   gtfsStopId?: string;
   matchedStopName?: string | null;
   arrivals?: TransitRealtimeArrival[];
+  scheduledArrivals?: Array<
+    TransitRealtimeArrival & {
+      scheduled?: boolean;
+      headsign?: string | null;
+      directionId?: string | null;
+    }
+  >;
 }
 
 interface AlertsResponse {
