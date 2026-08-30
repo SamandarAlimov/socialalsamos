@@ -1625,15 +1625,37 @@ export default function MapPage() {
                 </div>
                 {routeWaypoints.map((waypoint, index) => {
                   const target = `waypoint:${index}` as RouteEditTarget;
+                  const leg = activeRoute?.legs?.[index];
                   return (
                     <div
                       key={'route-waypoint:' + waypoint.id + ':' + index}
-                      className="flex min-h-10 items-center gap-2 rounded-2xl border border-border/[0.45] bg-background/[0.55] px-3"
+                      draggable={!routeEditField}
+                      onDragStart={() => setDraggedRouteStopIndex(index)}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        if (draggedRouteStopIndex != null) {
+                          reorderRouteStop(draggedRouteStopIndex, index);
+                        }
+                        setDraggedRouteStopIndex(null);
+                      }}
+                      onDragEnd={() => setDraggedRouteStopIndex(null)}
+                      className={cn(
+                        'flex min-h-12 items-center gap-1.5 rounded-2xl border border-border/[0.45] bg-background/[0.55] px-2 transition',
+                        draggedRouteStopIndex === index &&
+                          'opacity-55 ring-1 ring-primary/[0.30]',
+                      )}
                     >
+                      <span
+                        className="hidden cursor-grab touch-none text-muted-foreground md:flex"
+                        title="Sudrab tartiblang"
+                      >
+                        <GripVertical className="h-4 w-4" />
+                      </span>
                       <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/[0.12] text-[10px] font-extrabold text-primary">
                         {index + 1}
                       </span>
-                      <span className="w-10 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      <span className="w-8 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                         To
                       </span>
                       {routeEditField === target ? (
@@ -1659,26 +1681,82 @@ export default function MapPage() {
                             setRouteEditField(target);
                             setRouteEditQuery('');
                           }}
-                          className="min-w-0 flex-1 truncate text-left text-sm font-medium"
+                          className="min-w-0 flex-1 py-1.5 text-left"
                         >
-                          {waypoint.name}
+                          <span className="block truncate text-sm font-medium">
+                            {waypoint.name}
+                          </span>
+                          {leg && (
+                            <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                              {formatMinutes(leg.durationS)} · {formatKm(leg.distanceM)}
+                            </span>
+                          )}
                         </button>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => removeRouteWaypoint(index)}
-                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-destructive"
-                        aria-label="Oraliq manzilni olib tashlash"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() => reorderRouteStop(index, index - 1)}
+                          disabled={index === 0}
+                          className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-25"
+                          aria-label="Manzilni yuqoriga surish"
+                        >
+                          <ArrowUp className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => reorderRouteStop(index, index + 1)}
+                          className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                          aria-label="Manzilni pastga surish"
+                        >
+                          <ArrowDown className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeRouteWaypoint(index)}
+                          className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-destructive"
+                          aria-label="Oraliq manzilni olib tashlash"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
 
-                <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-border/[0.45] bg-background/[0.55] px-3">
+                <div
+                  draggable={Boolean(destination && !routeEditField)}
+                  onDragStart={() =>
+                    setDraggedRouteStopIndex(routeWaypoints.length)
+                  }
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    if (draggedRouteStopIndex != null) {
+                      reorderRouteStop(
+                        draggedRouteStopIndex,
+                        routeWaypoints.length,
+                      );
+                    }
+                    setDraggedRouteStopIndex(null);
+                  }}
+                  onDragEnd={() => setDraggedRouteStopIndex(null)}
+                  className={cn(
+                    'flex min-h-12 items-center gap-1.5 rounded-2xl border border-border/[0.45] bg-background/[0.55] px-2 transition',
+                    draggedRouteStopIndex === routeWaypoints.length &&
+                      'opacity-55 ring-1 ring-primary/[0.30]',
+                  )}
+                >
+                  {destination && (
+                    <span
+                      className="hidden cursor-grab touch-none text-muted-foreground md:flex"
+                      title="Sudrab tartiblang"
+                    >
+                      <GripVertical className="h-4 w-4" />
+                    </span>
+                  )}
                   <MapPin className="h-4 w-4 shrink-0 text-destructive" />
-                  <span className="w-10 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <span className="w-8 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                     To
                   </span>
                   {routeEditField === 'destination' ? (
@@ -1702,20 +1780,51 @@ export default function MapPage() {
                         setRouteEditField('destination');
                         setRouteEditQuery('');
                       }}
-                      className="min-w-0 flex-1 truncate text-left text-sm font-semibold"
+                      className="min-w-0 flex-1 py-1.5 text-left"
                     >
-                      {destination?.name || 'Manzil tanlanmagan'}
+                      <span className="block truncate text-sm font-semibold">
+                        {destination?.name || 'Manzil tanlanmagan'}
+                      </span>
+                      {destination &&
+                        activeRoute?.legs?.[routeWaypoints.length] && (
+                          <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                            {formatMinutes(
+                              activeRoute.legs[routeWaypoints.length].durationS,
+                            )}{' '}
+                            ·{' '}
+                            {formatKm(
+                              activeRoute.legs[routeWaypoints.length].distanceM,
+                            )}
+                          </span>
+                        )}
                     </button>
                   )}
                   {destination && (
-                    <button
-                      type="button"
-                      onClick={removeFinalDestination}
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-destructive"
-                      aria-label="Oxirgi manzilni olib tashlash"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex shrink-0 items-center gap-0.5">
+                      {routeWaypoints.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            reorderRouteStop(
+                              routeWaypoints.length,
+                              routeWaypoints.length - 1,
+                            )
+                          }
+                          className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                          aria-label="Oxirgi manzilni yuqoriga surish"
+                        >
+                          <ArrowUp className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={removeFinalDestination}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-destructive"
+                        aria-label="Oxirgi manzilni olib tashlash"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   )}
                 </div>
 
