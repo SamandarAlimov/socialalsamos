@@ -10,6 +10,7 @@ import { ProductCard } from '@/components/marketplace/ProductCard';
 import { Product } from '@/hooks/useMarketplace';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { marketplaceUz } from '@/i18n/marketplace';
 
 interface SellerStorefrontProps {
   sellerId: string | null;
@@ -71,11 +72,11 @@ export function SellerStorefront({ sellerId, onClose, onProductSelect }: SellerS
                   </div>
                   <div className="flex items-center gap-1 text-muted-foreground">
                     <Package className="h-4 w-4" />
-                    <span>{products.length} mahsulot</span>
+                    <span>{marketplaceUz.storefront.productCount(products.length)}</span>
                   </div>
                   <div className="flex items-center gap-1 text-muted-foreground">
                     <Heart className="h-4 w-4" />
-                    <span>{seller.total_sales} sotuv</span>
+                    <span>{marketplaceUz.storefront.sales(seller.total_sales)}</span>
                   </div>
                 </div>
 
@@ -105,8 +106,8 @@ export function SellerStorefront({ sellerId, onClose, onProductSelect }: SellerS
                 {/* Tabs */}
                 <div className="flex gap-1 mt-4 p-1 rounded-xl bg-muted/40">
                   {[
-                    { id: 'products' as const, label: 'Mahsulotlar', count: products.length },
-                    { id: 'reviews' as const, label: 'Sharhlar', count: reviews.length },
+                    { id: 'products' as const, label: marketplaceUz.storefront.products, count: products.length },
+                    { id: 'reviews' as const, label: marketplaceUz.storefront.reviews, count: reviews.length },
                   ].map(tab => (
                     <button
                       key={tab.id}
@@ -131,7 +132,7 @@ export function SellerStorefront({ sellerId, onClose, onProductSelect }: SellerS
                 {activeTab === 'products' && (
                   <>
                     <div className="flex items-center justify-between mb-3">
-                      <p className="text-sm text-muted-foreground">{products.length} ta mahsulot</p>
+                      <p className="text-sm text-muted-foreground">{marketplaceUz.storefront.productCount(products.length)}</p>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" className={cn("h-8 w-8 rounded-lg", layout === 'grid' && "bg-muted")} onClick={() => setLayout('grid')}>
                           <Grid3X3 className="h-3.5 w-3.5" />
@@ -162,7 +163,7 @@ export function SellerStorefront({ sellerId, onClose, onProductSelect }: SellerS
                     {reviews.length === 0 ? (
                       <div className="text-center py-12">
                         <Star className="h-10 w-10 mx-auto text-muted-foreground/20 mb-3" />
-                        <p className="text-muted-foreground">Hali sharhlar yo'q</p>
+                        <p className="text-muted-foreground">{marketplaceUz.storefront.noReviews}</p>
                       </div>
                     ) : (
                       reviews.map(review => (
@@ -173,7 +174,7 @@ export function SellerStorefront({ sellerId, onClose, onProductSelect }: SellerS
                               <AvatarFallback>{review.user?.display_name?.[0] || 'U'}</AvatarFallback>
                             </Avatar>
                             <div className="flex-1">
-                              <p className="text-sm font-medium">{review.user?.display_name || 'Foydalanuvchi'}</p>
+                              <p className="text-sm font-medium">{review.user?.display_name || marketplaceUz.storefront.user}</p>
                               <div className="flex gap-0.5">
                                 {Array.from({ length: 5 }).map((_, i) => (
                                   <Star key={i} className={cn("h-3 w-3", i < review.rating ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30")} />

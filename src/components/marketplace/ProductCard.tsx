@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Heart, Star, MapPin, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { marketplaceUz } from '@/i18n/marketplace';
 import { Product, useProductActions } from '@/hooks/useMarketplace';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { formatPrice, getDiscount, getStockState } from '@/lib/marketplace';
@@ -83,7 +84,7 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
           )}
           {isSoldOut && (
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="px-2 py-0.5 rounded-md bg-black/70 text-white text-[10px] font-bold">SOTILGAN</span>
+              <span className="px-2 py-0.5 rounded-md bg-black/70 text-white text-[10px] font-bold">{marketplaceUz.card.sold}</span>
             </div>
           )}
         </div>
@@ -114,7 +115,7 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
               className="h-8 w-8"
               onClick={handleLike}
               disabled={isLiking}
-              aria-label={isLiked ? 'Saqlanganlardan olish' : 'Saqlash'}
+              aria-label={isLiked ? marketplaceUz.card.removeSaved : marketplaceUz.card.save}
               aria-pressed={isLiked}
             >
               <Heart className={cn('h-4 w-4', isLiked && 'fill-red-500 text-red-500')} />
@@ -153,7 +154,7 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
 
         {isSoldOut && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="px-3 py-1 rounded-lg bg-black/70 text-white text-xs font-bold tracking-wide">SOTILGAN</span>
+            <span className="px-3 py-1 rounded-lg bg-black/70 text-white text-xs font-bold tracking-wide">{marketplaceUz.card.sold}</span>
           </div>
         )}
 
@@ -170,7 +171,7 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
             )}
             onClick={handleLike}
             disabled={isLiking}
-            aria-label={isLiked ? 'Saqlanganlardan olish' : 'Saqlash'}
+            aria-label={isLiked ? marketplaceUz.card.removeSaved : marketplaceUz.card.save}
             aria-pressed={isLiked}
           >
             <Heart className={cn('h-3.5 w-3.5', isLiked && 'fill-current')} />
@@ -191,7 +192,7 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
           )}
           {isLowStock && (
             <span className="px-2 py-0.5 rounded-md bg-orange-500/95 text-white text-[10px] font-bold shadow-lg">
-              {stock} ta qoldi
+              {marketplaceUz.card.stockLeft(stock)}
             </span>
           )}
         </div>
@@ -229,7 +230,7 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
               <span className="font-semibold tabular-nums">{sellerRating.toFixed(1)}</span>
             </div>
             <span className="text-muted-foreground">·</span>
-            <span className="text-muted-foreground">{product.seller?.total_sales ?? 0} sotuv</span>
+            <span className="text-muted-foreground">{marketplaceUz.card.sales(product.seller?.total_sales ?? 0)}</span>
           </div>
         )}
 

@@ -7,6 +7,7 @@ import { Product } from '@/hooks/useMarketplace';
 import db from '@/lib/supabaseAny';
 import { formatPrice } from '@/lib/marketplace';
 import { motion } from 'framer-motion';
+import { marketplaceUz } from '@/i18n/marketplace';
 
 interface VideoPost {
   id: string;
@@ -145,7 +146,7 @@ export function VideoCommerceSection({ onProductSelect }: VideoCommerceSectionPr
         <div className="rounded-lg bg-primary/10 p-1.5">
           <Play className="h-4 w-4 text-primary" />
         </div>
-        <h3 className="font-bold">Video orqali xarid</h3>
+        <h3 className="font-bold">{marketplaceUz.video.title}</h3>
         <Badge variant="outline" className="border-primary/20 bg-primary/5 text-[10px] text-primary">
           Yangi
         </Badge>

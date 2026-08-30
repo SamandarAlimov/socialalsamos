@@ -8,6 +8,7 @@ import { CheckoutSheet } from '@/components/marketplace/CheckoutSheet';
 import { formatPrice, getShippingCost, getStockState } from '@/lib/marketplace';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { marketplaceUz } from '@/i18n/marketplace';
 
 interface CartSheetProps {
   open: boolean;
@@ -40,7 +41,7 @@ export function CartSheet({ open, onOpenChange }: CartSheetProps) {
               <div className="p-2 rounded-xl bg-primary/10">
                 <ShoppingBag className="h-4 w-4 text-primary" />
               </div>
-              <span>Savat</span>
+              <span>{marketplaceUz.cart.title}</span>
               {itemCount > 0 && (
                 <span className="ml-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold tabular-nums">
                   {itemCount}
@@ -54,9 +55,9 @@ export function CartSheet({ open, onOpenChange }: CartSheetProps) {
               <div className="w-20 h-20 rounded-2xl bg-muted/50 flex items-center justify-center mb-5">
                 <ShoppingBag className="h-10 w-10 text-muted-foreground/30" />
               </div>
-              <h3 className="font-semibold text-lg mb-1">Savat bo'sh</h3>
+              <h3 className="font-semibold text-lg mb-1">{marketplaceUz.cart.emptyTitle}</h3>
               <p className="text-sm text-muted-foreground mb-5 max-w-xs">
-                Yoqtirgan mahsulotlaringizni savatga qo'shing
+                {marketplaceUz.cart.emptyDescription}
               </p>
               <Button onClick={() => onOpenChange(false)} className="rounded-xl">
                 Xarid qilish
@@ -70,8 +71,7 @@ export function CartSheet({ open, onOpenChange }: CartSheetProps) {
                     <div className="flex items-start gap-2 p-3 rounded-xl bg-destructive/10 text-destructive text-xs">
                       <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                       <span>
-                        {unavailableItems.length} ta mahsulot sotuvda yo'q yoki miqdori yetarli emas.
-                        Buyurtma berishdan oldin savatni tahrirlang.
+                        {marketplaceUz.cart.unavailable(unavailableItems.length)}
                       </span>
                     </div>
                   )}
@@ -107,18 +107,18 @@ export function CartSheet({ open, onOpenChange }: CartSheetProps) {
                 <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                   <div className="flex items-center gap-1">
                     <ShieldCheck className="h-3.5 w-3.5 text-green-500" />
-                    <span>Xavfsiz to'lov</span>
+                    <span>{marketplaceUz.cart.securePayment}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <Truck className="h-3.5 w-3.5 text-blue-500" />
-                    <span>Yetkazib berish</span>
+                    <span>{marketplaceUz.cart.delivery}</span>
                   </div>
                 </div>
 
                 {/* Real totals — shipping is no longer a mystery "calculated later" */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Mahsulotlar ({itemCount})</span>
+                    <span className="text-muted-foreground">{marketplaceUz.cart.productsCount(itemCount)}</span>
                     <span className="tabular-nums">{formatPrice(total, currency)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
@@ -129,7 +129,7 @@ export function CartSheet({ open, onOpenChange }: CartSheetProps) {
                   </div>
                   <div className="h-px bg-border/30 my-1" />
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Jami</span>
+                    <span className="text-sm font-medium">{marketplaceUz.cart.total}</span>
                     <span className="text-lg font-bold tabular-nums">{formatPrice(grandTotal, currency)}</span>
                   </div>
                 </div>
@@ -139,7 +139,7 @@ export function CartSheet({ open, onOpenChange }: CartSheetProps) {
                   disabled={hasBlockingIssues}
                   onClick={() => { setShowCheckout(true); onOpenChange(false); }}
                 >
-                  Buyurtma berish — {formatPrice(grandTotal, currency)}
+                  {marketplaceUz.cart.checkout} — {formatPrice(grandTotal, currency)}
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
               </div>
@@ -202,14 +202,14 @@ function CartItemCard({ item, onUpdateQuantity, onRemove }: {
             {product.seller?.business_name}
           </p>
           {isSoldOut ? (
-            <p className="text-[11px] font-medium text-destructive mt-0.5">Sotuvda yo'q</p>
+            <p className="text-[11px] font-medium text-destructive mt-0.5">{marketplaceUz.cart.soldOut}</p>
           ) : exceedsStock ? (
             <p className="text-[11px] font-medium text-destructive mt-0.5">
-              Omborda faqat {stock} dona
+              {marketplaceUz.cart.stockOnly(stock)}
             </p>
           ) : itemShipping > 0 ? (
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              + {formatPrice(itemShipping, currency)} yetkazish
+              + {formatPrice(itemShipping, currency)} {marketplaceUz.cart.shippingSuffix}
             </p>
           ) : null}
         </div>
@@ -219,7 +219,7 @@ function CartItemCard({ item, onUpdateQuantity, onRemove }: {
             <button
               className="h-7 w-7 rounded-lg bg-muted/60 border border-border/30 flex items-center justify-center hover:bg-muted transition-colors"
               onClick={() => onUpdateQuantity(item.quantity - 1)}
-              aria-label="Sonini kamaytirish"
+              aria-label={marketplaceUz.cart.decrease}
             >
               <Minus className="h-3 w-3" />
             </button>
@@ -228,7 +228,7 @@ function CartItemCard({ item, onUpdateQuantity, onRemove }: {
               className="h-7 w-7 rounded-lg bg-muted/60 border border-border/30 flex items-center justify-center hover:bg-muted transition-colors disabled:opacity-40"
               onClick={() => onUpdateQuantity(item.quantity + 1)}
               disabled={item.quantity >= stock}
-              aria-label="Sonini oshirish"
+              aria-label={marketplaceUz.cart.increase}
             >
               <Plus className="h-3 w-3" />
             </button>
@@ -242,7 +242,7 @@ function CartItemCard({ item, onUpdateQuantity, onRemove }: {
       <button
         className="self-start p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors"
         onClick={onRemove}
-        aria-label="Savatdan o'chirish"
+        aria-label={marketplaceUz.cart.remove}
       >
         <Trash2 className="h-4 w-4" />
       </button>
