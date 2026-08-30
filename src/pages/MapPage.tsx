@@ -66,12 +66,14 @@ import {
 } from '@/hooks/useMapPlaces';
 import { useSavedPlaces } from '@/hooks/useSavedPlaces';
 import { useTrafficProvider } from '@/hooks/useTrafficProvider';
+import { useTrafficIncidents } from '@/hooks/useTrafficIncidents';
 import { distanceMeters } from '@/lib/geocoding';
 import { formatDwell, usePlaceVisits, useVisitTracking } from '@/hooks/useVisitTracking';
 import { PlaceCategoryBar } from '@/components/map/PlaceCategoryBar';
 import { PlaceResultsList } from '@/components/map/PlaceResultsList';
 import { PlaceDetailsCard } from '@/components/map/PlaceDetailsCard';
 import { BusStopCard } from '@/components/map/BusStopCard';
+import { TrafficIncidentCard } from '@/components/map/TrafficIncidentCard';
 import { BusStopResultsList } from '@/components/map/BusStopResultsList';
 import { TaxiOffersCard } from '@/components/map/TaxiOffersCard';
 import { MapLayerSwitcher } from '@/components/map/MapLayerSwitcher';
@@ -103,10 +105,21 @@ import {
   readNavigationSession,
   writeNavigationSession,
 } from '@/lib/navigationSession';
+import {
+  trafficIncidentColor,
+  type TrafficIncident,
+} from '@/lib/traffic';
 
 const DEFAULT_CENTER = { latitude: 41.311081, longitude: 69.240562 };
 
-type PanelMode = 'search' | 'place' | 'stop' | 'route' | 'history' | 'saved';
+type PanelMode =
+  | 'search'
+  | 'place'
+  | 'stop'
+  | 'incident'
+  | 'route'
+  | 'history'
+  | 'saved';
 type RouteEditTarget =
   | 'origin'
   | 'destination'
@@ -414,6 +427,8 @@ export default function MapPage() {
   const [category, setCategory] = useState<string | null>(null);
   const [selectedPlace, setSelectedPlace] = useState<MapPlace | null>(null);
   const [selectedStop, setSelectedStop] = useState<TransitStop | null>(null);
+  const [selectedIncident, setSelectedIncident] =
+    useState<TrafficIncident | null>(null);
   const [panel, setPanel] = useState<PanelMode>('search');
   const [snap, setSnap] = useState<MapSheetSnap>('peek');
 
@@ -511,6 +526,14 @@ export default function MapPage() {
   const stopRoutes = useStopRoutes(selectedStop);
   const transitStatus = useTransitRealtimeStatus();
   const trafficProvider = useTrafficProvider();
+  const trafficIncidents = useTrafficIncidents(
+    viewport,
+    Boolean(
+      overlays.includes('traffic') &&
+        trafficProvider.status.incidents,
+    ),
+    trafficProvider.status.refreshSeconds,
+  );
   const saved = useSavedPlaces();
   const searchHistory = useMapSearchHistory();
   useVisitTracking(true);
