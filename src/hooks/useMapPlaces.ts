@@ -48,7 +48,7 @@ export function usePlaceCategory(categoryId: PlaceCategoryId | null, center?: Ce
       controller.abort();
       setLoading(false);
       setError('Xarita provayderi sekin javob bermoqda. Qayta urinib ko\u2018ring.');
-    }, 10000);
+    }, 12500);
 
     fetchPlacesByCategory(categoryId, center, { signal: controller.signal })
       .then((result) => {
