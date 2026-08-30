@@ -24,7 +24,6 @@ import type { PollInput } from '@/lib/polls';
 import type { PostLocationInput, PostMusicInput } from '@/lib/postMeta';
 import type { StickerPlacement } from '@/lib/stickers';
 import { AttachmentGrid } from '@/components/create/AttachmentGrid';
-import { FormatToolbar } from '@/components/create/FormatToolbar';
 import { PollComposer } from '@/components/create/PollComposer';
 import { LocationPicker } from '@/components/create/LocationPicker';
 import { MusicPicker } from '@/components/create/MusicPicker';
@@ -32,10 +31,11 @@ import { MentionCollaborator } from '@/components/create/MentionCollaborator';
 import { StickerMediaEditor } from '@/components/create/StickerMediaEditor';
 import { ImageEditor } from '@/components/create/ImageEditor';
 import { VideoEditor, type VideoEditData } from '@/components/VideoEditor';
-import { HashtagSuggestions } from '@/components/HashtagSuggestions';
 import { startLiveLocationSharing } from '@/lib/liveLocationSharing';
 import { parseStorageReference } from '@/lib/mediaUpload';
 import { supabase } from '@/integrations/supabase/client';
+import { RichTextComposer } from '@/components/create/RichTextComposer';
+import type { AlsamosRichTextDocument } from '@/lib/richTextDocument';
 
 /** MentionCollaborator ichidagi Profile bilan bir xil shakl. */
 interface CollaboratorProfile {
@@ -55,16 +55,6 @@ const VISIBILITIES: Array<{
   { id: 'friends', label: 'Do‘stlar', icon: UsersRound },
   { id: 'private', label: 'Faqat men', icon: Lock },
 ];
-
-/**
- * Kursor turgan joydagi hashtag so‘rovini aniqlaydi.
- * `null` — kursor hashtag ustida emas.
- */
-function hashtagQueryAt(text: string, cursor: number): string | null {
-  const before = text.slice(0, cursor);
-  const match = before.match(/#([\p{L}\p{N}_]*)$/u);
-  return match ? match[1] : null;
-}
 
 function draftMusicObject(input?: PostMusicInput | null): { bucket: string; key: string } | null {
   if (!input?.track || input.trackId || input.track.source !== 'device') return null;
@@ -105,17 +95,16 @@ export function PostComposer() {
   const { toast } = useToast();
   const { createPost } = usePosts();
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const musicRef = useRef<PostMusicInput | null>(null);
 
   const [content, setContent] = useState('');
+  const [formattedContent, setFormattedContent] = useState<AlsamosRichTextDocument | null>(null);
   const [visibility, setVisibility] = useState<PostVisibility>('public');
   const [poll, setPoll] = useState<PollInput | null>(null);
   const [location, setLocation] = useState<PostLocationInput | null>(null);
   const [music, setMusic] = useState<PostMusicInput | null>(null);
   const [collaborators, setCollaborators] = useState<CollaboratorProfile[]>([]);
-  const [hashtagQuery, setHashtagQuery] = useState<string | null>(null);
   const [isPosting, setIsPosting] = useState(false);
 
   const [showPoll, setShowPoll] = useState(false);
@@ -209,33 +198,6 @@ export function PostComposer() {
         0,
       ),
     [stickerDrafts, attachments],
-  );
-
-  const handleContentChange = useCallback((value: string) => {
-    setContent(value);
-    const element = textareaRef.current;
-    const cursor = element ? element.selectionStart : value.length;
-    setHashtagQuery(hashtagQueryAt(value, cursor));
-  }, []);
-
-  /** Tanlangan hashtagni kursor turgan joyga qo‘yadi. */
-  const insertHashtag = useCallback(
-    (tag: string) => {
-      const element = textareaRef.current;
-      const cursor = element ? element.selectionStart : content.length;
-      const before = content.slice(0, cursor).replace(/#([\p{L}\p{N}_]*)$/u, '#' + tag + ' ');
-      const after = content.slice(cursor);
-
-      setContent(before + after);
-      setHashtagQuery(null);
-
-      requestAnimationFrame(() => {
-        if (!element) return;
-        element.focus();
-        element.setSelectionRange(before.length, before.length);
-      });
-    },
-    [content],
   );
 
   const handleFilesSelected = useCallback(
@@ -367,6 +329,7 @@ export function PostComposer() {
         poll,
         location,
         music,
+        formattedContent,
       });
 
       if (!created) return;
@@ -381,6 +344,7 @@ export function PostComposer() {
       // 3. Tozalaymiz va lentaga qaytamiz
       clearAttachments();
       setContent('');
+      setFormattedContent(null);
       setPoll(null);
       setLocation(null);
       setMusic(null);
@@ -401,6 +365,7 @@ export function PostComposer() {
     poll,
     location,
     music,
+    formattedContent,
     clearAttachments,
     markAttachmentsPublished,
     navigate,
@@ -427,29 +392,15 @@ export function PostComposer() {
         ))}
       </div>
 
-      {/* Matn + formatlash */}
-      <div className="rounded-2xl border border-border/60 bg-muted/20 p-3">
-        <FormatToolbar
-          textareaRef={textareaRef}
-          value={content}
-          onChange={handleContentChange}
-          className="mb-2"
-        />
-
-        <textarea
-          ref={textareaRef}
-          value={content}
-          onChange={(event) => handleContentChange(event.target.value)}
-          onBlur={() => setTimeout(() => setHashtagQuery(null), 150)}
-          placeholder="Nima yangilik? #hashtag ishlatib ko‘ring..."
-          rows={5}
-          className="w-full resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-        />
-
-        {hashtagQuery !== null && (
-          <HashtagSuggestions query={hashtagQuery} onSelect={insertHashtag} className="mt-2" />
-        )}
-      </div>
+      {/* Structured WYSIWYG matn editori */}
+      <RichTextComposer
+        value={formattedContent}
+        onChange={({ plainText, formattedContent: nextDocument }) => {
+          setContent(plainText);
+          setFormattedContent(nextDocument);
+        }}
+        placeholder="Nima yangilik? #hashtag ishlatib ko‘ring..."
+      />
 
       {/* Fayllar — rasm/videoni bosib stiker qo‘yish mumkin */}
       <AttachmentGrid
