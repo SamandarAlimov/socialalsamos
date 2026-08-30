@@ -69,6 +69,9 @@ interface Message {
     sender_name: string;
     original_content: string;
   };
+  forwarded_from_message_id?: string | null;
+  forwarded_from_name?: string | null;
+  original_content?: string | null;
   reply_to?: ReplyTarget | null;
 }
 
@@ -400,6 +403,8 @@ export function EnhancedMessageBubble({
       : null;
 
   const senderLabel = message.sender?.display_name || message.sender?.username || 'Foydalanuvchi';
+  const forwardedFromName =
+    message.forwarded_from_name || message.forwarded_from?.sender_name || null;
 
   const emojiOnly =
     !message.is_deleted &&
@@ -498,11 +503,11 @@ export function EnhancedMessageBubble({
           )}
           style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
         >
-          {message.forwarded_from && (
-            <div className="mb-1 flex items-center gap-1 text-xs opacity-70">
+          {forwardedFromName && (
+            <div className="mb-1 flex items-center gap-1 text-xs opacity-75">
               <Forward className="h-3 w-3 shrink-0" />
               <span className="truncate">
-                Yo'naltirilgan: {message.forwarded_from.sender_name}
+                Yo'naltirilgan: {forwardedFromName}
               </span>
             </div>
           )}
