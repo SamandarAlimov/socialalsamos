@@ -993,6 +993,19 @@ export default function MapPage() {
     setSnap('half');
   }, []);
 
+  useEffect(() => {
+    if (!navigationActive) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      stopNavigation();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [navigationActive, stopNavigation]); // Escape ham navigationdan chiqadi
+
   const handleNavigationArrive = useCallback(() => {
     toast.success('Manzilga yetib keldingiz.');
   }, []);
