@@ -1907,26 +1907,18 @@ export default function MapPage() {
     }
 
     if (!navigationActive) {
-      for (const group of markerGroups) {
-        if (group.type === 'cluster') {
-          markers.push({
-            id: 'cluster|' + group.id,
-            kind: 'cluster',
-            latitude: group.latitude,
-            longitude: group.longitude,
-            count: group.count,
-            label: group.count + ' ta joy',
-          });
-        } else {
-          markers.push({
-            id: 'place|' + group.place.id,
-            kind: 'place',
-            latitude: group.place.latitude,
-            longitude: group.place.longitude,
-            color: categoryUi(group.place.categoryId).color,
-            label: group.place.name,
-          });
-        }
+      // Vector renderer clusteringni GPU/source darajasida o'zi qiladi.
+      // Shu sabab unga oldindan clusterlangan markerGroups emas, raw viewport
+      // POIlar beriladi. Raster Leaflet esa eski markerGroups'ni ishlatishda davom etadi.
+      for (const place of visiblePlaces) {
+        markers.push({
+          id: 'place|' + place.id,
+          kind: 'place',
+          latitude: place.latitude,
+          longitude: place.longitude,
+          color: categoryUi(place.categoryId).color,
+          label: place.name,
+        });
       }
 
       if (panel === 'route' && routeOrigin) {
@@ -2009,7 +2001,7 @@ export default function MapPage() {
     me,
     navigationActive,
     navigation.position,
-    markerGroups,
+    visiblePlaces,
     panel,
     routeOrigin,
     routeWaypoints,
@@ -2069,29 +2061,11 @@ export default function MapPage() {
 
   const handleVectorMarkerClick = useCallback(
     (markerId: string) => {
-      if (markerId.startsWith('cluster|')) {
-        const rawId = markerId.slice('cluster|'.length);
-        const group = markerGroups.find(
-          (item) => item.type === 'cluster' && item.id === rawId,
-        );
-        if (!group || group.type !== 'cluster') return;
-        const map = mapRef.current;
-        if (!map) return;
-        map.setView(
-          [group.latitude, group.longitude],
-          Math.min(18, Math.max(map.getZoom() + 2, 15)),
-          { animate: true },
-        );
-        return;
-      }
-
       if (markerId.startsWith('place|')) {
         const placeId = markerId.slice('place|'.length);
-        const group = markerGroups.find(
-          (item) => item.type === 'place' && item.place.id === placeId,
-        );
-        if (!group || group.type !== 'place') return;
-        const selected = withUserDistance(group.place);
+        const place = visiblePlaces.find((item) => item.id === placeId);
+        if (!place) return;
+        const selected = withUserDistance(place);
         setSelectedPlace(selected);
         setSelectedStop(null);
         setMovedCenter(null);
@@ -2118,7 +2092,7 @@ export default function MapPage() {
         setSnap('half');
       }
     },
-    [markerGroups, visibleStops, withUserDistance],
+    [visiblePlaces, visibleStops, withUserDistance],
   );
 
   const handleVectorEngineError = useCallback((error: Error) => {
