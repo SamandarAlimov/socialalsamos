@@ -720,12 +720,12 @@ export default function MapPage() {
           <div
             className={cn(
               'shrink-0 border-b px-3 pb-3 pt-2 backdrop-blur-xl',
-              contrastLayer ? 'border-white/10 bg-black/10' : 'border-border/45 bg-background/35',
+              contrastLayer ? 'border-white/[0.10] bg-black/[0.10]' : 'border-border/[0.45] bg-background/[0.35]',
             )}
           >
             <div className="flex items-start gap-2">
               <div className="min-w-0 flex-1 space-y-1.5">
-                <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-border/45 bg-background/55 px-3">
+                <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-border/[0.45] bg-background/[0.55] px-3">
                   <span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-primary bg-background" />
                   <span className="w-10 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                     From
@@ -757,7 +757,7 @@ export default function MapPage() {
                     </button>
                   )}
                 </div>
-                <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-border/45 bg-background/55 px-3">
+                <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-border/[0.45] bg-background/[0.55] px-3">
                   <MapPin className="h-4 w-4 shrink-0 text-destructive" />
                   <span className="w-10 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                     To
@@ -796,7 +796,7 @@ export default function MapPage() {
                   type="button"
                   onClick={swapRouteEndpoints}
                   disabled={!destination}
-                  className="flex h-10 w-10 items-center justify-center rounded-2xl border border-border/45 bg-background/60 text-foreground transition hover:bg-background disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex h-10 w-10 items-center justify-center rounded-2xl border border-border/[0.45] bg-background/[0.60] text-foreground transition hover:bg-background disabled:cursor-not-allowed disabled:opacity-40"
                   aria-label="Boshlanish va manzilni almashtirish"
                 >
                   <ArrowDownUp className="h-4 w-4" />
@@ -807,7 +807,7 @@ export default function MapPage() {
                     setPanel(selectedPlace ? 'place' : 'search');
                     setRoutes([]);
                   }}
-                  className="flex h-10 w-10 items-center justify-center rounded-2xl border border-border/45 bg-background/60 text-muted-foreground transition hover:bg-background hover:text-foreground"
+                  className="flex h-10 w-10 items-center justify-center rounded-2xl border border-border/[0.45] bg-background/[0.60] text-muted-foreground transition hover:bg-background hover:text-foreground"
                   aria-label="Yopish"
                 >
                   <X className="h-4 w-4" />
@@ -816,12 +816,12 @@ export default function MapPage() {
             </div>
 
             {routeEditField && (
-              <div className="mt-2 overflow-hidden rounded-2xl border border-border/45 bg-background/88 shadow-xl backdrop-blur-2xl">
+              <div className="mt-2 overflow-hidden rounded-2xl border border-border/[0.45] bg-background/[0.88] shadow-xl backdrop-blur-2xl">
                 {routeEditField === 'origin' && (
                   <button
                     type="button"
                     onClick={useCurrentLocationAsOrigin}
-                    className="flex w-full items-center gap-2.5 border-b border-border/40 px-3 py-2.5 text-left text-sm hover:bg-muted/50"
+                    className="flex w-full items-center gap-2.5 border-b border-border/[0.40] px-3 py-2.5 text-left text-sm hover:bg-muted/[0.50]"
                   >
                     <Crosshair className="h-4 w-4 text-primary" />
                     <span className="font-medium">Joriy joylashuv</span>
@@ -842,7 +842,7 @@ export default function MapPage() {
                       key={'route-search:' + place.id}
                       type="button"
                       onClick={() => selectRouteEndpoint(place)}
-                      className="flex w-full items-start gap-2.5 border-b border-border/35 px-3 py-2.5 text-left last:border-0 hover:bg-muted/50"
+                      className="flex w-full items-start gap-2.5 border-b border-border/[0.35] px-3 py-2.5 text-left last:border-0 hover:bg-muted/[0.50]"
                     >
                       <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                       <span className="min-w-0 flex-1">
@@ -864,7 +864,7 @@ export default function MapPage() {
               </div>
             )}
 
-            <div className="mt-2.5 grid grid-cols-4 gap-1 rounded-2xl bg-muted/40 p-1">
+            <div className="mt-2.5 grid grid-cols-4 gap-1 rounded-2xl bg-muted/[0.40] p-1">
               {MODES.map((mode) => (
                 <button
                   key={mode.id}
@@ -880,7 +880,7 @@ export default function MapPage() {
                     'flex h-9 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition',
                     routeMode === mode.id
                       ? 'bg-background text-primary shadow-sm'
-                      : 'text-muted-foreground hover:bg-background/60 hover:text-foreground',
+                      : 'text-muted-foreground hover:bg-background/[0.60] hover:text-foreground',
                     mode.id === 'transit' && !transitRoutingAvailable && 'cursor-not-allowed opacity-40',
                   )}
                 >
@@ -910,10 +910,10 @@ export default function MapPage() {
                     className={cn(
                       'group flex w-full items-center gap-3 rounded-2xl border px-3.5 py-3 text-left transition-all',
                       selected
-                        ? 'border-primary/55 bg-primary/[0.09] shadow-sm ring-1 ring-primary/15'
+                        ? 'border-primary/[0.55] bg-primary/[0.09] shadow-sm ring-1 ring-primary/[0.15]'
                         : contrastLayer
-                          ? 'border-white/10 bg-white/[0.045] hover:bg-white/[0.075]'
-                          : 'border-border/50 bg-background/55 hover:border-primary/20 hover:bg-muted/45',
+                          ? 'border-white/[0.10] bg-white/[0.045] hover:bg-white/[0.075]'
+                          : 'border-border/[0.50] bg-background/[0.55] hover:border-primary/[0.20] hover:bg-muted/[0.45]',
                     )}
                   >
                     <span
@@ -979,7 +979,7 @@ export default function MapPage() {
                       key={index}
                       className={cn(
                         'flex items-start gap-3 rounded-xl px-3 py-2.5 text-sm',
-                        contrastLayer ? 'bg-white/[0.035]' : 'bg-muted/30',
+                        contrastLayer ? 'bg-white/[0.035]' : 'bg-muted/[0.30]',
                       )}
                     >
                       <span
@@ -1015,7 +1015,7 @@ export default function MapPage() {
           <div
             className={cn(
               'flex shrink-0 items-center gap-2 border-b px-4 py-3',
-              contrastLayer ? 'border-white/10 bg-black/10' : 'border-border/60',
+              contrastLayer ? 'border-white/[0.10] bg-black/[0.10]' : 'border-border/[0.60]',
             )}
           >
             <Bookmark className="h-4 w-4 text-primary" />
@@ -1070,8 +1070,8 @@ export default function MapPage() {
                     className={cn(
                       'flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition',
                       contrastLayer
-                        ? 'border-white/10 bg-white/[0.045] hover:bg-white/[0.075]'
-                        : 'border-border/45 bg-background/55 hover:border-primary/20 hover:bg-muted/45',
+                        ? 'border-white/[0.10] bg-white/[0.045] hover:bg-white/[0.075]'
+                        : 'border-border/[0.45] bg-background/[0.55] hover:border-primary/[0.20] hover:bg-muted/[0.45]',
                     )}
                   >
                     <span
@@ -1102,7 +1102,7 @@ export default function MapPage() {
           <div
             className={cn(
               'flex shrink-0 items-center gap-2 border-b px-4 py-3',
-              contrastLayer ? 'border-white/10 bg-black/10' : 'border-border/60',
+              contrastLayer ? 'border-white/[0.10] bg-black/[0.10]' : 'border-border/[0.60]',
             )}
           >
             <History className="h-4 w-4 text-primary" />
@@ -1141,8 +1141,8 @@ export default function MapPage() {
                     className={cn(
                       'flex items-start gap-3 rounded-2xl border px-3 py-3 transition',
                       contrastLayer
-                        ? 'border-white/10 bg-white/[0.045] hover:bg-white/[0.075]'
-                        : 'border-border/45 bg-background/55 hover:border-primary/20 hover:bg-muted/45',
+                        ? 'border-white/[0.10] bg-white/[0.045] hover:bg-white/[0.075]'
+                        : 'border-border/[0.45] bg-background/[0.55] hover:border-primary/[0.20] hover:bg-muted/[0.45]',
                     )}
                   >
                     <span
@@ -1211,7 +1211,7 @@ export default function MapPage() {
                 }
               : undefined
           }
-          className="border-b border-border/60 px-2"
+          className="border-b border-border/[0.60] px-2"
         />
         <div className="min-h-0 flex-1 overflow-y-auto map-panel-scrollbar">
           {!query.trim() && !category ? (
@@ -1507,10 +1507,10 @@ export default function MapPage() {
           <div className="relative min-w-0 flex-1">
             <div
               className={cn(
-                'flex h-11 w-full items-center gap-2 rounded-[18px] px-3 shadow-xl ring-1 backdrop-blur-2xl transition focus-within:ring-primary/25',
+                'flex h-11 w-full items-center gap-2 rounded-[18px] px-3 shadow-xl ring-1 backdrop-blur-2xl transition focus-within:ring-primary/[0.25]',
                 contrastLayer
-                  ? 'map-imagery-search ring-white/15'
-                  : 'bg-background/84 ring-border/45 focus-within:bg-background/94',
+                  ? 'map-imagery-search ring-white/[0.15]'
+                  : 'bg-background/[0.84] ring-border/[0.45] focus-within:bg-background/[0.94]',
               )}
             >
               <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -1621,7 +1621,7 @@ export default function MapPage() {
               setPanel('search');
               if (category || query.trim()) setSnap('half');
             }}
-            className="pointer-events-auto flex h-9 items-center gap-2 rounded-full border border-border/45 bg-background/82 px-3 text-xs font-semibold shadow-lg backdrop-blur-2xl transition hover:bg-background/95"
+            className="pointer-events-auto flex h-9 items-center gap-2 rounded-full border border-border/[0.45] bg-background/[0.82] px-3 text-xs font-semibold shadow-lg backdrop-blur-2xl transition hover:bg-background/[0.95]"
           >
             <Search className="h-3.5 w-3.5 text-primary" />
             Shu hududda qidirish
@@ -1634,15 +1634,15 @@ export default function MapPage() {
         className={cn(
           'absolute right-3 z-[1100] flex flex-col gap-1.5 rounded-[18px] border p-1.5 text-foreground shadow-xl backdrop-blur-2xl transition-[bottom] duration-300 md:bottom-auto md:top-1/2 md:-translate-y-1/2',
           contrastLayer
-            ? 'map-imagery-controls border-white/15'
-            : 'border-border/35 bg-background/55',
+            ? 'map-imagery-controls border-white/[0.15]'
+            : 'border-border/[0.35] bg-background/[0.55]',
         )}
         style={isMobile ? { bottom: sheetHeightPx + 16 } : undefined}
       >
         <button
           type="button"
           onClick={() => mapRef.current?.zoomIn()}
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/68 text-foreground transition hover:bg-background/95 hover:shadow-sm"
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/[0.68] text-foreground transition hover:bg-background/[0.95] hover:shadow-sm"
           aria-label="Yaqinlashtirish"
         >
           <ZoomIn className="h-5 w-5" />
@@ -1650,7 +1650,7 @@ export default function MapPage() {
         <button
           type="button"
           onClick={() => mapRef.current?.zoomOut()}
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/68 text-foreground transition hover:bg-background/95 hover:shadow-sm"
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/[0.68] text-foreground transition hover:bg-background/[0.95] hover:shadow-sm"
           aria-label="Uzoqlashtirish"
         >
           <ZoomOut className="h-5 w-5" />
@@ -1660,8 +1660,8 @@ export default function MapPage() {
           onClick={centerOnMe}
           disabled={locating}
           className={cn(
-            'flex h-10 w-10 items-center justify-center rounded-xl bg-background/68 text-foreground transition hover:bg-background/95 hover:shadow-sm disabled:cursor-wait',
-            locating && 'bg-primary/12 text-primary',
+            'flex h-10 w-10 items-center justify-center rounded-xl bg-background/[0.68] text-foreground transition hover:bg-background/[0.95] hover:shadow-sm disabled:cursor-wait',
+            locating && 'bg-primary/[0.12] text-primary',
           )}
           aria-label={locating ? 'Joylashuv aniqlanmoqda' : 'Mening joylashuvim'}
         >
@@ -1678,7 +1678,7 @@ export default function MapPage() {
             setSnap('half');
             void visits.reload();
           }}
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/68 text-foreground transition hover:bg-background/95 hover:shadow-sm"
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/[0.68] text-foreground transition hover:bg-background/[0.95] hover:shadow-sm"
           aria-label="Tashriflar tarixi"
         >
           <History className="h-5 w-5" />
@@ -1694,7 +1694,7 @@ export default function MapPage() {
             'flex h-10 w-10 items-center justify-center rounded-xl transition',
             showStops
               ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'bg-background/68 text-foreground hover:bg-background/95 hover:shadow-sm',
+              : 'bg-background/[0.68] text-foreground hover:bg-background/[0.95] hover:shadow-sm',
           )}
           aria-label="Bekatlar"
         >
@@ -1709,7 +1709,7 @@ export default function MapPage() {
             setSnap('half');
             void saved.reload();
           }}
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/68 text-foreground transition hover:bg-background/95 hover:shadow-sm"
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/[0.68] text-foreground transition hover:bg-background/[0.95] hover:shadow-sm"
           aria-label="Saqlangan joylar"
         >
           <Bookmark className="h-5 w-5" />
@@ -1721,7 +1721,7 @@ export default function MapPage() {
         snap={snap}
         onSnapChange={setSnap}
         onHeightChange={setSheetHeightPx}
-        className={contrastLayer ? 'map-imagery-panel md:ring-black/10' : undefined}
+        className={contrastLayer ? 'map-imagery-panel md:ring-black/[0.10]' : undefined}
       >
         {snap === 'peek' && panel === 'search' ? (
           <button
