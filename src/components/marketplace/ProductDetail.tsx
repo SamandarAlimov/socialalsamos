@@ -12,7 +12,6 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { CategoryIcon } from '@/components/marketplace/CategoryIcon';
 import { ProductCard } from '@/components/marketplace/ProductCard';
 import { Product, useCart, useProductActions, useProducts } from '@/hooks/useMarketplace';
@@ -31,6 +30,7 @@ interface ProductDetailProps {
   onCartChange?: () => void;
   onMessageSeller?: (sellerId: string) => void;
   onProductSelect?: (product: Product) => void;
+  onOpenCart?: () => void;
 }
 
 export function ProductDetail({
@@ -41,6 +41,7 @@ export function ProductDetail({
   onCartChange,
   onMessageSeller,
   onProductSelect,
+  onOpenCart,
 }: ProductDetailProps) {
   const { triggerHaptic } = useHapticFeedback();
   const { toggleLike, registerView } = useProductActions();
@@ -77,15 +78,12 @@ export function ProductDetail({
   const [descExpanded, setDescExpanded] = useState(false);
   const [imageFailed, setImageFailed] = useState<Record<number, boolean>>({});
   const [isZoomed, setIsZoomed] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewTitle, setReviewTitle] = useState('');
   const [reviewContent, setReviewContent] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   const touchStartX = useRef<number | null>(null);
-  const mobileScrollRef = useRef<HTMLDivElement>(null);
-  const detailScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => setStack([]), [productProp?.id]);
 
@@ -98,12 +96,9 @@ export function ProductDetail({
     setDescExpanded(false);
     setImageFailed({});
     setIsZoomed(false);
-    setScrolled(false);
     setReviewRating(5);
     setReviewTitle('');
     setReviewContent('');
-    mobileScrollRef.current?.scrollTo({ top: 0 });
-    detailScrollRef.current?.scrollTo({ top: 0 });
   }, [product?.id]);
 
   useEffect(() => {
@@ -317,11 +312,11 @@ export function ProductDetail({
         disabled={isAddingToCart || isBuying || isSoldOut}
       >
         {isAddingToCart ? (
-          <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Qo‘shilmoqda</>
+          <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> {marketplaceUz.productDetail.adding}</>
         ) : addedToCart ? (
-          <><Check className="mr-1.5 h-4 w-4" /> Qo‘shildi</>
+          <><Check className="mr-1.5 h-4 w-4" /> {marketplaceUz.productDetail.added}</>
         ) : (
-          <><ShoppingCart className="mr-1.5 h-4 w-4" /> Savatga</>
+          <><ShoppingCart className="mr-1.5 h-4 w-4" /> {marketplaceUz.productDetail.addToCart}</>
         )}
         {inCartQty > 0 && !isAddingToCart && (
           <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold">
@@ -335,103 +330,86 @@ export function ProductDetail({
         onClick={handleBuyNow}
         disabled={isSoldOut || isBuying || isAddingToCart}
       >
-        {isSoldOut ? 'Sotilgan' : isBuying ? (
-          <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Ochilmoqda</>
+        {isSoldOut ? marketplaceUz.productDetail.sold : isBuying ? (
+          <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> {marketplaceUz.productDetail.opening}</>
         ) : (
-          <><Zap className="mr-1.5 h-4 w-4" /> Sotib olish</>
+          <><Zap className="mr-1.5 h-4 w-4" /> {marketplaceUz.productDetail.buyNow}</>
         )}
       </Button>
     </div>
   );
 
   return (
-    <Sheet open={!!productProp} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <SheetContent
-        side="bottom"
-        className={cn(
-          'h-[98vh] p-0 rounded-t-3xl border-t border-border/30 overflow-hidden [&>button]:hidden',
-          'md:max-w-6xl md:mx-auto md:rounded-3xl md:h-[90vh] md:my-[5vh] md:top-0 md:bottom-auto',
-        )}
-      >
-        <div className="relative flex h-full flex-col bg-background">
-          <AnimatePresence>
-            {scrolled && (
-              <motion.div
-                initial={{ opacity: 0, y: -12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                className="absolute inset-x-0 top-0 z-50 flex h-16 items-center gap-2 border-b border-border/30 bg-background/95 px-3 backdrop-blur-xl"
-              >
-                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" onClick={handleBackOrClose}>
-                  {canGoBack ? <ArrowLeft className="h-5 w-5" /> : <X className="h-5 w-5" />}
-                </Button>
-                <div className="h-10 w-10 overflow-hidden rounded-lg bg-muted">
-                  {images[0] && !imageFailed[0] ? (
-                    <img
-                      src={images[0]}
-                      alt=""
-                      className="h-full w-full object-contain"
-                      onError={() => setImageFailed(prev => ({ ...prev, 0: true }))}
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center">
-                      <CategoryIcon slug={product.category?.slug} name={product.category?.name} className="h-5 w-5" />
-                    </div>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold">{product.title}</p>
-                  <p className="text-xs font-bold text-primary">{formatPrice(product.price, currency)}</p>
-                </div>
-                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" onClick={handleShare}>
-                  <Share2 className="h-4 w-4" />
-                </Button>
-              </motion.div>
-            )}
-          </AnimatePresence>
+    <div className="relative min-h-full bg-background">
+      <div className="sticky top-0 z-40 border-b border-border/35 bg-background/88 backdrop-blur-2xl">
+        <div className="mx-auto flex h-16 w-full max-w-7xl items-center gap-3 px-4 lg:px-6">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 shrink-0 rounded-full border border-border/40 bg-background/80 shadow-sm"
+            onClick={handleBackOrClose}
+            aria-label={marketplaceUz.productDetail.back}
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
 
-          {!scrolled && (
-            <div className="absolute inset-x-0 top-0 z-40 flex items-center justify-between p-3 pointer-events-none">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="pointer-events-auto h-10 w-10 rounded-full border border-border/30 bg-background/85 shadow-lg backdrop-blur-xl"
-                onClick={handleBackOrClose}
-              >
-                {canGoBack ? <ArrowLeft className="h-5 w-5" /> : <X className="h-5 w-5" />}
-              </Button>
-              <div className="flex gap-2 pointer-events-auto">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={cn(
-                    'h-10 w-10 rounded-full border shadow-lg backdrop-blur-xl',
-                    isLiked ? 'border-red-500/30 bg-red-500/15 text-red-500' : 'border-border/30 bg-background/85',
-                  )}
-                  onClick={handleLike}
-                >
-                  <Heart className={cn('h-5 w-5', isLiked && 'fill-current')} />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-10 w-10 rounded-full border border-border/30 bg-background/85 shadow-lg backdrop-blur-xl"
-                  onClick={handleShare}
-                >
-                  <Share2 className="h-5 w-5" />
-                </Button>
-              </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold md:text-base">{product.title}</p>
+            <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
+              {product.category?.name && <span className="truncate">{product.category.name}</span>}
+              <span className="font-bold text-primary">{formatPrice(product.price, currency)}</span>
             </div>
+          </div>
+
+          {onOpenCart && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative h-10 w-10 rounded-full border border-border/40 bg-background/80 shadow-sm"
+              onClick={onOpenCart}
+              aria-label={marketplaceUz.cart.title}
+            >
+              <ShoppingCart className="h-4.5 w-4.5" />
+              {inCartQty > 0 && (
+                <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-primary px-1 text-[9px] font-bold leading-4 text-primary-foreground">
+                  {inCartQty > 99 ? '99+' : inCartQty}
+                </span>
+              )}
+            </Button>
           )}
 
-          <div
-            ref={mobileScrollRef}
-            onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 300)}
-            className="flex-1 min-h-0 overflow-y-auto md:grid md:grid-cols-2 md:gap-8 md:overflow-hidden md:p-4"
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              'h-10 w-10 rounded-full border shadow-sm',
+              isLiked
+                ? 'border-red-500/30 bg-red-500/10 text-red-500'
+                : 'border-border/40 bg-background/80',
+            )}
+            onClick={handleLike}
+            aria-label={isLiked ? marketplaceUz.card.removeSaved : marketplaceUz.card.save}
           >
-            <div className="md:sticky md:top-0 md:self-start">
+            <Heart className={cn('h-4.5 w-4.5', isLiked && 'fill-current')} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 rounded-full border border-border/40 bg-background/80 shadow-sm"
+            onClick={handleShare}
+            aria-label={marketplaceUz.productDetail.share}
+          >
+            <Share2 className="h-4.5 w-4.5" />
+          </Button>
+        </div>
+      </div>
+
+      <div
+            className="alsamos-scrollbar mx-auto grid w-full max-w-7xl gap-6 px-4 py-5 md:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] md:gap-8 lg:gap-10 lg:px-6"
+          >
+            <div className="md:sticky md:top-20 md:self-start">
               <div
-                className="relative aspect-[4/5] select-none overflow-hidden bg-muted/40 md:max-h-[calc(90vh-2rem)] md:rounded-2xl md:bg-muted"
+                className="relative aspect-[4/5] select-none overflow-hidden rounded-3xl border border-border/30 bg-muted/40 shadow-sm md:max-h-[calc(100dvh-7rem)] md:bg-muted"
                 onTouchStart={handleTouchStart}
                 onTouchEnd={handleTouchEnd}
                 onDoubleClick={() => setIsZoomed(value => !value)}
@@ -517,7 +495,7 @@ export function ProductDetail({
 
               {images.length > 1 && (
                 <div className="border-b border-border/20 px-4 py-3 md:border-b-0 md:px-0 md:pb-0">
-                  <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+                  <div className="alsamos-scrollbar flex gap-2 overflow-x-auto pb-1">
                     {images.map((url, index) => (
                       <button
                         key={url + index}
@@ -548,11 +526,7 @@ export function ProductDetail({
               )}
             </div>
 
-            <div
-              ref={detailScrollRef}
-              onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 300)}
-              className="pb-36 md:h-full md:min-h-0 md:overflow-y-auto md:pb-6 md:pr-2"
-            >
+            <div className="pb-36 md:pb-10">
               <div className="space-y-5 p-4 md:p-0">
                 {product.category && (
                   <div className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
@@ -971,7 +945,7 @@ export function ProductDetail({
                       {[0, 1, 2].map(item => <div key={item} className="h-52 w-40 shrink-0 animate-pulse rounded-2xl bg-muted" />)}
                     </div>
                   ) : relatedProducts.length > 0 ? (
-                    <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:px-0">
+                    <div className="alsamos-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:px-0">
                       {relatedProducts.map(related => (
                         <div key={related.id} className="w-40 shrink-0">
                           <ProductCard product={related} onSelect={openRelated} />
@@ -993,11 +967,9 @@ export function ProductDetail({
             </div>
           </div>
 
-          <div className="absolute inset-x-0 bottom-0 z-40 border-t border-border/30 bg-background/95 px-4 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] backdrop-blur-xl md:hidden">
+      <div className="fixed inset-x-0 bottom-[78px] z-40 border-t border-border/30 bg-background/92 px-4 pt-3 pb-3 backdrop-blur-2xl md:hidden">
             {actionButtons}
           </div>
-        </div>
-      </SheetContent>
-    </Sheet>
+    </div>
   );
 }

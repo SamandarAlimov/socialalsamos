@@ -37,6 +37,7 @@ import VideosPage from "./pages/VideosPage";
 import DiscoveryPage from "./pages/DiscoveryPage";
 import SearchPage from "./pages/SearchPage";
 import MarketplacePage from "./pages/MarketplacePage";
+import MarketplaceProductPage from "./pages/MarketplaceProductPage";
 import AdminPage from "./pages/AdminPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import StoryArchivePage from "./pages/StoryArchivePage";
@@ -120,6 +121,7 @@ function AppRoutes() {
         <Route path="/messages" element={<MessagesPage />} />
         <Route path="/join/:slug" element={<JoinInvitePage />} />
         <Route path="/marketplace" element={<MarketplacePage />} />
+        <Route path="/marketplace/product/:productId" element={<MarketplaceProductPage />} />
         <Route path="/map" element={<MapPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         {/* DB foundation tayyor bo'lsa modular, aks holda deployment-safe legacy fallback. */}

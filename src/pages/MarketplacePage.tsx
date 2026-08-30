@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Search, ShoppingBag, Plus, Store, Package, Heart, TrendingUp, Sparkles,
   LayoutDashboard, Flame, Crown, ChevronRight, SlidersHorizontal, Grid3X3,
@@ -20,15 +20,12 @@ import {
   useSavedProducts,
   useCart,
   useNearbyMarketplaceProducts,
-  fetchMarketplaceProductById,
   Product,
 } from '@/hooks/useMarketplace';
 import { ProductCard } from '@/components/marketplace/ProductCard';
-import { ProductDetail } from '@/components/marketplace/ProductDetail';
 import { BecomeSeller } from '@/components/marketplace/BecomeSeller';
 import { CreateProductDialog } from '@/components/marketplace/CreateProductDialog';
 import { CartSheet } from '@/components/marketplace/CartSheet';
-import { CheckoutSheet } from '@/components/marketplace/CheckoutSheet';
 import { SellerDashboard } from '@/components/marketplace/SellerDashboard';
 import { OrdersView } from '@/components/marketplace/OrdersView';
 import { SellerOrdersView } from '@/components/marketplace/SellerOrdersView';
@@ -47,6 +44,7 @@ export default function MarketplacePage() {
   const isMobile = useIsMobile();
   const { user } = useAuth();
   const { triggerHaptic } = useHapticFeedback();
+  const navigate = useNavigate();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'browse');
@@ -71,10 +69,8 @@ export default function MarketplacePage() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showCreateProduct, setShowCreateProduct] = useState(false);
   const [showCart, setShowCart] = useState(false);
-  const [showCheckout, setShowCheckout] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [gridLayout, setGridLayout] = useState<'grid' | 'list'>('grid');
@@ -86,24 +82,17 @@ export default function MarketplacePage() {
   /** Seller area sub-view: own catalogue vs incoming order queue. */
   const [sellingView, setSellingView] = useState<'products' | 'orders'>('products');
 
-  // /marketplace?product=<id> — xaritadagi yaqin e'lon kartasidan kelganda
-  // Mahsulot oynasini to'g'ridan-to'g'ri ochamiz.
+  // Legacy/map links may still use ?product=<id>. Canonical route is a real page.
   useEffect(() => {
     const productId = searchParams.get('product');
     if (!productId) return;
+    navigate(`/marketplace/product/${productId}`, { replace: true });
+  }, [navigate, searchParams]);
 
-    let cancelled = false;
-    void fetchMarketplaceProductById(productId).then((product) => {
-      if (cancelled) return;
-      if (product) {
-        setSelectedProduct(product);
-        setActiveTab('browse');
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
+  // Seller links are URL-addressable so product page -> store -> back works naturally.
+  useEffect(() => {
+    const sellerId = searchParams.get('seller');
+    if (sellerId) setSelectedSellerId(sellerId);
   }, [searchParams]);
 
   // Debounced search: one query per pause, not one per keystroke.
@@ -156,24 +145,15 @@ export default function MarketplacePage() {
     setSelectedCategory(slug);
   };
 
-  const handleProductSelect = (product: Product) => {
+  const handleProductSelect = useCallback((product: Product) => {
     triggerHaptic('light');
-    setSelectedProduct(product);
-  };
+    navigate(`/marketplace/product/${product.id}`);
+  }, [navigate, triggerHaptic]);
 
-  const handleOrderProductSelect = useCallback(async (productId: string) => {
-    const product = await fetchMarketplaceProductById(productId);
-    if (!product) return;
+  const handleOrderProductSelect = useCallback((productId: string) => {
     triggerHaptic('light');
-    setSelectedProduct(product);
-  }, [triggerHaptic]);
-
-  /** Real "Sotib olish": the item is in the cart, so go straight to checkout. */
-  const handleBuyNow = useCallback(async () => {
-    setSelectedProduct(null);
-    await refreshCart();
-    setShowCheckout(true);
-  }, [refreshCart]);
+    navigate(`/marketplace/product/${productId}`);
+  }, [navigate, triggerHaptic]);
 
   const maxProductPrice = useMemo(
     () => products.reduce((max, p) => Math.max(max, Number(p.price) || 0), 0),
@@ -819,36 +799,22 @@ export default function MarketplacePage() {
         </AnimatePresence>
       </div>
 
-      {/* Product Detail */}
-      <ProductDetail
-        product={selectedProduct}
-        onClose={() => {
-          setSelectedProduct(null);
-          if (searchParams.has('product')) {
-            const next = new URLSearchParams(searchParams);
-            next.delete('product');
-            setSearchParams(next, { replace: true });
-          }
-        }}
-        onSellerClick={(id) => { setSelectedProduct(null); setSelectedSellerId(id); }}
-        onBuyNow={handleBuyNow}
-        onCartChange={refreshCart}
-        onProductSelect={handleProductSelect}
-      />
       <CreateProductDialog
         open={showCreateProduct}
         onOpenChange={setShowCreateProduct}
         onSuccess={() => { refreshSeller(); refreshProducts(); }}
       />
       <CartSheet open={showCart} onOpenChange={setShowCart} />
-      <CheckoutSheet
-        open={showCheckout}
-        onOpenChange={setShowCheckout}
-        onSuccess={() => { setShowCheckout(false); refreshCart(); refreshProducts(); }}
-      />
       <SellerStorefront
         sellerId={selectedSellerId}
-        onClose={() => setSelectedSellerId(null)}
+        onClose={() => {
+          setSelectedSellerId(null);
+          if (searchParams.has('seller')) {
+            const next = new URLSearchParams(searchParams);
+            next.delete('seller');
+            setSearchParams(next, { replace: true });
+          }
+        }}
         onProductSelect={handleProductSelect}
       />
 
