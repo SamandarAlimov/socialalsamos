@@ -18,7 +18,7 @@ import { VoiceMessagePlayer } from '@/components/VoiceMessagePlayer';
 import { AnimatedEmoji } from '@/components/emoji/AnimatedEmoji';
 
 import { TelegramStyleContextMenu } from './TelegramStyleContextMenu';
-import { TelegramReactions, ReactionGroup } from './TelegramReactions';
+import { TelegramReactions } from './TelegramReactions';
 import { LocationMessage } from './LocationMessage';
 import { GroupReadReceipts } from './GroupReadReceipts';
 import { MessageContent } from './MessageContent';
@@ -28,9 +28,9 @@ import { CallHistoryMessage, CallHistoryData } from './CallHistoryMessage';
 import { BubbleTail } from './BubbleTail';
 import { StickerMessage } from './StickerMessage';
 import { getEmojiOnlyInfo } from '@/lib/emojiOnly';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
+import { useMessageReactions } from '@/hooks/useMessageReactions';
 import { format } from 'date-fns';
 
 /** Telegramdagi kabi uzoq bosish vaqti */
@@ -113,8 +113,12 @@ export function EnhancedMessageBubble({
   allMediaTracks = [],
 }: EnhancedMessageBubbleProps) {
   const { user } = useAuth();
-  const [reactions, setReactions] = useState<ReactionGroup[]>([]);
   const { lightTap, mediumTap, successFeedback } = useHapticFeedback();
+  const {
+    reactions,
+    addReaction: addReactionPersisted,
+    toggleReaction: toggleReactionPersisted,
+  } = useMessageReactions(message.id);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
@@ -175,17 +179,18 @@ export function EnhancedMessageBubble({
 
   const addReaction = useCallback(
     async (emoji: string) => {
-      if (!user) return;
       lightTap();
-      const already = reactions.find((r) => r.emoji === emoji && r.hasReacted);
-      if (already) return;
-      await supabase.from('message_reactions').insert({
-        message_id: message.id,
-        user_id: user.id,
-        emoji,
-      });
+      await addReactionPersisted(emoji);
     },
-    [user, reactions, message.id, lightTap]
+    [addReactionPersisted, lightTap]
+  );
+
+  const toggleReaction = useCallback(
+    async (emoji: string) => {
+      lightTap();
+      await toggleReactionPersisted(emoji);
+    },
+    [lightTap, toggleReactionPersisted]
   );
 
   const handleClick = useCallback(
@@ -293,77 +298,7 @@ export function EnhancedMessageBubble({
     axisRef.current = 'unknown';
   }, [swipeOffset, onReply, message, successFeedback]);
 
-  const fetchReactions = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('message_reactions')
-      .select('*')
-      .eq('message_id', message.id);
-
-    if (!error && data) {
-      const grouped = data.reduce((groups, reaction) => {
-        const existing = groups.find((g: ReactionGroup) => g.emoji === reaction.emoji);
-        if (existing) {
-          existing.count++;
-          existing.users.push(reaction.user_id);
-          if (reaction.user_id === user?.id) existing.hasReacted = true;
-        } else {
-          groups.push({
-            emoji: reaction.emoji,
-            count: 1,
-            users: [reaction.user_id],
-            hasReacted: reaction.user_id === user?.id,
-          });
-        }
-        return groups;
-      }, [] as ReactionGroup[]);
-      setReactions(grouped);
-    }
-  }, [message.id, user?.id]);
-
-  useEffect(() => {
-    fetchReactions();
-
-    const channel = supabase
-      .channel(`reactions-${message.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'message_reactions',
-          filter: `message_id=eq.${message.id}`,
-        },
-        () => fetchReactions()
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [message.id, fetchReactions]);
-
   useEffect(() => handleLongPressEnd, [handleLongPressEnd]);
-
-  const toggleReaction = async (emoji: string) => {
-    if (!user) return;
-    lightTap();
-    const hasReacted = reactions.some((r) => r.hasReacted && r.emoji === emoji);
-
-    if (hasReacted) {
-      await supabase
-        .from('message_reactions')
-        .delete()
-        .eq('message_id', message.id)
-        .eq('user_id', user.id)
-        .eq('emoji', emoji);
-    } else {
-      await supabase.from('message_reactions').insert({
-        message_id: message.id,
-        user_id: user.id,
-        emoji,
-      });
-    }
-  };
 
   const copyToClipboard = () => {
     if (message.content) {
