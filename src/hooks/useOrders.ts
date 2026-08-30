@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useCart, Product } from '@/hooks/useMarketplace';
+import db from '@/lib/supabaseAny';
 
 export interface OrderItem {
   id: string;
@@ -121,14 +122,14 @@ export function useOrders() {
     setIsLoading(true);
     setError(null);
 
-    const variantResult = await supabase
+    const variantResult = await db
       .from('orders')
       .select(ORDER_SELECT_VARIANTS)
       .eq('buyer_id', user.id)
       .order('created_at', { ascending: false });
 
     const result = variantResult.error
-      ? await supabase
+      ? await db
           .from('orders')
           .select(ORDER_SELECT_LEGACY)
           .eq('buyer_id', user.id)
@@ -192,14 +193,14 @@ export function useSellerOrders() {
 
     setSellerId(seller.id);
 
-    const variantResult = await supabase
+    const variantResult = await db
       .from('orders')
       .select(SELLER_ORDER_SELECT_VARIANTS)
       .eq('seller_id', seller.id)
       .order('created_at', { ascending: false });
 
     const result = variantResult.error
-      ? await supabase
+      ? await db
           .from('orders')
           .select(SELLER_ORDER_SELECT_LEGACY)
           .eq('seller_id', seller.id)
