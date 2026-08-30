@@ -325,7 +325,8 @@ export default function MapPage() {
   const isBusStopFilter = category === 'bus_stop';
   const showStops = overlays.includes('stops') || isBusStopFilter;
 
-  const search = usePlaceSearch(query, center);
+  const mapQueryCenter = movedCenter ?? center;
+  const search = usePlaceSearch(query, mapQueryCenter, 180);
   const routeSearchCenter =
     routeEditField === 'origin'
       ? routeOrigin ?? center
@@ -337,9 +338,12 @@ export default function MapPage() {
     routeSearchCenter,
     240,
   );
-  const categoryResults = usePlaceCategory(isBusStopFilter ? null : category, center);
+  const categoryResults = usePlaceCategory(
+    isBusStopFilter ? null : category,
+    mapQueryCenter,
+  );
   const nearbyStops = useNearbyStops(
-    showStops || panel === 'stop' ? center : null,
+    showStops || panel === 'stop' ? mapQueryCenter : null,
     isBusStopFilter ? 5000 : 1500,
   );
   const stopRoutes = useStopRoutes(selectedStop);
