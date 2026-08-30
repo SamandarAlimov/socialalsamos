@@ -185,20 +185,35 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
   );
 
   const handleVideoSaved = useCallback(
-    (editData: VideoEditData) => {
+    async (editData: VideoEditData, renderedFile?: File | null) => {
       if (!videoTargetId) return;
+
       const target = attachments.find((item) => item.id === videoTargetId);
-      setEditState(videoTargetId, {
+      const nextEditState = {
         ...(target?.editState ?? {}),
         video: {
           ...editData,
-          rendered: false,
-          savedAt: new Date().toISOString(),
+          rendered: Boolean(renderedFile),
+          ...(renderedFile
+            ? { renderedAt: new Date().toISOString() }
+            : { savedAt: new Date().toISOString() }),
         },
-      });
+      };
+
+      if (renderedFile) {
+        await replaceAttachmentFile(videoTargetId, renderedFile, nextEditState);
+      } else {
+        setEditState(videoTargetId, nextEditState);
+      }
+
       setVideoTargetId(null);
     },
-    [attachments, setEditState, videoTargetId],
+    [
+      attachments,
+      replaceAttachmentFile,
+      setEditState,
+      videoTargetId,
+    ],
   );
 
   const createHiddenDraft = useCallback(async () => {
@@ -688,6 +703,7 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
       <VideoEditor
         open={Boolean(videoTarget)}
         videoUrl={videoTarget?.previewUrl ?? ''}
+        sourceFile={videoTarget?.file ?? null}
         initialEditData={(videoTarget?.editState?.video ?? null) as VideoEditData | null}
         onSave={handleVideoSaved}
         onCancel={() => setVideoTargetId(null)}
