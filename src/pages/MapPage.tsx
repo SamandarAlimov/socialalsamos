@@ -108,6 +108,22 @@ function placeIcon(color: string, active: boolean) {
   });
 }
 
+function routeCheckpointIcon(index: number, final = false) {
+  const label = final ? '✓' : String(index + 1);
+  const background = final ? '#ef4444' : '#2F6FED';
+  return L.divIcon({
+    html:
+      '<div style="width:30px;height:30px;border-radius:999px;background:' +
+      background +
+      ';border:3px solid white;box-shadow:0 4px 12px rgba(0,0,0,.22);display:flex;align-items:center;justify-content:center;color:white;font:800 12px/1 system-ui">' +
+      label +
+      '</div>',
+    className: 'alsamos-route-checkpoint',
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+  });
+}
+
 const ME_ICON = L.divIcon({
   html: meDotSvg(),
   className: 'alsamos-me',
