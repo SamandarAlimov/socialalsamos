@@ -46,7 +46,7 @@ export function MapSearchSuggestions({
       {showRecent ? (
         <>
           <div className="flex items-center justify-between px-3.5 pb-2 pt-3">
-            <p className={cn('text-xs font-semibold uppercase tracking-wide', highContrast ? 'text-white/55' : 'text-muted-foreground')}>
+            <p className={cn('text-xs font-semibold uppercase tracking-wide', highContrast ? 'text-white/[0.55]' : 'text-muted-foreground')}>
               Oxirgi qidiruvlar
             </p>
             {recent.length > 0 && (
@@ -56,7 +56,7 @@ export function MapSearchSuggestions({
                 onClick={onClearRecent}
                 className={cn(
                   'text-xs font-semibold transition',
-                  highContrast ? 'text-white/60 hover:text-white' : 'text-muted-foreground hover:text-foreground',
+                  highContrast ? 'text-white/[0.60] hover:text-white' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
                 Tozalash
@@ -74,16 +74,16 @@ export function MapSearchSuggestions({
                   onClick={() => onSelectRecent(item)}
                   className={cn(
                     'flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-sm transition',
-                    highContrast ? 'hover:bg-white/8' : 'hover:bg-muted/60',
+                    highContrast ? 'hover:bg-white/[0.08]' : 'hover:bg-muted/60',
                   )}
                 >
-                  <Clock3 className={cn('h-4 w-4 shrink-0', highContrast ? 'text-white/45' : 'text-muted-foreground')} />
+                  <Clock3 className={cn('h-4 w-4 shrink-0', highContrast ? 'text-white/[0.45]' : 'text-muted-foreground')} />
                   <span className="min-w-0 flex-1 truncate font-medium">{item}</span>
                 </button>
               ))}
             </div>
           ) : (
-            <div className={cn('px-4 pb-4 pt-1 text-sm', highContrast ? 'text-white/55' : 'text-muted-foreground')}>
+            <div className={cn('px-4 pb-4 pt-1 text-sm', highContrast ? 'text-white/[0.55]' : 'text-muted-foreground')}>
               Joy nomini yozing — masalan, “Rahimjon ota masjidi”.
             </div>
           )}
@@ -91,7 +91,7 @@ export function MapSearchSuggestions({
       ) : (
         <>
           {loading && (
-            <div className={cn('flex items-center gap-2 px-4 py-3 text-sm', highContrast ? 'text-white/60' : 'text-muted-foreground')}>
+            <div className={cn('flex items-center gap-2 px-4 py-3 text-sm', highContrast ? 'text-white/[0.60]' : 'text-muted-foreground')}>
               <Loader2 className="h-4 w-4 animate-spin" />
               Qidirilmoqda...
             </div>
@@ -116,7 +116,7 @@ export function MapSearchSuggestions({
                     onClick={() => onSelectPlace(place)}
                     className={cn(
                       'flex w-full items-start gap-3 px-3.5 py-2.5 text-left transition',
-                      highContrast ? 'hover:bg-white/8' : 'hover:bg-muted/60',
+                      highContrast ? 'hover:bg-white/[0.08]' : 'hover:bg-muted/60',
                     )}
                   >
                     <span
@@ -131,7 +131,7 @@ export function MapSearchSuggestions({
                       <span
                         className={cn(
                           'mt-0.5 block truncate text-xs',
-                          highContrast ? 'text-white/55' : 'text-muted-foreground',
+                          highContrast ? 'text-white/[0.55]' : 'text-muted-foreground',
                         )}
                       >
                         {place.address || place.categoryLabel || ui.label}
@@ -142,7 +142,7 @@ export function MapSearchSuggestions({
                       <span
                         className={cn(
                           'shrink-0 pt-0.5 text-[11px]',
-                          highContrast ? 'text-white/45' : 'text-muted-foreground',
+                          highContrast ? 'text-white/[0.45]' : 'text-muted-foreground',
                         )}
                       >
                         {formatDistance(place.distanceM)}
@@ -155,7 +155,7 @@ export function MapSearchSuggestions({
           )}
 
           {!loading && !error && places.length === 0 && (
-            <div className={cn('flex items-center gap-2 px-4 py-4 text-sm', highContrast ? 'text-white/55' : 'text-muted-foreground')}>
+            <div className={cn('flex items-center gap-2 px-4 py-4 text-sm', highContrast ? 'text-white/[0.55]' : 'text-muted-foreground')}>
               <Search className="h-4 w-4" />
               Natija topilmadi. Nomni boshqacha yozib ko‘ring.
             </div>
