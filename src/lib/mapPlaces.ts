@@ -698,11 +698,11 @@ export async function resolveMapClickPlace(
   signal?: AbortSignal,
 ): Promise<MapPlace | null> {
   const radius =
-    zoom >= 18 ? 35 :
-    zoom >= 17 ? 50 :
-    zoom >= 16 ? 75 :
-    zoom >= 15 ? 120 :
-    180;
+    zoom >= 18 ? 70 :
+    zoom >= 17 ? 95 :
+    zoom >= 16 ? 140 :
+    zoom >= 15 ? 200 :
+    260;
 
   const query =
     '[out:json][timeout:12];\n(' +
