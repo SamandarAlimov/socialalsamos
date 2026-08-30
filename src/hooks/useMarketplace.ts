@@ -1077,6 +1077,13 @@ export function useProductActions() {
     return true;
   };
 
+  const rollbackCreatedProduct = async (productId: string) => {
+    await db
+      .from('products')
+      .update({ status: 'deleted' })
+      .eq('id', productId);
+  };
+
   const createProductVariants = async (
     productId: string,
     variants: Array<{
@@ -1145,6 +1152,7 @@ export function useProductActions() {
     createSeller,
     createProduct,
     checkProductVariantsReady,
+    rollbackCreatedProduct,
     createProductVariants,
     updateProduct,
     deleteProduct,
