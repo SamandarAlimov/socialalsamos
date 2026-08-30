@@ -25,13 +25,13 @@ function formatCount(count: number): string {
  */
 export function HashtagSuggestions({ query, onSelect, className }: HashtagSuggestionsProps) {
   const trimmed = (query ?? '').trim();
-  const { results, isLoading } = useHashtagSearch(trimmed);
+  const { suggestions, isLoading } = useHashtagSearch(trimmed);
   const { trending, isLoading: isLoadingTrending } = useTrendingHashtags(8);
 
   if (query === null) return null;
 
   const showTrending = trimmed.length === 0;
-  const items = showTrending ? trending : results;
+  const items = showTrending ? trending : suggestions;
   const loading = showTrending ? isLoadingTrending : isLoading;
 
   return (
