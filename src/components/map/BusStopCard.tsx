@@ -1,6 +1,6 @@
 import { Bus, Clock, Loader2, Navigation, RefreshCw, Radio, Train, X } from 'lucide-react';
 import type { TransitRoute, TransitStop } from '@/lib/transit';
-import { formatArrival, hasRealtimeTransitFeed } from '@/lib/transit';
+import { formatArrival } from '@/lib/transit';
 import { formatDistance } from '@/lib/geocoding';
 import { cn } from '@/lib/utils';
 
@@ -9,6 +9,8 @@ interface BusStopCardProps {
   routes: TransitRoute[];
   loading?: boolean;
   error?: string | null;
+  realtimeConfigured?: boolean;
+  realtimeFresh?: boolean;
   onReload?: () => void;
   onDirections?: (stop: TransitStop) => void;
   onClose?: () => void;
@@ -27,13 +29,13 @@ export function BusStopCard({
   routes,
   loading,
   error,
+  realtimeConfigured = false,
+  realtimeFresh = false,
   onReload,
   onDirections,
   onClose,
   className,
 }: BusStopCardProps) {
-  const realtimeFeedEnabled = hasRealtimeTransitFeed();
-
   return (
     <div className={cn('flex flex-col overflow-hidden bg-background', className)}>
       <div className="flex items-start gap-3 border-b border-border/60 px-4 py-3">
@@ -73,9 +75,18 @@ export function BusStopCard({
       </div>
 
       <div className="max-h-72 flex-1 overflow-y-auto">
-        {!realtimeFeedEnabled && (
+        {!realtimeConfigured ? (
           <div className="border-b border-border/50 bg-muted/40 px-4 py-2 text-[11px] leading-relaxed text-muted-foreground">
-            Jonli kelish vaqti provayderi ulanmagan. Vaqt faqat OSM jadval oralig'i mavjud bo'lsa taxminiy ko'rsatiladi.
+            Jonli kelish vaqti provayderi ulanmagan. Faqat haqiqiy OSM jadval oralig'i mavjud bo'lsa taxminiy vaqt ko'rsatiladi.
+          </div>
+        ) : !realtimeFresh ? (
+          <div className="border-b border-amber-500/20 bg-amber-500/8 px-4 py-2 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
+            Real-time manba mavjud, lekin hozirgi ma'lumot eskirgan yoki vaqtincha olinmayapti.
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 border-b border-emerald-500/15 bg-emerald-500/8 px-4 py-2 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+            <Radio className="h-3 w-3" />
+            GTFS real-time yangilanmoqda
           </div>
         )}
         {loading && !routes.length && (
