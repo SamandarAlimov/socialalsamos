@@ -65,8 +65,8 @@ export const PLACE_CATEGORIES: PlaceCategory[] = [
     id: 'cafe',
     label: 'Kafe / Kofe',
     emoji: '\u2615',
-    filters: ['amenity=cafe', 'cuisine=coffee_shop'],
-    keywords: ['kafe', 'kofe', 'cafe', 'coffee', 'кафе', 'кофе'],
+    filters: ['amenity=cafe', 'shop=coffee', 'cuisine=coffee_shop'],
+    keywords: ['kafe', 'kofe', 'qahva', 'cafe', 'coffee', 'coffee shop', 'кафе', 'кофе'],
   },
   {
     id: 'fast_food',
@@ -86,7 +86,7 @@ export const PLACE_CATEGORIES: PlaceCategory[] = [
     id: 'fuel',
     label: 'Zaprovka',
     emoji: '\u26fd',
-    filters: ['amenity=fuel'],
+    filters: ['amenity=fuel', 'amenity=charging_station'],
     keywords: [
       'zaprovka',
       'zapravka',
@@ -105,7 +105,7 @@ export const PLACE_CATEGORIES: PlaceCategory[] = [
     id: 'parking',
     label: 'Parkovka',
     emoji: '\ud83c\udd7f\ufe0f',
-    filters: ['amenity=parking'],
+    filters: ['amenity=parking', 'amenity=parking_entrance'],
     keywords: ['parkovka', 'parking', 'toxtash', "to'xtash", 'парковка', 'stoyanka'],
   },
   {
@@ -154,7 +154,7 @@ export const PLACE_CATEGORIES: PlaceCategory[] = [
     id: 'mosque',
     label: 'Masjidlar',
     emoji: '\ud83d\udd4c',
-    filters: ['amenity=place_of_worship'],
+    filters: ['amenity=place_of_worship&religion=muslim', 'building=mosque'],
     keywords: ['masjid', 'masjidi', 'mosque', 'мечеть', 'jome', 'juma masjidi', 'namoz'],
   },
   {
@@ -311,11 +311,23 @@ function addressFromTags(tags: Record<string, string>): string | null {
   return parts.length ? parts.join(', ') : null;
 }
 
+function filterParts(filter: string): [string, string][] {
+  return filter
+    .split('&')
+    .map((part) => {
+      const splitAt = part.indexOf('=');
+      return splitAt > 0
+        ? [part.slice(0, splitAt), part.slice(splitAt + 1)]
+        : ['', ''];
+    })
+    .filter(([key, value]) => Boolean(key && value));
+}
+
 function categoryFromTags(tags: Record<string, string>): PlaceCategory | undefined {
   for (const category of PLACE_CATEGORIES) {
     for (const filter of category.filters) {
-      const [key, value] = filter.split('=');
-      if (tags[key] === value) return category;
+      const parts = filterParts(filter);
+      if (parts.length && parts.every(([key, value]) => tags[key] === value)) return category;
     }
   }
   return undefined;
@@ -384,13 +396,13 @@ export async function fetchPlacesByCategory(
   for (const radius of radii) {
     const body = category.filters
       .map((filter) => {
-        const [key, value] = filter.split('=');
+        const selector = filterParts(filter)
+          .map(([key, value]) => '["' + key + '"="' + value + '"]')
+          .join('');
         return (
-          'nwr["' +
-          key +
-          '"="' +
-          value +
-          '"](around:' +
+          'nwr' +
+          selector +
+          '(around:' +
           radius +
           ',' +
           center.latitude +
