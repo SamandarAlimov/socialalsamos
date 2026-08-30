@@ -2316,6 +2316,9 @@ export default function MapPage() {
           error={stopRoutes.error}
           realtimeConfigured={stopRoutes.realtimeConfigured}
           realtimeFresh={stopRoutes.realtimeFresh}
+          providerName={transitStatus.providerName}
+          authoritative={Boolean(transitStatus.authoritative)}
+          alerts={stopRoutes.alerts}
           highContrast={contrastLayer}
           onReload={stopRoutes.reload}
           onClose={() => {
