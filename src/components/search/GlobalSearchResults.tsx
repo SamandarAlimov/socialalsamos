@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Globe, BookOpen, Newspaper, ImageIcon, PlayCircle, LayoutGrid, ExternalLink, AlertCircle, Loader2, Clock, KeyRound } from 'lucide-react';
+import { Globe, BookOpen, Newspaper, ImageIcon, PlayCircle, LayoutGrid, ExternalLink, AlertCircle, Loader2, Clock, DatabaseZap } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -323,13 +323,17 @@ function VideoGrid({ items }: { items: GlobalSearchResult[] }) {
 
 // ── States ─────────────────────────────────────────────────────────────────
 function ErrorState({ error }: { error: { code: string; message: string } }) {
-  const missingKey = error.code === 'PROVIDER_NOT_CONFIGURED';
-  const Icon = missingKey ? KeyRound : AlertCircle;
+  const indexState = error.code === 'INDEX_EMPTY' || error.code === 'INDEX_UNAVAILABLE';
+  const Icon = indexState ? DatabaseZap : AlertCircle;
   return (
     <div className="p-5 rounded-2xl bg-card/60 border border-border/40 backdrop-blur-sm text-center">
       <Icon className="h-6 w-6 text-muted-foreground mx-auto mb-2.5" />
       <p className="text-sm font-medium text-foreground mb-1">
-        {missingKey ? 'Provayder sozlanmagan' : 'Qidiruv vaqtincha mavjud emas'}
+        {error.code === 'INDEX_EMPTY'
+          ? 'Alsamos web indeksi kengaymoqda'
+          : error.code === 'INDEX_UNAVAILABLE'
+            ? 'Global Search indeksi hali deploy qilinmagan'
+            : 'Qidiruv vaqtincha mavjud emas'}
       </p>
       <p className="text-xs text-muted-foreground leading-relaxed">{error.message}</p>
     </div>
