@@ -10,33 +10,24 @@
 --   * public.post_hashtags.hashtag_id UUID
 -- =============================================================================
 
-do $$
+do $
 declare
   v_kind "char";
 begin
   select c.relkind into v_kind
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
-  where n.nspname = 'public' and c.relname = 'hashtags_aggregated';
-
-  if v_kind = 'v' then
-    execute 'drop view public.hashtags_aggregated';
-  elsif v_kind = 'm' then
-    execute 'drop materialized view public.hashtags_aggregated';
-  end if;
-
-  select c.relkind into v_kind
-  from pg_class c
-  join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relname = 'hashtags';
 
+  -- O'chirmaymiz: view OID saqlanadi va eski dependency'lar uzilmaydi.
+  -- Keyin public.hashtags nomida normalized table yaratamiz.
   if v_kind = 'v' then
-    execute 'drop view public.hashtags';
+    execute 'alter view public.hashtags rename to hashtags_legacy_view';
   elsif v_kind = 'm' then
-    execute 'drop materialized view public.hashtags';
+    execute 'alter materialized view public.hashtags rename to hashtags_legacy_view';
   end if;
 end
-$$;
+$;
 
 create table if not exists public.hashtags (
   id uuid primary key default gen_random_uuid(),
@@ -62,6 +53,38 @@ create table if not exists public.post_hashtags (
 alter table public.post_hashtags
   add column if not exists hashtag text,
   add column if not exists hashtag_id uuid;
+
+-- Legacy sxemada primary key (post_id, hashtag) bo'lishi mumkin.
+-- PK hashtag ustunini NOT NULL qiladi, shuning uchun avval aynan shu PKni
+-- katalogdan topib olib tashlaymiz. Yangi unique(post_id, hashtag_id) quyida yaratiladi.
+do $
+declare
+  v_constraint record;
+begin
+  for v_constraint in
+    select con.conname
+    from pg_constraint con
+    join pg_class rel on rel.oid = con.conrelid
+    join pg_namespace n on n.oid = rel.relnamespace
+    where n.nspname = 'public'
+      and rel.relname = 'post_hashtags'
+      and con.contype = 'p'
+      and exists (
+        select 1
+        from unnest(con.conkey) as key(attnum)
+        join pg_attribute a
+          on a.attrelid = rel.oid
+         and a.attnum = key.attnum
+        where a.attname = 'hashtag'
+      )
+  loop
+    execute format(
+      'alter table public.post_hashtags drop constraint %I',
+      v_constraint.conname
+    );
+  end loop;
+end
+$;
 
 -- The old hashtag column was required. New inserts are normalized through
 -- hashtag_id, therefore the legacy text column must be optional.
