@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { db } from '@/lib/db';
+import {
+  isMissingStructuredPostSchemaError,
+  readStructuredPostSchemaCapability,
+  writeStructuredPostSchemaCapability,
+} from '@/lib/structuredPostSchema';
 
 export interface PostLocation {
   id: string;
@@ -27,12 +32,13 @@ export function isLiveActive(location: Pick<PostLocation, 'mode' | 'live_until'>
 }
 
 /** Post joylashuvini yuklaydi; live rejimda realtime kuzatadi. */
-export function usePostLocation(postId: string | null) {
+export function usePostLocation(postId: string | null, enabled = true) {
   const [location, setLocation] = useState<PostLocation | null>(null);
-  const [isLoading, setIsLoading] = useState(Boolean(postId));
+  const schemaEnabled = enabled && readStructuredPostSchemaCapability() !== 'missing';
+  const [isLoading, setIsLoading] = useState(Boolean(postId) && schemaEnabled);
 
   const load = useCallback(async () => {
-    if (!postId) {
+    if (!postId || !schemaEnabled) {
       setLocation(null);
       setIsLoading(false);
       return;
@@ -47,14 +53,19 @@ export function usePostLocation(postId: string | null) {
         .maybeSingle();
 
       if (error) throw error;
+      writeStructuredPostSchemaCapability('available');
       setLocation((data as PostLocation) ?? null);
     } catch (error) {
-      console.error('Joylashuvni yuklashda xatolik:', error);
+      if (isMissingStructuredPostSchemaError(error)) {
+        writeStructuredPostSchemaCapability('missing');
+      } else {
+        console.error('Joylashuvni yuklashda xatolik:', error);
+      }
       setLocation(null);
     } finally {
       setIsLoading(false);
     }
-  }, [postId]);
+  }, [postId, schemaEnabled]);
 
   useEffect(() => {
     load();
