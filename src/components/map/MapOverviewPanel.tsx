@@ -7,7 +7,6 @@ import {
   Layers,
   MapPinned,
   MoonStar,
-  Navigation,
   CircleParking,
   Pill,
   Coffee,
@@ -25,8 +24,6 @@ interface MapOverviewPanelProps {
   onHistory: () => void;
   onStops: () => void;
   onLayers: () => void;
-  onCenter: () => void;
-  hasLocation: boolean;
   className?: string;
 }
 
@@ -47,8 +44,6 @@ export function MapOverviewPanel({
   onHistory,
   onStops,
   onLayers,
-  onCenter,
-  hasLocation,
   className,
 }: MapOverviewPanelProps) {
   return (
@@ -66,14 +61,6 @@ export function MapOverviewPanel({
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={onCenter}
-          className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-semibold text-primary-foreground shadow-sm transition hover:-translate-y-0.5 hover:shadow-md active:translate-y-0"
-        >
-          <Navigation className="h-4 w-4" />
-          {hasLocation ? 'Mening joylashuvim' : 'Joylashuvni aniqlash'}
-        </button>
       </div>
 
       <div className="mt-4">
