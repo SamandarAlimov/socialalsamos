@@ -66,6 +66,7 @@ export interface MapSceneMarker {
   active?: boolean;
   count?: number;
   bearing?: number | null;
+  variant?: string | null;
 }
 
 export interface MapSceneLine {
