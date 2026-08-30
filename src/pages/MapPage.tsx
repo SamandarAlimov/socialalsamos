@@ -1219,6 +1219,7 @@ export default function MapPage() {
     url.searchParams.set('destLat', String(place.latitude));
     url.searchParams.set('destLng', String(place.longitude));
     url.searchParams.set('destName', place.name);
+    url.searchParams.set('placeId', canonicalPlaceId(place));
     return url.toString();
   }, []);
 
@@ -1257,6 +1258,7 @@ export default function MapPage() {
         lng: String(place.longitude),
         label: place.address ? place.name + ', ' + place.address : place.name,
         name: place.name,
+        placeId: canonicalPlaceId(place),
       });
       navigate('/messages?' + params.toString());
     },
@@ -1792,7 +1794,9 @@ export default function MapPage() {
                 '&lat=' +
                 place.latitude +
                 '&lng=' +
-                place.longitude,
+                place.longitude +
+                '&placeId=' +
+                encodeURIComponent(canonicalPlaceId(place)),
             )
           }
           className="h-full"
