@@ -42,9 +42,15 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { PollDisplay, parsePollFromContent } from '@/components/PollDisplay';
 import { PostMusicCard } from '@/components/PostMusicCard';
+import { PostLocationCard } from '@/components/PostLocationCard';
 import { RichText } from '@/components/RichText';
 import { useToast } from '@/hooks/use-toast';
-import { formatCompactCount, parseMusicFromContent } from '@/lib/postMarkers';
+import {
+  formatCompactCount,
+  legacyLocationToPostLocation,
+  parseLocationFromContent,
+  parseMusicFromContent,
+} from '@/lib/postMarkers';
 
 interface Post {
   id: string;
@@ -289,7 +295,9 @@ export function ProfilePostsGrid({
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {sortedPosts.map((post) => {
             const { pollData, cleanContent } = parsePollFromContent(post.content || '');
-            const { music, cleanContent: textContent } = parseMusicFromContent(cleanContent);
+            const { location: legacyLocation, cleanContent: locationCleanContent } =
+              parseLocationFromContent(cleanContent);
+            const { music, cleanContent: textContent } = parseMusicFromContent(locationCleanContent);
             const mediaUrls = post.media_urls ?? [];
             const hasMedia = mediaUrls.length > 0;
             const isVideo = post.media_type === 'video';
@@ -350,6 +358,15 @@ export function ProfilePostsGrid({
                       </p>
                     )}
                   </div>
+                ) : legacyLocation ? (
+                  <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-primary/15 to-primary/5 p-3">
+                    <p className="line-clamp-2 text-center text-xs font-medium">
+                      {legacyLocation.label || legacyLocation.place?.name || 'Joylashuv'}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {legacyLocation.latitude.toFixed(4)}, {legacyLocation.longitude.toFixed(4)}
+                    </p>
+                  </div>
                 ) : pollData ? (
                   <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-primary/15 to-primary/5 p-3">
                     <BarChart3 className="h-6 w-6 text-primary" />
@@ -360,7 +377,7 @@ export function ProfilePostsGrid({
                 ) : (
                   <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5 p-4">
                     <p className="line-clamp-5 text-center text-sm text-foreground">
-                      {textContent || cleanContent || post.content}
+                      {textContent || legacyLocation?.label || ''}
                     </p>
                   </div>
                 )}
@@ -421,7 +438,9 @@ export function ProfilePostsGrid({
         <div className="mx-auto max-w-2xl space-y-5">
           {sortedPosts.map((post) => {
             const { pollData, cleanContent } = parsePollFromContent(post.content || '');
-            const { music, cleanContent: textContent } = parseMusicFromContent(cleanContent);
+            const { location: legacyLocation, cleanContent: locationCleanContent } =
+              parseLocationFromContent(cleanContent);
+            const { music, cleanContent: textContent } = parseMusicFromContent(locationCleanContent);
             const mediaUrls = post.media_urls ?? [];
             const hasMedia = mediaUrls.length > 0;
             const isVideo = post.media_type === 'video';
@@ -528,6 +547,15 @@ export function ProfilePostsGrid({
                 {pollData && (
                   <div className="px-4 pb-3">
                     <PollDisplay postId={post.id} pollData={pollData} />
+                  </div>
+                )}
+
+                {legacyLocation && (
+                  <div className="px-4 pb-3">
+                    <PostLocationCard
+                      location={legacyLocationToPostLocation(post.id, legacyLocation)}
+                      isOwner={false}
+                    />
                   </div>
                 )}
 
