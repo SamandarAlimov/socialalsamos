@@ -38,7 +38,7 @@ export function SwitchAccountDialog({ open, onOpenChange }: SwitchAccountDialogP
     authenticateAccount,
     addAccount,
     removeAccount,
-  } = useMultiAccount();
+  } = useMultiAccount(open);
   const { toast } = useToast();
 
   const [mode, setMode] = useState<Mode>('list');
