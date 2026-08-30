@@ -20,6 +20,8 @@ import { AnimatedEmoji } from '@/components/emoji/AnimatedEmoji';
 import { TelegramStyleContextMenu } from './TelegramStyleContextMenu';
 import { TelegramReactions } from './TelegramReactions';
 import { LocationMessage } from './LocationMessage';
+import { MessagePoll } from './MessagePoll';
+import { parseMessageLocation, parseMessagePoll } from '@/lib/messageStructuredPayload';
 import { GroupReadReceipts } from './GroupReadReceipts';
 import { MessageContent } from './MessageContent';
 import { SharedPostPreview } from './SharedPostPreview';
@@ -59,6 +61,10 @@ interface Message {
   delivered_at?: string;
   read_at?: string;
   tempId?: string;
+  metadata?: Record<string, unknown> | null;
+  location_payload?: Record<string, unknown> | null;
+  live_location_expires_at?: string | null;
+  live_location_stopped_at?: string | null;
   sender?: {
     id: string;
     avatar_url: string | null;
@@ -358,33 +364,10 @@ export function EnhancedMessageBubble({
   };
   const callHistoryData = parseCallHistory();
 
-  const isLocationFromMediaType = message.media_type === 'location' && message.media_url;
-  const isLocationFromText = message.content?.startsWith('\ud83d\udccd LOCATION:');
-  const isLocationMessage = isLocationFromMediaType || isLocationFromText;
-
-  const parseLocation = (): { latitude: number; longitude: number; address?: string } | null => {
-    if (isLocationFromMediaType && message.media_url) {
-      try {
-        const [lat, lng] = message.media_url.split(',').map(Number);
-        return { latitude: lat, longitude: lng, address: message.content || undefined };
-      } catch {
-        return null;
-      }
-    }
-    if (isLocationFromText && message.content) {
-      try {
-        const locationPart = message.content.replace('\ud83d\udccd LOCATION:', '');
-        const [coords, address] = locationPart.split('|');
-        const [lat, lng] = coords.split(',').map(Number);
-        if (!isNaN(lat) && !isNaN(lng))
-          return { latitude: lat, longitude: lng, address: address || undefined };
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  };
-  const locationData = parseLocation();
+  // Web + Flutter + legacy xabarlarni bitta canonical parser orqali o'qiymiz.
+  const locationData = parseMessageLocation(message);
+  const pollData = parseMessagePoll(message);
+  const isLocationMessage = Boolean(locationData);
 
   const isReadyToReply = swipeOffset >= SWIPE_THRESHOLD;
 
@@ -566,10 +549,13 @@ export function EnhancedMessageBubble({
             <LocationMessage
               latitude={locationData.latitude}
               longitude={locationData.longitude}
-              address={locationData.address}
+              address={locationData.address || locationData.label}
               isMine={isMine}
               senderName={message.sender?.display_name || undefined}
+              liveUntil={locationData.live ? locationData.expiresAt : undefined}
             />
+          ) : pollData ? (
+            <MessagePoll messageId={message.id} poll={pollData} isMine={isMine} />
           ) : (
             <>
               {message.story_id && <StoryReplyPreview storyId={message.story_id} isMine={isMine} />}
@@ -591,12 +577,17 @@ export function EnhancedMessageBubble({
                 <>
                   {message.content &&
                     !message.content.startsWith('[') &&
-                    !message.shared_post_id && (
+                    !message.shared_post_id &&
+                    !pollData &&
+                    !isLocationMessage && (
                       <div className="chat-selectable">
                         <MessageContent content={message.content} isMine={isMine} />
                       </div>
                     )}
-                  {message.media_url && message.media_type && (
+                  {message.media_url &&
+                    message.media_type &&
+                    !isLocationMessage &&
+                    !pollData && (
                     <div
                       className={cn(
                         'min-w-0 max-w-full',
