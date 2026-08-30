@@ -150,6 +150,6 @@ create unique index if not exists post_hashtags_post_hashtag_uniq
 create or replace view public.hashtags_aggregated as
 select
   h.tag,
-  h.posts_count as post_count,
+  h.posts_count::bigint as post_count,
   h.last_used_at
 from public.hashtags h;
