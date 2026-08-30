@@ -57,6 +57,7 @@ import {
   List,
   Palette,
   Quote,
+  Type,
   Strikethrough,
   Underline,
 } from 'lucide-react';
@@ -272,6 +273,7 @@ function ToolbarButton({
       title={label}
       aria-label={label}
       aria-pressed={active}
+      onMouseDown={(event) => event.preventDefault()}
       onClick={onClick}
       className={cn(
         'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground active:scale-95',
@@ -288,6 +290,8 @@ function RichToolbar() {
   const [formats, setFormats] = useState<Partial<Record<TextFormatType, boolean>>>({});
   const [blockType, setBlockType] = useState<BlockType>('paragraph');
   const [color, setColor] = useState<string>('');
+  const [open, setOpen] = useState(false);
+  const [showColors, setShowColors] = useState(false);
 
   const updateToolbar = useCallback(() => {
     const selection = $getSelection();
@@ -395,52 +399,106 @@ function RichToolbar() {
   ];
 
   return (
-    <div className="space-y-2 border-b border-border/50 pb-2">
-      <div className="flex items-center gap-1 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
-        {inline.map(([format, label, Icon]) => (
-          <ToolbarButton
-            key={format}
-            active={Boolean(formats[format])}
-            label={label}
-            onClick={() => formatText(format)}
-          >
-            <Icon className="h-4 w-4" />
-          </ToolbarButton>
-        ))}
+    <div className="border-b border-border/50 pb-2">
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          aria-label="Formatlash"
+          aria-expanded={open}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => setOpen((current) => !current)}
+          className={cn(
+            'flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition',
+            open
+              ? 'bg-primary/10 text-primary'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+          )}
+        >
+          <Type className="h-4 w-4" />
+          <span>Aa</span>
+        </button>
 
-        <span className="mx-1 h-5 w-px shrink-0 bg-border" />
-
-        {blocks.map(([format, label, Icon]) => (
-          <ToolbarButton
-            key={format}
-            active={blockType === format}
-            label={label}
-            onClick={() => setBlock(format)}
-          >
-            <Icon className="h-4 w-4" />
-          </ToolbarButton>
-        ))}
+        {(formats.bold ||
+          formats.italic ||
+          formats.underline ||
+          formats.strikethrough ||
+          formats.code ||
+          blockType !== 'paragraph' ||
+          color) && (
+          <span className="ml-1 text-[10px] text-muted-foreground">
+            Format faol
+          </span>
+        )}
       </div>
 
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-        <Palette className="h-4 w-4 shrink-0 text-muted-foreground" />
-        {TEXT_COLORS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            title={item.label}
-            aria-label={item.label}
-            onClick={() => setTextColor(item.id)}
-            className={cn(
-              'h-6 w-6 shrink-0 rounded-full border-2 transition-transform hover:scale-110',
-              color.toLowerCase() === item.cssValue.toLowerCase()
-                ? 'border-foreground ring-2 ring-primary/25'
-                : 'border-background ring-1 ring-border',
-            )}
-            style={{ backgroundColor: item.cssValue }}
-          />
-        ))}
-      </div>
+      {open && (
+        <div className="mt-2 rounded-xl border border-border/60 bg-background p-2 shadow-sm">
+          <div className="flex items-center gap-1 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
+            {inline.map(([format, label, Icon]) => (
+              <ToolbarButton
+                key={format}
+                active={Boolean(formats[format])}
+                label={label}
+                onClick={() => formatText(format)}
+              >
+                <Icon className="h-4 w-4" />
+              </ToolbarButton>
+            ))}
+
+            <span className="mx-1 h-5 w-px shrink-0 bg-border" />
+
+            {blocks.map(([format, label, Icon]) => (
+              <ToolbarButton
+                key={format}
+                active={blockType === format}
+                label={label}
+                onClick={() => setBlock(format)}
+              >
+                <Icon className="h-4 w-4" />
+              </ToolbarButton>
+            ))}
+
+            <span className="mx-1 h-5 w-px shrink-0 bg-border" />
+
+            <button
+              type="button"
+              title="Rang"
+              aria-label="Rang"
+              aria-expanded={showColors}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => setShowColors((current) => !current)}
+              className={cn(
+                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground',
+                showColors && 'bg-primary/10 text-primary',
+              )}
+            >
+              <Palette className="h-4 w-4" />
+            </button>
+          </div>
+
+          {showColors && (
+            <div className="mt-2 flex items-center gap-2 overflow-x-auto border-t border-border/50 pt-2">
+              {TEXT_COLORS.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  title={item.label}
+                  aria-label={item.label}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => setTextColor(item.id)}
+                  className={cn(
+                    'h-7 w-7 shrink-0 rounded-full border-2 transition-transform hover:scale-110',
+                    color.toLowerCase() === item.cssValue.toLowerCase()
+                      ? 'border-foreground ring-2 ring-primary/25'
+                      : 'border-background ring-1 ring-border',
+                  )}
+                  style={{ backgroundColor: item.cssValue }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -531,7 +589,7 @@ export function RichTextComposer({
 
   return (
     <LexicalComposer initialConfig={initialConfig}>
-      <div className={cn('relative rounded-2xl border border-border/60 bg-muted/20 p-3', className)}>
+      <div className={cn('relative p-0', className)}>
         <RichToolbar />
         <div className="relative mt-2 min-h-[130px]">
           <RichTextPlugin
