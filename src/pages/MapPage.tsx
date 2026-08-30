@@ -292,6 +292,7 @@ export default function MapPage() {
   const abortRef = useRef<AbortController | null>(null);
 
   const layer = getLayer(layerId);
+  const imageryLayer = layerId === 'satellite' || layerId === 'hybrid';
   const isBusStopFilter = category === 'bus_stop';
   const showStops = overlays.includes('stops') || isBusStopFilter;
 
@@ -865,7 +866,7 @@ export default function MapPage() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-3 py-3">
+          <div className="flex-1 overflow-y-auto map-panel-scrollbar px-3 py-3">
             {routeLoading && (
               <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -948,7 +949,7 @@ export default function MapPage() {
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto map-panel-scrollbar">
             {saved.loading && (
               <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -1025,7 +1026,7 @@ export default function MapPage() {
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto map-panel-scrollbar">
             {visits.loading && (
               <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -1113,13 +1114,11 @@ export default function MapPage() {
           }
           className="border-b border-border/60 px-2"
         />
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto map-panel-scrollbar">
           {!query.trim() && !category ? (
             <MapOverviewPanel
               savedPlaces={saved.places}
               visits={visits.visits}
-              hasLocation={Boolean(me)}
-              onCenter={centerOnMe}
               onCategory={(id) => {
                 setCategory(id);
                 setQuery('');
@@ -1366,7 +1365,14 @@ export default function MapPage() {
       {/* Yuqoridagi qidiruv qatori */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-[1100] px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:left-[404px] md:pt-3">
         <div className="pointer-events-auto mx-auto flex max-w-xl items-center gap-2">
-          <div className="flex h-11 flex-1 items-center gap-2 rounded-[18px] bg-background/84 px-3 shadow-xl ring-1 ring-border/45 backdrop-blur-2xl transition focus-within:bg-background/94 focus-within:ring-primary/25">
+          <div
+            className={cn(
+              'flex h-11 flex-1 items-center gap-2 rounded-[18px] px-3 shadow-xl ring-1 backdrop-blur-2xl transition focus-within:ring-primary/25',
+              imageryLayer
+                ? 'bg-background/96 text-foreground ring-border/70 focus-within:bg-background'
+                : 'bg-background/84 ring-border/45 focus-within:bg-background/94',
+            )}
+          >
             <Search className="h-4 w-4 text-muted-foreground" />
             <input
               value={query}
@@ -1401,6 +1407,7 @@ export default function MapPage() {
               setLayerOpen(false);
             }}
             overlays={overlays}
+            highContrast={imageryLayer}
             onToggleOverlay={(id) =>
               setOverlays((prev) =>
                 prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
@@ -1432,7 +1439,12 @@ export default function MapPage() {
 
       {/* O'ng tomondagi tez amallar */}
       <div
-        className="absolute right-3 z-[1100] flex flex-col gap-1.5 rounded-[18px] border border-border/35 bg-background/55 p-1.5 shadow-xl backdrop-blur-2xl transition-[bottom] duration-300 md:bottom-auto md:top-1/2 md:-translate-y-1/2"
+        className={cn(
+          'absolute right-3 z-[1100] flex flex-col gap-1.5 rounded-[18px] border p-1.5 text-foreground shadow-xl backdrop-blur-2xl transition-[bottom] duration-300 md:bottom-auto md:top-1/2 md:-translate-y-1/2',
+          imageryLayer
+            ? 'border-border/65 bg-background/94'
+            : 'border-border/35 bg-background/55',
+        )}
         style={isMobile ? { bottom: sheetHeightPx + 16 } : undefined}
       >
         <button
@@ -1513,7 +1525,12 @@ export default function MapPage() {
       </div>
 
       {/* Pastdagi suzuvchi panel */}
-      <MapBottomSheet snap={snap} onSnapChange={setSnap} onHeightChange={setSheetHeightPx}>
+      <MapBottomSheet
+        snap={snap}
+        onSnapChange={setSnap}
+        onHeightChange={setSheetHeightPx}
+        className={imageryLayer ? 'md:border-border/70 md:bg-background/96 md:ring-black/5' : undefined}
+      >
         {snap === 'peek' && panel === 'search' ? (
           <button
             type="button"
