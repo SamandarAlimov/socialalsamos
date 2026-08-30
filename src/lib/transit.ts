@@ -39,8 +39,14 @@ export interface TransitRoute {
   intervalMin: number;
   /** Keyingi kelish vaqtlari (daqiqada), taxminiy yoki real. */
   nextArrivalsMin: number[];
-  /** Ma'lumot manbasi: real vaqt yoki jadval/taxmin. */
+  /** Ma'lumot manbasi: real vaqt yoki jadval. */
   realtime: boolean;
+  /** Aniq GTFS static jadvalidan olingan bo'lsa. */
+  scheduled?: boolean;
+  headsign?: string | null;
+  directionId?: string | null;
+  shapeId?: string | null;
+  shapeCoordinates?: [number, number][];
 }
 
 const OVERPASS_ENDPOINTS = [
