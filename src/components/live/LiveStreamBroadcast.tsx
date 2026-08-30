@@ -194,12 +194,12 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
 
   const handleStartLive = async () => {
     if (!user) {
-      toast.error('You must be logged in to go live');
+      toast.error('Jonli efir uchun tizimga kiring');
       return;
     }
 
     if (!localStreamRef.current) {
-      toast.error('Camera not initialized');
+      toast.error('Kamera tayyor emas');
       return;
     }
 
@@ -232,7 +232,7 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
       setStream(data as LiveStream);
       setIsLive(true);
 
-      toast.success('You are now LIVE!');
+      toast.success('Jonli efir boshlandi');
     } catch (error: any) {
       console.error('Error starting broadcast:', error);
       toast.error(error.message || 'Failed to start broadcast');
@@ -283,7 +283,7 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
           .eq('status', 'live');
       }
 
-      toast.success('Live ended');
+      toast.success('Jonli efir yakunlandi');
       onClose();
     } catch (error) {
       console.error('Error ending broadcast:', error);
@@ -361,7 +361,7 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
       }
     } catch (error) {
       console.error('Error switching camera:', error);
-      toast.error('Failed to switch camera');
+      toast.error('Kamerani almashtirib bo‘lmadi');
     }
   };
 
@@ -397,7 +397,7 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
         }
         
         setIsScreenSharing(false);
-        toast.success('Switched back to camera');
+        toast.success('Kameraga qaytildi');
       } else {
         // Start screen sharing
         const screenStream = await navigator.mediaDevices.getDisplayMedia({
@@ -431,30 +431,32 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
         };
         
         setIsScreenSharing(true);
-        toast.success('Screen sharing started');
+        toast.success('Ekran ulashish boshlandi');
       }
     } catch (error: any) {
       console.error('Error toggling screen share:', error);
       if (error.name !== 'NotAllowedError') {
-        toast.error('Failed to share screen');
+        toast.error('Ekranni ulashib bo‘lmadi');
       }
     }
   };
 
   // Pre-live screen content
   const preLiveContent = (
-    <div className="fixed inset-0 z-[9999] bg-black flex flex-col" style={{ height: '100dvh' }}>
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 safe-area-top">
-        <button onClick={handleClose} className="text-white">
-          <X className="h-6 w-6" />
+    <div className="fixed inset-0 z-[9999] flex h-[100dvh] flex-col bg-black">
+      <div className="flex items-center justify-between px-4 py-3 safe-area-top">
+        <button
+          onClick={handleClose}
+          className="flex h-10 w-10 items-center justify-center rounded-full text-white transition hover:bg-white/10"
+          aria-label="Yopish"
+        >
+          <X className="h-5 w-5" />
         </button>
-        <span className="text-white font-semibold">New Live Video</span>
-        <div className="w-6" />
+        <span className="text-sm font-semibold text-white">Live</span>
+        <div className="w-10" />
       </div>
 
-      {/* Preview */}
-      <div className="flex-1 relative">
+      <div className="relative min-h-0 flex-1">
         {isInitializing ? (
           <div className="absolute inset-0 flex items-center justify-center bg-black">
             <Loader2 className="h-8 w-8 animate-spin text-white" />
@@ -465,41 +467,78 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
             autoPlay
             playsInline
             muted
-            className="absolute inset-0 w-full h-full object-cover mirror"
+            className={cn(
+              'absolute inset-0 h-full w-full object-cover',
+              facingMode === 'user' && !isScreenSharing && 'mirror',
+            )}
           />
         )}
-        
-        {/* Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/80" />
-        
-        {/* Camera switch button */}
-        <button
-          onClick={switchCamera}
-          className="absolute top-4 right-4 h-10 w-10 rounded-full bg-white/20 flex items-center justify-center"
-        >
-          <SwitchCamera className="h-5 w-5 text-white" />
-        </button>
-        
-        {/* Title input */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 safe-area-bottom">
+
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/85" />
+
+        <div className="absolute right-4 top-4 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={switchCamera}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur transition hover:bg-black/55"
+            aria-label="Kamerani almashtirish"
+          >
+            <SwitchCamera className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            onClick={toggleCamera}
+            className={cn(
+              'flex h-10 w-10 items-center justify-center rounded-full text-white backdrop-blur transition',
+              isCameraOn ? 'bg-black/35 hover:bg-black/55' : 'bg-destructive/85',
+            )}
+            aria-label={isCameraOn ? 'Kamerani o‘chirish' : 'Kamerani yoqish'}
+          >
+            {isCameraOn ? <Camera className="h-5 w-5" /> : <CameraOff className="h-5 w-5" />}
+          </button>
+          <button
+            type="button"
+            onClick={toggleMute}
+            className={cn(
+              'flex h-10 w-10 items-center justify-center rounded-full text-white backdrop-blur transition',
+              isMuted ? 'bg-destructive/85' : 'bg-black/35 hover:bg-black/55',
+            )}
+            aria-label={isMuted ? 'Mikrofonni yoqish' : 'Mikrofonni o‘chirish'}
+          >
+            {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+          </button>
+          <button
+            type="button"
+            onClick={() => void toggleScreenShare()}
+            className={cn(
+              'hidden h-10 w-10 items-center justify-center rounded-full text-white backdrop-blur transition md:flex',
+              isScreenSharing ? 'bg-primary/85' : 'bg-black/35 hover:bg-black/55',
+            )}
+            aria-label={isScreenSharing ? 'Ekran ulashishni to‘xtatish' : 'Ekranni ulashish'}
+          >
+            {isScreenSharing ? <MonitorOff className="h-5 w-5" /> : <Monitor className="h-5 w-5" />}
+          </button>
+        </div>
+
+        <div className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-xl p-4 safe-area-bottom">
           <Input
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Add a title for your live video..."
-            className="bg-white/10 border-white/20 text-white placeholder:text-white/50 mb-4"
+            onChange={(e) => setTitle(e.target.value.slice(0, 120))}
+            placeholder="Jonli efir nomi"
+            className="mb-3 h-11 rounded-xl border-white/15 bg-black/35 text-white backdrop-blur placeholder:text-white/50"
           />
-          
+
           <Button
             onClick={handleStartLive}
-            disabled={isStarting || isInitializing}
-            className="w-full bg-destructive hover:bg-destructive/90 text-white font-bold py-6"
+            disabled={isStarting || isInitializing || !localStreamRef.current}
+            className="h-12 w-full rounded-xl bg-destructive font-semibold text-white hover:bg-destructive/90"
           >
             {isStarting ? (
-              <Loader2 className="h-5 w-5 animate-spin mr-2" />
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
             ) : (
-              <Radio className="h-5 w-5 mr-2" />
+              <Radio className="mr-2 h-5 w-5" />
             )}
-            Go Live
+            Jonli efirni boshlash
           </Button>
         </div>
       </div>
