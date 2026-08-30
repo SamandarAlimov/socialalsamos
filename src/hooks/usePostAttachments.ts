@@ -346,7 +346,17 @@ export function usePostAttachments(options?: {
         let thumbnailKey: string | undefined;
         if (attachment.kind === 'video' && attachment.previewUrl) {
           try {
-            const poster = await captureVideoPoster(attachment.previewUrl);
+            const reelCover = (
+              attachment.editState?.reelCover ?? {}
+            ) as Record<string, unknown>;
+            const requestedPosterSecond = Number(reelCover.second);
+            const posterSecond = Number.isFinite(requestedPosterSecond)
+              ? Math.max(0, requestedPosterSecond)
+              : 0.1;
+            const poster = await captureVideoPoster(
+              attachment.previewUrl,
+              posterSecond,
+            );
             if (poster) {
               const posterFile = new File([poster], `poster-${attachment.id}.jpg`, {
                 type: 'image/jpeg',
