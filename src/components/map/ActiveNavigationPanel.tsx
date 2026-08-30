@@ -26,6 +26,7 @@ interface ActiveNavigationPanelProps {
   voiceEnabled?: boolean;
   voiceSupported?: boolean;
   onToggleVoice?: () => void;
+  following?: boolean;
   onRecenter: () => void;
   onStop: () => void;
 }
@@ -68,6 +69,7 @@ export function ActiveNavigationPanel({
   voiceEnabled = true,
   voiceSupported = false,
   onToggleVoice,
+  following = true,
   onRecenter,
   onStop,
 }: ActiveNavigationPanelProps) {
@@ -261,9 +263,18 @@ export function ActiveNavigationPanel({
           <button
             type="button"
             onClick={onRecenter}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm transition hover:shadow-md"
-            aria-label="Joylashuvga qaytish"
-            title="Joylashuvga qaytish"
+            className={cn(
+              'flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl shadow-sm transition hover:shadow-md',
+              following
+                ? highContrast
+                  ? 'bg-white/[0.08] text-white/[0.72]'
+                  : 'bg-muted text-muted-foreground'
+                : 'bg-primary text-primary-foreground ring-4 ring-primary/[0.14]',
+            )}
+            aria-label={
+              following ? 'Joylashuv markazda' : 'Joylashuvga qaytish'
+            }
+            title={following ? 'Joylashuv markazda' : 'Joylashuvga qaytish'}
           >
             <Crosshair className="h-5 w-5" />
           </button>
