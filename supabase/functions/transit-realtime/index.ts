@@ -10,9 +10,14 @@
 //   TRANSIT_GTFS_STATIC_URL
 //   TRANSIT_GTFS_RT_TRIP_UPDATES_URL
 //   TRANSIT_GTFS_RT_VEHICLES_URL
-// Optional:
+// Optional official GTFS-RT surface:
+//   TRANSIT_GTFS_RT_ALERTS_URL
 //   TRANSIT_GTFS_HEADERS_JSON={"x-api-key":"..."}
 //   TRANSIT_NORMALIZED_URL=https://provider.example/api
+// Provenance (strongly recommended):
+//   TRANSIT_PROVIDER_NAME="City transport operator"
+//   TRANSIT_PROVIDER_URL=https://operator.example
+//   TRANSIT_FEED_AUTHORITY=official|operator|aggregator|unknown
 //
 // If no provider is configured, the endpoint returns configured:false and
 // never invents arrival times or vehicle positions.
@@ -47,6 +52,19 @@ type FeedCache = {
   fetchedAt: number;
 };
 
+type TransitAuthority =
+  | "official"
+  | "operator"
+  | "aggregator"
+  | "unknown";
+
+type FeedHealth = {
+  configured: boolean;
+  fresh: boolean | null;
+  ageSeconds: number | null;
+  fetchedAt: number | null;
+};
+
 const STATIC_TTL_MS = 6 * 60 * 60 * 1000;
 const REALTIME_TTL_MS = 20 * 1000;
 const MAX_FRESH_AGE_SECONDS = 120;
@@ -57,6 +75,23 @@ const feedCache = new Map<string, FeedCache>();
 
 function env(name: string): string {
   return (Deno.env.get(name) ?? "").trim();
+}
+
+function providerMeta() {
+  const rawAuthority = env("TRANSIT_FEED_AUTHORITY").toLowerCase();
+  const authority: TransitAuthority =
+    rawAuthority === "official" ||
+    rawAuthority === "operator" ||
+    rawAuthority === "aggregator"
+      ? rawAuthority
+      : "unknown";
+  return {
+    providerName: env("TRANSIT_PROVIDER_NAME") || null,
+    providerUrl: env("TRANSIT_PROVIDER_URL") || null,
+    authority,
+    authoritative:
+      authority === "official" || authority === "operator",
+  };
 }
 
 function providerHeaders(): Record<string, string> {
@@ -227,10 +262,47 @@ async function decodeFeed(url: string): Promise<any> {
   return feed;
 }
 
-function feedFresh(feed: any): boolean {
+function feedFresh(
+  feed: any,
+  maxAgeSeconds = MAX_FRESH_AGE_SECONDS,
+): boolean {
   const timestamp = asNumber(feed?.header?.timestamp);
   if (!timestamp) return true;
-  return Math.max(0, Date.now() / 1000 - timestamp) <= MAX_FRESH_AGE_SECONDS;
+  return Math.max(0, Date.now() / 1000 - timestamp) <= maxAgeSeconds;
+}
+
+async function feedHealth(
+  url: string,
+  maxAgeSeconds = MAX_FRESH_AGE_SECONDS,
+): Promise<FeedHealth> {
+  if (!url) {
+    return {
+      configured: false,
+      fresh: null,
+      ageSeconds: null,
+      fetchedAt: null,
+    };
+  }
+  try {
+    const feed = await decodeFeed(url);
+    const timestamp = asNumber(feed?.header?.timestamp);
+    const ageSeconds = timestamp
+      ? Math.max(0, Math.round(Date.now() / 1000 - timestamp))
+      : null;
+    return {
+      configured: true,
+      fresh: feedFresh(feed, maxAgeSeconds),
+      ageSeconds,
+      fetchedAt: timestamp || null,
+    };
+  } catch {
+    return {
+      configured: true,
+      fresh: false,
+      ageSeconds: null,
+      fetchedAt: null,
+    };
+  }
 }
 
 function routeMeta(staticData: StaticData | null, routeId: string, tripId: string) {
@@ -258,10 +330,10 @@ async function normalizedRequest(action: string, payload: Record<string, unknown
 
 async function arrivals(payload: Record<string, any>) {
   const normalized = await normalizedRequest("arrivals", payload);
-  if (normalized) return normalized;
+  if (normalized) return { ...providerMeta(), ...normalized };
 
   const tripUpdatesUrl = env("TRANSIT_GTFS_RT_TRIP_UPDATES_URL");
-  if (!tripUpdatesUrl) return { configured: false, realtime: false, arrivals: [] };
+  if (!tripUpdatesUrl) return { ...providerMeta(), configured: false, realtime: false, arrivals: [] };
 
   const staticData = await loadStatic();
   const lat = Number(payload.latitude);
@@ -274,6 +346,7 @@ async function arrivals(payload: Record<string, any>) {
   const stopId = requestedStopId || matched?.id || "";
   if (!stopId) {
     return {
+      ...providerMeta(),
       configured: true,
       realtime: false,
       reason: "GTFS stop mosligi topilmadi",
@@ -283,7 +356,7 @@ async function arrivals(payload: Record<string, any>) {
 
   const feed = await decodeFeed(tripUpdatesUrl);
   if (!feedFresh(feed)) {
-    return { configured: true, realtime: false, stale: true, arrivals: [], gtfsStopId: stopId };
+    return { ...providerMeta(), configured: true, realtime: false, stale: true, arrivals: [], gtfsStopId: stopId };
   }
 
   const nowSeconds = Date.now() / 1000;
@@ -316,6 +389,7 @@ async function arrivals(payload: Record<string, any>) {
 
   result.sort((a, b) => a.minutes - b.minutes);
   return {
+    ...providerMeta(),
     configured: true,
     realtime: true,
     gtfsStopId: stopId,
@@ -324,10 +398,123 @@ async function arrivals(payload: Record<string, any>) {
   };
 }
 
+function translatedText(value: any): string | null {
+  const translations = Array.isArray(value?.translation)
+    ? value.translation
+    : [];
+  const preferred =
+    translations.find((item: any) =>
+      /^uz(?:-|$)/i.test(String(item?.language ?? ""))
+    ) ||
+    translations.find((item: any) =>
+      /^ru(?:-|$)/i.test(String(item?.language ?? ""))
+    ) ||
+    translations.find((item: any) =>
+      /^en(?:-|$)/i.test(String(item?.language ?? ""))
+    ) ||
+    translations[0];
+  const text = String(preferred?.text ?? "").trim();
+  return text || null;
+}
+
+function alertIsActive(alert: any): boolean {
+  const periods = Array.isArray(alert?.activePeriod)
+    ? alert.activePeriod
+    : [];
+  if (!periods.length) return true;
+  const now = Date.now() / 1000;
+  return periods.some((period: any) => {
+    const start = asNumber(period?.start);
+    const end = asNumber(period?.end);
+    return (!start || start <= now) && (!end || end >= now);
+  });
+}
+
+async function alerts(payload: Record<string, any>) {
+  const normalized = await normalizedRequest("alerts", payload);
+  if (normalized) {
+    return {
+      ...providerMeta(),
+      ...normalized,
+    };
+  }
+
+  const alertsUrl = env("TRANSIT_GTFS_RT_ALERTS_URL");
+  if (!alertsUrl) {
+    return {
+      ...providerMeta(),
+      configured: false,
+      realtime: false,
+      alerts: [],
+    };
+  }
+
+  const staticData = await loadStatic();
+  const lat = Number(payload.latitude);
+  const lng = Number(payload.longitude);
+  const matched =
+    staticData && Number.isFinite(lat) && Number.isFinite(lng)
+      ? nearestStop(staticData, lat, lng)
+      : null;
+  const requestedStopId = String(payload.gtfsStopId || "");
+  const stopId = requestedStopId || matched?.id || "";
+
+  const feed = await decodeFeed(alertsUrl);
+  if (!feedFresh(feed, 10 * 60)) {
+    return {
+      ...providerMeta(),
+      configured: true,
+      realtime: false,
+      stale: true,
+      gtfsStopId: stopId || null,
+      alerts: [],
+    };
+  }
+
+  const result: any[] = [];
+  for (const entity of feed.entity ?? []) {
+    const alert = entity.alert;
+    if (!alert || !alertIsActive(alert)) continue;
+
+    const informed = Array.isArray(alert.informedEntity)
+      ? alert.informedEntity
+      : [];
+    const appliesToStop =
+      !stopId ||
+      informed.length === 0 ||
+      informed.some(
+        (selector: any) =>
+          !selector?.stopId ||
+          String(selector.stopId) === stopId,
+      );
+    if (!appliesToStop) continue;
+
+    result.push({
+      id: String(entity.id || result.length),
+      title:
+        translatedText(alert.headerText) ||
+        "Transport xizmati bo‘yicha ogohlantirish",
+      description: translatedText(alert.descriptionText),
+      url: translatedText(alert.url),
+      cause: asNumber(alert.cause) || null,
+      effect: asNumber(alert.effect) || null,
+    });
+  }
+
+  return {
+    ...providerMeta(),
+    configured: true,
+    realtime: true,
+    gtfsStopId: stopId || null,
+    matchedStopName: matched?.name ?? null,
+    alerts: result.slice(0, 20),
+  };
+}
+
 async function journeyRoute(payload: Record<string, any>) {
   const router = env("TRANSIT_ROUTER_URL").replace(/\/+$/, "");
   if (!router) {
-    return { configured: false, routes: [] };
+    return { ...providerMeta(), configured: false, routes: [] };
   }
 
   const from = payload.from ?? {};
@@ -354,7 +541,7 @@ async function journeyRoute(payload: Record<string, any>) {
     !Number.isFinite(body.to.latitude) ||
     !Number.isFinite(body.to.longitude)
   ) {
-    return { configured: true, routes: [], error: "Invalid route coordinates" };
+    return { ...providerMeta(), configured: true, routes: [], error: "Invalid route coordinates" };
   }
 
   const response = await fetch(router + "/route", {
@@ -367,6 +554,7 @@ async function journeyRoute(payload: Record<string, any>) {
   const data = await response.json();
   const routes = Array.isArray(data?.routes) ? data.routes : [];
   return {
+    ...providerMeta(),
     configured: true,
     routes: routes.slice(0, 4).map((route: any, index: number) => ({
       mode: "transit",
@@ -387,12 +575,12 @@ async function vehicles(payload: Record<string, any>) {
   if (normalized) return normalized;
 
   const vehiclesUrl = env("TRANSIT_GTFS_RT_VEHICLES_URL");
-  if (!vehiclesUrl) return { configured: false, realtime: false, vehicles: [] };
+  if (!vehiclesUrl) return { ...providerMeta(), configured: false, realtime: false, vehicles: [] };
 
   const staticData = await loadStatic();
   const feed = await decodeFeed(vehiclesUrl);
   if (!feedFresh(feed)) {
-    return { configured: true, realtime: false, stale: true, vehicles: [] };
+    return { ...providerMeta(), configured: true, realtime: false, stale: true, vehicles: [] };
   }
 
   const south = Number(payload.south);
@@ -431,7 +619,7 @@ async function vehicles(payload: Record<string, any>) {
     });
   }
 
-  return { configured: true, realtime: true, vehicles: result.slice(0, 500) };
+  return { ...providerMeta(), configured: true, realtime: true, vehicles: result.slice(0, 500) };
 }
 
 Deno.serve(async (req) => {
@@ -458,17 +646,58 @@ Deno.serve(async (req) => {
 
   try {
     if (action === "status") {
+      const normalizedConfigured = Boolean(env("TRANSIT_NORMALIZED_URL"));
+      const tripUrl = env("TRANSIT_GTFS_RT_TRIP_UPDATES_URL");
+      const vehiclesUrl = env("TRANSIT_GTFS_RT_VEHICLES_URL");
+      const alertsUrl = env("TRANSIT_GTFS_RT_ALERTS_URL");
+      const [tripHealth, vehicleHealth, alertHealth] = await Promise.all([
+        normalizedConfigured
+          ? Promise.resolve({
+              configured: true,
+              fresh: null,
+              ageSeconds: null,
+              fetchedAt: null,
+            } as FeedHealth)
+          : feedHealth(tripUrl),
+        normalizedConfigured
+          ? Promise.resolve({
+              configured: true,
+              fresh: null,
+              ageSeconds: null,
+              fetchedAt: null,
+            } as FeedHealth)
+          : feedHealth(vehiclesUrl),
+        normalizedConfigured
+          ? Promise.resolve({
+              configured: Boolean(alertsUrl),
+              fresh: null,
+              ageSeconds: null,
+              fetchedAt: null,
+            } as FeedHealth)
+          : feedHealth(alertsUrl, 10 * 60),
+      ]);
+
       return jsonResponse(req, {
+        ...providerMeta(),
         configured: Boolean(
-          env("TRANSIT_NORMALIZED_URL") ||
-          env("TRANSIT_GTFS_RT_TRIP_UPDATES_URL") ||
-          env("TRANSIT_GTFS_RT_VEHICLES_URL"),
+          normalizedConfigured ||
+          tripUrl ||
+          vehiclesUrl ||
+          alertsUrl,
         ),
         staticGtfs: Boolean(env("TRANSIT_GTFS_STATIC_URL")),
-        arrivals: Boolean(env("TRANSIT_NORMALIZED_URL") || env("TRANSIT_GTFS_RT_TRIP_UPDATES_URL")),
-        vehicles: Boolean(env("TRANSIT_NORMALIZED_URL") || env("TRANSIT_GTFS_RT_VEHICLES_URL")),
+        arrivals: Boolean(normalizedConfigured || tripUrl),
+        vehicles: Boolean(normalizedConfigured || vehiclesUrl),
+        alerts: Boolean(
+          normalizedConfigured || alertsUrl,
+        ),
         routing: Boolean(env("TRANSIT_ROUTER_URL")),
-      }, 200, { "Cache-Control": "public, max-age=30" });
+        health: {
+          tripUpdates: tripHealth,
+          vehicles: vehicleHealth,
+          alerts: alertHealth,
+        },
+      }, 200, { "Cache-Control": "public, max-age=20" });
     }
 
     if (action === "arrivals") {
@@ -480,6 +709,12 @@ Deno.serve(async (req) => {
     if (action === "vehicles") {
       return jsonResponse(req, await vehicles(payload), 200, {
         "Cache-Control": "public, max-age=10",
+      });
+    }
+
+    if (action === "alerts") {
+      return jsonResponse(req, await alerts(payload), 200, {
+        "Cache-Control": "public, max-age=30",
       });
     }
 
