@@ -86,6 +86,8 @@ import {
 } from '@/hooks/useActiveNavigation';
 import { useNavigationVoice } from '@/hooks/useNavigationVoice';
 import { ActiveNavigationPanel } from '@/components/map/ActiveNavigationPanel';
+import { LeafletEngineBridge } from '@/components/map/engine/LeafletEngineBridge';
+import type { MapEngineController } from '@/lib/mapEngine';
 import {
   readNavigationSession,
   writeNavigationSession,
@@ -380,7 +382,7 @@ export default function MapPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const isMobile = useIsMobile();
-  const mapRef = useRef<L.Map | null>(null);
+  const mapRef = useRef<MapEngineController | null>(null);
   const hasDestinationParam = params.has('destLat') && params.has('destLng');
   const restoredNavigation = useRef(
     hasDestinationParam ? null : readNavigationSession(),
@@ -2769,7 +2771,6 @@ export default function MapPage() {
   return (
     <div className={cn('relative h-full min-h-0 w-full overflow-hidden', layer.dark && 'dark')}>
       <MapContainer
-        ref={mapRef}
         center={[center.latitude, center.longitude]}
         zoom={14}
         zoomControl={false}
@@ -2812,6 +2813,7 @@ export default function MapPage() {
             );
           })}
 
+        <LeafletEngineBridge controllerRef={mapRef} />
         <MapController
           center={center}
           zoom={navigationActive ? 17 : selectedPlace ? 16 : undefined}
