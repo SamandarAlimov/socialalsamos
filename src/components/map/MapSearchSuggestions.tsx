@@ -115,8 +115,6 @@ export function MapSearchSuggestions({
   const hover = highContrast ? 'hover:bg-white/[0.08]' : 'hover:bg-muted/60';
   const active = highContrast ? 'bg-white/[0.11]' : 'bg-primary/[0.07]';
 
-  let keyboardOffset = 0;
-
   return (
     <div
       className={cn(
@@ -191,7 +189,7 @@ export function MapSearchSuggestions({
       ) : (
         <>
           {categories.length > 0 && (
-            <div className="border-b border-border/30 py-1">
+            <div className={cn('border-b py-1', highContrast ? 'border-white/10' : 'border-border/30')}>
               <div
                 className={cn(
                   'flex items-center gap-1.5 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em]',
@@ -202,7 +200,7 @@ export function MapSearchSuggestions({
                 Kategoriyalar
               </div>
               {categories.map((category, index) => {
-                const itemIndex = keyboardOffset + index;
+                const itemIndex = index;
                 const ui = categoryUi(category.id);
                 return (
                   <button
@@ -239,11 +237,6 @@ export function MapSearchSuggestions({
               })}
             </div>
           )}
-
-          {(() => {
-            keyboardOffset = categories.length;
-            return null;
-          })()}
 
           {loading && (
             <div
