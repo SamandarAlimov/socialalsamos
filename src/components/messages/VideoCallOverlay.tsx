@@ -322,7 +322,7 @@ export function VideoCallOverlay({
 
   if (isMinimized) {
     return (
-      <div className="fixed bottom-4 right-4 z-[9999] w-[min(340px,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-white/10 bg-neutral-950/95 text-white shadow-2xl backdrop-blur-2xl">
+      <div className="fixed bottom-4 right-4 z-40 w-[min(340px,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-white/10 bg-neutral-950/95 text-white shadow-2xl backdrop-blur-2xl">
         {primaryParticipant?.stream && (
           <MediaElement
             stream={primaryParticipant.stream}
@@ -375,7 +375,7 @@ export function VideoCallOverlay({
   return (
     <div
       ref={rootRef}
-      className="chat-no-select fixed inset-0 z-[9999] overflow-hidden bg-[#080b0f] text-white"
+      className="chat-no-select fixed inset-0 z-40 overflow-hidden bg-[#080b0f] text-white"
       style={{ height: '100dvh', width: '100vw' }}
       onMouseMove={revealControls}
       onTouchStart={revealControls}
