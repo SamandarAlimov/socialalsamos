@@ -308,6 +308,29 @@ export default function MessagesPage() {
     }
   }, [searchParams, allConversations, selectedConversation, conversationsLoading]);
 
+  // Marketplace/profile deep-link: ?user=<profile_id> opens or creates a private chat.
+  useEffect(() => {
+    const targetUserId = searchParams.get('user');
+    if (!targetUserId || !user || targetUserId === user.id) return;
+
+    let cancelled = false;
+
+    void createPrivateConversation(targetUserId).then((conv) => {
+      if (cancelled || !conv) return;
+      setSelectedChannel(null);
+      setSelectedConversation(conv);
+      setShowMobileChat(true);
+
+      const next = new URLSearchParams(searchParams);
+      next.delete('user');
+      setSearchParams(next, { replace: true });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [createPrivateConversation, searchParams, setSearchParams, user]);
+
   const fetchConversationById = async (conversationId: string) => {
     try {
       const { data: convData } = await supabase

@@ -16,9 +16,15 @@ interface SellerStorefrontProps {
   sellerId: string | null;
   onClose: () => void;
   onProductSelect: (product: Product) => void;
+  onMessageSeller?: (userId: string) => void;
 }
 
-export function SellerStorefront({ sellerId, onClose, onProductSelect }: SellerStorefrontProps) {
+export function SellerStorefront({
+  sellerId,
+  onClose,
+  onProductSelect,
+  onMessageSeller,
+}: SellerStorefrontProps) {
   const { seller, products, reviews, isLoading } = useSellerStore(sellerId || undefined);
   const [activeTab, setActiveTab] = useState<'products' | 'reviews'>('products');
   const [layout, setLayout] = useState<'grid' | 'list'>('grid');
@@ -93,13 +99,18 @@ export function SellerStorefront({ sellerId, onClose, onProductSelect }: SellerS
 
                 {/* Actions */}
                 <div className="flex gap-2 mt-3">
-                  <Button className="flex-1 rounded-xl h-10 shadow-lg shadow-primary/20" size="sm">
+                  <Button
+                    className="flex-1 rounded-xl h-10 shadow-lg shadow-primary/20"
+                    size="sm"
+                    disabled={!onMessageSeller || !seller.user_id}
+                    onClick={() => seller.user_id && onMessageSeller?.(seller.user_id)}
+                  >
                     <MessageCircle className="h-4 w-4 mr-1.5" />
-                    Xabar yuborish
+                    {marketplaceUz.storefront.sendMessage}
                   </Button>
                   <Button variant="outline" className="rounded-xl h-10" size="sm">
                     <Users className="h-4 w-4 mr-1.5" />
-                    Obuna
+                    {marketplaceUz.storefront.follow}
                   </Button>
                 </div>
 

@@ -90,6 +90,10 @@ export default function MarketplaceProductPage() {
         product={product}
         onClose={goBack}
         onSellerClick={(sellerId) => navigate(`/marketplace?seller=${sellerId}`)}
+        onMessageSeller={() => {
+          const sellerUserId = product.seller?.user_id;
+          navigate(sellerUserId ? `/messages?user=${sellerUserId}` : '/messages');
+        }}
         onBuyNow={async () => {
           await refreshCart();
           setShowCheckout(true);

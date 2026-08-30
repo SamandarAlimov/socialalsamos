@@ -807,6 +807,7 @@ export default function MarketplacePage() {
       <CartSheet open={showCart} onOpenChange={setShowCart} />
       <SellerStorefront
         sellerId={selectedSellerId}
+        onMessageSeller={(userId) => navigate(`/messages?user=${userId}`)}
         onClose={() => {
           setSelectedSellerId(null);
           if (searchParams.has('seller')) {
