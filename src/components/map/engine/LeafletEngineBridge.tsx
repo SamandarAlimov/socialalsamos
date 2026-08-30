@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, type MutableRefObject } from 'react';
 import { useMap } from 'react-leaflet';
 import L from 'leaflet';
 
@@ -7,7 +7,7 @@ import type { MapEngineController } from '@/lib/mapEngine';
 export function LeafletEngineBridge({
   controllerRef,
 }: {
-  controllerRef: React.MutableRefObject<MapEngineController | null>;
+  controllerRef: MutableRefObject<MapEngineController | null>;
 }) {
   const map = useMap();
 
