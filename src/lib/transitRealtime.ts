@@ -160,12 +160,16 @@ export async function fetchTransitRealtimeStatus(): Promise<TransitRealtimeStatu
 
 export async function fetchTransitStaticStopRoutes(input: {
   stopId?: string;
+  gtfsStopId?: string | null;
+  stopName?: string | null;
   latitude: number;
   longitude: number;
 }): Promise<StaticStopRoutesResponse | null> {
   return await invokeTransit<StaticStopRoutesResponse>({
     action: 'stop-routes',
     stopId: input.stopId,
+    gtfsStopId: input.gtfsStopId,
+    stopName: input.stopName,
     latitude: input.latitude,
     longitude: input.longitude,
   });
@@ -174,6 +178,7 @@ export async function fetchTransitStaticStopRoutes(input: {
 export async function fetchTransitArrivals(input: {
   stopId?: string;
   gtfsStopId?: string | null;
+  stopName?: string | null;
   latitude: number;
   longitude: number;
 }): Promise<ArrivalsResponse | null> {
@@ -181,6 +186,7 @@ export async function fetchTransitArrivals(input: {
     action: 'arrivals',
     stopId: input.stopId,
     gtfsStopId: input.gtfsStopId,
+    stopName: input.stopName,
     latitude: input.latitude,
     longitude: input.longitude,
   });
@@ -189,6 +195,7 @@ export async function fetchTransitArrivals(input: {
 export async function fetchTransitAlerts(input: {
   stopId?: string;
   gtfsStopId?: string | null;
+  stopName?: string | null;
   latitude: number;
   longitude: number;
 }): Promise<AlertsResponse | null> {
@@ -196,6 +203,7 @@ export async function fetchTransitAlerts(input: {
     action: 'alerts',
     stopId: input.stopId,
     gtfsStopId: input.gtfsStopId,
+    stopName: input.stopName,
     latitude: input.latitude,
     longitude: input.longitude,
   });
