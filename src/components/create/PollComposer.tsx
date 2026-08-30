@@ -164,9 +164,9 @@ export function PollComposer({ open, onClose, onSave, initialPoll }: PollCompose
   );
 
   const handleSave = useCallback(() => {
-    const validation = validatePoll(draft);
-    if (!validation.valid) {
-      setErrors(validation.errors);
+    const validationError = validatePoll(draft);
+    if (validationError) {
+      setErrors([validationError]);
       return;
     }
 
