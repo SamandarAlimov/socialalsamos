@@ -669,9 +669,8 @@ export default function MessagesPage() {
     mediaUrl?: string,
     mediaType?: string
   ) => {
-    if (selectedConversation) {
-      await scheduleMessage(selectedConversation.id, scheduledFor, content, mediaUrl, mediaType);
-    }
+    if (!selectedConversation) return null;
+    return scheduleMessage(selectedConversation.id, scheduledFor, content, mediaUrl, mediaType);
   };
 
   // Joylashuv (oddiy va jonli)
