@@ -48,8 +48,17 @@ export function TaxiOffersCard({
             key={offer.provider.slug}
             className="flex items-center gap-3 rounded-lg border border-border/60 px-3 py-2"
           >
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted text-sm font-bold">
-              {offer.provider.name.slice(0, 1)}
+            <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-muted text-sm font-bold">
+              {offer.provider.logoUrl ? (
+                <img
+                  src={offer.provider.logoUrl}
+                  alt=""
+                  className="h-full w-full object-contain"
+                  loading="lazy"
+                />
+              ) : (
+                offer.provider.name.slice(0, 1)
+              )}
             </span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{offer.provider.name}</p>
