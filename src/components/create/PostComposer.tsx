@@ -11,6 +11,7 @@ import {
   MapPin,
   Music2,
   Paperclip,
+  Save,
   Send,
   Sticker as StickerIcon,
   Trash2,
@@ -36,7 +37,7 @@ import { ACCEPT_ANY_FILE, MAX_COLLABORATORS, MAX_FILES_PER_POST } from '@/lib/po
 import type { PollInput } from '@/lib/polls';
 import type { PostLocationInput, PostMusicInput } from '@/lib/postMeta';
 import type { StickerPlacement } from '@/lib/stickers';
-import { AttachmentGrid } from '@/components/create/AttachmentGrid';
+import { PostMediaComposer } from '@/components/create/PostMediaComposer';
 import { PollComposer } from '@/components/create/PollComposer';
 import { LocationPicker } from '@/components/create/LocationPicker';
 import { MusicPicker } from '@/components/create/MusicPicker';
@@ -233,6 +234,7 @@ export function PostComposer() {
   const [showSchedule, setShowSchedule] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [draftHydrated, setDraftHydrated] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<Date | null>(null);
   const [richEditorVersion, setRichEditorVersion] = useState(0);
 
   /** Media editor targetlari sticker qatlamidan alohida boshqariladi. */
@@ -319,9 +321,10 @@ export function PostComposer() {
         return;
       }
 
+      const savedAt = Date.now();
       writeStoredPostDraft(draftOwnerId, {
         version: POST_DRAFT_VERSION,
-        savedAt: Date.now(),
+        savedAt,
         content,
         formattedContent,
         visibility,
@@ -333,6 +336,7 @@ export function PostComposer() {
         scheduledAt: scheduledAt?.toISOString() ?? null,
         hadMedia: attachments.length > 0,
       });
+      setDraftSavedAt(new Date(savedAt));
     }, 450);
 
     return () => window.clearTimeout(timer);
@@ -368,6 +372,39 @@ export function PostComposer() {
     musicRef.current = next;
     setMusic(next);
   }, []);
+
+  const saveDraftNow = useCallback(() => {
+    if (!draftOwnerId) return;
+
+    const savedAt = Date.now();
+    writeStoredPostDraft(draftOwnerId, {
+      version: POST_DRAFT_VERSION,
+      savedAt,
+      content,
+      formattedContent,
+      visibility,
+      poll,
+      location,
+      music: music?.track?.source === 'device' ? null : music,
+      collaborators,
+      scheduledAt: scheduledAt?.toISOString() ?? null,
+      hadMedia: attachments.length > 0,
+    });
+    setDraftSavedAt(new Date(savedAt));
+    toast({ title: 'Qoralama saqlandi' });
+  }, [
+    attachments.length,
+    collaborators,
+    content,
+    draftOwnerId,
+    formattedContent,
+    location,
+    music,
+    poll,
+    scheduledAt,
+    toast,
+    visibility,
+  ]);
 
   const canSubmit = useMemo(
     () =>
@@ -769,14 +806,15 @@ export function PostComposer() {
         </div>
 
         {attachments.length > 0 && (
-          <div className="border-t border-border/50 px-3 py-3 sm:px-5">
-            <AttachmentGrid
+          <div className="border-t border-border/50">
+            <PostMediaComposer
               attachments={attachments}
               onRemove={removeAttachment}
               onRetry={retryAttachment}
               onReorder={reorderAttachments}
               onEditImage={openImageEditor}
               onEditVideo={openVideoEditor}
+              onSticker={(item) => openStickerEditor(item)}
             />
           </div>
         )}
@@ -933,6 +971,18 @@ export function PostComposer() {
                 action: () => setShowSchedule(true),
                 disabled: location?.mode === 'live',
                 active: Boolean(scheduledAt),
+              },
+              {
+                label: 'Qoralama',
+                icon: Save,
+                action: saveDraftNow,
+                disabled:
+                  content.trim().length === 0 &&
+                  attachments.length === 0 &&
+                  !poll &&
+                  !location &&
+                  !music,
+                active: Boolean(draftSavedAt),
               },
               {
                 label: 'Ko‘rish',
