@@ -213,6 +213,36 @@
     scrollbar-width: none;
   }
 
+
+  /* Map floating panel: slim Alsamos-branded scrollbar instead of browser default. */
+  .map-panel-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary) / 0.72) transparent;
+    scrollbar-gutter: stable;
+  }
+
+  .map-panel-scrollbar::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+  }
+
+  .map-panel-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .map-panel-scrollbar::-webkit-scrollbar-thumb {
+    min-height: 44px;
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: hsl(var(--primary) / 0.62);
+    background-clip: padding-box;
+  }
+
+  .map-panel-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.88);
+    background-clip: padding-box;
+  }
+
   /* Animation Utilities */
   .animate-fade-up {
     animation: fadeUp 0.5s ease-out forwards;
