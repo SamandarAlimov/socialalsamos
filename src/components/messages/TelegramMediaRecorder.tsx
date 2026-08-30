@@ -63,6 +63,8 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
   const autoSendRef = useRef(false);
   const lockedRef = useRef(false);
   const cancelledRef = useRef(false);
+  const holdActiveRef = useRef(false);
+  const releaseBeforeRecorderRef = useRef(false);
 
   const stopVisualization = useCallback(() => {
     if (animationFrameRef.current) {
@@ -125,7 +127,6 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     setIsLocked(false);
     lockedRef.current = false;
     autoSendRef.current = false;
-    cancelledRef.current = false;
   }, [cleanup]);
 
   const formatDuration = (seconds: number): string => {
@@ -142,7 +143,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         'video/webm',
         'video/mp4',
       ];
-      return videoTypes.find((type) => MediaRecorder.isTypeSupported(type)) || 'video/webm';
+      return videoTypes.find((type) => MediaRecorder.isTypeSupported(type)) || '';
     }
     const audioTypes = [
       'audio/webm;codecs=opus',
@@ -150,7 +151,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
       'audio/ogg;codecs=opus',
       'audio/mp4',
     ];
-    return audioTypes.find((type) => MediaRecorder.isTypeSupported(type)) || 'audio/webm';
+    return audioTypes.find((type) => MediaRecorder.isTypeSupported(type)) || '';
   };
 
   const extensionFor = (mimeType: string): string => {
@@ -180,7 +181,11 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
           type: 'chat',
           visibility: 'public',
         });
-        onSend(uploaded.url, Math.max(1, seconds), recordMode === 'video' ? 'video' : 'audio');
+        await onSend(
+          uploaded.storageUrl || uploaded.url,
+          Math.max(1, seconds),
+          recordMode === 'video' ? 'video' : 'audio'
+        );
         resetAll();
       } catch (error) {
         console.error('Media message upload failed:', error);
@@ -291,9 +296,12 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
           }
         }
 
-        const mimeType = getSupportedMimeType(isVideo);
-        mimeTypeRef.current = mimeType;
-        const recorder = new MediaRecorder(stream, { mimeType });
+        const preferredMimeType = getSupportedMimeType(isVideo);
+        const recorder = preferredMimeType
+          ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+          : new MediaRecorder(stream);
+        mimeTypeRef.current =
+          recorder.mimeType || preferredMimeType || (isVideo ? 'video/webm' : 'audio/webm');
         mediaRecorderRef.current = recorder;
 
         recorder.ondataavailable = (e) => {
