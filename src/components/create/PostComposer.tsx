@@ -37,6 +37,7 @@ import { ACCEPT_ANY_FILE, MAX_COLLABORATORS, MAX_FILES_PER_POST } from '@/lib/po
 import type { PollInput } from '@/lib/polls';
 import type { PostLocationInput, PostMusicInput } from '@/lib/postMeta';
 import type { StickerPlacement } from '@/lib/stickers';
+import { readStickerPlacements } from '@/lib/stickerPlacements';
 import { PostMediaComposer } from '@/components/create/PostMediaComposer';
 import { PollComposer } from '@/components/create/PollComposer';
 import { LocationPicker } from '@/components/create/LocationPicker';
@@ -1155,7 +1156,12 @@ export function PostComposer() {
           if (!next) setStickerTargetId(null);
         }}
         attachment={stickerTarget}
-        initialPlacements={stickerTargetId ? (stickerDrafts[stickerTargetId] ?? []) : []}
+        initialPlacements={
+          stickerTargetId
+            ? (stickerDrafts[stickerTargetId] ??
+                readStickerPlacements(stickerTarget?.editState ?? null))
+            : []
+        }
         onSave={handleStickersSaved}
       />
 
