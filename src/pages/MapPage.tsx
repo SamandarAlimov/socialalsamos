@@ -911,7 +911,7 @@ export default function MapPage() {
                       'group flex w-full items-center gap-3 rounded-2xl border px-3.5 py-3 text-left transition-all',
                       selected
                         ? 'border-primary/55 bg-primary/[0.09] shadow-sm ring-1 ring-primary/15'
-                        : imageryLayer
+                        : contrastLayer
                           ? 'border-white/10 bg-white/[0.045] hover:bg-white/[0.075]'
                           : 'border-border/50 bg-background/55 hover:border-primary/20 hover:bg-muted/45',
                     )}
@@ -921,7 +921,7 @@ export default function MapPage() {
                         'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition',
                         selected
                           ? 'bg-primary text-primary-foreground'
-                          : imageryLayer
+                          : contrastLayer
                             ? 'bg-white/[0.07] text-white/[0.65]'
                             : 'bg-muted text-muted-foreground group-hover:text-foreground',
                       )}
@@ -985,7 +985,7 @@ export default function MapPage() {
                       <span
                         className={cn(
                           'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg',
-                          imageryLayer
+                          contrastLayer
                             ? 'bg-white/[0.07] text-white/[0.60]'
                             : 'bg-background text-muted-foreground',
                         )}
@@ -1069,7 +1069,7 @@ export default function MapPage() {
                     }}
                     className={cn(
                       'flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition',
-                      imageryLayer
+                      contrastLayer
                         ? 'border-white/10 bg-white/[0.045] hover:bg-white/[0.075]'
                         : 'border-border/45 bg-background/55 hover:border-primary/20 hover:bg-muted/45',
                     )}
@@ -1140,7 +1140,7 @@ export default function MapPage() {
                     key={visit.id}
                     className={cn(
                       'flex items-start gap-3 rounded-2xl border px-3 py-3 transition',
-                      imageryLayer
+                      contrastLayer
                         ? 'border-white/10 bg-white/[0.045] hover:bg-white/[0.075]'
                         : 'border-border/45 bg-background/55 hover:border-primary/20 hover:bg-muted/45',
                     )}
@@ -1325,7 +1325,7 @@ export default function MapPage() {
     selectRouteEndpoint,
     useCurrentLocationAsOrigin,
     selectSearchPlace,
-    imageryLayer,
+    contrastLayer,
     contrastLayer,
   ]);
 
@@ -1508,7 +1508,7 @@ export default function MapPage() {
             <div
               className={cn(
                 'flex h-11 w-full items-center gap-2 rounded-[18px] px-3 shadow-xl ring-1 backdrop-blur-2xl transition focus-within:ring-primary/25',
-                imageryLayer
+                contrastLayer
                   ? 'map-imagery-search ring-white/15'
                   : 'bg-background/84 ring-border/45 focus-within:bg-background/94',
               )}
@@ -1633,7 +1633,7 @@ export default function MapPage() {
       <div
         className={cn(
           'absolute right-3 z-[1100] flex flex-col gap-1.5 rounded-[18px] border p-1.5 text-foreground shadow-xl backdrop-blur-2xl transition-[bottom] duration-300 md:bottom-auto md:top-1/2 md:-translate-y-1/2',
-          imageryLayer
+          contrastLayer
             ? 'map-imagery-controls border-white/15'
             : 'border-border/35 bg-background/55',
         )}
