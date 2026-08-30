@@ -123,3 +123,41 @@ export function stopSvg(): string {
     '</svg>',
   ].join('');
 }
+
+
+/** POI markerlar ko'payganda xaritani toza saqlaydigan cluster badge. */
+export function clusterSvg(count: number): string {
+  const text = count > 99 ? '99+' : String(count);
+  const size = count > 20 ? 42 : count > 8 ? 38 : 34;
+  return [
+    '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:999px;',
+    'display:flex;align-items:center;justify-content:center;',
+    'background:rgba(25,30,40,.88);color:white;font:700 12px/1 system-ui;',
+    'border:2px solid rgba(255,255,255,.95);box-shadow:0 6px 20px rgba(0,0,0,.22);',
+    'backdrop-filter:blur(8px)">',
+    text,
+    '</div>',
+  ].join('');
+}
+
+/** GTFS-RT live vehicle markeri: marshrut raqami bilan. */
+export function vehicleSvg(ref: string, color?: string | null, bearing?: number | null): string {
+  const safeRef = String(ref || 'BUS').slice(0, 5).replace(/[<>&"']/g, '');
+  const bg = color && /^#[0-9a-fA-F]{6}$/.test(color) ? color : '#1677D2';
+  const rotate = Number.isFinite(Number(bearing)) ? Number(bearing) : 0;
+  return [
+    '<div style="position:relative;display:flex;align-items:center;justify-content:center;">',
+    '<div style="min-width:34px;height:28px;padding:0 7px;border-radius:10px;',
+    'display:flex;align-items:center;justify-content:center;background:' + bg + ';',
+    'color:#fff;font:800 11px/1 system-ui;border:2px solid #fff;',
+    'box-shadow:0 5px 16px rgba(0,0,0,.24)">',
+    safeRef,
+    '</div>',
+    '<div style="position:absolute;bottom:-5px;width:8px;height:8px;background:' + bg + ';',
+    'transform:rotate(45deg);border-right:2px solid #fff;border-bottom:2px solid #fff"></div>',
+    Number.isFinite(Number(bearing))
+      ? '<div style="position:absolute;top:-9px;font-size:9px;color:' + bg + ';transform:rotate(' + rotate + 'deg)">▲</div>'
+      : '',
+    '</div>',
+  ].join('');
+}
