@@ -419,17 +419,6 @@ function RichToolbar() {
           <span>Aa</span>
         </button>
 
-        {(formats.bold ||
-          formats.italic ||
-          formats.underline ||
-          formats.strikethrough ||
-          formats.code ||
-          blockType !== 'paragraph' ||
-          color) && (
-          <span className="ml-1 text-[10px] text-muted-foreground">
-            Format faol
-          </span>
-        )}
       </div>
 
       {open && (
