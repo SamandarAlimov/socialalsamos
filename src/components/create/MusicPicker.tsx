@@ -9,7 +9,7 @@ import {
   Search,
   Trash2,
   Upload,
-  Volume2,
+  Ovoz2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -367,12 +367,7 @@ export function MusicPicker({
             <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
               <Music2 className="h-5 w-5" />
             </span>
-            <div className="min-w-0">
-              <DialogTitle className="text-base">Musiqa tanlash</DialogTitle>
-              <p className="mt-1 truncate text-xs text-muted-foreground">
-                Katalog yoki qurilmadan audio · clip va volume sozlamalari
-              </p>
-            </div>
+            <DialogTitle className="text-base">Musiqa</DialogTitle>
           </div>
         </DialogHeader>
 
@@ -631,12 +626,7 @@ export function MusicPicker({
                 <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                   <Music2 className="h-6 w-6" />
                 </span>
-                <div>
-                  <p className="text-sm font-medium text-foreground">Trek tanlang</p>
-                  <p className="mt-1 text-xs leading-relaxed">
-                    Tanlangan musiqa uchun clip va volume sozlamalari shu yerda chiqadi.
-                  </p>
-                </div>
+                <p className="text-sm font-medium text-foreground">Trek tanlang</p>
               </div>
             )}
           </aside>
