@@ -4,8 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { unreadMessagesEmitter } from './useUnreadMessages';
-import db from '@/lib/supabaseAny';
-import { messageDraftsEmitter } from '@/lib/messageDrafts';
+import { loadMessageDrafts, messageDraftsEmitter } from '@/lib/messageDrafts';
 
 export interface LastMessageMeta {
   /** Oxirgi xabar id - o'qilganlik holatini aniqlash uchun kerak */
@@ -255,26 +254,9 @@ export function useConversations(
         });
       }
 
-      // 3c) Telegram-style per-chat draftlar. Migration hali deploy qilinmagan
-      // muhitda chat ro'yxatini sindirmaslik uchun xato graceful fallback qiladi.
-      const draftMap = new Map<string, { content: string; updated_at: string | null }>();
-      const { data: draftRows, error: draftError } = await db
-        .from('message_drafts')
-        .select('conversation_id, content, updated_at')
-        .eq('user_id', user.id)
-        .in('conversation_id', ids);
-
-      if (draftError) {
-        console.warn('Message drafts are not available yet:', draftError);
-      } else {
-        for (const row of draftRows || []) {
-          if (typeof row.content !== 'string' || !row.content.trim()) continue;
-          draftMap.set(row.conversation_id, {
-            content: row.content,
-            updated_at: row.updated_at ?? null,
-          });
-        }
-      }
+      // 3c) Telegram-style per-chat draftlar: server mavjud bo'lsa sync,
+      // migration/connectivity bo'lmasa shu qurilmadagi local fallback ishlaydi.
+      const draftMap = await loadMessageDrafts(user.id, ids);
 
       // 4) O'qilmagan xabarlar - bitta so'rov
       const unreadMap = new Map<string, number>();
