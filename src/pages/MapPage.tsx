@@ -65,6 +65,7 @@ import {
   useTransitVehicles,
 } from '@/hooks/useMapPlaces';
 import { useSavedPlaces } from '@/hooks/useSavedPlaces';
+import { useTrafficProvider } from '@/hooks/useTrafficProvider';
 import { distanceMeters } from '@/lib/geocoding';
 import { formatDwell, usePlaceVisits, useVisitTracking } from '@/hooks/useVisitTracking';
 import { PlaceCategoryBar } from '@/components/map/PlaceCategoryBar';
@@ -509,6 +510,7 @@ export default function MapPage() {
   );
   const stopRoutes = useStopRoutes(selectedStop);
   const transitStatus = useTransitRealtimeStatus();
+  const trafficProvider = useTrafficProvider();
   const saved = useSavedPlaces();
   const searchHistory = useMapSearchHistory();
   useVisitTracking(true);
@@ -586,6 +588,19 @@ export default function MapPage() {
     () => clusterPlaces(visiblePlaces, viewport?.zoom ?? 14, selectedPlace?.id),
     [visiblePlaces, viewport?.zoom, selectedPlace?.id],
   );
+
+  useEffect(() => {
+    if (trafficProvider.loading) return;
+    if (trafficProvider.status.configured) return;
+    setOverlays((current) =>
+      current.includes('traffic')
+        ? current.filter((item) => item !== 'traffic')
+        : current,
+    );
+  }, [
+    trafficProvider.loading,
+    trafficProvider.status.configured,
+  ]);
 
   const liveTransitEnabled = Boolean(
     viewport &&
@@ -3284,6 +3299,9 @@ export default function MapPage() {
           navigationBearing={navigation.position?.heading ?? null}
           navigationPitch={48}
           buildings3d
+          traffic={trafficProvider.status}
+          trafficEnabled={overlays.includes('traffic')}
+          trafficStyle={layerId === 'night' ? 'dark' : 'light'}
           pickMode={Boolean(routeMapPickTarget)}
           referenceCenter={center}
           onViewport={setViewport}
@@ -3312,6 +3330,7 @@ export default function MapPage() {
           pickMode={Boolean(routeMapPickTarget)}
           referenceCenter={center}
           highContrast={contrastLayer}
+          traffic={trafficProvider.status}
           onViewport={setViewport}
           onMovedCenter={setMovedCenter}
           onMapClick={
@@ -3424,6 +3443,17 @@ export default function MapPage() {
             }}
             overlays={overlays}
             highContrast={contrastLayer}
+            overlayMeta={{
+              traffic: {
+                available: trafficProvider.status.configured,
+                loading: trafficProvider.loading,
+                detail: trafficProvider.loading
+                  ? 'Tekshirilmoqda…'
+                  : trafficProvider.status.configured
+                    ? trafficProvider.status.label
+                    : 'Real traffic provider ulanmagan',
+              },
+            }}
             onToggleOverlay={(id) =>
               setOverlays((prev) =>
                 prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
