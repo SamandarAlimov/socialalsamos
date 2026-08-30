@@ -5,6 +5,7 @@ export interface TransitRealtimeStatus {
   staticGtfs?: boolean;
   arrivals?: boolean;
   vehicles?: boolean;
+  routing?: boolean;
 }
 
 export interface TransitRealtimeArrival {
@@ -15,6 +16,31 @@ export interface TransitRealtimeArrival {
   minutes: number;
   tripId?: string;
   gtfsStopId?: string;
+}
+
+export interface TransitJourneyStep {
+  distanceM?: number;
+  durationS?: number;
+  instruction?: string;
+  name?: string;
+  maneuver?: string;
+  modifier?: string;
+  mode?: string;
+  routeRef?: string;
+  from?: string;
+  to?: string;
+}
+
+export interface TransitJourneyRoute {
+  mode: 'transit';
+  durationS: number;
+  distanceM: number;
+  coordinates: [number, number][];
+  steps: TransitJourneyStep[];
+  label: string;
+  transfers?: number;
+  fare?: unknown;
+  legs?: unknown[];
 }
 
 export interface TransitRealtimeVehicle {
@@ -86,6 +112,19 @@ export async function fetchTransitVehicles(input: {
 }): Promise<VehiclesResponse | null> {
   return await invokeTransit<VehiclesResponse>({
     action: 'vehicles',
+    ...input,
+  });
+}
+
+
+export async function fetchTransitJourneyRoutes(input: {
+  from: { latitude: number; longitude: number; name?: string };
+  to: { latitude: number; longitude: number; name?: string };
+  departureTime?: string | null;
+  arriveBy?: boolean;
+}): Promise<{ configured?: boolean; routes?: TransitJourneyRoute[] } | null> {
+  return await invokeTransit({
+    action: 'route',
     ...input,
   });
 }
