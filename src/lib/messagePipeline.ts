@@ -14,6 +14,9 @@ export interface MessageInsertArgs {
   content: string;
   mediaUrl?: string;
   mediaType?: string;
+  mediaFileName?: string;
+  mimeType?: string;
+  mediaSizeBytes?: number;
   replyToId?: string | null;
   clientMessageId?: string;
   metadata?: Record<string, unknown>;
@@ -27,6 +30,9 @@ export function buildMessageInsertPayload({
   content,
   mediaUrl,
   mediaType,
+  mediaFileName,
+  mimeType,
+  mediaSizeBytes,
   replyToId,
   clientMessageId,
   metadata,
@@ -40,6 +46,10 @@ export function buildMessageInsertPayload({
     media_url: mediaUrl,
     media_type: mediaType,
   };
+
+  if (mediaFileName) payload.media_file_name = mediaFileName;
+  if (mimeType) payload.mime_type = mimeType;
+  if (typeof mediaSizeBytes === 'number') payload.media_size_bytes = mediaSizeBytes;
 
   // Oddiy xabar reply schema/cache holatiga umuman bog'lanmasin.
   if (replyToId) payload.reply_to_id = replyToId;
