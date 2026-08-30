@@ -32,6 +32,7 @@ import { useSelfChat } from '@/hooks/useSelfChat';
 import { useLiveLocation } from '@/hooks/useLiveLocation';
 import { useToast } from '@/hooks/use-toast';
 import { FolderChat } from '@/lib/chatFolders';
+import { buildLocationMessageFields, buildPollMessageFields } from '@/lib/messageStructuredPayload';
 
 // Komponentlar
 import { ChatListItem } from '@/components/messages/ChatListItem';
@@ -66,8 +67,6 @@ import {
 import { useIsMobile } from '@/hooks/use-mobile';
 
 type MessageTab = 'all' | 'private' | 'groups' | 'channels' | 'requests' | 'archived';
-
-const LOCATION_PREFIX = '\ud83d\udccd LOCATION:';
 
 /** Sana yorlig'i: Bugun / Kecha / 12-mart, dushanba */
 function formatDateLabel(dateString: string): string {
@@ -284,12 +283,25 @@ export default function MessagesPage() {
   // Jonli joylashuv
   const liveLocationSessionRef = useRef<{ messageId: string } | null>(null);
   const liveLocation = useLiveLocation({
-    onUpdate: async ({ latitude, longitude }) => {
+    onUpdate: async (_activeSession, { latitude, longitude }) => {
       const session = liveLocationSessionRef.current;
       if (!session) return;
+
+      const location = buildLocationMessageFields({
+        latitude,
+        longitude,
+        live: true,
+        expiresAt: new Date(_activeSession.expiresAt).toISOString(),
+      });
+
       await supabase
         .from('messages')
-        .update({ media_url: `${latitude},${longitude}` })
+        .update({
+          media_url: location.mediaUrl,
+          location_payload: location.locationPayload as any,
+          metadata: location.metadata as any,
+          live_location_expires_at: location.liveLocationExpiresAt,
+        })
         .eq('id', session.messageId);
     },
   });
@@ -603,24 +615,27 @@ export default function MessagesPage() {
   const sendPendingSharedLocation = useCallback(
     async (conversationId: string) => {
       if (!pendingSharedLocation || !user) return;
-      const content =
-        LOCATION_PREFIX +
-        pendingSharedLocation.latitude.toFixed(6) +
-        ',' +
-        pendingSharedLocation.longitude.toFixed(6) +
-        '|' +
-        pendingSharedLocation.label;
+
+      const location = buildLocationMessageFields({
+        latitude: pendingSharedLocation.latitude,
+        longitude: pendingSharedLocation.longitude,
+        label: pendingSharedLocation.label,
+      });
 
       const { error } = await supabase.from('messages').insert({
         conversation_id: conversationId,
         sender_id: user.id,
-        content,
+        content: location.content,
+        media_url: location.mediaUrl,
+        media_type: location.mediaType,
+        metadata: location.metadata as any,
+        location_payload: location.locationPayload as any,
       });
 
       if (error) {
         toast({
           title: 'Xatolik',
-          description: 'Lokatsiyani chatga yuborib bo\u2018lmadi',
+          description: 'Lokatsiyani chatga yuborib bo‘lmadi',
           variant: 'destructive',
         });
         return;
@@ -705,55 +720,54 @@ export default function MessagesPage() {
     );
   };
 
-  // Joylashuv (oddiy va jonli)
+  // Joylashuv (oddiy va jonli) — web/Flutter uchun bitta canonical payload.
   const handleShareLocation = async (location: {
     latitude: number;
     longitude: number;
     address?: string;
     liveDurationSeconds?: number;
   }) => {
-    const base = `${LOCATION_PREFIX}${location.latitude},${location.longitude}${
-      location.address ? `|${location.address}` : ''
-    }`;
+    if (!selectedConversation || !user) return;
 
-    if (!location.liveDurationSeconds || !selectedConversation || !user) {
-      await sendMessage(base);
-      return;
-    }
+    const expiresAt = location.liveDurationSeconds
+      ? new Date(Date.now() + location.liveDurationSeconds * 1000).toISOString()
+      : undefined;
 
-    // Jonli joylashuv: xabarni yaratamiz va uni davriy yangilaymiz
-    const expiresAt = new Date(Date.now() + location.liveDurationSeconds * 1000).toISOString();
-    const { data, error } = await supabase
-      .from('messages')
-      .insert({
-        conversation_id: selectedConversation.id,
-        sender_id: user.id,
-        content: `${base}|LIVE:${expiresAt}`,
-        media_url: `${location.latitude},${location.longitude}`,
-        media_type: 'live_location',
-      })
-      .select('id')
-      .maybeSingle();
+    const fields = buildLocationMessageFields({
+      latitude: location.latitude,
+      longitude: location.longitude,
+      address: location.address,
+      live: Boolean(location.liveDurationSeconds),
+      expiresAt,
+    });
 
-    if (error || !data) {
-      toast({
-        title: 'Xatolik',
-        description: 'Jonli joylashuvni yuborib bo\u2018lmadi',
-        variant: 'destructive',
+    const data = await sendMessage(
+      fields.content,
+      fields.mediaUrl,
+      fields.mediaType,
+      replyTo?.id || null,
+      {
+        metadata: fields.metadata,
+        locationPayload: fields.locationPayload as unknown as Record<string, unknown>,
+        liveLocationExpiresAt: fields.liveLocationExpiresAt,
+      }
+    );
+
+    if (!data) return;
+    setReplyTo(null);
+
+    if (location.liveDurationSeconds) {
+      liveLocationSessionRef.current = { messageId: data.id };
+      liveLocation.start({
+        messageId: data.id,
+        conversationId: selectedConversation.id,
+        durationSeconds: location.liveDurationSeconds,
       });
-      return;
+      toast({
+        title: 'Jonli joylashuv yoqildi',
+        description: 'Joylashuvingiz belgilangan vaqt davomida yangilanadi',
+      });
     }
-
-    liveLocationSessionRef.current = { messageId: data.id };
-    await liveLocation.start({
-      messageId: data.id,
-      conversationId: selectedConversation.id,
-      durationSeconds: location.liveDurationSeconds,
-    });
-    toast({
-      title: 'Jonli joylashuv yoqildi',
-      description: 'Joylashuvingiz belgilangan vaqt davomida yangilanadi',
-    });
   };
 
   useEffect(() => {
