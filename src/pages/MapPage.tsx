@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { MapContainer, Marker, Polyline, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
@@ -296,6 +296,7 @@ export default function MapPage() {
 
   const layer = getLayer(layerId);
   const imageryLayer = layerId === 'satellite' || layerId === 'hybrid';
+  const contrastLayer = imageryLayer || layerId === 'night';
   const isBusStopFilter = category === 'bus_stop';
   const showStops = overlays.includes('stops') || isBusStopFilter;
 
@@ -658,7 +659,7 @@ export default function MapPage() {
         <PlaceDetailsCard
           place={selectedPlace}
           saved={saved.isSaved(selectedPlace.latitude, selectedPlace.longitude)}
-          highContrast={imageryLayer}
+          highContrast={contrastLayer}
           onClose={() => {
             setSelectedPlace(null);
             setPanel('search');
@@ -692,7 +693,7 @@ export default function MapPage() {
           error={stopRoutes.error}
           realtimeConfigured={stopRoutes.realtimeConfigured}
           realtimeFresh={stopRoutes.realtimeFresh}
-          highContrast={imageryLayer}
+          highContrast={contrastLayer}
           onReload={stopRoutes.reload}
           onClose={() => {
             setSelectedStop(null);
@@ -963,7 +964,7 @@ export default function MapPage() {
                 }}
                 distanceKm={activeRoute.distanceM / 1000}
                 durationMin={activeRoute.durationS / 60}
-                highContrast={imageryLayer}
+                highContrast={contrastLayer}
               />
             )}
 
@@ -1246,7 +1247,7 @@ export default function MapPage() {
               stops={nearbyStops.stops}
               loading={nearbyStops.loading}
               activeId={selectedStop?.id}
-              highContrast={imageryLayer}
+              highContrast={contrastLayer}
               onSelect={(stop) => {
                 setSelectedStop(stop);
                 setSelectedPlace(null);
@@ -1412,7 +1413,24 @@ export default function MapPage() {
                   setSnap('half');
                 },
               }}
-            />
+            >
+              <Tooltip
+                direction="top"
+                offset={[0, -26]}
+                opacity={1}
+                className={cn(
+                  'alsamos-map-tooltip',
+                  contrastLayer && 'alsamos-map-tooltip--contrast',
+                )}
+              >
+                <span className="font-semibold">{group.place.name}</span>
+                {group.place.categoryLabel && (
+                  <span className="ml-1 text-[10px] opacity-60">
+                    · {group.place.categoryLabel}
+                  </span>
+                )}
+              </Tooltip>
+            </Marker>
           ),
         )}
 
@@ -1430,7 +1448,20 @@ export default function MapPage() {
               position={[vehicle.latitude, vehicle.longitude]}
               icon={liveVehicleIcon(vehicle.ref, vehicle.color, vehicle.bearing)}
               zIndexOffset={350}
-            />
+            >
+              <Tooltip
+                direction="top"
+                offset={[0, -24]}
+                opacity={1}
+                className={cn(
+                  'alsamos-map-tooltip',
+                  contrastLayer && 'alsamos-map-tooltip--contrast',
+                )}
+              >
+                <span className="font-bold">{vehicle.ref}</span>
+                {vehicle.name ? <span className="ml-1 opacity-65">· {vehicle.name}</span> : null}
+              </Tooltip>
+            </Marker>
           ))}
 
         {showStops &&
@@ -1446,7 +1477,19 @@ export default function MapPage() {
                   setSnap('half');
                 },
               }}
-            />
+            >
+              <Tooltip
+                direction="top"
+                offset={[0, -18]}
+                opacity={1}
+                className={cn(
+                  'alsamos-map-tooltip',
+                  contrastLayer && 'alsamos-map-tooltip--contrast',
+                )}
+              >
+                <span className="font-semibold">{stop.name || 'Bekat'}</span>
+              </Tooltip>
+            </Marker>
           ))}
 
         {activeRoute && activeRoute.coordinates.length > 1 && (
@@ -1519,7 +1562,7 @@ export default function MapPage() {
               error={search.error}
               recent={searchHistory.recent}
               visible={searchFocused}
-              highContrast={imageryLayer}
+              highContrast={contrastLayer}
               onSelectPlace={selectSearchPlace}
               onSelectCategory={(suggestedCategory) => {
                 setCategory(suggestedCategory.id);
@@ -1555,7 +1598,7 @@ export default function MapPage() {
               setLayerOpen(false);
             }}
             overlays={overlays}
-            highContrast={imageryLayer}
+            highContrast={contrastLayer}
             onToggleOverlay={(id) =>
               setOverlays((prev) =>
                 prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
