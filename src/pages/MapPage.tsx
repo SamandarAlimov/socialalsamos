@@ -899,6 +899,10 @@ export default function MapPage() {
     setSnap('half');
   }, []);
 
+  const handleNavigationArrive = useCallback(() => {
+    toast.success('Manzilga yetib keldingiz.');
+  }, []);
+
   const startNavigation = useCallback(async () => {
     if (!destination || !routes[routeIndex]) {
       toast.error('Avval marshrutni tanlang.');
@@ -985,7 +989,7 @@ export default function MapPage() {
       : null,
     onPosition: handleNavigationPosition,
     onReroute: rerouteNavigation,
-    onArrive: () => toast.success('Manzilga yetib keldingiz.'),
+    onArrive: handleNavigationArrive,
   });
   const fitTo =
     navigationActive || !activeRoute?.coordinates?.length
@@ -1779,7 +1783,11 @@ export default function MapPage() {
             );
           })}
 
-        <MapController center={center} zoom={selectedPlace ? 16 : undefined} fitTo={fitTo} />
+        <MapController
+          center={center}
+          zoom={navigationActive ? 17 : selectedPlace ? 16 : undefined}
+          fitTo={fitTo}
+        />
         <MapViewportObserver
           referenceCenter={center}
           onViewport={setViewport}
@@ -1801,7 +1809,7 @@ export default function MapPage() {
           />
         )}
 
-        {markerGroups.map((group) =>
+        {!navigationActive && markerGroups.map((group) =>
           group.type === 'cluster' ? (
             <Marker
               key={group.id}
@@ -1866,7 +1874,8 @@ export default function MapPage() {
           />
         )}
 
-        {liveVehicles.realtime &&
+        {!navigationActive &&
+          liveVehicles.realtime &&
           liveVehicles.vehicles.map((vehicle) => (
             <Marker
               key={'vehicle:' + vehicle.id}
@@ -1889,7 +1898,8 @@ export default function MapPage() {
             </Marker>
           ))}
 
-        {showStops &&
+        {!navigationActive &&
+          showStops &&
           visibleStops.map((stop) => (
             <Marker
               key={stop.id}
