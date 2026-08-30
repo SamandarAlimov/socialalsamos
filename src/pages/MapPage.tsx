@@ -107,6 +107,7 @@ import {
 } from '@/lib/navigationSession';
 import {
   trafficIncidentColor,
+  trafficIncidentLabel,
   type TrafficIncident,
 } from '@/lib/traffic';
 
@@ -1978,7 +1979,32 @@ export default function MapPage() {
         });
       }
 
-      if (panel === 'route') {
+      if (panel === 'incident' && selectedIncident) {
+      return (
+        <TrafficIncidentCard
+          incident={selectedIncident}
+          highContrast={contrastLayer}
+          onClose={() => {
+            setSelectedIncident(null);
+            setPanel('search');
+            setSnap('peek');
+          }}
+          onDirections={(incident) =>
+            openDirections({
+              id: 'traffic:' + incident.id,
+              source: 'traffic',
+              name: trafficIncidentLabel(incident),
+              latitude: incident.latitude,
+              longitude: incident.longitude,
+              categoryLabel: 'Yo‘ldagi hodisa',
+            } as unknown as MapPlace)
+          }
+          className="h-full"
+        />
+      );
+    }
+
+    if (panel === 'route') {
         routeWaypoints.forEach((waypoint, index) => {
           markers.push({
             id: 'route-stop|' + index,
@@ -2042,6 +2068,40 @@ export default function MapPage() {
       }
     }
 
+    if (overlays.includes('traffic')) {
+      trafficIncidents.incidents.forEach((incident) => {
+        markers.push({
+          id: 'incident|' + incident.id,
+          kind: 'incident',
+          latitude: incident.latitude,
+          longitude: incident.longitude,
+          color: trafficIncidentColor(incident.category),
+          label:
+            incident.description ||
+            trafficIncidentLabel(incident),
+          variant: incident.category,
+          active: selectedIncident?.id === incident.id,
+        });
+      });
+    }
+
+    if (overlays.includes('traffic')) {
+      trafficIncidents.incidents.forEach((incident) => {
+        markers.push({
+          id: 'incident|' + incident.id,
+          kind: 'incident',
+          latitude: incident.latitude,
+          longitude: incident.longitude,
+          color: trafficIncidentColor(incident.category),
+          label:
+            incident.description ||
+            trafficIncidentLabel(incident),
+          variant: incident.category,
+          active: selectedIncident?.id === incident.id,
+        });
+      });
+    }
+
     return markers;
   }, [
     me,
@@ -2057,6 +2117,9 @@ export default function MapPage() {
     liveVehicles.vehicles,
     showStops,
     visibleStops,
+    overlays,
+    trafficIncidents.incidents,
+    selectedIncident?.id,
   ]);
 
   const vectorSceneMarkers = useMemo<MapSceneMarker[]>(() => {
@@ -2188,6 +2251,9 @@ export default function MapPage() {
     liveVehicles.vehicles,
     showStops,
     visibleStops,
+    overlays,
+    trafficIncidents.incidents,
+    selectedIncident?.id,
   ]);
 
   const vectorSceneLines = useMemo<MapSceneLine[]>(() => {
@@ -2226,6 +2292,53 @@ export default function MapPage() {
         width: 5,
         opacity: 1,
       });
+
+      if (
+        !navigationActive &&
+        activeRoute.trafficSections?.length
+      ) {
+        activeRoute.trafficSections.forEach((section, index) => {
+          const start = Math.max(
+            0,
+            Math.min(
+              activeRoute.coordinates.length - 1,
+              section.startIndex,
+            ),
+          );
+          const end = Math.max(
+            start,
+            Math.min(
+              activeRoute.coordinates.length - 1,
+              section.endIndex,
+            ),
+          );
+          const coordinates =
+            activeRoute.coordinates.slice(start, end + 1);
+          if (coordinates.length < 2) return;
+
+          const category = String(section.category).toLowerCase();
+          const color =
+            category.includes('closure')
+              ? '#DC2626'
+              : category.includes('work')
+                ? '#F97316'
+                : category.includes('jam')
+                  ? section.magnitude >= 3
+                    ? '#E11D48'
+                    : section.magnitude >= 2
+                      ? '#F97316'
+                      : '#F59E0B'
+                  : '#F59E0B';
+
+          lines.push({
+            id: 'traffic-section:' + index,
+            coordinates,
+            color,
+            width: 7,
+            opacity: 0.94,
+          });
+        });
+      }
     }
 
     return lines;
@@ -2261,6 +2374,7 @@ export default function MapPage() {
         const selected = withUserDistance(place);
         setSelectedPlace(selected);
         setSelectedStop(null);
+        setSelectedIncident(null);
         setMovedCenter(null);
         setCenter({
           latitude: selected.latitude,
@@ -2277,15 +2391,41 @@ export default function MapPage() {
         if (!stop) return;
         setSelectedStop(stop);
         setSelectedPlace(null);
+        setSelectedIncident(null);
         setCenter({
           latitude: stop.latitude,
           longitude: stop.longitude,
         });
         setPanel('stop');
         setSnap('half');
+        return;
+      }
+
+      if (markerId.startsWith('incident|')) {
+        const incidentId = markerId.slice('incident|'.length);
+        const incident = trafficIncidents.incidents.find(
+          (item) => item.id === incidentId,
+        );
+        if (!incident) return;
+        setSelectedIncident(incident);
+        setSelectedPlace(null);
+        setSelectedStop(null);
+        setMovedCenter(null);
+        setCenter({
+          latitude: incident.latitude,
+          longitude: incident.longitude,
+        });
+        setPanel('incident');
+        setSnap('half');
       }
     },
-    [markerGroups, visiblePlaces, visibleStops, withUserDistance],
+    [
+      markerGroups,
+      visiblePlaces,
+      visibleStops,
+      trafficIncidents.incidents,
+      withUserDistance,
+    ],
   );
 
   const handleVectorEngineError = useCallback((error: Error) => {
@@ -2829,6 +2969,27 @@ export default function MapPage() {
                       <p className="mt-0.5 truncate text-xs text-muted-foreground">
                         {route.label}
                       </p>
+                      {route.trafficProvider && (
+                        <p
+                          className={cn(
+                            'mt-1 text-[10px] font-semibold',
+                            route.trafficDelayS
+                              ? 'text-orange-500'
+                              : 'text-emerald-600 dark:text-emerald-400',
+                          )}
+                        >
+                          {route.trafficDelayS
+                            ? '+' +
+                              formatMinutes(route.trafficDelayS) +
+                              ' tirbandlik' +
+                              (route.trafficLengthM
+                                ? ' · ' +
+                                  formatKm(route.trafficLengthM) +
+                                  ' ta’sirlangan'
+                                : '')
+                            : 'Jonli traffic bo‘yicha'}
+                        </p>
+                      )}
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="text-xs font-bold">{arrivalTime(route.durationS)}</p>
@@ -3258,6 +3419,7 @@ export default function MapPage() {
     panel,
     selectedPlace,
     selectedStop,
+    selectedIncident,
     stopRoutes.routes,
     stopRoutes.loading,
     stopRoutes.error,
@@ -3294,6 +3456,7 @@ export default function MapPage() {
     beginMapEndpointPick,
     stopRoutes.realtimeConfigured,
     stopRoutes.realtimeFresh,
+    trafficIncidents.incidents,
     routeEditField,
     routeEditQuery,
     routeEndpointSearch.loading,
@@ -3479,7 +3642,10 @@ export default function MapPage() {
                 detail: trafficProvider.loading
                   ? 'Tekshirilmoqda…'
                   : trafficProvider.status.configured
-                    ? trafficProvider.status.label
+                    ? (trafficProvider.status.label || 'Real traffic') +
+                      (trafficProvider.status.incidents
+                        ? ' · hodisalar'
+                        : '')
                     : 'Real traffic provider ulanmagan',
               },
               transit: {
