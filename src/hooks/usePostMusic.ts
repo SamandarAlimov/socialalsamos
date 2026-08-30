@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { db } from '@/lib/db';
 import { resolveStorageUrl } from '@/lib/mediaUpload';
+import {
+  isMissingStructuredPostSchemaError,
+  readStructuredPostSchemaCapability,
+  writeStructuredPostSchemaCapability,
+} from '@/lib/structuredPostSchema';
 
 export interface PostMusicTrack {
   id: string;
@@ -29,12 +34,13 @@ export interface PostMusicItem {
 }
 
 export function usePostMusic(postId: string | null, enabled = true) {
+  const schemaEnabled = enabled && readStructuredPostSchemaCapability() !== 'missing';
   const [music, setMusic] = useState<PostMusicItem | null>(null);
-  const [isLoading, setIsLoading] = useState(Boolean(postId) && enabled);
+  const [isLoading, setIsLoading] = useState(Boolean(postId) && schemaEnabled);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!postId || !enabled) {
+    if (!postId || !schemaEnabled) {
       setMusic(null);
       setIsLoading(false);
       return;
@@ -51,6 +57,7 @@ export function usePostMusic(postId: string | null, enabled = true) {
         .maybeSingle();
 
       if (linkError) throw linkError;
+      writeStructuredPostSchemaCapability('available');
       if (!link?.track_id) {
         setMusic(null);
         return;
@@ -98,13 +105,17 @@ export function usePostMusic(postId: string | null, enabled = true) {
         playback_url: playbackUrl,
       });
     } catch (loadError) {
-      console.error('Post musiqasini yuklashda xatolik:', loadError);
-      setError('Musiqani yuklab bo‘lmadi');
+      if (isMissingStructuredPostSchemaError(loadError)) {
+        writeStructuredPostSchemaCapability('missing');
+      } else {
+        console.error('Post musiqasini yuklashda xatolik:', loadError);
+        setError('Musiqani yuklab bo‘lmadi');
+      }
       setMusic(null);
     } finally {
       setIsLoading(false);
     }
-  }, [enabled, postId]);
+  }, [schemaEnabled, postId]);
 
   useEffect(() => {
     void load();
