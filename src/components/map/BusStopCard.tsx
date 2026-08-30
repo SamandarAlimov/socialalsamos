@@ -11,6 +11,7 @@ interface BusStopCardProps {
   error?: string | null;
   realtimeConfigured?: boolean;
   realtimeFresh?: boolean;
+  highContrast?: boolean;
   onReload?: () => void;
   onDirections?: (stop: TransitStop) => void;
   onClose?: () => void;
@@ -31,15 +32,32 @@ export function BusStopCard({
   error,
   realtimeConfigured = false,
   realtimeFresh = false,
+  highContrast = false,
   onReload,
   onDirections,
   onClose,
   className,
 }: BusStopCardProps) {
   return (
-    <div className={cn('flex flex-col overflow-hidden bg-background', className)}>
-      <div className="flex items-start gap-3 border-b border-border/60 px-4 py-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/15 text-sky-600">
+    <div
+      className={cn(
+        'flex min-h-0 flex-col overflow-hidden',
+        highContrast ? 'map-imagery-card bg-slate-950/90 text-white' : 'bg-background text-foreground',
+        className,
+      )}
+    >
+      <div
+        className={cn(
+          'flex shrink-0 items-start gap-3 border-b px-4 py-3.5',
+          highContrast ? 'border-white/10 bg-black/10' : 'border-border/60',
+        )}
+      >
+        <span
+          className={cn(
+            'flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-sky-500',
+            highContrast ? 'bg-sky-400/[0.12]' : 'bg-sky-500/15',
+          )}
+        >
           <Bus className="h-5 w-5" />
         </span>
         <div className="min-w-0 flex-1">
@@ -55,7 +73,12 @@ export function BusStopCard({
             <button
               type="button"
               onClick={onReload}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground"
+              className={cn(
+                'flex h-8 w-8 items-center justify-center rounded-xl transition',
+                highContrast
+                  ? 'bg-white/[0.06] text-white/60 hover:bg-white/[0.12] hover:text-white'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
               aria-label="Yangilash"
             >
               <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
@@ -65,7 +88,12 @@ export function BusStopCard({
             <button
               type="button"
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground"
+              className={cn(
+                'flex h-8 w-8 items-center justify-center rounded-xl transition',
+                highContrast
+                  ? 'bg-white/[0.06] text-white/60 hover:bg-white/[0.12] hover:text-white'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
               aria-label="Yopish"
             >
               <X className="h-4 w-4" />
@@ -74,17 +102,24 @@ export function BusStopCard({
         </div>
       </div>
 
-      <div className="max-h-72 flex-1 overflow-y-auto">
+      <div className="map-panel-scrollbar min-h-0 flex-1 overflow-y-auto">
         {!realtimeConfigured ? (
-          <div className="border-b border-border/50 bg-muted/40 px-4 py-2 text-[11px] leading-relaxed text-muted-foreground">
+          <div
+            className={cn(
+              'border-b px-4 py-2.5 text-[11px] leading-relaxed',
+              highContrast
+                ? 'border-white/10 bg-white/[0.04] text-white/55'
+                : 'border-border/50 bg-muted/40 text-muted-foreground',
+            )}
+          >
             Jonli kelish vaqti provayderi ulanmagan. Faqat haqiqiy OSM jadval oralig'i mavjud bo'lsa taxminiy vaqt ko'rsatiladi.
           </div>
         ) : !realtimeFresh ? (
-          <div className="border-b border-amber-500/20 bg-amber-500/8 px-4 py-2 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
+          <div className="border-b border-amber-400/15 bg-amber-400/[0.08] px-4 py-2.5 text-[11px] leading-relaxed text-amber-300">
             Real-time manba mavjud, lekin hozirgi ma'lumot eskirgan yoki vaqtincha olinmayapti.
           </div>
         ) : (
-          <div className="flex items-center gap-1.5 border-b border-emerald-500/15 bg-emerald-500/8 px-4 py-2 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+          <div className="flex items-center gap-1.5 border-b border-emerald-400/15 bg-emerald-400/[0.08] px-4 py-2.5 text-[11px] font-medium text-emerald-400">
             <Radio className="h-3 w-3" />
             GTFS real-time yangilanmoqda
           </div>
@@ -104,9 +139,15 @@ export function BusStopCard({
           </p>
         )}
 
-        <div className="divide-y divide-border/50">
+        <div className={cn('divide-y', highContrast ? 'divide-white/10' : 'divide-border/50')}>
           {routes.map((route) => (
-            <div key={route.id} className="flex items-center gap-3 px-4 py-3">
+            <div
+              key={route.id}
+              className={cn(
+                'mx-3 my-2 flex items-center gap-3 rounded-2xl px-3 py-3',
+                highContrast ? 'bg-white/[0.055]' : 'bg-muted/30',
+              )}
+            >
               <span
                 className="flex h-9 min-w-[2.75rem] items-center justify-center gap-1 rounded-lg px-2 text-sm font-bold text-white"
                 style={{ backgroundColor: route.colour || '#1E7BC4' }}
@@ -135,7 +176,13 @@ export function BusStopCard({
                 <span
                   className={cn(
                     'text-sm font-semibold',
-                    route.realtime ? 'text-emerald-600' : 'text-foreground',
+                    route.realtime
+                      ? highContrast
+                        ? 'text-emerald-300'
+                        : 'text-emerald-600'
+                      : highContrast
+                        ? 'text-white'
+                        : 'text-foreground',
                   )}
                 >
                   {route.nextArrivalsMin?.length
@@ -148,7 +195,7 @@ export function BusStopCard({
                   </span>
                 )}
                 {route.realtime ? (
-                  <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600">
+                  <span className={cn('flex items-center gap-1 text-[11px] font-medium', highContrast ? 'text-emerald-300' : 'text-emerald-600')}>
                     <Radio className="h-3 w-3" />
                     real vaqt
                   </span>
@@ -162,11 +209,11 @@ export function BusStopCard({
       </div>
 
       {onDirections && (
-        <div className="border-t border-border/60 p-3">
+        <div className={cn('shrink-0 border-t p-3', highContrast ? 'border-white/10 bg-black/10' : 'border-border/60')}>
           <button
             type="button"
             onClick={() => onDirections(stop)}
-            className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-primary-foreground"
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-bold text-primary-foreground shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
           >
             <Navigation className="h-4 w-4" />
             Bekatgacha yo'l
