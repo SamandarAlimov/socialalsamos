@@ -702,6 +702,23 @@ export default function MessagesPage() {
     return sent;
   };
 
+  const handleCreatePoll = async (poll: {
+    question: string;
+    options: string[];
+    multiple: boolean;
+    anonymous: boolean;
+  }) => {
+    const fields = buildPollMessageFields(poll);
+    const sent = await sendMessage(
+      fields.content,
+      undefined,
+      fields.mediaType,
+      replyTo?.id || null,
+      { metadata: fields.metadata }
+    );
+    if (sent) setReplyTo(null);
+  };
+
   const handleScheduleMessage = async (
     scheduledFor: Date,
     content: string,
@@ -2162,6 +2179,7 @@ export default function MessagesPage() {
               replyTo={replyTo}
               onCancelReply={() => setReplyTo(null)}
               onShareLocation={handleShareLocation}
+              onCreatePoll={handleCreatePoll}
             />
           </div>
         </>
