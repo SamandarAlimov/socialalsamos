@@ -70,7 +70,7 @@ type FeedHealth = {
 
 const STATIC_TTL_MS = 6 * 60 * 60 * 1000;
 const REALTIME_TTL_MS = 20 * 1000;
-const MAX_FRESH_AGE_SECONDS = 120;
+const MAX_FRESH_AGE_SECONDS = 90;
 const MAX_MATCH_METERS = 300;
 
 let staticCache: StaticData | null = null;
