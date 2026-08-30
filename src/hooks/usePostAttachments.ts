@@ -121,9 +121,11 @@ export function usePostAttachments(options?: {
   }, []);
 
   const patch = useCallback((id: string, changes: Partial<Attachment>) => {
-    setAttachments((current) =>
-      current.map((item) => (item.id === id ? { ...item, ...changes } : item)),
+    const next = attachmentsRef.current.map((item) =>
+      item.id === id ? { ...item, ...changes } : item,
     );
+    attachmentsRef.current = next;
+    setAttachments(next);
   }, []);
 
   /** Fayllarni qo'shish. Validatsiya + metama'lumot o'qish. */
@@ -150,7 +152,9 @@ export function usePostAttachments(options?: {
         progress: 0,
       }));
 
-      setAttachments((current) => [...current, ...created]);
+      const nextAttachments = [...attachmentsRef.current, ...created];
+      attachmentsRef.current = nextAttachments;
+      setAttachments(nextAttachments);
 
       // Metama'lumotlarni fonda o'qiymiz
       await Promise.all(
@@ -289,19 +293,20 @@ export function usePostAttachments(options?: {
   }, []);
 
   const reorderAttachments = useCallback((fromIndex: number, toIndex: number) => {
-    setAttachments((current) => {
-      if (
-        fromIndex < 0 || toIndex < 0 ||
-        fromIndex >= current.length || toIndex >= current.length ||
-        fromIndex === toIndex
-      ) {
-        return current;
-      }
-      const next = [...current];
-      const [moved] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, moved);
-      return next;
-    });
+    const current = attachmentsRef.current;
+    if (
+      fromIndex < 0 || toIndex < 0 ||
+      fromIndex >= current.length || toIndex >= current.length ||
+      fromIndex === toIndex
+    ) {
+      return;
+    }
+
+    const next = [...current];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    attachmentsRef.current = next;
+    setAttachments(next);
   }, []);
 
   const setEditState = useCallback(
