@@ -9,6 +9,7 @@ import {
 
 import {
   clusterSvg,
+  incidentSvg,
   meDotSvg,
   navigationArrowSvg,
   pinSvg,
@@ -88,6 +89,11 @@ function markerHtml(marker: MapSceneMarker): string {
       return clusterSvg(Math.max(1, marker.count ?? 1));
     case 'stop':
       return stopSvg();
+    case 'incident':
+      return incidentSvg(
+        marker.label || 'incident',
+        marker.color || '#F97316',
+      );
     case 'vehicle':
       return vehicleSvg(
         marker.label || 'BUS',
@@ -122,6 +128,7 @@ function markerAnchor(marker: MapSceneMarker): 'center' | 'bottom' {
   return marker.kind === 'me' ||
     marker.kind === 'navigation' ||
     marker.kind === 'cluster' ||
+    marker.kind === 'incident' ||
     marker.kind === 'stop' ||
     marker.kind === 'vehicle'
     ? 'center'
