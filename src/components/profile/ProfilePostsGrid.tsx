@@ -27,6 +27,7 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import { enUS, ru, uz } from 'date-fns/locale';
 import { PostViewModal } from '@/components/PostViewModal';
+import { PostCollaboratorByline } from '@/components/PostCollaboratorByline';
 import { EditPostDialog } from '@/components/EditPostDialog';
 import { Button } from '@/components/ui/button';
 import {
@@ -442,6 +443,11 @@ export function ProfilePostsGrid({
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold">
                         {profile.display_name || profile.username}
+                        <PostCollaboratorByline
+                          postId={post.id}
+                          isOwner={isOwnProfile}
+                          className="ml-1 text-sm"
+                        />
                       </p>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
