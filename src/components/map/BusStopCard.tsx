@@ -22,6 +22,18 @@ interface BusStopCardProps {
   className?: string;
 }
 
+function safeExternalUrl(value?: string | null): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:'
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function ModeIcon({ mode }: { mode?: string }) {
   if (mode === 'tram' || mode === 'train' || mode === 'subway') {
     return <Train className="h-4 w-4" />;
@@ -160,9 +172,9 @@ export function BusStopCard({
                         {alert.description}
                       </p>
                     )}
-                    {alert.url && (
+                    {safeExternalUrl(alert.url) && (
                       <a
-                        href={alert.url}
+                        href={safeExternalUrl(alert.url) ?? undefined}
                         target="_blank"
                         rel="noreferrer"
                         className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
