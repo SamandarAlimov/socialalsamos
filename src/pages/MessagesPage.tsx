@@ -39,6 +39,7 @@ import { useLiveLocation } from '@/hooks/useLiveLocation';
 import { useToast } from '@/hooks/use-toast';
 import { FolderChat } from '@/lib/chatFolders';
 import { buildLocationMessageFields, buildPollMessageFields } from '@/lib/messageStructuredPayload';
+import { db } from '@/lib/db';
 
 // Komponentlar
 import { ChatListItem } from '@/components/messages/ChatListItem';
@@ -1445,21 +1446,52 @@ export default function MessagesPage() {
     const callFullyEnded = await leaveVideoCall();
 
     if (callFullyEnded && conversationForHistory && callForHistory) {
-      const callHistoryData = {
-        type: callType,
-        status: 'ended' as const,
-        duration: duration > 0 ? duration : undefined,
-        timestamp: new Date().toISOString(),
-        caller_id: callForHistory.host_id,
-        callee_id: user?.id || '',
-      };
+      // New deployments create the history bubble atomically in the database
+      // when video_calls.ended_at changes. Probe by call_id first; only write a
+      // client fallback while older production schemas are rolling forward.
+      const { data: canonicalHistory, error: canonicalProbeError } = await db
+        .from('messages')
+        .select('id')
+        .eq('call_id', callForHistory.id)
+        .eq('media_type', 'call_history')
+        .maybeSingle();
 
-      await supabase.from('messages').insert({
-        conversation_id: conversationForHistory.id,
-        sender_id: user?.id,
-        content: JSON.stringify(callHistoryData),
-        media_type: 'call_history',
-      });
+      if (!canonicalHistory) {
+        const callHistoryData = {
+          call_id: callForHistory.id,
+          type: callType,
+          status: (callForHistory.started_at ? 'ended' : 'cancelled') as
+            | 'ended'
+            | 'cancelled',
+          duration: duration > 0 ? duration : undefined,
+          timestamp: new Date().toISOString(),
+          caller_id: callForHistory.host_id,
+          callee_id: user?.id || '',
+        };
+
+        const baseMessage = {
+          conversation_id: conversationForHistory.id,
+          sender_id: user?.id,
+          content: JSON.stringify(callHistoryData),
+          media_type: 'call_history',
+        };
+
+        if (!canonicalProbeError) {
+          const { error: insertError } = await db.from('messages').insert({
+            ...baseMessage,
+            call_id: callForHistory.id,
+          });
+          if (insertError) {
+            console.warn('[Calls] canonical history fallback failed:', insertError);
+          }
+        } else {
+          // Compatibility with a database that has not added messages.call_id.
+          const { error: legacyInsertError } = await supabase.from('messages').insert(baseMessage);
+          if (legacyInsertError) {
+            console.warn('[Calls] legacy history fallback failed:', legacyInsertError);
+          }
+        }
+      }
     }
 
     setIsInCall(false);
