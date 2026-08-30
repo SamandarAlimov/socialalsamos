@@ -115,13 +115,6 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
                 {Math.round(scale * 100)}%
               </div>
             )}
-
-            {/* Double-tap hint for images (shows briefly) */}
-            {!isZoomed && (
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur-sm text-white/70 text-[10px] px-2 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                Ikki marta bosib kattalashtiring
-              </div>
-            )}
           </>
         )}
 
