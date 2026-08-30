@@ -685,7 +685,7 @@ export function useCart() {
       return;
     }
 
-    const { data } = await db
+    const variantQuery = await db
       .from('cart_items')
       .select(`
         *,
@@ -703,19 +703,45 @@ export function useCart() {
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
 
-    if (data) {
-      setItems((data as any[]).map(item => ({
+    if (!variantQuery.error) {
+      setItems(((variantQuery.data ?? []) as any[]).map(item => ({
         ...item,
         product_variant_id: item.product_variant_id ?? null,
         product: item.product as Product,
         variant: item.variant ? {
           ...item.variant,
           price: item.variant.price == null ? null : Number(item.variant.price),
-          compare_at_price: item.variant.compare_at_price == null ? null : Number(item.variant.compare_at_price),
+          compare_at_price:
+            item.variant.compare_at_price == null ? null : Number(item.variant.compare_at_price),
           quantity: Number(item.variant.quantity ?? 0),
           options: item.variant.options ?? {},
         } as ProductVariant : null,
       })));
+    } else {
+      // Production may briefly lag the frontend migration. Keep legacy carts usable.
+      const legacyQuery = await supabase
+        .from('cart_items')
+        .select(`
+          *,
+          product:products(
+            *,
+            seller:sellers(id, business_name, is_verified),
+            images:product_images(id, url, position)
+          )
+        `)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (legacyQuery.data) {
+        setItems(legacyQuery.data.map(item => ({
+          ...item,
+          product_variant_id: null,
+          variant: null,
+          product: item.product as unknown as Product,
+        })));
+      } else {
+        setItems([]);
+      }
     }
     setIsLoading(false);
   }, [user]);
@@ -803,8 +829,8 @@ export function useCart() {
       : await db.from('cart_items').insert({
           user_id: user.id,
           product_id: productId,
-          product_variant_id: variantId,
           quantity: nextQuantity,
+          ...(variantId ? { product_variant_id: variantId } : {}),
         });
 
     if (error) {
