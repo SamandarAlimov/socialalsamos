@@ -233,6 +233,38 @@ export const UZ_BBOX = { south: 37.1, west: 55.9, north: 45.7, east: 73.2 };
 const overpassCache = new Map<string, { at: number; data: unknown }>();
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
+type SearchResult = { places: MapPlace[]; category?: PlaceCategory };
+const mapSearchCache = new Map<string, { at: number; data: SearchResult }>();
+const SEARCH_CACHE_TTL_MS = 3 * 60 * 1000;
+const SEARCH_CACHE_MAX = 80;
+
+function searchCacheKey(
+  query: string,
+  center?: { latitude: number; longitude: number } | null,
+): string {
+  const location = center
+    ? center.latitude.toFixed(2) + ',' + center.longitude.toFixed(2)
+    : 'uz';
+  return normalizeQuery(query) + '@' + location;
+}
+
+function readSearchCache(key: string): SearchResult | null {
+  const hit = mapSearchCache.get(key);
+  if (!hit || Date.now() - hit.at > SEARCH_CACHE_TTL_MS) {
+    if (hit) mapSearchCache.delete(key);
+    return null;
+  }
+  return hit.data;
+}
+
+function writeSearchCache(key: string, data: SearchResult): void {
+  if (mapSearchCache.size >= SEARCH_CACHE_MAX) {
+    const oldestKey = mapSearchCache.keys().next().value as string | undefined;
+    if (oldestKey) mapSearchCache.delete(oldestKey);
+  }
+  mapSearchCache.set(key, { at: Date.now(), data });
+}
+
 async function overpass(query: string, signal?: AbortSignal): Promise<any> {
   const cached = overpassCache.get(query);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.data;
@@ -629,35 +661,65 @@ export async function searchMapPlaces(
     queryTokens.length <= 2 &&
     category.keywords.some((keyword) => normalizeQuery(keyword) === normalizeQuery(term));
 
+  const cacheKey = searchCacheKey(term, center);
+  const cached = readSearchCache(cacheKey);
+  if (cached) return cached;
+
   if (category && center && isPureCategory) {
     const places = await fetchPlacesByCategory(category.id, center, { signal });
-    return { places, category };
+    const result = { places, category };
+    writeSearchCache(cacheKey, result);
+    return result;
   }
 
-  // 2) Nom bo'yicha qidiruv - uch manba parallel, birortasi ishlamasa ham natija bo'ladi.
+
+  const cached = readSearchCache(cacheKey);
+  if (cached) return cached;
+
+  // 2) Nom bo'yicha qidiruv. Productionda har bir tugma bosishda 7-8 ta
+  // geocoder so'rovi yubormaymiz: avval uchta asosiy manba bir martadan.
   const variants = searchQueryVariants(term);
   const settled = await Promise.allSettled([
-    // Overpass regexning o'zi transliteratsiya variantlarini ko'radi.
     searchByNameOverpass(term, center, signal),
-    ...variants.slice(0, 4).map((variant) => searchByNominatim(variant, center, signal)),
-    ...variants.slice(0, 3).map((variant) => searchByPhoton(variant, center, signal)),
+    searchByNominatim(term, center, signal),
+    searchByPhoton(term, center, signal),
   ]);
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
   const merged = new Map<string, MapPlace>();
-  for (const result of settled) {
-    if (result.status !== 'fulfilled') continue;
-    for (const place of result.value) {
-      const key =
-        normalizeQuery(place.name) +
-        '@' +
-        place.latitude.toFixed(4) +
-        ',' +
-        place.longitude.toFixed(4);
-      const existing = merged.get(key);
-      // Overpass natijasi teglari boyroq - uni ustun qo'yamiz.
-      if (!existing || (existing.source !== 'overpass' && place.source === 'overpass')) {
-        merged.set(key, place);
+  const mergeSettled = (results: PromiseSettledResult<MapPlace[]>[]) => {
+    for (const result of results) {
+      if (result.status !== 'fulfilled') continue;
+      for (const place of result.value) {
+        const key =
+          normalizeQuery(place.name) +
+          '@' +
+          place.latitude.toFixed(4) +
+          ',' +
+          place.longitude.toFixed(4);
+        const existing = merged.get(key);
+        // Overpass natijasi teglari boyroq - uni ustun qo'yamiz.
+        if (!existing || (existing.source !== 'overpass' && place.source === 'overpass')) {
+          merged.set(key, place);
+        }
       }
+    }
+  };
+  mergeSettled(settled);
+
+  // Transliteratsiya sabab asosiy qidiruv juda kam natija bersagina Photon
+  // alias fallback ishlaydi. Nominatim bir term uchun bir martadan ortiq
+  // chaqirilmaydi — public geocoderga ortiqcha yuk tushirmaymiz.
+  if (merged.size < 3) {
+    const aliases = variants
+      .filter((variant) => normalizeQuery(variant) !== normalizeQuery(term))
+      .slice(0, 2);
+    if (aliases.length) {
+      const fallback = await Promise.allSettled(
+        aliases.map((variant) => searchByPhoton(variant, center, signal)),
+      );
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      mergeSettled(fallback);
     }
   }
 
@@ -678,10 +740,14 @@ export async function searchMapPlaces(
   // 4) Hech narsa topilmasa va kategoriya sezilsa - atrofdagi shu turdagi joylar.
   if (places.length === 0 && category && center) {
     const fallback = await fetchPlacesByCategory(category.id, center, { signal });
-    return { places: fallback, category };
+    const result = { places: fallback, category };
+    writeSearchCache(cacheKey, result);
+    return result;
   }
 
-  return { places, category };
+  const result = { places, category };
+  writeSearchCache(cacheKey, result);
+  return result;
 }
 
 /** Ochiq/yopiq holatini `opening_hours` dan taxminiy aniqlash. */
