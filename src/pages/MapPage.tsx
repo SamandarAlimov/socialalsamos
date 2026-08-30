@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { MapContainer, Marker, Polyline, TileLayer, useMap } from 'react-leaflet';
+import { MapContainer, Marker, Polyline, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
@@ -19,6 +19,8 @@ import {
   Bus,
   Trash2,
   X,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -33,6 +35,7 @@ import {
   formatMinutes,
   type RouteMode,
   type RouteResult,
+  hasTransitRoutingProvider,
 } from '@/lib/routing';
 import {
   useNearbyStops,
@@ -41,6 +44,7 @@ import {
   useStopRoutes,
 } from '@/hooks/useMapPlaces';
 import { useSavedPlaces } from '@/hooks/useSavedPlaces';
+import { distanceMeters } from '@/lib/geocoding';
 import { formatDwell, usePlaceVisits, useVisitTracking } from '@/hooks/useVisitTracking';
 import { PlaceCategoryBar } from '@/components/map/PlaceCategoryBar';
 import { PlaceResultsList } from '@/components/map/PlaceResultsList';
@@ -50,10 +54,11 @@ import { TaxiOffersCard } from '@/components/map/TaxiOffersCard';
 import { MapLayerSwitcher } from '@/components/map/MapLayerSwitcher';
 import { SendPlaceToChatDialog } from '@/components/map/SendPlaceToChatDialog';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { MapBottomSheet, type MapSheetSnap } from '@/components/map/MapBottomSheet';
 
 const DEFAULT_CENTER = { latitude: 41.311081, longitude: 69.240562 };
 
-type Snap = 'peek' | 'half' | 'full';
 type PanelMode = 'search' | 'place' | 'stop' | 'route' | 'history' | 'saved';
 
 const MODES: { id: RouteMode; label: string; Icon: typeof Car }[] = [
@@ -115,9 +120,65 @@ function MapController({
   return null;
 }
 
+interface MapViewport {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+}
+
+function MapViewportObserver({
+  referenceCenter,
+  onViewport,
+  onMovedCenter,
+}: {
+  referenceCenter: { latitude: number; longitude: number };
+  onViewport: (viewport: MapViewport) => void;
+  onMovedCenter: (center: { latitude: number; longitude: number } | null) => void;
+}) {
+  const publish = useCallback(
+    (map: L.Map, moved: boolean) => {
+      const bounds = map.getBounds();
+      onViewport({
+        south: bounds.getSouth(),
+        west: bounds.getWest(),
+        north: bounds.getNorth(),
+        east: bounds.getEast(),
+      });
+      if (!moved) return;
+      const mapCenter = map.getCenter();
+      const candidate = { latitude: mapCenter.lat, longitude: mapCenter.lng };
+      onMovedCenter(
+        distanceMeters(
+          referenceCenter.latitude,
+          referenceCenter.longitude,
+          candidate.latitude,
+          candidate.longitude,
+        ) > 250
+          ? candidate
+          : null,
+      );
+    },
+    [referenceCenter.latitude, referenceCenter.longitude, onViewport, onMovedCenter],
+  );
+
+  const map = useMapEvents({
+    moveend: () => publish(map, true),
+    zoomend: () => publish(map, true),
+  });
+
+  useEffect(() => {
+    publish(map, false);
+  }, [map, publish]);
+
+  return null;
+}
+
 export default function MapPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const isMobile = useIsMobile();
+  const mapRef = useRef<L.Map | null>(null);
 
   const [center, setCenter] = useState(DEFAULT_CENTER);
   const [me, setMe] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -130,7 +191,7 @@ export default function MapPage() {
   const [selectedPlace, setSelectedPlace] = useState<MapPlace | null>(null);
   const [selectedStop, setSelectedStop] = useState<TransitStop | null>(null);
   const [panel, setPanel] = useState<PanelMode>('search');
-  const [snap, setSnap] = useState<Snap>('peek');
+  const [snap, setSnap] = useState<MapSheetSnap>('peek');
 
   const [routeMode, setRouteMode] = useState<RouteMode>('car');
   const [routes, setRoutes] = useState<RouteResult[]>([]);
@@ -139,6 +200,9 @@ export default function MapPage() {
   const [destination, setDestination] = useState<MapPlace | null>(null);
 
   const [shareTarget, setShareTarget] = useState<MapPlace | null>(null);
+  const [sheetHeightPx, setSheetHeightPx] = useState(112);
+  const [movedCenter, setMovedCenter] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [viewport, setViewport] = useState<MapViewport | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const layer = getLayer(layerId);
@@ -155,6 +219,38 @@ export default function MapPage() {
   const places = query.trim() ? search.places : categoryResults.places;
   const listLoading = query.trim() ? search.loading : categoryResults.loading;
   const listError = query.trim() ? search.error : categoryResults.error;
+
+  const visiblePlaces = useMemo(() => {
+    if (!viewport) return places.slice(0, 80);
+    const latPad = (viewport.north - viewport.south) * 0.2;
+    const lngPad = (viewport.east - viewport.west) * 0.2;
+    return places
+      .filter(
+        (place) =>
+          place.latitude >= viewport.south - latPad &&
+          place.latitude <= viewport.north + latPad &&
+          place.longitude >= viewport.west - lngPad &&
+          place.longitude <= viewport.east + lngPad,
+      )
+      .slice(0, 80);
+  }, [places, viewport]);
+
+  const visibleStops = useMemo(() => {
+    if (!viewport) return nearbyStops.stops.slice(0, 100);
+    const latPad = (viewport.north - viewport.south) * 0.15;
+    const lngPad = (viewport.east - viewport.west) * 0.15;
+    return nearbyStops.stops
+      .filter(
+        (stop) =>
+          stop.latitude >= viewport.south - latPad &&
+          stop.latitude <= viewport.north + latPad &&
+          stop.longitude >= viewport.west - lngPad &&
+          stop.longitude <= viewport.east + lngPad,
+      )
+      .slice(0, 100);
+  }, [nearbyStops.stops, viewport]);
+
+  const transitRoutingAvailable = hasTransitRoutingProvider();
 
   // Joylashuvni aniqlash
   useEffect(() => {
@@ -284,8 +380,6 @@ export default function MapPage() {
   const activeRoute = routes[routeIndex] ?? null;
   const fitTo = activeRoute?.coordinates?.length ? activeRoute.coordinates : null;
 
-  const sheetHeight = snap === 'peek' ? 'h-[108px]' : snap === 'half' ? 'h-[54vh]' : 'h-[88vh]';
-
   const panelBody = useMemo(() => {
     if (panel === 'place' && selectedPlace) {
       return (
@@ -352,11 +446,18 @@ export default function MapPage() {
                 key={mode.id}
                 type="button"
                 onClick={() => changeMode(mode.id)}
+                disabled={mode.id === 'transit' && !transitRoutingAvailable}
+                title={
+                  mode.id === 'transit' && !transitRoutingAvailable
+                    ? 'Real jamoat transporti routeri ulanmagan'
+                    : undefined
+                }
                 className={cn(
                   'flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg text-xs font-medium',
                   routeMode === mode.id
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:bg-muted',
+                  mode.id === 'transit' && !transitRoutingAvailable && 'cursor-not-allowed opacity-40',
                 )}
               >
                 <mode.Icon className="h-4 w-4" />
@@ -651,18 +752,34 @@ export default function MapPage() {
     saved.places,
     query,
     me,
+    transitRoutingAvailable,
   ]);
 
   return (
-    <div className={cn('relative h-[calc(100vh-4rem)] w-full overflow-hidden', layer.dark && 'dark')}>
+    <div className={cn('relative h-[100dvh] w-full overflow-hidden md:h-screen', layer.dark && 'dark')}>
       <MapContainer
+        ref={mapRef}
         center={[center.latitude, center.longitude]}
         zoom={14}
         zoomControl={false}
+        preferCanvas
         className="h-full w-full"
       >
-        <TileLayer url={layer.url} attribution={layer.attribution} maxZoom={layer.maxZoom} />
-        {layer.labelsUrl && <TileLayer url={layer.labelsUrl} attribution={layer.attribution} />}
+        <TileLayer
+          url={layer.url}
+          attribution={layer.attribution}
+          maxZoom={layer.maxZoom}
+          updateWhenIdle
+          keepBuffer={3}
+        />
+        {layer.labelsUrl && (
+          <TileLayer
+            url={layer.labelsUrl}
+            attribution={layer.attribution}
+            updateWhenIdle
+            keepBuffer={2}
+          />
+        )}
 
         {overlays
           .filter((id) => id !== 'stops')
@@ -680,10 +797,15 @@ export default function MapPage() {
           })}
 
         <MapController center={center} zoom={selectedPlace ? 16 : undefined} fitTo={fitTo} />
+        <MapViewportObserver
+          referenceCenter={center}
+          onViewport={setViewport}
+          onMovedCenter={setMovedCenter}
+        />
 
         {me && <Marker position={[me.latitude, me.longitude]} icon={ME_ICON} />}
 
-        {places.map((place) => (
+        {visiblePlaces.map((place) => (
           <Marker
             key={place.id}
             position={[place.latitude, place.longitude]}
@@ -706,7 +828,7 @@ export default function MapPage() {
         )}
 
         {showStops &&
-          nearbyStops.stops.map((stop) => (
+          visibleStops.map((stop) => (
             <Marker
               key={stop.id}
               position={[stop.latitude, stop.longitude]}
@@ -730,7 +852,7 @@ export default function MapPage() {
       </MapContainer>
 
       {/* Yuqoridagi qidiruv qatori */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-[1100] p-3 md:left-[400px]">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-[1100] px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:left-[400px] md:pt-3">
         <div className="pointer-events-auto mx-auto flex max-w-xl items-center gap-2">
           <div className="flex h-11 flex-1 items-center gap-2 rounded-2xl bg-background/95 px-3 shadow-lg ring-1 ring-border/60 backdrop-blur">
             <Search className="h-4 w-4 text-muted-foreground" />
@@ -776,14 +898,51 @@ export default function MapPage() {
         </div>
       </div>
 
+      {movedCenter && (
+        <div className="pointer-events-none absolute inset-x-0 top-[72px] z-[1090] flex justify-center md:left-[400px]">
+          <button
+            type="button"
+            onClick={() => {
+              setCenter(movedCenter);
+              setMovedCenter(null);
+            }}
+            className="pointer-events-auto flex h-9 items-center gap-2 rounded-full border border-border/60 bg-background/95 px-3 text-xs font-semibold shadow-lg backdrop-blur"
+          >
+            <Search className="h-3.5 w-3.5 text-primary" />
+            Shu hududda qidirish
+          </button>
+        </div>
+      )}
+
       {/* O'ng tomondagi tez amallar */}
-      <div className="absolute right-3 top-1/2 z-[1100] flex -translate-y-1/2 flex-col gap-2">
+      <div
+        className="absolute right-3 z-[1100] flex flex-col gap-2 transition-[bottom] duration-300 md:bottom-auto md:top-1/2 md:-translate-y-1/2"
+        style={isMobile ? { bottom: sheetHeightPx + 16 } : undefined}
+      >
+        <button
+          type="button"
+          onClick={() => mapRef.current?.zoomIn()}
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/95 text-foreground shadow-md ring-1 ring-border/60 backdrop-blur"
+          aria-label="Yaqinlashtirish"
+        >
+          <ZoomIn className="h-5 w-5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => mapRef.current?.zoomOut()}
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/95 text-foreground shadow-md ring-1 ring-border/60 backdrop-blur"
+          aria-label="Uzoqlashtirish"
+        >
+          <ZoomOut className="h-5 w-5" />
+        </button>
         <button
           type="button"
           onClick={() => {
-            if (me) setCenter({ ...me });
-            else toast.error('Joylashuv aniqlanmadi.');
-          }}
+            if (me) {
+              setCenter({ ...me });
+              setMovedCenter(null);
+            } else toast.error('Joylashuv aniqlanmadi.');
+          }
           className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/95 text-foreground shadow-md ring-1 ring-border/60 backdrop-blur"
           aria-label="Mening joylashuvim"
         >
@@ -833,22 +992,7 @@ export default function MapPage() {
       </div>
 
       {/* Pastdagi suzuvchi panel */}
-      <div
-        className={cn(
-          'absolute inset-x-0 bottom-0 z-[1150] flex flex-col overflow-hidden rounded-t-3xl border-t border-border/60 bg-background shadow-2xl transition-[height] duration-300 md:inset-y-0 md:left-0 md:right-auto md:h-full md:w-[400px] md:rounded-none md:border-r md:border-t-0',
-          sheetHeight,
-          'md:h-full',
-        )}
-      >
-        <button
-          type="button"
-          onClick={() => setSnap(snap === 'full' ? 'half' : snap === 'half' ? 'peek' : 'full')}
-          className="flex h-6 w-full items-center justify-center md:hidden"
-          aria-label="Panelni o'zgartirish"
-        >
-          <span className="h-1.5 w-10 rounded-full bg-muted-foreground/40" />
-        </button>
-
+      <MapBottomSheet snap={snap} onSnapChange={setSnap} onHeightChange={setSheetHeightPx}>
         {snap === 'peek' && panel === 'search' ? (
           <button
             type="button"
@@ -869,7 +1013,7 @@ export default function MapPage() {
         >
           {panelBody}
         </div>
-      </div>
+      </MapBottomSheet>
 
       <SendPlaceToChatDialog
         open={Boolean(shareTarget)}
