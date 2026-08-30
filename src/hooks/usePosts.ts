@@ -2,11 +2,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import type { PollInput } from '@/lib/polls';
-import type {
-  PostLocationInput,
-  PostMediaInput,
-  PostMusicInput,
+import { createPollForPost, type PollInput } from '@/lib/polls';
+import {
+  savePostLocation,
+  savePostMedia,
+  savePostMusic,
+  type PostLocationInput,
+  type PostMediaInput,
+  type PostMusicInput,
 } from '@/lib/postMeta';
 import { MAX_COLLABORATORS } from '@/lib/postComposer';
 import type { AlsamosRichTextDocument } from '@/lib/richTextDocument';
@@ -42,27 +45,43 @@ export interface Post {
 
 export type PostVisibility = 'public' | 'friends' | 'private';
 
-function isMissingPostKindError(error: unknown): boolean {
+function errorText(error: unknown): string {
   const value = error as {
     code?: string;
     message?: string;
     details?: string;
     hint?: string;
   } | null;
-  const text = [value?.code, value?.message, value?.details, value?.hint]
+
+  return [value?.code, value?.message, value?.details, value?.hint]
     .filter(Boolean)
     .join(' ')
     .toLowerCase();
+}
+
+function isMissingPublishPostDraftError(error: unknown): boolean {
+  const value = error as { code?: string } | null;
+  const text = errorText(error);
 
   return (
-    text.includes('post_kind') &&
-    (
-      text.includes('column') ||
-      text.includes('schema cache') ||
-      text.includes('does not exist') ||
-      value?.code === '42703' ||
-      value?.code === 'PGRST204'
-    )
+    value?.code === 'PGRST202' ||
+    (text.includes('publish_post_draft') &&
+      (text.includes('schema cache') || text.includes('could not find the function')))
+  );
+}
+
+function isSchemaCompatibilityError(error: unknown): boolean {
+  const value = error as { code?: string } | null;
+  const text = errorText(error);
+
+  return (
+    value?.code === '42703' ||
+    value?.code === '42P01' ||
+    value?.code === 'PGRST204' ||
+    value?.code === 'PGRST205' ||
+    text.includes('schema cache') ||
+    text.includes('does not exist') ||
+    text.includes('could not find the')
   );
 }
 
@@ -96,7 +115,7 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
 
     try {
       let allowedUserIds: string[] | null = null;
-      let visibility: 'public' | Array<'public' | 'friends'> =
+      const visibility: 'public' | Array<'public' | 'friends'> =
         filter === 'friends' ? ['public', 'friends'] : 'public';
 
       if (filter === 'following') {
@@ -148,44 +167,38 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
         return;
       }
 
-      const buildQuery = (includePostKind: boolean) => {
-        let query = db
-          .from('posts')
-          .select(`
-            *,
-            profile:profiles!posts_user_id_fkey (
-              id,
-              username,
-              display_name,
-              avatar_url,
-              is_verified
-            )
-          `)
-          .order('created_at', { ascending: false })
-          .range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1);
+      // post_kind is intentionally not used as a REST filter here. Production
+      // can temporarily run an older posts schema while migrations catch up;
+      // selecting "*" works on both schemas and stories are filtered client-side.
+      let query = db
+        .from('posts')
+        .select(`
+          *,
+          profile:profiles!posts_user_id_fkey (
+            id,
+            username,
+            display_name,
+            avatar_url,
+            is_verified
+          )
+        `)
+        .order('created_at', { ascending: false })
+        .range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1);
 
-        // Production may briefly lag behind the app migration. Only this
-        // optional discriminator gets a compatibility retry; RLS still applies.
-        if (includePostKind) query = query.neq('post_kind', 'story');
+      query = Array.isArray(visibility)
+        ? query.in('visibility', visibility)
+        : query.eq('visibility', visibility);
 
-        query = Array.isArray(visibility)
-          ? query.in('visibility', visibility)
-          : query.eq('visibility', visibility);
+      if (allowedUserIds) query = query.in('user_id', allowedUserIds);
 
-        if (allowedUserIds) query = query.in('user_id', allowedUserIds);
-        return query;
-      };
-
-      let result = await buildQuery(true);
-      if (result.error && isMissingPostKindError(result.error)) {
-        result = await buildQuery(false);
-      }
-
-      const { data, error } = result;
+      const { data, error } = await query;
       if (error) throw error;
 
-      if (user && data && data.length > 0) {
-        const postIds = data.map((post) => post.id);
+      const rawPosts = (data ?? []) as Array<Post & { post_kind?: string | null }>;
+      const visiblePosts = rawPosts.filter((post) => post.post_kind !== 'story');
+
+      if (user && visiblePosts.length > 0) {
+        const postIds = visiblePosts.map((post) => post.id);
         const { data: likes, error: likesError } = await supabase
           .from('post_likes')
           .select('post_id')
@@ -197,27 +210,26 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
         }
 
         const likedPostIds = new Set((likes ?? []).map((row) => row.post_id));
-        const postsWithStatus = data.map((post) => ({
+        const postsWithStatus = visiblePosts.map((post) => ({
           ...post,
           is_liked: likedPostIds.has(post.id),
           is_bookmarked: false,
         }));
 
         setPosts((previous) =>
-          refresh ? (postsWithStatus as Post[]) : [...previous, ...(postsWithStatus as Post[])]
+          refresh ? postsWithStatus : [...previous, ...postsWithStatus]
         );
       } else {
         setPosts((previous) =>
-          refresh ? ((data ?? []) as Post[]) : [...previous, ...((data ?? []) as Post[])]
+          refresh ? visiblePosts : [...previous, ...visiblePosts]
         );
       }
 
-      setHasMore(Boolean(data && data.length === PAGE_SIZE));
+      // Pagination is based on the raw database page so a page containing a
+      // story does not incorrectly signal the end of the feed.
+      setHasMore(rawPosts.length === PAGE_SIZE);
     } catch (error: any) {
       console.error('Error fetching posts:', error);
-
-      // A failed page must not keep infinite-scroll requesting offset
-      // 10/20/30/... forever. Stop until an explicit refresh.
       setHasMore(false);
 
       if (refresh || pageNum === 0) {
@@ -269,8 +281,6 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
       .slice(0, MAX_COLLABORATORS);
 
     try {
-      // P0: post + barcha strukturali meta bitta PostgreSQL transaction ichida.
-      // Biror meta yozuvi xato qilsa, yarimta post bazada qolmaydi.
       const payload = {
         content,
         mediaUrls,
@@ -287,20 +297,139 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
         editState: options.editState ?? null,
       };
 
-      const { data: postId, error: publishError } = await (supabase as any).rpc(
+      let postId: string | null = null;
+      let directPost: Post | null = null;
+      let usedMinimalSchema = false;
+      const metaErrors: string[] = [];
+
+      const { data: rpcPostId, error: publishError } = await (supabase as any).rpc(
         'publish_post_draft',
         { p_payload: payload },
       );
 
-      if (publishError || !postId) {
-        // Uploadlar draft lifecycle tomonidan saqlanadi: foydalanuvchi shu
-        // composer ichida darhol qayta urinishi mumkin. Route yopilsa hook
-        // orphan obyektlarni o'zi tozalaydi.
+      if (!publishError && rpcPostId) {
+        postId = String(rpcPostId);
+      } else if (publishError && isMissingPublishPostDraftError(publishError)) {
+        console.warn(
+          'publish_post_draft RPC production bazada topilmadi; compatibility publish ishlatiladi.',
+          publishError,
+        );
+
+        const publishedAt = isScheduled ? null : new Date().toISOString();
+        let insertResult = await db
+          .from('posts')
+          .insert({
+            user_id: user.id,
+            content,
+            media_urls: mediaUrls,
+            media_type: mediaType,
+            visibility,
+            post_kind: options.postKind ?? 'post',
+            status: isScheduled ? 'scheduled' : 'published',
+            scheduled_at: options.scheduledAt ?? null,
+            published_at: publishedAt,
+            formatted_content: options.formattedContent ?? null,
+            edit_state: options.editState ?? null,
+          })
+          .select('*')
+          .single();
+
+        if (insertResult.error && isSchemaCompatibilityError(insertResult.error)) {
+          if (isScheduled) {
+            throw new Error(
+              'Rejalashtirilgan post uchun production Supabase migratsiyalarini yangilash kerak.',
+            );
+          }
+
+          usedMinimalSchema = true;
+          insertResult = await db
+            .from('posts')
+            .insert({
+              user_id: user.id,
+              content,
+              media_urls: mediaUrls,
+              media_type: mediaType,
+              visibility,
+            })
+            .select('*')
+            .single();
+        }
+
+        if (insertResult.error || !insertResult.data?.id) {
+          throw insertResult.error ?? new Error('Post identifikatori qaytmadi');
+        }
+
+        postId = String(insertResult.data.id);
+        directPost = insertResult.data as Post;
+
+        // Compatibility path keeps the post usable while the DB migration is
+        // being deployed. Structured extras are best-effort and reported.
+        if (options.media?.length) {
+          try {
+            await savePostMedia(postId, options.media);
+          } catch (metaError) {
+            console.warn('Compatibility publish: post_media saqlanmadi:', metaError);
+            metaErrors.push('fayllar');
+          }
+        }
+
+        if (options.poll) {
+          try {
+            await createPollForPost(postId, options.poll);
+          } catch (metaError) {
+            console.warn('Compatibility publish: so‘rovnoma saqlanmadi:', metaError);
+            metaErrors.push('so‘rovnoma');
+          }
+        }
+
+        if (options.location) {
+          try {
+            await savePostLocation(postId, options.location, user.id);
+          } catch (metaError) {
+            console.warn('Compatibility publish: joylashuv saqlanmadi:', metaError);
+            metaErrors.push('joylashuv');
+          }
+        }
+
+        if (options.music) {
+          try {
+            await savePostMusic(postId, options.music);
+          } catch (metaError) {
+            console.warn('Compatibility publish: musiqa saqlanmadi:', metaError);
+            metaErrors.push('musiqa');
+          }
+        }
+
+        if (collaborators.length > 0) {
+          const { error: collaboratorError } = await db
+            .from('post_collaborators')
+            .insert(
+              collaborators.map((collaboratorId) => ({
+                post_id: postId,
+                user_id: collaboratorId,
+                invited_by: user.id,
+                status: 'pending',
+              })),
+            );
+
+          if (collaboratorError) {
+            console.warn(
+              'Compatibility publish: hammuallif takliflari saqlanmadi:',
+              collaboratorError,
+            );
+            metaErrors.push('hammualliflar');
+          }
+        }
+
+        if (usedMinimalSchema && options.formattedContent) {
+          metaErrors.push('formatlangan matn');
+        }
+      } else {
         throw publishError ?? new Error('Post identifikatori qaytmadi');
       }
 
-      // RPC atomik yozdi. Bundan keyin obyektlarni rollback qilib bo'lmaydi:
-      // UI refetch xatosi post yaratilmagan degani emas.
+      if (!postId) throw new Error('Post identifikatori qaytmadi');
+
       const { data, error } = await supabase
         .from('posts')
         .select(`
@@ -316,8 +445,8 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
         .eq('id', postId)
         .single();
 
-      const fallbackPost: Post = {
-        id: String(postId),
+      const fallbackPost: Post = directPost ?? {
+        id: postId,
         user_id: user.id,
         content,
         media_urls: mediaUrls,
@@ -349,14 +478,23 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
         setPosts((prev) => [createdPost, ...prev]);
       }
 
-      toast({
-        title: isScheduled ? 'Rejalashtirildi' : 'Posted!',
-        description: isScheduled
-          ? 'Post belgilangan vaqtda e\\u2018lon qilinadi.'
-          : collaborators.length > 0
-            ? 'Post joylandi va hammualliflarga taklif yuborildi.'
-            : 'Post muvaffaqiyatli joylandi.',
-      });
+      if (metaErrors.length > 0) {
+        toast({
+          title: 'Post joylandi',
+          description:
+            `Production bazasi yangilanmagani uchun ${Array.from(new Set(metaErrors)).join(', ')} vaqtincha saqlanmadi.`,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: isScheduled ? 'Rejalashtirildi' : 'Posted!',
+          description: isScheduled
+            ? 'Post belgilangan vaqtda e‘lon qilinadi.'
+            : collaborators.length > 0
+              ? 'Post joylandi va hammualliflarga taklif yuborildi.'
+              : 'Post muvaffaqiyatli joylandi.',
+        });
+      }
 
       return createdPost;
     } catch (error: any) {
