@@ -367,13 +367,21 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
       if (!publishError && rpcPostId) {
         postId = String(rpcPostId);
       } else if (publishError && isMissingPublishPostDraftError(publishError)) {
-        console.warn(
-          'publish_post_draft RPC production bazada topilmadi; compatibility publish ishlatiladi.',
-          publishError,
-        );
+        if (atomicCapability !== 'missing' && structuredCapability !== 'missing') {
+          console.warn(
+            'publish_post_draft RPC production bazada topilmadi; compatibility publish ishlatiladi.',
+            publishError,
+          );
+        }
 
         const publishedAt = isScheduled ? null : new Date().toISOString();
         const knownLegacySchema = readStructuredPostSchemaCapability() === 'missing';
+
+        if (knownLegacySchema && isScheduled) {
+          throw new Error(
+            'Rejalashtirilgan post uchun production Supabase migratsiyalarini yangilash kerak.',
+          );
+        }
         const compatibilityContent =
           knownLegacySchema && options.location
             ? appendLocationMarker(content, options.location)
@@ -448,21 +456,28 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
 
         // Compatibility path keeps the post usable while the DB migration is
         // being deployed. Structured extras are best-effort and reported.
-        if (options.media?.length) {
+        if (options.media?.length && readStructuredPostSchemaCapability() !== 'missing') {
           try {
             await savePostMedia(postId, options.media);
           } catch (metaError) {
             console.warn('Compatibility publish: post_media saqlanmadi:', metaError);
-            metaErrors.push('fayllar');
+            writeStructuredPostSchemaCapability('missing');
+            // Public postda media_urls legacy fallback sifatida allaqachon saqlangan.
+            if (visibility !== 'public') metaErrors.push('fayllar');
           }
         }
 
         if (options.poll) {
-          try {
-            await createPollForPost(postId, options.poll);
-          } catch (metaError) {
-            console.warn('Compatibility publish: so‘rovnoma saqlanmadi:', metaError);
+          if (readStructuredPostSchemaCapability() === 'missing') {
             metaErrors.push('so‘rovnoma');
+          } else {
+            try {
+              await createPollForPost(postId, options.poll);
+            } catch (metaError) {
+              console.warn('Compatibility publish: so‘rovnoma saqlanmadi:', metaError);
+              writeStructuredPostSchemaCapability('missing');
+              metaErrors.push('so‘rovnoma');
+            }
           }
         }
 
@@ -488,32 +503,41 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
         }
 
         if (options.music) {
-          try {
-            await savePostMusic(postId, options.music);
-          } catch (metaError) {
-            console.warn('Compatibility publish: musiqa saqlanmadi:', metaError);
+          if (readStructuredPostSchemaCapability() === 'missing') {
             metaErrors.push('musiqa');
+          } else {
+            try {
+              await savePostMusic(postId, options.music);
+            } catch (metaError) {
+              console.warn('Compatibility publish: musiqa saqlanmadi:', metaError);
+              writeStructuredPostSchemaCapability('missing');
+              metaErrors.push('musiqa');
+            }
           }
         }
 
         if (collaborators.length > 0) {
-          const { error: collaboratorError } = await db
-            .from('post_collaborators')
-            .insert(
-              collaborators.map((collaboratorId) => ({
-                post_id: postId,
-                user_id: collaboratorId,
-                invited_by: user.id,
-                status: 'pending',
-              })),
-            );
-
-          if (collaboratorError) {
-            console.warn(
-              'Compatibility publish: hammuallif takliflari saqlanmadi:',
-              collaboratorError,
-            );
+          if (readStructuredPostSchemaCapability() === 'missing') {
             metaErrors.push('hammualliflar');
+          } else {
+            const { error: collaboratorError } = await db
+              .from('post_collaborators')
+              .insert(
+                collaborators.map((collaboratorId) => ({
+                  post_id: postId,
+                  user_id: collaboratorId,
+                  invited_by: user.id,
+                  status: 'pending',
+                })),
+              );
+
+            if (collaboratorError) {
+              console.warn(
+                'Compatibility publish: hammuallif takliflari saqlanmadi:',
+                collaboratorError,
+              );
+              metaErrors.push('hammualliflar');
+            }
           }
         }
 
