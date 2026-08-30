@@ -89,19 +89,19 @@ export function AppSidebar() {
   return (
     <aside 
       className={cn(
-        "h-screen sticky top-0 bg-sidebar border-r border-sidebar-border flex-col transition-all duration-300 z-30",
+        "h-screen min-h-0 sticky top-0 bg-sidebar border-r border-sidebar-border flex-col overflow-hidden transition-all duration-300 z-30",
         "hidden md:flex", // Hide on mobile
         collapsed ? "w-[72px]" : "w-64"
       )}
     >
       {/* Logo + Notifications */}
-      <div className="h-16 flex items-center justify-between px-4 border-b border-sidebar-border">
+      <div className="h-16 shrink-0 flex items-center justify-between px-4 border-b border-sidebar-border">
         <AlsamosLogo size="sm" showText={!collapsed} />
         {!collapsed && <NotificationsDropdown />}
       </div>
 
       {/* Main Navigation */}
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto scrollbar-hidden">
+      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-3 [scrollbar-gutter:stable] [scrollbar-width:thin]">
         {navItems.map((item) => {
           const isActive = item.path ? location.pathname === item.path : false;
           const badgeCount = getBadgeCount(item.badgeKey);
@@ -163,7 +163,7 @@ export function AppSidebar() {
       </nav>
 
       {/* Bottom Section */}
-      <div className="p-3 border-t border-sidebar-border space-y-1">
+      <div className="shrink-0 p-3 border-t border-sidebar-border space-y-1">
         {bottomItems.map((item) => {
           const isActive = location.pathname === item.path;
           return (
