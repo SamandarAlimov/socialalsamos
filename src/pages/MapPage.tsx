@@ -1882,7 +1882,10 @@ export default function MapPage() {
               </button>
             )}
 
-            {activeRoute && destination && routeMode === 'car' && (
+            {activeRoute &&
+              destination &&
+              routeMode === 'car' &&
+              routeWaypoints.length === 0 && (
               <TaxiOffersCard
                 className="mt-3"
                 from={{
@@ -2250,8 +2253,12 @@ export default function MapPage() {
     transitRoutingAvailable,
     centerOnMe,
     routeOrigin,
+    routeWaypoints,
     destination,
     swapRouteEndpoints,
+    removeRouteWaypoint,
+    removeFinalDestination,
+    beginMapEndpointPick,
     stopRoutes.realtimeConfigured,
     stopRoutes.realtimeFresh,
     routeEditField,
@@ -2325,7 +2332,12 @@ export default function MapPage() {
           onViewport={setViewport}
           onMovedCenter={setMovedCenter}
         />
-        {!navigationActive && <MapClickObserver onMapClick={handleMapClick} />}
+        {!navigationActive && !routeMapPickTarget && (
+          <MapClickObserver onMapClick={handleMapClick} />
+        )}
+        {!navigationActive && routeMapPickTarget && (
+          <MapClickObserver onMapClick={handleRouteMapPick} />
+        )}
         {navigationActive && (
           <NavigationInteractionObserver
             onManualPan={() => setNavigationFollowing(false)}
@@ -2404,7 +2416,52 @@ export default function MapPage() {
           ),
         )}
 
-        {selectedPlace && (
+        {!navigationActive &&
+          panel === 'route' &&
+          routeWaypoints.map((waypoint, index) => (
+            <Marker
+              key={'route-waypoint-marker:' + waypoint.id + ':' + index}
+              position={[waypoint.latitude, waypoint.longitude]}
+              icon={routeCheckpointIcon(index)}
+              zIndexOffset={700}
+            >
+              <Tooltip
+                direction="top"
+                offset={[0, -14]}
+                opacity={1}
+                className={cn(
+                  'alsamos-map-tooltip',
+                  contrastLayer && 'alsamos-map-tooltip--contrast',
+                )}
+              >
+                <span className="font-semibold">
+                  {index + 1}. {waypoint.name}
+                </span>
+              </Tooltip>
+            </Marker>
+          ))}
+
+        {!navigationActive && panel === 'route' && destination && (
+          <Marker
+            position={[destination.latitude, destination.longitude]}
+            icon={routeCheckpointIcon(routeWaypoints.length, true)}
+            zIndexOffset={720}
+          >
+            <Tooltip
+              direction="top"
+              offset={[0, -14]}
+              opacity={1}
+              className={cn(
+                'alsamos-map-tooltip',
+                contrastLayer && 'alsamos-map-tooltip--contrast',
+              )}
+            >
+              <span className="font-semibold">{destination.name}</span>
+            </Tooltip>
+          </Marker>
+        )}
+
+        {selectedPlace && panel !== 'route' && (
           <Marker
             position={[selectedPlace.latitude, selectedPlace.longitude]}
             icon={placeIcon(categoryUi(selectedPlace.categoryId).color, true)}
@@ -2498,7 +2555,7 @@ export default function MapPage() {
       </MapContainer>
 
       {/* Yuqoridagi qidiruv qatori */}
-      {!navigationActive && (
+      {!navigationActive && !routeMapPickTarget && (
       <div className="pointer-events-none absolute inset-x-0 top-0 z-[1100] px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:left-[404px] md:pt-3">
         <div className="pointer-events-auto mx-auto flex max-w-xl items-center gap-2">
           <div className="relative min-w-0 flex-1">
@@ -2605,6 +2662,41 @@ export default function MapPage() {
           />
         </div>
       </div>
+      )}
+
+      {routeMapPickTarget && !navigationActive && (
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-[1300] px-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:left-[404px] md:pt-3">
+          <div
+            className={cn(
+              'pointer-events-auto mx-auto flex max-w-md items-center gap-3 rounded-[18px] border px-3 py-2.5 shadow-2xl backdrop-blur-2xl',
+              contrastLayer
+                ? 'border-white/[0.15] bg-slate-950/[0.92] text-white'
+                : 'border-primary/[0.20] bg-background/[0.94] text-foreground',
+            )}
+          >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/[0.12] text-primary">
+              <MapPinned className="h-4 w-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold">
+                {routeMapPickTarget === 'origin'
+                  ? 'From nuqtasini tanlang'
+                  : 'To nuqtasini tanlang'}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                Xaritadagi bino, joy yoki istalgan nuqtani bosing
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setRouteMapPickTarget(null)}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              aria-label="Xaritadan tanlashni bekor qilish"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
       )}
 
       {mapClickLoading && !navigationActive && (
