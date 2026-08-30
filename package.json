@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit",
     "typecheck:create": "tsc -p tsconfig.create.json --noEmit",
+    "test:map": "vitest run src/lib/routing.test.ts src/lib/taxiProviders.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {
