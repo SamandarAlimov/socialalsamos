@@ -9,6 +9,7 @@ import type {
   PostMusicInput,
 } from '@/lib/postMeta';
 import { MAX_COLLABORATORS } from '@/lib/postComposer';
+import { MEDIA_BUCKET, PRIVATE_MEDIA_BUCKET } from '@/lib/mediaUpload';
 
 export interface Post {
   id: string;
@@ -38,6 +39,30 @@ export interface Post {
 }
 
 export type PostVisibility = 'public' | 'friends' | 'private';
+
+async function cleanupUnpublishedMedia(items: PostMediaInput[]): Promise<void> {
+  const byBucket = new Map<string, Set<string>>();
+
+  const add = (bucket?: string | null, key?: string | null) => {
+    if (!bucket || !key) return;
+    if (bucket !== MEDIA_BUCKET && bucket !== PRIVATE_MEDIA_BUCKET) return;
+    const keys = byBucket.get(bucket) ?? new Set<string>();
+    keys.add(key);
+    byBucket.set(bucket, keys);
+  };
+
+  for (const item of items) {
+    add(item.storageBucket, item.storageKey);
+    add(item.thumbnailBucket, item.thumbnailKey);
+  }
+
+  await Promise.all(
+    Array.from(byBucket.entries()).map(async ([bucket, keys]) => {
+      const { error } = await supabase.storage.from(bucket).remove(Array.from(keys));
+      if (error) console.warn('Yarim qolgan uploadni tozalab bo‘lmadi:', error);
+    }),
+  );
+}
 
 /** Post yaratishda qo'shimcha strukturali ma'lumotlar. */
 export interface CreatePostOptions {
@@ -207,10 +232,15 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
         { p_payload: payload },
       );
 
-      if (publishError) throw publishError;
-      if (!postId) throw new Error('Post identifikatori qaytmadi');
+      if (publishError || !postId) {
+        // Binary upload DB transaction ichida emas. DB publish yiqilsa
+        // hech qayerga bog'lanmagan Supabase obyektlarini best-effort tozalaymiz.
+        await cleanupUnpublishedMedia(options.media ?? []);
+        throw publishError ?? new Error('Post identifikatori qaytmadi');
+      }
 
-      // RPC atomik yozadi; UI uchun profil bilan tayyor postni qayta o'qiymiz.
+      // RPC atomik yozdi. Bundan keyin obyektlarni rollback qilib bo'lmaydi:
+      // UI refetch xatosi post yaratilmagan degani emas.
       const { data, error } = await supabase
         .from('posts')
         .select(`
@@ -226,10 +256,32 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
         .eq('id', postId)
         .single();
 
-      if (error) throw error;
+      const fallbackPost: Post = {
+        id: String(postId),
+        user_id: user.id,
+        content,
+        media_urls: mediaUrls,
+        media_type: mediaType,
+        likes_count: 0,
+        comments_count: 0,
+        shares_count: 0,
+        bookmarks_count: 0,
+        reposts_count: 0,
+        views_count: 0,
+        is_pinned: false,
+        visibility,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      const createdPost = error || !data ? fallbackPost : (data as Post);
+
+      if (error) {
+        console.warn('Post yaratildi, lekin UI refetch bajarilmadi:', error);
+      }
 
       if (!isScheduled && visibility === 'public') {
-        setPosts((prev) => [data as Post, ...prev]);
+        setPosts((prev) => [createdPost, ...prev]);
       }
 
       toast({
@@ -241,7 +293,7 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
             : 'Post muvaffaqiyatli joylandi.',
       });
 
-      return data;
+      return createdPost;
     } catch (error: any) {
       console.error('Error creating post:', error);
       toast({
