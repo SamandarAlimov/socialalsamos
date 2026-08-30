@@ -23,9 +23,9 @@ import { cn } from '@/lib/utils';
 import { useMusicCatalog, type MusicCatalogTrack } from '@/hooks/useMusicCatalog';
 import { MAX_FILE_SIZE, formatBytes } from '@/lib/postComposer';
 import {
+  parseStorageReference,
   resolveStorageUrl,
   uploadMedia,
-  type MediaVisibility,
 } from '@/lib/mediaUpload';
 import type { PostMusicInput } from '@/lib/postMeta';
 import type { PostVisibility } from '@/hooks/usePosts';
@@ -108,6 +108,7 @@ function fromCurrent(input?: PostMusicInput | null): SelectedTrack | null {
   if (!input) return null;
   const track = input.track;
   if (!track && !input.trackId) return null;
+  const parsed = parseStorageReference(track?.audioUrl);
 
   return {
     key: input.trackId ?? `draft:${track?.audioUrl ?? 'music'}`,
@@ -116,6 +117,8 @@ function fromCurrent(input?: PostMusicInput | null): SelectedTrack | null {
     artist: track?.artist ?? null,
     duration: track?.durationSeconds ?? null,
     audioUrl: track?.audioUrl ?? '',
+    storageBucket: track?.storageBucket ?? parsed?.bucket ?? null,
+    storageKey: track?.storageKey ?? parsed?.key ?? null,
     source: track?.source ?? 'platform',
     externalId: track?.externalId ?? null,
     license: track?.license ?? null,
@@ -150,6 +153,7 @@ export function MusicPicker({
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const transientUploadRef = useRef<{ bucket: string; key: string } | null>(null);
   const { tracks, isLoading, error, refresh } = useMusicCatalog(query, open);
 
   useEffect(() => {
@@ -217,6 +221,17 @@ export function MusicPicker({
     [playingKey, startSeconds, stopPreview, volume],
   );
 
+  const cleanupTransientUpload = useCallback(async () => {
+    const transient = transientUploadRef.current;
+    if (!transient) return;
+    transientUploadRef.current = null;
+
+    const { error } = await import('@/integrations/supabase/client').then(({ supabase }) =>
+      supabase.storage.from(transient.bucket).remove([transient.key]),
+    );
+    if (error) console.warn('Bekor qilingan device music faylini tozalab bo‘lmadi:', error);
+  }, []);
+
   const handleDeviceFile = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -241,11 +256,15 @@ export function MusicPicker({
       setUploading(true);
       try {
         const duration = await getAudioDuration(file);
-        const storageVisibility: MediaVisibility = visibility;
+        await cleanupTransientUpload();
+
+        // Device trek har doim private saqlanadi. Post public bo'lsa ham
+        // playback faqat post_music -> can_view_post orqali signed URL oladi.
         const uploaded = await uploadMedia(file, {
           type: 'music',
-          visibility: storageVisibility,
+          visibility: 'private',
         });
+        transientUploadRef.current = { bucket: uploaded.bucket, key: uploaded.key };
 
         const track: SelectedTrack = {
           key: `device:${uploaded.bucket}:${uploaded.key}`,
@@ -273,7 +292,7 @@ export function MusicPicker({
         setUploading(false);
       }
     },
-    [user, visibility],
+    [cleanupTransientUpload, user],
   );
 
   const apply = useCallback(() => {
@@ -287,6 +306,8 @@ export function MusicPicker({
       title: selected.title,
       artist: selected.artist,
       audioUrl: selected.audioUrl,
+      storageBucket: selected.storageBucket ?? null,
+      storageKey: selected.storageKey ?? null,
       coverUrl: selected.coverUrl ?? null,
       durationSeconds: selected.duration,
       source: selected.source,
@@ -306,6 +327,7 @@ export function MusicPicker({
       mutedOriginal,
     });
 
+    transientUploadRef.current = null;
     stopPreview();
     onOpenChange(false);
   }, [
@@ -323,7 +345,10 @@ export function MusicPicker({
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) stopPreview();
+        if (!next) {
+          stopPreview();
+          void cleanupTransientUpload();
+        }
         onOpenChange(next);
       }}
     >
@@ -402,6 +427,7 @@ export function MusicPicker({
                   aria-label="Musiqani olib tashlash"
                   onClick={() => {
                     stopPreview();
+                    void cleanupTransientUpload();
                     setSelected(null);
                   }}
                   className="rounded-lg p-2 text-muted-foreground transition hover:bg-muted hover:text-destructive"
@@ -519,6 +545,7 @@ export function MusicPicker({
                         type="button"
                         onClick={() => {
                           stopPreview();
+                          void cleanupTransientUpload();
                           setSelected(item);
                           setStartSeconds(0);
                           setClipSeconds(Math.min(30, item.duration ?? 30));
@@ -549,6 +576,7 @@ export function MusicPicker({
             onClick={() => {
               onSelectMusic(null);
               stopPreview();
+              void cleanupTransientUpload();
               onOpenChange(false);
             }}
           >
