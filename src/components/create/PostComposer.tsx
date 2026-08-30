@@ -731,7 +731,10 @@ export function PostComposer() {
 
   return (
     <div
-      className="relative mx-auto w-full max-w-3xl px-0 pb-8 sm:px-4 sm:pt-4"
+      className={cn(
+        'relative mx-auto w-full max-w-3xl px-0 pb-8 sm:px-4 sm:pt-4',
+        attachments.length > 0 && 'lg:max-w-6xl',
+      )}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -746,8 +749,20 @@ export function PostComposer() {
         </div>
       )}
 
-      <section className="overflow-hidden border-y border-border/60 bg-background sm:rounded-2xl sm:border">
-        <div className="flex items-start gap-3 px-4 pb-2 pt-4 sm:px-5 sm:pt-5">
+      <section
+        className={cn(
+          'overflow-hidden border-y border-border/60 bg-background sm:rounded-2xl sm:border',
+          attachments.length > 0 &&
+            'lg:grid lg:h-[calc(100dvh-7.5rem)] lg:grid-cols-[minmax(320px,0.82fr)_minmax(440px,1.18fr)] lg:grid-rows-[minmax(0,1fr)_auto_auto]',
+        )}
+      >
+        <div
+          className={cn(
+            'flex items-start gap-3 px-4 pb-2 pt-4 sm:px-5 sm:pt-5',
+            attachments.length > 0 &&
+              'lg:col-start-1 lg:row-start-1 lg:min-h-0 lg:overflow-y-auto',
+          )}
+        >
           <Avatar className="h-11 w-11 shrink-0">
             <AvatarImage src={profile?.avatar_url ?? ''} />
             <AvatarFallback className="font-semibold">
@@ -806,7 +821,7 @@ export function PostComposer() {
         </div>
 
         {attachments.length > 0 && (
-          <div className="border-t border-border/50">
+          <div className="border-t border-border/50 lg:col-start-2 lg:row-start-1 lg:row-span-3 lg:min-h-0 lg:border-l lg:border-t-0">
             <PostMediaComposer
               attachments={attachments}
               onRemove={removeAttachment}
@@ -820,7 +835,13 @@ export function PostComposer() {
         )}
 
         {(poll || location || music || collaborators.length > 0 || scheduledAt || totalStickers > 0) && (
-          <div className="border-t border-border/50">
+          <div
+            className={cn(
+              'border-t border-border/50',
+              attachments.length > 0 &&
+                'lg:col-start-1 lg:row-start-2 lg:max-h-44 lg:overflow-y-auto',
+            )}
+          >
             {poll && (
               <div className="flex min-h-12 items-center gap-3 px-4 py-2.5 sm:px-5">
                 <BarChart3 className="h-4 w-4 shrink-0 text-primary" />
@@ -920,7 +941,12 @@ export function PostComposer() {
           </div>
         )}
 
-        <div className="flex items-center gap-1 border-t border-border/60 px-2 py-2 sm:px-3">
+        <div
+          className={cn(
+            'flex items-center gap-1 border-t border-border/60 px-2 py-2 sm:px-3',
+            attachments.length > 0 && 'lg:col-start-1 lg:row-start-3',
+          )}
+        >
           <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
             {[
               {
