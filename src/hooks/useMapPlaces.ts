@@ -178,6 +178,7 @@ export function useStopRoutes(stop?: TransitStop | null) {
     async (signal?: AbortSignal) => {
       if (!stop?.id) {
         setRoutes([]);
+        setRealtimeConfigured(false);
         setRealtimeFresh(false);
         setAlerts([]);
         return;
@@ -278,6 +279,7 @@ export function useStopRoutes(stop?: TransitStop | null) {
         setError('Marshrutlar yuklanmadi.');
         setRoutes([]);
         setRealtimeFresh(false);
+        setAlerts([]);
       } finally {
         setLoading(false);
       }
