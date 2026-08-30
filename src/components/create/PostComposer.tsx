@@ -176,7 +176,8 @@ export function PostComposer() {
 
   /** Stiker tahririni ochish. Media bo‘lmasa tushunarli ogohlantirish. */
   const openStickerEditor = useCallback(
-    (attachmentId?: string) => {
+    (attachment?: { id: string } | string) => {
+      const attachmentId = typeof attachment === 'string' ? attachment : attachment?.id;
       const target = attachmentId
         ? attachments.find((item) => item.id === attachmentId)
         : stickerableAttachments[0];
