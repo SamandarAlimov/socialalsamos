@@ -899,27 +899,54 @@ export default function MapPage() {
             )}
 
             <div className="space-y-2">
-              {routes.map((route, index) => (
-                <button
-                  key={route.label + index}
-                  type="button"
-                  onClick={() => setRouteIndex(index)}
-                  className={cn(
-                    'flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left',
-                    index === routeIndex ? 'border-primary bg-primary/5' : 'border-border/60',
-                  )}
-                >
-                  <Navigation className="h-4 w-4 text-primary" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold">
-                      {formatMinutes(route.durationS)} \u00b7 {formatKm(route.distanceM)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {route.label} \u00b7 {arrivalTime(route.durationS)} da yetib borasiz
-                    </p>
-                  </div>
-                </button>
-              ))}
+              {routes.map((route, index) => {
+                const selected = index === routeIndex;
+                return (
+                  <button
+                    key={route.label + index}
+                    type="button"
+                    onClick={() => setRouteIndex(index)}
+                    className={cn(
+                      'group flex w-full items-center gap-3 rounded-2xl border px-3.5 py-3 text-left transition-all',
+                      selected
+                        ? 'border-primary/55 bg-primary/[0.09] shadow-sm ring-1 ring-primary/15'
+                        : imageryLayer
+                          ? 'border-white/10 bg-white/[0.045] hover:bg-white/[0.075]'
+                          : 'border-border/50 bg-background/55 hover:border-primary/20 hover:bg-muted/45',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition',
+                        selected
+                          ? 'bg-primary text-primary-foreground'
+                          : imageryLayer
+                            ? 'bg-white/[0.07] text-white/[0.65]'
+                            : 'bg-muted text-muted-foreground group-hover:text-foreground',
+                      )}
+                    >
+                      <Navigation className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline gap-2">
+                        <p className="text-base font-extrabold tracking-tight">
+                          {formatMinutes(route.durationS)}
+                        </p>
+                        <span className="text-xs font-medium text-muted-foreground">
+                          {formatKm(route.distanceM)}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                        {route.label}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-xs font-bold">{arrivalTime(route.durationS)}</p>
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">yetib borish</p>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
 
             {activeRoute && destination && routeMode === 'car' && (
@@ -940,19 +967,42 @@ export default function MapPage() {
               />
             )}
 
-            {activeRoute && (
-              <div className="mt-3 divide-y divide-border/50">
-                {activeRoute.steps.map((step, index) => (
-                  <div key={index} className="flex items-start gap-3 py-2 text-sm">
-                    <Navigation className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0 flex-1">
-                      <p>{step.instruction}</p>
-                      <p className="text-xs text-muted-foreground">{formatKm(step.distanceM)}</p>
+            {activeRoute && activeRoute.steps.length > 0 && (
+              <div className="mt-4">
+                <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                  Yo‘l bo‘yicha
+                </p>
+                <div className="space-y-1.5">
+                  {activeRoute.steps.map((step, index) => (
+                    <div
+                      key={index}
+                      className={cn(
+                        'flex items-start gap-3 rounded-xl px-3 py-2.5 text-sm',
+                        imageryLayer ? 'bg-white/[0.035]' : 'bg-muted/30',
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg',
+                          imageryLayer
+                            ? 'bg-white/[0.07] text-white/[0.60]'
+                            : 'bg-background text-muted-foreground',
+                        )}
+                      >
+                        <Navigation className="h-3.5 w-3.5" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="leading-snug">{step.instruction}</p>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          {formatKm(step.distanceM)}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            )}
+            ))}
+
           </div>
         </div>
       );
@@ -993,7 +1043,7 @@ export default function MapPage() {
               </p>
             )}
 
-            <div className={cn('divide-y', imageryLayer ? 'divide-white/10' : 'divide-border/50')}>
+            <div className="space-y-2 p-3">
               {saved.places.map((place) => {
                 const ui = categoryUi(place.category);
                 return (
@@ -1017,8 +1067,10 @@ export default function MapPage() {
                       setSnap('half');
                     }}
                     className={cn(
-                      'flex w-full items-center gap-3 px-4 py-3 text-left transition',
-                      imageryLayer ? 'hover:bg-white/[0.07]' : 'hover:bg-muted/50',
+                      'flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition',
+                      imageryLayer
+                        ? 'border-white/10 bg-white/[0.045] hover:bg-white/[0.075]'
+                        : 'border-border/45 bg-background/55 hover:border-primary/20 hover:bg-muted/45',
                     )}
                   >
                     <span
@@ -1079,15 +1131,17 @@ export default function MapPage() {
               </p>
             )}
 
-            <div className={cn('divide-y', imageryLayer ? 'divide-white/10' : 'divide-border/50')}>
+            <div className="space-y-2 p-3">
               {visits.visits.map((visit) => {
                 const ui = categoryUi(visit.category);
                 return (
                   <div
                     key={visit.id}
                     className={cn(
-                      'flex items-start gap-3 px-4 py-3 transition',
-                      imageryLayer && 'hover:bg-white/[0.04]',
+                      'flex items-start gap-3 rounded-2xl border px-3 py-3 transition',
+                      imageryLayer
+                        ? 'border-white/10 bg-white/[0.045] hover:bg-white/[0.075]'
+                        : 'border-border/45 bg-background/55 hover:border-primary/20 hover:bg-muted/45',
                     )}
                   >
                     <span
