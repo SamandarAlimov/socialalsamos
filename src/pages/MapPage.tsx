@@ -795,6 +795,108 @@ export default function MapPage() {
     [withUserDistance],
   );
 
+  const handleVectorFeatureClick = useCallback(
+    async (feature: VectorRenderedFeature, zoom: number) => {
+      const point = {
+        latitude: feature.latitude,
+        longitude: feature.longitude,
+      };
+
+      mapClickAbortRef.current?.abort();
+      const controller = new AbortController();
+      mapClickAbortRef.current = controller;
+
+      setSearchFocused(false);
+      setLayerOpen(false);
+      setSelectedStop(null);
+      setMovedCenter(null);
+      setCenter(point);
+
+      const featureTags = Object.fromEntries(
+        Object.entries(feature.properties)
+          .filter(([, value]) =>
+            ['string', 'number', 'boolean'].includes(typeof value),
+          )
+          .map(([key, value]) => [key, String(value)]),
+      );
+
+      const provisional = withUserDistance({
+        id:
+          'vector:' +
+          (feature.sourceLayer || feature.layerId || 'feature') +
+          ':' +
+          String(
+            feature.featureId ??
+              point.latitude.toFixed(6) + ',' + point.longitude.toFixed(6),
+          ),
+        source: 'vector',
+        canonicalId: feature.canonicalId ?? undefined,
+        name: feature.name || 'Tanlangan joy',
+        categoryLabel:
+          feature.sourceLayer === 'building'
+            ? 'Bino'
+            : feature.sourceLayer || 'Joy',
+        latitude: point.latitude,
+        longitude: point.longitude,
+        address: null,
+        tags: featureTags,
+      } as MapPlace);
+
+      setSelectedPlace(provisional);
+      setPanel('place');
+      setSnap('half');
+      setMapClickLoading(true);
+      mapRef.current?.panTo(
+        [point.latitude, point.longitude],
+        { animate: true },
+      );
+
+      try {
+        const resolved = await resolveMapClickPlace(
+          point,
+          zoom,
+          controller.signal,
+        );
+        if (controller.signal.aborted || !resolved) return;
+
+        const enriched = withUserDistance({
+          ...resolved,
+          canonicalId:
+            feature.canonicalId ??
+            resolved.canonicalId,
+          name:
+            feature.name && feature.name !== 'Nomsiz joy'
+              ? feature.name
+              : resolved.name,
+          tags: {
+            ...featureTags,
+            ...(resolved.tags ?? {}),
+          },
+        });
+        setSelectedPlace(enriched);
+        setCenter({
+          latitude: enriched.latitude,
+          longitude: enriched.longitude,
+        });
+        mapRef.current?.panTo(
+          [enriched.latitude, enriched.longitude],
+          { animate: true },
+        );
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          toast.error(
+            'Joy tafsilotlarini boyitib bo‘lmadi, vector feature saqlandi.',
+          );
+        }
+      } finally {
+        if (mapClickAbortRef.current === controller) {
+          setMapClickLoading(false);
+        }
+      }
+    },
+    [withUserDistance],
+  );
+
   const buildRoute = useCallback(
     async (
       place: MapPlace,
