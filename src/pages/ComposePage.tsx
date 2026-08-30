@@ -57,6 +57,7 @@ export default function ComposePage() {
   const [mode, setMode] = useState<CreateMode>(
     requestedMode === 'story' ? 'story' : 'post',
   );
+  const [storyDraftActive, setStoryDraftActive] = useState(false);
 
   useEffect(() => {
     const next = searchParams.get('mode');
@@ -66,6 +67,8 @@ export default function ComposePage() {
   const meta = MODE_META[mode];
 
   const selectMode = (next: CreateMode) => {
+    if (storyDraftActive && mode === 'story' && next !== 'story') return;
+
     setMode(next);
     const params = new URLSearchParams(searchParams);
     if (next === 'post') params.delete('mode');
@@ -105,11 +108,21 @@ export default function ComposePage() {
                 key={id}
                 type="button"
                 onClick={() => selectMode(id)}
+                disabled={storyDraftActive && mode === 'story' && id !== 'story'}
+                title={
+                  storyDraftActive && mode === 'story' && id !== 'story'
+                    ? 'Avval Story qoralamasini joylang yoki bekor qiling'
+                    : undefined
+                }
                 className={cn(
                   'flex h-9 min-w-24 items-center justify-center gap-2 rounded-xl px-3 text-xs font-medium transition',
                   mode === id
                     ? 'bg-background text-primary shadow-sm ring-1 ring-border/50'
                     : 'text-muted-foreground hover:text-foreground',
+                  storyDraftActive &&
+                    mode === 'story' &&
+                    id !== 'story' &&
+                    'cursor-not-allowed opacity-40',
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -145,7 +158,11 @@ export default function ComposePage() {
               </div>
             </div>
 
-            {mode === 'post' ? <PostComposer /> : <StoryComposer />}
+            {mode === 'post' ? (
+              <PostComposer />
+            ) : (
+              <StoryComposer onDraftStateChange={setStoryDraftActive} />
+            )}
           </section>
         </div>
       </main>
@@ -162,6 +179,10 @@ export default function ComposePage() {
                 mode === id
                   ? 'bg-muted font-semibold text-primary shadow-sm'
                   : 'font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                storyDraftActive &&
+                  mode === 'story' &&
+                  id !== 'story' &&
+                  'cursor-not-allowed opacity-40',
               )}
             >
               <Icon className="h-[18px] w-[18px]" />
