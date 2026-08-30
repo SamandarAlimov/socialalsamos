@@ -81,7 +81,7 @@ function InfoRow({
       <span
         className={cn(
           'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl',
-          highContrast ? 'bg-white/[0.08] text-white/70' : 'bg-background text-muted-foreground',
+          highContrast ? 'bg-white/[0.08] text-white/[0.70]' : 'bg-background text-muted-foreground',
         )}
       >
         {icon}
@@ -208,7 +208,7 @@ export function PlaceDetailsCard({
   };
 
   const secondaryButton = highContrast
-    ? 'border-white/12 bg-white/[0.055] text-white/[0.82] hover:bg-white/[0.1] hover:text-white'
+    ? 'border-white/[0.12] bg-white/[0.055] text-white/[0.82] hover:bg-white/[0.1] hover:text-white'
     : 'border-border/60 bg-background/65 text-foreground hover:bg-muted/60';
 
   return (
