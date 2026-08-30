@@ -16,13 +16,14 @@ import { formatPrice } from '@/lib/marketplace';
 import { formatDistanceToNow, format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { marketplaceUz } from '@/i18n/marketplace';
 
 export const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
-  pending: { label: 'Kutilmoqda', color: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20', icon: Clock },
-  processing: { label: 'Tayyorlanmoqda', color: 'bg-blue-500/10 text-blue-600 border-blue-500/20', icon: Package },
-  shipped: { label: "Jo'natildi", color: 'bg-purple-500/10 text-purple-600 border-purple-500/20', icon: Truck },
-  delivered: { label: 'Yetkazildi', color: 'bg-green-500/10 text-green-600 border-green-500/20', icon: CheckCircle },
-  cancelled: { label: 'Bekor qilindi', color: 'bg-red-500/10 text-red-600 border-red-500/20', icon: XCircle },
+  pending: { label: marketplaceUz.orders.status.pending, color: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20', icon: Clock },
+  processing: { label: marketplaceUz.orders.status.processing, color: 'bg-blue-500/10 text-blue-600 border-blue-500/20', icon: Package },
+  shipped: { label: marketplaceUz.orders.status.shipped, color: 'bg-purple-500/10 text-purple-600 border-purple-500/20', icon: Truck },
+  delivered: { label: marketplaceUz.orders.status.delivered, color: 'bg-green-500/10 text-green-600 border-green-500/20', icon: CheckCircle },
+  cancelled: { label: marketplaceUz.orders.status.cancelled, color: 'bg-red-500/10 text-red-600 border-red-500/20', icon: XCircle },
 };
 
 const TIMELINE_STEPS = ['pending', 'processing', 'shipped', 'delivered'] as const;
@@ -74,7 +75,7 @@ export function OrdersView({ onProductSelect }: OrdersViewProps) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <AlertTriangle className="h-8 w-8 text-destructive mb-3" />
-        <p className="text-sm text-muted-foreground mb-4">Buyurtmalarni yuklab bo'lmadi</p>
+        <p className="text-sm text-muted-foreground mb-4">{marketplaceUz.orders.loadFailed}</p>
         <Button variant="outline" className="rounded-xl" onClick={refresh}>
           <RotateCcw className="h-4 w-4 mr-2" />
           Qayta urinish
@@ -89,7 +90,7 @@ export function OrdersView({ onProductSelect }: OrdersViewProps) {
         <div className="w-20 h-20 rounded-2xl bg-muted/50 flex items-center justify-center mb-5">
           <ShoppingBag className="h-10 w-10 text-muted-foreground/30" />
         </div>
-        <h3 className="font-semibold text-lg mb-1">Buyurtmalar yo'q</h3>
+        <h3 className="font-semibold text-lg mb-1">{marketplaceUz.orders.emptyTitle}</h3>
         <p className="text-sm text-muted-foreground max-w-xs">
           Birinchi buyurtmangizni bering va natijani shu yerda kuzating
         </p>
@@ -170,7 +171,7 @@ export function OrdersView({ onProductSelect }: OrdersViewProps) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{order.order_number || shortOrderNumber(order)}</p>
-                  <p className="text-xs text-muted-foreground">{order.items.length} ta mahsulot</p>
+                  <p className="text-xs text-muted-foreground">{marketplaceUz.orders.itemCount(order.items.length)}</p>
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-primary tabular-nums">
@@ -221,7 +222,7 @@ function OrderDetailSheet({
   const isBusy = updatingId === order.id;
 
   const handleCancel = async () => {
-    const result = await cancelOrder(order.id, 'Xaridor bekor qildi');
+    const result = await cancelOrder(order.id, marketplaceUz.orders.buyerCancelled);
     setConfirmCancel(false);
     if (result.success) onChanged();
   };
@@ -297,7 +298,7 @@ function OrderDetailSheet({
 
             {/* Items */}
             <div className="space-y-2">
-              <h4 className="text-sm font-semibold">Mahsulotlar</h4>
+              <h4 className="text-sm font-semibold">{marketplaceUz.orders.products}</h4>
               {order.items.map(item => (
                 <div
                   key={item.id}
@@ -333,7 +334,7 @@ function OrderDetailSheet({
                 </div>
                 <div>
                   <p className="text-sm font-medium">{order.seller.business_name}</p>
-                  <p className="text-xs text-muted-foreground">Sotuvchi</p>
+                  <p className="text-xs text-muted-foreground">{marketplaceUz.orders.seller}</p>
                 </div>
               </div>
             )}
@@ -343,7 +344,7 @@ function OrderDetailSheet({
               <div className="p-3 rounded-xl bg-muted/20 border border-border/20 space-y-1">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <MapPin className="h-4 w-4 text-primary" />
-                  Yetkazib berish manzili
+                  {marketplaceUz.orders.deliveryAddress}
                 </div>
                 <p className="text-sm text-muted-foreground">
                   {order.shipping_address.full_name} • {order.shipping_address.phone}
@@ -358,33 +359,33 @@ function OrderDetailSheet({
             {/* Price summary */}
             <div className="p-3 rounded-xl bg-muted/20 border border-border/20 space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Mahsulotlar</span>
+                <span className="text-muted-foreground">{marketplaceUz.orders.products}</span>
                 <span className="tabular-nums">{formatPrice(order.subtotal, order.currency)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Yetkazish</span>
+                <span className="text-muted-foreground">{marketplaceUz.orders.delivery}</span>
                 <span className="tabular-nums">
                   {order.shipping_cost > 0 ? formatPrice(order.shipping_cost, order.currency) : 'Bepul'}
                 </span>
               </div>
               <div className="h-px bg-border/30" />
               <div className="flex justify-between font-bold">
-                <span>Jami</span>
+                <span>{marketplaceUz.orders.total}</span>
                 <span className="text-primary tabular-nums">{formatPrice(order.total, order.currency)}</span>
               </div>
             </div>
 
             {/* Receipt / meta */}
             <div className="text-xs text-muted-foreground space-y-1">
-              <p>Buyurtma sanasi: {format(new Date(order.created_at), 'dd.MM.yyyy HH:mm')}</p>
+              <p>{marketplaceUz.orders.orderDate}: {format(new Date(order.created_at), 'dd.MM.yyyy HH:mm')}</p>
               {order.receipt_number && (
                 <p className="flex items-center gap-1.5">
                   <Receipt className="h-3.5 w-3.5" />
-                  Kvitansiya: {order.receipt_number}
+                  {marketplaceUz.orders.receipt}: {order.receipt_number}
                 </p>
               )}
-              {order.paid_at && <p>To'langan: {format(new Date(order.paid_at), 'dd.MM.yyyy HH:mm')}</p>}
-              {order.notes && <p>Izoh: {order.notes}</p>}
+              {order.paid_at && <p>{marketplaceUz.orders.paidAt}: {format(new Date(order.paid_at), 'dd.MM.yyyy HH:mm')}</p>}
+              {order.notes && <p>{marketplaceUz.orders.note}: {order.notes}</p>}
             </div>
 
             {canCancel && (
@@ -395,9 +396,9 @@ function OrderDetailSheet({
                 onClick={() => setConfirmCancel(true)}
               >
                 {isBusy ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Bajarilmoqda...</>
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> {marketplaceUz.orders.processing}</>
                 ) : (
-                  <><XCircle className="h-4 w-4 mr-2" /> Buyurtmani bekor qilish</>
+                  <><XCircle className="h-4 w-4 mr-2" /> {marketplaceUz.orders.cancelOrder}</>
                 )}
               </Button>
             )}
@@ -416,7 +417,7 @@ function OrderDetailSheet({
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel className="rounded-xl">Yo'q</AlertDialogCancel>
+              <AlertDialogCancel className="rounded-xl">{marketplaceUz.orders.no}</AlertDialogCancel>
               <AlertDialogAction
                 className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 onClick={handleCancel}

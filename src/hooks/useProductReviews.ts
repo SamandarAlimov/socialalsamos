@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import db from '@/lib/supabaseAny';
+import { marketplaceUz } from '@/i18n/marketplace';
 
 export interface ProductReview {
   id: string;
@@ -161,8 +162,8 @@ export function useProductReviews(productId?: string | null) {
   ): Promise<boolean> => {
     if (!user || !productId || !eligibleOrderId) {
       toast({
-        title: 'Sharh yozib bo‘lmaydi',
-        description: 'Sharh faqat yetkazilgan buyurtmadagi mahsulot uchun yoziladi.',
+        title: marketplaceUz.reviewActions.unavailableTitle,
+        description: marketplaceUz.reviewActions.deliveredOnly,
         variant: 'destructive',
       });
       return false;
@@ -181,17 +182,17 @@ export function useProductReviews(productId?: string | null) {
     if (error) {
       const duplicate = error.code === '23505';
       toast({
-        title: duplicate ? 'Sharh allaqachon mavjud' : 'Sharh saqlanmadi',
+        title: duplicate ? marketplaceUz.reviewActions.duplicateTitle : marketplaceUz.reviewActions.saveFailed,
         description: duplicate
-          ? 'Bu mahsulot uchun oldin sharh qoldirgansiz.'
-          : 'Qayta urinib ko‘ring.',
+          ? marketplaceUz.reviewActions.duplicateDescription
+          : marketplaceUz.reviewActions.retry,
         variant: 'destructive',
       });
       if (duplicate) setEligibility('already_reviewed');
       return false;
     }
 
-    toast({ title: 'Sharhingiz e’lon qilindi' });
+    toast({ title: marketplaceUz.reviewActions.published });
     setEligibility('already_reviewed');
     setEligibleOrderId(null);
     setPage(0);

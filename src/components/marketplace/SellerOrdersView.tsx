@@ -15,6 +15,7 @@ import { formatPrice } from '@/lib/marketplace';
 import { formatDistanceToNow } from 'date-fns';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { marketplaceUz } from '@/i18n/marketplace';
 
 /**
  * The seller side had no order queue at all: orders arrived in the database
@@ -24,20 +25,20 @@ import { cn } from '@/lib/utils';
  */
 
 const FILTERS: Array<{ id: 'active' | OrderStatus | 'all'; label: string }> = [
-  { id: 'active', label: 'Faol' },
-  { id: 'pending', label: 'Yangi' },
-  { id: 'processing', label: 'Tayyorlanmoqda' },
-  { id: 'shipped', label: "Yo'lda" },
-  { id: 'delivered', label: 'Yetkazildi' },
-  { id: 'cancelled', label: 'Bekor qilindi' },
-  { id: 'all', label: 'Barchasi' },
+  { id: 'active', label: marketplaceUz.sellerOrders.filters.active },
+  { id: 'pending', label: marketplaceUz.sellerOrders.filters.pending },
+  { id: 'processing', label: marketplaceUz.sellerOrders.filters.processing },
+  { id: 'shipped', label: marketplaceUz.sellerOrders.filters.shipped },
+  { id: 'delivered', label: marketplaceUz.sellerOrders.filters.delivered },
+  { id: 'cancelled', label: marketplaceUz.sellerOrders.filters.cancelled },
+  { id: 'all', label: marketplaceUz.sellerOrders.filters.all },
 ];
 
 /** The single next step a seller can take from each state. */
 const NEXT_ACTION: Partial<Record<OrderStatus, { to: OrderStatus; label: string; icon: any }>> = {
-  pending: { to: 'processing', label: 'Qabul qilish', icon: Package },
-  processing: { to: 'shipped', label: "Jo'natildi deb belgilash", icon: Truck },
-  shipped: { to: 'delivered', label: 'Yetkazildi deb belgilash', icon: CheckCircle },
+  pending: { to: 'processing', label: marketplaceUz.sellerOrders.next.accept, icon: Package },
+  processing: { to: 'shipped', label: marketplaceUz.sellerOrders.next.shipped, icon: Truck },
+  shipped: { to: 'delivered', label: marketplaceUz.sellerOrders.next.delivered, icon: CheckCircle },
 };
 
 export function SellerOrdersView() {
@@ -64,7 +65,7 @@ export function SellerOrdersView() {
 
   const handleCancel = async () => {
     if (!cancelTarget) return;
-    const result = await cancelOrder(cancelTarget.id, 'Sotuvchi bekor qildi');
+    const result = await cancelOrder(cancelTarget.id, marketplaceUz.sellerOrders.sellerCancelled);
     setCancelTarget(null);
     if (result.success) refresh();
   };
@@ -81,7 +82,7 @@ export function SellerOrdersView() {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <AlertTriangle className="h-8 w-8 text-destructive mb-3" />
-        <p className="text-sm text-muted-foreground mb-4">Buyurtmalarni yuklab bo'lmadi</p>
+        <p className="text-sm text-muted-foreground mb-4">{marketplaceUz.orders.loadFailed}</p>
         <Button variant="outline" className="rounded-xl" onClick={refresh}>
           <RotateCcw className="h-4 w-4 mr-2" />
           Qayta urinish
@@ -98,10 +99,10 @@ export function SellerOrdersView() {
         <h3 className="text-sm font-semibold">
           Kelgan buyurtmalar
           {pendingCount > 0 && (
-            <Badge className="ml-2 text-[10px]">{pendingCount} yangi</Badge>
+            <Badge className="ml-2 text-[10px]">{marketplaceUz.sellerOrders.newCount(pendingCount)}</Badge>
           )}
         </h3>
-        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={refresh} aria-label="Yangilash">
+        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={refresh} aria-label={marketplaceUz.sellerOrders.refresh}>
           <RotateCcw className="h-4 w-4" />
         </Button>
       </div>
@@ -130,7 +131,7 @@ export function SellerOrdersView() {
           <div className="w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
             <Inbox className="h-8 w-8 text-muted-foreground/30" />
           </div>
-          <p className="text-sm text-muted-foreground">Bu bo'limda buyurtma yo'q</p>
+          <p className="text-sm text-muted-foreground">{marketplaceUz.sellerOrders.empty}</p>
         </div>
       ) : (
         filtered.map((order, i) => {
@@ -185,7 +186,7 @@ export function SellerOrdersView() {
                     {order.order_number || order.id.slice(0, 8).toUpperCase()}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {order.buyer?.display_name || order.buyer?.username || 'Xaridor'} • {order.items.length} ta mahsulot
+                    {order.buyer?.display_name || order.buyer?.username || marketplaceUz.sellerOrders.buyer} • {order.items.length} ta mahsulot
                   </p>
                 </div>
                 <p className="font-bold text-primary tabular-nums shrink-0">
@@ -200,7 +201,7 @@ export function SellerOrdersView() {
                 aria-expanded={isOpen}
               >
                 {isOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                {isOpen ? 'Yopish' : 'Tafsilotlar'}
+                {isOpen ? marketplaceUz.sellerOrders.close : marketplaceUz.sellerOrders.details}
               </button>
 
               {isOpen && (
@@ -226,7 +227,7 @@ export function SellerOrdersView() {
                     </div>
                   )}
                   {order.notes && (
-                    <p className="text-xs text-muted-foreground">Izoh: {order.notes}</p>
+                    <p className="text-xs text-muted-foreground">{marketplaceUz.sellerOrders.note}: {order.notes}</p>
                   )}
                 </div>
               )}
@@ -276,7 +277,7 @@ export function SellerOrdersView() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-xl">Yo'q</AlertDialogCancel>
+            <AlertDialogCancel className="rounded-xl">{marketplaceUz.sellerOrders.no}</AlertDialogCancel>
             <AlertDialogAction
               className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleCancel}
