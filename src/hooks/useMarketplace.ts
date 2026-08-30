@@ -1096,5 +1096,13 @@ export function useProductActions() {
     return true;
   };
 
-  return { toggleLike, registerView, createSeller, createProduct, updateProduct, deleteProduct };
+  return {
+    toggleLike,
+    registerView,
+    createSeller,
+    createProduct,
+    createProductVariants,
+    updateProduct,
+    deleteProduct,
+  };
 }
