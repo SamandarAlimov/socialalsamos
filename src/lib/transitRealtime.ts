@@ -173,12 +173,14 @@ export async function fetchTransitStaticStopRoutes(input: {
 
 export async function fetchTransitArrivals(input: {
   stopId?: string;
+  gtfsStopId?: string | null;
   latitude: number;
   longitude: number;
 }): Promise<ArrivalsResponse | null> {
   return await invokeTransit<ArrivalsResponse>({
     action: 'arrivals',
     stopId: input.stopId,
+    gtfsStopId: input.gtfsStopId,
     latitude: input.latitude,
     longitude: input.longitude,
   });
