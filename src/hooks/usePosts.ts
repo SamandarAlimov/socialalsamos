@@ -92,7 +92,8 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
     setIsLoading(true);
 
     try {
-      // Fetch all post types including videos/reels
+      // Feed query visibility bilan bir xil semantikaga ega bo'lishi kerak.
+      // RLS oxirgi himoya qatlamidir; client esa keraksiz qatorlarni so'ramaydi.
       let query = supabase
         .from('posts')
         .select(`
@@ -105,20 +106,76 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
             is_verified
           )
         `)
-        .eq('visibility', 'public')
         .order('created_at', { ascending: false })
         .range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1);
 
-      if (filter === 'following' && user) {
-        const { data: following } = await supabase
+      if (filter === 'global') {
+        query = query.eq('visibility', 'public');
+      } else if (filter === 'following') {
+        if (!user) {
+          if (refresh) setPosts([]);
+          setHasMore(false);
+          return;
+        }
+
+        const { data: following, error: followingError } = await supabase
           .from('follows')
           .select('following_id')
           .eq('follower_id', user.id);
 
-        if (following && following.length > 0) {
-          const followingIds = following.map(f => f.following_id);
-          query = query.in('user_id', followingIds);
+        if (followingError) throw followingError;
+
+        const followingIds = (following ?? []).map((row) => row.following_id);
+        if (followingIds.length === 0) {
+          if (refresh) setPosts([]);
+          setHasMore(false);
+          return;
         }
+
+        query = query
+          .eq('visibility', 'public')
+          .in('user_id', followingIds);
+      } else {
+        // "friends" = mutual follow. Faqat ikki tomonlama follow bo'lgan
+        // foydalanuvchilarning public + friends postlari olinadi.
+        if (!user) {
+          if (refresh) setPosts([]);
+          setHasMore(false);
+          return;
+        }
+
+        const { data: outgoing, error: outgoingError } = await supabase
+          .from('follows')
+          .select('following_id')
+          .eq('follower_id', user.id);
+
+        if (outgoingError) throw outgoingError;
+
+        const outgoingIds = (outgoing ?? []).map((row) => row.following_id);
+        if (outgoingIds.length === 0) {
+          if (refresh) setPosts([]);
+          setHasMore(false);
+          return;
+        }
+
+        const { data: reciprocal, error: reciprocalError } = await supabase
+          .from('follows')
+          .select('follower_id')
+          .eq('following_id', user.id)
+          .in('follower_id', outgoingIds);
+
+        if (reciprocalError) throw reciprocalError;
+
+        const friendIds = (reciprocal ?? []).map((row) => row.follower_id);
+        if (friendIds.length === 0) {
+          if (refresh) setPosts([]);
+          setHasMore(false);
+          return;
+        }
+
+        query = query
+          .in('visibility', ['public', 'friends'])
+          .in('user_id', friendIds);
       }
 
       const { data, error } = await query;
