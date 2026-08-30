@@ -187,7 +187,7 @@ export function PollComposer({ open, onClose, onSave, initialPoll }: PollCompose
     <button
       type="button"
       onClick={() => onToggle(!value)}
-      className="flex w-full items-center gap-3 rounded-xl border border-border/60 px-3 py-2.5 text-left transition hover:bg-muted/50"
+      className="flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-background px-3 py-3 text-left transition hover:border-primary/20 hover:bg-primary/[0.025]"
     >
       {icon && <span className="shrink-0 text-muted-foreground">{icon}</span>}
       <span className="min-w-0 flex-1">
@@ -211,261 +211,354 @@ export function PollComposer({ open, onClose, onSave, initialPoll }: PollCompose
   );
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-background">
-      {/* Sarlavha */}
-      <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="h-5 w-5 text-primary" />
-          <h2 className="text-base font-semibold">So‘rovnoma</h2>
-        </div>
-        <div className="flex items-center gap-2">
+    <div className="fixed inset-0 z-[60] flex h-[100dvh] min-h-0 flex-col bg-background">
+      <header className="shrink-0 border-b border-border/60 bg-background/90 backdrop-blur-2xl">
+        <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-3 px-4 sm:px-6">
+          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <BarChart3 className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm font-semibold sm:text-base">So‘rovnoma yaratish</h2>
+            <p className="truncate text-xs text-muted-foreground">
+              Oddiy poll yoki viktorina · {options.length}/{POLL_MAX_OPTIONS} variant
+            </p>
+          </div>
+
           <button
             type="button"
             onClick={handleSave}
-            className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3.5 text-sm font-semibold text-primary-foreground"
+            className="hidden h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm sm:flex"
           >
-            <Check className="h-4 w-4" /> Saqlash
+            <Check className="h-4 w-4" />
+            Saqlash
           </button>
           <button
             type="button"
             onClick={onClose}
             aria-label="Yopish"
-            className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted"
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/60 text-muted-foreground transition hover:bg-muted"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* Tarkib — scroll klaviatura ostida ham ishlaydi */}
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 pb-24 [-webkit-overflow-scrolling:touch]">
-        {errors.length > 0 && (
-          <ul className="space-y-1 rounded-xl border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
-            {errors.map((message) => (
-              <li key={message}>• {message}</li>
-            ))}
-          </ul>
-        )}
+      <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-muted/20 [-webkit-overflow-scrolling:touch]">
+        <div className="mx-auto grid w-full max-w-6xl gap-5 px-4 py-5 pb-28 sm:px-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+          <section className="min-w-0 space-y-4">
+            {errors.length > 0 && (
+              <ul className="space-y-1 rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-xs text-destructive">
+                {errors.map((message) => (
+                  <li key={message}>• {message}</li>
+                ))}
+              </ul>
+            )}
 
-        {/* Savol */}
-        <div>
-          <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Savol
-          </label>
-          <textarea
-            value={question}
-            onChange={(event) => setQuestion(event.target.value)}
-            placeholder="Savolingizni yozing..."
-            rows={2}
-            maxLength={300}
-            className="mt-1.5 w-full resize-none rounded-xl border border-border/60 bg-muted/30 p-3 text-sm outline-none focus:border-primary"
-          />
-          <p className="mt-1 text-right text-[11px] text-muted-foreground">{question.length}/300</p>
-        </div>
+            <div className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-sm">
+              <div className="border-b border-border/50 px-4 py-3 sm:px-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Savol
+                </p>
+              </div>
+              <div className="p-4 sm:p-5">
+                <textarea
+                  value={question}
+                  onChange={(event) => setQuestion(event.target.value)}
+                  placeholder="Savolingizni yozing..."
+                  rows={3}
+                  maxLength={300}
+                  className="w-full resize-none rounded-2xl border border-border/60 bg-muted/25 p-4 text-base font-medium outline-none transition focus:border-primary/60 focus:bg-background"
+                />
+                <p className="mt-2 text-right text-[11px] text-muted-foreground">
+                  {question.length}/300
+                </p>
+              </div>
+            </div>
 
-        {/* Variantlar */}
-        <div>
-          <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Variantlar ({options.length}/{POLL_MAX_OPTIONS})
-          </label>
-
-          <div className="mt-1.5 space-y-2">
-            {options.map((option, index) => (
-              <div key={option.id} className="space-y-1.5">
-                <div className="flex items-center gap-1.5">
-                  {quizMode && (
-                    <button
-                      type="button"
-                      onClick={() => setCorrectIndex(index)}
-                      aria-label="To‘g‘ri javob"
-                      className={cn(
-                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition',
-                        correctIndex === index
-                          ? 'border-green-500 bg-green-500 text-white'
-                          : 'border-border/60 text-muted-foreground',
-                      )}
-                    >
-                      <Check className="h-4 w-4" />
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setEmojiTargetId((current) => (current === option.id ? null : option.id))
-                    }
-                    aria-label="Emoji tanlash"
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/60 text-muted-foreground transition hover:bg-muted"
-                  >
-                    {option.emoji ? (
-                      <span className="text-base">{option.emoji}</span>
-                    ) : (
-                      <Smile className="h-4 w-4" />
-                    )}
-                  </button>
-
-                  <input
-                    value={option.label}
-                    onChange={(event) => updateOption(option.id, { label: event.target.value })}
-                    placeholder={'Variant ' + (index + 1)}
-                    maxLength={150}
-                    className="h-9 min-w-0 flex-1 rounded-xl border border-border/60 bg-muted/30 px-3 text-sm outline-none focus:border-primary"
-                  />
-
-                  <button
-                    type="button"
-                    onClick={() => moveOption(index, -1)}
-                    disabled={index === 0}
-                    aria-label="Yuqoriga"
-                    className="flex h-8 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground disabled:opacity-30"
-                  >
-                    <ArrowUp className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => moveOption(index, 1)}
-                    disabled={index === options.length - 1}
-                    aria-label="Pastga"
-                    className="flex h-8 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground disabled:opacity-30"
-                  >
-                    <ArrowDown className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => removeOption(option.id)}
-                    disabled={options.length <= POLL_MIN_OPTIONS}
-                    aria-label="O‘chirish"
-                    className="flex h-8 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground disabled:opacity-30"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+            <div className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-sm">
+              <div className="flex items-center justify-between border-b border-border/50 px-4 py-3 sm:px-5">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    Javob variantlari
+                  </p>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                    {quizMode ? 'To‘g‘ri javobni belgilang' : 'Variantlar tartibini boshqaring'}
+                  </p>
                 </div>
+                <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-medium text-muted-foreground">
+                  {options.length}/{POLL_MAX_OPTIONS}
+                </span>
+              </div>
 
-                {/* Emoji tanlash — bosish orqali (mobil qurilmada ham ishlaydi) */}
-                {emojiTargetId === option.id && (
-                  <div className="flex flex-wrap gap-1.5 rounded-xl border border-border/60 bg-muted/30 p-2">
-                    {EMOJIS.map((emoji) => (
+              <div className="space-y-3 p-4 sm:p-5">
+                {options.map((option, index) => (
+                  <div key={option.id} className="rounded-2xl border border-border/50 bg-background p-2.5">
+                    <div className="flex items-center gap-2">
+                      {quizMode && (
+                        <button
+                          type="button"
+                          onClick={() => setCorrectIndex(index)}
+                          aria-label="To‘g‘ri javob"
+                          className={cn(
+                            'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition',
+                            correctIndex === index
+                              ? 'border-emerald-500 bg-emerald-500 text-white'
+                              : 'border-border/60 text-muted-foreground hover:bg-muted',
+                          )}
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                      )}
+
                       <button
-                        key={emoji}
                         type="button"
-                        onClick={() => {
-                          updateOption(option.id, { emoji });
-                          setEmojiTargetId(null);
-                        }}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-base transition hover:bg-muted"
+                        onClick={() =>
+                          setEmojiTargetId((current) => (current === option.id ? null : option.id))
+                        }
+                        aria-label="Emoji tanlash"
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-muted/25 text-muted-foreground transition hover:bg-muted"
                       >
-                        {emoji}
+                        {option.emoji ? (
+                          <span className="text-base">{option.emoji}</span>
+                        ) : (
+                          <Smile className="h-4 w-4" />
+                        )}
+                      </button>
+
+                      <input
+                        value={option.label}
+                        onChange={(event) => updateOption(option.id, { label: event.target.value })}
+                        placeholder={'Variant ' + (index + 1)}
+                        maxLength={150}
+                        className="h-10 min-w-0 flex-1 rounded-xl border border-border/60 bg-muted/25 px-3 text-sm outline-none transition focus:border-primary/60 focus:bg-background"
+                      />
+
+                      <div className="hidden items-center gap-0.5 sm:flex">
+                        <button
+                          type="button"
+                          onClick={() => moveOption(index, -1)}
+                          disabled={index === 0}
+                          aria-label="Yuqoriga"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted disabled:opacity-25"
+                        >
+                          <ArrowUp className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveOption(index, 1)}
+                          disabled={index === options.length - 1}
+                          aria-label="Pastga"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted disabled:opacity-25"
+                        >
+                          <ArrowDown className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => removeOption(option.id)}
+                        disabled={options.length <= POLL_MIN_OPTIONS}
+                        aria-label="O‘chirish"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive disabled:opacity-25"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <div className="mt-2 flex gap-1 sm:hidden">
+                      <button
+                        type="button"
+                        onClick={() => moveOption(index, -1)}
+                        disabled={index === 0}
+                        className="flex h-8 flex-1 items-center justify-center rounded-lg bg-muted/45 text-xs text-muted-foreground disabled:opacity-25"
+                      >
+                        <ArrowUp className="mr-1 h-3.5 w-3.5" /> Yuqoriga
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveOption(index, 1)}
+                        disabled={index === options.length - 1}
+                        className="flex h-8 flex-1 items-center justify-center rounded-lg bg-muted/45 text-xs text-muted-foreground disabled:opacity-25"
+                      >
+                        <ArrowDown className="mr-1 h-3.5 w-3.5" /> Pastga
+                      </button>
+                    </div>
+
+                    {emojiTargetId === option.id && (
+                      <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl bg-muted/35 p-2">
+                        {EMOJIS.map((emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => {
+                              updateOption(option.id, { emoji });
+                              setEmojiTargetId(null);
+                            }}
+                            className="flex h-9 w-9 items-center justify-center rounded-lg text-base transition hover:bg-background"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                        {option.emoji && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateOption(option.id, { emoji: undefined });
+                              setEmojiTargetId(null);
+                            }}
+                            className="flex h-9 items-center gap-1 rounded-lg px-2 text-xs text-muted-foreground transition hover:bg-background"
+                          >
+                            <X className="h-3 w-3" /> Olib tashlash
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {options.length < POLL_MAX_OPTIONS && (
+                  <button
+                    type="button"
+                    onClick={addOption}
+                    className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border text-sm font-medium text-muted-foreground transition hover:border-primary/35 hover:bg-primary/[0.03] hover:text-foreground"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Variant qo‘shish
+                  </button>
+                )}
+              </div>
+            </div>
+          </section>
+
+          <aside className="min-w-0 space-y-4 lg:sticky lg:top-5">
+            <div className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-sm">
+              <div className="border-b border-border/50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Poll sozlamalari
+                </p>
+              </div>
+
+              <div className="space-y-4 p-4">
+                <div>
+                  <label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    <Clock className="h-3.5 w-3.5" />
+                    Muddat
+                  </label>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {DURATIONS.map((duration) => (
+                      <button
+                        key={duration.label}
+                        type="button"
+                        onClick={() => setDurationMinutes(duration.minutes)}
+                        className={cn(
+                          'rounded-full border px-2.5 py-1.5 text-[11px] font-medium transition',
+                          durationMinutes === duration.minutes
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-border/60 text-muted-foreground hover:bg-muted',
+                        )}
+                      >
+                        {duration.label}
                       </button>
                     ))}
-                    {option.emoji && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          updateOption(option.id, { emoji: undefined });
-                          setEmojiTargetId(null);
-                        }}
-                        className="flex h-8 items-center gap-1 rounded-lg px-2 text-xs text-muted-foreground transition hover:bg-muted"
-                      >
-                        <X className="h-3 w-3" /> Olib tashlash
-                      </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {toggleRow(
+                    'Viktorina rejimi',
+                    'To‘g‘ri javob va izoh',
+                    quizMode,
+                    (value) => {
+                      setQuizMode(value);
+                      if (value) setAllowMultiple(false);
+                    },
+                    <Trophy className="h-4 w-4" />,
+                  )}
+
+                  {!quizMode &&
+                    toggleRow(
+                      'Ko‘p tanlov',
+                      'Bir nechta variant',
+                      allowMultiple,
+                      setAllowMultiple,
+                      <Check className="h-4 w-4" />,
                     )}
+
+                  {toggleRow(
+                    'Anonim',
+                    'Ovoz berganlar yashirin',
+                    isAnonymous,
+                    setIsAnonymous,
+                    <Lock className="h-4 w-4" />,
+                  )}
+
+                  {!quizMode &&
+                    toggleRow(
+                      'Natijalarni oldin',
+                      'Ovoz berishdan avval ko‘rsatish',
+                      showResultsBeforeVote,
+                      setShowResultsBeforeVote,
+                      <BarChart3 className="h-4 w-4" />,
+                    )}
+                </div>
+
+                {quizMode && (
+                  <div>
+                    <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      Javob izohi
+                    </label>
+                    <textarea
+                      value={explanation}
+                      onChange={(event) => setExplanation(event.target.value)}
+                      placeholder="To‘g‘ri javob nima uchun to‘g‘ri?"
+                      rows={3}
+                      maxLength={300}
+                      className="mt-2 w-full resize-none rounded-2xl border border-border/60 bg-muted/25 p-3 text-xs outline-none focus:border-primary/60"
+                    />
                   </div>
                 )}
               </div>
-            ))}
-          </div>
+            </div>
 
-          {options.length < POLL_MAX_OPTIONS && (
-            <button
-              type="button"
-              onClick={addOption}
-              className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border text-sm font-medium text-muted-foreground transition hover:bg-muted/50"
-            >
-              <Plus className="h-4 w-4" /> Variant qo‘shish
-            </button>
-          )}
-        </div>
-
-        {/* Muddat */}
-        <div>
-          <label className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            <Clock className="h-3 w-3" /> Muddat
-          </label>
-          <div className="mt-1.5 flex flex-wrap gap-2">
-            {DURATIONS.map((duration) => (
-              <button
-                key={duration.label}
-                type="button"
-                onClick={() => setDurationMinutes(duration.minutes)}
-                className={cn(
-                  'rounded-full border px-3 py-1.5 text-xs font-medium transition',
-                  durationMinutes === duration.minutes
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border/60 text-muted-foreground hover:bg-muted',
+            <div className="rounded-3xl border border-border/60 bg-card p-4 shadow-sm">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                Preview
+              </p>
+              <p className="mt-2 line-clamp-2 text-sm font-semibold">
+                {question.trim() || 'Savol hali yozilmagan'}
+              </p>
+              <div className="mt-3 space-y-1.5">
+                {options.slice(0, 4).map((option, index) => (
+                  <div key={option.id} className="flex items-center gap-2 rounded-xl bg-muted/40 px-3 py-2">
+                    <span className="text-sm">{option.emoji || '○'}</span>
+                    <span className="min-w-0 flex-1 truncate text-xs">
+                      {option.label.trim() || `Variant ${index + 1}`}
+                    </span>
+                    {quizMode && correctIndex === index && (
+                      <Check className="h-3.5 w-3.5 text-emerald-500" />
+                    )}
+                  </div>
+                ))}
+                {options.length > 4 && (
+                  <p className="px-1 text-[10px] text-muted-foreground">
+                    +{options.length - 4} ta variant
+                  </p>
                 )}
-              >
-                {duration.label}
-              </button>
-            ))}
-          </div>
+              </div>
+            </div>
+          </aside>
         </div>
+      </main>
 
-        {/* Sozlamalar */}
-        <div className="space-y-2">
-          {toggleRow(
-            'Viktorina rejimi',
-            'To‘g‘ri javob belgilanadi, ovoz berilgach ko‘rsatiladi',
-            quizMode,
-            (value) => {
-              setQuizMode(value);
-              if (value) setAllowMultiple(false);
-            },
-            <Trophy className="h-4 w-4" />,
-          )}
-
-          {!quizMode &&
-            toggleRow(
-              'Ko‘p tanlov',
-              'Bir necha variantni tanlash mumkin',
-              allowMultiple,
-              setAllowMultiple,
-              <Check className="h-4 w-4" />,
-            )}
-
-          {toggleRow(
-            'Anonim ovoz berish',
-            'Kim ovoz berganini boshqalar ko‘rmaydi',
-            isAnonymous,
-            setIsAnonymous,
-            <Lock className="h-4 w-4" />,
-          )}
-
-          {!quizMode &&
-            toggleRow(
-              'Natijalarni oldin ko‘rsatish',
-              'Ovoz bermasdan ham natijalar ko‘rinadi',
-              showResultsBeforeVote,
-              setShowResultsBeforeVote,
-              <BarChart3 className="h-4 w-4" />,
-            )}
-        </div>
-
-        {/* Viktorina izohi */}
-        {quizMode && (
-          <div>
-            <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Izoh (ixtiyoriy)
-            </label>
-            <textarea
-              value={explanation}
-              onChange={(event) => setExplanation(event.target.value)}
-              placeholder="To‘g‘ri javob nima uchun to‘g‘ri?"
-              rows={2}
-              maxLength={300}
-              className="mt-1.5 w-full resize-none rounded-xl border border-border/60 bg-muted/30 p-3 text-sm outline-none focus:border-primary"
-            />
-          </div>
-        )}
+      <div className="absolute inset-x-0 bottom-0 z-10 border-t border-border/60 bg-background/92 p-3 backdrop-blur-xl sm:hidden">
+        <button
+          type="button"
+          onClick={handleSave}
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-semibold text-primary-foreground"
+        >
+          <Check className="h-4 w-4" />
+          So‘rovnomani saqlash
+        </button>
       </div>
     </div>
   );
