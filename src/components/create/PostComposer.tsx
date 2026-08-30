@@ -706,12 +706,7 @@ export function PostComposer() {
             <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
               <UploadCloud className="h-7 w-7" />
             </span>
-            <div>
-              <p className="font-semibold">Fayllarni shu yerga tashlang</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Rasm, video, audio, hujjat, arxiv va boshqa fayllar qo‘llanadi
-              </p>
-            </div>
+            <p className="font-semibold">Fayllarni shu yerga tashlang</p>
           </div>
         </div>
       )}
@@ -792,14 +787,9 @@ export function PostComposer() {
           {/* Media stage */}
           <div className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-sm">
             <div className="flex items-center justify-between border-b border-border/50 px-4 py-3 sm:px-5">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Media va fayllar
-                </p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  Universal upload · drag/drop · tahrirlash
-                </p>
-              </div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Media
+              </p>
               <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-medium text-muted-foreground">
                 {attachments.length}/{MAX_FILES_PER_POST}
               </span>
@@ -814,12 +804,7 @@ export function PostComposer() {
                 <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/15 bg-primary/10 text-primary shadow-sm transition group-hover:scale-105">
                   <UploadCloud className="h-6 w-6" />
                 </span>
-                <div>
-                  <p className="text-sm font-semibold">Fayl yoki media qo‘shing</p>
-                  <p className="mt-1 max-w-md text-xs leading-relaxed text-muted-foreground">
-                    Rasm, video, audio, hujjat, arxiv va boshqa fayllarni tanlang yoki shu maydonga tashlang.
-                  </p>
-                </div>
+                <p className="text-sm font-semibold">Fayl qo‘shish</p>
               </button>
             ) : (
               <div className="p-3 sm:p-4">
@@ -839,10 +824,7 @@ export function PostComposer() {
             <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/20 p-3">
               <StickerIcon className="h-5 w-5 shrink-0 text-primary" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium">{totalStickers} stiker qo‘yildi</p>
-                <p className="text-xs text-muted-foreground">
-                  Media ustidagi joylashuv postda ham aynan shunday ko‘rinadi
-                </p>
+                <p className="text-sm font-medium">{totalStickers} stiker</p>
               </div>
               <button
                 type="button"
@@ -859,7 +841,7 @@ export function PostComposer() {
           <div className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-sm">
             <div className="border-b border-border/50 px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Post sozlamalari
+                Qo‘shimchalar
               </p>
             </div>
 
@@ -874,14 +856,14 @@ export function PostComposer() {
                 },
                 {
                   label: 'Stikerlar',
-                  description: totalStickers > 0 ? `${totalStickers} ta qo‘yilgan` : 'Media ustiga',
+                  description: totalStickers > 0 ? `${totalStickers} ta` : 'Qo‘shish',
                   icon: StickerIcon,
                   action: () => openStickerEditor(),
                   disabled: false,
                 },
                 {
                   label: 'So‘rovnoma',
-                  description: poll ? 'Sozlangan' : 'Poll yoki quiz',
+                  description: poll ? 'Sozlangan' : 'Qo‘shish',
                   icon: BarChart3,
                   action: () => setShowPoll(true),
                   disabled: false,
@@ -892,14 +874,14 @@ export function PostComposer() {
                     ? location.mode === 'live'
                       ? 'Jonli'
                       : 'Tanlangan'
-                    : 'POI, pin yoki live',
+                    : 'Qo‘shish',
                   icon: MapPin,
                   action: () => setShowLocation(true),
                   disabled: false,
                 },
                 {
                   label: 'Musiqa',
-                  description: music?.track?.title ?? 'Katalog yoki device',
+                  description: music?.track?.title ?? 'Qo‘shish',
                   icon: Music2,
                   action: () => setShowMusic(true),
                   disabled: false,
@@ -913,7 +895,7 @@ export function PostComposer() {
                 },
                 {
                   label: 'Rejalashtirish',
-                  description: scheduledAt ? formatScheduledDate(scheduledAt) : 'Keyinroq joylash',
+                  description: scheduledAt ? formatScheduledDate(scheduledAt) : 'Tanlash',
                   icon: CalendarClock,
                   action: () => setShowSchedule(true),
                   disabled: location?.mode === 'live',
@@ -1048,21 +1030,19 @@ export function PostComposer() {
               className="mb-2 flex h-10 w-full items-center justify-center gap-2 rounded-2xl border border-border/60 bg-background text-xs font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Eye className="h-4 w-4" />
-              Postni ko‘rib chiqish
+              Ko‘rish
             </button>
 
             <div className="mb-2 hidden px-1 xl:block">
               <p className="truncate text-xs font-semibold">
-                {scheduledAt ? 'Rejalashtirilgan nashr' : 'Post joylashga tayyor'}
+                {scheduledAt ? 'Rejalashtirilgan nashr' : 'Tayyor'}
               </p>
               <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
                 {scheduledAt
                   ? formatScheduledDate(scheduledAt)
                   : `${attachments.length} fayl · ${collaborators.length} hammuallif · ${VISIBILITIES.find((item) => item.id === visibility)?.label}`}
               </p>
-              <p className="mt-1 text-[9px] text-muted-foreground/80">
-                Ctrl/⌘ + Enter · tez joylash
-              </p>
+
             </div>
 
             <button
