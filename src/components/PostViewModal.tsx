@@ -28,6 +28,7 @@ import { useToast } from '@/hooks/use-toast';
 import { formatCompactCount, parseMusicFromContent } from '@/lib/postMarkers';
 import { usePostMedia } from '@/hooks/usePostMedia';
 import { MediaStickerOverlay } from '@/components/stickers/MediaStickerOverlay';
+import { PostCollaboratorsCard } from '@/components/PostCollaboratorsCard';
 import type { WithEditState } from '@/lib/stickerPlacements';
 
 interface PostViewModalProps {
@@ -299,6 +300,11 @@ export function PostViewModal({
                 )}
 
                 <div className="px-4 py-3">
+                  <PostCollaboratorsCard
+                    postId={post.id}
+                    isOwner={isOwnProfile}
+                    className="mb-3"
+                  />
                   <CommentsSection postId={post.id} />
                 </div>
               </div>
