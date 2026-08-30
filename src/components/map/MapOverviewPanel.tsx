@@ -52,14 +52,14 @@ export function MapOverviewPanel({
   className,
 }: MapOverviewPanelProps) {
   return (
-    <div className={cn('h-full overflow-y-auto px-4 py-4', className)}>
-      <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+    <div className={cn('h-full overflow-y-auto px-3.5 py-3.5', className)}>
+      <div className="rounded-[22px] border border-border/45 bg-background/52 p-4 shadow-sm backdrop-blur-xl">
         <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/12 text-primary shadow-sm ring-1 ring-primary/10">
             <MapPinned className="h-5 w-5" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold">Alsamos Xarita</p>
+            <p className="text-[15px] font-bold tracking-tight">Alsamos Xarita</p>
             <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
               Joy qidiring, yaqin xizmatlarni toping, bekatlarni ko‘ring va marshrut tuzing.
             </p>
@@ -69,7 +69,7 @@ export function MapOverviewPanel({
         <button
           type="button"
           onClick={onCenter}
-          className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-primary-foreground"
+          className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-semibold text-primary-foreground shadow-sm transition hover:-translate-y-0.5 hover:shadow-md active:translate-y-0"
         >
           <Navigation className="h-4 w-4" />
           {hasLocation ? 'Mening joylashuvim' : 'Joylashuvni aniqlash'}
@@ -80,15 +80,15 @@ export function MapOverviewPanel({
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Yaqin atrofda
         </p>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-2.5">
           {shortcuts.map(({ id, label, Icon }) => (
             <button
               key={id}
               type="button"
               onClick={() => onCategory(id)}
-              className="flex min-h-[72px] flex-col items-center justify-center gap-2 rounded-xl border border-border/60 bg-background px-2 py-3 text-center text-xs font-medium transition hover:bg-muted/60"
+              className="group flex min-h-[76px] flex-col items-center justify-center gap-2 rounded-2xl border border-border/40 bg-background/46 px-2 py-3 text-center text-xs font-semibold backdrop-blur transition-all hover:-translate-y-0.5 hover:border-primary/25 hover:bg-background/72 hover:shadow-md"
             >
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-transform group-hover:scale-105">
                 <Icon className="h-4 w-4" />
               </span>
               {label}
@@ -105,7 +105,7 @@ export function MapOverviewPanel({
           <button
             type="button"
             onClick={onSaved}
-            className="flex items-center gap-3 rounded-xl border border-border/60 bg-background p-3 text-left hover:bg-muted/60"
+            className="flex items-center gap-3 rounded-2xl border border-border/40 bg-background/46 p-3 text-left backdrop-blur transition-all hover:-translate-y-0.5 hover:border-primary/20 hover:bg-background/72 hover:shadow-sm"
           >
             <Bookmark className="h-4 w-4 text-primary" />
             <span className="min-w-0">
@@ -116,7 +116,7 @@ export function MapOverviewPanel({
           <button
             type="button"
             onClick={onHistory}
-            className="flex items-center gap-3 rounded-xl border border-border/60 bg-background p-3 text-left hover:bg-muted/60"
+            className="flex items-center gap-3 rounded-2xl border border-border/40 bg-background/46 p-3 text-left backdrop-blur transition-all hover:-translate-y-0.5 hover:border-primary/20 hover:bg-background/72 hover:shadow-sm"
           >
             <History className="h-4 w-4 text-primary" />
             <span className="min-w-0">
@@ -127,7 +127,7 @@ export function MapOverviewPanel({
           <button
             type="button"
             onClick={onStops}
-            className="flex items-center gap-3 rounded-xl border border-border/60 bg-background p-3 text-left hover:bg-muted/60"
+            className="flex items-center gap-3 rounded-2xl border border-border/40 bg-background/46 p-3 text-left backdrop-blur transition-all hover:-translate-y-0.5 hover:border-primary/20 hover:bg-background/72 hover:shadow-sm"
           >
             <Bus className="h-4 w-4 text-primary" />
             <span className="min-w-0">
@@ -138,7 +138,7 @@ export function MapOverviewPanel({
           <button
             type="button"
             onClick={onLayers}
-            className="flex items-center gap-3 rounded-xl border border-border/60 bg-background p-3 text-left hover:bg-muted/60"
+            className="flex items-center gap-3 rounded-2xl border border-border/40 bg-background/46 p-3 text-left backdrop-blur transition-all hover:-translate-y-0.5 hover:border-primary/20 hover:bg-background/72 hover:shadow-sm"
           >
             <Layers className="h-4 w-4 text-primary" />
             <span className="min-w-0">
@@ -165,7 +165,7 @@ export function MapOverviewPanel({
                 key={place.id}
                 type="button"
                 onClick={onSaved}
-                className="flex w-full items-center gap-3 rounded-xl border border-border/60 bg-background p-3 text-left hover:bg-muted/60"
+                className="flex w-full items-center gap-3 rounded-2xl border border-border/40 bg-background/46 p-3 text-left backdrop-blur transition-all hover:bg-background/72 hover:shadow-sm"
               >
                 <Bookmark className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1">
@@ -190,7 +190,7 @@ export function MapOverviewPanel({
               Tarix
             </button>
           </div>
-          <div className="rounded-xl border border-border/60 bg-background p-3">
+          <div className="rounded-2xl border border-border/40 bg-background/46 p-3 backdrop-blur">
             <div className="flex items-center gap-2 text-sm font-medium">
               <Clock3 className="h-4 w-4 text-primary" />
               <span className="truncate">{visits[0].name || 'Joylashuv'}</span>
