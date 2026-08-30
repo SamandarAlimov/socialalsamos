@@ -369,7 +369,7 @@ export function ProductDetail({
               onClick={onOpenCart}
               aria-label={marketplaceUz.cart.title}
             >
-              <ShoppingCart className="h-4.5 w-4.5" />
+              <ShoppingCart className="h-[18px] w-[18px]" />
               {inCartQty > 0 && (
                 <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-primary px-1 text-[9px] font-bold leading-4 text-primary-foreground">
                   {inCartQty > 99 ? '99+' : inCartQty}
@@ -390,7 +390,7 @@ export function ProductDetail({
             onClick={handleLike}
             aria-label={isLiked ? marketplaceUz.card.removeSaved : marketplaceUz.card.save}
           >
-            <Heart className={cn('h-4.5 w-4.5', isLiked && 'fill-current')} />
+            <Heart className={cn('h-[18px] w-[18px]', isLiked && 'fill-current')} />
           </Button>
           <Button
             variant="ghost"
@@ -399,7 +399,7 @@ export function ProductDetail({
             onClick={handleShare}
             aria-label={marketplaceUz.productDetail.share}
           >
-            <Share2 className="h-4.5 w-4.5" />
+            <Share2 className="h-[18px] w-[18px]" />
           </Button>
         </div>
       </div>
@@ -967,7 +967,7 @@ export function ProductDetail({
             </div>
           </div>
 
-      <div className="fixed inset-x-0 bottom-[78px] z-40 border-t border-border/30 bg-background/92 px-4 pt-3 pb-3 backdrop-blur-2xl md:hidden">
+      <div className="fixed inset-x-0 bottom-[78px] z-40 flex justify-center border-t border-border/30 bg-background/92 px-4 pt-3 pb-3 backdrop-blur-2xl md:hidden">
             {actionButtons}
           </div>
     </div>

@@ -41,7 +41,8 @@ export function AppLayout() {
     location.pathname === '/messages' ||
     location.pathname === '/map' ||
     location.pathname === '/videos' ||
-    location.pathname === '/create';
+    location.pathname === '/create' ||
+    location.pathname.startsWith('/marketplace/product/');
 
   // Immersive mobile mode: no header, no bottom nav, no padding.
   // Desktop keeps the standard sidebar/layout.
@@ -82,7 +83,7 @@ export function AppLayout() {
       <main
         className={cn(
           'flex-1 md:ml-0 md:pt-0 md:pb-0',
-          isMapPage ? 'h-full min-h-0 overflow-hidden p-0' : 'overflow-auto',
+          isMapPage ? 'h-full min-h-0 overflow-hidden p-0' : 'alsamos-scrollbar overflow-auto',
           hideHeaderOnPages ? 'pt-0' : 'pt-14',
           immersiveMobile ? 'pb-0' : 'pb-20'
         )}

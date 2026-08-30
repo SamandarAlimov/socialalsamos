@@ -187,6 +187,39 @@
     @apply opacity-100;
   }
 
+  /* Alsamos native scrollbar: subtle by default, brand-forward on hover. */
+  .alsamos-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary) / 0.42) transparent;
+    scrollbar-gutter: stable;
+  }
+
+  .alsamos-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .alsamos-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .alsamos-scrollbar::-webkit-scrollbar-thumb {
+    min-height: 42px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: hsl(var(--primary) / 0.34);
+    background-clip: padding-box;
+  }
+
+  .alsamos-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.78);
+    background-clip: padding-box;
+  }
+
+  .alsamos-scrollbar::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
   /* Scrollbar Styling */
   .scrollbar-custom::-webkit-scrollbar {
     @apply w-2;
