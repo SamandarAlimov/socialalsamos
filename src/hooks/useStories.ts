@@ -60,6 +60,7 @@ export function useStories() {
           )
         `)
         .gt('expires_at', new Date().toISOString())
+        .neq('is_active', false)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
