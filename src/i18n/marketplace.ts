@@ -42,6 +42,14 @@ export const marketplaceUz = {
     shippingDescription: 'Mahsulotni xaridorga yetkazib bering',
     shippingPrice: 'Yetkazib berish narxi',
     freeShippingPlaceholder: '0 — bepul yetkazish',
+    variants: 'Variantlar',
+    variantsDescription: 'Rang, o‘lcham, xotira kabi variantlarni alohida zaxira va narx bilan kiriting',
+    variantFormatHint: 'Format: Rang=Qora; Xotira=128 GB',
+    variantNumber: (number: number) => `Variant ${number}`,
+    variantOptionsPlaceholder: 'Rang=Qora; Xotira=128 GB',
+    variantPricePlaceholder: 'Narx',
+    variantQuantityPlaceholder: 'Soni',
+    addVariant: 'Variant qo‘shish',
     publishing: 'Joylanmoqda...',
     publish: 'E’lonni joylashtirish',
     conditions: {
@@ -176,6 +184,8 @@ export const marketplaceUz = {
     respondsInDays: (days: number) => `Odatda ${days} kunda`,
     recentlyViewed: "Yaqinda ko'rilgan",
     purchaseSummary: 'Xarid xulosasi',
+    options: 'Variant va xususiyatlar',
+    chooseVariant: 'Kerakli kombinatsiyani tanlang',
   },
   checkout: {
     addressTitle: 'Yetkazib berish manzili',
