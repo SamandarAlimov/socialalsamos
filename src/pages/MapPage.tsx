@@ -40,7 +40,11 @@ import {
   stopSvg,
   vehicleSvg,
 } from '@/lib/placeIcons';
-import { resolveMapClickPlace, type MapPlace } from '@/lib/mapPlaces';
+import {
+  canonicalPlaceId,
+  resolveMapClickPlace,
+  type MapPlace,
+} from '@/lib/mapPlaces';
 import type { TransitStop } from '@/lib/transit';
 import {
   arrivalTime,
@@ -1234,8 +1238,8 @@ export default function MapPage() {
       category: place.categoryId,
       latitude: place.latitude,
       longitude: place.longitude,
-      externalId: place.id,
-      externalSource: place.source,
+      externalId: canonicalPlaceId(place),
+      externalSource: 'alsamos',
     });
     toast.success(added ? 'Saqlangan joylarga qo\u2019shildi' : 'Saqlangan joylardan olindi');
   };
