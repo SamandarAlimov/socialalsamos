@@ -829,6 +829,7 @@ export default function MarketplacePage() {
         onSellerClick={(id) => { setSelectedProduct(null); setSelectedSellerId(id); }}
         onBuyNow={handleBuyNow}
         onCartChange={refreshCart}
+        onProductSelect={handleProductSelect}
       />
       <CreateProductDialog
         open={showCreateProduct}
