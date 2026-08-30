@@ -12,7 +12,7 @@
     "typecheck:create": "tsc -p tsconfig.create.json --noEmit",
     "typecheck:api": "tsc -p tsconfig.api.json --noEmit",
     "test:map": "vitest run src/lib/routing.test.ts src/lib/taxiProviders.test.ts src/lib/mapPlaces.test.ts src/lib/mapEngine.test.ts src/lib/traffic.test.ts src/lib/transit.test.ts",
-    "test:messages": "vitest run src/lib/messagePipeline.test.ts src/lib/videoNoteLayout.test.ts src/lib/messageStructuredPayload.test.ts src/components/chat/RichComposer.test.ts src/lib/messageDrafts.test.ts",
+    "test:messages": "vitest run src/lib/messagePipeline.test.ts src/lib/videoNoteLayout.test.ts src/lib/messageStructuredPayload.test.ts src/components/chat/RichComposer.test.ts src/lib/messageDrafts.test.ts src/lib/attachmentPreview.test.ts",
     "typecheck:messages": "tsc -p tsconfig.messages.json --noEmit",
     "preview": "vite preview"
   },
