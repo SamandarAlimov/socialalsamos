@@ -27,5 +27,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Typecheck
+        run: npm run typecheck:create
+
       - name: Production build
         run: npm run build

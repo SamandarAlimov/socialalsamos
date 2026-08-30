@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import {
   MAX_FILES_PER_POST,
   isPreviewable,
@@ -9,6 +10,7 @@ import {
 } from '@/lib/postComposer';
 import { captureVideoPoster, readMediaMetadata } from '@/lib/mediaMetadata';
 import { uploadFileWithProgress } from '@/lib/uploadWithProgress';
+import type { MediaVisibility } from '@/lib/mediaUpload';
 import type { PostMediaInput } from '@/lib/postMeta';
 
 export type AttachmentStatus = 'pending' | 'uploading' | 'done' | 'error';
@@ -22,8 +24,17 @@ export interface Attachment {
   status: AttachmentStatus;
   progress: number;
   error?: string;
+  /** Preview URL (private bo‘lsa vaqtinchalik signed URL). */
   uploadedUrl?: string;
+  /** DBga yoziladigan stable URL/reference. */
+  storageUrl?: string;
+  storageBucket?: string;
+  storageKey?: string;
   thumbnailUrl?: string;
+  thumbnailStorageUrl?: string;
+  thumbnailBucket?: string;
+  thumbnailKey?: string;
+  uploadedVisibility?: MediaVisibility;
   width?: number;
   height?: number;
   durationSeconds?: number;
@@ -47,9 +58,14 @@ function createId(): string {
  *  - xato bo'lsa fayl jimgina tushib qolardi → endi xato ko'rinadi va qayta urinish bor
  *  - blob URL lar revoke qilinmasdi (memory leak) → endi to'g'ri tozalanadi
  */
-export function usePostAttachments(options?: { maxFiles?: number; uploadKind?: string }) {
+export function usePostAttachments(options?: {
+  maxFiles?: number;
+  uploadKind?: string;
+  visibility?: MediaVisibility;
+}) {
   const maxFiles = options?.maxFiles ?? MAX_FILES_PER_POST;
   const uploadKind = options?.uploadKind ?? 'post';
+  const visibility = options?.visibility ?? 'public';
   const { toast } = useToast();
 
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -177,12 +193,16 @@ export function usePostAttachments(options?: { maxFiles?: number; uploadKind?: s
       try {
         const uploaded = await uploadFileWithProgress(attachment.file, {
           kind: uploadKind,
+          visibility,
           signal: controller.signal,
           onProgress: (percent) => patch(attachment.id, { progress: percent }),
         });
 
         // Video uchun poster kadrni ham yuklaymiz
         let thumbnailUrl: string | undefined;
+        let thumbnailStorageUrl: string | undefined;
+        let thumbnailBucket: string | undefined;
+        let thumbnailKey: string | undefined;
         if (attachment.kind === 'video' && attachment.previewUrl) {
           try {
             const poster = await captureVideoPoster(attachment.previewUrl);
@@ -192,8 +212,12 @@ export function usePostAttachments(options?: { maxFiles?: number; uploadKind?: s
               });
               const uploadedPoster = await uploadFileWithProgress(posterFile, {
                 kind: uploadKind,
+                visibility,
               });
               thumbnailUrl = uploadedPoster.url;
+              thumbnailStorageUrl = uploadedPoster.storageUrl;
+              thumbnailBucket = uploadedPoster.bucket;
+              thumbnailKey = uploadedPoster.key;
             }
           } catch (posterError) {
             console.warn('Poster yuklanmadi:', posterError);
@@ -205,7 +229,14 @@ export function usePostAttachments(options?: { maxFiles?: number; uploadKind?: s
           status: 'done',
           progress: 100,
           uploadedUrl: uploaded.url,
+          storageUrl: uploaded.storageUrl,
+          storageBucket: uploaded.bucket,
+          storageKey: uploaded.key,
           thumbnailUrl,
+          thumbnailStorageUrl,
+          thumbnailBucket,
+          thumbnailKey,
+          uploadedVisibility: visibility,
           error: undefined,
         };
 
@@ -213,9 +244,41 @@ export function usePostAttachments(options?: { maxFiles?: number; uploadKind?: s
           status: 'done',
           progress: 100,
           uploadedUrl: uploaded.url,
+          storageUrl: uploaded.storageUrl,
+          storageBucket: uploaded.bucket,
+          storageKey: uploaded.key,
           thumbnailUrl,
+          thumbnailStorageUrl,
+          thumbnailBucket,
+          thumbnailKey,
+          uploadedVisibility: visibility,
           error: undefined,
         });
+
+        // Visibility public -> private/friends (yoki aksincha) o'zgargan bo'lsa,
+        // avvalgi obyekt endi postga bog'lanmaydi. Uni best-effort o'chiramiz.
+        if (
+          attachment.uploadedVisibility &&
+          attachment.uploadedVisibility !== visibility &&
+          attachment.storageBucket &&
+          attachment.storageKey
+        ) {
+          void supabase.storage
+            .from(attachment.storageBucket)
+            .remove([attachment.storageKey])
+            .then(({ error: cleanupError }) => {
+              if (cleanupError) console.warn('Eski media obyektini tozalab bo‘lmadi:', cleanupError);
+            });
+
+          if (attachment.thumbnailBucket && attachment.thumbnailKey) {
+            void supabase.storage
+              .from(attachment.thumbnailBucket)
+              .remove([attachment.thumbnailKey])
+              .then(({ error: cleanupError }) => {
+                if (cleanupError) console.warn('Eski preview obyektini tozalab bo‘lmadi:', cleanupError);
+              });
+          }
+        }
 
         return result;
       } catch (error) {
@@ -228,7 +291,7 @@ export function usePostAttachments(options?: { maxFiles?: number; uploadKind?: s
         abortControllers.current.delete(attachment.id);
       }
     },
-    [patch, uploadKind],
+    [patch, uploadKind, visibility],
   );
 
   const retryAttachment = useCallback(
@@ -262,17 +325,21 @@ export function usePostAttachments(options?: { maxFiles?: number; uploadKind?: s
     try {
       for (const attachment of pending) {
         const uploaded =
-          attachment.status === 'done' && attachment.uploadedUrl
+          attachment.status === 'done' &&
+          attachment.storageUrl &&
+          attachment.uploadedVisibility === visibility
             ? attachment
             : await uploadOne(attachment);
 
-        if (!uploaded?.uploadedUrl) {
+        if (!uploaded?.storageUrl) {
           failed.push(attachment);
           continue;
         }
 
         media.push({
-          storageUrl: uploaded.uploadedUrl,
+          storageUrl: uploaded.storageUrl,
+          storageBucket: uploaded.storageBucket ?? null,
+          storageKey: uploaded.storageKey ?? null,
           kind: uploaded.kind,
           mimeType: uploaded.file.type || null,
           fileName: uploaded.file.name,
@@ -280,7 +347,9 @@ export function usePostAttachments(options?: { maxFiles?: number; uploadKind?: s
           width: uploaded.width ?? null,
           height: uploaded.height ?? null,
           durationSeconds: uploaded.durationSeconds ?? null,
-          thumbnailUrl: uploaded.thumbnailUrl ?? null,
+          thumbnailUrl: uploaded.thumbnailStorageUrl ?? uploaded.thumbnailUrl ?? null,
+          thumbnailBucket: uploaded.thumbnailBucket ?? null,
+          thumbnailKey: uploaded.thumbnailKey ?? null,
           aspectRatio: uploaded.aspectRatio ?? null,
           altText: uploaded.altText ?? null,
           editState: uploaded.editState ?? null,
@@ -291,7 +360,7 @@ export function usePostAttachments(options?: { maxFiles?: number; uploadKind?: s
     }
 
     return { media, failed };
-  }, [uploadOne]);
+  }, [uploadOne, visibility]);
 
   const totalProgress = attachments.length
     ? Math.round(attachments.reduce((sum, item) => sum + item.progress, 0) / attachments.length)

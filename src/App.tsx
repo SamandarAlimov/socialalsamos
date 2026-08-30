@@ -28,8 +28,8 @@ import SecurityPage from "./pages/SecurityPage";
 import ChatWallpaperPage from "./pages/ChatWallpaperPage";
 import DataStoragePage from "./pages/DataStoragePage";
 import PaymentSettingsPage from "./pages/PaymentSettingsPage";
-import CreatePage from "./pages/CreatePage";
 import ComposePage from "./pages/ComposePage";
+import CreateEntryPage from "./pages/CreateEntryPage";
 import StickerPacksPage from "./pages/StickerPacksPage";
 import StickerModerationPage from "./pages/StickerModerationPage";
 import MapPage from "./pages/MapPage";
@@ -122,9 +122,10 @@ function AppRoutes() {
         <Route path="/marketplace" element={<MarketplacePage />} />
         <Route path="/map" element={<MapPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
-        <Route path="/create" element={<CreatePage />} />
-        {/* Yangi modulli post yaratish oqimi (sinov bosqichida) */}
-        <Route path="/compose" element={<ComposePage />} />
+        {/* DB foundation tayyor bo'lsa modular, aks holda deployment-safe legacy fallback. */}
+        <Route path="/create" element={<CreateEntryPage />} />
+        {/* Eski test URL lar buzilmasin; canonical yo'l /create. */}
+        <Route path="/compose" element={<Navigate to="/create" replace />} />
         {/* Stiker paketlari: o'z paketi va havola orqali kelgan paket.
             Diqqat: "moderation" marshruti ":slug" dan OLDIN turishi shart,
             aks holda slug marshruti uni yutib yuboradi. */}

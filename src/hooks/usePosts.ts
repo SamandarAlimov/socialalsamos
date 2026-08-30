@@ -2,16 +2,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { createPollForPost, type PollInput } from '@/lib/polls';
-import {
-  savePostLocation,
-  savePostMedia,
-  savePostMusic,
-  type PostLocationInput,
-  type PostMediaInput,
-  type PostMusicInput,
+import type { PollInput } from '@/lib/polls';
+import type {
+  PostLocationInput,
+  PostMediaInput,
+  PostMusicInput,
 } from '@/lib/postMeta';
 import { MAX_COLLABORATORS } from '@/lib/postComposer';
+import { MEDIA_BUCKET, PRIVATE_MEDIA_BUCKET } from '@/lib/mediaUpload';
 
 export interface Post {
   id: string;
@@ -42,6 +40,30 @@ export interface Post {
 
 export type PostVisibility = 'public' | 'friends' | 'private';
 
+async function cleanupUnpublishedMedia(items: PostMediaInput[]): Promise<void> {
+  const byBucket = new Map<string, Set<string>>();
+
+  const add = (bucket?: string | null, key?: string | null) => {
+    if (!bucket || !key) return;
+    if (bucket !== MEDIA_BUCKET && bucket !== PRIVATE_MEDIA_BUCKET) return;
+    const keys = byBucket.get(bucket) ?? new Set<string>();
+    keys.add(key);
+    byBucket.set(bucket, keys);
+  };
+
+  for (const item of items) {
+    add(item.storageBucket, item.storageKey);
+    add(item.thumbnailBucket, item.thumbnailKey);
+  }
+
+  await Promise.all(
+    Array.from(byBucket.entries()).map(async ([bucket, keys]) => {
+      const { error } = await supabase.storage.from(bucket).remove(Array.from(keys));
+      if (error) console.warn('Yarim qolgan uploadni tozalab bo‘lmadi:', error);
+    }),
+  );
+}
+
 /** Post yaratishda qo'shimcha strukturali ma'lumotlar. */
 export interface CreatePostOptions {
   /** MUHIM: ilgari bu qiymat saqlanmasdan tushib qolar edi (maxfiylik bug'i). */
@@ -70,7 +92,8 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
     setIsLoading(true);
 
     try {
-      // Fetch all post types including videos/reels
+      // Feed query visibility bilan bir xil semantikaga ega bo'lishi kerak.
+      // RLS oxirgi himoya qatlamidir; client esa keraksiz qatorlarni so'ramaydi.
       let query = supabase
         .from('posts')
         .select(`
@@ -83,20 +106,76 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
             is_verified
           )
         `)
-        .eq('visibility', 'public')
         .order('created_at', { ascending: false })
         .range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1);
 
-      if (filter === 'following' && user) {
-        const { data: following } = await supabase
+      if (filter === 'global') {
+        query = query.eq('visibility', 'public');
+      } else if (filter === 'following') {
+        if (!user) {
+          if (refresh) setPosts([]);
+          setHasMore(false);
+          return;
+        }
+
+        const { data: following, error: followingError } = await supabase
           .from('follows')
           .select('following_id')
           .eq('follower_id', user.id);
 
-        if (following && following.length > 0) {
-          const followingIds = following.map(f => f.following_id);
-          query = query.in('user_id', followingIds);
+        if (followingError) throw followingError;
+
+        const followingIds = (following ?? []).map((row) => row.following_id);
+        if (followingIds.length === 0) {
+          if (refresh) setPosts([]);
+          setHasMore(false);
+          return;
         }
+
+        query = query
+          .eq('visibility', 'public')
+          .in('user_id', followingIds);
+      } else {
+        // "friends" = mutual follow. Faqat ikki tomonlama follow bo'lgan
+        // foydalanuvchilarning public + friends postlari olinadi.
+        if (!user) {
+          if (refresh) setPosts([]);
+          setHasMore(false);
+          return;
+        }
+
+        const { data: outgoing, error: outgoingError } = await supabase
+          .from('follows')
+          .select('following_id')
+          .eq('follower_id', user.id);
+
+        if (outgoingError) throw outgoingError;
+
+        const outgoingIds = (outgoing ?? []).map((row) => row.following_id);
+        if (outgoingIds.length === 0) {
+          if (refresh) setPosts([]);
+          setHasMore(false);
+          return;
+        }
+
+        const { data: reciprocal, error: reciprocalError } = await supabase
+          .from('follows')
+          .select('follower_id')
+          .eq('following_id', user.id)
+          .in('follower_id', outgoingIds);
+
+        if (reciprocalError) throw reciprocalError;
+
+        const friendIds = (reciprocal ?? []).map((row) => row.follower_id);
+        if (friendIds.length === 0) {
+          if (refresh) setPosts([]);
+          setHasMore(false);
+          return;
+        }
+
+        query = query
+          .in('visibility', ['public', 'friends'])
+          .in('user_id', friendIds);
       }
 
       const { data, error } = await query;
@@ -166,8 +245,8 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
   }, [fetchPosts]);
 
   const createPost = useCallback(async (
-    content: string, 
-    mediaUrls: string[] = [], 
+    content: string,
+    mediaUrls: string[] = [],
     mediaType = 'text',
     collaboratorIds: string[] = [],
     options: CreatePostOptions = {}
@@ -183,25 +262,44 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
 
     const visibility = options.visibility ?? 'public';
     const isScheduled = Boolean(options.scheduledAt);
-    // 10 nafardan ortiq hammuallif qabul qilinmaydi (baza ham trigger bilan tekshiradi)
-    const collaborators = Array.from(new Set(collaboratorIds)).slice(0, MAX_COLLABORATORS);
+    const collaborators = Array.from(new Set(collaboratorIds))
+      .filter((id) => id !== user.id)
+      .slice(0, MAX_COLLABORATORS);
 
     try {
+      // P0: post + barcha strukturali meta bitta PostgreSQL transaction ichida.
+      // Biror meta yozuvi xato qilsa, yarimta post bazada qolmaydi.
+      const payload = {
+        content,
+        mediaUrls,
+        mediaType,
+        collaboratorIds: collaborators,
+        visibility,
+        postKind: options.postKind ?? 'post',
+        scheduledAt: options.scheduledAt ?? null,
+        media: options.media ?? [],
+        poll: options.poll ?? null,
+        location: options.location ?? null,
+        music: options.music ?? null,
+        editState: options.editState ?? null,
+      };
+
+      const { data: postId, error: publishError } = await (supabase as any).rpc(
+        'publish_post_draft',
+        { p_payload: payload },
+      );
+
+      if (publishError || !postId) {
+        // Binary upload DB transaction ichida emas. DB publish yiqilsa
+        // hech qayerga bog'lanmagan Supabase obyektlarini best-effort tozalaymiz.
+        await cleanupUnpublishedMedia(options.media ?? []);
+        throw publishError ?? new Error('Post identifikatori qaytmadi');
+      }
+
+      // RPC atomik yozdi. Bundan keyin obyektlarni rollback qilib bo'lmaydi:
+      // UI refetch xatosi post yaratilmagan degani emas.
       const { data, error } = await supabase
         .from('posts')
-        .insert({
-          user_id: user.id,
-          content,
-          media_urls: mediaUrls,
-          media_type: mediaType,
-          // Maxfiylik tanlovi endi haqiqatda saqlanadi
-          visibility,
-          post_kind: options.postKind ?? 'post',
-          status: isScheduled ? 'scheduled' : 'published',
-          scheduled_at: options.scheduledAt ?? null,
-          published_at: isScheduled ? null : new Date().toISOString(),
-          edit_state: options.editState ?? null,
-        } as any)
         .select(`
           *,
           profile:profiles!posts_user_id_fkey (
@@ -212,98 +310,52 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
             is_verified
           )
         `)
+        .eq('id', postId)
         .single();
 
-      if (error) throw error;
+      const fallbackPost: Post = {
+        id: String(postId),
+        user_id: user.id,
+        content,
+        media_urls: mediaUrls,
+        media_type: mediaType,
+        likes_count: 0,
+        comments_count: 0,
+        shares_count: 0,
+        bookmarks_count: 0,
+        reposts_count: 0,
+        views_count: 0,
+        is_pinned: false,
+        visibility,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
 
-      // --- Strukturali meta-ma'lumotlar ---
-      // Bittasi xato bo'lsa ham post o'chib ketmasligi kerak, shuning uchun
-      // har biri alohida try/catch bilan yoziladi va xatosi ogohlantiriladi.
-      const metaErrors: string[] = [];
+      const createdPost = error || !data ? fallbackPost : (data as Post);
 
-      if (options.media?.length) {
-        try {
-          await savePostMedia(data.id, options.media);
-        } catch (metaError) {
-          console.error('post_media saqlanmadi:', metaError);
-          metaErrors.push('fayllar');
-        }
+      if (error) {
+        console.warn('Post yaratildi, lekin UI refetch bajarilmadi:', error);
       }
 
-      if (options.poll) {
-        try {
-          await createPollForPost(data.id, options.poll);
-        } catch (metaError) {
-          console.error('So\u2018rovnoma saqlanmadi:', metaError);
-          metaErrors.push('so\u2018rovnoma');
-        }
-      }
-
-      if (options.location) {
-        try {
-          await savePostLocation(data.id, options.location, user.id);
-        } catch (metaError) {
-          console.error('Joylashuv saqlanmadi:', metaError);
-          metaErrors.push('joylashuv');
-        }
-      }
-
-      if (options.music) {
-        try {
-          await savePostMusic(data.id, options.music);
-        } catch (metaError) {
-          console.error('Musiqa saqlanmadi:', metaError);
-          metaErrors.push('musiqa');
-        }
-      }
-
-      // Send collaboration requests if collaborators are specified
-      if (collaborators.length > 0 && data) {
-        const collaborationInserts = collaborators.map(collaboratorId => ({
-          post_id: data.id,
-          user_id: collaboratorId,
-          invited_by: user.id,
-          status: 'pending'
-        }));
-
-        const { error: collabError } = await supabase
-          .from('post_collaborators')
-          .insert(collaborationInserts);
-
-        if (collabError) {
-          console.error('Error sending collaboration requests:', collabError);
-          // Don't fail the post creation, just log the error
-        }
-      }
-
-      // Rejalashtirilgan yoki maxfiy postlar umumiy lentaga qo'shilmaydi
       if (!isScheduled && visibility === 'public') {
-        setPosts(prev => [data as Post, ...prev]);
+        setPosts((prev) => [createdPost, ...prev]);
       }
 
-      if (metaErrors.length > 0) {
-        toast({
-          title: 'Post joylandi, lekin...',
-          description: `${metaErrors.join(', ')} saqlanmadi. Postni tahrirlab qayta qo\u2018shing.`,
-          variant: 'destructive',
-        });
-      } else {
-        toast({
-          title: isScheduled ? 'Rejalashtirildi' : 'Posted!',
-          description: isScheduled
-            ? 'Post belgilangan vaqtda e\u2018lon qilinadi.'
-            : collaborators.length > 0
-              ? 'Your post has been published and collaboration requests sent.'
-              : 'Your post has been published.',
-        });
-      }
+      toast({
+        title: isScheduled ? 'Rejalashtirildi' : 'Posted!',
+        description: isScheduled
+          ? 'Post belgilangan vaqtda e\\u2018lon qilinadi.'
+          : collaborators.length > 0
+            ? 'Post joylandi va hammualliflarga taklif yuborildi.'
+            : 'Post muvaffaqiyatli joylandi.',
+      });
 
-      return data;
+      return createdPost;
     } catch (error: any) {
       console.error('Error creating post:', error);
       toast({
-        title: 'Error',
-        description: error?.message ?? 'Failed to create post',
+        title: 'Post joylanmadi',
+        description: error?.message ?? 'Postni yaratishda xatolik yuz berdi',
         variant: 'destructive',
       });
       return null;
