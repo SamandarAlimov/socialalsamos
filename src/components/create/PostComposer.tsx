@@ -477,374 +477,378 @@ export function PostComposer() {
           </div>
         </div>
       )}
-      {/* Web uchun ixcham identity-first composer header */}
-      <div className="flex items-center gap-3 rounded-3xl border border-border/60 bg-gradient-to-br from-card via-card to-primary/[0.045] p-3.5 shadow-sm sm:p-4">
-        <Avatar className="h-12 w-12 shrink-0 border-2 border-background shadow-sm ring-1 ring-border/60 sm:h-14 sm:w-14">
-          <AvatarImage src={profile?.avatar_url ?? ''} />
-          <AvatarFallback className="font-semibold">
-            {(profile?.display_name || profile?.username || 'U').charAt(0).toUpperCase()}
-          </AvatarFallback>
-        </Avatar>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_310px] xl:items-start">
+        <section className="min-w-0 space-y-4">
+          {/* Identity */}
+          <div className="flex items-center gap-3 rounded-3xl border border-border/60 bg-gradient-to-br from-card via-card to-primary/[0.045] p-3.5 shadow-sm sm:p-4">
+            <Avatar className="h-12 w-12 shrink-0 border-2 border-background shadow-sm ring-1 ring-border/60 sm:h-14 sm:w-14">
+              <AvatarImage src={profile?.avatar_url ?? ''} />
+              <AvatarFallback className="font-semibold">
+                {(profile?.display_name || profile?.username || 'U').charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
 
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">
-            {profile?.display_name || profile?.username || 'Foydalanuvchi'}
-          </p>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold sm:text-base">
+                {profile?.display_name || profile?.username || 'Foydalanuvchi'}
+              </p>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                <Select
+                  value={visibility}
+                  onValueChange={(value) => setVisibility(value as PostVisibility)}
+                >
+                  <SelectTrigger className="h-8 w-auto min-w-28 gap-1 rounded-full border-border/60 bg-background px-3 text-xs shadow-none">
+                    <SelectValue />
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {VISIBILITIES.map(({ id, label, icon: Icon }) => (
+                      <SelectItem key={id} value={id}>
+                        <span className="flex items-center gap-2">
+                          <Icon className="h-3.5 w-3.5" />
+                          {label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-          <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            <Select
-              value={visibility}
-              onValueChange={(value) => setVisibility(value as PostVisibility)}
-            >
-              <SelectTrigger className="h-8 w-auto min-w-28 gap-1 rounded-full border-border/60 bg-background px-3 text-xs shadow-none">
-                <SelectValue />
-                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-              </SelectTrigger>
-              <SelectContent>
-                {VISIBILITIES.map(({ id, label, icon: Icon }) => (
-                  <SelectItem key={id} value={id}>
-                    <span className="flex items-center gap-2">
-                      <Icon className="h-3.5 w-3.5" />
-                      {label}
+                <button
+                  type="button"
+                  onClick={() => setShowCollaborators(true)}
+                  className={cn(
+                    'inline-flex h-8 items-center gap-1.5 rounded-full border border-border/60 bg-background px-3 text-xs font-medium transition hover:bg-muted',
+                    collaborators.length > 0 && 'border-primary/30 bg-primary/[0.06] text-primary',
+                  )}
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  {collaborators.length > 0
+                    ? `${collaborators.length} hammuallif`
+                    : 'Hammuallif qo‘shish'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Asosiy matn editori */}
+          <div className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-sm">
+            <div className="border-b border-border/50 px-4 py-3 sm:px-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Matn
+              </p>
+            </div>
+            <div className="p-3 sm:p-4">
+              <RichTextComposer
+                value={formattedContent}
+                onChange={({ plainText, formattedContent: nextDocument }) => {
+                  setContent(plainText);
+                  setFormattedContent(nextDocument);
+                }}
+                placeholder="Nima yangilik? #hashtag ishlatib ko‘ring..."
+                className="border-0 bg-transparent p-0"
+              />
+            </div>
+          </div>
+
+          {/* Media stage */}
+          <div className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-sm">
+            <div className="flex items-center justify-between border-b border-border/50 px-4 py-3 sm:px-5">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Media va fayllar
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  Universal upload · drag/drop · tahrirlash
+                </p>
+              </div>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-medium text-muted-foreground">
+                {attachments.length}/{MAX_FILES_PER_POST}
+              </span>
+            </div>
+
+            {attachments.length === 0 ? (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="group flex min-h-52 w-full flex-col items-center justify-center gap-3 bg-gradient-to-b from-muted/20 to-transparent px-6 py-10 text-center transition hover:from-primary/[0.05]"
+              >
+                <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/15 bg-primary/10 text-primary shadow-sm transition group-hover:scale-105">
+                  <UploadCloud className="h-6 w-6" />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold">Fayl yoki media qo‘shing</p>
+                  <p className="mt-1 max-w-md text-xs leading-relaxed text-muted-foreground">
+                    Rasm, video, audio, hujjat, arxiv va boshqa fayllarni tanlang yoki shu maydonga tashlang.
+                  </p>
+                </div>
+              </button>
+            ) : (
+              <div className="p-3 sm:p-4">
+                <AttachmentGrid
+                  attachments={attachments}
+                  onRemove={removeAttachment}
+                  onRetry={retryAttachment}
+                  onReorder={reorderAttachments}
+                  onEditImage={openImageEditor}
+                  onEditVideo={openVideoEditor}
+                />
+              </div>
+            )}
+          </div>
+
+          {totalStickers > 0 && (
+            <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/20 p-3">
+              <StickerIcon className="h-5 w-5 shrink-0 text-primary" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">{totalStickers} stiker qo‘yildi</p>
+                <p className="text-xs text-muted-foreground">
+                  Media ustidagi joylashuv postda ham aynan shunday ko‘rinadi
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => openStickerEditor()}
+                className="shrink-0 text-xs font-medium text-primary"
+              >
+                Tahrirlash
+              </button>
+            </div>
+          )}
+        </section>
+
+        <aside className="min-w-0 space-y-3 xl:sticky xl:top-4">
+          <div className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-sm">
+            <div className="border-b border-border/50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Post sozlamalari
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 p-3 xl:grid-cols-1">
+              {[
+                {
+                  label: 'Fayl qo‘shish',
+                  description: `${attachments.length}/${MAX_FILES_PER_POST} fayl`,
+                  icon: Paperclip,
+                  action: () => fileInputRef.current?.click(),
+                  disabled: !canAddMore,
+                },
+                {
+                  label: 'Stikerlar',
+                  description: totalStickers > 0 ? `${totalStickers} ta qo‘yilgan` : 'Media ustiga',
+                  icon: StickerIcon,
+                  action: () => openStickerEditor(),
+                  disabled: false,
+                },
+                {
+                  label: 'So‘rovnoma',
+                  description: poll ? 'Sozlangan' : 'Poll yoki quiz',
+                  icon: BarChart3,
+                  action: () => setShowPoll(true),
+                  disabled: false,
+                },
+                {
+                  label: 'Joylashuv',
+                  description: location
+                    ? location.mode === 'live'
+                      ? 'Jonli'
+                      : 'Tanlangan'
+                    : 'POI, pin yoki live',
+                  icon: MapPin,
+                  action: () => setShowLocation(true),
+                  disabled: false,
+                },
+                {
+                  label: 'Musiqa',
+                  description: music?.track?.title ?? 'Katalog yoki device',
+                  icon: Music2,
+                  action: () => setShowMusic(true),
+                  disabled: false,
+                },
+                {
+                  label: 'Hammualliflar',
+                  description: `${collaborators.length}/${MAX_COLLABORATORS}`,
+                  icon: Users,
+                  action: () => setShowCollaborators(true),
+                  disabled: false,
+                },
+                {
+                  label: 'Rejalashtirish',
+                  description: scheduledAt ? formatScheduledDate(scheduledAt) : 'Keyinroq joylash',
+                  icon: CalendarClock,
+                  action: () => setShowSchedule(true),
+                  disabled: location?.mode === 'live',
+                },
+              ].map(({ label, description, icon: Icon, action, disabled }) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={action}
+                  disabled={disabled}
+                  className="flex min-h-14 items-center gap-3 rounded-2xl border border-border/50 bg-background px-3 py-2.5 text-left transition hover:border-primary/25 hover:bg-primary/[0.035] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-semibold">{label}</span>
+                    <span className="block truncate text-[10px] text-muted-foreground">
+                      {description}
                     </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  </span>
+                </button>
+              ))}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept={ACCEPT_ANY_FILE}
+                onChange={handleFilesSelected}
+                className="hidden"
+              />
+            </div>
+          </div>
+
+          {(poll || location || music || collaborators.length > 0 || scheduledAt) && (
+            <div className="space-y-2 rounded-3xl border border-border/60 bg-card p-3 shadow-sm">
+              <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Qo‘shilganlar
+              </p>
+
+              {poll && (
+                <div className="flex items-start gap-2 rounded-2xl bg-muted/35 p-3">
+                  <BarChart3 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold">{poll.question}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {poll.options.length} variant{poll.quizMode ? ' · quiz' : ''}
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => setPoll(null)} className="text-muted-foreground hover:text-destructive">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {location && (
+                <div className="flex items-start gap-2 rounded-2xl bg-muted/35 p-3">
+                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold">
+                      {location.place?.name ?? location.label ?? 'Joylashuv'}
+                    </p>
+                    <p className="truncate text-[10px] text-muted-foreground">
+                      {location.mode === 'live' ? 'Real vaqtli ulashish' : location.place?.address ?? 'Aniq nuqta'}
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => setLocation(null)} className="text-muted-foreground hover:text-destructive">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {music && (
+                <div className="flex items-start gap-2 rounded-2xl bg-muted/35 p-3">
+                  <Music2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold">{music.track?.title ?? 'Musiqa'}</p>
+                    <p className="truncate text-[10px] text-muted-foreground">
+                      {music.track?.artist ?? 'Katalog'}
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => handleMusicChange(null)} className="text-muted-foreground hover:text-destructive">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {collaborators.length > 0 && (
+                <div className="rounded-2xl bg-muted/35 p-3">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 shrink-0 text-primary" />
+                    <p className="text-xs font-semibold">{collaborators.length} hammuallif</p>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {collaborators.slice(0, 5).map((collaborator) => (
+                      <span key={collaborator.id} className="rounded-full bg-background px-2 py-1 text-[10px]">
+                        @{collaborator.username}
+                      </span>
+                    ))}
+                    {collaborators.length > 5 && (
+                      <span className="rounded-full bg-background px-2 py-1 text-[10px] text-muted-foreground">
+                        +{collaborators.length - 5}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {scheduledAt && (
+                <div className="flex items-start gap-2 rounded-2xl border border-primary/20 bg-primary/[0.055] p-3">
+                  <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold">Rejalashtirilgan</p>
+                    <p className="truncate text-[10px] text-muted-foreground">
+                      {formatScheduledDate(scheduledAt)}
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => setScheduledAt(null)} className="text-muted-foreground hover:text-destructive">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="sticky bottom-2 z-20 rounded-3xl border border-border/70 bg-background/94 p-2.5 shadow-[0_16px_50px_rgba(0,0,0,0.18)] backdrop-blur-xl">
+            <div className="mb-2 hidden px-1 xl:block">
+              <p className="truncate text-xs font-semibold">
+                {scheduledAt ? 'Rejalashtirilgan nashr' : 'Post joylashga tayyor'}
+              </p>
+              <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                {scheduledAt
+                  ? formatScheduledDate(scheduledAt)
+                  : `${attachments.length} fayl · ${collaborators.length} hammuallif · ${VISIBILITIES.find((item) => item.id === visibility)?.label}`}
+              </p>
+            </div>
 
             <button
               type="button"
-              onClick={() => setShowCollaborators(true)}
-              className={cn(
-                'inline-flex h-8 items-center gap-1.5 rounded-full border border-border/60 bg-background px-3 text-xs font-medium transition hover:bg-muted',
-                collaborators.length > 0 && 'border-primary/30 bg-primary/[0.06] text-primary',
-              )}
+              onClick={() => void handleSubmit()}
+              disabled={!canSubmit}
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Users className="h-3.5 w-3.5" />
-              {collaborators.length > 0
-                ? `${collaborators.length} hammuallif`
-                : 'Hammuallif qo‘shish'}
+              {isPosting || isUploading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : scheduledAt ? (
+                <CalendarClock className="h-4 w-4" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              {isUploading
+                ? 'Fayllar yuklanmoqda...'
+                : isPosting
+                  ? scheduledAt
+                    ? 'Rejalashtirilmoqda...'
+                    : 'Joylanmoqda...'
+                  : scheduledAt
+                    ? 'Rejalashtirish'
+                    : 'Joylash'}
             </button>
           </div>
-        </div>
-      </div>
 
-      {/* Structured WYSIWYG matn editori */}
-      <RichTextComposer
-        value={formattedContent}
-        onChange={({ plainText, formattedContent: nextDocument }) => {
-          setContent(plainText);
-          setFormattedContent(nextDocument);
-        }}
-        placeholder="Nima yangilik? #hashtag ishlatib ko‘ring..."
-      />
-
-      {/* Fayllar — rasm/videoni bosib stiker qo‘yish mumkin */}
-      <AttachmentGrid
-        attachments={attachments}
-        onRemove={removeAttachment}
-        onRetry={retryAttachment}
-        onReorder={reorderAttachments}
-        onEditImage={openImageEditor}
-        onEditVideo={openVideoEditor}
-      />
-
-      {/* Stiker xulosasi */}
-      {totalStickers > 0 && (
-        <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/20 p-3">
-          <StickerIcon className="h-5 w-5 shrink-0 text-primary" />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">{totalStickers} stiker qo‘yildi</p>
-            <p className="text-xs text-muted-foreground">
-              Media ustidagi joylashuv postda ham aynan shunday ko‘rinadi
+          {!canAddMore && (
+            <p className="px-1 text-[10px] text-muted-foreground">
+              Bitta postga {MAX_FILES_PER_POST} tagacha fayl qo‘shish mumkin.
             </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => openStickerEditor()}
-            className="shrink-0 text-xs font-medium text-primary"
-          >
-            Tahrirlash
-          </button>
-        </div>
-      )}
-
-      {/* So‘rovnoma xulosasi */}
-      {poll && (
-        <div className="flex items-start gap-3 rounded-2xl border border-border/60 bg-muted/20 p-3">
-          <BarChart3 className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{poll.question}</p>
-            <p className="text-xs text-muted-foreground">
-              {poll.options.length} variant
-              {poll.quizMode ? ' · viktorina' : ''}
-              {poll.allowMultiple ? ' · ko‘p tanlov' : ''}
-              {poll.isAnonymous ? ' · anonim' : ''}
+          )}
+          {canAddMore && attachments.length > 0 && (
+            <p className="px-1 text-[10px] text-muted-foreground">
+              Yana {remainingSlots} fayl qo‘shsa bo‘ladi.
             </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowPoll(true)}
-            className="shrink-0 text-xs font-medium text-primary"
-          >
-            Tahrirlash
-          </button>
-          <button
-            type="button"
-            onClick={() => setPoll(null)}
-            aria-label="So‘rovnomani o‘chirish"
-            className="shrink-0 text-muted-foreground transition hover:text-destructive"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Joylashuv xulosasi */}
-      {location && (
-        <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/20 p-3">
-          <MapPin className="h-5 w-5 shrink-0 text-primary" />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">
-              {location.place?.name ?? location.label ?? 'Joylashuv'}
-            </p>
-            <p className="truncate text-xs text-muted-foreground">
-              {location.mode === 'live'
-                ? 'Real vaqtli ulashish'
-                : (location.place?.address ??
-                  location.latitude.toFixed(4) + ', ' + location.longitude.toFixed(4))}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setLocation(null)}
-            aria-label="Joylashuvni o‘chirish"
-            className="shrink-0 text-muted-foreground transition hover:text-destructive"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Musiqa xulosasi */}
-      {music && (
-        <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/20 p-3">
-          <Music2 className="h-5 w-5 shrink-0 text-primary" />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">
-              {music.track?.title ?? 'Tanlangan musiqa'}
-            </p>
-            <p className="truncate text-xs text-muted-foreground">
-              {music.track?.artist ?? 'Katalog treki'}
-              {' · '}
-              {Math.round((music.volume ?? 1) * 100)}%
-              {music.startSeconds ? ' · ' + Math.round(music.startSeconds) + 's dan' : ''}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowMusic(true)}
-            className="shrink-0 text-xs font-medium text-primary"
-          >
-            Tahrirlash
-          </button>
-          <button
-            type="button"
-            onClick={() => handleMusicChange(null)}
-            aria-label="Musiqani o‘chirish"
-            className="shrink-0 text-muted-foreground transition hover:text-destructive"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Hammualliflar */}
-      {collaborators.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border/60 bg-muted/20 p-3">
-          <Users className="h-4 w-4 shrink-0 text-primary" />
-          {collaborators.map((collaborator) => (
-            <span
-              key={collaborator.id}
-              className="inline-flex items-center gap-1 rounded-full bg-background px-2 py-1 text-xs"
-            >
-              @{collaborator.username}
-              <button
-                type="button"
-                onClick={() =>
-                  setCollaborators((current) =>
-                    current.filter((item) => item.id !== collaborator.id),
-                  )
-                }
-                aria-label="Olib tashlash"
-                className="text-muted-foreground transition hover:text-destructive"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </span>
-          ))}
-          <span className="text-xs text-muted-foreground">
-            {collaborators.length}/{MAX_COLLABORATORS}
-          </span>
-        </div>
-      )}
-
-      {scheduledAt && (
-        <div className="flex items-center gap-3 rounded-2xl border border-primary/25 bg-primary/[0.055] p-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <CalendarClock className="h-5 w-5" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">Rejalashtirilgan post</p>
-            <p className="truncate text-xs text-muted-foreground">
-              {formatScheduledDate(scheduledAt)}
-            </p>
-          </div>
-          <button
-            type="button"
-            className="shrink-0 text-xs font-medium text-primary"
-            onClick={() => setShowSchedule(true)}
-          >
-            O‘zgartirish
-          </button>
-          <button
-            type="button"
-            aria-label="Rejani bekor qilish"
-            className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-destructive"
-            onClick={() => setScheduledAt(null)}
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Asboblar paneli */}
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-        {[
-          {
-            label: 'Fayl',
-            icon: Paperclip,
-            action: () => fileInputRef.current?.click(),
-            disabled: !canAddMore,
-            meta: `${attachments.length}/${MAX_FILES_PER_POST}`,
-          },
-          {
-            label: 'Stiker',
-            icon: StickerIcon,
-            action: () => openStickerEditor(),
-            disabled: false,
-          },
-          {
-            label: 'So‘rovnoma',
-            icon: BarChart3,
-            action: () => setShowPoll(true),
-            disabled: false,
-          },
-          {
-            label: 'Joylashuv',
-            icon: MapPin,
-            action: () => setShowLocation(true),
-            disabled: false,
-          },
-          {
-            label: 'Musiqa',
-            icon: Music2,
-            action: () => setShowMusic(true),
-            disabled: false,
-          },
-          {
-            label: 'Hammuallif',
-            icon: Users,
-            action: () => setShowCollaborators(true),
-            disabled: false,
-            meta: `${collaborators.length}/${MAX_COLLABORATORS}`,
-          },
-          {
-            label: 'Rejalash',
-            icon: CalendarClock,
-            action: () => setShowSchedule(true),
-            disabled: location?.mode === 'live',
-            meta: scheduledAt ? '✓' : undefined,
-          },
-        ].map(({ label, icon: Icon, action, disabled, meta }) => (
-          <button
-            key={label}
-            type="button"
-            onClick={action}
-            disabled={disabled}
-            title={
-              label === 'Rejalash' && location?.mode === 'live'
-                ? 'Jonli joylashuvli post darhol joylanadi'
-                : undefined
-            }
-            className={cn(
-              'flex min-h-16 flex-col items-center justify-center gap-1 rounded-2xl border border-border/60 bg-background px-2 py-2 text-center transition',
-              'hover:border-primary/25 hover:bg-primary/[0.035] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45',
-            )}
-          >
-            <Icon className="h-4 w-4 text-primary" />
-            <span className="text-[11px] font-medium">{label}</span>
-            {meta && <span className="text-[10px] text-muted-foreground">{meta}</span>}
-          </button>
-        ))}
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept={ACCEPT_ANY_FILE}
-          onChange={handleFilesSelected}
-          className="hidden"
-        />
-      </div>
-
-      {!canAddMore && (
-        <p className="text-xs text-muted-foreground">
-          Bitta postga {MAX_FILES_PER_POST} tagacha fayl qo‘shish mumkin.
-        </p>
-      )}
-      {canAddMore && attachments.length > 0 && (
-        <p className="text-xs text-muted-foreground">Yana {remainingSlots} fayl qo‘shsa bo‘ladi.</p>
-      )}
-
-      {/* Har doim qo‘l ostida turadigan publish paneli */}
-      <div className="sticky bottom-2 z-20 mt-2 rounded-2xl border border-border/70 bg-background/92 p-2 shadow-[0_12px_40px_rgba(0,0,0,0.16)] backdrop-blur-xl">
-        <div className="flex items-center gap-2">
-          <div className="hidden min-w-0 flex-1 px-2 sm:block">
-            <p className="truncate text-xs font-medium">
-              {scheduledAt ? 'Rejalashtirilgan nashr' : 'Post joylashga tayyor'}
-            </p>
-            <p className="truncate text-[11px] text-muted-foreground">
-              {scheduledAt
-                ? formatScheduledDate(scheduledAt)
-                : `${attachments.length} fayl · ${collaborators.length} hammuallif · ${VISIBILITIES.find((item) => item.id === visibility)?.label}`}
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => void handleSubmit()}
-            disabled={!canSubmit}
-            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none sm:min-w-44"
-          >
-            {isPosting || isUploading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : scheduledAt ? (
-              <CalendarClock className="h-4 w-4" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-            {isUploading
-              ? 'Fayllar yuklanmoqda...'
-              : isPosting
-                ? scheduledAt
-                  ? 'Rejalashtirilmoqda...'
-                  : 'Joylanmoqda...'
-                : scheduledAt
-                  ? 'Rejalashtirish'
-                  : 'Joylash'}
-          </button>
-        </div>
+          )}
+        </aside>
       </div>
 
       {/* Oynalar */}
