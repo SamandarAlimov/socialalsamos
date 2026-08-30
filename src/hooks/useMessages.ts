@@ -100,29 +100,56 @@ const UNREAD_SCAN_LIMIT = 1000;
 /** Realtime hodisalar ketma-ket kelganda ro'yxatni bir marta yangilash */
 const LIST_REFRESH_DEBOUNCE = 500;
 
-const MESSAGE_SELECT = `
+const BASE_MESSAGE_SELECT = `
   *,
   sender:profiles!messages_sender_id_fkey (
     id,
     username,
     display_name,
     avatar_url
-  ),
-  reply_to:messages!messages_reply_to_id_fkey (
-    id,
-    content,
-    media_url,
-    media_type,
-    is_deleted,
-    sender_id,
-    sender:profiles!messages_sender_id_fkey (
-      id,
-      username,
-      display_name,
-      avatar_url
-    )
   )
 `;
+
+type ReplyTarget = NonNullable<Message['reply_to']>;
+
+/**
+ * Reply preview core message queryni sindirmasligi kerak.
+ * Avval xabarlar oddiy select bilan keladi, reply targetlar esa alohida hydrate qilinadi.
+ * Production schema cache/FK embed vaqtincha mos kelmasa ham tarix va send ishlashda davom etadi.
+ */
+async function hydrateReplyTargets<T extends { reply_to_id?: string | null }>(
+  rows: T[]
+): Promise<Array<T & { reply_to?: ReplyTarget | null }>> {
+  if (rows.length === 0) return [];
+
+  const replyIds = Array.from(
+    new Set(rows.map((row) => row.reply_to_id).filter((id): id is string => Boolean(id)))
+  );
+
+  if (replyIds.length === 0) {
+    return rows.map((row) => ({ ...row, reply_to: null }));
+  }
+
+  const { data, error } = await supabase
+    .from('messages')
+    .select(BASE_MESSAGE_SELECT)
+    .in('id', replyIds);
+
+  if (error) {
+    console.warn('Reply preview hydration failed; core messages remain available:', error);
+    return rows.map((row) => ({ ...row, reply_to: null }));
+  }
+
+  const replyMap = new Map<string, ReplyTarget>();
+  for (const row of (data || []) as any[]) {
+    replyMap.set(row.id, row as ReplyTarget);
+  }
+
+  return rows.map((row) => ({
+    ...row,
+    reply_to: row.reply_to_id ? replyMap.get(row.reply_to_id) ?? null : null,
+  }));
+}
 
 export function useConversations(
   type?: 'private' | 'group' | 'channel',
@@ -683,7 +710,7 @@ export function useMessages(conversationId: string | null) {
       // Telegramdek: butun tarix emas, oxirgi sahifa yuklanadi
       const { data, error } = await supabase
         .from('messages')
-        .select(MESSAGE_SELECT)
+        .select(BASE_MESSAGE_SELECT)
         .eq('conversation_id', conversationId)
         .eq('is_deleted', false)
         .order('created_at', { ascending: false })
@@ -693,7 +720,7 @@ export function useMessages(conversationId: string | null) {
 
       const page = (data || []) as any[];
       setHasMore(page.length === MESSAGE_PAGE_SIZE);
-      const rows = page.slice().reverse();
+      const rows = await hydrateReplyTargets(page.slice().reverse());
 
       let deletedForMeIds: Set<string> = new Set();
       if (user && rows.length > 0) {
@@ -743,7 +770,7 @@ export function useMessages(conversationId: string | null) {
     try {
       const { data, error } = await supabase
         .from('messages')
-        .select(MESSAGE_SELECT)
+        .select(BASE_MESSAGE_SELECT)
         .eq('conversation_id', conversationId)
         .eq('is_deleted', false)
         .lt('created_at', before)
@@ -756,7 +783,7 @@ export function useMessages(conversationId: string | null) {
       setHasMore(page.length === MESSAGE_PAGE_SIZE);
       if (page.length === 0) return;
 
-      const rows = page.slice().reverse();
+      const rows = await hydrateReplyTargets(page.slice().reverse());
 
       let deletedForMeIds: Set<string> = new Set();
       if (user) {
@@ -827,26 +854,53 @@ export function useMessages(conversationId: string | null) {
       setMessages((prev) => [...prev, optimisticMessage]);
 
       try {
-        const { data, error } = await supabase
+        const insertPayload: Record<string, unknown> = {
+          conversation_id: conversationId,
+          sender_id: user.id,
+          content,
+          media_url: mediaUrl,
+          media_type: mediaType,
+        };
+
+        // Null reply_to_id ni yubormaymiz: eski production schema/cache bilan ham
+        // oddiy xabarlar jo'natilishi to'xtab qolmasin.
+        if (replyToId) insertPayload.reply_to_id = replyToId;
+
+        let { data, error } = await supabase
           .from('messages')
-          .insert({
-            conversation_id: conversationId,
-            sender_id: user.id,
-            content,
-            media_url: mediaUrl,
-            media_type: mediaType,
-            reply_to_id: replyToId || null,
-          })
-          .select(MESSAGE_SELECT)
+          .insert(insertPayload as any)
+          .select(BASE_MESSAGE_SELECT)
           .single();
 
-        if (error) throw error;
+        // Reply kolonkasi productionda hali deploy bo'lmagan bo'lsa, xabarni
+        // yo'qotmaymiz: reply metadata'siz qayta yuboramiz.
+        if (error && replyToId) {
+          console.warn('Reply relationship insert failed, retrying core message without reply:', error);
+          const fallback = await supabase
+            .from('messages')
+            .insert({
+              conversation_id: conversationId,
+              sender_id: user.id,
+              content,
+              media_url: mediaUrl,
+              media_type: mediaType,
+            })
+            .select(BASE_MESSAGE_SELECT)
+            .single();
+          data = fallback.data;
+          error = fallback.error;
+        }
 
-        processedMessageIds.current.add(data.id);
+        if (error || !data) throw error ?? new Error('Xabar serverdan qaytmadi');
+
+        const [hydratedData] = await hydrateReplyTargets([data as any]);
+        const persisted = hydratedData ?? data;
+
+        processedMessageIds.current.add(persisted.id);
 
         setMessages((prev) =>
           prev.map((m) =>
-            m.tempId === tempId ? ({ ...data, status: 'sent' as const } as Message) : m
+            m.tempId === tempId ? ({ ...persisted, status: 'sent' as const } as Message) : m
           )
         );
 
@@ -856,7 +910,7 @@ export function useMessages(conversationId: string | null) {
           .eq('id', conversationId)
           .then(() => {});
 
-        return data;
+        return persisted;
       } catch (error: any) {
         console.error('Error sending message:', error);
 
@@ -1037,17 +1091,20 @@ export function useMessages(conversationId: string | null) {
 
           const { data } = await supabase
             .from('messages')
-            .select(MESSAGE_SELECT)
+            .select(BASE_MESSAGE_SELECT)
             .eq('id', payload.new.id)
             .single();
 
           if (data) {
+            const [hydratedData] = await hydrateReplyTargets([data as any]);
+            const incoming = hydratedData ?? data;
+
             setMessages((prev) => {
-              if (prev.some((m) => m.id === data.id)) return prev;
-              return [...prev, { ...data, status: 'sent' as const } as Message];
+              if (prev.some((m) => m.id === incoming.id)) return prev;
+              return [...prev, { ...incoming, status: 'sent' as const } as Message];
             });
 
-            if (user && data.sender_id !== user.id) markRead([data.id]);
+            if (user && incoming.sender_id !== user.id) markRead([incoming.id]);
           }
         }
       )
