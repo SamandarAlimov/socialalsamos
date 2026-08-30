@@ -9,7 +9,7 @@ import {
   Search,
   Trash2,
   Upload,
-  Ovoz2,
+  Volume2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -585,7 +585,7 @@ export function MusicPicker({
                     <div className="flex items-center justify-between text-xs">
                       <span className="flex items-center gap-1.5 font-medium">
                         <Volume2 className="h-3.5 w-3.5" />
-                        Volume
+                        Ovoz
                       </span>
                       <span className="text-muted-foreground">{volume}%</span>
                     </div>
