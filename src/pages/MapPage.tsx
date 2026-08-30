@@ -692,6 +692,7 @@ export default function MapPage() {
           error={stopRoutes.error}
           realtimeConfigured={stopRoutes.realtimeConfigured}
           realtimeFresh={stopRoutes.realtimeFresh}
+          highContrast={imageryLayer}
           onReload={stopRoutes.reload}
           onClose={() => {
             setSelectedStop(null);
@@ -714,8 +715,13 @@ export default function MapPage() {
 
     if (panel === 'route') {
       return (
-        <div className="flex h-full flex-col">
-          <div className="border-b border-border/45 bg-background/35 px-3 pb-3 pt-2 backdrop-blur-xl">
+        <div className={cn('flex h-full flex-col', imageryLayer && 'map-imagery-card')}>
+          <div
+            className={cn(
+              'shrink-0 border-b px-3 pb-3 pt-2 backdrop-blur-xl',
+              imageryLayer ? 'border-white/10 bg-black/10' : 'border-border/45 bg-background/35',
+            )}
+          >
             <div className="flex items-start gap-2">
               <div className="min-w-0 flex-1 space-y-1.5">
                 <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-border/45 bg-background/55 px-3">
@@ -930,6 +936,7 @@ export default function MapPage() {
                 }}
                 distanceKm={activeRoute.distanceM / 1000}
                 durationMin={activeRoute.durationS / 60}
+                highContrast={imageryLayer}
               />
             )}
 
@@ -953,8 +960,13 @@ export default function MapPage() {
 
     if (panel === 'saved') {
       return (
-        <div className="flex h-full flex-col">
-          <div className="flex items-center gap-2 border-b border-border/60 px-4 py-3">
+        <div className={cn('flex h-full flex-col', imageryLayer && 'map-imagery-card')}>
+          <div
+            className={cn(
+              'flex shrink-0 items-center gap-2 border-b px-4 py-3',
+              imageryLayer ? 'border-white/10 bg-black/10' : 'border-border/60',
+            )}
+          >
             <Bookmark className="h-4 w-4 text-primary" />
             <p className="flex-1 text-sm font-semibold">Saqlangan joylar</p>
             <button
@@ -981,7 +993,7 @@ export default function MapPage() {
               </p>
             )}
 
-            <div className="divide-y divide-border/50">
+            <div className={cn('divide-y', imageryLayer ? 'divide-white/10' : 'divide-border/50')}>
               {saved.places.map((place) => {
                 const ui = categoryUi(place.category);
                 return (
@@ -1004,7 +1016,10 @@ export default function MapPage() {
                       setPanel('place');
                       setSnap('half');
                     }}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/50"
+                    className={cn(
+                      'flex w-full items-center gap-3 px-4 py-3 text-left transition',
+                      imageryLayer ? 'hover:bg-white/[0.07]' : 'hover:bg-muted/50',
+                    )}
                   >
                     <span
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
@@ -1030,8 +1045,13 @@ export default function MapPage() {
 
     if (panel === 'history') {
       return (
-        <div className="flex h-full flex-col">
-          <div className="flex items-center gap-2 border-b border-border/60 px-4 py-3">
+        <div className={cn('flex h-full flex-col', imageryLayer && 'map-imagery-card')}>
+          <div
+            className={cn(
+              'flex shrink-0 items-center gap-2 border-b px-4 py-3',
+              imageryLayer ? 'border-white/10 bg-black/10' : 'border-border/60',
+            )}
+          >
             <History className="h-4 w-4 text-primary" />
             <p className="flex-1 text-sm font-semibold">Tashriflar tarixi</p>
             <button
@@ -1059,11 +1079,17 @@ export default function MapPage() {
               </p>
             )}
 
-            <div className="divide-y divide-border/50">
+            <div className={cn('divide-y', imageryLayer ? 'divide-white/10' : 'divide-border/50')}>
               {visits.visits.map((visit) => {
                 const ui = categoryUi(visit.category);
                 return (
-                  <div key={visit.id} className="flex items-start gap-3 px-4 py-3">
+                  <div
+                    key={visit.id}
+                    className={cn(
+                      'flex items-start gap-3 px-4 py-3 transition',
+                      imageryLayer && 'hover:bg-white/[0.04]',
+                    )}
+                  >
                     <span
                       className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl"
                       style={{ backgroundColor: ui.color + '1f' }}
@@ -1166,6 +1192,7 @@ export default function MapPage() {
               stops={nearbyStops.stops}
               loading={nearbyStops.loading}
               activeId={selectedStop?.id}
+              highContrast={imageryLayer}
               onSelect={(stop) => {
                 setSelectedStop(stop);
                 setSelectedPlace(null);
@@ -1407,16 +1434,6 @@ export default function MapPage() {
                   if (event.key === 'Escape') {
                     setSearchFocused(false);
                     event.currentTarget.blur();
-                    return;
-                  }
-                  if (event.key === 'Enter') {
-                    const first = search.places[0];
-                    if (first) {
-                      event.preventDefault();
-                      selectSearchPlace(first);
-                    } else if (query.trim().length >= 2) {
-                      searchHistory.addRecent(query);
-                    }
                   }
                 }}
                 placeholder="Joy, manzil yoki tashkilot nomi"
@@ -1450,6 +1467,20 @@ export default function MapPage() {
               visible={searchFocused}
               highContrast={imageryLayer}
               onSelectPlace={selectSearchPlace}
+              onSelectCategory={(suggestedCategory) => {
+                setCategory(suggestedCategory.id);
+                setQuery('');
+                setSelectedPlace(null);
+                setSelectedStop(null);
+                setPanel('search');
+                setSnap('half');
+                setSearchFocused(false);
+                if (suggestedCategory.id === 'bus_stop') {
+                  setOverlays((prev) =>
+                    prev.includes('stops') ? prev : [...prev, 'stops'],
+                  );
+                }
+              }}
               onSelectRecent={(value) => {
                 setQuery(value);
                 setCategory(null);
