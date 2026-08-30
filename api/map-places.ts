@@ -108,6 +108,208 @@ async function nominatimSearch(
   );
 }
 
+function normalizeOsmType(value: unknown): 'node' | 'way' | 'relation' | null {
+  const type = String(value ?? '').toLowerCase();
+  if (type === 'node' || type === 'n') return 'node';
+  if (type === 'way' || type === 'w') return 'way';
+  if (type === 'relation' || type === 'r') return 'relation';
+  return null;
+}
+
+function canonicalOsmId(type: unknown, id: unknown): string | null {
+  const osmType = normalizeOsmType(type);
+  const osmId = String(id ?? '').trim();
+  if (!osmType || !/^\d+$/.test(osmId)) return null;
+  return 'osm:' + osmType + ':' + osmId;
+}
+
+function normalizedName(value: unknown): string {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/[\u2018\u2019\u02bb\u02bc\u0060\u00b4]/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeNominatimResults(data: unknown): any[] {
+  if (!Array.isArray(data)) return [];
+
+  return data.flatMap((item: any) => {
+    const latitude = Number(item?.lat);
+    const longitude = Number(item?.lon);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return [];
+
+    const namedetails =
+      item.namedetails && typeof item.namedetails === 'object'
+        ? item.namedetails
+        : {};
+    const extras =
+      item.extratags && typeof item.extratags === 'object'
+        ? item.extratags
+        : {};
+    const name =
+      namedetails.name ||
+      namedetails['name:uz'] ||
+      namedetails['name:ru'] ||
+      namedetails['name:en'] ||
+      item.name ||
+      String(item.display_name ?? '').split(',')[0] ||
+      'Nomsiz joy';
+
+    return [
+      {
+        source: 'nominatim',
+        id:
+          'nominatim/' +
+          String(item.osm_type ?? 'x') +
+          '/' +
+          String(item.osm_id ?? item.place_id ?? latitude + ',' + longitude),
+        canonicalId:
+          canonicalOsmId(item.osm_type, item.osm_id) ??
+          null,
+        name,
+        latitude,
+        longitude,
+        address: item.display_name ?? null,
+        rawKey: typeof item.category === 'string' ? item.category : null,
+        rawValue: typeof item.type === 'string' ? item.type : null,
+        extras,
+      },
+    ];
+  });
+}
+
+function normalizePhotonResults(data: unknown): any[] {
+  const features =
+    data && typeof data === 'object' && Array.isArray((data as any).features)
+      ? (data as any).features
+      : [];
+
+  return features.flatMap((feature: any) => {
+    const coords = feature?.geometry?.coordinates;
+    const props = feature?.properties ?? {};
+    if (!Array.isArray(coords) || coords.length < 2) return [];
+
+    const latitude = Number(coords[1]);
+    const longitude = Number(coords[0]);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return [];
+
+    return [
+      {
+        source: 'photon',
+        id: 'photon/' + String(props.osm_id ?? coords.join(',')),
+        canonicalId:
+          canonicalOsmId(props.osm_type, props.osm_id) ??
+          null,
+        name: props.name || props.street || props.city || 'Nomsiz joy',
+        latitude,
+        longitude,
+        address:
+          [props.street, props.housenumber, props.city, props.state, props.country]
+            .filter(Boolean)
+            .join(', ') || null,
+        rawKey: typeof props.osm_key === 'string' ? props.osm_key : null,
+        rawValue: typeof props.osm_value === 'string' ? props.osm_value : null,
+        extras: {},
+      },
+    ];
+  });
+}
+
+function mergeUnifiedPlaces(items: any[]): any[] {
+  const merged = new Map<string, any>();
+
+  for (const item of items) {
+    const key =
+      item.canonicalId ||
+      normalizedName(item.name) +
+        '@' +
+        Number(item.latitude).toFixed(4) +
+        ',' +
+        Number(item.longitude).toFixed(4);
+
+    const existing = merged.get(key);
+    if (!existing) {
+      merged.set(key, item);
+      continue;
+    }
+
+    const existingRichness =
+      Number(Boolean(existing.address)) +
+      Object.keys(existing.extras ?? {}).length +
+      Number(existing.source === 'nominatim');
+    const nextRichness =
+      Number(Boolean(item.address)) +
+      Object.keys(item.extras ?? {}).length +
+      Number(item.source === 'nominatim');
+
+    if (nextRichness > existingRichness) {
+      merged.set(key, {
+        ...existing,
+        ...item,
+        canonicalId: item.canonicalId || existing.canonicalId || null,
+      });
+    }
+  }
+
+  return Array.from(merged.values()).slice(0, 45);
+}
+
+async function unifiedSearch(
+  query: string,
+  variants: string[],
+  lat: number | null,
+  lng: number | null,
+) {
+  const terms = Array.from(
+    new Set(
+      [query, ...variants]
+        .map((value) => value.trim())
+        .filter((value) => value.length >= 2),
+    ),
+  ).slice(0, 5);
+
+  const requests: Promise<{ source: string; data: unknown }>[] = [];
+  for (const term of terms.slice(0, 4)) {
+    requests.push(
+      photonSearch(term, lat, lng).then((data) => ({
+        source: 'photon',
+        data,
+      })),
+    );
+  }
+  for (const term of terms.slice(0, 2)) {
+    requests.push(
+      nominatimSearch(term, lat, lng).then((data) => ({
+        source: 'nominatim',
+        data,
+      })),
+    );
+  }
+
+  const settled = await Promise.allSettled(requests);
+  const normalized: any[] = [];
+  let healthyProviders = 0;
+
+  for (const result of settled) {
+    if (result.status !== 'fulfilled') continue;
+    healthyProviders += 1;
+    if (result.value.source === 'photon') {
+      normalized.push(...normalizePhotonResults(result.value.data));
+    } else {
+      normalized.push(...normalizeNominatimResults(result.value.data));
+    }
+  }
+
+  if (!healthyProviders) throw new Error('all search providers unavailable');
+
+  return {
+    places: mergeUnifiedPlaces(normalized),
+    terms,
+    healthyProviders,
+  };
+}
+
 async function reverseSearch(lat: number, lng: number) {
   const params = new URLSearchParams({
     format: 'jsonv2',
@@ -218,10 +420,18 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
+    const variants = String(req.query?.variants ?? '')
+      .split('|')
+      .map((value) => value.trim())
+      .filter((value) => value.length >= 2)
+      .slice(0, 5);
+
     const key =
       action +
       ':' +
       query.toLowerCase() +
+      ':' +
+      variants.join('|').toLowerCase() +
       ':' +
       (lat?.toFixed(2) ?? '') +
       ':' +
@@ -237,7 +447,9 @@ export default async function handler(req: any, res: any) {
     }
 
     let data: unknown;
-    if (action === 'photon') {
+    if (action === 'search') {
+      data = await unifiedSearch(query, variants, lat, lng);
+    } else if (action === 'photon') {
       data = await photonSearch(query, lat, lng);
     } else if (action === 'nominatim') {
       data = await nominatimSearch(query, lat, lng);
