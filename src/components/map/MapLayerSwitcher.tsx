@@ -9,6 +9,7 @@ interface MapLayerSwitcherProps {
   onLayerChange: (id: MapLayerId) => void;
   overlays: string[];
   onToggleOverlay: (id: string) => void;
+  highContrast?: boolean;
   className?: string;
 }
 
@@ -33,6 +34,7 @@ export function MapLayerSwitcher({
   onLayerChange,
   overlays,
   onToggleOverlay,
+  highContrast = false,
   className,
 }: MapLayerSwitcherProps) {
   return (
@@ -40,14 +42,26 @@ export function MapLayerSwitcher({
       <button
         type="button"
         onClick={() => onOpenChange(!open)}
-        className="flex h-10 w-10 items-center justify-center rounded-2xl bg-background/82 text-foreground shadow-lg ring-1 ring-border/45 backdrop-blur-2xl transition hover:bg-background/95 hover:shadow-xl"
+        className={cn(
+          'flex h-10 w-10 items-center justify-center rounded-2xl text-foreground shadow-lg ring-1 backdrop-blur-2xl transition hover:shadow-xl',
+          highContrast
+            ? 'bg-background/96 ring-border/70 hover:bg-background'
+            : 'bg-background/82 ring-border/45 hover:bg-background/95',
+        )}
         aria-label="Qatlamlar"
       >
         <Layers className="h-5 w-5" />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-12 z-[1200] w-64 rounded-[22px] border border-border/45 bg-background/88 p-3 shadow-2xl backdrop-blur-2xl">
+        <div
+          className={cn(
+            'absolute right-0 top-12 z-[1200] w-64 rounded-[22px] border p-3 text-foreground shadow-2xl backdrop-blur-2xl',
+            highContrast
+              ? 'border-border/70 bg-background/97'
+              : 'border-border/45 bg-background/88',
+          )}
+        >
           <div className="mb-2 flex items-center justify-between">
             <p className="text-sm font-semibold">Qatlamlar</p>
             <button
@@ -73,7 +87,9 @@ export function MapLayerSwitcher({
                     'flex flex-col items-center gap-1 rounded-xl border p-2 text-xs font-medium transition-colors',
                     active
                       ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border/60 text-muted-foreground hover:text-foreground',
+                      : highContrast
+                        ? 'border-border/70 bg-background/70 text-foreground/80 hover:bg-muted/70 hover:text-foreground'
+                        : 'border-border/60 text-muted-foreground hover:text-foreground',
                   )}
                 >
                   <Icon className="h-5 w-5" />
@@ -84,7 +100,14 @@ export function MapLayerSwitcher({
           </div>
 
           <div className="mt-3 border-t border-border/60 pt-2">
-            <p className="mb-1 text-xs font-medium text-muted-foreground">Ustama qatlamlar</p>
+            <p
+              className={cn(
+                'mb-1 text-xs font-medium',
+                highContrast ? 'text-foreground/70' : 'text-muted-foreground',
+              )}
+            >
+              Ustama qatlamlar
+            </p>
             {MAP_OVERLAYS.map((overlay) => {
               const Icon = OVERLAY_ICON[overlay.id] ?? Layers;
               const active = overlays.includes(overlay.id);
@@ -95,7 +118,12 @@ export function MapLayerSwitcher({
                   onClick={() => onToggleOverlay(overlay.id)}
                   className="flex w-full items-center gap-2 rounded-lg px-1.5 py-2 text-sm hover:bg-muted"
                 >
-                  <Icon className="h-4 w-4 text-muted-foreground" />
+                  <Icon
+                    className={cn(
+                      'h-4 w-4',
+                      highContrast ? 'text-foreground/70' : 'text-muted-foreground',
+                    )}
+                  />
                   <span className="flex-1 text-left">{overlay.label}</span>
                   <span
                     className={cn(
