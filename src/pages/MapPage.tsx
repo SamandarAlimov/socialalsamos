@@ -22,6 +22,7 @@ import {
   Plus,
   PersonStanding,
   Search,
+  Sparkles,
   Bus,
   Trash2,
   X,
@@ -49,6 +50,7 @@ import type { TransitStop } from '@/lib/transit';
 import {
   arrivalTime,
   fetchRoutesThrough,
+  optimizeRouteWaypoints,
   formatKm,
   formatMinutes,
   type RouteMode,
@@ -424,6 +426,7 @@ export default function MapPage() {
     restoredNavigation?.routeIndex ?? 0,
   );
   const [routeLoading, setRouteLoading] = useState(false);
+  const [routeOptimizing, setRouteOptimizing] = useState(false);
   const [destination, setDestination] = useState<MapPlace | null>(
     restoredNavigation?.destination ?? null,
   );
@@ -1041,6 +1044,53 @@ export default function MapPage() {
       buildRoute,
     ],
   );
+
+  const optimizeStops = useCallback(async () => {
+    if (!destination || routeWaypoints.length < 2) return;
+
+    const origin =
+      routeOrigin ??
+      (me
+        ? { ...me, name: 'Joriy joylashuv' }
+        : { ...center, name: 'Xarita markazi' });
+
+    setRouteOptimizing(true);
+    try {
+      const optimized = await optimizeRouteWaypoints(
+        routeMode,
+        origin,
+        routeWaypoints,
+        destination,
+      );
+      const changed = optimized.some(
+        (place, index) => place.id !== routeWaypoints[index]?.id,
+      );
+
+      if (!changed) {
+        toast('Manzillar tartibi allaqachon qulay.');
+        return;
+      }
+
+      setRouteWaypoints(optimized);
+      await buildRoute(
+        destination,
+        routeMode,
+        origin,
+        optimized,
+      );
+      toast.success('Oraliq manzillar tartibi optimallashtirildi.');
+    } finally {
+      setRouteOptimizing(false);
+    }
+  }, [
+    destination,
+    routeWaypoints,
+    routeOrigin,
+    me,
+    center,
+    routeMode,
+    buildRoute,
+  ]);
 
   const removeFinalDestination = useCallback(() => {
     if (routeWaypoints.length) {
@@ -2053,6 +2103,24 @@ export default function MapPage() {
                     </button>
                   )
                 )}
+
+                {destination &&
+                  routeWaypoints.length >= 2 &&
+                  routeMode !== 'transit' && (
+                    <button
+                      type="button"
+                      onClick={() => void optimizeStops()}
+                      disabled={routeOptimizing || routeLoading}
+                      className="flex min-h-9 w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-bold text-muted-foreground transition hover:bg-primary/[0.06] hover:text-primary disabled:cursor-wait disabled:opacity-50"
+                    >
+                      {routeOptimizing ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-4 w-4" />
+                      )}
+                      Eng qulay tartib
+                    </button>
+                  )}
               </div>
 
               <div className="flex shrink-0 flex-col gap-1.5">
@@ -2675,6 +2743,8 @@ export default function MapPage() {
     removeRouteWaypoint,
     removeFinalDestination,
     reorderRouteStop,
+    optimizeStops,
+    routeOptimizing,
     draggedRouteStopIndex,
     beginMapEndpointPick,
     stopRoutes.realtimeConfigured,
