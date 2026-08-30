@@ -14,6 +14,7 @@ describe('Messages regression pipeline', () => {
       conversationId: 'conv-1',
       senderId: 'user-1',
       content: 'Salom',
+      clientMessageId: 'temp-1',
     });
 
     expect(payload).toMatchObject({
@@ -22,6 +23,7 @@ describe('Messages regression pipeline', () => {
       content: 'Salom',
     });
     expect(payload).not.toHaveProperty('reply_to_id');
+    expect(payload).toHaveProperty('client_message_id', 'temp-1');
     expect(BASE_MESSAGE_SELECT).not.toContain('reply_to:messages');
   });
 
@@ -50,6 +52,7 @@ describe('Messages regression pipeline', () => {
         senderId: 'user-1',
         content: 'Reply',
         replyToId: 'message-0',
+        clientMessageId: 'temp-reply-1',
       }),
       insert
     );
@@ -73,6 +76,7 @@ describe('Messages regression pipeline', () => {
         senderId: 'user-1',
         content: 'Reply',
         replyToId: 'message-0',
+        clientMessageId: 'temp-reply-1',
       }),
       insert
     );
