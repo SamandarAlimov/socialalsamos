@@ -9,6 +9,7 @@ import type {
   PostMusicInput,
 } from '@/lib/postMeta';
 import { MAX_COLLABORATORS } from '@/lib/postComposer';
+import type { AlsamosRichTextDocument } from '@/lib/richTextDocument';
 
 export interface Post {
   id: string;
@@ -24,6 +25,7 @@ export interface Post {
   views_count: number;
   is_pinned: boolean;
   visibility: string;
+  formatted_content?: AlsamosRichTextDocument | null;
   created_at: string;
   updated_at: string;
   profile?: {
@@ -50,6 +52,7 @@ export interface CreatePostOptions {
   poll?: PollInput | null;
   location?: PostLocationInput | null;
   music?: PostMusicInput | null;
+  formattedContent?: AlsamosRichTextDocument | null;
   /** Tahrir holati (filtr, aspect ratio, overlaylar) — reproduksiya uchun. */
   editState?: Record<string, unknown> | null;
 }
@@ -256,6 +259,7 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
         poll: options.poll ?? null,
         location: options.location ?? null,
         music: options.music ?? null,
+        formattedContent: options.formattedContent ?? null,
         editState: options.editState ?? null,
       };
 
@@ -302,6 +306,7 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
         views_count: 0,
         is_pinned: false,
         visibility,
+        formatted_content: options.formattedContent ?? null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
