@@ -9,6 +9,9 @@
     "src/hooks/useMessages.ts",
     "src/lib/messagePipeline.ts",
     "src/lib/messagePipeline.test.ts",
-    "src/components/messages/EnhancedMessageBubble.tsx"
+    "src/components/messages/EnhancedMessageBubble.tsx",
+    "src/components/messages/TelegramMediaRecorder.tsx",
+    "src/lib/videoNoteLayout.ts",
+    "src/lib/videoNoteLayout.test.ts"
   ]
 }
