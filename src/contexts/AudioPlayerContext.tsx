@@ -39,6 +39,22 @@ interface AudioPlayerContextType {
 
 const AudioPlayerContext = createContext<AudioPlayerContextType | null>(null);
 
+function disposeAudioElement(audio: HTMLAudioElement | null) {
+  if (!audio) return;
+  audio.pause();
+  audio.onloadedmetadata = null;
+  audio.onended = null;
+  audio.onwaiting = null;
+  audio.oncanplay = null;
+  audio.onerror = null;
+  audio.removeAttribute('src');
+  try {
+    audio.load();
+  } catch {
+    // Some WebViews may throw while being torn down.
+  }
+}
+
 export function useAudioPlayer() {
   const context = useContext(AudioPlayerContext);
   if (!context) {
@@ -84,14 +100,8 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
   }, [isPlaying, updateProgress]);
 
   const playTrackInternal = useCallback((track: MediaTrack, index: number) => {
-    // Stop current audio if playing
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.removeEventListener('loadedmetadata', () => {});
-      audioRef.current.removeEventListener('ended', () => {});
-      audioRef.current.removeEventListener('waiting', () => {});
-      audioRef.current.removeEventListener('canplay', () => {});
-    }
+    // Old audio listenerlari keyingi trackga aralashib ketmasin.
+    disposeAudioElement(audioRef.current);
 
     const audio = new Audio(track.url);
     audio.playbackRate = playbackSpeed;
@@ -123,22 +133,26 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
       console.error('Audio playback error');
     };
 
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('waiting', handleWaiting);
-    audio.addEventListener('canplay', handleCanPlay);
-    audio.addEventListener('error', handleError);
+    audio.onloadedmetadata = handleLoadedMetadata;
+    audio.onended = handleEnded;
+    audio.onwaiting = handleWaiting;
+    audio.oncanplay = handleCanPlay;
+    audio.onerror = handleError;
 
     setCurrentTrack(track);
     setCurrentIndex(index);
     setCurrentTime(0);
+    setIsPlaying(false);
     setIsBuffering(true);
-    
+
     audio.play().then(() => {
+      if (audioRef.current !== audio) return;
       setIsPlaying(true);
       setIsBuffering(false);
     }).catch((err) => {
+      if (audioRef.current !== audio) return;
       console.error('Failed to play audio:', err);
+      setIsPlaying(false);
       setIsBuffering(false);
     });
   }, [playbackSpeed]);
@@ -197,12 +211,12 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
   }, [currentTrack]);
 
   const stop = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-    }
+    disposeAudioElement(audioRef.current);
+    audioRef.current = null;
     setIsPlaying(false);
+    setIsBuffering(false);
     setCurrentTime(0);
+    setDuration(0);
     setCurrentTrack(null);
     setCurrentIndex(-1);
   }, []);
@@ -247,9 +261,8 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
+      disposeAudioElement(audioRef.current);
+      audioRef.current = null;
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
