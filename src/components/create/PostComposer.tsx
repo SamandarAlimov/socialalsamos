@@ -6,6 +6,7 @@ import {
   Loader2,
   Lock,
   MapPin,
+  Music2,
   Paperclip,
   Send,
   Sticker as StickerIcon,
@@ -20,12 +21,13 @@ import { usePosts, type PostVisibility } from '@/hooks/usePosts';
 import { usePostAttachments } from '@/hooks/usePostAttachments';
 import { ACCEPT_ANY_FILE, MAX_COLLABORATORS, MAX_FILES_PER_POST } from '@/lib/postComposer';
 import type { PollInput } from '@/lib/polls';
-import type { PostLocationInput } from '@/lib/postMeta';
+import type { PostLocationInput, PostMusicInput } from '@/lib/postMeta';
 import type { StickerPlacement } from '@/lib/stickers';
 import { AttachmentGrid } from '@/components/create/AttachmentGrid';
 import { FormatToolbar } from '@/components/create/FormatToolbar';
 import { PollComposer } from '@/components/create/PollComposer';
 import { LocationPicker } from '@/components/create/LocationPicker';
+import { MusicPicker } from '@/components/create/MusicPicker';
 import { MentionCollaborator } from '@/components/create/MentionCollaborator';
 import { StickerMediaEditor } from '@/components/create/StickerMediaEditor';
 import { HashtagSuggestions } from '@/components/HashtagSuggestions';
@@ -83,12 +85,14 @@ export function PostComposer() {
   const [visibility, setVisibility] = useState<PostVisibility>('public');
   const [poll, setPoll] = useState<PollInput | null>(null);
   const [location, setLocation] = useState<PostLocationInput | null>(null);
+  const [music, setMusic] = useState<PostMusicInput | null>(null);
   const [collaborators, setCollaborators] = useState<CollaboratorProfile[]>([]);
   const [hashtagQuery, setHashtagQuery] = useState<string | null>(null);
   const [isPosting, setIsPosting] = useState(false);
 
   const [showPoll, setShowPoll] = useState(false);
   const [showLocation, setShowLocation] = useState(false);
+  const [showMusic, setShowMusic] = useState(false);
   const [showCollaborators, setShowCollaborators] = useState(false);
 
   /** Stiker tahriri: qaysi fayl ustida ishlanmoqda. */
@@ -258,6 +262,7 @@ export function PostComposer() {
         media,
         poll,
         location,
+        music,
       });
 
       if (!created) return;
@@ -267,6 +272,7 @@ export function PostComposer() {
       setContent('');
       setPoll(null);
       setLocation(null);
+      setMusic(null);
       setCollaborators([]);
       setStickerDrafts({});
       navigate('/home');
@@ -283,6 +289,7 @@ export function PostComposer() {
     visibility,
     poll,
     location,
+    music,
     clearAttachments,
     navigate,
   ]);
@@ -419,6 +426,39 @@ export function PostComposer() {
         </div>
       )}
 
+      {/* Musiqa xulosasi */}
+      {music && (
+        <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/20 p-3">
+          <Music2 className="h-5 w-5 shrink-0 text-primary" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">
+              {music.track?.title ?? 'Tanlangan musiqa'}
+            </p>
+            <p className="truncate text-xs text-muted-foreground">
+              {music.track?.artist ?? 'Katalog treki'}
+              {' · '}
+              {Math.round((music.volume ?? 1) * 100)}%
+              {music.startSeconds ? ' · ' + Math.round(music.startSeconds) + 's dan' : ''}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowMusic(true)}
+            className="shrink-0 text-xs font-medium text-primary"
+          >
+            Tahrirlash
+          </button>
+          <button
+            type="button"
+            onClick={() => setMusic(null)}
+            aria-label="Musiqani o‘chirish"
+            className="shrink-0 text-muted-foreground transition hover:text-destructive"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {/* Hammualliflar */}
       {collaborators.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border/60 bg-muted/20 p-3">
@@ -489,6 +529,14 @@ export function PostComposer() {
 
         <button
           type="button"
+          onClick={() => setShowMusic(true)}
+          className="flex items-center gap-1.5 rounded-xl border border-border/60 px-3 py-2 text-xs font-medium transition hover:bg-muted"
+        >
+          <Music2 className="h-4 w-4" /> Musiqa
+        </button>
+
+        <button
+          type="button"
           onClick={() => setShowCollaborators(true)}
           className="flex items-center gap-1.5 rounded-xl border border-border/60 px-3 py-2 text-xs font-medium transition hover:bg-muted"
         >
@@ -541,6 +589,14 @@ export function PostComposer() {
         open={showLocation}
         onClose={() => setShowLocation(false)}
         onSelect={setLocation}
+      />
+
+      <MusicPicker
+        open={showMusic}
+        onOpenChange={setShowMusic}
+        currentMusic={music}
+        onSelectMusic={setMusic}
+        visibility={visibility}
       />
 
       <StickerMediaEditor
