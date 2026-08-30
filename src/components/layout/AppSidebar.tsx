@@ -89,8 +89,11 @@ export function AppSidebar() {
   return (
     <aside 
       className={cn(
-        "h-screen min-h-0 sticky top-0 bg-sidebar border-r border-sidebar-border flex-col overflow-hidden transition-all duration-300 z-30",
+        "h-screen min-h-0 sticky top-0 bg-sidebar border-r border-sidebar-border flex-col transition-all duration-300 z-50",
         "hidden md:flex", // Hide on mobile
+        // Keep the sidebar itself overflow-visible so the collapse control can
+        // sit outside the 72px/256px panel without being clipped. The nav has
+        // its own overflow container below.
         collapsed ? "w-[72px]" : "w-64"
       )}
     >
@@ -279,8 +282,10 @@ export function AppSidebar() {
 
       {/* Collapse Toggle */}
       <button
+        type="button"
+        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         onClick={() => { setUserToggled(true); setCollapsed(!collapsed); }}
-        className="absolute -right-3 top-20 z-40 bg-background border border-border rounded-full p-1.5 shadow-md hover:bg-accent transition-colors"
+        className="absolute -right-3 top-20 z-50 bg-background border border-border rounded-full p-1.5 shadow-md hover:bg-accent transition-colors pointer-events-auto"
       >
         {collapsed ? (
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
