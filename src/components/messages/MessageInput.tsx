@@ -759,7 +759,7 @@ export function MessageInput({
               onSend={(url, _duration, type) => {
                 // Telegram ovozli / doiraviy video xabarlarni matnsiz yuboradi:
                 // bubble o'zi pleyerni chizadi, shuning uchun placeholder matn saqlanmaydi.
-                onSend('', url, type);
+                return onSend('', url, type);
               }}
             />
           </div>
