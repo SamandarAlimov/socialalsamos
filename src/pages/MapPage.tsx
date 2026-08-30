@@ -1344,7 +1344,9 @@ export default function MapPage() {
               emptyText={
                 query.trim()
                   ? "Hech narsa topilmadi. Nomni boshqacha yozib ko'ring."
-                  : 'Kategoriya tanlang yoki qidiruvdan foydalaning.'
+                  : category
+                    ? "Bu hududda mos joy topilmadi. Xaritani surib boshqa hududda tekshirib ko'ring."
+                    : 'Kategoriya tanlang yoki qidiruvdan foydalaning.'
               }
               onSelect={selectSearchPlace}
               onDirections={openDirections}
