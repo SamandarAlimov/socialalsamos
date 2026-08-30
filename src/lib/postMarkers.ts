@@ -14,7 +14,22 @@ export interface PostMusic {
   durationSeconds: number | null;
 }
 
+export interface LegacyPostLocation {
+  mode: 'place' | 'live';
+  label: string | null;
+  latitude: number;
+  longitude: number;
+  accuracyM: number | null;
+  liveUntil: string | null;
+  place: {
+    name: string;
+    address: string | null;
+    category: string | null;
+  } | null;
+}
+
 const MUSIC_TAG = '[MUSIC]';
+const LOCATION_TAG = '[LOCATION]';
 
 /** JSON obyektining yopiluvchi qavsini topadi (satr ichidagi qavslarni hisobga olmaydi). */
 function findObjectEnd(text: string, start: number): number {
@@ -107,6 +122,108 @@ export function parseMusicFromContent(content: string | null | undefined): {
   }
 
   return { music: null, cleanContent: cleaned };
+}
+
+
+function normalizeLocation(raw: Record<string, unknown>): LegacyPostLocation | null {
+  const latitude = num(raw.latitude ?? raw.lat);
+  const longitude = num(raw.longitude ?? raw.lng ?? raw.lon);
+  if (latitude == null || longitude == null) return null;
+
+  const rawPlace =
+    raw.place && typeof raw.place === 'object' && !Array.isArray(raw.place)
+      ? (raw.place as Record<string, unknown>)
+      : null;
+
+  const placeName = rawPlace ? str(rawPlace.name) : null;
+  const place = rawPlace && placeName
+    ? {
+        name: placeName,
+        address: str(rawPlace.address),
+        category: str(rawPlace.category),
+      }
+    : null;
+
+  return {
+    mode: raw.mode === 'live' ? 'live' : 'place',
+    label: str(raw.label) ?? place?.name ?? null,
+    latitude,
+    longitude,
+    accuracyM: num(raw.accuracyM ?? raw.accuracy_m),
+    liveUntil: str(raw.liveUntil ?? raw.live_until),
+    place,
+  };
+}
+
+export function parseLocationFromContent(content: string | null | undefined): {
+  location: LegacyPostLocation | null;
+  cleanContent: string;
+} {
+  if (!content) return { location: null, cleanContent: '' };
+
+  const tagIndex = content.indexOf(LOCATION_TAG);
+  if (tagIndex === -1) return { location: null, cleanContent: content };
+
+  const jsonStart = content.indexOf('{', tagIndex + LOCATION_TAG.length);
+  const jsonEnd = jsonStart === -1 ? -1 : findObjectEnd(content, jsonStart);
+
+  if (jsonStart === -1 || jsonEnd === -1) {
+    const cleaned = (content.slice(0, tagIndex) + content.slice(tagIndex + LOCATION_TAG.length)).trim();
+    return { location: null, cleanContent: cleaned };
+  }
+
+  const cleaned = (content.slice(0, tagIndex) + content.slice(jsonEnd + 1)).trim();
+
+  try {
+    const parsed = JSON.parse(content.slice(jsonStart, jsonEnd + 1));
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return {
+        location: normalizeLocation(parsed as Record<string, unknown>),
+        cleanContent: cleaned,
+      };
+    }
+  } catch {
+    // Buzuq legacy marker foydalanuvchiga ko'rinmasin.
+  }
+
+  return { location: null, cleanContent: cleaned };
+}
+
+export function appendLocationMarker(
+  content: string,
+  input: {
+    mode: 'place' | 'live';
+    latitude: number;
+    longitude: number;
+    label?: string | null;
+    accuracyM?: number | null;
+    liveUntil?: string | null;
+    place?: {
+      name: string;
+      address?: string | null;
+      category?: string | null;
+    } | null;
+  },
+): string {
+  const { cleanContent } = parseLocationFromContent(content);
+
+  const marker = LOCATION_TAG + JSON.stringify({
+    mode: input.mode,
+    latitude: input.latitude,
+    longitude: input.longitude,
+    label: input.label ?? input.place?.name ?? null,
+    accuracyM: input.accuracyM ?? null,
+    liveUntil: input.liveUntil ?? null,
+    place: input.place
+      ? {
+          name: input.place.name,
+          address: input.place.address ?? null,
+          category: input.place.category ?? null,
+        }
+      : null,
+  });
+
+  return cleanContent ? cleanContent + '\n' + marker : marker;
 }
 
 /** Sekundni `3:07` ko'rinishiga aylantiradi. */
