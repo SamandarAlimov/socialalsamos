@@ -512,496 +512,371 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
     attachments.length > 0 && !isPosting && !isUploading && !isCombining;
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 pb-8 pt-4 sm:px-5 lg:px-6">
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,430px)_minmax(0,1fr)] lg:items-start">
-        <section className="lg:sticky lg:top-4">
-          <div className="rounded-[32px] border border-border/60 bg-card p-3 shadow-[0_18px_60px_rgba(0,0,0,0.12)] sm:p-4">
-            <div
-              className={cn(
-                'relative mx-auto aspect-[9/16] w-full max-w-[400px] overflow-hidden rounded-[27px] border bg-black',
-                isDragging
-                  ? 'border-primary ring-4 ring-primary/15'
-                  : 'border-white/10',
-              )}
-              onDragEnter={(event) => {
-                event.preventDefault();
-                setIsDragging(true);
-              }}
-              onDragOver={(event) => {
-                event.preventDefault();
-                event.dataTransfer.dropEffect = 'copy';
-              }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={(event) => void handleDrop(event)}
-            >
-              {activeClip?.previewUrl ? (
-                <video
-                  src={activeClip.previewUrl}
-                  muted
-                  loop
-                  autoPlay
-                  playsInline
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex h-full w-full flex-col items-center justify-center gap-4 bg-[radial-gradient(circle_at_top,hsl(var(--primary)/0.2),transparent_40%),linear-gradient(to_bottom,#171717,#030303)] px-8 text-center text-white"
-                >
-                  <span className="flex h-16 w-16 items-center justify-center rounded-[22px] border border-white/10 bg-white/10 shadow-xl backdrop-blur">
-                    <Video className="h-7 w-7" />
-                  </span>
-                  <p className="text-sm font-semibold">Video qo‘shish</p>
-                </button>
-              )}
+    <div className="mx-auto w-full max-w-3xl px-0 pb-8 sm:px-4 sm:pt-4">
+      <section className="overflow-hidden border-y border-border/60 bg-background sm:rounded-2xl sm:border">
+        <div className="flex items-center gap-3 px-4 py-3 sm:px-5">
+          <Avatar className="h-10 w-10 shrink-0">
+            <AvatarImage src={profile?.avatar_url ?? ''} />
+            <AvatarFallback className="font-semibold">
+              {(profile?.display_name || profile?.username || 'U')
+                .charAt(0)
+                .toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
 
-              <span className="pointer-events-none absolute left-3 top-3 rounded-full border border-white/10 bg-black/55 px-2.5 py-1 text-[10px] font-semibold text-white backdrop-blur">
-                9:16
-              </span>
+          <p className="min-w-0 flex-1 truncate text-sm font-semibold">
+            {profile?.display_name || profile?.username || 'Foydalanuvchi'}
+          </p>
 
-              {music && (
-                <span className="pointer-events-none absolute right-3 top-3 flex max-w-[55%] items-center gap-1.5 rounded-full border border-white/10 bg-black/55 px-2.5 py-1 text-[10px] font-medium text-white backdrop-blur">
-                  <Music2 className="h-3 w-3 shrink-0" />
-                  <span className="truncate">
-                    {music.track?.title ?? 'Musiqa'}
-                  </span>
-                </span>
-              )}
+          <Select
+            value={visibility}
+            onValueChange={(value) => setVisibility(value as PostVisibility)}
+          >
+            <SelectTrigger className="h-8 w-auto min-w-0 gap-1 rounded-full border-0 bg-muted/55 px-2.5 text-[11px] font-medium shadow-none focus:ring-0">
+              <SelectValue />
+              <ChevronDown className="h-3 w-3 text-muted-foreground" />
+            </SelectTrigger>
+            <SelectContent>
+              {VISIBILITIES.map((item) => (
+                <SelectItem key={item.id} value={item.id}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-              {caption.trim() && (
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-5 pb-6 pt-16">
-                  <p className="line-clamp-5 whitespace-pre-wrap break-words text-sm leading-relaxed text-white drop-shadow">
-                    {caption}
-                  </p>
-                </div>
-              )}
-
-              {isDragging && (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-primary/25 backdrop-blur-sm">
-                  <div className="rounded-2xl border border-white/15 bg-black/65 px-5 py-3 text-sm font-semibold text-white">
-                    Reel videosini tashlang
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="video/*"
-              multiple
-              className="hidden"
-              onChange={handleFileInput}
-            />
-
-            <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="border-t border-border/50 p-3 sm:p-4">
+          <div
+            className={cn(
+              'relative mx-auto aspect-[9/16] w-full max-w-[400px] overflow-hidden rounded-xl bg-black',
+              isDragging && 'ring-2 ring-primary',
+            )}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = 'copy';
+            }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(event) => void handleDrop(event)}
+          >
+            {activeClip?.previewUrl ? (
+              <video
+                src={activeClip.previewUrl}
+                muted
+                loop
+                autoPlay
+                playsInline
+                className="h-full w-full object-cover"
+              />
+            ) : (
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-border/60 bg-background text-xs font-medium transition hover:border-primary/25 hover:bg-primary/[0.035]"
+                className="flex h-full w-full flex-col items-center justify-center gap-3 text-white/80 transition hover:text-white"
               >
-                <ImagePlus className="h-4 w-4 text-primary" />
-                {attachments.length > 0 ? 'Klip qo‘shish' : 'Qurilmadan'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCamera(true)}
-                className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-border/60 bg-background text-xs font-medium transition hover:border-primary/25 hover:bg-primary/[0.035]"
-              >
-                <Camera className="h-4 w-4 text-primary" />
-                Kamera
-              </button>
-            </div>
-
-            {activeClip && (
-              <button
-                type="button"
-                onClick={() => setVideoTargetId(activeClip.id)}
-                className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-muted/60 text-xs font-medium transition hover:bg-muted"
-              >
-                <Pencil className="h-4 w-4" />
-                Tahrirlash
+                <Video className="h-8 w-8" />
+                <span className="text-sm font-medium">Video qo‘shish</span>
               </button>
             )}
 
-            {attachments.length > 0 && (
-              <div className="mt-3 space-y-2">
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {attachments.map((clip, index) => (
+            {music && (
+              <span className="pointer-events-none absolute right-3 top-3 flex max-w-[65%] items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-medium text-white backdrop-blur">
+                <Music2 className="h-3 w-3 shrink-0" />
+                <span className="truncate">{music.track?.title ?? 'Musiqa'}</span>
+              </span>
+            )}
+          </div>
+
+          {attachments.length > 0 && (
+            <div className="mx-auto mt-3 max-w-[520px]">
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                {attachments.map((clip, index) => (
+                  <button
+                    key={clip.id}
+                    type="button"
+                    onClick={() => setSelectedClipId(clip.id)}
+                    className={cn(
+                      'relative h-16 w-11 shrink-0 overflow-hidden rounded-lg border-2 bg-black transition',
+                      clip.id === activeClip?.id
+                        ? 'border-primary'
+                        : 'border-transparent opacity-65 hover:opacity-100',
+                    )}
+                  >
+                    {clip.previewUrl ? (
+                      <video
+                        src={clip.previewUrl}
+                        muted
+                        playsInline
+                        preload="metadata"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <Video className="absolute inset-0 m-auto h-4 w-4 text-white/60" />
+                    )}
+                    <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 text-[8px] text-white">
+                      {index + 1}
+                    </span>
+                  </button>
+                ))}
+
+                {attachments.length < MAX_REEL_CLIPS && (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex h-16 w-11 shrink-0 items-center justify-center rounded-lg border border-dashed border-border/70 text-muted-foreground transition hover:border-primary/40 hover:text-primary"
+                    aria-label="Klip qo‘shish"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              {activeClip && (
+                <div className="flex flex-wrap items-center gap-1 border-t border-border/40 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setVideoTargetId(activeClip.id)}
+                    title="Tahrirlash"
+                    className="flex h-8 items-center gap-1.5 rounded-full px-3 text-[10px] font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Tahrirlash
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={activeClipIndex <= 0}
+                    onClick={() =>
+                      reorderAttachments(activeClipIndex, activeClipIndex - 1)
+                    }
+                    title="Oldinga"
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted disabled:opacity-25"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={
+                      activeClipIndex < 0 ||
+                      activeClipIndex >= attachments.length - 1
+                    }
+                    onClick={() =>
+                      reorderAttachments(activeClipIndex, activeClipIndex + 1)
+                    }
+                    title="Keyinga"
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted disabled:opacity-25"
+                  >
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => removeClip(activeClip.id)}
+                    title="O‘chirish"
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+
+                  <div className="mx-1 h-5 w-px bg-border" />
+
+                  {REEL_SPEEDS.map((speed) => (
                     <button
-                      key={clip.id}
+                      key={speed}
                       type="button"
-                      onClick={() => setSelectedClipId(clip.id)}
+                      onClick={() =>
+                        setEditState(activeClip.id, {
+                          ...(activeClip.editState ?? {}),
+                          reelClip: {
+                            ...((activeClip.editState?.reelClip ?? {}) as Record<string, unknown>),
+                            speed,
+                          },
+                        })
+                      }
                       className={cn(
-                        'relative h-20 w-14 shrink-0 overflow-hidden rounded-xl border-2 bg-black transition',
-                        clip.id === activeClip?.id
-                          ? 'border-primary'
-                          : 'border-transparent opacity-70 hover:opacity-100',
+                        'h-8 rounded-full px-2.5 text-[10px] font-semibold transition',
+                        activeSpeed === speed
+                          ? 'bg-primary/10 text-primary'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                       )}
                     >
-                      {clip.previewUrl ? (
-                        <video
-                          src={clip.previewUrl}
-                          muted
-                          playsInline
-                          preload="metadata"
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <Video className="absolute inset-0 m-auto h-5 w-5 text-white/60" />
-                      )}
-                      <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[9px] text-white">
-                        {index + 1}
-                      </span>
+                      {speed}×
                     </button>
                   ))}
 
-                  {attachments.length < MAX_REEL_CLIPS && (
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex h-20 w-14 shrink-0 items-center justify-center rounded-xl border border-dashed border-border/70 text-muted-foreground transition hover:border-primary/40 hover:text-primary"
-                    >
-                      <Plus className="h-5 w-5" />
-                    </button>
+                  {activeClipIndex < attachments.length - 1 && (
+                    <>
+                      <div className="mx-1 h-5 w-px bg-border" />
+                      {[
+                        ['none', 'Oddiy'],
+                        ['fade', 'Fade'],
+                      ].map(([transition, label]) => (
+                        <button
+                          key={transition}
+                          type="button"
+                          onClick={() =>
+                            setEditState(activeClip.id, {
+                              ...(activeClip.editState ?? {}),
+                              reelClip: {
+                                ...((activeClip.editState?.reelClip ?? {}) as Record<string, unknown>),
+                                transition,
+                              },
+                            })
+                          }
+                          className={cn(
+                            'h-8 rounded-full px-2.5 text-[10px] font-semibold transition',
+                            clipTransition(activeClip) === transition
+                              ? 'bg-primary/10 text-primary'
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                          )}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </>
                   )}
                 </div>
-
-                {activeClip && (
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] text-muted-foreground">
-                      {activeClipIndex + 1}/{attachments.length}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        disabled={activeClipIndex <= 0}
-                        onClick={() =>
-                          reorderAttachments(activeClipIndex, activeClipIndex - 1)
-                        }
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted disabled:opacity-30"
-                        aria-label="Oldinga"
-                      >
-                        <ArrowLeft className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        disabled={activeClipIndex < 0 || activeClipIndex >= attachments.length - 1}
-                        onClick={() =>
-                          reorderAttachments(activeClipIndex, activeClipIndex + 1)
-                        }
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted disabled:opacity-30"
-                        aria-label="Keyinga"
-                      >
-                        <ArrowRight className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeClip(activeClip.id)}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
-                        aria-label="Klipni o‘chirish"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {activeClip && (
-                  <div className="flex items-center gap-1 rounded-xl bg-muted/40 p-1">
-                    {REEL_SPEEDS.map((speed) => (
-                      <button
-                        key={speed}
-                        type="button"
-                        onClick={() =>
-                          setEditState(activeClip.id, {
-                            ...(activeClip.editState ?? {}),
-                            reelClip: {
-                              ...((activeClip.editState?.reelClip ?? {}) as Record<string, unknown>),
-                              speed,
-                            },
-                          })
-                        }
-                        className={cn(
-                          'h-8 flex-1 rounded-lg text-[10px] font-semibold transition',
-                          activeSpeed === speed
-                            ? 'bg-background text-primary shadow-sm'
-                            : 'text-muted-foreground hover:text-foreground',
-                        )}
-                      >
-                        {speed}×
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {activeClip && activeClipIndex < attachments.length - 1 && (
-                  <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted/40 p-1">
-                    {[
-                      ['none', 'Oddiy'],
-                      ['fade', 'Fade'],
-                    ].map(([transition, label]) => (
-                      <button
-                        key={transition}
-                        type="button"
-                        onClick={() =>
-                          setEditState(activeClip.id, {
-                            ...(activeClip.editState ?? {}),
-                            reelClip: {
-                              ...((activeClip.editState?.reelClip ?? {}) as Record<string, unknown>),
-                              transition,
-                            },
-                          })
-                        }
-                        className={cn(
-                          'h-8 rounded-lg text-[10px] font-semibold transition',
-                          clipTransition(activeClip) === transition
-                            ? 'bg-background text-primary shadow-sm'
-                            : 'text-muted-foreground hover:text-foreground',
-                        )}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </section>
-
-        <aside className="min-w-0 space-y-4">
-          <div className="flex items-center gap-3 rounded-3xl border border-border/60 bg-gradient-to-br from-card via-card to-primary/[0.045] p-4 shadow-sm">
-            <Avatar className="h-12 w-12 shrink-0 border-2 border-background shadow-sm ring-1 ring-border/60">
-              <AvatarImage src={profile?.avatar_url ?? ''} />
-              <AvatarFallback className="font-semibold">
-                {(profile?.display_name || profile?.username || 'U')
-                  .charAt(0)
-                  .toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">
-                {profile?.display_name || profile?.username || 'Foydalanuvchi'}
-              </p>
-              <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                <Select
-                  value={visibility}
-                  onValueChange={(value) =>
-                    setVisibility(value as PostVisibility)
-                  }
-                >
-                  <SelectTrigger className="h-8 w-auto min-w-28 gap-1 rounded-full border-border/60 bg-background px-3 text-xs shadow-none">
-                    <SelectValue />
-                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {VISIBILITIES.map((item) => (
-                      <SelectItem key={item.id} value={item.id}>
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <button
-                  type="button"
-                  onClick={() => setShowCollaborators(true)}
-                  className={cn(
-                    'inline-flex h-8 items-center gap-1.5 rounded-full border border-border/60 bg-background px-3 text-xs font-medium transition hover:bg-muted',
-                    collaborators.length > 0 &&
-                      'border-primary/30 bg-primary/[0.06] text-primary',
-                  )}
-                >
-                  <Users className="h-3.5 w-3.5" />
-                  {collaborators.length > 0
-                    ? `${collaborators.length} hammuallif`
-                    : 'Hammuallif'}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-sm">
-            <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Caption
-              </p>
-              <span className="text-[10px] text-muted-foreground">
-                {caption.length}/2200
-              </span>
-            </div>
-            <textarea
-              value={caption}
-              onChange={(event) =>
-                setCaption(event.target.value.slice(0, 2200))
-              }
-              placeholder="Reel haqida yozing... #hashtag"
-              rows={7}
-              className="min-h-44 w-full resize-none bg-transparent px-4 py-4 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setShowMusic(true)}
-              className={cn(
-                'flex min-h-20 items-center gap-3 rounded-3xl border p-4 text-left transition',
-                music
-                  ? 'border-primary/25 bg-primary/[0.055]'
-                  : 'border-border/60 bg-card hover:border-primary/20',
               )}
-            >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <Music2 className="h-5 w-5" />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-xs font-semibold">Musiqa</span>
-                <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
-                  {music?.track?.title ?? 'Tanlanmagan'}
-                </span>
-              </span>
-            </button>
+            </div>
+          )}
+        </div>
 
-            <button
-              type="button"
-              onClick={() => setShowCollaborators(true)}
-              className="flex min-h-20 items-center gap-3 rounded-3xl border border-border/60 bg-card p-4 text-left transition hover:border-primary/20"
-            >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <Users className="h-5 w-5" />
-              </span>
-              <span>
-                <span className="block text-xs font-semibold">
-                  Hammualliflar
-                </span>
-                <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                  {collaborators.length}/{MAX_COLLABORATORS}
-                </span>
-              </span>
-            </button>
-          </div>
+        <div className="border-t border-border/50 px-4 py-3 sm:px-5">
+          <textarea
+            value={caption}
+            onChange={(event) => setCaption(event.target.value.slice(0, 2200))}
+            placeholder="Izoh qo‘shish..."
+            rows={4}
+            className="min-h-24 w-full resize-none bg-transparent text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
+          />
+        </div>
 
+        <div className="border-t border-border/50">
           {attachments.length > 0 && totalDuration > 0 && (
-            <div className="flex items-center gap-3 rounded-3xl border border-border/60 bg-card p-3 shadow-sm">
-              <div className="flex h-16 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted">
+            <div className="flex min-h-14 items-center gap-3 px-4 py-2.5 sm:px-5">
+              <div className="flex h-12 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
                 {coverPreviewUrl ? (
-                  <img
-                    src={coverPreviewUrl}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
+                  <img src={coverPreviewUrl} alt="" className="h-full w-full object-cover" />
                 ) : (
                   <ImageIcon className="h-4 w-4 text-muted-foreground" />
                 )}
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="mb-2 flex items-center justify-between text-xs">
-                  <span className="font-semibold">Muqova</span>
-                  <span className="text-muted-foreground">
-                    {formatSeconds(coverSecond)}
-                  </span>
-                </div>
-                <Slider
-                  value={[coverSecond]}
-                  min={0}
-                  max={Math.max(0.1, totalDuration - 0.05)}
-                  step={0.1}
-                  onValueChange={([value]) => setCoverSecond(value ?? 0)}
-                />
-              </div>
-            </div>
-          )}
-
-          {(music || collaborators.length > 0) && (
-            <div className="space-y-2 rounded-3xl border border-border/60 bg-card p-3 shadow-sm">
-              {music && (
-                <div className="space-y-3 rounded-2xl bg-muted/40 p-3">
-                  <div className="flex items-center gap-3">
-                    <Music2 className="h-4 w-4 shrink-0 text-primary" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-semibold">
-                        {music.track?.title ?? 'Musiqa'}
-                      </p>
-                      <p className="truncate text-[10px] text-muted-foreground">
-                        {music.track?.artist ?? 'Katalog'}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleMusicChange(null)}
-                      className="rounded-lg p-1 text-muted-foreground transition hover:text-destructive"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <span className="w-14 shrink-0 text-[10px] font-medium text-muted-foreground">
-                      Ovoz
-                    </span>
-                    <Slider
-                      value={[Math.round((music.volume ?? 1) * 100)]}
-                      min={0}
-                      max={100}
-                      step={1}
-                      onValueChange={([value]) =>
-                        handleMusicChange({
-                          ...music,
-                          volume: (value ?? 100) / 100,
-                        })
-                      }
-                      className="flex-1"
-                    />
-                    <span className="w-8 text-right text-[10px] text-muted-foreground">
-                      {Math.round((music.volume ?? 1) * 100)}%
-                    </span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleMusicChange({
-                        ...music,
-                        mutedOriginal: !music.mutedOriginal,
-                      })
-                    }
-                    className={cn(
-                      'flex h-9 w-full items-center justify-between rounded-xl border px-3 text-[11px] font-medium transition',
-                      music.mutedOriginal
-                        ? 'border-primary/25 bg-primary/[0.06] text-primary'
-                        : 'border-border/60 bg-background text-muted-foreground',
-                    )}
-                  >
-                    <span>Asl audio</span>
-                    <span>{music.mutedOriginal ? 'O‘chiq' : 'Yoniq'}</span>
-                  </button>
-                </div>
-              )}
-
-              {collaborators.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 rounded-2xl bg-muted/40 p-3">
-                  {collaborators.map((item) => (
-                    <span
-                      key={item.id}
-                      className="rounded-full bg-background px-2 py-1 text-[10px]"
-                    >
-                      @{item.username}
-                    </span>
-                  ))}
-                </div>
-              )}
+              <span className="w-14 shrink-0 text-xs font-medium">Muqova</span>
+              <Slider
+                value={[coverSecond]}
+                min={0}
+                max={Math.max(0.1, totalDuration - 0.05)}
+                step={0.1}
+                onValueChange={([value]) => setCoverSecond(value ?? 0)}
+                className="min-w-0 flex-1"
+              />
+              <span className="w-9 text-right text-[10px] text-muted-foreground">
+                {formatSeconds(coverSecond)}
+              </span>
             </div>
           )}
 
           <button
             type="button"
+            onClick={() => setShowMusic(true)}
+            className="flex min-h-14 w-full items-center gap-3 border-t border-border/40 px-4 py-2.5 text-left first:border-t-0 sm:px-5"
+          >
+            <Music2 className="h-[18px] w-[18px] shrink-0 text-muted-foreground" />
+            <span className="flex-1 text-sm">Musiqa</span>
+            <span className="max-w-[45%] truncate text-xs text-muted-foreground">
+              {music?.track?.title ?? 'Qo‘shish'}
+            </span>
+            <ChevronDown className="-rotate-90 h-4 w-4 text-muted-foreground" />
+          </button>
+
+          {music && (
+            <div className="space-y-3 border-t border-border/40 px-4 py-3 sm:px-5">
+              <div className="flex items-center gap-3">
+                <span className="w-16 shrink-0 text-xs text-muted-foreground">Ovoz</span>
+                <Slider
+                  value={[Math.round((music.volume ?? 1) * 100)]}
+                  min={0}
+                  max={100}
+                  step={1}
+                  onValueChange={([value]) =>
+                    handleMusicChange({
+                      ...music,
+                      volume: (value ?? 100) / 100,
+                    })
+                  }
+                  className="flex-1"
+                />
+                <span className="w-9 text-right text-[10px] text-muted-foreground">
+                  {Math.round((music.volume ?? 1) * 100)}%
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  handleMusicChange({
+                    ...music,
+                    mutedOriginal: !music.mutedOriginal,
+                  })
+                }
+                className="flex w-full items-center justify-between text-xs"
+              >
+                <span className="text-muted-foreground">Asl audio</span>
+                <span className="font-medium">
+                  {music.mutedOriginal ? 'O‘chiq' : 'Yoniq'}
+                </span>
+              </button>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setShowCollaborators(true)}
+            className="flex min-h-14 w-full items-center gap-3 border-t border-border/40 px-4 py-2.5 text-left sm:px-5"
+          >
+            <Users className="h-[18px] w-[18px] shrink-0 text-muted-foreground" />
+            <span className="flex-1 text-sm">Hammualliflar</span>
+            <span className="max-w-[45%] truncate text-xs text-muted-foreground">
+              {collaborators.length > 0
+                ? collaborators.map((item) => '@' + item.username).join(', ')
+                : 'Qo‘shish'}
+            </span>
+            <ChevronDown className="-rotate-90 h-4 w-4 text-muted-foreground" />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-1 border-t border-border/60 px-3 py-2 sm:px-4">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            title="Klip qo‘shish"
+            aria-label="Klip qo‘shish"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          >
+            <ImagePlus className="h-[18px] w-[18px]" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowCamera(true)}
+            title="Kamera"
+            aria-label="Kamera"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          >
+            <Camera className="h-[18px] w-[18px]" />
+          </button>
+
+          <div className="flex-1" />
+
+          <button
+            type="button"
             disabled={!canPublish}
             onClick={() => void publishReel()}
-            className="flex h-13 min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-45"
           >
             {isPosting || isUploading || isCombining ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -1009,15 +884,20 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
               <Send className="h-4 w-4" />
             )}
             {isCombining
-              ? `Tayyorlanmoqda ${Math.round(combineProgress * 100)}%`
-              : isUploading
-                ? 'Yuklanmoqda...'
-                : isPosting
-                  ? 'Joylanmoqda...'
-                  : 'Reel joylash'}
+              ? `${Math.round(combineProgress * 100)}%`
+              : 'Joylash'}
           </button>
-        </aside>
-      </div>
+        </div>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="video/*"
+          multiple
+          className="hidden"
+          onChange={handleFileInput}
+        />
+      </section>
 
       {showCamera && (
         <CameraVideoRecorder
