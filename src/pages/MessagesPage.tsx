@@ -1372,19 +1372,16 @@ export default function MessagesPage() {
   const mediaTracksForPlaylist = useMemo(() => {
     return messages
       .filter(
-        (msg) =>
-          !msg.is_deleted &&
-          msg.media_url &&
-          (msg.media_type === 'audio' || msg.media_type === 'video')
+        (msg) => !msg.is_deleted && msg.media_url && msg.media_type === 'audio'
       )
       .map((msg) => ({
         id: msg.id,
         url: msg.media_url!,
-        name: msg.media_type === 'audio' ? 'Ovozli xabar' : 'Video xabar',
+        name: 'Ovozli xabar',
         artist: msg.sender?.display_name || msg.sender?.username || 'Foydalanuvchi',
-        title: msg.media_type === 'audio' ? 'Ovozli xabar' : 'Video xabar',
+        title: 'Ovozli xabar',
         senderName: msg.sender?.display_name || msg.sender?.username,
-        type: msg.media_type as 'audio' | 'video',
+        type: 'audio' as const,
       }));
   }, [messages]);
 
