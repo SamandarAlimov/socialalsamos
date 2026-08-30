@@ -107,6 +107,16 @@ function placeIcon(color: string, active: boolean) {
   });
 }
 
+function routeOriginIcon() {
+  return L.divIcon({
+    html:
+      '<div style="width:30px;height:30px;border-radius:999px;background:#ffffff;border:3px solid #2F6FED;box-shadow:0 4px 12px rgba(0,0,0,.22);display:flex;align-items:center;justify-content:center;color:#2F6FED;font:800 12px/1 system-ui">A</div>',
+    className: 'alsamos-route-origin',
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+  });
+}
+
 function routeCheckpointIcon(index: number, final = false) {
   const label = final ? '✓' : String(index + 1);
   const background = final ? '#ef4444' : '#2F6FED';
@@ -2414,6 +2424,28 @@ export default function MapPage() {
               </Tooltip>
             </Marker>
           ),
+        )}
+
+        {!navigationActive && panel === 'route' && routeOrigin && (
+          <Marker
+            position={[routeOrigin.latitude, routeOrigin.longitude]}
+            icon={routeOriginIcon()}
+            zIndexOffset={710}
+          >
+            <Tooltip
+              direction="top"
+              offset={[0, -14]}
+              opacity={1}
+              className={cn(
+                'alsamos-map-tooltip',
+                contrastLayer && 'alsamos-map-tooltip--contrast',
+              )}
+            >
+              <span className="font-semibold">
+                From · {routeOrigin.name}
+              </span>
+            </Tooltip>
+          </Marker>
         )}
 
         {!navigationActive &&
