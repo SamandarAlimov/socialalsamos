@@ -480,7 +480,7 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
                 className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-muted/60 text-xs font-medium transition hover:bg-muted"
               >
                 <Pencil className="h-4 w-4" />
-                Media tahrirlash
+                Tahrirlash
               </button>
             )}
           </div>
@@ -571,7 +571,7 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
                     ? 'Media yuklanmoqda...'
                     : isCreatingDraft
                       ? 'Qoralama tayyorlanmoqda...'
-                      : 'Stiker bosqichiga o‘tish'}
+                      : 'Davom etish'}
                   {!isCreatingDraft && !isUploading && <ChevronRight className="h-4 w-4" />}
                 </button>
               </div>
@@ -583,7 +583,7 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
                   <ShieldCheck className="h-4 w-4" />
                 </span>
                 <div>
-                  <p className="text-sm font-semibold">Hidden draft tayyor</p>
+                  <p className="text-sm font-semibold">Tayyor</p>
 
                 </div>
               </div>
@@ -594,7 +594,7 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
                 className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-semibold text-primary-foreground shadow-sm"
               >
                 <Sparkles className="h-4 w-4" />
-                Interaktiv stikerlar
+                Stikerlar
               </button>
 
               <button
@@ -608,7 +608,7 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
                 ) : (
                   <Check className="h-4 w-4" />
                 )}
-                Stikersiz joylash
+                Joylash
               </button>
 
               <button
