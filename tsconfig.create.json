@@ -5,6 +5,8 @@
     "noEmit": true
   },
   "include": [
-    "src/pages/ComposePage.tsx"
+    "src/pages/ComposePage.tsx",
+    "src/hooks/usePostMedia.ts",
+    "src/components/PostExtras.tsx"
   ]
 }
