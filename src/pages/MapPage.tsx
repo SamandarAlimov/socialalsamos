@@ -1343,7 +1343,7 @@ export default function MapPage() {
                 ) : (
                   <Navigation className="h-5 w-5" />
                 )}
-                Navigatsiyani boshlash
+                Boshlash
                 <span className="ml-1 text-xs font-semibold opacity-80">
                   {formatMinutes(activeRoute.durationS)} · {formatKm(activeRoute.distanceM)}
                 </span>
