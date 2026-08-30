@@ -1379,37 +1379,86 @@ export default function MapPage() {
       {/* Yuqoridagi qidiruv qatori */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-[1100] px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:left-[404px] md:pt-3">
         <div className="pointer-events-auto mx-auto flex max-w-xl items-center gap-2">
-          <div
-            className={cn(
-              'flex h-11 flex-1 items-center gap-2 rounded-[18px] px-3 shadow-xl ring-1 backdrop-blur-2xl transition focus-within:ring-primary/25',
-              imageryLayer
-                ? 'map-imagery-search ring-white/15'
-                : 'bg-background/84 ring-border/45 focus-within:bg-background/94',
-            )}
-          >
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <input
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
+          <div className="relative min-w-0 flex-1">
+            <div
+              className={cn(
+                'flex h-11 w-full items-center gap-2 rounded-[18px] px-3 shadow-xl ring-1 backdrop-blur-2xl transition focus-within:ring-primary/25',
+                imageryLayer
+                  ? 'map-imagery-search ring-white/15'
+                  : 'bg-background/84 ring-border/45 focus-within:bg-background/94',
+              )}
+            >
+              <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <input
+                value={query}
+                onFocus={() => {
+                  setSearchFocused(true);
+                  setLayerOpen(false);
+                }}
+                onBlur={() => window.setTimeout(() => setSearchFocused(false), 120)}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setCategory(null);
+                  setPanel('search');
+                  setSearchFocused(true);
+                  if (event.target.value.trim()) setSnap('half');
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    setSearchFocused(false);
+                    event.currentTarget.blur();
+                    return;
+                  }
+                  if (event.key === 'Enter') {
+                    const first = search.places[0];
+                    if (first) {
+                      event.preventDefault();
+                      selectSearchPlace(first);
+                    } else if (query.trim().length >= 2) {
+                      searchHistory.addRecent(query);
+                    }
+                  }
+                }}
+                placeholder="Joy, manzil yoki tashkilot nomi"
+                className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    setQuery('');
+                    setCategory(null);
+                    setPanel('search');
+                    setSearchFocused(true);
+                  }}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
+                  aria-label="Tozalash"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+              {search.loading && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />}
+            </div>
+
+            <MapSearchSuggestions
+              query={query}
+              places={search.places}
+              loading={search.loading}
+              error={search.error}
+              recent={searchHistory.recent}
+              visible={searchFocused}
+              highContrast={imageryLayer}
+              onSelectPlace={selectSearchPlace}
+              onSelectRecent={(value) => {
+                setQuery(value);
                 setCategory(null);
                 setPanel('search');
-                if (event.target.value.trim()) setSnap('half');
+                setSnap('half');
+                setSearchFocused(true);
               }}
-              placeholder="Joy, manzil yoki tashkilot nomi"
-              className="h-full flex-1 bg-transparent text-sm outline-none"
+              onClearRecent={searchHistory.clearRecent}
             />
-            {query && (
-              <button
-                type="button"
-                onClick={() => setQuery('')}
-                className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
-                aria-label="Tozalash"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-            {search.loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
           </div>
 
           <MapLayerSwitcher
