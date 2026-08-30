@@ -1404,7 +1404,7 @@ export default function MapPage() {
               }
               onSelect={selectSearchPlace}
               onDirections={openDirections}
-              onSendToChat={setShareTarget}
+              onSendToChat={sendPlaceToChat}
               onSave={toggleSave}
             />
           )}
@@ -1452,7 +1452,8 @@ export default function MapPage() {
     useCurrentLocationAsOrigin,
     selectSearchPlace,
     contrastLayer,
-    contrastLayer,
+    sendPlaceToChat,
+    sharePlace,
   ]);
 
   return (
