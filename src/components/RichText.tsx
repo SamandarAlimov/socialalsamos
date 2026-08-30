@@ -2,9 +2,11 @@ import { Fragment, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { colorClassName, parseRichText, type InlineToken } from '@/lib/richText';
+import { normalizeAlsamosRichTextDocument } from '@/lib/richTextDocument';
 
 interface RichTextProps {
-  content: string;
+  content?: string | null;
+  formattedContent?: unknown;
   className?: string;
 }
 
@@ -87,8 +89,15 @@ function renderTokenText(text: string, keyPrefix: string) {
  * Formatlangan post matnini render qiladi.
  * HTML ishlatilmaydi — faqat tokenlar, shuning uchun XSS xavfi yo'q.
  */
-export function RichText({ content, className }: RichTextProps) {
-  const blocks = useMemo(() => parseRichText(content), [content]);
+export function RichText({ content, formattedContent, className }: RichTextProps) {
+  const structured = useMemo(
+    () => normalizeAlsamosRichTextDocument(formattedContent),
+    [formattedContent],
+  );
+  const blocks = useMemo(
+    () => structured?.blocks ?? parseRichText(content ?? ''),
+    [content, structured],
+  );
 
   if (blocks.length === 0) return null;
 

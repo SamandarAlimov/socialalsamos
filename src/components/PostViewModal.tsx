@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 import { PollDisplay, parsePollFromContent } from '@/components/PollDisplay';
-import { RichTextContent } from '@/components/RichTextContent';
+import { RichText } from '@/components/RichText';
 import { PostViewsDialog } from '@/components/PostViewsDialog';
 import { PostMusicCard } from '@/components/PostMusicCard';
 import { usePostViews } from '@/hooks/usePostViews';
@@ -34,6 +34,7 @@ interface PostViewModalProps {
   post: {
     id: string;
     content: string | null;
+    formatted_content?: unknown;
     media_urls: string[] | null;
     media_type: string | null;
     likes_count: number;
@@ -283,10 +284,14 @@ export function PostViewModal({
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto">
-                {(textContent || music || pollData) && (
+                {(textContent || post.formatted_content || music || pollData) && (
                   <div className="space-y-3 border-b border-border/60 px-4 py-3">
-                    {textContent && (
-                      <RichTextContent content={textContent} className="text-sm leading-relaxed" />
+                    {(textContent || post.formatted_content) && (
+                      <RichText
+                        content={textContent}
+                        formattedContent={post.formatted_content}
+                        className="text-sm leading-relaxed"
+                      />
                     )}
                     {music && <PostMusicCard music={music} />}
                     {pollData && <PollDisplay postId={post.id} pollData={pollData} />}

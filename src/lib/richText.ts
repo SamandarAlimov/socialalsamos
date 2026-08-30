@@ -12,13 +12,13 @@ export type InlineFormat = 'bold' | 'italic' | 'strike' | 'underline' | 'code';
 export type BlockFormat = 'h1' | 'h2' | 'h3' | 'quote' | 'bullet';
 
 export const TEXT_COLORS = [
-  { id: 'red', label: 'Qizil', className: 'text-red-500' },
-  { id: 'orange', label: 'Zarg\u2018aldoq', className: 'text-orange-500' },
-  { id: 'yellow', label: 'Sariq', className: 'text-yellow-500' },
-  { id: 'green', label: 'Yashil', className: 'text-green-500' },
-  { id: 'blue', label: 'Ko\u2018k', className: 'text-blue-500' },
-  { id: 'purple', label: 'Binafsha', className: 'text-purple-500' },
-  { id: 'pink', label: 'Pushti', className: 'text-pink-500' },
+  { id: 'red', label: 'Qizil', className: 'text-red-500', cssValue: '#ef4444' },
+  { id: 'orange', label: 'Zarg\u2018aldoq', className: 'text-orange-500', cssValue: '#f97316' },
+  { id: 'yellow', label: 'Sariq', className: 'text-yellow-500', cssValue: '#eab308' },
+  { id: 'green', label: 'Yashil', className: 'text-green-500', cssValue: '#22c55e' },
+  { id: 'blue', label: 'Ko\u2018k', className: 'text-blue-500', cssValue: '#3b82f6' },
+  { id: 'purple', label: 'Binafsha', className: 'text-purple-500', cssValue: '#a855f7' },
+  { id: 'pink', label: 'Pushti', className: 'text-pink-500', cssValue: '#ec4899' },
 ] as const;
 
 export type TextColorId = (typeof TEXT_COLORS)[number]['id'];
