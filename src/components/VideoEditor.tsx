@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   Crop,
@@ -25,26 +25,26 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import {
+  canRenderEditedVideo,
+  renderEditedVideo,
+  type VideoRenderEdit,
+} from '@/lib/videoRender';
 
 interface VideoEditorProps {
   videoUrl: string;
-  onSave: (editedData: VideoEditData) => void;
+  onSave: (
+    editedData: VideoEditData,
+    renderedFile?: File | null,
+  ) => void | Promise<void>;
   onCancel: () => void;
   open: boolean;
   initialEditData?: VideoEditData | null;
+  sourceFile?: File | null;
 }
 
-export interface VideoEditData {
-  trimStart: number;
-  trimEnd: number;
-  cropX: number;
-  cropY: number;
-  cropWidth: number;
-  cropHeight: number;
-  rotation: number;
-  flipHorizontal: boolean;
-  flipVertical: boolean;
-}
+export type VideoEditData = VideoRenderEdit;
 
 type EditorMode = 'trim' | 'crop' | 'transform';
 type AspectRatio = 'free' | '1:1' | '16:9' | '9:16' | '4:3';
@@ -127,6 +127,7 @@ export function VideoEditor({
   onCancel,
   open,
   initialEditData,
+  sourceFile,
 }: VideoEditorProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const cropSurfaceRef = useRef<HTMLDivElement>(null);
@@ -151,6 +152,13 @@ export function VideoEditor({
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('free');
   const [thumbnails, setThumbnails] = useState<string[]>([]);
   const [loadingThumbnails, setLoadingThumbnails] = useState(false);
+  const [isRendering, setIsRendering] = useState(false);
+  const [renderProgress, setRenderProgress] = useState(0);
+
+  const renderSupported = useMemo(
+    () => Boolean(sourceFile) && canRenderEditedVideo(),
+    [sourceFile],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -384,9 +392,9 @@ export function VideoEditor({
     }
   }, []);
 
-  const handleSave = useCallback(() => {
+  const editData = useMemo<VideoEditData>(() => {
     const safeDuration = Math.max(0, duration);
-    onSave({
+    return {
       trimStart: (trimStart / 100) * safeDuration,
       trimEnd: (trimEnd / 100) * safeDuration,
       cropX: cropArea.x,
@@ -396,16 +404,60 @@ export function VideoEditor({
       rotation,
       flipHorizontal,
       flipVertical,
-    });
+    };
   }, [
     cropArea,
     duration,
     flipHorizontal,
     flipVertical,
-    onSave,
     rotation,
     trimEnd,
     trimStart,
+  ]);
+
+  const saveEditGraph = useCallback(async () => {
+    if (isRendering) return;
+    await onSave(editData, null);
+  }, [editData, isRendering, onSave]);
+
+  const renderAndSave = useCallback(async () => {
+    if (isRendering) return;
+
+    if (!sourceFile || !renderSupported) {
+      await saveEditGraph();
+      return;
+    }
+
+    setIsRendering(true);
+    setRenderProgress(0);
+
+    try {
+      videoRef.current?.pause();
+      const renderedFile = await renderEditedVideo(sourceFile, editData, {
+        frameRate: 30,
+        maxDimension: 1080,
+        onProgress: setRenderProgress,
+      });
+
+      await onSave(editData, renderedFile);
+      toast.success('Video real faylga render qilindi');
+    } catch (error) {
+      console.error('Video render xatosi:', error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Videoni render qilib bo‘lmadi',
+      );
+    } finally {
+      setIsRendering(false);
+    }
+  }, [
+    editData,
+    isRendering,
+    onSave,
+    renderSupported,
+    saveEditGraph,
+    sourceFile,
   ]);
 
   const progressPercent =
@@ -419,11 +471,13 @@ export function VideoEditor({
             <div>
               <DialogTitle className="text-base">Video tahrirlash</DialogTitle>
               <p className="mt-1 text-xs text-muted-foreground">
-                Trim, crop va transform non-destructive edit holati sifatida saqlanadi.
+                {renderSupported
+                  ? 'Trim, crop va transformni yangi video faylga real render qilish mumkin.'
+                  : 'Bu brauzerda edit graph saqlanadi; real render mavjud emas.'}
               </p>
             </div>
             <span className="hidden rounded-full border border-border/60 bg-muted/40 px-3 py-1 text-[10px] font-medium text-muted-foreground sm:block">
-              Asl fayl saqlanadi
+              {renderSupported ? 'Real render mavjud' : 'Edit graph'}
             </span>
           </div>
         </DialogHeader>
@@ -743,20 +797,65 @@ export function VideoEditor({
               )}
 
               <div className="rounded-2xl border border-border/60 bg-muted/25 p-3 text-[11px] leading-relaxed text-muted-foreground">
-                Bu editor hozir non-destructive edit holatini saqlaydi. Final server render pipeline alohida media engine orqali bajariladi.
+                {renderSupported
+                  ? 'Render tugmasi yangi video fayl yaratadi. Xohlasangiz faqat edit holatini ham saqlashingiz mumkin.'
+                  : 'Bu qurilmada real browser render mavjud emas. Edit holati saqlanadi va keyingi render engine ishlatishi mumkin.'}
               </div>
             </div>
           </aside>
         </div>
 
         <DialogFooter className="shrink-0 gap-2 border-t border-border/60 bg-background px-5 py-4">
-          <Button type="button" variant="outline" onClick={onCancel} className="rounded-xl">
+          {isRendering && (
+            <div className="mr-auto min-w-32">
+              <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>Render</span>
+                <span>{Math.round(renderProgress * 100)}%</span>
+              </div>
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary transition-[width]"
+                  style={{ width: `${Math.round(renderProgress * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isRendering}
+            onClick={onCancel}
+            className="rounded-xl"
+          >
             <X className="mr-2 h-4 w-4" />
             Bekor qilish
           </Button>
-          <Button type="button" onClick={handleSave} className="rounded-xl">
-            <Check className="mr-2 h-4 w-4" />
-            Tahrirni saqlash
+
+          {renderSupported && (
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={isRendering}
+              onClick={() => void saveEditGraph()}
+              className="rounded-xl"
+            >
+              Faqat editni saqlash
+            </Button>
+          )}
+
+          <Button
+            type="button"
+            disabled={isRendering}
+            onClick={() => void renderAndSave()}
+            className="rounded-xl"
+          >
+            {isRendering ? (
+              <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground/40 border-t-primary-foreground" />
+            ) : (
+              <Check className="mr-2 h-4 w-4" />
+            )}
+            {renderSupported ? 'Render va saqlash' : 'Tahrirni saqlash'}
           </Button>
         </DialogFooter>
       </DialogContent>
