@@ -96,25 +96,25 @@ export function PostMediaComposer({
   const canEditVideo = active.kind === 'video' && Boolean(onEditVideo);
 
   return (
-    <div className="overflow-hidden bg-background">
-      <div className="relative flex min-h-64 max-h-[48dvh] w-full items-center justify-center overflow-hidden bg-black">
+    <div className="overflow-hidden bg-background lg:h-full">
+      <div className="relative flex min-h-64 max-h-[48dvh] lg:max-h-[calc(100dvh-7.5rem)] w-full items-center justify-center overflow-hidden bg-black lg:h-full lg:max-h-none lg:min-h-0">
         {active.kind === 'image' && active.previewUrl ? (
-          <div className="relative max-h-[48dvh] max-w-full">
+          <div className="relative max-h-[48dvh] lg:max-h-[calc(100dvh-7.5rem)] max-w-full">
             <img
               src={active.previewUrl}
               alt={active.altText || active.file.name}
-              className="block max-h-[48dvh] max-w-full object-contain"
+              className="block max-h-[48dvh] lg:max-h-[calc(100dvh-7.5rem)] max-w-full object-contain"
             />
             <MediaStickerOverlay editState={active.editState ?? null} />
           </div>
         ) : active.kind === 'video' && active.previewUrl ? (
-          <div className="relative max-h-[48dvh] max-w-full">
+          <div className="relative max-h-[48dvh] lg:max-h-[calc(100dvh-7.5rem)] max-w-full">
             <video
               src={active.previewUrl}
               controls
               playsInline
               preload="metadata"
-              className="block max-h-[48dvh] max-w-full object-contain"
+              className="block max-h-[48dvh] lg:max-h-[calc(100dvh-7.5rem)] max-w-full object-contain"
             />
             <MediaStickerOverlay editState={active.editState ?? null} />
           </div>
