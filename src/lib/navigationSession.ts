@@ -52,9 +52,11 @@ export function readNavigationSession(): NavigationSession | null {
 
     if (
       parsed.version !== 1 ||
+      parsed.active !== true ||
+      parsed.mode === 'transit' ||
       !Number.isFinite(Number(parsed.updatedAt)) ||
       Date.now() - Number(parsed.updatedAt) > MAX_AGE_MS ||
-      !['car', 'foot', 'bike', 'transit'].includes(String(parsed.mode)) ||
+      !['car', 'foot', 'bike'].includes(String(parsed.mode)) ||
       !Array.isArray(parsed.routes)
     ) {
       window.sessionStorage.removeItem(STORAGE_KEY);
@@ -118,6 +120,14 @@ export function writeNavigationSession(
   session: Omit<NavigationSession, 'version' | 'updatedAt'>,
 ): void {
   if (typeof window === 'undefined') return;
+
+  // Route preview/sessionni refreshdan keyin majburan qaytarmaymiz.
+  // Faqat foydalanuvchi "Boshlash" qilgan aktiv navigatsiya resumable.
+  if (!session.active || session.mode === 'transit') {
+    clearNavigationSession();
+    return;
+  }
+
   try {
     const payload: NavigationSession = {
       version: 1,
