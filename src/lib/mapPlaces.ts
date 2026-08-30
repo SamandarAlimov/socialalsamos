@@ -559,6 +559,208 @@ export async function fetchPlacesByCategory(
     .slice(0, limit);
 }
 
+
+function clickedPlaceDisplayName(
+  tags: Record<string, string>,
+  category?: PlaceCategory,
+): string {
+  return (
+    tags.name ||
+    tags['name:uz'] ||
+    tags['name:ru'] ||
+    tags['name:en'] ||
+    tags.brand ||
+    tags.operator ||
+    category?.label ||
+    tags['addr:housename'] ||
+    (tags.building ? 'Bino' : 'Joy')
+  );
+}
+
+function clickCandidateScore(
+  place: MapPlace,
+  click: { latitude: number; longitude: number },
+): number {
+  const distance = distanceMeters(
+    click.latitude,
+    click.longitude,
+    place.latitude,
+    place.longitude,
+  );
+  const tags = place.tags ?? {};
+  let score = -distance;
+
+  if (place.name && !['Nomsiz joy', 'Bino', 'Joy'].includes(place.name)) score += 90;
+  if (place.categoryId) score += 55;
+  if (tags.amenity || tags.shop || tags.tourism || tags.office || tags.leisure) score += 45;
+  if (tags.brand || tags.operator) score += 28;
+  if (tags['addr:housenumber'] || tags['addr:housename']) score += 18;
+  if (tags.building && !tags.name && !tags.amenity && !tags.shop) score += 4;
+
+  return score;
+}
+
+async function reverseNominatimPlace(
+  point: { latitude: number; longitude: number },
+  signal?: AbortSignal,
+): Promise<MapPlace | null> {
+  const params = new URLSearchParams({
+    format: 'jsonv2',
+    lat: String(point.latitude),
+    lon: String(point.longitude),
+    zoom: '18',
+    addressdetails: '1',
+    extratags: '1',
+    namedetails: '1',
+    'accept-language': 'uz,ru,en',
+  });
+
+  const response = await fetchWithTimeout(
+    'https://nominatim.openstreetmap.org/reverse?' + params.toString(),
+    {
+      signal,
+      headers: { Accept: 'application/json' },
+    },
+    4500,
+  );
+  if (!response.ok) return null;
+
+  const item = await response.json();
+  if (!item?.lat || !item?.lon) return null;
+
+  const extra: Record<string, string> =
+    item.extratags && typeof item.extratags === 'object' ? item.extratags : {};
+  const address =
+    item.address && typeof item.address === 'object' ? item.address : {};
+  const namedetails =
+    item.namedetails && typeof item.namedetails === 'object' ? item.namedetails : {};
+  const tags: Record<string, string> = {
+    ...extra,
+    ...(item.type ? { [String(item.category || 'type')]: String(item.type) } : {}),
+  };
+
+  const category = categoryFromTags(tags);
+  const name =
+    namedetails.name ||
+    namedetails['name:uz'] ||
+    namedetails['name:ru'] ||
+    namedetails['name:en'] ||
+    item.name ||
+    address.amenity ||
+    address.shop ||
+    address.tourism ||
+    address.building ||
+    address.house_name ||
+    address.road ||
+    String(item.display_name ?? '').split(',')[0] ||
+    category?.label ||
+    'Joy';
+
+  return {
+    id:
+      'nominatim/' +
+      (item.osm_type ?? 'x') +
+      '/' +
+      (item.osm_id ?? item.place_id ?? point.latitude + ',' + point.longitude),
+    source: 'nominatim',
+    name,
+    categoryId: category?.id,
+    categoryLabel:
+      category?.label ||
+      (item.type ? String(item.type).replace(/_/g, ' ') : 'Joy'),
+    latitude: Number(item.lat),
+    longitude: Number(item.lon),
+    address: item.display_name ?? null,
+    phone: extra.phone || extra['contact:phone'] || null,
+    website: extra.website || extra['contact:website'] || null,
+    openingHours: extra.opening_hours || null,
+    brand: extra.brand || extra.operator || null,
+    cuisine: extra.cuisine || null,
+    wheelchair: extra.wheelchair || null,
+    distanceM: distanceMeters(
+      point.latitude,
+      point.longitude,
+      Number(item.lat),
+      Number(item.lon),
+    ),
+    tags,
+  };
+}
+
+/**
+ * Raster tile ustidagi label/bino Leaflet uchun alohida DOM obyekt emas.
+ * Shu sabab map click koordinatasidan real OSM obyektini topib, oddiy POI
+ * marker bosilgandek PlaceDetailsCard ochish uchun ishlatiladi.
+ */
+export async function resolveMapClickPlace(
+  point: { latitude: number; longitude: number },
+  zoom = 16,
+  signal?: AbortSignal,
+): Promise<MapPlace | null> {
+  const radius =
+    zoom >= 18 ? 35 :
+    zoom >= 17 ? 50 :
+    zoom >= 16 ? 75 :
+    zoom >= 15 ? 120 :
+    180;
+
+  const query =
+    '[out:json][timeout:12];\n(' +
+    '\nnwr["name"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
+    '\nnwr["amenity"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
+    '\nnwr["shop"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
+    '\nnwr["tourism"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
+    '\nnwr["office"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
+    '\nnwr["leisure"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
+    '\nnwr["building"]["addr:housenumber"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
+    '\n);\nout tags center 40;';
+
+  try {
+    const data = await overpass(query, signal, 4800);
+    const candidates = ((data?.elements ?? []) as any[])
+      .map((element): MapPlace | null => {
+        const position = elementLatLng(element);
+        if (!position) return null;
+        const tags: Record<string, string> = element.tags ?? {};
+        const category = categoryFromTags(tags);
+        const place = elementToPlace(element);
+        if (!place) return null;
+        return {
+          ...place,
+          name: clickedPlaceDisplayName(tags, category),
+          categoryId: place.categoryId ?? category?.id,
+          categoryLabel:
+            place.categoryLabel ??
+            category?.label ??
+            (tags.building ? 'Bino' : 'Joy'),
+          distanceM: distanceMeters(
+            point.latitude,
+            point.longitude,
+            position.lat,
+            position.lon,
+          ),
+        };
+      })
+      .filter((place): place is MapPlace => place !== null)
+      .filter((place) => (place.distanceM ?? Infinity) <= radius * 1.35)
+      .sort(
+        (a, b) =>
+          clickCandidateScore(b, point) - clickCandidateScore(a, point),
+      );
+
+    if (candidates.length) return candidates[0];
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') throw error;
+  }
+
+  try {
+    return await reverseNominatimPlace(point, signal);
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') throw error;
+    return null;
+  }
+}
+
 /** Apostrof/harf variantlarini bir xillashtirish: o\u2018zbek -> o'zbek. */
 export function normalizeQuery(value: string): string {
   return value
