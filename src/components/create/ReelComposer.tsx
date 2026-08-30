@@ -820,22 +820,65 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
           {(music || collaborators.length > 0) && (
             <div className="space-y-2 rounded-3xl border border-border/60 bg-card p-3 shadow-sm">
               {music && (
-                <div className="flex items-center gap-3 rounded-2xl bg-muted/40 p-3">
-                  <Music2 className="h-4 w-4 shrink-0 text-primary" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-semibold">
-                      {music.track?.title ?? 'Musiqa'}
-                    </p>
-                    <p className="truncate text-[10px] text-muted-foreground">
-                      {music.track?.artist ?? 'Katalog'}
-                    </p>
+                <div className="space-y-3 rounded-2xl bg-muted/40 p-3">
+                  <div className="flex items-center gap-3">
+                    <Music2 className="h-4 w-4 shrink-0 text-primary" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-semibold">
+                        {music.track?.title ?? 'Musiqa'}
+                      </p>
+                      <p className="truncate text-[10px] text-muted-foreground">
+                        {music.track?.artist ?? 'Katalog'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleMusicChange(null)}
+                      className="rounded-lg p-1 text-muted-foreground transition hover:text-destructive"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
                   </div>
+
+                  <div className="flex items-center gap-3">
+                    <span className="w-14 shrink-0 text-[10px] font-medium text-muted-foreground">
+                      Ovoz
+                    </span>
+                    <Slider
+                      value={[Math.round((music.volume ?? 1) * 100)]}
+                      min={0}
+                      max={100}
+                      step={1}
+                      onValueChange={([value]) =>
+                        handleMusicChange({
+                          ...music,
+                          volume: (value ?? 100) / 100,
+                        })
+                      }
+                      className="flex-1"
+                    />
+                    <span className="w-8 text-right text-[10px] text-muted-foreground">
+                      {Math.round((music.volume ?? 1) * 100)}%
+                    </span>
+                  </div>
+
                   <button
                     type="button"
-                    onClick={() => handleMusicChange(null)}
-                    className="rounded-lg p-1 text-muted-foreground transition hover:text-destructive"
+                    onClick={() =>
+                      handleMusicChange({
+                        ...music,
+                        mutedOriginal: !music.mutedOriginal,
+                      })
+                    }
+                    className={cn(
+                      'flex h-9 w-full items-center justify-between rounded-xl border px-3 text-[11px] font-medium transition',
+                      music.mutedOriginal
+                        ? 'border-primary/25 bg-primary/[0.06] text-primary'
+                        : 'border-border/60 bg-background text-muted-foreground',
+                    )}
                   >
-                    <X className="h-3.5 w-3.5" />
+                    <span>Asl audio</span>
+                    <span>{music.mutedOriginal ? 'O‘chiq' : 'Yoniq'}</span>
                   </button>
                 </div>
               )}
