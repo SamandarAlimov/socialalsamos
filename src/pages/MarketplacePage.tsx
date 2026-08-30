@@ -66,7 +66,9 @@ export default function MarketplacePage() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams, triggerHaptic]);
 
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState(
+    () => searchParams.get('category') || 'all',
+  );
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateProduct, setShowCreateProduct] = useState(false);
@@ -92,6 +94,11 @@ export default function MarketplacePage() {
   // Seller links are URL-addressable; URL is the single source of truth.
   useEffect(() => {
     setSelectedSellerId(searchParams.get('seller'));
+  }, [searchParams]);
+
+  useEffect(() => {
+    const category = searchParams.get('category') || 'all';
+    setSelectedCategory(category);
   }, [searchParams]);
 
   // Debounced search: one query per pause, not one per keystroke.
@@ -142,6 +149,10 @@ export default function MarketplacePage() {
   const handleCategorySelect = (slug: string) => {
     triggerHaptic('light');
     setSelectedCategory(slug);
+    const next = new URLSearchParams(searchParams);
+    if (slug === 'all') next.delete('category');
+    else next.set('category', slug);
+    setSearchParams(next, { replace: true });
   };
 
   const handleProductSelect = useCallback((product: Product) => {

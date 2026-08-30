@@ -29,6 +29,9 @@ export interface Seller {
     username: string | null;
     display_name: string | null;
     avatar_url: string | null;
+    is_online?: boolean | null;
+    last_seen?: string | null;
+    followers_count?: number | null;
   };
 }
 
@@ -154,7 +157,7 @@ export function useProducts(categorySlug?: string, searchQuery?: string) {
               is_verified,
               rating,
               total_sales,
-              profile:profiles(username, display_name, avatar_url)
+              profile:profiles(username, display_name, avatar_url, is_online, last_seen, followers_count)
             ),
             category:product_categories(id, name, slug, icon),
             images:product_images(id, url, position)
@@ -276,7 +279,7 @@ export function useNearbyMarketplaceProducts(center?: MarketplaceCenter | null, 
           seller:sellers(
             id, user_id, business_name, business_type, logo_url, location,
             is_verified, rating, total_sales,
-            profile:profiles(username, display_name, avatar_url)
+            profile:profiles(username, display_name, avatar_url, is_online, last_seen, followers_count)
           ),
           category:product_categories(id, name, slug, icon),
           images:product_images(id, url, position)
@@ -352,7 +355,7 @@ export async function fetchMarketplaceProductById(productId: string): Promise<Pr
       seller:sellers(
         id, user_id, business_name, business_type, description, logo_url, location,
         is_verified, rating, total_sales,
-        profile:profiles(username, display_name, avatar_url)
+        profile:profiles(username, display_name, avatar_url, is_online, last_seen, followers_count)
       ),
       category:product_categories(id, name, slug, icon),
       images:product_images(id, url, position)
@@ -362,6 +365,141 @@ export async function fetchMarketplaceProductById(productId: string): Promise<Pr
 
   if (error || !data) return null;
   return mapMarketplaceProduct(data);
+}
+
+const RECENTLY_VIEWED_KEY = 'alsamos:marketplace:recently-viewed';
+const RECENTLY_VIEWED_LIMIT = 10;
+
+export interface SellerResponseStats {
+  response_rate: number | null;
+  average_response_minutes: number | null;
+  conversations_count: number;
+  is_online: boolean;
+  last_seen: string | null;
+}
+
+export function useSellerResponseStats(sellerUserId?: string | null) {
+  const [stats, setStats] = useState<SellerResponseStats | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!sellerUserId) {
+      setStats(null);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoading(true);
+
+    void db
+      .rpc('get_seller_response_stats', { _seller_user_id: sellerUserId })
+      .then(({ data, error }: any) => {
+        if (cancelled) return;
+        if (error) {
+          // Hosted DB migration hali deploy qilinmagan muhitda page buzilmasin.
+          console.warn('Seller response stats unavailable:', error);
+          setStats(null);
+          return;
+        }
+        const row = Array.isArray(data) ? data[0] : data;
+        setStats(row ? {
+          response_rate: row.response_rate == null ? null : Number(row.response_rate),
+          average_response_minutes:
+            row.average_response_minutes == null ? null : Number(row.average_response_minutes),
+          conversations_count: Number(row.conversations_count ?? 0),
+          is_online: Boolean(row.is_online),
+          last_seen: row.last_seen ?? null,
+        } : null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sellerUserId]);
+
+  return { stats, isLoading };
+}
+
+async function fetchMarketplaceProductsByIds(ids: string[]): Promise<Product[]> {
+  if (ids.length === 0) return [];
+
+  const { data, error } = await db
+    .from('products')
+    .select(`
+      *,
+      seller:sellers(
+        id, user_id, business_name, business_type, description, logo_url, location,
+        is_verified, rating, total_sales,
+        profile:profiles(username, display_name, avatar_url, is_online, last_seen, followers_count)
+      ),
+      category:product_categories(id, name, slug, icon),
+      images:product_images(id, url, position)
+    `)
+    .in('id', ids)
+    .eq('status', 'active');
+
+  if (error || !data) return [];
+
+  const byId = new Map((data as any[]).map(row => [row.id, mapMarketplaceProduct(row)]));
+  return ids.map(id => byId.get(id)).filter(Boolean) as Product[];
+}
+
+export function useRecentlyViewedProducts(currentProductId?: string | null) {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!currentProductId || typeof window === 'undefined') {
+      setProducts([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const readIds = () => {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]');
+        return Array.isArray(parsed)
+          ? parsed.filter((id): id is string => typeof id === 'string')
+          : [];
+      } catch {
+        return [];
+      }
+    };
+
+    const previous = readIds()
+      .filter(id => id !== currentProductId)
+      .slice(0, RECENTLY_VIEWED_LIMIT);
+
+    if (previous.length > 0) {
+      setIsLoading(true);
+      void fetchMarketplaceProductsByIds(previous)
+        .then(rows => {
+          if (!cancelled) setProducts(rows);
+        })
+        .finally(() => {
+          if (!cancelled) setIsLoading(false);
+        });
+    } else {
+      setProducts([]);
+    }
+
+    try {
+      const next = [currentProductId, ...previous].slice(0, RECENTLY_VIEWED_LIMIT);
+      localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(next));
+    } catch {
+      // Private browsing/storage quota: recently viewed is optional.
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentProductId]);
+
+  return { products, isLoading };
 }
 
 export function useSellerProducts() {

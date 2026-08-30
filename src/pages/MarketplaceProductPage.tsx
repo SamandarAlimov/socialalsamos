@@ -21,10 +21,101 @@ export default function MarketplaceProductPage() {
 
   useEffect(() => {
     if (!product) return;
+
     const previousTitle = document.title;
     document.title = `${product.title} | Alsamos Bozor`;
+
+    const description =
+      product.description?.trim().slice(0, 180) ||
+      `${product.title} — Alsamos Bozor`;
+    const image = product.images?.[0]?.url || '';
+    const canonicalUrl =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}/marketplace/product/${product.id}`
+        : '';
+
+    const touched: Array<{ element: HTMLMetaElement; previous: string | null }> = [];
+    const setMeta = (selector: string, attr: 'name' | 'property', key: string, value: string) => {
+      let element = document.head.querySelector<HTMLMetaElement>(selector);
+      if (!element) {
+        element = document.createElement('meta');
+        element.setAttribute(attr, key);
+        element.dataset.marketplaceProduct = 'true';
+        document.head.appendChild(element);
+      }
+      touched.push({ element, previous: element.getAttribute('content') });
+      element.setAttribute('content', value);
+    };
+
+    setMeta('meta[name="description"]', 'name', 'description', description);
+    setMeta('meta[property="og:type"]', 'property', 'og:type', 'product');
+    setMeta('meta[property="og:title"]', 'property', 'og:title', product.title);
+    setMeta('meta[property="og:description"]', 'property', 'og:description', description);
+    setMeta('meta[property="og:url"]', 'property', 'og:url', canonicalUrl);
+    setMeta('meta[property="og:site_name"]', 'property', 'og:site_name', 'Alsamos');
+    setMeta('meta[name="twitter:card"]', 'name', 'twitter:card', image ? 'summary_large_image' : 'summary');
+    setMeta('meta[name="twitter:title"]', 'name', 'twitter:title', product.title);
+    setMeta('meta[name="twitter:description"]', 'name', 'twitter:description', description);
+    if (image) {
+      setMeta('meta[property="og:image"]', 'property', 'og:image', image);
+      setMeta('meta[name="twitter:image"]', 'name', 'twitter:image', image);
+    }
+
+    let canonical = document.head.querySelector<HTMLLinkElement>('link[data-marketplace-product-canonical]');
+    const previousCanonical = canonical?.getAttribute('href') ?? null;
+    if (!canonical) {
+      canonical = document.createElement('link');
+      canonical.rel = 'canonical';
+      canonical.dataset.marketplaceProductCanonical = 'true';
+      document.head.appendChild(canonical);
+    }
+    canonical.href = canonicalUrl;
+
+    const jsonLd = document.createElement('script');
+    jsonLd.type = 'application/ld+json';
+    jsonLd.dataset.marketplaceProductJsonld = 'true';
+    jsonLd.textContent = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: product.title,
+      description,
+      image: product.images?.map(item => item.url) ?? [],
+      sku: product.id,
+      brand: product.seller?.business_name
+        ? { '@type': 'Brand', name: product.seller.business_name }
+        : undefined,
+      offers: {
+        '@type': 'Offer',
+        url: canonicalUrl,
+        priceCurrency: product.currency || 'USD',
+        price: product.price,
+        availability:
+          product.status === 'active' && Number(product.quantity) > 0
+            ? 'https://schema.org/InStock'
+            : 'https://schema.org/OutOfStock',
+        seller: product.seller?.business_name
+          ? { '@type': 'Organization', name: product.seller.business_name }
+          : undefined,
+      },
+    });
+    document.head.appendChild(jsonLd);
+
     return () => {
       document.title = previousTitle;
+      touched.forEach(({ element, previous }) => {
+        if (element.dataset.marketplaceProduct === 'true' && previous == null) {
+          element.remove();
+        } else if (previous == null) {
+          element.removeAttribute('content');
+        } else {
+          element.setAttribute('content', previous);
+        }
+      });
+      if (canonical) {
+        if (previousCanonical == null) canonical.remove();
+        else canonical.setAttribute('href', previousCanonical);
+      }
+      jsonLd.remove();
     };
   }, [product]);
 
@@ -109,6 +200,8 @@ export default function MarketplaceProductPage() {
         }}
         onCartChange={refreshCart}
         onOpenCart={() => setShowCart(true)}
+        onBrowseMarketplace={() => navigate('/marketplace')}
+        onBrowseCategory={(slug) => navigate(`/marketplace?category=${slug}`)}
         onProductSelect={(nextProduct) => {
           navigate(`/marketplace/product/${nextProduct.id}`);
         }}

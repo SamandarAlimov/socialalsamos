@@ -3,7 +3,7 @@ import {
   ArrowLeft, Award, BadgeCheck, CalendarClock, Check, ChevronLeft, ChevronRight,
   Clock, Copy, Eye, Heart, Loader2, Lock, MapPin, MessageCircle, Minus,
   PackageX, Plus, RotateCcw, Share2, ShieldCheck, ShoppingCart, Star, Store,
-  Tag, Truck, X, Zap,
+  Tag, Truck, X, Zap, ChevronRight, LocateFixed, Navigation, TimerReset,
 } from 'lucide-react';
 import { addDays, format, formatDistanceToNow } from 'date-fns';
 import { uz } from 'date-fns/locale';
@@ -14,13 +14,21 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { CategoryIcon } from '@/components/marketplace/CategoryIcon';
 import { ProductCard } from '@/components/marketplace/ProductCard';
-import { Product, useCart, useProductActions, useProducts } from '@/hooks/useMarketplace';
+import {
+  Product,
+  useCart,
+  useProductActions,
+  useProducts,
+  useRecentlyViewedProducts,
+  useSellerResponseStats,
+} from '@/hooks/useMarketplace';
 import { useProductReviews } from '@/hooks/useProductReviews';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useToast } from '@/hooks/use-toast';
 import { conditionLabel, formatPrice, getDiscount, getStockState } from '@/lib/marketplace';
 import { cn } from '@/lib/utils';
 import { marketplaceUz } from '@/i18n/marketplace';
+import { useMarketplaceDeliveryLocation } from '@/hooks/useMarketplaceDeliveryLocation';
 
 interface ProductDetailProps {
   product: Product | null;
@@ -31,6 +39,8 @@ interface ProductDetailProps {
   onMessageSeller?: (sellerId: string) => void;
   onProductSelect?: (product: Product) => void;
   onOpenCart?: () => void;
+  onBrowseMarketplace?: () => void;
+  onBrowseCategory?: (slug: string) => void;
 }
 
 export function ProductDetail({
@@ -42,6 +52,8 @@ export function ProductDetail({
   onMessageSeller,
   onProductSelect,
   onOpenCart,
+  onBrowseMarketplace,
+  onBrowseCategory,
 }: ProductDetailProps) {
   const { triggerHaptic } = useHapticFeedback();
   const { toggleLike, registerView } = useProductActions();
@@ -68,6 +80,21 @@ export function ProductDetail({
     createReview,
     setPage: setReviewPage,
   } = useProductReviews(product?.id);
+
+  const {
+    products: recentlyViewedProducts,
+    isLoading: recentlyViewedLoading,
+  } = useRecentlyViewedProducts(product?.id);
+  const {
+    stats: sellerResponseStats,
+    isLoading: sellerStatsLoading,
+  } = useSellerResponseStats(product?.seller?.user_id);
+  const {
+    location: deliveryLocation,
+    isLocating: isLocatingDelivery,
+    error: deliveryLocationError,
+    locate: locateDelivery,
+  } = useMarketplaceDeliveryLocation();
 
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isLiked, setIsLiked] = useState(product?.is_liked || false);
@@ -161,8 +188,33 @@ export function ProductDetail({
     return productId === product.id ? sum + Number(item.quantity || 0) : sum;
   }, 0);
 
-  const deliveryFrom = format(addDays(new Date(), 2), 'd MMM', { locale: uz });
-  const deliveryTo = format(addDays(new Date(), 5), 'd MMM', { locale: uz });
+  const distanceKm =
+    deliveryLocation &&
+    Number.isFinite(Number(product.latitude)) &&
+    Number.isFinite(Number(product.longitude))
+      ? (() => {
+          const toRad = (value: number) => (value * Math.PI) / 180;
+          const lat1 = Number(product.latitude);
+          const lon1 = Number(product.longitude);
+          const lat2 = deliveryLocation.latitude;
+          const lon2 = deliveryLocation.longitude;
+          const dLat = toRad(lat2 - lat1);
+          const dLon = toRad(lon2 - lon1);
+          const a =
+            Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+          return 2 * 6371 * Math.asin(Math.sqrt(a));
+        })()
+      : null;
+
+  const minDeliveryDays =
+    distanceKm == null ? 2 :
+    distanceKm <= 25 ? 1 :
+    distanceKm <= 200 ? 2 :
+    distanceKm <= 600 ? 3 : 4;
+  const maxDeliveryDays = minDeliveryDays + (distanceKm != null && distanceKm <= 25 ? 1 : 2);
+  const deliveryFrom = format(addDays(new Date(), minDeliveryDays), 'd MMM', { locale: uz });
+  const deliveryTo = format(addDays(new Date(), maxDeliveryDays), 'd MMM', { locale: uz });
 
   const goPrev = () => {
     if (images.length < 2) return;
@@ -404,9 +456,38 @@ export function ProductDetail({
         </div>
       </div>
 
-      <div
-            className="alsamos-scrollbar mx-auto grid w-full max-w-7xl gap-6 px-4 py-5 md:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] md:gap-8 lg:gap-10 lg:px-6"
+      <div className="mx-auto w-full max-w-7xl px-4 pt-4 lg:px-6">
+        <nav
+          className="flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-muted-foreground"
+          aria-label="Breadcrumb"
+        >
+          <button
+            type="button"
+            onClick={onBrowseMarketplace}
+            className="shrink-0 transition-colors hover:text-primary"
           >
+            {marketplaceUz.productDetail.marketplace}
+          </button>
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-50" />
+          {product.category ? (
+            <>
+              <button
+                type="button"
+                onClick={() => onBrowseCategory?.(product.category!.slug)}
+                className="max-w-40 truncate transition-colors hover:text-primary"
+              >
+                {product.category.name}
+              </button>
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-50" />
+            </>
+          ) : null}
+          <span className="truncate font-medium text-foreground">{product.title}</span>
+        </nav>
+      </div>
+
+      <div
+        className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-5 md:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] md:items-start md:gap-8 lg:gap-10 lg:px-6"
+      >
             <div className="md:sticky md:top-20 md:self-start">
               <div
                 className="relative aspect-[4/5] select-none overflow-hidden rounded-3xl border border-border/30 bg-muted/40 shadow-sm md:max-h-[calc(100dvh-7rem)] md:bg-muted"
@@ -526,7 +607,7 @@ export function ProductDetail({
               )}
             </div>
 
-            <div className="pb-36 md:pb-10">
+            <div className="pb-36 md:sticky md:top-20 md:self-start md:pb-0">
               <div className="space-y-5 p-4 md:p-0">
                 {product.category && (
                   <div className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
@@ -634,14 +715,58 @@ export function ProductDetail({
                   )}
                 </div>
 
-                <div className="flex items-center gap-3 rounded-2xl border border-border/30 bg-muted/20 p-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <CalendarClock className="h-5 w-5" />
+                <div className="space-y-3 rounded-2xl border border-border/30 bg-muted/20 p-3">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                      <CalendarClock className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold">{marketplaceUz.productDetail.estimatedDelivery}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {deliveryFrom} — {deliveryTo}
+                        {distanceKm != null ? ` · ~${Math.round(distanceKm)} km` : ''}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold">{marketplaceUz.productDetail.estimatedDelivery}</p>
-                    <p className="text-xs text-muted-foreground">{deliveryFrom} — {deliveryTo}</p>
+
+                  <div className="flex items-start gap-3 rounded-xl border border-border/30 bg-background/70 p-3">
+                    <Navigation className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-medium text-muted-foreground">
+                        {marketplaceUz.productDetail.deliveryTo}
+                      </p>
+                      <p className="mt-0.5 truncate text-sm font-semibold">
+                        {deliveryLocation?.label || marketplaceUz.productDetail.deliveryLocationUnknown}
+                      </p>
+                      {deliveryLocationError && (
+                        <p className="mt-1 text-[11px] text-destructive">{deliveryLocationError}</p>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 shrink-0 rounded-lg px-2 text-xs text-primary"
+                      onClick={() => void locateDelivery()}
+                      disabled={isLocatingDelivery}
+                    >
+                      {isLocatingDelivery ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <LocateFixed className="mr-1 h-3.5 w-3.5" />
+                      )}
+                      {!isLocatingDelivery && marketplaceUz.productDetail.locateMe}
+                    </Button>
                   </div>
+
+                  {(product.location || product.seller?.location) && (
+                    <div className="flex items-center gap-2 px-1 text-[11px] text-muted-foreground">
+                      <MapPin className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">
+                        {marketplaceUz.productDetail.shipFrom}: {product.location || product.seller?.location}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="hidden md:flex md:flex-col md:gap-2">
@@ -651,7 +776,7 @@ export function ProductDetail({
                       variant="outline"
                       className="h-11 max-w-md rounded-xl"
                       disabled={!product.seller || !onMessageSeller}
-                      onClick={() => product.seller && onMessageSeller?.(product.seller.id)}
+                      onClick={() => product.seller && onMessageSeller?.(product.seller.user_id)}
                     >
                       <MessageCircle className="mr-2 h-4 w-4" /> {marketplaceUz.productDetail.makeOffer}
                     </Button>
@@ -690,10 +815,44 @@ export function ProductDetail({
                         <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
                           <Store className="h-3 w-3" /> {product.seller.business_type}
                         </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+                          {sellerStatsLoading ? (
+                            <span className="flex items-center gap-1">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              {marketplaceUz.productDetail.responseStatsLoading}
+                            </span>
+                          ) : (
+                            <>
+                              <span className={cn(
+                                'flex items-center gap-1',
+                                sellerResponseStats?.is_online && 'font-medium text-emerald-600',
+                              )}>
+                                <span className={cn(
+                                  'h-1.5 w-1.5 rounded-full',
+                                  sellerResponseStats?.is_online ? 'bg-emerald-500' : 'bg-muted-foreground/40',
+                                )} />
+                                {sellerResponseStats?.is_online
+                                  ? marketplaceUz.productDetail.online
+                                  : marketplaceUz.productDetail.offline}
+                              </span>
+                              {sellerResponseStats?.response_rate != null && (
+                                <span>
+                                  {marketplaceUz.productDetail.responseRate}: {Math.round(sellerResponseStats.response_rate)}%
+                                </span>
+                              )}
+                              {sellerResponseStats?.average_response_minutes != null && (
+                                <span className="flex items-center gap-1">
+                                  <TimerReset className="h-3 w-3" />
+                                  {formatResponseTime(sellerResponseStats.average_response_minutes)}
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </div>
                       <div className="flex gap-1.5">
                         {onMessageSeller && (
-                          <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl" onClick={() => onMessageSeller(product.seller!.id)}>
+                          <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl" onClick={() => onMessageSeller(product.seller!.user_id)}>
                             <MessageCircle className="h-4 w-4" />
                           </Button>
                         )}
@@ -707,6 +866,13 @@ export function ProductDetail({
                   </div>
                 )}
 
+              </div>
+            </div>
+          </div>
+
+      <div className="mx-auto w-full max-w-7xl px-4 pb-12 lg:px-6">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.42fr)] lg:items-start">
+          <div className="space-y-6">
                 {product.description && (
                   <div className="space-y-2">
                     <h3 className="text-sm font-semibold">{marketplaceUz.productDetail.description}</h3>
@@ -957,15 +1123,50 @@ export function ProductDetail({
                   )}
                 </div>
 
+                {(recentlyViewedLoading || recentlyViewedProducts.length > 0) && (
+                  <section className="space-y-3 rounded-2xl border border-border/30 bg-muted/10 p-4">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-primary" />
+                      <h3 className="text-sm font-semibold">{marketplaceUz.productDetail.recentlyViewed}</h3>
+                    </div>
+                    {recentlyViewedLoading ? (
+                      <div className="flex gap-3 overflow-hidden">
+                        {[0, 1, 2, 3].map(item => (
+                          <div key={item} className="h-52 w-40 shrink-0 animate-pulse rounded-2xl bg-muted" />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="alsamos-scrollbar -mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
+                        {recentlyViewedProducts.map(recent => (
+                          <div key={recent.id} className="w-40 shrink-0">
+                            <ProductCard product={recent} onSelect={openRelated} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                )}
+
                 <div className="flex items-center justify-between border-t border-border/30 pt-3 text-[11px] text-muted-foreground">
                   <span className="flex items-center gap-1.5"><Clock className="h-3 w-3" /> ID: {product.id.slice(0, 8)}</span>
                   <Button variant="ghost" size="sm" className="h-8 rounded-lg px-2 text-xs" onClick={copyProductId}>
                     <Copy className="mr-1.5 h-3.5 w-3.5" /> {marketplaceUz.productDetail.copy}
                   </Button>
                 </div>
-              </div>
-            </div>
+
           </div>
+          <aside className="hidden space-y-4 lg:block">
+            <div className="rounded-2xl border border-border/30 bg-card p-4">
+              <h3 className="text-sm font-semibold">{marketplaceUz.productDetail.purchaseSummary}</h3>
+              <div className="mt-3 flex items-baseline justify-between gap-3">
+                <span className="text-xs text-muted-foreground">{marketplaceUz.productDetail.total(quantity)}</span>
+                <strong className="text-xl text-primary">{formatPrice(grandTotal, currency)}</strong>
+              </div>
+              <div className="mt-3">{actionButtons}</div>
+            </div>
+          </aside>
+        </div>
+      </div>
 
       <div className="fixed inset-x-0 bottom-[78px] z-40 flex justify-center border-t border-border/30 bg-background/92 px-4 pt-3 pb-3 backdrop-blur-2xl md:hidden">
             {actionButtons}
@@ -973,3 +1174,16 @@ export function ProductDetail({
     </div>
   );
 }
+
+function formatResponseTime(minutes: number) {
+  const safe = Math.max(0, Math.round(minutes));
+  if (safe < 1) return marketplaceUz.productDetail.respondsVeryFast;
+  if (safe < 60) return marketplaceUz.productDetail.respondsInMinutes(safe);
+  if (safe < 24 * 60) {
+    const hours = Math.max(1, Math.round(safe / 60));
+    return marketplaceUz.productDetail.respondsInHours(hours);
+  }
+  const days = Math.max(1, Math.round(safe / (24 * 60)));
+  return marketplaceUz.productDetail.respondsInDays(days);
+}
+
