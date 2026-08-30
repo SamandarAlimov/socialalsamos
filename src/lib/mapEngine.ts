@@ -53,7 +53,8 @@ export type MapSceneMarkerKind =
   | 'route-stop'
   | 'route-destination'
   | 'stop'
-  | 'vehicle';
+  | 'vehicle'
+  | 'incident';
 
 export interface MapSceneMarker {
   id: string;
