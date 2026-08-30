@@ -28,7 +28,7 @@ export interface TransitRoute {
   /** Marshrut raqami, masalan "57". */
   ref: string;
   name: string;
-  mode: 'bus' | 'trolleybus' | 'minibus' | 'tram' | 'subway' | 'other';
+  mode: 'bus' | 'trolleybus' | 'minibus' | 'tram' | 'subway' | 'train' | 'other';
   from?: string | null;
   to?: string | null;
   operator?: string | null;
@@ -128,6 +128,7 @@ function routeMode(tags: Record<string, string>): TransitRoute['mode'] {
   if (route === 'minibus' || route === 'share_taxi') return 'minibus';
   if (route === 'tram') return 'tram';
   if (route === 'subway') return 'subway';
+  if (route === 'train' || route === 'railway') return 'train';
   return 'other';
 }
 
