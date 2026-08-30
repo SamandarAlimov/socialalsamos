@@ -34,8 +34,7 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
-/** Belgili matnni (markerlarni) tahrirlanadigan HTMLga aylantirish */
-export function markersToHtml(text: string): string {
+function inlineMarkersToHtml(text: string): string {
   let html = escapeHtml(text);
   html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
   html = html.replace(
@@ -47,8 +46,64 @@ export function markersToHtml(text: string): string {
   html = html.replace(/__([^\n_]+)__/g, '<i>$1</i>');
   html = html.replace(/~~([^\n~]+)~~/g, '<s>$1</s>');
   html = html.replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>');
-  html = html.replace(/\n/g, '<br>');
   return html;
+}
+
+/**
+ * Transport/storage markerlarini haqiqiy WYSIWYG DOMga aylantiradi.
+ * Foydalanuvchi **, >, -, ++ kabi texnik belgilarni inputda ko'rmaydi.
+ */
+export function markersToHtml(text: string): string {
+  if (!text) return '';
+
+  return text
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => {
+      const quote = /^>\s?(.*)$/.exec(line);
+      if (quote) {
+        return '<blockquote data-block="quote">' +
+          (inlineMarkersToHtml(quote[1]) || '<br>') +
+          '</blockquote>';
+      }
+
+      const bullet = /^[-*]\s+(.*)$/.exec(line);
+      if (bullet) {
+        return '<div data-block="bullet">' +
+          (inlineMarkersToHtml(bullet[1]) || '<br>') +
+          '</div>';
+      }
+
+      const ordered = /^(\d+)\.\s+(.*)$/.exec(line);
+      if (ordered) {
+        return '<div data-block="ordered" data-prefix="' + ordered[1] + '.">' +
+          (inlineMarkersToHtml(ordered[2]) || '<br>') +
+          '</div>';
+      }
+
+      const heading2 = /^##\s+(.*)$/.exec(line);
+      if (heading2) {
+        return '<div data-block="heading2">' +
+          (inlineMarkersToHtml(heading2[1]) || '<br>') +
+          '</div>';
+      }
+
+      const heading1 = /^#\s+(.*)$/.exec(line);
+      if (heading1) {
+        return '<div data-block="heading1">' +
+          (inlineMarkersToHtml(heading1[1]) || '<br>') +
+          '</div>';
+      }
+
+      if (/^(---|\*\*\*)\s*$/.test(line)) {
+        return '<div data-block="divider"><br></div>';
+      }
+
+      return '<div data-block="paragraph">' +
+        (inlineMarkersToHtml(line) || '<br>') +
+        '</div>';
+    })
+    .join('');
 }
 
 function wrap(inner: string, marker: string, markerEnd?: string): string {
@@ -66,6 +121,18 @@ function serializeNode(node: Node): string {
   if (tag === 'br') return '\n';
 
   const inner = serializeChildren(el);
+  const block = el.getAttribute('data-block');
+
+  if (block === 'paragraph') return inner === '\n' ? '\n' : '\n' + inner;
+  if (block === 'quote') return '\n> ' + (inner === '\n' ? '' : inner);
+  if (block === 'bullet') return '\n- ' + (inner === '\n' ? '' : inner);
+  if (block === 'ordered') {
+    const prefix = el.getAttribute('data-prefix') || '1.';
+    return '\n' + prefix + ' ' + (inner === '\n' ? '' : inner);
+  }
+  if (block === 'heading1') return '\n# ' + (inner === '\n' ? '' : inner);
+  if (block === 'heading2') return '\n## ' + (inner === '\n' ? '' : inner);
+  if (block === 'divider') return '\n---';
 
   switch (tag) {
     case 'b':
@@ -300,10 +367,20 @@ export const RichComposer = forwardRef<RichComposerHandle, RichComposerProps>(
           return;
         }
       }
-      // Tashqi HTML formatlar kompozitorni buzmasligi uchun faqat oddiy matn
+      // Tashqi HTMLni olmaymiz. Plain-text ichida format markerlari bo'lsa,
+      // ularni foydalanuvchiga kod sifatida ko'rsatmay, darhol WYSIWYG DOMga aylantiramiz.
       e.preventDefault();
       const text = e.clipboardData?.getData('text/plain') || '';
-      if (text) document.execCommand('insertText', false, text);
+      if (text) {
+        const hasBlockMarkup =
+          /(^|\n)\s*(>|[-*]\s+|\d+\.\s+|#{1,2}\s+|---\s*$)/m.test(text);
+        const hasInlineMarkup = /\*\*|__|\+\+|~~|\|\||`/.test(text);
+        if (hasBlockMarkup || hasInlineMarkup) {
+          document.execCommand('insertHTML', false, markersToHtml(text));
+        } else {
+          document.execCommand('insertText', false, text);
+        }
+      }
       emitChange();
     };
 
@@ -331,7 +408,12 @@ export const RichComposer = forwardRef<RichComposerHandle, RichComposerProps>(
             'min-h-[40px] max-h-[140px] overflow-y-auto scrollbar-hide',
             'focus:outline-none focus:ring-2 focus:ring-primary/40',
             '[&_code]:font-mono [&_code]:text-[13.5px] [&_a]:text-primary [&_a]:underline',
-            '[&_blockquote]:border-l-2 [&_blockquote]:border-primary [&_blockquote]:pl-2 [&_blockquote]:my-0',
+            '[&_blockquote]:my-0 [&_blockquote]:border-l-2 [&_blockquote]:border-primary [&_blockquote]:pl-2',
+            '[&_[data-block=bullet]]:relative [&_[data-block=bullet]]:pl-5 [&_[data-block=bullet]::before]:absolute [&_[data-block=bullet]::before]:left-1.5 [&_[data-block=bullet]::before]:content-["•"]',
+            '[&_[data-block=ordered]]:relative [&_[data-block=ordered]]:pl-7 [&_[data-block=ordered]::before]:absolute [&_[data-block=ordered]::before]:left-1 [&_[data-block=ordered]::before]:font-medium [&_[data-block=ordered]::before]:content-[attr(data-prefix)]',
+            '[&_[data-block=heading1]]:text-[17px] [&_[data-block=heading1]]:font-bold',
+            '[&_[data-block=heading2]]:text-[16px] [&_[data-block=heading2]]:font-semibold',
+            '[&_[data-block=divider]]:my-2 [&_[data-block=divider]]:h-px [&_[data-block=divider]]:overflow-hidden [&_[data-block=divider]]:bg-border',
             disabled && 'cursor-not-allowed opacity-50',
             className
           )}
