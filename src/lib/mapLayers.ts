@@ -27,6 +27,12 @@ export interface MapLayerDef {
   url: string;
   attribution: string;
   maxZoom: number;
+  /**
+   * Providerda real raster mavjud bo'lgan eng yuqori zoom.
+   * Leaflet undan yuqorida shu tile'ni scale qiladi; aks holda Esri ayrim
+   * hududlarda "Map data not yet available" placeholder qaytaradi.
+   */
+  maxNativeZoom?: number;
   /** Sputnik ustiga yozuvlar qatlami (gibrid rejim uchun). */
   labelsUrl?: string;
   /** Tungi rejim - UI ni qorayadi. */
@@ -35,13 +41,21 @@ export interface MapLayerDef {
 
 export const MAP_LAYERS: MapLayerDef[] = [
   { id: 'map', label: 'Xarita', url: OSM_URL, attribution: OSM_ATTR, maxZoom: 19 },
-  { id: 'satellite', label: 'Sputnik', url: ESRI_URL, attribution: ESRI_ATTR, maxZoom: 19 },
+  {
+    id: 'satellite',
+    label: 'Sputnik',
+    url: ESRI_URL,
+    attribution: ESRI_ATTR,
+    maxZoom: 19,
+    maxNativeZoom: 15,
+  },
   {
     id: 'hybrid',
     label: 'Gibrid',
     url: ESRI_URL,
     attribution: ESRI_ATTR,
     maxZoom: 19,
+    maxNativeZoom: 15,
     labelsUrl: CARTO_LABELS_URL,
   },
   { id: 'night', label: 'Tungi', url: CARTO_DARK_URL, attribution: CARTO_ATTR, maxZoom: 19, dark: true },
