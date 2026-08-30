@@ -9,6 +9,7 @@ interface TaxiOffersCardProps {
   to: TaxiPoint;
   distanceKm: number;
   durationMin: number;
+  highContrast?: boolean;
   className?: string;
 }
 
@@ -21,6 +22,7 @@ export function TaxiOffersCard({
   to,
   distanceKm,
   durationMin,
+  highContrast = false,
   className,
 }: TaxiOffersCardProps) {
   const { providers, loading } = useTaxiProviders();
@@ -32,7 +34,15 @@ export function TaxiOffersCard({
   if (!offers.length) return null;
 
   return (
-    <div className={cn('rounded-xl border border-border/70 p-3', className)}>
+    <div
+      className={cn(
+        'rounded-2xl border p-3',
+        highContrast
+          ? 'border-white/10 bg-white/[0.045] text-white'
+          : 'border-border/60 bg-background/60',
+        className,
+      )}
+    >
       <div className="mb-2 flex items-center gap-2">
         <Car className="h-4 w-4 text-primary" />
         <p className="text-sm font-semibold">Taksi chaqirish</p>
@@ -46,9 +56,12 @@ export function TaxiOffersCard({
         {offers.map((offer) => (
           <div
             key={offer.provider.slug}
-            className="flex items-center gap-3 rounded-lg border border-border/60 px-3 py-2"
+            className={cn(
+              'flex items-center gap-3 rounded-2xl border px-3 py-2.5',
+              highContrast ? 'border-white/10 bg-white/[0.045]' : 'border-border/50 bg-background/55',
+            )}
           >
-            <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-muted text-sm font-bold">
+            <span className={cn('flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl text-sm font-bold', highContrast ? 'bg-white/[0.08]' : 'bg-muted')}>
               {offer.provider.logoUrl ? (
                 <img
                   src={offer.provider.logoUrl}
@@ -69,7 +82,12 @@ export function TaxiOffersCard({
             {offer.provider.phone && (
               <a
                 href={'tel:' + offer.provider.phone}
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 text-muted-foreground hover:text-foreground"
+                className={cn(
+                  'flex h-8 w-8 items-center justify-center rounded-xl border transition',
+                  highContrast
+                    ? 'border-white/12 bg-white/[0.04] text-white/60 hover:bg-white/[0.1] hover:text-white'
+                    : 'border-border/60 text-muted-foreground hover:text-foreground',
+                )}
                 aria-label="Qo'ng'iroq"
               >
                 <Phone className="h-4 w-4" />
