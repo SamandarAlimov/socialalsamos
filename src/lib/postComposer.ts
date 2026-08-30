@@ -144,10 +144,10 @@ export function partitionSelectedFiles(
     }
 
     const result = validateFile(file);
-    if (result.ok) {
-      accepted.push({ file, kind: result.kind });
-    } else {
+    if ('error' in result) {
       errors.push(result.error);
+    } else {
+      accepted.push({ file, kind: result.kind });
     }
   }
 
