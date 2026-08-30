@@ -134,6 +134,65 @@ const MODES: { id: RouteMode; label: string; Icon: typeof Car }[] = [
   { id: 'bike', label: 'Velosiped', Icon: Bike },
 ];
 
+function formatTransitFare(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === 'string') {
+    const text = value.trim();
+    return text || null;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return new Intl.NumberFormat('uz-UZ').format(value);
+  }
+  if (typeof value === 'object') {
+    const fare = value as {
+      amount?: unknown;
+      currency?: unknown;
+    };
+    const amount = Number(fare.amount);
+    if (!Number.isFinite(amount)) return null;
+    const currency = String(fare.currency ?? '').toUpperCase();
+    const formatted = new Intl.NumberFormat('uz-UZ').format(amount);
+    if (currency === 'UZS') return formatted + ' so‘m';
+    return currency ? formatted + ' ' + currency : formatted;
+  }
+  return null;
+}
+
+function formatTransitClock(value?: string | null): string | null {
+  if (!value) return null;
+  const hhmm = String(value).match(/(?:T|^)(\d{2}):(\d{2})/);
+  if (hhmm) return hhmm[1] + ':' + hhmm[2];
+  const date = new Date(value);
+  if (!Number.isNaN(date.getTime())) {
+    return date.toLocaleTimeString('uz-UZ', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+  return null;
+}
+
+function transitModeLabel(mode?: string): string {
+  switch (mode) {
+    case 'walk':
+      return 'Piyoda';
+    case 'bus':
+      return 'Avtobus';
+    case 'trolleybus':
+      return 'Trolleybus';
+    case 'minibus':
+      return 'Marshrutka';
+    case 'tram':
+      return 'Tramvay';
+    case 'subway':
+      return 'Metro';
+    case 'train':
+      return 'Poyezd';
+    default:
+      return 'Transport';
+  }
+}
+
 function placeIcon(color: string, active: boolean) {
   return L.divIcon({
     html: pinSvg(color, { size: active ? 40 : 30, active }),
@@ -3078,6 +3137,45 @@ export default function MapPage() {
                             : 'Jonli traffic bo‘yicha'}
                         </p>
                       )}
+                      {route.mode === 'transit' && (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          {(route.transitLegs ?? [])
+                            .filter((leg) => leg.mode !== 'walk')
+                            .slice(0, 4)
+                            .map((leg, legIndex) => (
+                              <span
+                                key={
+                                  (leg.routeId ||
+                                    leg.routeRef ||
+                                    leg.mode) +
+                                  ':' +
+                                  legIndex
+                                }
+                                className="inline-flex h-5 items-center rounded-md px-1.5 text-[10px] font-extrabold text-white"
+                                style={{
+                                  backgroundColor:
+                                    leg.color || '#1E7BC4',
+                                }}
+                              >
+                                {leg.routeRef ||
+                                  transitModeLabel(leg.mode)}
+                              </span>
+                            ))}
+                          {route.transitTransfers ? (
+                            <span className="text-[10px] font-semibold text-muted-foreground">
+                              {route.transitTransfers} ta almashish
+                            </span>
+                          ) : null}
+                          {route.transitWalkingDistanceM ? (
+                            <span className="text-[10px] font-semibold text-muted-foreground">
+                              Piyoda{' '}
+                              {formatKm(
+                                route.transitWalkingDistanceM,
+                              )}
+                            </span>
+                          ) : null}
+                        </div>
+                      )}
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="text-xs font-bold">{arrivalTime(route.durationS)}</p>
@@ -3087,6 +3185,157 @@ export default function MapPage() {
                 );
               })}
             </div>
+
+            {activeRoute?.mode === 'transit' &&
+              activeRoute.transitLegs?.length ? (
+              <div
+                className={cn(
+                  'mt-3 overflow-hidden rounded-2xl border',
+                  contrastLayer
+                    ? 'border-white/[0.10] bg-white/[0.035]'
+                    : 'border-border/[0.50] bg-background/[0.55]',
+                )}
+              >
+                <div className="flex items-center justify-between border-b border-border/[0.40] px-3.5 py-3">
+                  <div>
+                    <p className="text-xs font-extrabold">
+                      Safar tafsiloti
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                      {[
+                        formatTransitClock(
+                          activeRoute.transitDepartureTime,
+                        ),
+                        formatTransitClock(
+                          activeRoute.transitArrivalTime,
+                        ),
+                      ]
+                        .filter(Boolean)
+                        .join(' → ') ||
+                        formatMinutes(activeRoute.durationS)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {formatTransitFare(
+                      activeRoute.transitFare,
+                    ) && (
+                      <span className="rounded-full bg-muted px-2 py-1 text-[10px] font-bold">
+                        {formatTransitFare(
+                          activeRoute.transitFare,
+                        )}
+                      </span>
+                    )}
+                    {activeRoute.transitRealtime && (
+                      <span className="rounded-full bg-emerald-500/[0.12] px-2 py-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                        real vaqt
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="divide-y divide-border/[0.35]">
+                  {activeRoute.transitLegs.map(
+                    (leg, legIndex) => {
+                      const isWalk = leg.mode === 'walk';
+                      return (
+                        <div
+                          key={
+                            (leg.routeId ||
+                              leg.routeRef ||
+                              leg.mode) +
+                            ':' +
+                            legIndex
+                          }
+                          className="flex items-start gap-3 px-3.5 py-3"
+                        >
+                          <span
+                            className={cn(
+                              'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
+                              isWalk
+                                ? 'bg-muted text-muted-foreground'
+                                : 'text-white',
+                            )}
+                            style={
+                              isWalk
+                                ? undefined
+                                : {
+                                    backgroundColor:
+                                      leg.color || '#1E7BC4',
+                                  }
+                            }
+                          >
+                            {isWalk ? (
+                              <PersonStanding className="h-4 w-4" />
+                            ) : (
+                              <Bus className="h-4 w-4" />
+                            )}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <p className="text-sm font-bold">
+                                {isWalk
+                                  ? 'Piyoda'
+                                  : leg.routeRef ||
+                                    transitModeLabel(leg.mode)}
+                              </p>
+                              {leg.headsign && !isWalk && (
+                                <span className="truncate text-[11px] text-muted-foreground">
+                                  → {leg.headsign}
+                                </span>
+                              )}
+                            </div>
+                            {(leg.from || leg.to) && (
+                              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                {[leg.from, leg.to]
+                                  .filter(Boolean)
+                                  .join(' → ')}
+                              </p>
+                            )}
+                            <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] font-medium text-muted-foreground">
+                              {leg.durationS > 0 && (
+                                <span>
+                                  {formatMinutes(leg.durationS)}
+                                </span>
+                              )}
+                              {leg.distanceM > 0 && (
+                                <span>
+                                  {formatKm(leg.distanceM)}
+                                </span>
+                              )}
+                              {leg.waitTimeS ? (
+                                <span>
+                                  kutish{' '}
+                                  {formatMinutes(leg.waitTimeS)}
+                                </span>
+                              ) : null}
+                              {leg.stops ? (
+                                <span>{leg.stops} bekat</span>
+                              ) : null}
+                              {formatTransitClock(
+                                leg.departureTime,
+                              ) &&
+                                formatTransitClock(
+                                  leg.arrivalTime,
+                                ) && (
+                                  <span>
+                                    {formatTransitClock(
+                                      leg.departureTime,
+                                    )}{' '}
+                                    →{' '}
+                                    {formatTransitClock(
+                                      leg.arrivalTime,
+                                    )}
+                                  </span>
+                                )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    },
+                  )}
+                </div>
+              </div>
+            ) : null}
 
             {pendingNavigationStart && routeOrigin && (
               <div
