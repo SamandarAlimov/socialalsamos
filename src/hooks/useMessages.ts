@@ -60,6 +60,9 @@ export interface Message {
   media_url: string | null;
   media_type: string | null;
   reply_to_id: string | null;
+  forwarded_from_message_id?: string | null;
+  forwarded_from_name?: string | null;
+  original_content?: string | null;
   story_id: string | null;
   shared_post_id: string | null;
   is_edited: boolean;
