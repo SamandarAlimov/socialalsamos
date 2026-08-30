@@ -216,6 +216,11 @@ export function useStopRoutes(stop?: TransitStop | null) {
                 intervalMin: 0,
                 nextArrivalsMin: [],
                 realtime: false,
+                scheduled: false,
+                headsign: route.headsign ?? null,
+                directionId: route.directionId ?? null,
+                shapeId: route.shapeId ?? null,
+                shapeCoordinates: route.shapeCoordinates ?? [],
               }))
             : await fetchStopRoutes(stop.id, { signal });
 
@@ -225,6 +230,30 @@ export function useStopRoutes(stop?: TransitStop | null) {
 
         const byRef = new Map<string, number[]>();
         const byRouteId = new Map<string, number[]>();
+        const scheduleByRef = new Map<string, number[]>();
+        const scheduleByRouteId = new Map<string, number[]>();
+
+        for (const arrival of edgeRealtime?.scheduledArrivals ?? []) {
+          if (!Number.isFinite(arrival.minutes)) continue;
+          if (arrival.ref) {
+            const list = scheduleByRef.get(arrival.ref) ?? [];
+            list.push(arrival.minutes);
+            scheduleByRef.set(
+              arrival.ref,
+              list.sort((a, b) => a - b),
+            );
+          }
+          if (arrival.routeId) {
+            const list =
+              scheduleByRouteId.get(arrival.routeId) ?? [];
+            list.push(arrival.minutes);
+            scheduleByRouteId.set(
+              arrival.routeId,
+              list.sort((a, b) => a - b),
+            );
+          }
+        }
+
         for (const arrival of edgeRealtime?.arrivals ?? []) {
           if (!Number.isFinite(arrival.minutes)) continue;
           if (arrival.ref) {
@@ -257,21 +286,45 @@ export function useStopRoutes(stop?: TransitStop | null) {
 
         // Eski normalized VITE adapteri backward-compatible fallback sifatida qoladi.
         const legacyRealtime =
-          byRef.size === 0 ? await fetchRealtimeArrivals(stop.id, signal) : null;
+          byRef.size === 0 && scheduleByRef.size === 0
+            ? await fetchRealtimeArrivals(stop.id, signal)
+            : null;
 
         setRoutes(
           base.map((route) => {
             const gtfsRouteId = route.id.startsWith('gtfs:')
               ? route.id.slice('gtfs:'.length)
               : '';
-            const arrivals =
+            const realtimeArrivals =
               (gtfsRouteId ? byRouteId.get(gtfsRouteId) : undefined) ??
               byRef.get(route.ref) ??
               legacyRealtime?.[route.ref] ??
               [];
-            return arrivals.length
-              ? { ...route, nextArrivalsMin: arrivals, realtime: true }
-              : route;
+            if (realtimeArrivals.length) {
+              return {
+                ...route,
+                nextArrivalsMin: realtimeArrivals,
+                realtime: true,
+                scheduled: false,
+              };
+            }
+
+            const scheduledArrivals =
+              (gtfsRouteId
+                ? scheduleByRouteId.get(gtfsRouteId)
+                : undefined) ??
+              scheduleByRef.get(route.ref) ??
+              [];
+            if (scheduledArrivals.length) {
+              return {
+                ...route,
+                nextArrivalsMin: scheduledArrivals,
+                realtime: false,
+                scheduled: true,
+              };
+            }
+
+            return route;
           }),
         );
       } catch (err) {
