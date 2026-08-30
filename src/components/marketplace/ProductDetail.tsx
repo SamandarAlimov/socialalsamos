@@ -3,7 +3,7 @@ import {
   ArrowLeft, Award, BadgeCheck, CalendarClock, Check, ChevronLeft, ChevronRight,
   Clock, Copy, Eye, Heart, Loader2, Lock, MapPin, MessageCircle, Minus,
   PackageX, Plus, RotateCcw, Share2, ShieldCheck, ShoppingCart, Star, Store,
-  Tag, Truck, X, Zap, ChevronRight, LocateFixed, Navigation, TimerReset,
+  Tag, Truck, X, Zap, LocateFixed, Navigation, TimerReset,
 } from 'lucide-react';
 import { addDays, format, formatDistanceToNow } from 'date-fns';
 import { uz } from 'date-fns/locale';
@@ -21,11 +21,12 @@ import {
   useProducts,
   useRecentlyViewedProducts,
   useSellerResponseStats,
+  useProductVariants,
 } from '@/hooks/useMarketplace';
 import { useProductReviews } from '@/hooks/useProductReviews';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useToast } from '@/hooks/use-toast';
-import { conditionLabel, formatPrice, getDiscount, getStockState } from '@/lib/marketplace';
+import { conditionLabel, formatPrice, getDiscount } from '@/lib/marketplace';
 import { cn } from '@/lib/utils';
 import { marketplaceUz } from '@/i18n/marketplace';
 import { useMarketplaceDeliveryLocation } from '@/hooks/useMarketplaceDeliveryLocation';
@@ -62,7 +63,6 @@ export function ProductDetail({
 
   const [stack, setStack] = useState<Product[]>([]);
   const product = stack.length > 0 ? stack[stack.length - 1] : productProp;
-  const stockState = getStockState(product ?? ({} as Product));
 
   const { products: relatedSource, isLoading: relatedLoading } = useProducts(
     product?.category?.slug || 'all',
@@ -96,6 +96,11 @@ export function ProductDetail({
     locate: locateDelivery,
   } = useMarketplaceDeliveryLocation();
 
+  const {
+    variants,
+    isLoading: variantsLoading,
+  } = useProductVariants(product?.id);
+
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isLiked, setIsLiked] = useState(product?.is_liked || false);
   const [quantity, setQuantity] = useState(1);
@@ -109,6 +114,7 @@ export function ProductDetail({
   const [reviewTitle, setReviewTitle] = useState('');
   const [reviewContent, setReviewContent] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
 
   const touchStartX = useRef<number | null>(null);
 
@@ -126,11 +132,40 @@ export function ProductDetail({
     setReviewRating(5);
     setReviewTitle('');
     setReviewContent('');
+    setSelectedOptions({});
   }, [product?.id]);
 
+  const variantOptionNames = useMemo(
+    () => Array.from(new Set(variants.flatMap(variant => Object.keys(variant.options || {})))),
+    [variants],
+  );
+
+  const selectedVariant = useMemo(() => {
+    if (variants.length === 0) return null;
+    return variants.find(variant =>
+      variantOptionNames.every(
+        name => String(variant.options?.[name] ?? '') === String(selectedOptions[name] ?? ''),
+      ),
+    ) ?? null;
+  }, [selectedOptions, variantOptionNames, variants]);
+
+  const selectedStock = variants.length > 0
+    ? Math.max(0, Number(selectedVariant?.quantity ?? 0))
+    : Math.max(0, Number(product?.quantity ?? 0));
+
   useEffect(() => {
-    setQuantity(q => Math.min(q, Math.max(1, stockState.stock)));
-  }, [stockState.stock]);
+    if (variants.length === 0) {
+      setSelectedOptions({});
+      return;
+    }
+    setSelectedOptions({ ...variants[0].options });
+    setQuantity(1);
+    setCurrentImageIndex(0);
+  }, [product?.id, variants]);
+
+  useEffect(() => {
+    setQuantity(q => Math.min(q, Math.max(1, selectedStock)));
+  }, [selectedStock]);
 
   useEffect(() => {
     if (!product?.id) return;
@@ -145,7 +180,17 @@ export function ProductDetail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product?.id]);
 
-  const images = product?.images?.length ? product.images.map(image => image.url) : [];
+  const images = useMemo(() => {
+    const base = product?.images?.length ? product.images.map(image => image.url) : [];
+    const variantImage = selectedVariant?.image_url;
+    if (!variantImage) return base;
+    return [variantImage, ...base.filter(url => url !== variantImage)];
+  }, [product?.images, selectedVariant?.image_url]);
+
+  useEffect(() => {
+    setCurrentImageIndex(0);
+    setImageFailed({});
+  }, [selectedVariant?.id]);
 
   useEffect(() => {
     if (!product || images.length < 2) return;
@@ -168,24 +213,35 @@ export function ProductDetail({
   if (!product) return null;
 
   const currency = product.currency || 'USD';
+  const displayPrice = Number(selectedVariant?.price ?? product.price);
+  const displayCompareAt =
+    selectedVariant?.compare_at_price ?? product.compare_at_price;
   const { hasDiscount, percent: discountPercent, savings } = getDiscount(
-    product.price,
-    product.compare_at_price,
+    displayPrice,
+    displayCompareAt,
   );
-  const { stock, isSoldOut, isLowStock } = stockState;
+  const stock = selectedStock;
+  const isSoldOut =
+    product.status !== 'active' ||
+    stock <= 0 ||
+    (variants.length > 0 && !selectedVariant);
+  const isLowStock = !isSoldOut && stock <= 5;
   const sellerRating = Number(product.seller?.rating ?? 0);
   const currentImage = images[currentImageIndex];
   const showFallback = !currentImage || imageFailed[currentImageIndex];
   const canGoBack = stack.length > 0;
 
   const shippingCost = product.shipping_available ? Number(product.shipping_price ?? 0) : 0;
-  const lineTotal = Number(product.price) * quantity;
+  const lineTotal = displayPrice * quantity;
   const grandTotal = lineTotal + shippingCost * quantity;
   const shippingApplies = shippingCost > 0;
 
   const inCartQty = cartItems.reduce((sum, item) => {
-    const productId = (item as { product_id?: string }).product_id;
-    return productId === product.id ? sum + Number(item.quantity || 0) : sum;
+    if (item.product_id !== product.id) return sum;
+    if (variants.length > 0 && (item.product_variant_id ?? null) !== (selectedVariant?.id ?? null)) {
+      return sum;
+    }
+    return sum + Number(item.quantity || 0);
   }, 0);
 
   const distanceKm =
@@ -257,11 +313,32 @@ export function ProductDetail({
     if (success) setIsLiked(value => !value);
   };
 
+  const handleVariantOptionSelect = (name: string, value: string) => {
+    triggerHaptic('light');
+
+    const preferred = variants.find(variant =>
+      String(variant.options?.[name] ?? '') === value &&
+      Object.entries(selectedOptions).every(([otherName, otherValue]) =>
+        otherName === name ||
+        String(variant.options?.[otherName] ?? '') === String(otherValue),
+      ),
+    );
+    const fallback = variants.find(
+      variant => String(variant.options?.[name] ?? '') === value,
+    );
+    const next = preferred ?? fallback;
+    if (!next) return;
+
+    setSelectedOptions({ ...next.options });
+    setQuantity(1);
+    setCurrentImageIndex(0);
+  };
+
   const handleAddToCart = async () => {
-    if (isAddingToCart || isBuying || isSoldOut) return;
+    if (isAddingToCart || isBuying || isSoldOut || variantsLoading) return;
     setIsAddingToCart(true);
     triggerHaptic('medium');
-    const success = await addToCart(product.id, quantity);
+    const success = await addToCart(product.id, quantity, selectedVariant?.id);
     setIsAddingToCart(false);
     if (!success) return;
     setAddedToCart(true);
@@ -273,7 +350,7 @@ export function ProductDetail({
     if (isBuying || isAddingToCart || isSoldOut) return;
     setIsBuying(true);
     triggerHaptic('heavy');
-    const success = await addToCart(product.id, quantity);
+    const success = await addToCart(product.id, quantity, selectedVariant?.id);
     setIsBuying(false);
     if (!success) return;
     onCartChange?.();
@@ -294,7 +371,7 @@ export function ProductDetail({
     triggerHaptic('light');
     const shareData = {
       title: product.title,
-      text: `${product.title} — ${formatPrice(product.price, currency)}`,
+      text: `${product.title}${selectedVariant ? ` · ${Object.values(selectedVariant.options).join(' / ')}` : ''} — ${formatPrice(displayPrice, currency)}`,
       url: typeof window !== 'undefined' ? window.location.href : '',
     };
     try {
@@ -361,7 +438,7 @@ export function ProductDetail({
           addedToCart && 'border-emerald-500/40 text-emerald-600 bg-emerald-500/5',
         )}
         onClick={handleAddToCart}
-        disabled={isAddingToCart || isBuying || isSoldOut}
+        disabled={isAddingToCart || isBuying || isSoldOut || variantsLoading}
       >
         {isAddingToCart ? (
           <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> {marketplaceUz.productDetail.adding}</>
@@ -380,7 +457,7 @@ export function ProductDetail({
       <Button
         className="flex-1 rounded-2xl h-12 text-sm font-bold shadow-lg shadow-primary/20"
         onClick={handleBuyNow}
-        disabled={isSoldOut || isBuying || isAddingToCart}
+        disabled={isSoldOut || isBuying || isAddingToCart || variantsLoading}
       >
         {isSoldOut ? marketplaceUz.productDetail.sold : isBuying ? (
           <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> {marketplaceUz.productDetail.opening}</>
@@ -409,7 +486,7 @@ export function ProductDetail({
             <p className="truncate text-sm font-semibold md:text-base">{product.title}</p>
             <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
               {product.category?.name && <span className="truncate">{product.category.name}</span>}
-              <span className="font-bold text-primary">{formatPrice(product.price, currency)}</span>
+              <span className="font-bold text-primary">{formatPrice(displayPrice, currency)}</span>
             </div>
           </div>
 
@@ -633,12 +710,12 @@ export function ProductDetail({
                 <div className="rounded-2xl border border-primary/10 bg-primary/[0.035] p-4">
                   <div className="flex flex-wrap items-baseline gap-2">
                     <span className="text-3xl font-extrabold tracking-tight text-primary">
-                      {formatPrice(product.price, currency)}
+                      {formatPrice(displayPrice, currency)}
                     </span>
                     {hasDiscount && (
                       <>
                         <span className="text-sm text-muted-foreground line-through">
-                          {formatPrice(product.compare_at_price, currency)}
+                          {formatPrice(displayCompareAt, currency)}
                         </span>
                         <span className="rounded-md bg-red-500/10 px-2 py-0.5 text-xs font-bold text-red-500">
                           −{discountPercent}%
@@ -668,6 +745,79 @@ export function ProductDetail({
                   </div>
                 </div>
 
+                {variantsLoading ? (
+                  <div className="space-y-2 rounded-2xl border border-border/40 p-3">
+                    <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+                    <div className="flex gap-2">
+                      {[0, 1, 2].map(item => (
+                        <div key={item} className="h-9 w-20 animate-pulse rounded-xl bg-muted" />
+                      ))}
+                    </div>
+                  </div>
+                ) : variants.length > 0 ? (
+                  <div className="space-y-4 rounded-2xl border border-border/40 bg-card p-3.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold">{marketplaceUz.productDetail.options}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {marketplaceUz.productDetail.chooseVariant}
+                        </p>
+                      </div>
+                      {selectedVariant?.sku && (
+                        <span className="rounded-lg bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground">
+                          SKU: {selectedVariant.sku}
+                        </span>
+                      )}
+                    </div>
+
+                    {variantOptionNames.map(name => {
+                      const values = Array.from(
+                        new Set(
+                          variants
+                            .map(variant => String(variant.options?.[name] ?? ''))
+                            .filter(Boolean),
+                        ),
+                      );
+                      return (
+                        <div key={name} className="space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-medium">{name}</span>
+                            <span className="text-muted-foreground">{selectedOptions[name] || '—'}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {values.map(value => {
+                              const valueVariants = variants.filter(
+                                variant => String(variant.options?.[name] ?? '') === value,
+                              );
+                              const soldOutValue = valueVariants.every(
+                                variant => Number(variant.quantity ?? 0) <= 0,
+                              );
+                              const selected = selectedOptions[name] === value;
+                              return (
+                                <button
+                                  key={value}
+                                  type="button"
+                                  onClick={() => handleVariantOptionSelect(name, value)}
+                                  disabled={soldOutValue}
+                                  className={cn(
+                                    'min-h-9 rounded-xl border px-3 py-1.5 text-xs font-medium transition-all',
+                                    selected
+                                      ? 'border-primary bg-primary/10 text-primary ring-2 ring-primary/10'
+                                      : 'border-border/50 bg-background hover:border-primary/50',
+                                    soldOutValue && 'cursor-not-allowed opacity-40 line-through',
+                                  )}
+                                >
+                                  {value}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
                 {!isSoldOut && (
                   <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/40 p-3">
                     <div>
@@ -689,8 +839,8 @@ export function ProductDetail({
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 rounded-lg"
-                        onClick={() => setQuantity(value => Math.min(stockState.stock, value + 1))}
-                        disabled={quantity >= stockState.stock}
+                        onClick={() => setQuantity(value => Math.min(stock, value + 1))}
+                        disabled={quantity >= stock}
                       >
                         <Plus className="h-3.5 w-3.5" />
                       </Button>
@@ -899,6 +1049,9 @@ export function ProductDetail({
                     {[
                       { label: marketplaceUz.productDetail.condition, value: conditionLabel(product.condition) },
                       { label: marketplaceUz.productDetail.available, value: `${stock} dona` },
+                      ...(selectedVariant?.sku
+                        ? [{ label: 'SKU', value: selectedVariant.sku }]
+                        : []),
                       { label: marketplaceUz.productDetail.category, value: product.category?.name || '—' },
                       {
                         label: marketplaceUz.productDetail.delivery,
