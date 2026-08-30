@@ -278,17 +278,59 @@ function meters(lat1: number, lng1: number, lat2: number, lng2: number): number 
   return 2 * 6371000 * Math.asin(Math.sqrt(a));
 }
 
-function nearestStop(data: StaticData, lat: number, lng: number): StaticStop | null {
+function normalizedStopName(value: unknown): string {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[’‘ʻʼ`´]/g, "'")
+    .replace(/\b(bekati|bekat|bus stop|station|platform)\b/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function stopNameOverlap(a: string, b: string): number {
+  const left = new Set(normalizedStopName(a).split(" ").filter(Boolean));
+  const right = new Set(normalizedStopName(b).split(" ").filter(Boolean));
+  if (!left.size || !right.size) return 0;
+  let shared = 0;
+  for (const token of left) if (right.has(token)) shared += 1;
+  return shared / Math.max(left.size, right.size);
+}
+
+function nearestStop(
+  data: StaticData,
+  lat: number,
+  lng: number,
+  preferredName = "",
+): StaticStop | null {
   let best: StaticStop | null = null;
+  let bestScore = Infinity;
   let bestMeters = Infinity;
+
   for (const stop of data.stops) {
-    if (Math.abs(stop.lat - lat) > 0.01 || Math.abs(stop.lng - lng) > 0.015) continue;
+    if (
+      Math.abs(stop.lat - lat) > 0.01 ||
+      Math.abs(stop.lng - lng) > 0.015
+    ) {
+      continue;
+    }
+
     const distance = meters(lat, lng, stop.lat, stop.lng);
-    if (distance < bestMeters) {
+    if (distance > MAX_MATCH_METERS) continue;
+
+    const overlap = preferredName
+      ? stopNameOverlap(preferredName, stop.name)
+      : 0;
+    // Name match can beat a slightly closer opposite-side platform, but
+    // distance remains dominant when no useful names are present.
+    const score = distance - overlap * 90;
+    if (score < bestScore) {
       best = stop;
+      bestScore = score;
       bestMeters = distance;
     }
   }
+
   return bestMeters <= MAX_MATCH_METERS ? best : null;
 }
 
@@ -364,7 +406,12 @@ async function normalizedRequest(action: string, payload: Record<string, unknown
     headers: { "Content-Type": "application/json", ...providerHeaders() },
     body: JSON.stringify(payload),
   });
-  if (!response.ok) throw new Error("Normalized transit provider HTTP " + response.status);
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(
+      "Normalized transit provider HTTP " + response.status,
+    );
+  }
   return await response.json();
 }
 
@@ -383,7 +430,12 @@ async function staticStopRoutes(payload: Record<string, any>) {
   const lng = Number(payload.longitude);
   const matched =
     Number.isFinite(lat) && Number.isFinite(lng)
-      ? nearestStop(staticData, lat, lng)
+      ? nearestStop(
+          staticData,
+          lat,
+          lng,
+          String(payload.stopName || ""),
+        )
       : null;
   const requestedStopId = String(payload.gtfsStopId || "");
   const stopId = requestedStopId || matched?.id || "";
@@ -544,7 +596,12 @@ async function alerts(payload: Record<string, any>) {
   const lng = Number(payload.longitude);
   const matched =
     staticData && Number.isFinite(lat) && Number.isFinite(lng)
-      ? nearestStop(staticData, lat, lng)
+      ? nearestStop(
+          staticData,
+          lat,
+          lng,
+          String(payload.stopName || ""),
+        )
       : null;
   const requestedStopId = String(payload.gtfsStopId || "");
   const stopId = requestedStopId || matched?.id || "";
