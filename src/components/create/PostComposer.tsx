@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart3,
@@ -34,6 +34,8 @@ import { ImageEditor } from '@/components/create/ImageEditor';
 import { VideoEditor, type VideoEditData } from '@/components/VideoEditor';
 import { HashtagSuggestions } from '@/components/HashtagSuggestions';
 import { startLiveLocationSharing } from '@/lib/liveLocationSharing';
+import { parseStorageReference } from '@/lib/mediaUpload';
+import { supabase } from '@/integrations/supabase/client';
 
 /** MentionCollaborator ichidagi Profile bilan bir xil shakl. */
 interface CollaboratorProfile {
@@ -64,6 +66,28 @@ function hashtagQueryAt(text: string, cursor: number): string | null {
   return match ? match[1] : null;
 }
 
+function draftMusicObject(input?: PostMusicInput | null): { bucket: string; key: string } | null {
+  if (!input?.track || input.trackId || input.track.source !== 'device') return null;
+  if (input.track.storageBucket && input.track.storageKey) {
+    return { bucket: input.track.storageBucket, key: input.track.storageKey };
+  }
+  return parseStorageReference(input.track.audioUrl);
+}
+
+function sameDraftMusicObject(a?: PostMusicInput | null, b?: PostMusicInput | null): boolean {
+  const left = draftMusicObject(a);
+  const right = draftMusicObject(b);
+  return Boolean(left && right && left.bucket === right.bucket && left.key === right.key);
+}
+
+async function cleanupDraftMusic(input?: PostMusicInput | null): Promise<void> {
+  const object = draftMusicObject(input);
+  if (!object) return;
+
+  const { error } = await supabase.storage.from(object.bucket).remove([object.key]);
+  if (error) console.warn('Draft music obyektini tozalab bo‘lmadi:', error);
+}
+
 /**
  * Yangi post yaratish oynasi.
  *
@@ -83,6 +107,8 @@ export function PostComposer() {
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const musicRef = useRef<PostMusicInput | null>(null);
+  const publishSucceededRef = useRef(false);
 
   const [content, setContent] = useState('');
   const [visibility, setVisibility] = useState<PostVisibility>('public');
@@ -119,8 +145,30 @@ export function PostComposer() {
     retryAttachment,
     setEditState,
     replaceAttachmentFile,
+    markAttachmentsPublished,
     uploadAll,
   } = usePostAttachments({ visibility });
+
+  useEffect(() => {
+    musicRef.current = music;
+  }, [music]);
+
+  useEffect(() => {
+    return () => {
+      if (!publishSucceededRef.current) {
+        void cleanupDraftMusic(musicRef.current);
+      }
+    };
+  }, []);
+
+  const handleMusicChange = useCallback((next: PostMusicInput | null) => {
+    const current = musicRef.current;
+    if (current && !sameDraftMusicObject(current, next)) {
+      void cleanupDraftMusic(current);
+    }
+    musicRef.current = next;
+    setMusic(next);
+  }, []);
 
   const canSubmit = useMemo(
     () =>
@@ -326,6 +374,10 @@ export function PostComposer() {
 
       if (!created) return;
 
+      markAttachmentsPublished();
+      publishSucceededRef.current = true;
+      musicRef.current = null;
+
       if (location?.mode === 'live' && location.liveUntil) {
         startLiveLocationSharing(created.id, location.liveUntil);
       }
@@ -354,6 +406,7 @@ export function PostComposer() {
     location,
     music,
     clearAttachments,
+    markAttachmentsPublished,
     navigate,
   ]);
 
@@ -513,7 +566,7 @@ export function PostComposer() {
           </button>
           <button
             type="button"
-            onClick={() => setMusic(null)}
+            onClick={() => handleMusicChange(null)}
             aria-label="Musiqani o‘chirish"
             className="shrink-0 text-muted-foreground transition hover:text-destructive"
           >
@@ -658,7 +711,7 @@ export function PostComposer() {
         open={showMusic}
         onOpenChange={setShowMusic}
         currentMusic={music}
-        onSelectMusic={setMusic}
+        onSelectMusic={handleMusicChange}
         visibility={visibility}
       />
 
