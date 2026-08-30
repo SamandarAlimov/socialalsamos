@@ -26,6 +26,11 @@ import {
   type VectorRenderedFeature,
 } from '@/lib/mapEngine';
 import { loadMapLibreRuntime } from '@/lib/maplibreRuntime';
+import {
+  trafficTileTemplate,
+  type TrafficProviderStatus,
+  type TrafficStyle,
+} from '@/lib/traffic';
 
 interface VectorMapSurfaceProps {
   controllerRef: MutableRefObject<MapEngineController | null>;
@@ -39,6 +44,9 @@ interface VectorMapSurfaceProps {
   navigationBearing?: number | null;
   navigationPitch?: number;
   buildings3d?: boolean;
+  traffic?: TrafficProviderStatus | null;
+  trafficEnabled?: boolean;
+  trafficStyle?: TrafficStyle;
   pickMode?: boolean;
   referenceCenter: { latitude: number; longitude: number };
   onViewport: (viewport: MapViewport) => void;
@@ -66,6 +74,8 @@ const POI_SOURCE_ID = 'alsamos-vector-pois';
 const POI_CLUSTER_LAYER_ID = 'alsamos-vector-poi-clusters';
 const POI_CLUSTER_COUNT_LAYER_ID = 'alsamos-vector-poi-cluster-count';
 const POI_POINT_LAYER_ID = 'alsamos-vector-poi-points';
+const TRAFFIC_SOURCE_ID = 'alsamos-traffic-flow';
+const TRAFFIC_LAYER_ID = 'alsamos-traffic-flow-layer';
 
 function markerHtml(marker: MapSceneMarker): string {
   switch (marker.kind) {
@@ -122,7 +132,8 @@ function chooseRenderedFeature(features: any[]): any | null {
     (feature) =>
       feature?.layer?.id !== ROUTE_LAYER_ID &&
       feature?.source !== ROUTE_SOURCE_ID &&
-      feature?.source !== POI_SOURCE_ID,
+      feature?.source !== POI_SOURCE_ID &&
+      feature?.source !== TRAFFIC_SOURCE_ID,
   );
   if (!usable.length) return null;
 
@@ -214,6 +225,64 @@ function add3dBuildings(map: any): void {
     );
   } catch {
     // Style source schema may not expose a compatible building source.
+  }
+}
+
+function removeTrafficLayer(map: any): void {
+  try {
+    if (map.getLayer?.(TRAFFIC_LAYER_ID)) {
+      map.removeLayer(TRAFFIC_LAYER_ID);
+    }
+    if (map.getSource?.(TRAFFIC_SOURCE_ID)) {
+      map.removeSource(TRAFFIC_SOURCE_ID);
+    }
+  } catch {
+    // Style may be reloading.
+  }
+}
+
+function syncTrafficLayer(
+  map: any,
+  traffic: TrafficProviderStatus | null | undefined,
+  enabled: boolean,
+  style: TrafficStyle,
+): void {
+  if (!map?.isStyleLoaded?.()) return;
+
+  if (!enabled || !traffic?.configured) {
+    removeTrafficLayer(map);
+    return;
+  }
+
+  removeTrafficLayer(map);
+
+  try {
+    map.addSource(TRAFFIC_SOURCE_ID, {
+      type: 'raster',
+      tiles: [trafficTileTemplate(style)],
+      tileSize: 256,
+      minzoom: traffic.minZoom,
+      maxzoom: traffic.maxZoom,
+      attribution: traffic.attribution ?? undefined,
+    });
+
+    const beforeLayer = map.getLayer?.(ROUTE_LAYER_ID)
+      ? ROUTE_LAYER_ID
+      : undefined;
+    map.addLayer(
+      {
+        id: TRAFFIC_LAYER_ID,
+        type: 'raster',
+        source: TRAFFIC_SOURCE_ID,
+        paint: {
+          'raster-opacity': 0.9,
+          'raster-fade-duration': 180,
+        },
+      },
+      beforeLayer,
+    );
+  } catch {
+    removeTrafficLayer(map);
   }
 }
 
@@ -385,6 +454,9 @@ export function VectorMapSurface({
   navigationBearing = null,
   navigationPitch = 48,
   buildings3d = true,
+  traffic = null,
+  trafficEnabled = false,
+  trafficStyle = 'light',
   pickMode = false,
   referenceCenter,
   onViewport,
@@ -557,6 +629,12 @@ export function VectorMapSurface({
           if (disposed) return;
           ensureRouteLayer(map);
           ensurePoiLayers(map);
+          syncTrafficLayer(
+            map,
+            traffic,
+            trafficEnabled,
+            trafficStyle,
+          );
           if (buildings3d) add3dBuildings(map);
           setStyleRevision((value) => value + 1);
           publishViewport(map, false);
@@ -567,6 +645,12 @@ export function VectorMapSurface({
           if (disposed) return;
           ensureRouteLayer(map);
           ensurePoiLayers(map);
+          syncTrafficLayer(
+            map,
+            traffic,
+            trafficEnabled,
+            trafficStyle,
+          );
           if (buildings3d) add3dBuildings(map);
           setStyleRevision((value) => value + 1);
         });
@@ -731,6 +815,26 @@ export function VectorMapSurface({
     const source = map.getSource?.(ROUTE_SOURCE_ID);
     source?.setData?.(linesGeoJson(lines));
   }, [lines, styleRevision]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded?.()) return;
+    syncTrafficLayer(
+      map,
+      traffic,
+      trafficEnabled,
+      trafficStyle,
+    );
+  }, [
+    traffic?.configured,
+    traffic?.provider,
+    traffic?.attribution,
+    traffic?.minZoom,
+    traffic?.maxZoom,
+    trafficEnabled,
+    trafficStyle,
+    styleRevision,
+  ]);
 
   const poiSignature = useMemo(
     () =>
