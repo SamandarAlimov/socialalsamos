@@ -3305,6 +3305,7 @@ export default function MapPage() {
           traffic={trafficProvider.status}
           trafficEnabled={overlays.includes('traffic')}
           trafficStyle={layerId === 'night' ? 'dark' : 'light'}
+          trafficRevision={trafficProvider.revision}
           pickMode={Boolean(routeMapPickTarget)}
           referenceCenter={center}
           onViewport={setViewport}
@@ -3334,6 +3335,7 @@ export default function MapPage() {
           referenceCenter={center}
           highContrast={contrastLayer}
           traffic={trafficProvider.status}
+          trafficRevision={trafficProvider.revision}
           onViewport={setViewport}
           onMovedCenter={setMovedCenter}
           onMapClick={
@@ -3455,6 +3457,18 @@ export default function MapPage() {
                   : trafficProvider.status.configured
                     ? trafficProvider.status.label
                     : 'Real traffic provider ulanmagan',
+              },
+              transit: {
+                available: true,
+                detail: transitStatus.configured
+                  ? transitStatus.authoritative
+                    ? transitStatus.providerName ||
+                      'Rasmiy GTFS/GTFS-RT ulangan'
+                    : (transitStatus.providerName
+                        ? transitStatus.providerName + ' · '
+                        : '') +
+                      'GTFS manbasi tasdiqlanmagan'
+                  : 'Static transport · live GTFS ulanmagan',
               },
             }}
             onToggleOverlay={(id) =>
