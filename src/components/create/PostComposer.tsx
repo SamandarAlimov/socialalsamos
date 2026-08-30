@@ -31,6 +31,7 @@ import { MusicPicker } from '@/components/create/MusicPicker';
 import { MentionCollaborator } from '@/components/create/MentionCollaborator';
 import { StickerMediaEditor } from '@/components/create/StickerMediaEditor';
 import { HashtagSuggestions } from '@/components/HashtagSuggestions';
+import { startLiveLocationSharing } from '@/lib/liveLocationSharing';
 
 /** MentionCollaborator ichidagi Profile bilan bir xil shakl. */
 interface CollaboratorProfile {
@@ -266,6 +267,10 @@ export function PostComposer() {
       });
 
       if (!created) return;
+
+      if (location?.mode === 'live' && location.liveUntil) {
+        startLiveLocationSharing(created.id, location.liveUntil);
+      }
 
       // 3. Tozalaymiz va lentaga qaytamiz
       clearAttachments();
