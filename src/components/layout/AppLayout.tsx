@@ -37,7 +37,9 @@ export function AppLayout() {
 
   // Immersive mobile mode: no header, no bottom nav, no padding.
   // Desktop keeps the standard sidebar/layout.
-  const immersiveMobile = location.pathname === '/create';
+  const immersiveMobile =
+    location.pathname === '/create' ||
+    location.pathname === '/map';
 
   if (isLoading) {
     return (
