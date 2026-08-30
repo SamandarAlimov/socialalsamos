@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { db } from '@/lib/db';
 
 export interface NotificationActor {
   id: string;
@@ -17,7 +18,18 @@ export interface NotificationPost {
 export interface Notification {
   id: string;
   user_id: string;
-  type: 'message' | 'like' | 'comment' | 'follow' | 'mention' | 'collaboration_invite' | 'collaboration_accepted';
+  type:
+    | 'message'
+    | 'like'
+    | 'comment'
+    | 'follow'
+    | 'mention'
+    | 'collaboration_invite'
+    | 'collaboration_accepted'
+    | 'collaboration_declined'
+    | 'collaboration_revoked'
+    | 'collaboration_removed'
+    | 'collaboration_left';
   title: string;
   body: string | null;
   data: Record<string, unknown>;
@@ -146,6 +158,21 @@ export function useNotifications() {
     setNotifications(prev => prev.filter(n => n.id !== notificationId));
   }, [user]);
 
+  const respondToCollaboration = useCallback(
+    async (collaborationId: string, accept: boolean) => {
+      if (!user) throw new Error('Autentifikatsiya talab qilinadi');
+
+      const { error } = await db.rpc('respond_post_collaboration', {
+        p_collaboration_id: collaborationId,
+        p_accept: accept,
+      });
+
+      if (error) throw error;
+      await fetchNotifications();
+    },
+    [fetchNotifications, user],
+  );
+
   useEffect(() => {
     fetchNotifications();
   }, [fetchNotifications]);
@@ -218,6 +245,7 @@ export function useNotifications() {
     markAsRead,
     markAllAsRead,
     deleteNotification,
+    respondToCollaboration,
     refetch: fetchNotifications,
   };
 }
