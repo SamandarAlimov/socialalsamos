@@ -1153,19 +1153,37 @@ export default function MapPage() {
   };
 
   const rerouteNavigation = useCallback(
-    async (from: { latitude: number; longitude: number }) => {
+    async (
+      from: { latitude: number; longitude: number },
+      context: { nearestRouteIndex: number },
+    ) => {
       if (!destination || routeMode === 'transit') return;
+
+      const currentRoute = routes[routeIndex];
+      const checkpoints = currentRoute?.checkpointIndices ?? [];
+      const remainingWaypoints = routeWaypoints.filter((_, index) => {
+        const checkpointIndex = checkpoints[index + 1];
+        return (
+          checkpointIndex == null ||
+          checkpointIndex > context.nearestRouteIndex + 3
+        );
+      });
+
       try {
-        const result = await fetchRoutes(routeMode, from, destination);
+        const result = await fetchRoutesThrough(
+          routeMode,
+          [from, ...remainingWaypoints, destination],
+        );
         if (!result.length) return;
         setRouteOrigin({ ...from, name: 'Joriy joylashuv' });
+        setRouteWaypoints(remainingWaypoints);
         setRoutes(result);
         setRouteIndex(0);
       } catch {
         toast.error('Yangi marshrutni hisoblab bo‘lmadi.');
       }
     },
-    [destination, routeMode],
+    [destination, routeMode, routeWaypoints, routes, routeIndex],
   );
 
   const handleNavigationPosition = useCallback(
@@ -1247,7 +1265,10 @@ export default function MapPage() {
 
       if (originDistance > 150) {
         try {
-          const result = await fetchRoutes(routeMode, point, destination);
+          const result = await fetchRoutesThrough(
+            routeMode,
+            [point, ...routeWaypoints, destination],
+          );
           if (result.length) {
             setRouteOrigin({ ...point, name: 'Joriy joylashuv' });
             setRoutes(result);
@@ -1296,7 +1317,15 @@ export default function MapPage() {
       },
       { enableHighAccuracy: true, timeout: 10_000, maximumAge: 2_000 },
     );
-  }, [destination, routes, routeIndex, routeMode, routeOrigin, me]);
+  }, [
+    destination,
+    routes,
+    routeIndex,
+    routeMode,
+    routeOrigin,
+    routeWaypoints,
+    me,
+  ]);
 
   useEffect(() => {
     if (!destination || !routes.length) return;
@@ -1307,6 +1336,7 @@ export default function MapPage() {
       routeIndex,
       routeOrigin,
       destination,
+      routeWaypoints,
       routes,
     });
   }, [
@@ -1316,6 +1346,7 @@ export default function MapPage() {
     routeIndex,
     routeOrigin,
     destination,
+    routeWaypoints,
     routes,
   ]);
 
@@ -1344,6 +1375,7 @@ export default function MapPage() {
     routeIndex,
     routeOrigin,
     destination,
+    routeWaypoints,
     routes,
   ]); // navigation-session heartbeat
 
