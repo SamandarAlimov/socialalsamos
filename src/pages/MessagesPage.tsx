@@ -21,7 +21,13 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
-import { useConversations, useMessages, Conversation, Message } from '@/hooks/useMessages';
+import {
+  useConversations,
+  useMessages,
+  Conversation,
+  Message,
+  MessageSendExtras,
+} from '@/hooks/useMessages';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { useVideoCall } from '@/hooks/useVideoCall';
 import { useIncomingCalls } from '@/hooks/useIncomingCalls';
@@ -696,8 +702,19 @@ export default function MessagesPage() {
     }
   };
 
-  const handleSendMessage = async (content: string, mediaUrl?: string, mediaType?: string) => {
-    const sent = await sendMessage(content, mediaUrl, mediaType, replyTo?.id || null);
+  const handleSendMessage = async (
+    content: string,
+    mediaUrl?: string,
+    mediaType?: string,
+    extras?: MessageSendExtras
+  ) => {
+    const sent = await sendMessage(
+      content,
+      mediaUrl,
+      mediaType,
+      replyTo?.id || null,
+      extras
+    );
     if (sent) setReplyTo(null);
     return sent;
   };
