@@ -4,13 +4,11 @@ import {
   Camera,
   Check,
   ChevronDown,
-  ChevronRight,
   Globe2,
   ImagePlus,
   Loader2,
   Lock,
   Pencil,
-  ShieldCheck,
   Sparkles,
   Trash2,
   UsersRound,
@@ -361,237 +359,176 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
     !isCreatingDraft;
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 pb-8 pt-4 sm:px-5 lg:px-6">
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] lg:items-start">
-        <section className="lg:sticky lg:top-4">
-          <div className="rounded-[32px] border border-border/60 bg-card p-3 shadow-[0_18px_60px_rgba(0,0,0,0.12)] sm:p-4">
-            <div
-              className={cn(
-                'relative mx-auto aspect-[9/16] w-full max-w-[390px] overflow-hidden rounded-[26px] border bg-black',
-                isDragging ? 'border-primary ring-4 ring-primary/15' : 'border-white/10',
-              )}
-              onDragEnter={(event) => {
-                event.preventDefault();
-                if (!storyDraft) setIsDragging(true);
-              }}
-              onDragOver={(event) => {
-                event.preventDefault();
-                event.dataTransfer.dropEffect = 'copy';
-              }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={(event) => void handleDrop(event)}
-            >
-              {attachment?.previewUrl ? (
-                attachment.kind === 'video' ? (
-                  <video
-                    src={attachment.previewUrl}
-                    muted
-                    loop
-                    autoPlay
-                    playsInline
-                    className="h-full w-full object-contain"
-                  />
-                ) : (
-                  <img
-                    src={attachment.previewUrl}
-                    alt="Story preview"
-                    className="h-full w-full object-contain"
-                  />
-                )
+    <div className="mx-auto w-full max-w-3xl px-0 pb-8 sm:px-4 sm:pt-4">
+      <section className="overflow-hidden border-y border-border/60 bg-background sm:rounded-2xl sm:border">
+        <div className="flex items-center gap-3 px-4 py-3 sm:px-5">
+          <Avatar className="h-10 w-10 shrink-0">
+            <AvatarImage src={profile?.avatar_url ?? ''} />
+            <AvatarFallback className="font-semibold">
+              {(profile?.display_name || profile?.username || 'U').charAt(0).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+
+          <p className="min-w-0 flex-1 truncate text-sm font-semibold">
+            {profile?.display_name || profile?.username || 'Foydalanuvchi'}
+          </p>
+
+          <Select
+            value={visibility}
+            disabled={Boolean(storyDraft)}
+            onValueChange={(value) => setVisibility(value as PostVisibility)}
+          >
+            <SelectTrigger className="h-8 w-auto min-w-0 gap-1 rounded-full border-0 bg-muted/55 px-2.5 text-[11px] font-medium shadow-none focus:ring-0">
+              <SelectValue />
+              <ChevronDown className="h-3 w-3 text-muted-foreground" />
+            </SelectTrigger>
+            <SelectContent>
+              {VISIBILITIES.map(({ id, label, icon: Icon }) => (
+                <SelectItem key={id} value={id}>
+                  <span className="flex items-center gap-2">
+                    <Icon className="h-3.5 w-3.5" />
+                    {label}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="border-t border-border/50 p-3 sm:p-4">
+          <div
+            className={cn(
+              'relative mx-auto aspect-[9/16] w-full max-w-[390px] overflow-hidden rounded-xl bg-black',
+              isDragging && 'ring-2 ring-primary',
+            )}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              if (!storyDraft) setIsDragging(true);
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = 'copy';
+            }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(event) => void handleDrop(event)}
+          >
+            {attachment?.previewUrl ? (
+              attachment.kind === 'video' ? (
+                <video
+                  src={attachment.previewUrl}
+                  muted
+                  loop
+                  autoPlay
+                  playsInline
+                  className="h-full w-full object-contain"
+                />
               ) : (
-                <button
-                  type="button"
-                  disabled={Boolean(storyDraft)}
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex h-full w-full flex-col items-center justify-center gap-4 bg-[radial-gradient(circle_at_top,hsl(var(--primary)/0.18),transparent_42%),linear-gradient(to_bottom,#171717,#050505)] px-6 text-center text-white"
-                >
-                  <span className="flex h-16 w-16 items-center justify-center rounded-[22px] border border-white/10 bg-white/10 shadow-xl backdrop-blur">
-                    <ImagePlus className="h-7 w-7" />
-                  </span>
-                  <p className="text-sm font-semibold">Rasm yoki video</p>
-                </button>
-              )}
-
-              <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2">
-                <span className="rounded-full border border-white/10 bg-black/50 px-2.5 py-1 text-[10px] font-semibold text-white backdrop-blur">
-                  9:16
-                </span>
-                {storyDraft && (
-                  <span className="rounded-full border border-white/10 bg-black/50 px-2.5 py-1 text-[10px] font-semibold text-amber-300 backdrop-blur">
-                    Qoralama
-                  </span>
-                )}
-              </div>
-
-              {caption.trim() && (
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/35 to-transparent px-5 pb-6 pt-14">
-                  <p className="line-clamp-4 whitespace-pre-wrap break-words text-sm font-medium leading-relaxed text-white drop-shadow">
-                    {caption}
-                  </p>
-                </div>
-              )}
-
-              {isDragging && (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-primary/25 backdrop-blur-sm">
-                  <div className="rounded-2xl border border-white/15 bg-black/65 px-5 py-3 text-center text-sm font-semibold text-white">
-                    Story faylini tashlang
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,video/*"
-              className="hidden"
-              onChange={handleFileInput}
-            />
-
-            <div className="mt-3 grid grid-cols-2 gap-2">
+                <img
+                  src={attachment.previewUrl}
+                  alt=""
+                  className="h-full w-full object-contain"
+                />
+              )
+            ) : (
               <button
                 type="button"
                 disabled={Boolean(storyDraft)}
                 onClick={() => fileInputRef.current?.click()}
-                className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-border/60 bg-background text-xs font-medium transition hover:border-primary/25 hover:bg-primary/[0.035] disabled:opacity-50"
+                className="flex h-full w-full flex-col items-center justify-center gap-3 text-white/80 transition hover:text-white"
               >
-                <ImagePlus className="h-4 w-4 text-primary" />
-                {attachment ? 'Almashtirish' : 'Qurilmadan'}
-              </button>
-              <button
-                type="button"
-                disabled={Boolean(storyDraft)}
-                onClick={() => setShowCamera(true)}
-                className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-border/60 bg-background text-xs font-medium transition hover:border-primary/25 hover:bg-primary/[0.035] disabled:opacity-50"
-              >
-                <Camera className="h-4 w-4 text-primary" />
-                Kamera
-              </button>
-            </div>
-
-            {attachment && !storyDraft && (
-              <button
-                type="button"
-                onClick={() =>
-                  attachment.kind === 'image'
-                    ? setImageTargetId(attachment.id)
-                    : setVideoTargetId(attachment.id)
-                }
-                className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-muted/60 text-xs font-medium transition hover:bg-muted"
-              >
-                <Pencil className="h-4 w-4" />
-                Tahrirlash
+                <ImagePlus className="h-8 w-8" />
+                <span className="text-sm font-medium">Rasm yoki video</span>
               </button>
             )}
-          </div>
-        </section>
 
-        <aside className="min-w-0 space-y-4">
-          <div className="flex items-center gap-3 rounded-3xl border border-border/60 bg-gradient-to-br from-card via-card to-primary/[0.045] p-4 shadow-sm">
-            <Avatar className="h-12 w-12 shrink-0 border-2 border-background shadow-sm ring-1 ring-border/60">
-              <AvatarImage src={profile?.avatar_url ?? ''} />
-              <AvatarFallback className="font-semibold">
-                {(profile?.display_name || profile?.username || 'U').charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">
-                {profile?.display_name || profile?.username || 'Foydalanuvchi'}
-              </p>
-              <div className="mt-1.5">
-                <Select
-                  value={visibility}
-                  disabled={Boolean(storyDraft)}
-                  onValueChange={(value) => setVisibility(value as PostVisibility)}
-                >
-                  <SelectTrigger className="h-8 w-auto min-w-32 gap-1 rounded-full border-border/60 bg-background px-3 text-xs shadow-none">
-                    <SelectValue />
-                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {VISIBILITIES.map(({ id, label, icon: Icon }) => (
-                      <SelectItem key={id} value={id}>
-                        <span className="flex items-center gap-2">
-                          <Icon className="h-3.5 w-3.5" />
-                          {label}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            {caption.trim() && (
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent px-5 pb-6 pt-16">
+                <p className="line-clamp-4 whitespace-pre-wrap break-words text-sm font-medium leading-relaxed text-white">
+                  {caption}
+                </p>
               </div>
-            </div>
+            )}
 
-            <span className="hidden rounded-full border border-border/60 bg-background px-3 py-1.5 text-[10px] text-muted-foreground sm:block">
-              24 soat
-            </span>
+            {storyDraft && (
+              <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-medium text-white backdrop-blur">
+                Qoralama
+              </span>
+            )}
           </div>
+        </div>
 
-          <div className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-sm">
-            <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Matn
-              </p>
-              <span className="text-[10px] text-muted-foreground">{caption.length}/1000</span>
-            </div>
-            <textarea
-              value={caption}
-              disabled={Boolean(storyDraft)}
-              onChange={(event) => setCaption(event.target.value.slice(0, 1000))}
-              placeholder="Story haqida qisqa yozuv..."
-              rows={6}
-              className="min-h-36 w-full resize-none bg-transparent px-4 py-4 text-sm leading-relaxed outline-none placeholder:text-muted-foreground disabled:opacity-70"
-            />
-          </div>
+        <div className="border-t border-border/50 px-4 py-3 sm:px-5">
+          <textarea
+            value={caption}
+            disabled={Boolean(storyDraft)}
+            onChange={(event) => setCaption(event.target.value.slice(0, 1000))}
+            placeholder="Izoh qo‘shish..."
+            rows={3}
+            className="min-h-20 w-full resize-none bg-transparent text-sm leading-relaxed outline-none placeholder:text-muted-foreground disabled:opacity-60"
+          />
+        </div>
 
+        <div className="flex items-center gap-1 border-t border-border/50 px-3 py-2 sm:px-4">
           {!storyDraft ? (
-            <div className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-sm">
-              <div className="border-b border-border/50 px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                    Davom etish
-                  </p>
-                </div>
-              </div>
-              <div className="space-y-3 p-4">
+            <>
+              <div className="flex min-w-0 flex-1 items-center gap-1">
                 <button
                   type="button"
-                  disabled={!canContinue}
-                  onClick={() => void createHiddenDraft()}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                  title="Qurilmadan"
+                  aria-label="Qurilmadan"
+                  disabled={Boolean(storyDraft)}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-30"
                 >
-                  {isCreatingDraft || isUploading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Wand2 className="h-4 w-4" />
-                  )}
-                  {isUploading
-                    ? 'Media yuklanmoqda...'
-                    : isCreatingDraft
-                      ? 'Qoralama tayyorlanmoqda...'
-                      : 'Davom etish'}
-                  {!isCreatingDraft && !isUploading && <ChevronRight className="h-4 w-4" />}
+                  <ImagePlus className="h-[18px] w-[18px]" />
                 </button>
+                <button
+                  type="button"
+                  title="Kamera"
+                  aria-label="Kamera"
+                  disabled={Boolean(storyDraft)}
+                  onClick={() => setShowCamera(true)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-30"
+                >
+                  <Camera className="h-[18px] w-[18px]" />
+                </button>
+                {attachment && (
+                  <button
+                    type="button"
+                    title="Tahrirlash"
+                    aria-label="Tahrirlash"
+                    onClick={() =>
+                      attachment.kind === 'image'
+                        ? setImageTargetId(attachment.id)
+                        : setVideoTargetId(attachment.id)
+                    }
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                  >
+                    <Pencil className="h-[18px] w-[18px]" />
+                  </button>
+                )}
               </div>
-            </div>
+
+              <button
+                type="button"
+                disabled={!canContinue}
+                onClick={() => void createHiddenDraft()}
+                className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                {isCreatingDraft || isUploading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Wand2 className="h-4 w-4" />
+                )}
+                Davom etish
+              </button>
+            </>
           ) : (
-            <div className="space-y-3 rounded-3xl border border-primary/25 bg-primary/[0.045] p-4 shadow-sm">
-              <div className="flex items-start gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                  <ShieldCheck className="h-4 w-4" />
-                </span>
-                <div>
-                  <p className="text-sm font-semibold">Tayyor</p>
-
-                </div>
-              </div>
-
+            <>
               <button
                 type="button"
                 onClick={() => setShowStickers(true)}
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-semibold text-primary-foreground shadow-sm"
+                className="flex h-9 items-center gap-1.5 rounded-full px-3 text-xs font-medium text-primary transition hover:bg-primary/10"
               >
                 <Sparkles className="h-4 w-4" />
                 Stikerlar
@@ -599,9 +536,26 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
 
               <button
                 type="button"
+                disabled={isDiscarding || isFinalizing}
+                onClick={() => void discardDraft()}
+                title="Bekor qilish"
+                aria-label="Bekor qilish"
+                className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive disabled:opacity-35"
+              >
+                {isDiscarding ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+              </button>
+
+              <div className="flex-1" />
+
+              <button
+                type="button"
                 disabled={isFinalizing}
                 onClick={() => void activateStory()}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-border/60 bg-background text-sm font-medium transition hover:bg-muted disabled:opacity-50"
+                className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-45"
               >
                 {isFinalizing ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -610,39 +564,18 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
                 )}
                 Joylash
               </button>
-
-              <button
-                type="button"
-                disabled={isDiscarding || isFinalizing}
-                onClick={() => void discardDraft()}
-                className="flex h-10 w-full items-center justify-center gap-2 rounded-2xl text-xs font-medium text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-              >
-                {isDiscarding ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Trash2 className="h-4 w-4" />
-                )}
-                Qoralamani bekor qilish
-              </button>
-            </div>
+            </>
           )}
+        </div>
 
-
-        </aside>
-      </div>
-
-      {attachment && (
-        <AttachmentGrid
-          attachments={attachments}
-          onRemove={(id) => {
-            if (!storyDraft) removeAttachment(id);
-          }}
-          onRetry={() => undefined}
-          onEditImage={(item) => !storyDraft && setImageTargetId(item.id)}
-          onEditVideo={(item) => !storyDraft && setVideoTargetId(item.id)}
-          className="mt-5 lg:hidden"
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,video/*"
+          className="hidden"
+          onChange={handleFileInput}
         />
-      )}
+      </section>
 
       {showCamera && (
         <CameraVideoRecorder
