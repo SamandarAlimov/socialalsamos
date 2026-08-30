@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Upload, ImageIcon, Plus, Loader2 } from 'lucide-react';
+import { X, Plus, Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,8 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { CategoryIcon } from '@/components/marketplace/CategoryIcon';
 import { useCategories, useProductActions } from '@/hooks/useMarketplace';
 import { useAuth } from '@/contexts/AuthContext';
+import { marketplaceUz } from '@/i18n/marketplace';
 import { cn } from '@/lib/utils';
 import { uploadMedia } from '@/lib/mediaUpload';
 
@@ -19,11 +21,12 @@ interface CreateProductDialogProps {
   onSuccess: () => void;
 }
 
+const copy = marketplaceUz.productForm;
 const conditions = [
-  { value: 'new', label: 'New' },
-  { value: 'like_new', label: 'Like New' },
-  { value: 'good', label: 'Good' },
-  { value: 'fair', label: 'Fair' },
+  { value: 'new', label: copy.conditions.new },
+  { value: 'like_new', label: copy.conditions.like_new },
+  { value: 'good', label: copy.conditions.good },
+  { value: 'fair', label: copy.conditions.fair },
 ];
 
 export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreateProductDialogProps) {
@@ -41,13 +44,12 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
   const [isNegotiable, setIsNegotiable] = useState(false);
   const [shippingAvailable, setShippingAvailable] = useState(true);
   const [shippingPrice, setShippingPrice] = useState('0');
-  
   const [images, setImages] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
     if (!files || !user) return;
 
     setIsUploading(true);
@@ -62,12 +64,12 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
       }
     }
 
-    setImages(prev => [...prev, ...uploadedUrls].slice(0, 10));
+    setImages(previous => [...previous, ...uploadedUrls].slice(0, 10));
     setIsUploading(false);
   };
 
   const removeImage = (index: number) => {
-    setImages(prev => prev.filter((_, i) => i !== index));
+    setImages(previous => previous.filter((_, current) => current !== index));
   };
 
   const handleSubmit = async () => {
@@ -86,60 +88,56 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
       shipping_available: shippingAvailable,
       shipping_price: parseFloat(shippingPrice) || 0,
     }, images);
-
     setIsSubmitting(false);
 
-    if (result) {
-      // Reset form
-      setTitle('');
-      setDescription('');
-      setPrice('');
-      setCategoryId('');
-      setCondition('new');
-      setLocation('');
-      setQuantity('1');
-      setIsNegotiable(false);
-      setShippingAvailable(true);
-      setShippingPrice('0');
-      setImages([]);
-      
-      onSuccess();
-      onOpenChange(false);
-    }
+    if (!result) return;
+
+    setTitle('');
+    setDescription('');
+    setPrice('');
+    setCategoryId('');
+    setCondition('new');
+    setLocation('');
+    setQuantity('1');
+    setIsNegotiable(false);
+    setShippingAvailable(true);
+    setShippingPrice('0');
+    setImages([]);
+    onSuccess();
+    onOpenChange(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] p-0">
         <DialogHeader className="p-4 pb-0">
-          <DialogTitle>List a Product</DialogTitle>
+          <DialogTitle>{copy.title}</DialogTitle>
         </DialogHeader>
 
         <ScrollArea className="max-h-[calc(90vh-120px)]">
           <div className="p-4 space-y-6">
-            {/* Images */}
             <div className="space-y-2">
-              <Label>Photos (up to 10)</Label>
+              <Label>{copy.photos}</Label>
               <div className="grid grid-cols-4 gap-2">
-                {images.map((url, i) => (
-                  <div key={i} className="relative aspect-square rounded-lg overflow-hidden bg-muted">
+                {images.map((url, index) => (
+                  <div key={url} className="relative aspect-square rounded-lg overflow-hidden bg-muted">
                     <img src={url} alt="" className="w-full h-full object-cover" />
                     <Button
                       variant="destructive"
                       size="icon"
                       className="absolute top-1 right-1 h-6 w-6"
-                      onClick={() => removeImage(i)}
+                      onClick={() => removeImage(index)}
                     >
                       <X className="h-3 w-3" />
                     </Button>
                   </div>
                 ))}
-                
+
                 {images.length < 10 && (
                   <label className={cn(
-                    "aspect-square rounded-lg border-2 border-dashed border-muted-foreground/30",
-                    "flex flex-col items-center justify-center cursor-pointer",
-                    "hover:border-primary hover:bg-primary/5 transition-colors"
+                    'aspect-square rounded-lg border-2 border-dashed border-muted-foreground/30',
+                    'flex flex-col items-center justify-center cursor-pointer',
+                    'hover:border-primary hover:bg-primary/5 transition-colors',
                   )}>
                     <input
                       type="file"
@@ -154,7 +152,7 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
                     ) : (
                       <>
                         <Plus className="h-6 w-6 text-muted-foreground" />
-                        <span className="text-[10px] text-muted-foreground mt-1">Add</span>
+                        <span className="text-[10px] text-muted-foreground mt-1">{copy.add}</span>
                       </>
                     )}
                   </label>
@@ -162,136 +160,125 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
               </div>
             </div>
 
-            {/* Title */}
             <div className="space-y-2">
-              <Label htmlFor="title">Title *</Label>
+              <Label htmlFor="title">{copy.productTitle}</Label>
               <Input
                 id="title"
-                placeholder="What are you selling?"
+                placeholder={copy.productTitlePlaceholder}
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={event => setTitle(event.target.value)}
               />
             </div>
 
-            {/* Price */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="price">Price ($) *</Label>
+                <Label htmlFor="price">{copy.price}</Label>
                 <Input
                   id="price"
                   type="number"
-                  placeholder="0.00"
+                  placeholder="0"
                   min="0"
                   step="0.01"
                   value={price}
-                  onChange={(e) => setPrice(e.target.value)}
+                  onChange={event => setPrice(event.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="quantity">Quantity</Label>
+                <Label htmlFor="quantity">{copy.quantity}</Label>
                 <Input
                   id="quantity"
                   type="number"
                   placeholder="1"
                   min="1"
                   value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
+                  onChange={event => setQuantity(event.target.value)}
                 />
               </div>
             </div>
 
-            {/* Category & Condition */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Category</Label>
+                <Label>{copy.category}</Label>
                 <Select value={categoryId} onValueChange={setCategoryId}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select" />
+                    <SelectValue placeholder={copy.select} />
                   </SelectTrigger>
                   <SelectContent>
-                    {categories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>
-                        {cat.icon} {cat.name}
+                    {categories.map(category => (
+                      <SelectItem key={category.id} value={category.id}>
+                        <span className="flex items-center gap-2">
+                          <CategoryIcon slug={category.slug} name={category.name} className="h-4 w-4" />
+                          {category.name}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Condition</Label>
+                <Label>{copy.condition}</Label>
                 <Select value={condition} onValueChange={setCondition}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {conditions.map((c) => (
-                      <SelectItem key={c.value} value={c.value}>
-                        {c.label}
-                      </SelectItem>
+                    {conditions.map(item => (
+                      <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
-            {/* Description */}
             <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
+              <Label htmlFor="description">{copy.description}</Label>
               <Textarea
                 id="description"
-                placeholder="Describe your item..."
+                placeholder={copy.descriptionPlaceholder}
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={event => setDescription(event.target.value)}
                 rows={4}
               />
             </div>
 
-            {/* Location */}
             <div className="space-y-2">
-              <Label htmlFor="location">Location</Label>
+              <Label htmlFor="location">{copy.location}</Label>
               <Input
                 id="location"
-                placeholder="City, State"
+                placeholder={copy.locationPlaceholder}
                 value={location}
-                onChange={(e) => setLocation(e.target.value)}
+                onChange={event => setLocation(event.target.value)}
               />
             </div>
 
-            {/* Options */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-medium text-sm">Price is negotiable</p>
-                  <p className="text-xs text-muted-foreground">Let buyers make offers</p>
+                  <p className="font-medium text-sm">{copy.negotiable}</p>
+                  <p className="text-xs text-muted-foreground">{copy.negotiableDescription}</p>
                 </div>
-                <Switch
-                  checked={isNegotiable}
-                  onCheckedChange={setIsNegotiable}
-                />
+                <Switch checked={isNegotiable} onCheckedChange={setIsNegotiable} />
               </div>
 
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-medium text-sm">Shipping available</p>
-                  <p className="text-xs text-muted-foreground">Ship to buyers</p>
+                  <p className="font-medium text-sm">{copy.shipping}</p>
+                  <p className="text-xs text-muted-foreground">{copy.shippingDescription}</p>
                 </div>
-                <Switch
-                  checked={shippingAvailable}
-                  onCheckedChange={setShippingAvailable}
-                />
+                <Switch checked={shippingAvailable} onCheckedChange={setShippingAvailable} />
               </div>
 
               {shippingAvailable && (
                 <div className="space-y-2">
-                  <Label htmlFor="shippingPrice">Shipping Price ($)</Label>
+                  <Label htmlFor="shippingPrice">{copy.shippingPrice}</Label>
                   <Input
                     id="shippingPrice"
                     type="number"
-                    placeholder="0 for free shipping"
+                    placeholder={copy.freeShippingPlaceholder}
                     min="0"
                     step="0.01"
                     value={shippingPrice}
-                    onChange={(e) => setShippingPrice(e.target.value)}
+                    onChange={event => setShippingPrice(event.target.value)}
                   />
                 </div>
               )}
@@ -307,12 +294,9 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
             disabled={!title.trim() || !price || isSubmitting}
           >
             {isSubmitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Publishing...
-              </>
+              <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {copy.publishing}</>
             ) : (
-              'Publish Listing'
+              copy.publish
             )}
           </Button>
         </div>
