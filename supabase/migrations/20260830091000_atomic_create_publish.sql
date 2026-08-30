@@ -27,6 +27,7 @@ declare
   v_track jsonb;
   v_correct_index int;
   v_position int := 0;
+  v_source_index int := 0;
   v_option_id uuid;
   v_scheduled_at timestamptz;
   v_visibility text := coalesce(nullif(p_payload ->> 'visibility', ''), 'public');
@@ -142,6 +143,7 @@ begin
 
     v_correct_index := nullif(v_poll ->> 'correctOptionIndex', '')::int;
     v_position := 0;
+    v_source_index := 0;
 
     for v_item in
       select value
@@ -160,7 +162,7 @@ begin
         )
         returning id into v_option_id;
 
-        if v_correct_index is not null and v_correct_index = v_position then
+        if v_correct_index is not null and v_correct_index = v_source_index then
           update public.polls
           set correct_option_id = v_option_id
           where id = v_poll_id;
@@ -168,6 +170,8 @@ begin
 
         v_position := v_position + 1;
       end if;
+
+      v_source_index := v_source_index + 1;
     end loop;
 
     if v_position < 2 then
@@ -179,7 +183,13 @@ begin
     end if;
 
     if coalesce((v_poll ->> 'quizMode')::boolean, false)
-       and v_correct_index is null then
+       and (
+         v_correct_index is null
+         or not exists (
+           select 1 from public.polls
+           where id = v_poll_id and correct_option_id is not null
+         )
+       ) then
       raise exception 'Viktorina uchun to''g''ri javob belgilanmagan';
     end if;
   end if;
