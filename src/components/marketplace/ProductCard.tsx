@@ -48,7 +48,7 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
     }
   };
 
-  /** Local placeholder instead of an external placehold.co request. */
+  /** Local category fallback; no external placeholder request. */
   const ImageFallback = () => (
     <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted/40 text-muted-foreground/40">
       <CategoryIcon
