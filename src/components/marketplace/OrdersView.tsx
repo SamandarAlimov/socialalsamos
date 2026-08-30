@@ -33,6 +33,13 @@ function shortOrderNumber(order: Order) {
   return order.order_number ? order.order_number.slice(-8) : order.id.slice(0, 8).toUpperCase();
 }
 
+function variantOptionsLabel(options?: Record<string, string> | null) {
+  if (!options) return '';
+  return Object.entries(options)
+    .map(([name, value]) => `${name}: ${value}`)
+    .join(' · ');
+}
+
 function ThumbFallback() {
   return (
     <div className="w-full h-full flex items-center justify-center bg-muted text-muted-foreground/40">
@@ -313,6 +320,11 @@ function OrderDetailSheet({
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium line-clamp-1">{item.title}</p>
+                    {variantOptionsLabel(item.variant_options) && (
+                      <p className="mt-0.5 line-clamp-1 text-[11px] font-medium text-foreground/70">
+                        {variantOptionsLabel(item.variant_options)}
+                      </p>
+                    )}
                     <p className="text-xs text-muted-foreground tabular-nums">
                       {item.quantity} × {formatPrice(item.price, order.currency)}
                     </p>
