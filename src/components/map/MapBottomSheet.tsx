@@ -139,8 +139,8 @@ export function MapBottomSheet({
   return (
     <div
       className={cn(
-        'absolute inset-x-0 bottom-0 z-[1150] flex flex-col overflow-hidden rounded-t-[26px] border-t border-border/60 bg-background/98 shadow-2xl backdrop-blur-xl transition-[height] duration-300 ease-out',
-        'md:inset-y-0 md:left-0 md:right-auto md:h-full md:w-[400px] md:rounded-none md:border-r md:border-t-0 md:bg-background',
+        'absolute inset-x-0 bottom-0 z-[1150] flex flex-col overflow-hidden rounded-t-[28px] border-t border-border/50 bg-background/92 shadow-2xl backdrop-blur-2xl transition-[height] duration-300 ease-out',
+        'md:inset-y-3 md:left-3 md:right-auto md:h-auto md:w-[376px] md:rounded-[24px] md:border md:border-border/45 md:bg-background/82 md:shadow-2xl md:ring-1 md:ring-white/10',
         dragHeight != null && 'transition-none',
         className,
       )}
@@ -153,7 +153,7 @@ export function MapBottomSheet({
         onPointerMove={moveDrag}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
-        className="flex h-7 w-full shrink-0 touch-none items-center justify-center md:hidden"
+        className="flex h-7 w-full shrink-0 touch-none items-center justify-center bg-transparent md:hidden"
         aria-label="Xarita paneli balandligini o'zgartirish"
       >
         <span className="h-1.5 w-11 rounded-full bg-muted-foreground/35" />
