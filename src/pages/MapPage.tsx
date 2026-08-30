@@ -354,7 +354,10 @@ export default function MapPage() {
   const [params] = useSearchParams();
   const isMobile = useIsMobile();
   const mapRef = useRef<L.Map | null>(null);
-  const restoredNavigation = useRef(readNavigationSession()).current;
+  const hasDestinationParam = params.has('destLat') && params.has('destLng');
+  const restoredNavigation = useRef(
+    hasDestinationParam ? null : readNavigationSession(),
+  ).current;
 
   const [center, setCenter] = useState(DEFAULT_CENTER);
   const [me, setMe] = useState<{ latitude: number; longitude: number } | null>(null);
