@@ -56,15 +56,16 @@ export function useUserStickers() {
 
   const mapRow = useCallback((row: StickerRow): UserSticker => {
     const url = row.full_url ?? row.preview_url ?? '';
-    const item = stickerFromUrl({
+    const item: StickerItem = {
+      ...stickerFromUrl(url, {
+        kind: (row.kind as StickerItem['kind']) ?? 'image',
+        previewUrl: row.preview_url ?? url,
+        name: row.name ?? 'Stiker',
+        packId: row.pack_id,
+        stickerId: row.id,
+      }),
       key: `user:${row.id}`,
-      kind: (row.kind as StickerItem['kind']) ?? 'image',
-      previewUrl: row.preview_url ?? url,
-      fullUrl: url,
-      name: row.name ?? 'Stiker',
-      packId: row.pack_id,
-      stickerId: row.id,
-    });
+    };
 
     return {
       id: row.id,
