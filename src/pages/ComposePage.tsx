@@ -90,7 +90,7 @@ export default function ComposePage() {
                   disabled={disabled}
                   title={disabled ? 'Avval qoralamani yakunlang' : undefined}
                   className={cn(
-                    'relative flex min-w-[70px] items-center justify-center gap-1.5 px-2 text-xs font-medium transition sm:min-w-[88px] sm:px-3',
+                    'relative flex min-w-[58px] items-center justify-center gap-1 px-1.5 text-[11px] font-medium transition sm:min-w-[82px] sm:gap-1.5 sm:px-3 sm:text-xs',
                     mode === id
                       ? 'text-primary'
                       : 'text-muted-foreground hover:text-foreground',
