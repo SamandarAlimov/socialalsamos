@@ -70,6 +70,7 @@ import { MapOverviewPanel } from '@/components/map/MapOverviewPanel';
 import { MapSearchSuggestions } from '@/components/map/MapSearchSuggestions';
 import { useMapSearchHistory } from '@/hooks/useMapSearchHistory';
 import { useActiveNavigation } from '@/hooks/useActiveNavigation';
+import { useNavigationVoice } from '@/hooks/useNavigationVoice';
 import { ActiveNavigationPanel } from '@/components/map/ActiveNavigationPanel';
 
 const DEFAULT_CENTER = { latitude: 41.311081, longitude: 69.240562 };
@@ -990,6 +991,10 @@ export default function MapPage() {
     onPosition: handleNavigationPosition,
     onReroute: rerouteNavigation,
     onArrive: handleNavigationArrive,
+  });
+  const navigationVoice = useNavigationVoice({
+    active: navigationActive,
+    snapshot: navigation.snapshot,
   });
   const fitTo =
     navigationActive || !activeRoute?.coordinates?.length
@@ -2203,6 +2208,9 @@ export default function MapPage() {
           mode={routeMode}
           error={navigation.error}
           highContrast={contrastLayer}
+          voiceEnabled={navigationVoice.enabled}
+          voiceSupported={navigationVoice.supported}
+          onToggleVoice={navigationVoice.toggle}
           onRecenter={() => {
             if (!navigation.position || !mapRef.current) return;
             mapRef.current.setView(
