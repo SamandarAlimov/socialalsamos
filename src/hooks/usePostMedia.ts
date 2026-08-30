@@ -22,6 +22,7 @@ export interface PostMediaItem {
   duration_seconds: number | null;
   aspect_ratio: string | null;
   alt_text: string | null;
+  edit_state: Record<string, unknown> | null;
 }
 
 /**
