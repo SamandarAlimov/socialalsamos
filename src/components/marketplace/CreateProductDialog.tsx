@@ -35,6 +35,7 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
   const {
     createProduct,
     checkProductVariantsReady,
+    rollbackCreatedProduct,
     createProductVariants,
   } = useProductActions();
 
@@ -179,6 +180,7 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
     if (hasVariants) {
       const variantsSaved = await createProductVariants(result.id, parsedVariants);
       if (!variantsSaved) {
+        await rollbackCreatedProduct(result.id);
         setIsSubmitting(false);
         return;
       }
