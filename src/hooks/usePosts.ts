@@ -85,6 +85,28 @@ function isSchemaCompatibilityError(error: unknown): boolean {
   );
 }
 
+
+const ATOMIC_PUBLISH_CAPABILITY_KEY = 'alsamos.create.atomic-publish-capability.v1';
+
+type AtomicPublishCapability = 'available' | 'missing' | null;
+
+function readAtomicPublishCapability(): AtomicPublishCapability {
+  try {
+    const value = sessionStorage.getItem(ATOMIC_PUBLISH_CAPABILITY_KEY);
+    return value === 'available' || value === 'missing' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeAtomicPublishCapability(value: Exclude<AtomicPublishCapability, null>) {
+  try {
+    sessionStorage.setItem(ATOMIC_PUBLISH_CAPABILITY_KEY, value);
+  } catch {
+    // Capability cache is an optimization only.
+  }
+}
+
 /** Post yaratishda qo'shimcha strukturali ma'lumotlar. */
 export interface CreatePostOptions {
   /** MUHIM: ilgari bu qiymat saqlanmasdan tushib qolar edi (maxfiylik bug'i). */
@@ -195,6 +217,15 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
       if (error) throw error;
 
       const rawPosts = (data ?? []) as Array<Post & { post_kind?: string | null }>;
+
+      // select("*") da post_kind ustuni production schema'da mavjud bo'lsa
+      // har bir row obyektida key sifatida keladi. U yo'q bo'lsa atomic publish
+      // migratsiyasi ham hali deploy bo'lmagan bo'lishi ehtimoli yuqori.
+      if (rawPosts.length > 0) {
+        const hasPostKindColumn = Object.prototype.hasOwnProperty.call(rawPosts[0], 'post_kind');
+        writeAtomicPublishCapability(hasPostKindColumn ? 'available' : 'missing');
+      }
+
       const visiblePosts = rawPosts.filter((post) => post.post_kind !== 'story');
 
       if (user && visiblePosts.length > 0) {
@@ -302,10 +333,29 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
       let usedMinimalSchema = false;
       const metaErrors: string[] = [];
 
-      const { data: rpcPostId, error: publishError } = await (supabase as any).rpc(
-        'publish_post_draft',
-        { p_payload: payload },
-      );
+      let rpcPostId: unknown = null;
+      let publishError: unknown = null;
+      const atomicCapability = readAtomicPublishCapability();
+
+      if (atomicCapability !== 'missing') {
+        const rpcResult = await (supabase as any).rpc(
+          'publish_post_draft',
+          { p_payload: payload },
+        );
+        rpcPostId = rpcResult.data;
+        publishError = rpcResult.error;
+
+        if (!publishError && rpcPostId) {
+          writeAtomicPublishCapability('available');
+        } else if (publishError && isMissingPublishPostDraftError(publishError)) {
+          writeAtomicPublishCapability('missing');
+        }
+      } else {
+        publishError = {
+          code: 'PGRST202',
+          message: 'publish_post_draft capability is unavailable in this production schema',
+        };
+      }
 
       if (!publishError && rpcPostId) {
         postId = String(rpcPostId);
