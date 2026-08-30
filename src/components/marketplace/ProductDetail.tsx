@@ -10,10 +10,13 @@ import { uz } from 'date-fns/locale';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { CategoryIcon } from '@/components/marketplace/CategoryIcon';
 import { ProductCard } from '@/components/marketplace/ProductCard';
 import { Product, useCart, useProductActions, useProducts } from '@/hooks/useMarketplace';
+import { useProductReviews } from '@/hooks/useProductReviews';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useToast } from '@/hooks/use-toast';
 import { conditionLabel, formatPrice, getDiscount, getStockState } from '@/lib/marketplace';
@@ -52,6 +55,18 @@ export function ProductDetail({
     '',
   );
 
+  const {
+    reviews,
+    averageRating,
+    reviewCount,
+    page: reviewPage,
+    pageCount: reviewPageCount,
+    isLoading: reviewsLoading,
+    eligibility: reviewEligibility,
+    createReview,
+    setPage: setReviewPage,
+  } = useProductReviews(product?.id);
+
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isLiked, setIsLiked] = useState(product?.is_liked || false);
   const [quantity, setQuantity] = useState(1);
@@ -62,6 +77,10 @@ export function ProductDetail({
   const [imageFailed, setImageFailed] = useState<Record<number, boolean>>({});
   const [isZoomed, setIsZoomed] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewTitle, setReviewTitle] = useState('');
+  const [reviewContent, setReviewContent] = useState('');
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   const touchStartX = useRef<number | null>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
@@ -79,6 +98,9 @@ export function ProductDetail({
     setImageFailed({});
     setIsZoomed(false);
     setScrolled(false);
+    setReviewRating(5);
+    setReviewTitle('');
+    setReviewContent('');
     mobileScrollRef.current?.scrollTo({ top: 0 });
     detailScrollRef.current?.scrollTo({ top: 0 });
   }, [product?.id]);
@@ -235,6 +257,18 @@ export function ProductDetail({
       }
     } catch {
       // Foydalanuvchi ulashishni bekor qilishi mumkin.
+    }
+  };
+
+  const handleSubmitReview = async () => {
+    if (isSubmittingReview || reviewContent.trim().length < 3) return;
+    setIsSubmittingReview(true);
+    const success = await createReview(reviewRating, reviewTitle, reviewContent);
+    setIsSubmittingReview(false);
+    if (success) {
+      setReviewRating(5);
+      setReviewTitle('');
+      setReviewContent('');
     }
   };
 
@@ -752,6 +786,182 @@ export function ProductDetail({
                     ))}
                   </div>
                 </div>
+
+                <section className="space-y-4 rounded-2xl border border-border/30 bg-muted/10 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-base font-semibold">Xaridorlar sharhlari</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Faqat yetkazilgan buyurtmalar tasdiqlangan xaridor sharhi sifatida qabul qilinadi.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-xl bg-background px-3 py-2 shadow-sm">
+                      <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
+                      <div>
+                        <p className="text-lg font-extrabold leading-none">
+                          {reviewCount > 0 ? averageRating.toFixed(1) : '—'}
+                        </p>
+                        <p className="mt-1 text-[10px] text-muted-foreground">{reviewCount} ta sharh</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {reviewEligibility === 'eligible' && (
+                    <div className="space-y-3 rounded-xl border border-primary/20 bg-primary/[0.03] p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold">Baholang</p>
+                        <div className="flex gap-1">
+                          {[1, 2, 3, 4, 5].map(value => (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => setReviewRating(value)}
+                              className="rounded-md p-0.5"
+                              aria-label={`${value} yulduz`}
+                            >
+                              <Star
+                                className={cn(
+                                  'h-5 w-5',
+                                  value <= reviewRating
+                                    ? 'fill-amber-400 text-amber-400'
+                                    : 'text-muted-foreground/30',
+                                )}
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <Input
+                        value={reviewTitle}
+                        onChange={event => setReviewTitle(event.target.value)}
+                        placeholder="Sarlavha (ixtiyoriy)"
+                        maxLength={120}
+                        className="rounded-xl"
+                      />
+                      <Textarea
+                        value={reviewContent}
+                        onChange={event => setReviewContent(event.target.value)}
+                        placeholder="Mahsulot haqida fikringiz"
+                        maxLength={2000}
+                        rows={3}
+                        className="resize-none rounded-xl"
+                      />
+                      <Button
+                        className="h-10 w-full rounded-xl"
+                        onClick={handleSubmitReview}
+                        disabled={isSubmittingReview || reviewContent.trim().length < 3}
+                      >
+                        {isSubmittingReview ? (
+                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saqlanmoqda</>
+                        ) : (
+                          'Sharhni e’lon qilish'
+                        )}
+                      </Button>
+                    </div>
+                  )}
+
+                  {reviewEligibility === 'already_reviewed' && (
+                    <p className="rounded-xl bg-muted/40 p-3 text-xs text-muted-foreground">
+                      Bu mahsulot uchun sharhingiz allaqachon mavjud.
+                    </p>
+                  )}
+                  {reviewEligibility === 'not_delivered' && (
+                    <p className="rounded-xl bg-muted/40 p-3 text-xs text-muted-foreground">
+                      Sharh yozish uchun shu mahsulot qatnashgan buyurtma avval yetkazilgan bo‘lishi kerak.
+                    </p>
+                  )}
+                  {reviewEligibility === 'signed_out' && (
+                    <p className="rounded-xl bg-muted/40 p-3 text-xs text-muted-foreground">
+                      Sharh yozish uchun tizimga kiring. Xarid tasdiqlangan buyurtma orqali tekshiriladi.
+                    </p>
+                  )}
+
+                  {reviewsLoading ? (
+                    <div className="space-y-2">
+                      {[0, 1].map(item => (
+                        <div key={item} className="h-24 animate-pulse rounded-xl bg-muted" />
+                      ))}
+                    </div>
+                  ) : reviews.length > 0 ? (
+                    <div className="space-y-3">
+                      {reviews.map(review => {
+                        const reviewName =
+                          review.user?.display_name ||
+                          review.user?.username ||
+                          'Alsamos xaridori';
+                        return (
+                          <article key={review.id} className="rounded-xl border border-border/30 bg-background p-3">
+                            <div className="flex items-start gap-3">
+                              <Avatar className="h-9 w-9">
+                                <AvatarImage src={review.user?.avatar_url || ''} />
+                                <AvatarFallback>{reviewName[0]?.toUpperCase() || 'A'}</AvatarFallback>
+                              </Avatar>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div>
+                                    <p className="text-sm font-semibold">{reviewName}</p>
+                                    <div className="mt-0.5 flex items-center gap-0.5">
+                                      {[1, 2, 3, 4, 5].map(value => (
+                                        <Star
+                                          key={value}
+                                          className={cn(
+                                            'h-3.5 w-3.5',
+                                            value <= review.rating
+                                              ? 'fill-amber-400 text-amber-400'
+                                              : 'text-muted-foreground/25',
+                                          )}
+                                        />
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {formatDistanceToNow(new Date(review.created_at), { locale: uz })} oldin
+                                  </span>
+                                </div>
+                                {review.title && <p className="mt-2 text-sm font-semibold">{review.title}</p>}
+                                {review.content && (
+                                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                                    {review.content}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </article>
+                        );
+                      })}
+
+                      {reviewPageCount > 1 && (
+                        <div className="flex items-center justify-between gap-3 pt-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-lg"
+                            disabled={reviewPage <= 0}
+                            onClick={() => setReviewPage(Math.max(0, reviewPage - 1))}
+                          >
+                            Oldingi
+                          </Button>
+                          <span className="text-xs text-muted-foreground">
+                            {reviewPage + 1} / {reviewPageCount}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-lg"
+                            disabled={reviewPage + 1 >= reviewPageCount}
+                            onClick={() => setReviewPage(Math.min(reviewPageCount - 1, reviewPage + 1))}
+                          >
+                            Keyingi
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Hozircha sharh yo‘q. Birinchi tasdiqlangan sharh shu yerda ko‘rinadi.
+                    </p>
+                  )}
+                </section>
 
                 <div className="space-y-3">
                   <h3 className="text-sm font-semibold">O‘xshash mahsulotlar</h3>
