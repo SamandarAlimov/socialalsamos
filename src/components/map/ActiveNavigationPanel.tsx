@@ -2,10 +2,11 @@ import {
   CircleStop,
   Crosshair,
   Loader2,
-  MapPin,
   Navigation,
   Route,
   Satellite,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import type { RouteMode } from '@/lib/routing';
 import { arrivalTime, formatKm, formatMinutes } from '@/lib/routing';
@@ -22,8 +23,32 @@ interface ActiveNavigationPanelProps {
   mode: RouteMode;
   error?: string | null;
   highContrast?: boolean;
+  voiceEnabled?: boolean;
+  voiceSupported?: boolean;
+  onToggleVoice?: () => void;
   onRecenter: () => void;
   onStop: () => void;
+}
+
+function maneuverRotation(modifier?: string): number {
+  switch (modifier) {
+    case 'left':
+      return -90;
+    case 'slight left':
+      return -45;
+    case 'sharp left':
+      return -120;
+    case 'right':
+      return 90;
+    case 'slight right':
+      return 45;
+    case 'sharp right':
+      return 120;
+    case 'uturn':
+      return 180;
+    default:
+      return 0;
+  }
 }
 
 function modeLabel(mode: RouteMode): string {
@@ -40,6 +65,9 @@ export function ActiveNavigationPanel({
   mode,
   error,
   highContrast = false,
+  voiceEnabled = true,
+  voiceSupported = false,
+  onToggleVoice,
   onRecenter,
   onStop,
 }: ActiveNavigationPanelProps) {
@@ -79,7 +107,15 @@ export function ActiveNavigationPanel({
               {snapshot.rerouting ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
               ) : (
-                <Navigation className="h-5 w-5" />
+                <Navigation
+                  className="h-5 w-5 transition-transform"
+                  style={{
+                    transform:
+                      'rotate(' +
+                      maneuverRotation(snapshot.currentStep?.modifier) +
+                      'deg)',
+                  }}
+                />
               )}
             </span>
 
@@ -114,20 +150,42 @@ export function ActiveNavigationPanel({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={onStop}
-              className={cn(
-                'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition',
-                highContrast
-                  ? 'border-white/[0.12] bg-white/[0.05] text-white/[0.72] hover:bg-white/[0.1] hover:text-white'
-                  : 'border-border/[0.50] bg-background/[0.75] text-muted-foreground hover:bg-muted hover:text-foreground',
+            <div className="flex shrink-0 gap-1.5">
+              {voiceSupported && onToggleVoice && (
+                <button
+                  type="button"
+                  onClick={onToggleVoice}
+                  className={cn(
+                    'flex h-10 w-10 items-center justify-center rounded-xl border transition',
+                    highContrast
+                      ? 'border-white/[0.12] bg-white/[0.05] text-white/[0.72] hover:bg-white/[0.1] hover:text-white'
+                      : 'border-border/[0.50] bg-background/[0.75] text-muted-foreground hover:bg-muted hover:text-foreground',
+                  )}
+                  aria-label={voiceEnabled ? 'Ovozni o‘chirish' : 'Ovozni yoqish'}
+                  title={voiceEnabled ? 'Ovozni o‘chirish' : 'Ovozni yoqish'}
+                >
+                  {voiceEnabled ? (
+                    <Volume2 className="h-5 w-5" />
+                  ) : (
+                    <VolumeX className="h-5 w-5" />
+                  )}
+                </button>
               )}
-              aria-label="Navigatsiyani tugatish"
-              title="Navigatsiyani tugatish"
-            >
-              <CircleStop className="h-5 w-5" />
-            </button>
+              <button
+                type="button"
+                onClick={onStop}
+                className={cn(
+                  'flex h-10 w-10 items-center justify-center rounded-xl border transition',
+                  highContrast
+                    ? 'border-white/[0.12] bg-white/[0.05] text-white/[0.72] hover:bg-white/[0.1] hover:text-white'
+                    : 'border-border/[0.50] bg-background/[0.75] text-muted-foreground hover:bg-muted hover:text-foreground',
+                )}
+                aria-label="Navigatsiyani tugatish"
+                title="Navigatsiyani tugatish"
+              >
+                <CircleStop className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
           {error && (
@@ -180,6 +238,12 @@ export function ActiveNavigationPanel({
                     <Satellite className="h-3 w-3" />
                     ±{Math.round(position.accuracyM)} m
                   </span>
+                  {position.speedMps != null && position.speedMps >= 0.8 && (
+                    <>
+                      <span>·</span>
+                      <span>{Math.round(position.speedMps * 3.6)} km/soat</span>
+                    </>
+                  )}
                 </>
               )}
               {snapshot.distanceToRouteM > 30 && !snapshot.arrived && (
