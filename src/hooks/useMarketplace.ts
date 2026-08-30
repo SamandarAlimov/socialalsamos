@@ -63,11 +63,82 @@ export interface Product {
   is_liked?: boolean;
 }
 
+export interface ProductVariant {
+  id: string;
+  product_id: string;
+  sku: string | null;
+  options: Record<string, string>;
+  price: number | null;
+  compare_at_price: number | null;
+  quantity: number;
+  image_url: string | null;
+  is_active: boolean;
+  position: number;
+}
+
 export interface CartItem {
   id: string;
   product_id: string;
+  product_variant_id: string | null;
   quantity: number;
   product?: Product;
+  variant?: ProductVariant | null;
+}
+
+export function getCartItemUnitPrice(item: CartItem): number {
+  return Number(item.variant?.price ?? item.product?.price ?? 0);
+}
+
+export function getCartItemStock(item: CartItem): number {
+  return Math.max(
+    0,
+    Number(item.product_variant_id ? item.variant?.quantity ?? 0 : item.product?.quantity ?? 0),
+  );
+}
+
+export function getVariantOptionsLabel(variant?: ProductVariant | null): string {
+  if (!variant?.options) return '';
+  return Object.entries(variant.options)
+    .map(([name, value]) => `${name}: ${value}`)
+    .join(' · ');
+}
+
+export function useProductVariants(productId?: string | null) {
+  const [variants, setVariants] = useState<ProductVariant[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const refresh = useCallback(async () => {
+    if (!productId) {
+      setVariants([]);
+      return;
+    }
+
+    setIsLoading(true);
+    const { data, error } = await db
+      .from('product_variants')
+      .select('*')
+      .eq('product_id', productId)
+      .eq('is_active', true)
+      .order('position', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.warn('Product variants unavailable:', error);
+      setVariants([]);
+    } else {
+      setVariants((data ?? []).map((row: any) => ({
+        ...row,
+        price: row.price == null ? null : Number(row.price),
+        compare_at_price: row.compare_at_price == null ? null : Number(row.compare_at_price),
+        quantity: Number(row.quantity ?? 0),
+        options: row.options ?? {},
+      })) as ProductVariant[]);
+    }
+    setIsLoading(false);
+  }, [productId]);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+  return { variants, isLoading, refresh };
 }
 
 const PRODUCT_PAGE_SIZE = 50;
@@ -614,13 +685,18 @@ export function useCart() {
       return;
     }
 
-    const { data } = await supabase
+    const { data } = await db
       .from('cart_items')
       .select(`
         *,
+        variant:product_variants(
+          id, product_id, sku, options, price, compare_at_price, quantity,
+          image_url, is_active, position
+        ),
         product:products(
           *,
           seller:sellers(id, business_name, is_verified),
+          category:product_categories(id, name, slug, icon),
           images:product_images(id, url, position)
         )
       `)
@@ -628,9 +704,17 @@ export function useCart() {
       .order('created_at', { ascending: false });
 
     if (data) {
-      setItems(data.map(item => ({
+      setItems((data as any[]).map(item => ({
         ...item,
-        product: item.product as unknown as Product,
+        product_variant_id: item.product_variant_id ?? null,
+        product: item.product as Product,
+        variant: item.variant ? {
+          ...item.variant,
+          price: item.variant.price == null ? null : Number(item.variant.price),
+          compare_at_price: item.variant.compare_at_price == null ? null : Number(item.variant.compare_at_price),
+          quantity: Number(item.variant.quantity ?? 0),
+          options: item.variant.options ?? {},
+        } as ProductVariant : null,
       })));
     }
     setIsLoading(false);
@@ -648,7 +732,11 @@ export function useCart() {
    * and nothing validated stock or product status. Now the quantity is merged
    * and clamped against live stock.
    */
-  const addToCart = async (productId: string, quantity = 1) => {
+  const addToCart = async (
+    productId: string,
+    quantity = 1,
+    productVariantId?: string | null,
+  ) => {
     if (!user) {
       toast({
         title: 'Tizimga kiring',
@@ -659,8 +747,7 @@ export function useCart() {
     }
 
     const requestedQty = Math.max(1, Math.floor(quantity));
-
-    const { data: product, error: productError } = await supabase
+    const { data: product, error: productError } = await db
       .from('products')
       .select('id, title, quantity, status')
       .eq('id', productId)
@@ -671,32 +758,52 @@ export function useCart() {
       return false;
     }
 
-    const stock = Math.max(0, Number(product.quantity ?? 0));
+    let variant: ProductVariant | null = null;
+    if (productVariantId) {
+      const { data: row } = await db
+        .from('product_variants')
+        .select('id, product_id, sku, options, price, compare_at_price, quantity, image_url, is_active, position')
+        .eq('id', productVariantId)
+        .eq('product_id', productId)
+        .eq('is_active', true)
+        .maybeSingle();
+      if (!row) {
+        toast({ title: 'Variant mavjud emas', variant: 'destructive' });
+        return false;
+      }
+      variant = {
+        ...row,
+        price: row.price == null ? null : Number(row.price),
+        compare_at_price: row.compare_at_price == null ? null : Number(row.compare_at_price),
+        quantity: Number(row.quantity ?? 0),
+        options: row.options ?? {},
+      } as ProductVariant;
+    }
+
+    const stock = Math.max(0, Number(variant ? variant.quantity : product.quantity ?? 0));
     if (product.status !== 'active' || stock === 0) {
-      toast({
-        title: 'Mavjud emas',
-        description: 'Bu mahsulot hozirda sotuvda emas',
-        variant: 'destructive',
-      });
+      toast({ title: 'Mavjud emas', description: 'Mahsulot yoki variant sotuvda emas', variant: 'destructive' });
       return false;
     }
 
-    const existing = items.find(i => i.product_id === productId);
+    const variantId = variant?.id ?? null;
+    const existing = items.find(item =>
+      item.product_id === productId &&
+      (item.product_variant_id ?? null) === variantId
+    );
     const nextQuantity = Math.min((existing?.quantity ?? 0) + requestedQty, stock);
 
     if (existing && nextQuantity === existing.quantity) {
-      toast({
-        title: 'Maksimal miqdor',
-        description: `Omborda faqat ${stock} dona mavjud`,
-      });
+      toast({ title: 'Maksimal miqdor', description: `Omborda faqat ${stock} dona mavjud` });
       return false;
     }
 
     const { error } = existing
-      ? await supabase.from('cart_items').update({ quantity: nextQuantity }).eq('id', existing.id)
-      : await supabase.from('cart_items').insert({
+      ? await db.from('cart_items').update({ quantity: nextQuantity }).eq('id', existing.id)
+      : await db.from('cart_items').insert({
           user_id: user.id,
           product_id: productId,
+          product_variant_id: variantId,
           quantity: nextQuantity,
         });
 
@@ -705,9 +812,10 @@ export function useCart() {
       return false;
     }
 
+    const variantLabel = getVariantOptionsLabel(variant);
     toast({
       title: "Savatga qo'shildi",
-      description: `${product.title} — ${nextQuantity} dona`,
+      description: `${product.title}${variantLabel ? ` · ${variantLabel}` : ''} — ${nextQuantity} dona`,
     });
     await fetchCart();
     return true;
@@ -736,7 +844,7 @@ export function useCart() {
     }
 
     const item = items.find(i => i.id === itemId);
-    const stock = Math.max(1, Number(item?.product?.quantity ?? 1));
+    const stock = Math.max(1, item ? getCartItemStock(item) : 1);
     const nextQuantity = Math.min(Math.floor(quantity), stock);
 
     if (item && nextQuantity === item.quantity) return false;
@@ -767,7 +875,7 @@ export function useCart() {
   };
 
   const total = items.reduce(
-    (sum, item) => sum + (item.product?.price || 0) * item.quantity,
+    (sum, item) => sum + getCartItemUnitPrice(item) * item.quantity,
     0,
   );
 
@@ -781,7 +889,11 @@ export function useCart() {
 
   /** Lines that can no longer be purchased (sold out or delisted). */
   const unavailableItems = items.filter(
-    item => !item.product || item.product.status !== 'active' || Number(item.product.quantity ?? 0) < item.quantity,
+    item =>
+      !item.product ||
+      item.product.status !== 'active' ||
+      (item.product_variant_id != null && (!item.variant || !item.variant.is_active)) ||
+      getCartItemStock(item) < item.quantity,
   );
 
   const currency = items[0]?.product?.currency || 'USD';
@@ -920,6 +1032,38 @@ export function useProductActions() {
 
     toast({ title: 'Tayyor', description: "Mahsulot e'lon qilindi!" });
     return data;
+  };
+
+  const createProductVariants = async (
+    productId: string,
+    variants: Array<{
+      sku?: string | null;
+      options: Record<string, string>;
+      price?: number | null;
+      compare_at_price?: number | null;
+      quantity: number;
+      image_url?: string | null;
+    }>,
+  ) => {
+    if (!user || variants.length === 0) return true;
+    const { error } = await db.from('product_variants').insert(
+      variants.map((variant, index) => ({
+        product_id: productId,
+        sku: variant.sku?.trim() || null,
+        options: variant.options,
+        price: variant.price == null ? null : Number(variant.price),
+        compare_at_price: variant.compare_at_price == null ? null : Number(variant.compare_at_price),
+        quantity: Math.max(0, Math.floor(Number(variant.quantity) || 0)),
+        image_url: variant.image_url || null,
+        position: index,
+        is_active: true,
+      })),
+    );
+    if (error) {
+      toast({ title: 'Variantlar saqlanmadi', description: error.message, variant: 'destructive' });
+      return false;
+    }
+    return true;
   };
 
   const updateProduct = async (productId: string, updates: Partial<Product>) => {
