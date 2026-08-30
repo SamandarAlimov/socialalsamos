@@ -343,6 +343,18 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
 
         if (!isVideo) setState('recording');
 
+        if (!isVideo && releaseBeforeRecorderRef.current) {
+          releaseBeforeRecorderRef.current = false;
+          cancelledRef.current = true;
+          recorder.stop();
+          setState('idle');
+          toast({
+            title: 'Juda qisqa',
+            description: 'Ruxsat berilgach, yozish uchun tugmani yana bosib turing.',
+          });
+          return;
+        }
+
         clearTimer();
         timerRef.current = setInterval(() => {
           setDuration(Math.round((Date.now() - startedAtRef.current) / 1000));
@@ -438,21 +450,19 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
     if (state !== 'recording') return;
 
     const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
-    setFacingMode(newFacingMode);
+    const videoTrack = streamRef.current?.getVideoTracks()[0];
+    if (!videoTrack) return;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: newFacingMode, width: { ideal: 720 }, height: { ideal: 720 } },
-        audio: { echoCancellation: true, noiseSuppression: true },
-      });
-
-      if (streamRef.current) {
-        streamRef.current.getVideoTracks().forEach((track) => track.stop());
+      try {
+        await videoTrack.applyConstraints({ facingMode: { exact: newFacingMode } });
+      } catch {
+        await videoTrack.applyConstraints({ facingMode: newFacingMode });
       }
-      streamRef.current = stream;
+      setFacingMode(newFacingMode);
 
-      if (videoPreviewRef.current) {
-        videoPreviewRef.current.srcObject = stream;
+      if (videoPreviewRef.current && streamRef.current) {
+        videoPreviewRef.current.srcObject = streamRef.current;
         void videoPreviewRef.current.play();
       }
     } catch (error) {
