@@ -673,9 +673,6 @@ export async function searchMapPlaces(
   }
 
 
-  const cached = readSearchCache(cacheKey);
-  if (cached) return cached;
-
   // 2) Nom bo'yicha qidiruv. Productionda har bir tugma bosishda 7-8 ta
   // geocoder so'rovi yubormaymiz: avval uchta asosiy manba bir martadan.
   const variants = searchQueryVariants(term);
