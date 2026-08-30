@@ -2388,6 +2388,7 @@ export default function MapPage() {
     overlays,
     trafficIncidents.incidents,
     selectedIncident?.id,
+    selectedTransitRoute,
   ]);
 
   const handleVectorMarkerClick = useCallback(
