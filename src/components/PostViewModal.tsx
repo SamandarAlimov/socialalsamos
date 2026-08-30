@@ -22,10 +22,16 @@ import { PollDisplay, parsePollFromContent } from '@/components/PollDisplay';
 import { RichText } from '@/components/RichText';
 import { PostViewsDialog } from '@/components/PostViewsDialog';
 import { PostMusicCard } from '@/components/PostMusicCard';
+import { PostLocationCard } from '@/components/PostLocationCard';
 import { usePostViews } from '@/hooks/usePostViews';
 import { EditPostDialog } from '@/components/EditPostDialog';
 import { useToast } from '@/hooks/use-toast';
-import { formatCompactCount, parseMusicFromContent } from '@/lib/postMarkers';
+import {
+  formatCompactCount,
+  legacyLocationToPostLocation,
+  parseLocationFromContent,
+  parseMusicFromContent,
+} from '@/lib/postMarkers';
 import { usePostMedia } from '@/hooks/usePostMedia';
 import { MediaStickerOverlay } from '@/components/stickers/MediaStickerOverlay';
 import { PostCollaboratorByline } from '@/components/PostCollaboratorByline';
@@ -149,7 +155,9 @@ export function PostViewModal({
   const views = counts.views_count ?? post.views_count ?? 0;
 
   const { pollData, cleanContent } = parsePollFromContent(post.content || '');
-  const { music, cleanContent: textContent } = parseMusicFromContent(cleanContent);
+  const { location: legacyLocation, cleanContent: locationCleanContent } =
+    parseLocationFromContent(cleanContent);
+  const { music, cleanContent: textContent } = parseMusicFromContent(locationCleanContent);
 
   return (
     <>
@@ -290,7 +298,7 @@ export function PostViewModal({
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto">
-                {(textContent || post.formatted_content || music || pollData) && (
+                {(textContent || post.formatted_content || music || pollData || legacyLocation) && (
                   <div className="space-y-3 border-b border-border/60 px-4 py-3">
                     {(textContent || post.formatted_content) && (
                       <RichText
@@ -301,6 +309,12 @@ export function PostViewModal({
                     )}
                     {music && <PostMusicCard music={music} />}
                     {pollData && <PollDisplay postId={post.id} pollData={pollData} />}
+                    {legacyLocation && (
+                      <PostLocationCard
+                        location={legacyLocationToPostLocation(post.id, legacyLocation)}
+                        isOwner={false}
+                      />
+                    )}
                   </div>
                 )}
 
