@@ -238,6 +238,10 @@ const mapSearchCache = new Map<string, { at: number; data: SearchResult }>();
 const SEARCH_CACHE_TTL_MS = 3 * 60 * 1000;
 const SEARCH_CACHE_MAX = 80;
 
+const mapClickPlaceCache = new Map<string, { at: number; place: MapPlace | null }>();
+const MAP_CLICK_CACHE_TTL_MS = 10 * 60 * 1000;
+const MAP_CLICK_CACHE_MAX = 120;
+
 
 /**
  * Public geocoder/Overpass endpointlari ba'zan TCP/fetch darajasida javobsiz
@@ -621,7 +625,7 @@ async function reverseNominatimPlace(
       signal,
       headers: { Accept: 'application/json' },
     },
-    4500,
+    2200,
   );
   if (!response.ok) return null;
 
@@ -697,6 +701,36 @@ export async function resolveMapClickPlace(
   zoom = 16,
   signal?: AbortSignal,
 ): Promise<MapPlace | null> {
+  const cacheKey = point.latitude.toFixed(4) + ',' + point.longitude.toFixed(4);
+  const cached = mapClickPlaceCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < MAP_CLICK_CACHE_TTL_MS) {
+    return cached.place;
+  }
+
+  const remember = (place: MapPlace | null) => {
+    if (mapClickPlaceCache.size >= MAP_CLICK_CACHE_MAX) {
+      const oldest = mapClickPlaceCache.keys().next().value as string | undefined;
+      if (oldest) mapClickPlaceCache.delete(oldest);
+    }
+    mapClickPlaceCache.set(cacheKey, { at: Date.now(), place });
+    return place;
+  };
+
+  // Reverse geocoder odatda raster label/bino bosilganda eng tez javob beradi.
+  // Oldingi kod Overpass'ni 4-5 s kutardi, shu sabab tanlash og'ir tuyulardi.
+  try {
+    const reverse = await reverseNominatimPlace(point, signal);
+    if (reverse) {
+      const meaningful =
+        Boolean(reverse.name && !['Joy', 'Bino', 'Nomsiz joy'].includes(reverse.name)) ||
+        Boolean(reverse.categoryId) ||
+        Boolean(reverse.tags?.amenity || reverse.tags?.shop || reverse.tags?.tourism);
+      if (meaningful) return remember(reverse);
+    }
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') throw error;
+  }
+
   const radius =
     zoom >= 18 ? 70 :
     zoom >= 17 ? 95 :
@@ -705,7 +739,7 @@ export async function resolveMapClickPlace(
     260;
 
   const query =
-    '[out:json][timeout:12];\n(' +
+    '[out:json][timeout:8];\n(' +
     '\nnwr["name"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
     '\nnwr["amenity"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
     '\nnwr["shop"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
@@ -713,10 +747,10 @@ export async function resolveMapClickPlace(
     '\nnwr["office"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
     '\nnwr["leisure"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
     '\nnwr["building"]["addr:housenumber"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
-    '\n);\nout tags center 40;';
+    '\n);\nout tags center 30;';
 
   try {
-    const data = await overpass(query, signal, 4800);
+    const data = await overpass(query, signal, 2600);
     const candidates = ((data?.elements ?? []) as any[])
       .map((element): MapPlace | null => {
         const position = elementLatLng(element);
@@ -729,35 +763,18 @@ export async function resolveMapClickPlace(
           ...place,
           name: clickedPlaceDisplayName(tags, category),
           categoryId: place.categoryId ?? category?.id,
-          categoryLabel:
-            place.categoryLabel ??
-            category?.label ??
-            (tags.building ? 'Bino' : 'Joy'),
-          distanceM: distanceMeters(
-            point.latitude,
-            point.longitude,
-            position.lat,
-            position.lon,
-          ),
+          categoryLabel: place.categoryLabel ?? category?.label ?? (tags.building ? 'Bino' : 'Joy'),
+          distanceM: distanceMeters(point.latitude, point.longitude, position.lat, position.lon),
         };
       })
       .filter((place): place is MapPlace => place !== null)
       .filter((place) => (place.distanceM ?? Infinity) <= radius * 1.35)
-      .sort(
-        (a, b) =>
-          clickCandidateScore(b, point) - clickCandidateScore(a, point),
-      );
+      .sort((a, b) => clickCandidateScore(b, point) - clickCandidateScore(a, point));
 
-    if (candidates.length) return candidates[0];
+    return remember(candidates[0] ?? null);
   } catch (error) {
     if ((error as Error).name === 'AbortError') throw error;
-  }
-
-  try {
-    return await reverseNominatimPlace(point, signal);
-  } catch (error) {
-    if ((error as Error).name === 'AbortError') throw error;
-    return null;
+    return remember(null);
   }
 }
 
@@ -822,6 +839,63 @@ function searchQueryVariants(value: string): string[] {
   );
 
   return Array.from(variants).filter((item) => item.length >= 2).slice(0, 8);
+}
+
+
+function latinTokenToCyrillic(token: string): string {
+  let value = normalizeQuery(token);
+  const semantic: Record<string, string> = {
+    masjid: 'мечеть',
+    masjidi: 'мечеть',
+    mosque: 'мечеть',
+    ota: 'ата',
+    ata: 'ата',
+    juma: 'джума',
+    jome: 'джума',
+  };
+  if (semantic[value]) return semantic[value];
+
+  value = value
+    .replace(/sh/g, 'ш')
+    .replace(/ch/g, 'ч')
+    .replace(/yo/g, 'ё')
+    .replace(/yu/g, 'ю')
+    .replace(/ya/g, 'я')
+    .replace(/zh/g, 'ж');
+
+  const table: Record<string, string> = {
+    a: 'а', b: 'б', d: 'д', e: 'е', f: 'ф', g: 'г', h: 'х',
+    i: 'и', j: 'ж', k: 'к', l: 'л', m: 'м', n: 'н', o: 'о',
+    p: 'п', q: 'к', r: 'р', s: 'с', t: 'т', u: 'у', v: 'в',
+    x: 'х', y: 'й', z: 'з',
+  };
+
+  return Array.from(value)
+    .map((char) => table[char] ?? char)
+    .join('');
+}
+
+function localNameQueryVariants(value: string): string[] {
+  const baseVariants = searchQueryVariants(value);
+  const variants = new Set<string>(baseVariants);
+
+  for (const variant of baseVariants.slice(0, 5)) {
+    const words = normalizeQuery(variant).split(/\s+/).filter(Boolean);
+    const cyrillicWords = words.map(latinTokenToCyrillic);
+    variants.add(cyrillicWords.join(' '));
+
+    const mosqueIndex = cyrillicWords.findIndex((word) => word === 'мечеть');
+    if (mosqueIndex >= 0) {
+      const withoutMosque = cyrillicWords.filter((_, index) => index !== mosqueIndex);
+      variants.add(withoutMosque.join(' '));
+      variants.add(['мечеть', ...withoutMosque].join(' '));
+    }
+  }
+
+  return Array.from(variants)
+    .map((item) => item.replace(/\s+/g, ' ').trim())
+    .filter((item) => item.length >= 2)
+    .slice(0, 12);
 }
 
 /** Qidiruv matni kategoriya nomiga o'xshasa - kategoriya qidiruviga o'tamiz. */
@@ -1107,93 +1181,95 @@ export async function searchMapPlaces(
   const term = query.trim();
   if (term.length < 2) return { places: [] };
 
-  // 1) Kategoriya so'rovi bo'lsa (masalan "zaprovka") - to'g'ridan-to'g'ri POI filtri.
   const category = detectCategoryFromQuery(term);
   const queryTokens = tokens(term);
+  const normalizedTerm = normalizeQuery(term);
   const isPureCategory =
     !!category &&
     queryTokens.length <= 2 &&
-    category.keywords.some((keyword) => normalizeQuery(keyword) === normalizeQuery(term));
+    category.keywords.some((keyword) => normalizeQuery(keyword) === normalizedTerm);
 
   const cacheKey = searchCacheKey(term, center);
   const cached = readSearchCache(cacheKey);
   if (cached) return cached;
 
   if (category && center && isPureCategory) {
-    const places = await fetchPlacesByCategory(category.id, center, { signal });
+    const places = await fetchPlacesByCategory(category.id, center, {
+      signal,
+      radiusM: 8000,
+      limit: 50,
+    });
     const result = { places, category };
     writeSearchCache(cacheKey, result);
     return result;
   }
 
-
-  // 2) Nom bo'yicha qidiruv. Productionda har bir tugma bosishda 7-8 ta
-  // geocoder so'rovi yubormaymiz: avval uchta asosiy manba bir martadan.
-  const variants = searchQueryVariants(term);
-  const settled = await Promise.allSettled([
-    searchByNameOverpass(term, center, signal),
-    searchByNominatim(term, center, signal),
-    searchByPhoton(term, center, signal),
-  ]);
-  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+  const variants = localNameQueryVariants(term);
+  const fastTerms = Array.from(
+    new Set([
+      term,
+      ...variants.filter((variant) => /[\u0400-\u04FF]/.test(variant)).slice(0, 2),
+      ...variants.filter((variant) => normalizeQuery(variant) !== normalizedTerm).slice(0, 1),
+    ]),
+  ).slice(0, 4);
 
   const merged = new Map<string, MapPlace>();
-  const mergeSettled = (results: PromiseSettledResult<MapPlace[]>[]) => {
-    for (const result of results) {
-      if (result.status !== 'fulfilled') continue;
-      for (const place of result.value) {
-        const key =
-          normalizeQuery(place.name) +
-          '@' +
-          place.latitude.toFixed(4) +
-          ',' +
-          place.longitude.toFixed(4);
-        const existing = merged.get(key);
-        // Overpass natijasi teglari boyroq - uni ustun qo'yamiz.
-        if (!existing || (existing.source !== 'overpass' && place.source === 'overpass')) {
-          merged.set(key, place);
-        }
+  const mergePlaces = (items: MapPlace[]) => {
+    for (const place of items) {
+      const key =
+        normalizeQuery(place.name) +
+        '@' +
+        place.latitude.toFixed(4) +
+        ',' +
+        place.longitude.toFixed(4);
+      const existing = merged.get(key);
+      if (!existing || (existing.source !== 'overpass' && place.source === 'overpass')) {
+        merged.set(key, place);
       }
     }
   };
-  mergeSettled(settled);
 
-  // Transliteratsiya sabab asosiy qidiruv juda kam natija bersagina Photon
-  // alias fallback ishlaydi. Nominatim bir term uchun bir martadan ortiq
-  // chaqirilmaydi — public geocoderga ortiqcha yuk tushirmaymiz.
-  if (merged.size < 3) {
-    const aliases = variants
-      .filter((variant) => normalizeQuery(variant) !== normalizeQuery(term))
-      .slice(0, 2);
-    if (aliases.length) {
-      const fallback = await Promise.allSettled(
-        aliases.map((variant) => searchByPhoton(variant, center, signal)),
-      );
-      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-      mergeSettled(fallback);
+  // Autocomplete/qidiruv uchun geocoderlar tezroq. Overpass endi har tugma
+  // bosilganda blocking dependency emas.
+  const fastRequests: Promise<MapPlace[]>[] = [];
+  for (const fastTerm of fastTerms) {
+    fastRequests.push(searchByPhoton(fastTerm, center, signal));
+  }
+  fastRequests.push(searchByNominatim(term, center, signal));
+
+  const settledFast = await Promise.allSettled(fastRequests);
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+  for (const result of settledFast) {
+    if (result.status === 'fulfilled') mergePlaces(result.value);
+  }
+
+  // Kam natija bo'lsagina OSM nom qidiruviga o'tamiz.
+  if (merged.size < 4) {
+    const osmTerms = [term, ...fastTerms.filter((item) => item !== term)].slice(0, 2);
+    const settledOsm = await Promise.allSettled(
+      osmTerms.map((value) => searchByNameOverpass(value, center, signal)),
+    );
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    for (const result of settledOsm) {
+      if (result.status === 'fulfilled') mergePlaces(result.value);
     }
   }
 
-  let places = withDistance(Array.from(merged.values()), center);
-
-  // 3) Kategoriya so'zi ham bo'lsa ("masjidi") - shu turdagi joylarni yuqoriga chiqaramiz.
-  places = places
+  let places = withDistance(Array.from(merged.values()), center)
     .map((place) => ({ ...place, score: scorePlace(place, queryTokens) }))
     .sort((a, b) => {
       const categoryBonus = (place: MapPlace) =>
         category && place.categoryId === category.id ? 0.35 : 0;
-      return (
-        (b.score ?? 0) + categoryBonus(b) - ((a.score ?? 0) + categoryBonus(a))
-      );
+      return (b.score ?? 0) + categoryBonus(b) - ((a.score ?? 0) + categoryBonus(a));
     })
     .slice(0, 40);
 
-  // 4) Hech narsa topilmasa va kategoriya sezilsa - atrofdagi shu turdagi joylar.
   if (places.length === 0 && category && center) {
-    const fallback = await fetchPlacesByCategory(category.id, center, { signal });
-    const result = { places: fallback, category };
-    writeSearchCache(cacheKey, result);
-    return result;
+    places = await fetchPlacesByCategory(category.id, center, {
+      signal,
+      radiusM: 8000,
+      limit: 40,
+    });
   }
 
   const result = { places, category };
@@ -1201,17 +1277,3 @@ export async function searchMapPlaces(
   return result;
 }
 
-/** Ochiq/yopiq holatini `opening_hours` dan taxminiy aniqlash. */
-export function isProbablyOpen(openingHours?: string | null): boolean | null {
-  if (!openingHours) return null;
-  const value = openingHours.toLowerCase();
-  if (value.includes('24/7')) return true;
-  const match = value.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
-  if (!match) return null;
-  const now = new Date();
-  const minutes = now.getHours() * 60 + now.getMinutes();
-  const from = Number(match[1]) * 60 + Number(match[2]);
-  const to = Number(match[3]) * 60 + Number(match[4]);
-  if (to <= from) return minutes >= from || minutes <= to;
-  return minutes >= from && minutes <= to;
-}
