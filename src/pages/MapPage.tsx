@@ -55,7 +55,6 @@ import { BusStopCard } from '@/components/map/BusStopCard';
 import { BusStopResultsList } from '@/components/map/BusStopResultsList';
 import { TaxiOffersCard } from '@/components/map/TaxiOffersCard';
 import { MapLayerSwitcher } from '@/components/map/MapLayerSwitcher';
-import { SendPlaceToChatDialog } from '@/components/map/SendPlaceToChatDialog';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { MapBottomSheet, type MapSheetSnap } from '@/components/map/MapBottomSheet';
@@ -311,7 +310,6 @@ export default function MapPage() {
   const [routeEditField, setRouteEditField] = useState<'origin' | 'destination' | null>(null);
   const [routeEditQuery, setRouteEditQuery] = useState('');
 
-  const [shareTarget, setShareTarget] = useState<MapPlace | null>(null);
   const [sheetHeightPx, setSheetHeightPx] = useState(112);
   const [movedCenter, setMovedCenter] = useState<{ latitude: number; longitude: number } | null>(null);
   const [viewport, setViewport] = useState<MapViewport | null>(null);
@@ -686,26 +684,82 @@ export default function MapPage() {
     if (destination) void buildRoute(destination, routeMode, nextOrigin);
   }, [me, destination, routeMode, buildRoute, centerOnMe]);
 
-  const sharePlace = async (place: MapPlace) => {
-    const url =
-      window.location.origin +
-      '/map?destLat=' +
-      place.latitude +
-      '&destLng=' +
-      place.longitude +
-      '&destName=' +
-      encodeURIComponent(place.name);
+  const buildPlaceUrl = useCallback((place: MapPlace) => {
+    const url = new URL('/map', window.location.origin);
+    url.searchParams.set('destLat', String(place.latitude));
+    url.searchParams.set('destLng', String(place.longitude));
+    url.searchParams.set('destName', place.name);
+    return url.toString();
+  }, []);
+
+  const copyTextFallback = useCallback(async (text: string) => {
     try {
-      if (navigator.share) {
-        await navigator.share({ title: place.name, url });
-      } else {
-        await navigator.clipboard.writeText(url);
-        toast.success('Havola nusxalandi');
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
       }
     } catch {
-      // foydalanuvchi bekor qildi
+      // Legacy fallback below.
     }
-  };
+
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      textarea.style.pointerEvents = 'none';
+      document.body.appendChild(textarea);
+      textarea.select();
+      const copied = document.execCommand('copy');
+      textarea.remove();
+      return copied;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const sendPlaceToChat = useCallback(
+    (place: MapPlace) => {
+      const params = new URLSearchParams({
+        share: 'location',
+        lat: String(place.latitude),
+        lng: String(place.longitude),
+        label: place.address ? place.name + ', ' + place.address : place.name,
+        name: place.name,
+      });
+      navigate('/messages?' + params.toString());
+    },
+    [navigate],
+  );
+
+  const sharePlace = useCallback(
+    async (place: MapPlace) => {
+      const url = buildPlaceUrl(place);
+      const text = place.address ? place.name + ' · ' + place.address : place.name;
+      const data = { title: place.name, text, url };
+
+      if (typeof navigator.share === 'function') {
+        try {
+          if (!navigator.canShare || navigator.canShare(data)) {
+            await navigator.share(data);
+            return;
+          }
+        } catch (error) {
+          if ((error as DOMException)?.name === 'AbortError') return;
+          // Native share xato bersa clipboard fallback ishlaydi.
+        }
+      }
+
+      const copied = await copyTextFallback(url);
+      if (copied) {
+        toast.success('Joy havolasi nusxalandi');
+      } else {
+        toast.error('Ulashib bo‘lmadi. Havolani qo‘lda nusxalab ko‘ring.');
+      }
+    },
+    [buildPlaceUrl, copyTextFallback],
+  );
 
   const toggleSave = async (place: MapPlace) => {
     const added = await saved.toggleSave({
@@ -736,7 +790,7 @@ export default function MapPage() {
             setSnap('peek');
           }}
           onDirections={openDirections}
-          onSendToChat={setShareTarget}
+          onSendToChat={sendPlaceToChat}
           onToggleSave={toggleSave}
           onShare={sharePlace}
           onCreatePost={(place) =>
@@ -1834,20 +1888,6 @@ export default function MapPage() {
         </div>
       </MapBottomSheet>
 
-      <SendPlaceToChatDialog
-        open={Boolean(shareTarget)}
-        onOpenChange={(open) => !open && setShareTarget(null)}
-        place={
-          shareTarget
-            ? {
-                name: shareTarget.name,
-                address: shareTarget.address,
-                latitude: shareTarget.latitude,
-                longitude: shareTarget.longitude,
-              }
-            : null
-        }
-      />
     </div>
   );
 }
