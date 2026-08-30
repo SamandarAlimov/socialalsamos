@@ -2197,7 +2197,60 @@ export default function MapPage() {
               })}
             </div>
 
-            {activeRoute && destination && routeMode !== 'transit' && (
+            {pendingNavigationStart && routeOrigin && (
+              <div
+                className={cn(
+                  'mt-3 rounded-2xl border p-3',
+                  contrastLayer
+                    ? 'border-amber-300/[0.16] bg-amber-300/[0.07]'
+                    : 'border-amber-500/[0.18] bg-amber-500/[0.06]',
+                )}
+              >
+                <p className="text-sm font-extrabold">
+                  Siz From nuqtasida emassiz
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {routeOrigin.name} sizdan {formatKm(
+                    pendingNavigationStart.originDistanceM,
+                  )} uzoqda. Qanday boshlashni tanlang.
+                </p>
+                <div className="mt-3 grid gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void confirmNavigationStart('current')}
+                    className="flex h-10 items-center justify-center gap-2 rounded-xl bg-primary px-3 text-xs font-extrabold text-primary-foreground"
+                  >
+                    <Crosshair className="h-4 w-4" />
+                    Joriy joylashuvdan boshlash
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void confirmNavigationStart('via-origin')}
+                    className={cn(
+                      'flex h-10 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-bold',
+                      contrastLayer
+                        ? 'border-white/[0.12] bg-white/[0.04] text-white/[0.78]'
+                        : 'border-border/[0.55] bg-background text-foreground',
+                    )}
+                  >
+                    <MapPin className="h-4 w-4" />
+                    Avval From nuqtasiga borish
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPendingNavigationStart(null)}
+                    className="h-8 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                  >
+                    Faqat marshrutni ko‘rish
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeRoute &&
+              destination &&
+              routeMode !== 'transit' &&
+              !pendingNavigationStart && (
               <button
                 type="button"
                 onClick={() => void startNavigation()}
@@ -2592,6 +2645,8 @@ export default function MapPage() {
     swapRouteEndpoints,
     removeRouteWaypoint,
     removeFinalDestination,
+    reorderRouteStop,
+    draggedRouteStopIndex,
     beginMapEndpointPick,
     stopRoutes.realtimeConfigured,
     stopRoutes.realtimeFresh,
@@ -2606,6 +2661,8 @@ export default function MapPage() {
     sendPlaceToChat,
     sharePlace,
     startNavigation,
+    pendingNavigationStart,
+    confirmNavigationStart,
     navigationActive,
     locating,
   ]);
