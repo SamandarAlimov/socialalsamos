@@ -572,7 +572,7 @@ async function journeyRoute(payload: Record<string, any>) {
 
 async function vehicles(payload: Record<string, any>) {
   const normalized = await normalizedRequest("vehicles", payload);
-  if (normalized) return normalized;
+  if (normalized) return { ...providerMeta(), ...normalized };
 
   const vehiclesUrl = env("TRANSIT_GTFS_RT_VEHICLES_URL");
   if (!vehiclesUrl) return { ...providerMeta(), configured: false, realtime: false, vehicles: [] };
