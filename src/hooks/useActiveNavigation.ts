@@ -19,6 +19,8 @@ export interface NavigationSnapshot {
   currentStepIndex: number;
   currentStep: RouteStep | null;
   distanceToManeuverM: number;
+  nextCheckpointIndex: number | null;
+  distanceToCheckpointM: number | null;
   arrived: boolean;
   rerouting: boolean;
 }
@@ -28,11 +30,24 @@ interface UseActiveNavigationOptions {
   route: RouteResult | null;
   mode: RouteMode;
   destination: { latitude: number; longitude: number } | null;
+  checkpoints?: {
+    latitude: number;
+    longitude: number;
+    name?: string;
+  }[];
   onPosition?: (position: NavigationPosition) => void;
   onReroute?: (
     from: { latitude: number; longitude: number },
     context: { nearestRouteIndex: number },
   ) => Promise<void> | void;
+  onCheckpoint?: (
+    index: number,
+    checkpoint: {
+      latitude: number;
+      longitude: number;
+      name?: string;
+    },
+  ) => void;
   onArrive?: () => void;
 }
 
@@ -51,6 +66,8 @@ const EMPTY_SNAPSHOT: NavigationSnapshot = {
   currentStepIndex: 0,
   currentStep: null,
   distanceToManeuverM: 0,
+  nextCheckpointIndex: null,
+  distanceToCheckpointM: null,
   arrived: false,
   rerouting: false,
 };
@@ -332,8 +349,10 @@ export function useActiveNavigation({
   route,
   mode,
   destination,
+  checkpoints = [],
   onPosition,
   onReroute,
+  onCheckpoint,
   onArrive,
 }: UseActiveNavigationOptions) {
   const [position, setPosition] = useState<NavigationPosition | null>(null);
@@ -344,6 +363,7 @@ export function useActiveNavigation({
   const nearestIndexRef = useRef(0);
   const lastRerouteAtRef = useRef(0);
   const offRouteSamplesRef = useRef(0);
+  const nextCheckpointRef = useRef(0);
   const arrivedRef = useRef(false);
   const reroutingRef = useRef(false);
 
@@ -355,6 +375,7 @@ export function useActiveNavigation({
   useEffect(() => {
     nearestIndexRef.current = 0;
     offRouteSamplesRef.current = 0;
+    nextCheckpointRef.current = 0;
     arrivedRef.current = false;
     setSnapshot((current) => ({
       ...EMPTY_SNAPSHOT,
@@ -406,6 +427,57 @@ export function useActiveNavigation({
       const travelledM = Math.max(0, routeTotalM - routeRemainingM);
       const step = stepProgress(route.steps ?? [], travelledM);
 
+      const checkpointIndices = route.checkpointIndices ?? [];
+      let nextCheckpointIndex =
+        nextCheckpointRef.current < checkpoints.length
+          ? nextCheckpointRef.current
+          : null;
+      let distanceToCheckpointM: number | null = null;
+
+      if (nextCheckpointIndex != null) {
+        const checkpoint = checkpoints[nextCheckpointIndex];
+        distanceToCheckpointM = distanceMeters(
+          next.latitude,
+          next.longitude,
+          checkpoint.latitude,
+          checkpoint.longitude,
+        );
+
+        const geometryCheckpointIndex =
+          checkpointIndices[nextCheckpointIndex + 1] ?? null;
+        const isFinalCheckpoint =
+          nextCheckpointIndex === checkpoints.length - 1;
+        const checkpointReached =
+          !isFinalCheckpoint &&
+          (distanceToCheckpointM <= 42 ||
+            (geometryCheckpointIndex != null &&
+              projection.segmentIndex >= geometryCheckpointIndex + 2));
+
+        if (checkpointReached) {
+          onCheckpoint?.(nextCheckpointIndex, checkpoint);
+          nextCheckpointRef.current = Math.min(
+            checkpoints.length,
+            nextCheckpointIndex + 1,
+          );
+          nextCheckpointIndex =
+            nextCheckpointRef.current < checkpoints.length
+              ? nextCheckpointRef.current
+              : null;
+
+          if (nextCheckpointIndex != null) {
+            const followingCheckpoint = checkpoints[nextCheckpointIndex];
+            distanceToCheckpointM = distanceMeters(
+              next.latitude,
+              next.longitude,
+              followingCheckpoint.latitude,
+              followingCheckpoint.longitude,
+            );
+          } else {
+            distanceToCheckpointM = null;
+          }
+        }
+      }
+
       const destinationDistanceM = destination
         ? distanceMeters(
             next.latitude,
@@ -429,6 +501,8 @@ export function useActiveNavigation({
         currentStepIndex: step.index,
         currentStep: arrived ? null : step.step,
         distanceToManeuverM: arrived ? 0 : step.distanceToManeuverM,
+        nextCheckpointIndex,
+        distanceToCheckpointM,
         arrived,
         rerouting: current.rerouting,
       }));
@@ -470,7 +544,17 @@ export function useActiveNavigation({
         }
       }
     },
-    [route, cumulative, destination, mode, onArrive, onReroute, onPosition],
+    [
+      route,
+      cumulative,
+      destination,
+      checkpoints,
+      mode,
+      onArrive,
+      onCheckpoint,
+      onReroute,
+      onPosition,
+    ],
   );
 
   // Navigatsiya vaqtida ekran o'chmasin. Browser backgrounddan qaytganda
