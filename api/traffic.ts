@@ -385,15 +385,15 @@ async function fetchTomTomIncidents(
 }
 
 function routeInstruction(step: any): {
-  distanceM: number;
-  durationS: number;
+  offsetM: number;
+  travelTimeS: number;
   instruction: string;
   name: string;
   maneuver: string;
 } {
   return {
-    distanceM: Number(step?.routeOffsetInMeters) || 0,
-    durationS: Number(step?.travelTimeInSeconds) || 0,
+    offsetM: Number(step?.routeOffsetInMeters) || 0,
+    travelTimeS: Number(step?.travelTimeInSeconds) || 0,
     instruction:
       String(step?.message || step?.combinedMessage || '').trim() ||
       'Yo‘lda davom eting',
@@ -506,9 +506,39 @@ async function fetchTomTomRoute(
               }))
           : [];
 
-        const instructions = Array.isArray(route?.guidance?.instructions)
+        const rawInstructions = Array.isArray(route?.guidance?.instructions)
           ? route.guidance.instructions.map(routeInstruction)
           : [];
+        const instructions = rawInstructions.map(
+          (instruction: any, instructionIndex: number) => {
+            const next =
+              rawInstructions[instructionIndex + 1] ?? null;
+            const distanceM = next
+              ? Math.max(0, next.offsetM - instruction.offsetM)
+              : Math.max(
+                  0,
+                  (Number(summary.lengthInMeters) || 0) -
+                    instruction.offsetM,
+                );
+            const durationS = next
+              ? Math.max(
+                  0,
+                  next.travelTimeS - instruction.travelTimeS,
+                )
+              : Math.max(
+                  0,
+                  (Number(summary.travelTimeInSeconds) || 0) -
+                    instruction.travelTimeS,
+                );
+            return {
+              distanceM,
+              durationS,
+              instruction: instruction.instruction,
+              name: instruction.name,
+              maneuver: instruction.maneuver,
+            };
+          },
+        );
 
         return {
           mode: 'car',
