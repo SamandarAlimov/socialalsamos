@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 
 interface PlaceReviewsProps {
   place: PlaceRef | null;
+  highContrast?: boolean;
   className?: string;
 }
 
@@ -42,7 +43,7 @@ function Stars({
   );
 }
 
-export function PlaceReviews({ place, className }: PlaceReviewsProps) {
+export function PlaceReviews({ place, highContrast = false, className }: PlaceReviewsProps) {
   const { reviews, summary, myReview, loading, saving, submit, remove } = usePlaceReviews(place);
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
@@ -58,8 +59,13 @@ export function PlaceReviews({ place, className }: PlaceReviewsProps) {
   };
 
   return (
-    <div className={cn('space-y-4', className)}>
-      <div className="flex items-center gap-4 rounded-xl bg-muted/50 p-3">
+    <div className={cn('space-y-4', highContrast && 'text-white', className)}>
+      <div
+        className={cn(
+          'flex items-center gap-4 rounded-2xl p-3',
+          highContrast ? 'bg-white/[0.055]' : 'bg-muted/50',
+        )}
+      >
         <div className="text-center">
           <p className="text-2xl font-bold leading-none">
             {summary.total ? summary.average.toFixed(1) : '-'}
@@ -78,7 +84,12 @@ export function PlaceReviews({ place, className }: PlaceReviewsProps) {
         </div>
       </div>
 
-      <div className="rounded-xl border border-border/70 p-3">
+      <div
+        className={cn(
+          'rounded-2xl border p-3',
+          highContrast ? 'border-white/[0.10] bg-white/[0.035]' : 'border-border/70',
+        )}
+      >
         <p className="mb-2 text-sm font-medium">
           {myReview ? 'Sizning bahoyingiz' : 'Baho bering'}
         </p>
@@ -89,7 +100,12 @@ export function PlaceReviews({ place, className }: PlaceReviewsProps) {
           rows={3}
           maxLength={600}
           placeholder="Nima yoqdi, nima yoqmadi?"
-          className="mt-2 w-full resize-none rounded-lg border border-border/70 bg-background p-2 text-sm outline-none focus:border-primary"
+          className={cn(
+            'mt-2 w-full resize-none rounded-xl border p-2.5 text-sm outline-none focus:border-primary',
+            highContrast
+              ? 'border-white/[0.12] bg-white/[0.055] text-white placeholder:text-white/[0.38]'
+              : 'border-border/70 bg-background',
+          )}
         />
         <div className="mt-2 flex items-center gap-2">
           <button
@@ -109,7 +125,12 @@ export function PlaceReviews({ place, className }: PlaceReviewsProps) {
             <button
               type="button"
               onClick={() => void remove()}
-              className="flex h-9 items-center gap-1.5 rounded-lg border border-border/70 px-3 text-sm text-muted-foreground hover:text-destructive"
+              className={cn(
+                'flex h-9 items-center gap-1.5 rounded-xl border px-3 text-sm transition',
+                highContrast
+                  ? 'border-white/[0.12] bg-white/[0.035] text-white/[0.60] hover:bg-white/[0.08] hover:text-red-300'
+                  : 'border-border/70 text-muted-foreground hover:text-destructive',
+              )}
             >
               <Trash2 className="h-4 w-4" />
               O'chirish
@@ -127,7 +148,13 @@ export function PlaceReviews({ place, className }: PlaceReviewsProps) {
 
       <div className="space-y-3">
         {reviews.map((review) => (
-          <div key={review.id} className="flex gap-3">
+          <div
+            key={review.id}
+            className={cn(
+              'flex gap-3 rounded-2xl p-2.5',
+              highContrast ? 'bg-white/[0.035]' : 'bg-transparent',
+            )}
+          >
             <Avatar className="h-8 w-8">
               <AvatarImage src={review.author?.avatar_url ?? undefined} />
               <AvatarFallback>
