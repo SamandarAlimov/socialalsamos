@@ -48,7 +48,7 @@ export function usePlaceCategory(categoryId: PlaceCategoryId | null, center?: Ce
       controller.abort();
       setLoading(false);
       setError('Xarita provayderi sekin javob bermoqda. Qayta urinib ko\u2018ring.');
-    }, 12500);
+    }, 7000);
 
     fetchPlacesByCategory(categoryId, center, { signal: controller.signal })
       .then((result) => {
@@ -61,7 +61,9 @@ export function usePlaceCategory(categoryId: PlaceCategoryId | null, center?: Ce
         setError('Joylar yuklanmadi. Qayta urinib ko\u2018ring.');
         setPlaces([]);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
 
     return () => {
       window.clearTimeout(safetyTimer);
