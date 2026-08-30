@@ -187,13 +187,19 @@ export function useStopRoutes(stop?: TransitStop | null) {
       try {
         const staticGtfs = await fetchTransitStaticStopRoutes({
           stopId: stop.id,
+          gtfsStopId: stop.gtfsStopId ?? null,
+          stopName: stop.name,
           latitude: stop.latitude,
           longitude: stop.longitude,
         });
 
         const edgeRealtime = await fetchTransitArrivals({
           stopId: stop.id,
-          gtfsStopId: staticGtfs?.gtfsStopId ?? null,
+          gtfsStopId:
+            staticGtfs?.gtfsStopId ??
+            stop.gtfsStopId ??
+            null,
+          stopName: stop.name,
           latitude: stop.latitude,
           longitude: stop.longitude,
         });
@@ -237,7 +243,12 @@ export function useStopRoutes(stop?: TransitStop | null) {
 
         const edgeAlerts = await fetchTransitAlerts({
           stopId: stop.id,
-          gtfsStopId: edgeRealtime?.gtfsStopId ?? null,
+          gtfsStopId:
+            edgeRealtime?.gtfsStopId ??
+            staticGtfs?.gtfsStopId ??
+            stop.gtfsStopId ??
+            null,
+          stopName: stop.name,
           latitude: stop.latitude,
           longitude: stop.longitude,
         });
@@ -271,7 +282,13 @@ export function useStopRoutes(stop?: TransitStop | null) {
         setLoading(false);
       }
     },
-    [stop?.id, stop?.latitude, stop?.longitude],
+    [
+      stop?.id,
+      stop?.gtfsStopId,
+      stop?.name,
+      stop?.latitude,
+      stop?.longitude,
+    ],
   );
 
   useEffect(() => {
