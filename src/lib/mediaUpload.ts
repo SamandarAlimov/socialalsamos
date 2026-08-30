@@ -12,13 +12,60 @@ import { supabase } from '@/integrations/supabase/client';
  * platformada fayl yuklash to'xtab qolmaydi.
  */
 
-/** Ommaviy media buckchasi (supabase/migrations/*_media_storage_bucket.sql). */
+/** Storage bucketlari. Eski public obyektlar `media`da qoladi. */
 export const MEDIA_BUCKET = 'media';
+export const PRIVATE_MEDIA_BUCKET = 'media-private';
+
+export type MediaVisibility = 'public' | 'friends' | 'private';
+
+export function bucketForMediaVisibility(visibility: MediaVisibility = 'public'): string {
+  return visibility === 'public' ? MEDIA_BUCKET : PRIVATE_MEDIA_BUCKET;
+}
+
+export function makeStorageReference(bucket: string, key: string): string {
+  return `storage://${bucket}/${key}`;
+}
+
+export function parseStorageReference(value?: string | null): { bucket: string; key: string } | null {
+  if (!value?.startsWith('storage://')) return null;
+  const raw = value.slice('storage://'.length);
+  const slash = raw.indexOf('/');
+  if (slash <= 0 || slash === raw.length - 1) return null;
+  return { bucket: raw.slice(0, slash), key: raw.slice(slash + 1) };
+}
+
+/** Public URL yoki private signed URL ni ko‘rish vaqtida hosil qiladi. */
+export async function resolveStorageUrl(
+  value: string,
+  bucket?: string | null,
+  key?: string | null,
+  expiresIn = 3600,
+): Promise<string> {
+  const parsed = bucket && key ? { bucket, key } : parseStorageReference(value);
+  if (!parsed) return value;
+
+  if (parsed.bucket === MEDIA_BUCKET) {
+    return supabase.storage.from(parsed.bucket).getPublicUrl(parsed.key).data.publicUrl;
+  }
+
+  const { data, error } = await supabase.storage
+    .from(parsed.bucket)
+    .createSignedUrl(parsed.key, expiresIn);
+
+  if (error || !data?.signedUrl) {
+    throw error ?? new Error('Private fayl uchun vaqtinchalik havola olinmadi');
+  }
+
+  return data.signedUrl;
+}
 
 const EXTERNAL_API = String(import.meta.env.VITE_MEDIA_API_URL ?? '').replace(/\/+$/, '');
 
 export interface MediaUploadResult {
+  /** Joriy sessiyada preview uchun ochiladigan URL. */
   url: string;
+  /** DBga yoziladigan barqaror public URL yoki storage:// reference. */
+  storageUrl: string;
   key: string;
   bucket: string;
   type: string;
@@ -30,7 +77,7 @@ export interface MediaUploadOptions {
   filename?: string;
   /** Mantiqiy tur: avatar | cover | post | story | chat | file */
   type?: string;
-  visibility?: 'public' | 'private';
+  visibility?: MediaVisibility;
 }
 
 /** Xatolik matnini foydalanuvchi tushunadigan holatga keltirish */
@@ -73,11 +120,13 @@ async function uploadToStorage(
   userId: string,
   filename: string,
   contentType: string,
-  kind: string
+  kind: string,
+  visibility: MediaVisibility,
 ): Promise<MediaUploadResult> {
   const key = `${userId}/${kind}/${Date.now()}-${randomId()}-${safeFileName(filename)}`;
+  const bucket = bucketForMediaVisibility(visibility);
 
-  const { error } = await supabase.storage.from(MEDIA_BUCKET).upload(key, file, {
+  const { error } = await supabase.storage.from(bucket).upload(key, file, {
     contentType,
     cacheControl: '3600',
     upsert: false,
@@ -87,12 +136,25 @@ async function uploadToStorage(
     throw new Error(`Faylni saqlash amalga oshmadi: ${error.message}`);
   }
 
-  const { data } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(key);
+  const storageUrl =
+    bucket === MEDIA_BUCKET
+      ? supabase.storage.from(bucket).getPublicUrl(key).data.publicUrl
+      : makeStorageReference(bucket, key);
+
+  let url = storageUrl;
+  if (bucket === PRIVATE_MEDIA_BUCKET) {
+    try {
+      url = await resolveStorageUrl(storageUrl, bucket, key);
+    } catch (signError) {
+      console.warn('Private preview URL olinmadi:', signError);
+    }
+  }
 
   return {
-    url: data.publicUrl,
+    url,
+    storageUrl,
     key,
-    bucket: MEDIA_BUCKET,
+    bucket,
     type: contentType,
     name: filename,
     size: file.size,
@@ -138,8 +200,10 @@ async function uploadViaExternalApi(
     throw new Error(await readError(upload, 'Faylni saqlash amalga oshmadi'));
   }
 
+  const externalUrl = signed.public_url || signed.key;
   return {
-    url: signed.public_url || signed.key,
+    url: externalUrl,
+    storageUrl: externalUrl,
     key: signed.key,
     bucket: signed.bucket,
     type: contentType,
@@ -162,9 +226,11 @@ export async function uploadMedia(
   const filename = options.filename || (file instanceof File ? file.name : 'upload.bin');
   const contentType = file.type || 'application/octet-stream';
   const kind = options.type || 'file';
+  const visibility: MediaVisibility = options.visibility ?? 'public';
 
-  // 1) Tashqi API faqat aniq sozlangan bo'lsa ishlatiladi.
-  if (EXTERNAL_API) {
+  // 1) Tashqi API faqat PUBLIC fayllar uchun ishlatiladi.
+  // Private/friends obyektlar doimo RLS boshqaradigan Supabase bucketga ketadi.
+  if (EXTERNAL_API && visibility === 'public') {
     try {
       return await uploadViaExternalApi(
         file,
@@ -180,5 +246,5 @@ export async function uploadMedia(
   }
 
   // 2) Asosiy yo'l: Supabase Storage.
-  return uploadToStorage(file, session.user.id, filename, contentType, kind);
+  return uploadToStorage(file, session.user.id, filename, contentType, kind, visibility);
 }
