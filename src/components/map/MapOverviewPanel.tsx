@@ -8,7 +8,7 @@ import {
   MapPinned,
   MoonStar,
   Navigation,
-  ParkingCircle,
+  CircleParking,
   Pill,
   Coffee,
   Utensils,
@@ -34,7 +34,7 @@ const shortcuts = [
   { id: 'restaurant', label: 'Restoran', Icon: Utensils },
   { id: 'cafe', label: 'Kafe', Icon: Coffee },
   { id: 'fuel', label: 'Yoqilg\'i', Icon: Fuel },
-  { id: 'parking', label: 'Parkovka', Icon: ParkingCircle },
+  { id: 'parking', label: 'Parkovka', Icon: CircleParking },
   { id: 'pharmacy', label: 'Dorixona', Icon: Pill },
   { id: 'mosque', label: 'Masjid', Icon: MoonStar },
 ];
