@@ -228,7 +228,6 @@ export const marketplaceUz = {
     sellerDashboard: 'Sotuvchi paneli',
     addProduct: "Yangi mahsulot qo'shish",
     emptyProductsTitle: "Mahsulotlar yo'q",
-    firstProduct: 'Birinchi mahsulotingizni joylashtiring!',
     savedEmptyTitle: "Saqlangan mahsulotlar yo'q",
     savedEmptyDescription: 'Yoqtirgan mahsulotlaringizni saqlang',
   },

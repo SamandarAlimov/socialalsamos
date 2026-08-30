@@ -161,6 +161,11 @@ export default function MarketplacePage() {
     setSelectedProduct(product);
   };
 
+  const handleOrderProductSelect = useCallback(async (productId: string) => {
+    const product = await fetchMarketplaceProductById(productId);
+    if (product) handleProductSelect(product);
+  }, []);
+
   /** Real "Sotib olish": the item is in the cart, so go straight to checkout. */
   const handleBuyNow = useCallback(async () => {
     setSelectedProduct(null);
@@ -644,7 +649,7 @@ export default function MarketplacePage() {
                   description={marketplaceUz.page.ordersSignIn}
                 />
               ) : (
-                <OrdersView onProductSelect={handleProductSelect} />
+                <OrdersView onProductSelect={handleOrderProductSelect} />
               )}
             </motion.div>
           )}
