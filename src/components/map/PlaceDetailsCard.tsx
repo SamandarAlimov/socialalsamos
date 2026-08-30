@@ -386,10 +386,11 @@ export function PlaceDetailsCard({
             type="button"
             onClick={() => onSendToChat(place)}
             className={cn('flex h-11 flex-col items-center justify-center rounded-2xl border text-[10px] font-semibold transition', secondaryButton)}
-            aria-label="Chatga yuborish"
+            aria-label="Joylashuvni chatga yuborish"
+            title="Joylashuvni xabarlar orqali yuborish"
           >
             <MessageCircle className="mb-0.5 h-4 w-4" />
-            Chat
+            Chatga
           </button>
 
           <button
