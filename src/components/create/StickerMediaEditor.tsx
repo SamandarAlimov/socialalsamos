@@ -70,12 +70,7 @@ export function StickerMediaEditor({
               <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                 <StickerIcon className="h-5 w-5" />
               </span>
-              <div className="min-w-0">
-                <DialogTitle className="text-base">Stiker Studio</DialogTitle>
-                <p className="mt-1 truncate text-xs text-muted-foreground">
-                  Drag · scale · rotate · {placements.length}/{MAX_STICKERS_PER_MEDIA}
-                </p>
-              </div>
+              <DialogTitle className="text-base">Stikerlar</DialogTitle>
             </div>
           </DialogHeader>
 
@@ -109,7 +104,7 @@ export function StickerMediaEditor({
               </div>
 
               <span className="pointer-events-none absolute left-4 top-4 rounded-full border border-white/10 bg-black/50 px-2.5 py-1 text-[10px] font-semibold text-white backdrop-blur">
-                {isVideo ? 'Video layer' : 'Image layer'}
+                {placements.length}/{MAX_STICKERS_PER_MEDIA}
               </span>
             </section>
 
@@ -118,11 +113,9 @@ export function StickerMediaEditor({
                 <div>
                   <div className="flex items-center gap-2">
                     <Layers className="h-4 w-4 text-primary" />
-                    <h4 className="text-sm font-semibold">Stiker qatlamlari</h4>
+                    <h4 className="text-sm font-semibold">Stikerlar</h4>
                   </div>
-                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    Stikerlar media ustida alohida layer sifatida saqlanadi va feedda aynan shu koordinatada chiziladi.
-                  </p>
+
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
@@ -150,7 +143,7 @@ export function StickerMediaEditor({
 
                 <div className="rounded-3xl border border-border/60 bg-background p-4">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold">Layer holati</p>
+                    <p className="text-xs font-semibold">Tanlanganlar</p>
                     <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-semibold text-primary">
                       {placements.length}/{MAX_STICKERS_PER_MEDIA}
                     </span>
@@ -193,13 +186,7 @@ export function StickerMediaEditor({
                   )}
                 </div>
 
-                <div className="rounded-2xl bg-muted/40 p-3 text-[11px] leading-relaxed text-muted-foreground">
-                  Stikerni surib joylashtiring. O‘ng-past dasta bilan burish/o‘lcham, touch qurilmalarda pinch gesture ishlaydi.
-                </div>
 
-                <div className="rounded-2xl border border-primary/15 bg-primary/[0.045] p-3 text-[11px] leading-relaxed text-muted-foreground">
-                  Video stikerlari hozir edit graph sifatida saqlanadi; final video render media engine bosqichida bajariladi.
-                </div>
               </div>
             </aside>
           </div>
