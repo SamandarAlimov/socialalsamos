@@ -108,7 +108,6 @@ export function PostComposer() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const musicRef = useRef<PostMusicInput | null>(null);
-  const publishSucceededRef = useRef(false);
 
   const [content, setContent] = useState('');
   const [visibility, setVisibility] = useState<PostVisibility>('public');
@@ -155,9 +154,7 @@ export function PostComposer() {
 
   useEffect(() => {
     return () => {
-      if (!publishSucceededRef.current) {
-        void cleanupDraftMusic(musicRef.current);
-      }
+      void cleanupDraftMusic(musicRef.current);
     };
   }, []);
 
@@ -375,7 +372,6 @@ export function PostComposer() {
       if (!created) return;
 
       markAttachmentsPublished();
-      publishSucceededRef.current = true;
       musicRef.current = null;
 
       if (location?.mode === 'live' && location.liveUntil) {
