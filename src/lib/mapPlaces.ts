@@ -467,6 +467,35 @@ function withDistance(
  * Kategoriya bo'yicha atrofdagi joylar (FILTRLAR shu funksiya ustida ishlaydi).
  * `radiusM` - qidiruv radiusi, default 4 km; kerak bo'lsa avtomatik kengaytiriladi.
  */
+function categoryFallbackTerms(category: PlaceCategory): string[] {
+  const preferred: Partial<Record<PlaceCategoryId, string[]>> = {
+    restaurant: ['restaurant', 'ресторан'],
+    cafe: ['cafe', 'кафе'],
+    fast_food: ['fast food', 'фастфуд'],
+    bakery: ['bakery', 'пекарня'],
+    fuel: ['fuel station', 'АЗС', 'заправка'],
+    parking: ['parking', 'парковка'],
+    pharmacy: ['pharmacy', 'аптека'],
+    hospital: ['hospital', 'больница'],
+    atm: ['ATM', 'банкомат'],
+    bank: ['bank', 'банк'],
+    market: ['market', 'рынок'],
+    supermarket: ['supermarket', 'магазин'],
+    mosque: ['mosque', 'мечеть', 'masjid'],
+    hotel: ['hotel', 'гостиница'],
+    school: ['school', 'школа'],
+    gym: ['gym', 'фитнес'],
+    car_wash: ['car wash', 'мойка'],
+    bus_stop: ['bus stop', 'остановка'],
+  };
+  return Array.from(
+    new Set([...(preferred[category.id] ?? []), category.label, ...category.keywords]),
+  )
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 5);
+}
+
 export async function fetchPlacesByCategory(
   categoryId: PlaceCategoryId,
   center: { latitude: number; longitude: number },
@@ -476,7 +505,7 @@ export async function fetchPlacesByCategory(
   if (!category) return [];
 
   const limit = options?.limit ?? 60;
-  const radius = options?.radiusM ?? 15000;
+  const radius = options?.radiusM ?? 8000;
   const body = category.filters
     .map((filter) => {
       const selector = filterParts(filter)
@@ -497,10 +526,10 @@ export async function fetchPlacesByCategory(
     .join('\n');
 
   const query =
-    '[out:json][timeout:20];\n(\n' + body + '\n);\nout tags center ' + limit + ';';
+    '[out:json][timeout:8];\n(\n' + body + '\n);\nout tags center ' + limit + ';';
 
   try {
-    const data = await overpass(query, options?.signal, 7600);
+    const data = await overpass(query, options?.signal, 3200);
     const places = ((data?.elements ?? []) as any[])
       .map(elementToPlace)
       .filter((place): place is MapPlace => place !== null)
@@ -512,53 +541,31 @@ export async function fetchPlacesByCategory(
 
     if (places.length > 0) {
       return withDistance(places, center)
-        .filter((place) => (place.distanceM ?? 0) <= radius * 1.25)
+        .filter((place) => (place.distanceM ?? 0) <= radius * 1.35)
         .sort((a, b) => (a.distanceM ?? 0) - (b.distanceM ?? 0))
         .slice(0, limit);
     }
   } catch (error) {
     if ((error as Error).name === 'AbortError') throw error;
-    // Overpass vaqtincha ishlamasa kategoriyani butunlay yiqitmaymiz.
-    // Quyidagi geocoder fallback foydalanuvchiga hech bo'lmasa real yaqin
-    // natijalarni beradi; uydirma POI yaratilmaydi.
   }
 
-  const fallbackTerm = category.id.replace(/_/g, ' ');
-  const settled = await Promise.allSettled([
-    searchByPhoton(fallbackTerm, center, options?.signal),
-    searchByNominatim(fallbackTerm, center, options?.signal),
-  ]);
-  if (options?.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-
-  const merged = new Map<string, MapPlace>();
-  for (const result of settled) {
-    if (result.status !== 'fulfilled') continue;
-    for (const place of result.value) {
-      const distanceM = distanceMeters(
-        center.latitude,
-        center.longitude,
-        place.latitude,
-        place.longitude,
-      );
-      if (distanceM > radius * 1.5) continue;
-      const key =
-        normalizeQuery(place.name) +
-        '@' +
-        place.latitude.toFixed(4) +
-        ',' +
-        place.longitude.toFixed(4);
-      if (!merged.has(key)) {
-        merged.set(key, {
-          ...place,
-          categoryId: category.id,
-          categoryLabel: category.label,
-          distanceM,
-        });
-      }
-    }
+  // Public Overpass vaqtincha band bo'lsa category UI bo'sh/error bo'lib qolmasin.
+  // Birinchi real natija qaytargan geocoder bilan darhol davom etamiz.
+  const terms = categoryFallbackTerms(category);
+  const fallbackRequests: Promise<MapPlace[]>[] = [];
+  for (const term of terms.slice(0, 3)) {
+    fallbackRequests.push(searchByPhoton(term, center, options?.signal));
   }
+  fallbackRequests.push(searchByNominatim(terms[0] ?? category.label, center, options?.signal));
 
-  return Array.from(merged.values())
+  const fallbackPlaces = await firstNonEmptyPlaces(fallbackRequests, options?.signal);
+  return withDistance(fallbackPlaces, center)
+    .filter((place) => (place.distanceM ?? Infinity) <= radius * 1.6)
+    .map((place) => ({
+      ...place,
+      categoryId: category.id,
+      categoryLabel: category.label,
+    }))
     .sort((a, b) => (a.distanceM ?? 0) - (b.distanceM ?? 0))
     .slice(0, limit);
 }
@@ -716,21 +723,6 @@ export async function resolveMapClickPlace(
     return place;
   };
 
-  // Reverse geocoder odatda raster label/bino bosilganda eng tez javob beradi.
-  // Oldingi kod Overpass'ni 4-5 s kutardi, shu sabab tanlash og'ir tuyulardi.
-  try {
-    const reverse = await reverseNominatimPlace(point, signal);
-    if (reverse) {
-      const meaningful =
-        Boolean(reverse.name && !['Joy', 'Bino', 'Nomsiz joy'].includes(reverse.name)) ||
-        Boolean(reverse.categoryId) ||
-        Boolean(reverse.tags?.amenity || reverse.tags?.shop || reverse.tags?.tourism);
-      if (meaningful) return remember(reverse);
-    }
-  } catch (error) {
-    if ((error as Error).name === 'AbortError') throw error;
-  }
-
   const radius =
     zoom >= 18 ? 70 :
     zoom >= 17 ? 95 :
@@ -738,19 +730,19 @@ export async function resolveMapClickPlace(
     zoom >= 15 ? 200 :
     260;
 
-  const query =
-    '[out:json][timeout:8];\n(' +
-    '\nnwr["name"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
-    '\nnwr["amenity"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
-    '\nnwr["shop"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
-    '\nnwr["tourism"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
-    '\nnwr["office"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
-    '\nnwr["leisure"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
-    '\nnwr["building"]["addr:housenumber"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
-    '\n);\nout tags center 30;';
+  const overpassTask = (async (): Promise<MapPlace | null> => {
+    const query =
+      '[out:json][timeout:6];\n(' +
+      '\nnwr["name"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
+      '\nnwr["amenity"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
+      '\nnwr["shop"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
+      '\nnwr["tourism"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
+      '\nnwr["office"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
+      '\nnwr["leisure"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
+      '\nnwr["building"]["addr:housenumber"](around:' + radius + ',' + point.latitude + ',' + point.longitude + ');' +
+      '\n);\nout tags center 24;';
 
-  try {
-    const data = await overpass(query, signal, 2600);
+    const data = await overpass(query, signal, 2200);
     const candidates = ((data?.elements ?? []) as any[])
       .map((element): MapPlace | null => {
         const position = elementLatLng(element);
@@ -771,9 +763,22 @@ export async function resolveMapClickPlace(
       .filter((place) => (place.distanceM ?? Infinity) <= radius * 1.35)
       .sort((a, b) => clickCandidateScore(b, point) - clickCandidateScore(a, point));
 
-    return remember(candidates[0] ?? null);
+    return candidates[0] ?? null;
+  })();
+
+  const reverseTask = reverseNominatimPlace(point, signal);
+
+  try {
+    const place = await Promise.any(
+      [reverseTask, overpassTask].map(async (task) => {
+        const result = await task;
+        if (!result) throw new Error('empty');
+        return result;
+      }),
+    );
+    return remember(place);
   } catch (error) {
-    if ((error as Error).name === 'AbortError') throw error;
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     return remember(null);
   }
 }
@@ -952,7 +957,7 @@ async function searchByNameOverpass(
     'nwr["alt_name"~"' + pattern + '",i]' + area + ';\n' +
     ');\nout tags center 60;';
 
-  const data = await overpass(query1, signal, 4200);
+  const data = await overpass(query1, signal, 2800);
   return ((data?.elements ?? []) as any[])
     .map(elementToPlace)
     .filter((place): place is MapPlace => place !== null);
@@ -988,7 +993,7 @@ async function searchByNominatim(
   const response = await fetchWithTimeout(
     'https://nominatim.openstreetmap.org/search?' + params.toString(),
     { signal, headers: { Accept: 'application/json' } },
-    5500,
+    2800,
   );
   if (!response.ok) return [];
   const data = await response.json();
@@ -1026,7 +1031,7 @@ async function searchByPhoton(
       signal,
       headers: { Accept: 'application/json' },
     },
-    5000,
+    2400,
   );
   if (!response.ok) return [];
   const data = await response.json();
@@ -1050,6 +1055,26 @@ async function searchByPhoton(
       };
     })
     .filter((place): place is MapPlace => place !== null);
+}
+
+async function firstNonEmptyPlaces(
+  requests: Promise<MapPlace[]>[],
+  signal?: AbortSignal,
+): Promise<MapPlace[]> {
+  if (!requests.length) return [];
+  try {
+    return await Promise.any(
+      requests.map(async (request) => {
+        const places = await request;
+        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+        if (!places.length) throw new Error('empty');
+        return places;
+      }),
+    );
+  } catch (error) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    return [];
+  }
 }
 
 function editDistance(a: string, b: string): number {
@@ -1205,57 +1230,40 @@ export async function searchMapPlaces(
   }
 
   const variants = localNameQueryVariants(term);
+  const cyrillicVariants = variants.filter((variant) => /[\u0400-\u04FF]/.test(variant));
+  const latinAliases = variants.filter(
+    (variant) =>
+      !/[\u0400-\u04FF]/.test(variant) &&
+      normalizeQuery(variant) !== normalizedTerm,
+  );
+
   const fastTerms = Array.from(
-    new Set([
-      term,
-      ...variants.filter((variant) => /[\u0400-\u04FF]/.test(variant)).slice(0, 2),
-      ...variants.filter((variant) => normalizeQuery(variant) !== normalizedTerm).slice(0, 1),
-    ]),
+    new Set([term, ...cyrillicVariants.slice(0, 2), ...latinAliases.slice(0, 1)]),
   ).slice(0, 4);
 
-  const merged = new Map<string, MapPlace>();
-  const mergePlaces = (items: MapPlace[]) => {
-    for (const place of items) {
-      const key =
-        normalizeQuery(place.name) +
-        '@' +
-        place.latitude.toFixed(4) +
-        ',' +
-        place.longitude.toFixed(4);
-      const existing = merged.get(key);
-      if (!existing || (existing.source !== 'overpass' && place.source === 'overpass')) {
-        merged.set(key, place);
-      }
-    }
-  };
-
-  // Autocomplete/qidiruv uchun geocoderlar tezroq. Overpass endi har tugma
-  // bosilganda blocking dependency emas.
-  const fastRequests: Promise<MapPlace[]>[] = [];
-  for (const fastTerm of fastTerms) {
-    fastRequests.push(searchByPhoton(fastTerm, center, signal));
-  }
+  const fastRequests: Promise<MapPlace[]>[] = fastTerms.map((value) =>
+    searchByPhoton(value, center, signal),
+  );
   fastRequests.push(searchByNominatim(term, center, signal));
-
-  const settledFast = await Promise.allSettled(fastRequests);
-  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-  for (const result of settledFast) {
-    if (result.status === 'fulfilled') mergePlaces(result.value);
+  if (cyrillicVariants[0]) {
+    fastRequests.push(searchByNominatim(cyrillicVariants[0], center, signal));
   }
 
-  // Kam natija bo'lsagina OSM nom qidiruviga o'tamiz.
-  if (merged.size < 4) {
-    const osmTerms = [term, ...fastTerms.filter((item) => item !== term)].slice(0, 2);
-    const settledOsm = await Promise.allSettled(
+  let places = await firstNonEmptyPlaces(fastRequests, signal);
+
+  // Agar tez geocoderlar topa olmasa, OSM name qidiruviga o'tamiz.
+  if (!places.length) {
+    const osmTerms = Array.from(
+      new Set([term, ...cyrillicVariants.slice(0, 1), ...latinAliases.slice(0, 1)]),
+    ).slice(0, 3);
+
+    places = await firstNonEmptyPlaces(
       osmTerms.map((value) => searchByNameOverpass(value, center, signal)),
+      signal,
     );
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    for (const result of settledOsm) {
-      if (result.status === 'fulfilled') mergePlaces(result.value);
-    }
   }
 
-  let places = withDistance(Array.from(merged.values()), center)
+  places = withDistance(places, center)
     .map((place) => ({ ...place, score: scorePlace(place, queryTokens) }))
     .sort((a, b) => {
       const categoryBonus = (place: MapPlace) =>
