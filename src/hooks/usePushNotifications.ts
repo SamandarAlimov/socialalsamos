@@ -10,6 +10,13 @@ export function usePushNotifications() {
   const { playNotificationSound, playMessageSound } = useNotificationSound();
   const lastMessageIdRef = useRef<string | null>(null);
   const lastNotificationIdRef = useRef<string | null>(null);
+  const sendNotificationRef = useRef<null | ((
+    title: string,
+    body: string,
+    data?: { url?: string; type?: string; conversationId?: string }
+  ) => Promise<void>)>(null);
+  const playMessageSoundRef = useRef<() => void>(() => {});
+  const playNotificationSoundRef = useRef<(type?: 'default' | 'message' | 'like' | 'comment' | 'follow' | 'mention' | 'call') => void>(() => {});
 
   // Request notification permission
   const requestPermission = useCallback(async () => {
@@ -97,6 +104,12 @@ export function usePushNotifications() {
     }
   }, [isRegistered, registration]);
 
+  useEffect(() => {
+    sendNotificationRef.current = sendNotification;
+    playMessageSoundRef.current = playMessageSound;
+    playNotificationSoundRef.current = playNotificationSound;
+  }, [sendNotification, playMessageSound, playNotificationSound]);
+
   // Subscribe to new messages
   useEffect(() => {
     if (!user) return;
@@ -152,14 +165,14 @@ export function usePushNotifications() {
           }
 
           // Play sound
-          playMessageSound();
+          playMessageSoundRef.current();
 
           // Show notification (works in background via service worker)
           const messagePreview = message.content?.length > 50 
             ? message.content.substring(0, 50) + '...' 
             : message.content || 'Yangi xabar';
 
-          sendNotification(
+          void sendNotificationRef.current?.(
             `✉️ ${senderName}`,
             messagePreview,
             {
@@ -176,7 +189,7 @@ export function usePushNotifications() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, sendNotification, playMessageSound]);
+  }, [user?.id]);
 
   // Subscribe to other notifications (likes, comments, follows, mentions)
   useEffect(() => {
@@ -232,7 +245,7 @@ export function usePushNotifications() {
 
           // Play sound
           const soundType = notification.type as 'like' | 'comment' | 'follow' | 'mention';
-          playNotificationSound(soundType);
+          playNotificationSoundRef.current(soundType);
 
           // Build notification content
           const emoji = getNotificationEmoji(notification.type);
@@ -247,7 +260,7 @@ export function usePushNotifications() {
             url = `/user/${notification.data.follower_id}`;
           }
 
-          sendNotification(title, body, { url, type: notification.type });
+          void sendNotificationRef.current?.(title, body, { url, type: notification.type });
         }
       )
       .subscribe();
@@ -255,7 +268,7 @@ export function usePushNotifications() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, sendNotification, playNotificationSound]);
+  }, [user?.id]);
 
   return {
     requestPermission,
