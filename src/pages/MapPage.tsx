@@ -1095,6 +1095,34 @@ export default function MapPage() {
     routes,
   ]);
 
+  useEffect(() => {
+    if (!navigationActive || !destination || !routes.length) return;
+
+    // Uzoq safarda session TTL eskirib ketmasligi uchun aktiv navigatsiya
+    // holatini davriy yangilab turamiz.
+    const timer = window.setInterval(() => {
+      writeNavigationSession({
+        active: true,
+        following: navigationFollowing,
+        mode: routeMode,
+        routeIndex,
+        routeOrigin,
+        destination,
+        routes,
+      });
+    }, 30_000);
+
+    return () => window.clearInterval(timer);
+  }, [
+    navigationActive,
+    navigationFollowing,
+    routeMode,
+    routeIndex,
+    routeOrigin,
+    destination,
+    routes,
+  ]); // navigation-session heartbeat
+
   const activeRoute = routes[routeIndex] ?? null;
   const navigation = useActiveNavigation({
     active: navigationActive,
