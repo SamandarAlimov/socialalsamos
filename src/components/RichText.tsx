@@ -12,6 +12,14 @@ interface RichTextProps {
 
 const MENTION_HASHTAG_LINK = /(@[\p{L}\p{N}_]+)|(#[\p{L}\p{N}_]+)|(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/gu;
 
+// Legacy post composer metadata must never be shown as raw JSON in the feed.
+// Music is rendered by PostExtras/PostMusicCard instead.
+const LEGACY_MUSIC_BLOCK = /\s*\[MUSIC\][\s\S]*?\[\/MUSIC\]\s*/gi;
+
+function stripLegacyMetadata(content: string): string {
+  return content.replace(LEGACY_MUSIC_BLOCK, '').trim();
+}
+
 function tokenClassName(token: InlineToken): string {
   return cn(
     token.bold && 'font-bold',
@@ -90,13 +98,25 @@ function renderTokenText(text: string, keyPrefix: string) {
  * HTML ishlatilmaydi — faqat tokenlar, shuning uchun XSS xavfi yo'q.
  */
 export function RichText({ content, formattedContent, className }: RichTextProps) {
-  const structured = useMemo(
-    () => normalizeAlsamosRichTextDocument(formattedContent),
-    [formattedContent],
+  const cleanContent = useMemo(
+    () => stripLegacyMetadata(content ?? ''),
+    [content],
   );
+
+  const structured = useMemo(() => {
+    const normalized = normalizeAlsamosRichTextDocument(formattedContent);
+    // Old formatted documents can contain the same legacy [MUSIC] metadata.
+    // In that case fall back to the sanitized plain content rather than exposing
+    // the serialized implementation detail in the UI.
+    if (normalized && /\[MUSIC\]/i.test(JSON.stringify(formattedContent))) {
+      return null;
+    }
+    return normalized;
+  }, [formattedContent]);
+
   const blocks = useMemo(
-    () => structured?.blocks ?? parseRichText(content ?? ''),
-    [content, structured],
+    () => structured?.blocks ?? parseRichText(cleanContent),
+    [cleanContent, structured],
   );
 
   if (blocks.length === 0) return null;
