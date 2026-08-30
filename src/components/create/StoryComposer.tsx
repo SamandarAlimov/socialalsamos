@@ -76,7 +76,11 @@ function storyPayload(
   };
 }
 
-export function StoryComposer() {
+interface StoryComposerProps {
+  onDraftStateChange?: (hasDraft: boolean) => void;
+}
+
+export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { profile } = useAuth();
@@ -127,6 +131,10 @@ export function StoryComposer() {
   useEffect(() => {
     draftRef.current = storyDraft;
   }, [storyDraft]);
+
+  useEffect(() => {
+    onDraftStateChange?.(Boolean(storyDraft));
+  }, [onDraftStateChange, storyDraft]);
 
   // Hidden Story draft abandoned bo'lsa DB graph ham best-effort tozalanadi.
   useEffect(() => {
