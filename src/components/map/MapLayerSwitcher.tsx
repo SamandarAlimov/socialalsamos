@@ -45,7 +45,7 @@ export function MapLayerSwitcher({
         className={cn(
           'flex h-10 w-10 items-center justify-center rounded-2xl text-foreground shadow-lg ring-1 backdrop-blur-2xl transition hover:shadow-xl',
           highContrast
-            ? 'bg-background/96 ring-border/70 hover:bg-background'
+            ? 'bg-slate-950/85 text-white ring-white/20 hover:bg-slate-950/95'
             : 'bg-background/82 ring-border/45 hover:bg-background/95',
         )}
         aria-label="Qatlamlar"
@@ -58,7 +58,7 @@ export function MapLayerSwitcher({
           className={cn(
             'absolute right-0 top-12 z-[1200] w-64 rounded-[22px] border p-3 text-foreground shadow-2xl backdrop-blur-2xl',
             highContrast
-              ? 'border-border/70 bg-background/97'
+              ? 'border-white/15 bg-slate-950/90 text-white'
               : 'border-border/45 bg-background/88',
           )}
         >
@@ -67,7 +67,12 @@ export function MapLayerSwitcher({
             <button
               type="button"
               onClick={() => onOpenChange(false)}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground"
+              className={cn(
+                'flex h-7 w-7 items-center justify-center rounded-lg',
+                highContrast
+                  ? 'text-white/60 hover:bg-white/10 hover:text-white'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
               aria-label="Yopish"
             >
               <X className="h-4 w-4" />
@@ -88,7 +93,7 @@ export function MapLayerSwitcher({
                     active
                       ? 'border-primary bg-primary/10 text-primary'
                       : highContrast
-                        ? 'border-border/70 bg-background/70 text-foreground/80 hover:bg-muted/70 hover:text-foreground'
+                        ? 'border-white/15 bg-white/5 text-white/80 hover:bg-white/10 hover:text-white'
                         : 'border-border/60 text-muted-foreground hover:text-foreground',
                   )}
                 >
@@ -103,7 +108,7 @@ export function MapLayerSwitcher({
             <p
               className={cn(
                 'mb-1 text-xs font-medium',
-                highContrast ? 'text-foreground/70' : 'text-muted-foreground',
+                highContrast ? 'text-white/65' : 'text-muted-foreground',
               )}
             >
               Ustama qatlamlar
@@ -116,12 +121,15 @@ export function MapLayerSwitcher({
                   key={overlay.id}
                   type="button"
                   onClick={() => onToggleOverlay(overlay.id)}
-                  className="flex w-full items-center gap-2 rounded-lg px-1.5 py-2 text-sm hover:bg-muted"
+                  className={cn(
+                    'flex w-full items-center gap-2 rounded-lg px-1.5 py-2 text-sm',
+                    highContrast ? 'text-white/90 hover:bg-white/10' : 'hover:bg-muted',
+                  )}
                 >
                   <Icon
                     className={cn(
                       'h-4 w-4',
-                      highContrast ? 'text-foreground/70' : 'text-muted-foreground',
+                      highContrast ? 'text-white/70' : 'text-muted-foreground',
                     )}
                   />
                   <span className="flex-1 text-left">{overlay.label}</span>
