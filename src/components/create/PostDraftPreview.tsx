@@ -6,7 +6,6 @@ import {
   Lock,
   MapPin,
   Music2,
-  Users,
   UsersRound,
 } from 'lucide-react';
 
@@ -145,7 +144,21 @@ export function PostDraftPreview({
               </Avatar>
 
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold">{author.displayName}</p>
+                <p className="truncate text-sm font-semibold">
+                  {author.displayName}
+                  {collaborators.length > 0 && (
+                    <span className="font-normal text-muted-foreground">
+                      {' '}and{' '}
+                      <span className="font-medium text-foreground">
+                        {collaborators.length === 1
+                          ? '@' + collaborators[0].username
+                          : collaborators.length === 2
+                            ? '@' + collaborators[0].username + ' and @' + collaborators[1].username
+                            : '@' + collaborators[0].username + ' and ' + (collaborators.length - 1) + ' more'}
+                      </span>
+                    </span>
+                  )}
+                </p>
                 <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                   <span className="truncate">@{author.username}</span>
                   <span>·</span>
@@ -247,26 +260,6 @@ export function PostDraftPreview({
                 </div>
               )}
 
-              {collaborators.length > 0 && (
-                <div className="rounded-2xl bg-muted/35 p-3">
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-primary" />
-                    <p className="text-xs font-semibold">
-                      {collaborators.length} hammuallif
-                    </p>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {collaborators.map((person) => (
-                      <span
-                        key={person.id}
-                        className="rounded-full bg-background px-2 py-1 text-[10px]"
-                      >
-                        @{person.username}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </article>
         </div>
