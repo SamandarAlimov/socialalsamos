@@ -52,7 +52,7 @@ export function MapOverviewPanel({
   className,
 }: MapOverviewPanelProps) {
   return (
-    <div className={cn('h-full overflow-y-auto px-3.5 py-3.5', className)}>
+    <div className={cn('min-h-full px-3.5 py-3.5', className)}>
       <div className="rounded-[22px] border border-border/45 bg-background/52 p-4 shadow-sm backdrop-blur-xl">
         <div className="flex items-start gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/12 text-primary shadow-sm ring-1 ring-primary/10">
