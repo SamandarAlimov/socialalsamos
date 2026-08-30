@@ -161,3 +161,18 @@ export function vehicleSvg(ref: string, color?: string | null, bearing?: number 
     '</div>',
   ].join('');
 }
+
+
+/** Active navigation uchun yo'nalishga qarab buriladigan marker. */
+export function navigationArrowSvg(heading?: number | null): string {
+  const rotate = Number.isFinite(Number(heading)) ? Number(heading) : 0;
+  return [
+    '<div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;',
+    'filter:drop-shadow(0 5px 12px rgba(0,0,0,.28));transform:rotate(' + rotate + 'deg)">',
+    '<svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">',
+    '<circle cx="20" cy="20" r="17" fill="rgba(47,111,237,.18)"/>',
+    '<path d="M20 5.5 30 29l-10-4.8L10 29 20 5.5z" fill="#2F6FED" stroke="#fff" stroke-width="2.8" stroke-linejoin="round"/>',
+    '</svg>',
+    '</div>',
+  ].join('');
+}
