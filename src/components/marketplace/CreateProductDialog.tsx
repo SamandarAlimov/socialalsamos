@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Plus, Loader2 } from 'lucide-react';
+import { X, Plus, Loader2, Trash2, SlidersHorizontal } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,7 +32,7 @@ const conditions = [
 export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreateProductDialogProps) {
   const { user } = useAuth();
   const { categories } = useCategories();
-  const { createProduct } = useProductActions();
+  const { createProduct, createProductVariants } = useProductActions();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -47,6 +47,15 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
   const [images, setImages] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasVariants, setHasVariants] = useState(false);
+  const [variantDrafts, setVariantDrafts] = useState<Array<{
+    optionsText: string;
+    price: string;
+    quantity: string;
+    sku: string;
+  }>>([
+    { optionsText: '', price: '', quantity: '1', sku: '' },
+  ]);
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -72,8 +81,69 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
     setImages(previous => previous.filter((_, current) => current !== index));
   };
 
+  const addVariantDraft = () => {
+    setVariantDrafts(previous => [
+      ...previous,
+      { optionsText: '', price: '', quantity: '1', sku: '' },
+    ]);
+  };
+
+  const updateVariantDraft = (
+    index: number,
+    key: 'optionsText' | 'price' | 'quantity' | 'sku',
+    value: string,
+  ) => {
+    setVariantDrafts(previous =>
+      previous.map((draft, current) =>
+        current === index ? { ...draft, [key]: value } : draft,
+      ),
+    );
+  };
+
+  const removeVariantDraft = (index: number) => {
+    setVariantDrafts(previous =>
+      previous.length <= 1
+        ? [{ optionsText: '', price: '', quantity: '1', sku: '' }]
+        : previous.filter((_, current) => current !== index),
+    );
+  };
+
+  const parseVariantOptions = (value: string) => {
+    const options: Record<string, string> = {};
+    value
+      .split(';')
+      .map(part => part.trim())
+      .filter(Boolean)
+      .forEach(part => {
+        const separator = part.indexOf('=');
+        if (separator <= 0) return;
+        const name = part.slice(0, separator).trim();
+        const optionValue = part.slice(separator + 1).trim();
+        if (name && optionValue) options[name] = optionValue;
+      });
+    return options;
+  };
+
   const handleSubmit = async () => {
     if (!title.trim() || !price) return;
+
+    const parsedVariants = hasVariants
+      ? variantDrafts
+          .map(draft => ({
+            options: parseVariantOptions(draft.optionsText),
+            price: draft.price.trim() ? Number(draft.price) : null,
+            quantity: Math.max(0, Math.floor(Number(draft.quantity) || 0)),
+            sku: draft.sku.trim() || null,
+          }))
+          .filter(variant => Object.keys(variant.options).length > 0)
+      : [];
+
+    if (hasVariants && parsedVariants.length === 0) return;
+
+    const totalVariantStock = parsedVariants.reduce(
+      (sum, variant) => sum + variant.quantity,
+      0,
+    );
 
     setIsSubmitting(true);
     const result = await createProduct({
@@ -83,15 +153,26 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
       category_id: categoryId || undefined,
       condition,
       location: location.trim() || undefined,
-      quantity: parseInt(quantity) || 1,
+      quantity: hasVariants ? totalVariantStock : (parseInt(quantity) || 1),
       is_negotiable: isNegotiable,
       shipping_available: shippingAvailable,
       shipping_price: parseFloat(shippingPrice) || 0,
     }, images);
+
+    if (!result) {
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (hasVariants) {
+      const variantsSaved = await createProductVariants(result.id, parsedVariants);
+      if (!variantsSaved) {
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
     setIsSubmitting(false);
-
-    if (!result) return;
-
     setTitle('');
     setDescription('');
     setPrice('');
@@ -103,6 +184,8 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
     setShippingAvailable(true);
     setShippingPrice('0');
     setImages([]);
+    setHasVariants(false);
+    setVariantDrafts([{ optionsText: '', price: '', quantity: '1', sku: '' }]);
     onSuccess();
     onOpenChange(false);
   };
@@ -190,10 +273,113 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
                   type="number"
                   placeholder="1"
                   min="1"
-                  value={quantity}
+                  value={
+                    hasVariants
+                      ? String(variantDrafts.reduce(
+                          (sum, draft) => sum + Math.max(0, Math.floor(Number(draft.quantity) || 0)),
+                          0,
+                        ))
+                      : quantity
+                  }
                   onChange={event => setQuantity(event.target.value)}
+                  disabled={hasVariants}
                 />
               </div>
+            </div>
+
+            <div className="space-y-3 rounded-2xl border border-border/40 bg-muted/15 p-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-2.5">
+                  <div className="mt-0.5 rounded-lg bg-primary/10 p-1.5 text-primary">
+                    <SlidersHorizontal className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">{copy.variants}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {copy.variantsDescription}
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  checked={hasVariants}
+                  onCheckedChange={checked => {
+                    setHasVariants(checked);
+                    if (checked && variantDrafts.length === 0) {
+                      setVariantDrafts([{ optionsText: '', price: '', quantity: '1', sku: '' }]);
+                    }
+                  }}
+                />
+              </div>
+
+              {hasVariants && (
+                <div className="space-y-3">
+                  <p className="text-[11px] text-muted-foreground">
+                    {copy.variantFormatHint}
+                  </p>
+                  {variantDrafts.map((draft, index) => (
+                    <div
+                      key={index}
+                      className="space-y-2 rounded-xl border border-border/35 bg-background p-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold">
+                          {copy.variantNumber(index + 1)}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 rounded-lg text-muted-foreground hover:text-destructive"
+                          onClick={() => removeVariantDraft(index)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                      <Input
+                        value={draft.optionsText}
+                        onChange={event => updateVariantDraft(index, 'optionsText', event.target.value)}
+                        placeholder={copy.variantOptionsPlaceholder}
+                        className="h-10 rounded-xl"
+                      />
+                      <div className="grid grid-cols-3 gap-2">
+                        <Input
+                          value={draft.price}
+                          onChange={event => updateVariantDraft(index, 'price', event.target.value)}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder={copy.variantPricePlaceholder}
+                          className="h-10 rounded-xl"
+                        />
+                        <Input
+                          value={draft.quantity}
+                          onChange={event => updateVariantDraft(index, 'quantity', event.target.value)}
+                          type="number"
+                          min="0"
+                          placeholder={copy.variantQuantityPlaceholder}
+                          className="h-10 rounded-xl"
+                        />
+                        <Input
+                          value={draft.sku}
+                          onChange={event => updateVariantDraft(index, 'sku', event.target.value)}
+                          placeholder="SKU"
+                          className="h-10 rounded-xl"
+                        />
+                      </div>
+                    </div>
+                  ))}
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 w-full rounded-xl border-dashed"
+                    onClick={addVariantDraft}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    {copy.addVariant}
+                  </Button>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -291,7 +477,12 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
             className="w-full"
             size="lg"
             onClick={handleSubmit}
-            disabled={!title.trim() || !price || isSubmitting}
+            disabled={
+              !title.trim() ||
+              !price ||
+              isSubmitting ||
+              (hasVariants && !variantDrafts.some(draft => Object.keys(parseVariantOptions(draft.optionsText)).length > 0))
+            }
           >
             {isSubmitting ? (
               <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {copy.publishing}</>
