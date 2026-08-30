@@ -27,7 +27,7 @@ import { toast } from 'sonner';
 
 import { getLayer, getOverlay, type MapLayerId } from '@/lib/mapLayers';
 import { categoryUi, clusterSvg, meDotSvg, pinSvg, stopSvg, vehicleSvg } from '@/lib/placeIcons';
-import type { MapPlace } from '@/lib/mapPlaces';
+import { resolveMapClickPlace, type MapPlace } from '@/lib/mapPlaces';
 import type { TransitStop } from '@/lib/transit';
 import {
   arrivalTime,
@@ -182,6 +182,29 @@ function MapViewportObserver({
   return null;
 }
 
+function MapClickObserver({
+  onMapClick,
+}: {
+  onMapClick: (
+    point: { latitude: number; longitude: number },
+    zoom: number,
+  ) => void | Promise<void>;
+}) {
+  useMapEvents({
+    click: (event) => {
+      void onMapClick(
+        {
+          latitude: event.latlng.lat,
+          longitude: event.latlng.lng,
+        },
+        (event.target as L.Map).getZoom(),
+      );
+    },
+  });
+
+  return null;
+}
+
 type PlaceMarkerGroup =
   | { type: 'place'; place: MapPlace }
   | {
@@ -293,6 +316,8 @@ export default function MapPage() {
   const [movedCenter, setMovedCenter] = useState<{ latitude: number; longitude: number } | null>(null);
   const [viewport, setViewport] = useState<MapViewport | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const mapClickAbortRef = useRef<AbortController | null>(null);
+  const [mapClickLoading, setMapClickLoading] = useState(false);
 
   const layer = getLayer(layerId);
   const imageryLayer = layerId === 'satellite' || layerId === 'hybrid';
@@ -489,6 +514,47 @@ export default function MapPage() {
     setSnap('half');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleMapClick = useCallback(
+    async (
+      point: { latitude: number; longitude: number },
+      zoom: number,
+    ) => {
+      mapClickAbortRef.current?.abort();
+      const controller = new AbortController();
+      mapClickAbortRef.current = controller;
+
+      setSearchFocused(false);
+      setLayerOpen(false);
+      setMapClickLoading(true);
+
+      try {
+        const place = await resolveMapClickPlace(point, zoom, controller.signal);
+        if (controller.signal.aborted || !place) return;
+
+        setSelectedPlace(place);
+        setSelectedStop(null);
+        setPanel('place');
+        setSnap('half');
+
+        // Raster labelning o'zi bosiladigan DOM element emas. Topilgan real OSM
+        // obyektiga marker qo'yib, xaritani keskin zoom qilmasdan markazga yaqinlashtiramiz.
+        const map = mapRef.current;
+        if (map) {
+          map.panTo([place.latitude, place.longitude], { animate: true });
+        }
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          toast.error('Bu joy haqidagi ma’lumotni hozir olib bo‘lmadi.');
+        }
+      } finally {
+        if (mapClickAbortRef.current === controller) {
+          setMapClickLoading(false);
+        }
+      }
+    },
+    [],
+  );
 
   const buildRoute = useCallback(
     async (
@@ -1381,6 +1447,7 @@ export default function MapPage() {
           onViewport={setViewport}
           onMovedCenter={setMovedCenter}
         />
+        <MapClickObserver onMapClick={handleMapClick} />
 
         {me && <Marker position={[me.latitude, me.longitude]} icon={ME_ICON} />}
 
@@ -1608,6 +1675,22 @@ export default function MapPage() {
           />
         </div>
       </div>
+
+      {mapClickLoading && (
+        <div className="pointer-events-none absolute inset-x-0 top-[72px] z-[1095] flex justify-center md:left-[404px]">
+          <div
+            className={cn(
+              'flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-semibold shadow-lg backdrop-blur-2xl',
+              contrastLayer
+                ? 'border-white/[0.14] bg-slate-950/[0.88] text-white'
+                : 'border-border/[0.45] bg-background/[0.90] text-foreground',
+            )}
+          >
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+            Joy aniqlanmoqda...
+          </div>
+        </div>
+      )}
 
       {movedCenter && (
         <div className="pointer-events-none absolute inset-x-0 top-[72px] z-[1090] flex justify-center md:left-[404px]">
