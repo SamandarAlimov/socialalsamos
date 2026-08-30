@@ -72,6 +72,20 @@ export interface Message {
     display_name: string | null;
     avatar_url: string | null;
   };
+  reply_to?: {
+    id: string;
+    content: string | null;
+    media_url: string | null;
+    media_type: string | null;
+    is_deleted: boolean | null;
+    sender_id: string | null;
+    sender?: {
+      id: string;
+      username: string | null;
+      display_name: string | null;
+      avatar_url: string | null;
+    } | null;
+  } | null;
   is_read?: boolean;
   status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
   tempId?: string;
@@ -93,6 +107,20 @@ const MESSAGE_SELECT = `
     username,
     display_name,
     avatar_url
+  ),
+  reply_to:messages!messages_reply_to_id_fkey (
+    id,
+    content,
+    media_url,
+    media_type,
+    is_deleted,
+    sender_id,
+    sender:profiles!messages_sender_id_fkey (
+      id,
+      username,
+      display_name,
+      avatar_url
+    )
   )
 `;
 
@@ -762,7 +790,12 @@ export function useMessages(conversationId: string | null) {
   }, [conversationId, hasMore, isLoadingMore, user]);
 
   const sendMessage = useCallback(
-    async (content: string, mediaUrl?: string, mediaType?: string) => {
+    async (
+      content: string,
+      mediaUrl?: string,
+      mediaType?: string,
+      replyToId?: string | null
+    ) => {
       if (!conversationId || !user) return null;
 
       const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -775,7 +808,7 @@ export function useMessages(conversationId: string | null) {
         content,
         media_url: mediaUrl || null,
         media_type: mediaType || null,
-        reply_to_id: null,
+        reply_to_id: replyToId || null,
         story_id: null,
         shared_post_id: null,
         is_edited: false,
@@ -802,6 +835,7 @@ export function useMessages(conversationId: string | null) {
             content,
             media_url: mediaUrl,
             media_type: mediaType,
+            reply_to_id: replyToId || null,
           })
           .select(MESSAGE_SELECT)
           .single();

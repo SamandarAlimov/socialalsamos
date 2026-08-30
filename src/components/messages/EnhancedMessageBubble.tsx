@@ -27,6 +27,7 @@ import { StoryReplyPreview } from './StoryReplyPreview';
 import { CallHistoryMessage, CallHistoryData } from './CallHistoryMessage';
 import { BubbleTail } from './BubbleTail';
 import { StickerMessage } from './StickerMessage';
+import { ReplyMessagePreview, ReplyTarget } from './ReplyMessagePreview';
 import { getEmojiOnlyInfo } from '@/lib/emojiOnly';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
@@ -68,6 +69,7 @@ interface Message {
     sender_name: string;
     original_content: string;
   };
+  reply_to?: ReplyTarget | null;
 }
 
 import { MediaTrack } from '@/contexts/AudioPlayerContext';
@@ -85,6 +87,7 @@ interface EnhancedMessageBubbleProps {
   onPin?: (messageId: string) => void;
   onSelect?: (messageId: string) => void;
   onLongPress?: (messageId: string) => void;
+  onJumpToMessage?: (messageId: string) => void;
   isPinned?: boolean;
   isSelected?: boolean;
   isSelectionMode?: boolean;
@@ -105,6 +108,7 @@ export function EnhancedMessageBubble({
   onPin,
   onSelect,
   onLongPress,
+  onJumpToMessage,
   isPinned = false,
   isSelected = false,
   isSelectionMode = false,
@@ -402,6 +406,7 @@ export function EnhancedMessageBubble({
     !message.media_url &&
     !message.story_id &&
     !message.shared_post_id &&
+    !message.reply_to_id &&
     !isLocationMessage &&
     !isCallHistoryMessage &&
     message.content
@@ -466,7 +471,7 @@ export function EnhancedMessageBubble({
     }
 
     // Stiker / GIF - karta va dumchasiz, faqat mediasi ko'rinadi
-    if (stickerKind && message.media_url) {
+    if (stickerKind && message.media_url && !message.reply_to_id) {
       return (
         <div className={cn('flex flex-col', isMine ? 'items-end' : 'items-start')}>
           <StickerMessage url={message.media_url} kind={stickerKind} />
@@ -500,6 +505,27 @@ export function EnhancedMessageBubble({
                 Yo'naltirilgan: {message.forwarded_from.sender_name}
               </span>
             </div>
+          )}
+
+          {message.reply_to_id && (
+            message.reply_to ? (
+              <ReplyMessagePreview
+                reply={message.reply_to}
+                isMine={isMine}
+                onJump={isPreview ? undefined : onJumpToMessage}
+              />
+            ) : (
+              <div
+                className={cn(
+                  'mb-1.5 rounded-lg border-l-[3px] px-2 py-1.5 text-[11px]',
+                  isMine
+                    ? 'border-primary-foreground/70 bg-primary-foreground/10 text-primary-foreground/75'
+                    : 'border-primary bg-muted/70 text-muted-foreground'
+                )}
+              >
+                Javob berilgan xabar
+              </div>
+            )
           )}
 
           {(isGroup || showSender) &&

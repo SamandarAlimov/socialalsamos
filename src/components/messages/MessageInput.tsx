@@ -42,7 +42,8 @@ interface MessageInputProps {
     scheduledFor: Date,
     content: string,
     mediaUrl?: string,
-    mediaType?: string
+    mediaType?: string,
+    replyToId?: string | null
   ) => Promise<any>;
   onTyping: (isTyping: boolean) => void;
   replyTo?: ReplyTo | null;
@@ -829,13 +830,15 @@ export function MessageInput({
               scheduledFor,
               scheduledContent,
               pendingAlbum ? undefined : pendingAttachment?.url,
-              pendingAlbum ? undefined : pendingAttachment?.type
+              pendingAlbum ? undefined : pendingAttachment?.type,
+              replyTo?.id || null
             );
             if (scheduled === null) return;
 
             await clearDraft();
             clearAttachment();
             clearAlbum();
+            onCancelReply?.();
           }}
         />
       )}
