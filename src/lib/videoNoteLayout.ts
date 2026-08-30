@@ -5,7 +5,7 @@
 export const VIDEO_NOTE_MAX_SECONDS = 60;
 
 export const VIDEO_NOTE_PANEL_CLASS =
-  'pointer-events-auto absolute bottom-[calc(100%+0.5rem)] right-1 z-20 flex origin-bottom-right flex-col items-center gap-2 rounded-[24px] border border-border/80 bg-card/92 p-2.5 shadow-2xl backdrop-blur-xl sm:right-2';
+  'pointer-events-auto absolute bottom-[calc(100%+0.5rem)] right-1 z-20 flex origin-bottom-right flex-col items-center gap-2 rounded-[24px] border border-border/80 bg-card/95 p-2.5 shadow-2xl backdrop-blur-xl sm:right-2';
 
 export const VIDEO_NOTE_PANEL_STYLE = {
   width: 'min(256px, calc(100% - 0.75rem))',
