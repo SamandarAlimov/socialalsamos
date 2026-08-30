@@ -1979,32 +1979,7 @@ export default function MapPage() {
         });
       }
 
-      if (panel === 'incident' && selectedIncident) {
-      return (
-        <TrafficIncidentCard
-          incident={selectedIncident}
-          highContrast={contrastLayer}
-          onClose={() => {
-            setSelectedIncident(null);
-            setPanel('search');
-            setSnap('peek');
-          }}
-          onDirections={(incident) =>
-            openDirections({
-              id: 'traffic:' + incident.id,
-              source: 'traffic',
-              name: trafficIncidentLabel(incident),
-              latitude: incident.latitude,
-              longitude: incident.longitude,
-              categoryLabel: 'Yo‘ldagi hodisa',
-            } as unknown as MapPlace)
-          }
-          className="h-full"
-        />
-      );
-    }
-
-    if (panel === 'route') {
+      if (panel === 'route') {
         routeWaypoints.forEach((waypoint, index) => {
           markers.push({
             id: 'route-stop|' + index,
@@ -2066,23 +2041,6 @@ export default function MapPage() {
           });
         });
       }
-    }
-
-    if (overlays.includes('traffic')) {
-      trafficIncidents.incidents.forEach((incident) => {
-        markers.push({
-          id: 'incident|' + incident.id,
-          kind: 'incident',
-          latitude: incident.latitude,
-          longitude: incident.longitude,
-          color: trafficIncidentColor(incident.category),
-          label:
-            incident.description ||
-            trafficIncidentLabel(incident),
-          variant: incident.category,
-          active: selectedIncident?.id === incident.id,
-        });
-      });
     }
 
     if (overlays.includes('traffic')) {
@@ -2234,6 +2192,23 @@ export default function MapPage() {
           });
         });
       }
+    }
+
+    if (overlays.includes('traffic')) {
+      trafficIncidents.incidents.forEach((incident) => {
+        markers.push({
+          id: 'incident|' + incident.id,
+          kind: 'incident',
+          latitude: incident.latitude,
+          longitude: incident.longitude,
+          color: trafficIncidentColor(incident.category),
+          label:
+            incident.description ||
+            trafficIncidentLabel(incident),
+          variant: incident.category,
+          active: selectedIncident?.id === incident.id,
+        });
+      });
     }
 
     return markers;
@@ -2497,6 +2472,31 @@ export default function MapPage() {
               name: stop.name || 'Bekat',
               latitude: stop.latitude,
               longitude: stop.longitude,
+            } as unknown as MapPlace)
+          }
+          className="h-full"
+        />
+      );
+    }
+
+    if (panel === 'incident' && selectedIncident) {
+      return (
+        <TrafficIncidentCard
+          incident={selectedIncident}
+          highContrast={contrastLayer}
+          onClose={() => {
+            setSelectedIncident(null);
+            setPanel('search');
+            setSnap('peek');
+          }}
+          onDirections={(incident) =>
+            openDirections({
+              id: 'traffic:' + incident.id,
+              source: 'traffic',
+              name: trafficIncidentLabel(incident),
+              latitude: incident.latitude,
+              longitude: incident.longitude,
+              categoryLabel: 'Yo‘ldagi hodisa',
             } as unknown as MapPlace)
           }
           className="h-full"
