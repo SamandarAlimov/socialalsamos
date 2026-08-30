@@ -62,6 +62,10 @@ interface VectorMapSurfaceProps {
 const ROUTE_SOURCE_ID = 'alsamos-route-lines';
 const ROUTE_LAYER_ID = 'alsamos-route-lines-layer';
 const BUILDING_LAYER_ID = 'alsamos-buildings-3d';
+const POI_SOURCE_ID = 'alsamos-vector-pois';
+const POI_CLUSTER_LAYER_ID = 'alsamos-vector-poi-clusters';
+const POI_CLUSTER_COUNT_LAYER_ID = 'alsamos-vector-poi-cluster-count';
+const POI_POINT_LAYER_ID = 'alsamos-vector-poi-points';
 
 function markerHtml(marker: MapSceneMarker): string {
   switch (marker.kind) {
@@ -117,7 +121,8 @@ function chooseRenderedFeature(features: any[]): any | null {
   const usable = features.filter(
     (feature) =>
       feature?.layer?.id !== ROUTE_LAYER_ID &&
-      feature?.source !== ROUTE_SOURCE_ID,
+      feature?.source !== ROUTE_SOURCE_ID &&
+      feature?.source !== POI_SOURCE_ID,
   );
   if (!usable.length) return null;
 
@@ -210,6 +215,110 @@ function add3dBuildings(map: any): void {
   } catch {
     // Style source schema may not expose a compatible building source.
   }
+}
+
+function ensurePoiLayers(map: any): void {
+  if (!map?.isStyleLoaded?.()) return;
+
+  if (!map.getSource?.(POI_SOURCE_ID)) {
+    map.addSource(POI_SOURCE_ID, {
+      type: 'geojson',
+      cluster: true,
+      clusterRadius: 46,
+      clusterMaxZoom: 15,
+      data: {
+        type: 'FeatureCollection',
+        features: [],
+      },
+    });
+  }
+
+  if (!map.getLayer?.(POI_CLUSTER_LAYER_ID)) {
+    map.addLayer({
+      id: POI_CLUSTER_LAYER_ID,
+      type: 'circle',
+      source: POI_SOURCE_ID,
+      filter: ['has', 'point_count'],
+      paint: {
+        'circle-color': '#1f2937',
+        'circle-radius': [
+          'step',
+          ['get', 'point_count'],
+          16,
+          9,
+          19,
+          20,
+          22,
+        ],
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#ffffff',
+        'circle-opacity': 0.92,
+      },
+    });
+  }
+
+  if (!map.getLayer?.(POI_CLUSTER_COUNT_LAYER_ID)) {
+    map.addLayer({
+      id: POI_CLUSTER_COUNT_LAYER_ID,
+      type: 'symbol',
+      source: POI_SOURCE_ID,
+      filter: ['has', 'point_count'],
+      layout: {
+        'text-field': ['get', 'point_count_abbreviated'],
+        'text-size': 11,
+        'text-font': ['Noto Sans Regular'],
+      },
+      paint: {
+        'text-color': '#ffffff',
+      },
+    });
+  }
+
+  if (!map.getLayer?.(POI_POINT_LAYER_ID)) {
+    map.addLayer({
+      id: POI_POINT_LAYER_ID,
+      type: 'circle',
+      source: POI_SOURCE_ID,
+      filter: ['!', ['has', 'point_count']],
+      paint: {
+        'circle-color': ['coalesce', ['get', 'color'], '#2F6FED'],
+        'circle-radius': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          11,
+          4,
+          16,
+          7,
+          19,
+          9,
+        ],
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#ffffff',
+        'circle-opacity': 0.96,
+      },
+    });
+  }
+}
+
+function poiGeoJson(markers: MapSceneMarker[]) {
+  return {
+    type: 'FeatureCollection',
+    features: markers
+      .filter((marker) => marker.kind === 'place')
+      .map((marker) => ({
+        type: 'Feature',
+        properties: {
+          markerId: marker.id,
+          label: marker.label ?? '',
+          color: marker.color || '#2F6FED',
+        },
+        geometry: {
+          type: 'Point',
+          coordinates: [marker.longitude, marker.latitude],
+        },
+      })),
+  };
 }
 
 function ensureRouteLayer(map: any): void {
@@ -447,6 +556,7 @@ export function VectorMapSurface({
         map.on('load', () => {
           if (disposed) return;
           ensureRouteLayer(map);
+          ensurePoiLayers(map);
           if (buildings3d) add3dBuildings(map);
           setStyleRevision((value) => value + 1);
           publishViewport(map, false);
@@ -456,6 +566,7 @@ export function VectorMapSurface({
         map.on('style.load', () => {
           if (disposed) return;
           ensureRouteLayer(map);
+          ensurePoiLayers(map);
           if (buildings3d) add3dBuildings(map);
           setStyleRevision((value) => value + 1);
         });
@@ -479,9 +590,49 @@ export function VectorMapSurface({
             return;
           }
 
-          const feature = chooseRenderedFeature(
-            map.queryRenderedFeatures?.(event.point) ?? [],
+          const renderedFeatures =
+            map.queryRenderedFeatures?.(event.point) ?? [];
+
+          const clusterFeature = renderedFeatures.find(
+            (feature: any) =>
+              feature?.layer?.id === POI_CLUSTER_LAYER_ID,
           );
+          if (clusterFeature) {
+            const source = map.getSource?.(POI_SOURCE_ID);
+            const clusterId = Number(
+              clusterFeature?.properties?.cluster_id,
+            );
+            if (
+              source?.getClusterExpansionZoom &&
+              Number.isFinite(clusterId)
+            ) {
+              Promise.resolve(
+                source.getClusterExpansionZoom(clusterId),
+              )
+                .then((targetZoom: number) => {
+                  map.easeTo({
+                    center: event.lngLat,
+                    zoom: Math.min(19, targetZoom),
+                    duration: 380,
+                  });
+                })
+                .catch(() => undefined);
+            }
+            return;
+          }
+
+          const poiFeature = renderedFeatures.find(
+            (feature: any) =>
+              feature?.layer?.id === POI_POINT_LAYER_ID,
+          );
+          if (poiFeature?.properties?.markerId) {
+            callbacksRef.current.onMarkerClick?.(
+              String(poiFeature.properties.markerId),
+            );
+            return;
+          }
+
+          const feature = chooseRenderedFeature(renderedFeatures);
           if (feature && callbacksRef.current.onFeatureClick) {
             const rendered: VectorRenderedFeature = {
               featureId: feature.id ?? null,
@@ -581,6 +732,32 @@ export function VectorMapSurface({
     source?.setData?.(linesGeoJson(lines));
   }, [lines, styleRevision]);
 
+  const poiSignature = useMemo(
+    () =>
+      markers
+        .filter((marker) => marker.kind === 'place')
+        .map((marker) =>
+          [
+            marker.id,
+            marker.latitude.toFixed(6),
+            marker.longitude.toFixed(6),
+            marker.color ?? '',
+            marker.label ?? '',
+          ].join(':'),
+        )
+        .join('|'),
+    [markers],
+  );
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded?.()) return;
+
+    ensurePoiLayers(map);
+    const source = map.getSource?.(POI_SOURCE_ID);
+    source?.setData?.(poiGeoJson(markers));
+  }, [markers, poiSignature, styleRevision]);
+
   const markerSignature = useMemo(
     () =>
       markers
@@ -607,7 +784,12 @@ export function VectorMapSurface({
     if (!map || !maplibregl) return;
 
     markerRefs.current.forEach((marker) => marker.remove?.());
-    markerRefs.current = markers.map((marker) => {
+    markerRefs.current = markers
+      .filter(
+        (marker) =>
+          marker.kind !== 'place' && marker.kind !== 'cluster',
+      )
+      .map((marker) => {
       const element = document.createElement('button');
       element.type = 'button';
       element.className = 'alsamos-vector-marker';
