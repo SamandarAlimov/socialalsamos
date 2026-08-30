@@ -1,11 +1,28 @@
 import { supabase } from '@/integrations/supabase/client';
 
+export interface TransitFeedHealth {
+  configured: boolean;
+  fresh: boolean | null;
+  ageSeconds: number | null;
+  fetchedAt: number | null;
+}
+
 export interface TransitRealtimeStatus {
   configured: boolean;
   staticGtfs?: boolean;
   arrivals?: boolean;
   vehicles?: boolean;
+  alerts?: boolean;
   routing?: boolean;
+  providerName?: string | null;
+  providerUrl?: string | null;
+  authority?: 'official' | 'operator' | 'aggregator' | 'unknown';
+  authoritative?: boolean;
+  health?: {
+    tripUpdates?: TransitFeedHealth;
+    vehicles?: TransitFeedHealth;
+    alerts?: TransitFeedHealth;
+  };
 }
 
 export interface TransitRealtimeArrival {
@@ -43,6 +60,15 @@ export interface TransitJourneyRoute {
   legs?: unknown[];
 }
 
+export interface TransitServiceAlert {
+  id: string;
+  title: string;
+  description?: string | null;
+  url?: string | null;
+  cause?: number | null;
+  effect?: number | null;
+}
+
 export interface TransitRealtimeVehicle {
   id: string;
   label?: string;
@@ -60,6 +86,10 @@ export interface TransitRealtimeVehicle {
 
 interface ArrivalsResponse {
   configured?: boolean;
+  providerName?: string | null;
+  providerUrl?: string | null;
+  authority?: 'official' | 'operator' | 'aggregator' | 'unknown';
+  authoritative?: boolean;
   realtime?: boolean;
   stale?: boolean;
   gtfsStopId?: string;
@@ -67,8 +97,25 @@ interface ArrivalsResponse {
   arrivals?: TransitRealtimeArrival[];
 }
 
+interface AlertsResponse {
+  configured?: boolean;
+  realtime?: boolean;
+  stale?: boolean;
+  gtfsStopId?: string | null;
+  matchedStopName?: string | null;
+  providerName?: string | null;
+  providerUrl?: string | null;
+  authority?: 'official' | 'operator' | 'aggregator' | 'unknown';
+  authoritative?: boolean;
+  alerts?: TransitServiceAlert[];
+}
+
 interface VehiclesResponse {
   configured?: boolean;
+  providerName?: string | null;
+  providerUrl?: string | null;
+  authority?: 'official' | 'operator' | 'aggregator' | 'unknown';
+  authoritative?: boolean;
   realtime?: boolean;
   stale?: boolean;
   vehicles?: TransitRealtimeVehicle[];
@@ -99,6 +146,21 @@ export async function fetchTransitArrivals(input: {
   return await invokeTransit<ArrivalsResponse>({
     action: 'arrivals',
     stopId: input.stopId,
+    latitude: input.latitude,
+    longitude: input.longitude,
+  });
+}
+
+export async function fetchTransitAlerts(input: {
+  stopId?: string;
+  gtfsStopId?: string | null;
+  latitude: number;
+  longitude: number;
+}): Promise<AlertsResponse | null> {
+  return await invokeTransit<AlertsResponse>({
+    action: 'alerts',
+    stopId: input.stopId,
+    gtfsStopId: input.gtfsStopId,
     latitude: input.latitude,
     longitude: input.longitude,
   });
