@@ -181,11 +181,14 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
           type: 'chat',
           visibility: 'public',
         });
-        await onSend(
+        const sent = await onSend(
           uploaded.storageUrl || uploaded.url,
           Math.max(1, seconds),
           recordMode === 'video' ? 'video' : 'audio'
         );
+        if (sent === null) {
+          throw new Error('Xabar serverga yozilmadi');
+        }
         resetAll();
       } catch (error) {
         console.error('Media message upload failed:', error);
