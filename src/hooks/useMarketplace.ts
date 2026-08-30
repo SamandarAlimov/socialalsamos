@@ -1060,6 +1060,14 @@ export function useProductActions() {
     return data;
   };
 
+  const checkProductVariantsReady = async () => {
+    const { error } = await db
+      .from('product_variants')
+      .select('id')
+      .limit(1);
+    return !error;
+  };
+
   const createProductVariants = async (
     productId: string,
     variants: Array<{
@@ -1127,6 +1135,7 @@ export function useProductActions() {
     registerView,
     createSeller,
     createProduct,
+    checkProductVariantsReady,
     createProductVariants,
     updateProduct,
     deleteProduct,
