@@ -7,10 +7,10 @@ import {
   Globe,
   ImagePlus,
   MapPin,
+  MessageCircle,
   Navigation,
   PersonStanding,
   Phone,
-  Send,
   Share2,
   ShoppingBag,
   Star,
@@ -29,6 +29,7 @@ import { toast } from 'sonner';
 interface PlaceDetailsCardProps {
   place: MapPlace;
   saved?: boolean;
+  highContrast?: boolean;
   onClose: () => void;
   onDirections: (place: MapPlace) => void;
   onSendToChat: (place: MapPlace) => void;
@@ -43,35 +44,62 @@ type TabId = 'overview' | 'reviews' | 'details';
 const TABS: { id: TabId; label: string }[] = [
   { id: 'overview', label: 'Umumiy' },
   { id: 'reviews', label: 'Izohlar' },
-  { id: 'details', label: "Ma'lumot" },
+  { id: 'details', label: 'Tafsilotlar' },
 ];
 
-function Row({
+function InfoRow({
   icon,
+  title,
   children,
+  highContrast,
   onClick,
 }: {
   icon: React.ReactNode;
+  title: string;
   children: React.ReactNode;
+  highContrast?: boolean;
   onClick?: () => void;
 }) {
   return (
-    <div
-      className={cn(
-        'flex items-start gap-3 py-2 text-sm',
-        onClick && 'cursor-pointer hover:text-primary',
-      )}
+    <button
+      type="button"
+      disabled={!onClick}
       onClick={onClick}
+      className={cn(
+        'flex w-full items-start gap-3 rounded-2xl px-3 py-2.5 text-left transition',
+        highContrast
+          ? 'bg-white/[0.055] hover:bg-white/[0.09]'
+          : 'bg-muted/35 hover:bg-muted/60',
+        !onClick && 'cursor-default',
+      )}
     >
-      <span className="mt-0.5 text-muted-foreground">{icon}</span>
-      <div className="min-w-0 flex-1">{children}</div>
-    </div>
+      <span
+        className={cn(
+          'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl',
+          highContrast ? 'bg-white/8 text-white/70' : 'bg-background text-muted-foreground',
+        )}
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span
+          className={cn(
+            'block text-[11px] font-semibold uppercase tracking-wide',
+            highContrast ? 'text-white/45' : 'text-muted-foreground',
+          )}
+        >
+          {title}
+        </span>
+        <span className="mt-0.5 block min-w-0 text-sm font-medium">{children}</span>
+      </span>
+    </button>
   );
 }
 
 export function PlaceDetailsCard({
   place,
   saved,
+  highContrast = false,
   onClose,
   onDirections,
   onSendToChat,
@@ -97,149 +125,258 @@ export function PlaceDetailsCard({
 
   const { summary } = usePlaceReviews(placeRef);
   const heroImage = typeof place.tags?.image === 'string' ? place.tags.image : null;
+  const displayAddress =
+    place.address || place.latitude.toFixed(5) + ', ' + place.longitude.toFixed(5);
 
   const copyAddress = async () => {
-    const text = place.address || place.latitude.toFixed(5) + ', ' + place.longitude.toFixed(5);
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(displayAddress);
       toast.success('Manzil nusxalandi');
     } catch {
       toast.error('Nusxalanmadi');
     }
   };
 
+  const secondaryButton = highContrast
+    ? 'border-white/12 bg-white/[0.055] text-white/82 hover:bg-white/[0.1] hover:text-white'
+    : 'border-border/60 bg-background/65 text-foreground hover:bg-muted/60';
+
   return (
-    <div className={cn('flex flex-col overflow-hidden bg-background', className)}>
-      <div className="relative">
+    <div
+      className={cn(
+        'flex min-h-0 flex-col overflow-hidden',
+        highContrast ? 'map-imagery-card bg-slate-950/90 text-white' : 'bg-background text-foreground',
+        className,
+      )}
+    >
+      <div className="relative shrink-0 overflow-hidden">
         {heroImage ? (
-          <img src={heroImage} alt={place.name} className="h-36 w-full object-cover" />
+          <>
+            <img src={heroImage} alt={place.name} className="h-40 w-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/5 to-black/20" />
+          </>
         ) : (
           <div
-            className="flex h-24 w-full items-center justify-center"
-            style={{ backgroundColor: ui.color + '1a' }}
+            className="relative flex h-28 w-full items-center justify-center overflow-hidden"
+            style={{
+              background:
+                highContrast
+                  ? `linear-gradient(135deg, ${ui.color}55, rgba(15,23,42,.82) 72%)`
+                  : `linear-gradient(135deg, ${ui.color}30, ${ui.color}0d 72%)`,
+            }}
           >
-            <ui.Icon className="h-9 w-9" style={{ color: ui.color }} />
+            <div
+              className="absolute -right-10 -top-12 h-36 w-36 rounded-full blur-2xl"
+              style={{ backgroundColor: ui.color + '35' }}
+            />
+            <span
+              className={cn(
+                'relative flex h-16 w-16 items-center justify-center rounded-[22px] border shadow-xl backdrop-blur',
+                highContrast ? 'border-white/15 bg-white/10' : 'border-white/70 bg-background/75',
+              )}
+            >
+              <ui.Icon className="h-8 w-8" style={{ color: ui.color }} />
+            </span>
           </div>
         )}
+
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm"
+          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-white shadow-lg backdrop-blur transition hover:bg-black/60"
           aria-label="Yopish"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="px-4 pt-3">
-        <h2 className="text-lg font-semibold leading-tight">{place.name}</h2>
-        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-          <span className="font-medium" style={{ color: ui.color }}>
+      <div className="shrink-0 px-4 pb-3 pt-3.5">
+        <div className="flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[20px] font-extrabold leading-tight tracking-tight">
+              {place.name || ui.label}
+            </h2>
+            <p
+              className={cn(
+                'mt-1 line-clamp-2 text-xs leading-relaxed',
+                highContrast ? 'text-white/58' : 'text-muted-foreground',
+              )}
+            >
+              {displayAddress}
+            </p>
+          </div>
+
+          <span
+            className={cn(
+              'shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold',
+              highContrast ? 'bg-white/8' : 'bg-muted/55',
+            )}
+            style={{ color: ui.color }}
+          >
             {place.categoryLabel || ui.label}
           </span>
+        </div>
+
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
           {summary.total > 0 && (
-            <span className="flex items-center gap-1 font-medium text-amber-500">
+            <span
+              className={cn(
+                'flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold',
+                highContrast ? 'bg-amber-400/12 text-amber-300' : 'bg-amber-500/10 text-amber-600',
+              )}
+            >
               <Star className="h-3.5 w-3.5 fill-current" />
               {summary.average.toFixed(1)}
-              <span className="text-muted-foreground">({summary.total})</span>
+              <span className={highContrast ? 'text-white/45' : 'text-muted-foreground'}>
+                ({summary.total})
+              </span>
             </span>
           )}
+
           {open !== null && (
-            <span className={open ? 'font-medium text-emerald-600' : 'font-medium text-destructive'}>
+            <span
+              className={cn(
+                'rounded-full px-2 py-1 text-[11px] font-semibold',
+                open
+                  ? highContrast
+                    ? 'bg-emerald-400/12 text-emerald-300'
+                    : 'bg-emerald-500/10 text-emerald-600'
+                  : highContrast
+                    ? 'bg-red-400/12 text-red-300'
+                    : 'bg-destructive/10 text-destructive',
+              )}
+            >
               {open ? 'Ochiq' : 'Yopiq'}
             </span>
           )}
-          {place.distanceM != null && <span>{formatDistance(place.distanceM)}</span>}
+
+          {place.distanceM != null && (
+            <span
+              className={cn(
+                'rounded-full px-2 py-1 text-[11px] font-semibold',
+                highContrast ? 'bg-white/8 text-white/65' : 'bg-muted/55 text-muted-foreground',
+              )}
+            >
+              {formatDistance(place.distanceM)}
+            </span>
+          )}
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className="mt-3 grid grid-cols-[1.7fr_repeat(3,1fr)] gap-2">
           <button
             type="button"
             onClick={() => onDirections(place)}
-            className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-3 text-sm font-semibold text-primary-foreground"
+            className="flex h-11 items-center justify-center gap-2 rounded-2xl bg-primary px-3 text-sm font-bold text-primary-foreground shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
           >
             <Navigation className="h-4 w-4" />
             Marshrut
           </button>
+
           <button
             type="button"
             onClick={() => onSendToChat(place)}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/70 text-muted-foreground hover:text-foreground"
+            className={cn('flex h-11 flex-col items-center justify-center rounded-2xl border text-[10px] font-semibold transition', secondaryButton)}
             aria-label="Chatga yuborish"
           >
-            <Send className="h-4 w-4" />
+            <MessageCircle className="mb-0.5 h-4 w-4" />
+            Chat
           </button>
+
           <button
             type="button"
             onClick={() => onToggleSave(place)}
             className={cn(
-              'flex h-10 w-10 items-center justify-center rounded-xl border border-border/70',
-              saved ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
+              'flex h-11 flex-col items-center justify-center rounded-2xl border text-[10px] font-semibold transition',
+              secondaryButton,
+              saved && (highContrast ? 'border-primary/50 text-primary' : 'text-primary'),
             )}
             aria-label="Saqlash"
           >
-            {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
+            {saved ? <BookmarkCheck className="mb-0.5 h-4 w-4" /> : <Bookmark className="mb-0.5 h-4 w-4" />}
+            {saved ? 'Saqlandi' : 'Saqlash'}
           </button>
+
           <button
             type="button"
             onClick={() => onShare(place)}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/70 text-muted-foreground hover:text-foreground"
+            className={cn('flex h-11 flex-col items-center justify-center rounded-2xl border text-[10px] font-semibold transition', secondaryButton)}
             aria-label="Ulashish"
           >
-            <Share2 className="h-4 w-4" />
+            <Share2 className="mb-0.5 h-4 w-4" />
+            Ulashish
           </button>
         </div>
       </div>
 
-      <div className="mt-3 flex border-b border-border/60 px-4">
+      <div
+        className={cn(
+          'flex shrink-0 border-b px-3',
+          highContrast ? 'border-white/10 bg-black/10' : 'border-border/50 bg-background/70',
+        )}
+      >
         {TABS.map((item) => (
           <button
             key={item.id}
             type="button"
             onClick={() => setTab(item.id)}
             className={cn(
-              'relative flex-1 pb-2 text-sm font-medium transition-colors',
-              tab === item.id ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+              'relative flex-1 py-2.5 text-xs font-semibold transition-colors',
+              tab === item.id
+                ? highContrast
+                  ? 'text-white'
+                  : 'text-foreground'
+                : highContrast
+                  ? 'text-white/45 hover:text-white/80'
+                  : 'text-muted-foreground hover:text-foreground',
             )}
           >
             {item.label}
             {tab === item.id && (
-              <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary" />
+              <span className="absolute inset-x-4 bottom-0 h-0.5 rounded-full bg-primary" />
             )}
           </button>
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-3">
+      <div className="map-panel-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-3.5">
         {tab === 'overview' && (
           <div className="space-y-3">
-            <div className="divide-y divide-border/50">
-              {place.address && (
-                <Row icon={<MapPin className="h-4 w-4" />} onClick={copyAddress}>
-                  <p>{place.address}</p>
-                  <p className="text-xs text-muted-foreground">Nusxalash uchun bosing</p>
-                </Row>
-              )}
+            <div className="space-y-2">
+              <InfoRow
+                title="Manzil"
+                icon={<MapPin className="h-4 w-4" />}
+                highContrast={highContrast}
+                onClick={copyAddress}
+              >
+                <span className="line-clamp-2">{displayAddress}</span>
+              </InfoRow>
+
               {place.openingHours && (
-                <Row icon={<Clock className="h-4 w-4" />}>
-                  <p className="whitespace-pre-wrap">{place.openingHours}</p>
-                </Row>
+                <InfoRow title="Ish vaqti" icon={<Clock className="h-4 w-4" />} highContrast={highContrast}>
+                  <span className="whitespace-pre-wrap">{place.openingHours}</span>
+                </InfoRow>
               )}
+
               {place.phone && (
-                <Row
+                <InfoRow
+                  title="Telefon"
                   icon={<Phone className="h-4 w-4" />}
+                  highContrast={highContrast}
                   onClick={() => window.open('tel:' + place.phone, '_self')}
                 >
-                  <p>{place.phone}</p>
-                </Row>
+                  {place.phone}
+                </InfoRow>
               )}
+
               {place.website && (
-                <Row
+                <InfoRow
+                  title="Veb-sayt"
                   icon={<Globe className="h-4 w-4" />}
+                  highContrast={highContrast}
                   onClick={() => window.open(place.website as string, '_blank', 'noopener')}
                 >
-                  <p className="truncate">{place.website}</p>
-                </Row>
+                  <span className="block truncate">{place.website}</span>
+                </InfoRow>
               )}
             </div>
 
@@ -249,21 +386,27 @@ export function PlaceDetailsCard({
               areaName={place.address}
             />
 
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {onCreatePost && (
                 <button
                   type="button"
                   onClick={() => onCreatePost(place)}
-                  className="flex h-9 items-center gap-1.5 rounded-lg border border-border/70 px-3 text-sm"
+                  className={cn(
+                    'flex min-h-10 items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition',
+                    secondaryButton,
+                  )}
                 >
                   <ImagePlus className="h-4 w-4" />
-                  Shu joy haqida post
+                  Post yaratish
                 </button>
               )}
               <button
                 type="button"
                 onClick={copyAddress}
-                className="flex h-9 items-center gap-1.5 rounded-lg border border-border/70 px-3 text-sm"
+                className={cn(
+                  'flex min-h-10 items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition',
+                  secondaryButton,
+                )}
               >
                 <Copy className="h-4 w-4" />
                 Manzilni nusxalash
@@ -275,35 +418,28 @@ export function PlaceDetailsCard({
         {tab === 'reviews' && <PlaceReviews place={placeRef} />}
 
         {tab === 'details' && (
-          <div className="divide-y divide-border/50">
+          <div className="space-y-2">
             {place.brand && (
-              <Row icon={<ShoppingBag className="h-4 w-4" />}>
-                <p className="text-xs text-muted-foreground">Brend</p>
-                <p>{place.brand}</p>
-              </Row>
+              <InfoRow title="Brend" icon={<ShoppingBag className="h-4 w-4" />} highContrast={highContrast}>
+                {place.brand}
+              </InfoRow>
             )}
             {place.cuisine && (
-              <Row icon={<ui.Icon className="h-4 w-4" />}>
-                <p className="text-xs text-muted-foreground">Taomlar</p>
-                <p>{place.cuisine}</p>
-              </Row>
+              <InfoRow title="Taomlar" icon={<ui.Icon className="h-4 w-4" />} highContrast={highContrast}>
+                {place.cuisine}
+              </InfoRow>
             )}
             {place.wheelchair && (
-              <Row icon={<PersonStanding className="h-4 w-4" />}>
-                <p className="text-xs text-muted-foreground">Nogironlar aravachasi</p>
-                <p>{place.wheelchair === 'yes' ? 'Mavjud' : place.wheelchair}</p>
-              </Row>
+              <InfoRow title="Kirish imkoniyati" icon={<PersonStanding className="h-4 w-4" />} highContrast={highContrast}>
+                {place.wheelchair === 'yes' ? 'Nogironlar aravachasi uchun mos' : place.wheelchair}
+              </InfoRow>
             )}
-            <Row icon={<MapPin className="h-4 w-4" />}>
-              <p className="text-xs text-muted-foreground">Koordinata</p>
-              <p>
-                {place.latitude.toFixed(5)}, {place.longitude.toFixed(5)}
-              </p>
-            </Row>
-            <Row icon={<Globe className="h-4 w-4" />}>
-              <p className="text-xs text-muted-foreground">Manba</p>
-              <p className="uppercase">{place.source}</p>
-            </Row>
+            <InfoRow title="Koordinata" icon={<MapPin className="h-4 w-4" />} highContrast={highContrast}>
+              {place.latitude.toFixed(5)}, {place.longitude.toFixed(5)}
+            </InfoRow>
+            <InfoRow title="Ma’lumot manbasi" icon={<Globe className="h-4 w-4" />} highContrast={highContrast}>
+              <span className="uppercase">{place.source}</span>
+            </InfoRow>
           </div>
         )}
       </div>
