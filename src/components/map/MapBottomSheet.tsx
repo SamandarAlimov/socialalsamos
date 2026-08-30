@@ -139,8 +139,8 @@ export function MapBottomSheet({
   return (
     <div
       className={cn(
-        'absolute inset-x-0 bottom-0 z-[1150] flex flex-col overflow-hidden rounded-t-[28px] border-t border-border/50 bg-background/92 shadow-2xl backdrop-blur-2xl transition-[height] duration-300 ease-out',
-        'md:inset-y-3 md:left-3 md:right-auto md:h-auto md:w-[376px] md:rounded-[24px] md:border md:border-border/45 md:bg-background/82 md:shadow-2xl md:ring-1 md:ring-white/10',
+        'absolute inset-x-0 bottom-0 z-[1150] flex min-h-0 flex-col overflow-hidden rounded-t-[28px] border-t border-border/50 bg-background/92 shadow-2xl backdrop-blur-2xl transition-[height] duration-300 ease-out',
+        'md:inset-y-3 md:left-3 md:right-auto md:h-auto md:min-h-0 md:w-[376px] md:rounded-[24px] md:border md:border-border/45 md:bg-background/82 md:shadow-2xl md:ring-1 md:ring-white/10',
         dragHeight != null && 'transition-none',
         className,
       )}
@@ -158,7 +158,7 @@ export function MapBottomSheet({
       >
         <span className="h-1.5 w-11 rounded-full bg-muted-foreground/35" />
       </button>
-      <div className="min-h-0 flex-1">{children}</div>
+      <div className="min-h-0 flex-1 overflow-hidden overscroll-contain">{children}</div>
     </div>
   );
 }
