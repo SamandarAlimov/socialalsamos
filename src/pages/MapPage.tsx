@@ -57,6 +57,7 @@ import { SendPlaceToChatDialog } from '@/components/map/SendPlaceToChatDialog';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { MapBottomSheet, type MapSheetSnap } from '@/components/map/MapBottomSheet';
+import { MapOverviewPanel } from '@/components/map/MapOverviewPanel';
 
 const DEFAULT_CENTER = { latitude: 41.311081, longitude: 69.240562 };
 
@@ -277,6 +278,31 @@ export default function MapPage() {
       { enableHighAccuracy: true, timeout: 12000 },
     );
   }, []);
+
+  const centerOnMe = useCallback(() => {
+    if (me) {
+      setCenter({ ...me });
+      setMovedCenter(null);
+      return;
+    }
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      toast.error('Joylashuv bu qurilmada mavjud emas.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const point = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        };
+        setMe(point);
+        setCenter(point);
+        setMovedCenter(null);
+      },
+      () => toast.error('Joylashuvni aniqlab bo‘lmadi. Ruxsatni tekshiring.'),
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 15000 },
+    );
+  }, [me]);
 
   // Boshqa sahifadan kelgan manzil: /map?destLat=..&destLng=..&destName=..
   useEffect(() => {
@@ -734,8 +760,38 @@ export default function MapPage() {
           }
           className="border-b border-border/60 px-2"
         />
-        <div className="flex-1 overflow-y-auto">
-          {isBusStopFilter ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {!query.trim() && !category ? (
+            <MapOverviewPanel
+              savedPlaces={saved.places}
+              visits={visits.visits}
+              hasLocation={Boolean(me)}
+              onCenter={centerOnMe}
+              onCategory={(id) => {
+                setCategory(id);
+                setQuery('');
+                setPanel('search');
+                setSnap('half');
+              }}
+              onSaved={() => {
+                setPanel('saved');
+                setSnap('half');
+                void saved.reload();
+              }}
+              onHistory={() => {
+                setPanel('history');
+                setSnap('half');
+                void visits.reload();
+              }}
+              onStops={() => {
+                setCategory('bus_stop');
+                setOverlays((prev) => (prev.includes('stops') ? prev : [...prev, 'stops']));
+                setPanel('search');
+                setSnap('half');
+              }}
+              onLayers={() => setLayerOpen(true)}
+            />
+          ) : isBusStopFilter ? (
             <BusStopResultsList
               stops={nearbyStops.stops}
               loading={nearbyStops.loading}
@@ -810,15 +866,17 @@ export default function MapPage() {
     query,
     me,
     transitRoutingAvailable,
+    centerOnMe,
   ]);
 
   return (
-    <div className={cn('relative h-[100dvh] w-full overflow-hidden md:h-screen', layer.dark && 'dark')}>
+    <div className={cn('relative h-full min-h-0 w-full overflow-hidden', layer.dark && 'dark')}>
       <MapContainer
         ref={mapRef}
         center={[center.latitude, center.longitude]}
         zoom={14}
         zoomControl={false}
+        attributionControl={false}
         preferCanvas
         className="h-full w-full"
       >
@@ -1051,6 +1109,16 @@ export default function MapPage() {
           <Bookmark className="h-5 w-5" />
         </button>
       </div>
+
+      <a
+        href="https://www.openstreetmap.org/copyright"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="absolute right-2 z-[1060] rounded bg-background/75 px-1.5 py-0.5 text-[9px] leading-none text-muted-foreground/80 backdrop-blur hover:text-foreground md:bottom-1"
+        style={isMobile ? { bottom: sheetHeightPx + 4 } : undefined}
+      >
+        © OpenStreetMap
+      </a>
 
       {/* Pastdagi suzuvchi panel */}
       <MapBottomSheet snap={snap} onSnapChange={setSnap} onHeightChange={setSheetHeightPx}>
