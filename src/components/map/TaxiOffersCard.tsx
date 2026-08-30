@@ -11,6 +11,7 @@ import {
 import {
   buildTaxiOffersWithProviders,
   formatSum,
+  type TaxiOffer,
   type TaxiPoint,
 } from '@/lib/taxiProviders';
 import { cn } from '@/lib/utils';
@@ -64,7 +65,7 @@ export function TaxiOffersCard({
     () =>
       offers
         .filter((offer) => offer.estimate > 0)
-        .reduce<(typeof offers)[number] | null>(
+        .reduce<TaxiOffer | null>(
           (best, offer) =>
             !best || offer.estimate < best.estimate ? offer : best,
           null,
