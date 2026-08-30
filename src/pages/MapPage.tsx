@@ -1073,7 +1073,16 @@ export default function MapPage() {
       try {
         const resolved = await resolveMapClickPlace(point, zoom);
         if (resolved) {
-          applyRouteEndpoint(withUserDistance(resolved), target);
+          // Xaritadan tanlashda user bosgan koordinata authoritative bo'ladi.
+          // Reverse/POI resolver faqat nom, manzil va metadata bilan boyitadi.
+          applyRouteEndpoint(
+            withUserDistance({
+              ...resolved,
+              latitude: point.latitude,
+              longitude: point.longitude,
+            }),
+            target,
+          );
         }
       } catch {
         // Provisional coordinate marshrut uchun yetarli.
