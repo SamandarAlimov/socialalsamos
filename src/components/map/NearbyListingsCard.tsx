@@ -9,6 +9,7 @@ interface NearbyListingsCardProps {
   longitude: number;
   areaName?: string | null;
   radiusKm?: number;
+  highContrast?: boolean;
   className?: string;
 }
 
@@ -21,6 +22,7 @@ export function NearbyListingsCard({
   longitude,
   areaName,
   radiusKm = 5,
+  highContrast = false,
   className,
 }: NearbyListingsCardProps) {
   const navigate = useNavigate();
@@ -33,7 +35,7 @@ export function NearbyListingsCard({
   if (!loading && !listings.length) return null;
 
   return (
-    <div className={cn('rounded-xl border border-border/70 p-3', className)}>
+    <div className={cn('rounded-2xl border p-3', highContrast ? 'border-white/10 bg-white/[0.045]' : 'border-border/60 bg-background/55', className)}>
       <div className="mb-2 flex items-center gap-2">
         <ShoppingBag className="h-4 w-4 text-primary" />
         <p className="text-sm font-semibold">Yaqin e\u2019lonlar</p>
@@ -66,7 +68,7 @@ export function NearbyListingsCard({
             onClick={() => navigate('/marketplace?product=' + listing.id)}
             className="w-36 shrink-0 text-left"
           >
-            <div className="flex h-24 w-full items-center justify-center overflow-hidden rounded-lg bg-muted">
+            <div className={cn('flex h-24 w-full items-center justify-center overflow-hidden rounded-xl', highContrast ? 'bg-white/[0.07]' : 'bg-muted')}>
               {listing.image ? (
                 <img
                   src={listing.image}
