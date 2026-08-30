@@ -28,7 +28,7 @@ import { useToast } from '@/hooks/use-toast';
 import { formatCompactCount, parseMusicFromContent } from '@/lib/postMarkers';
 import { usePostMedia } from '@/hooks/usePostMedia';
 import { MediaStickerOverlay } from '@/components/stickers/MediaStickerOverlay';
-import { PostCollaboratorsCard } from '@/components/PostCollaboratorsCard';
+import { PostCollaboratorByline } from '@/components/PostCollaboratorByline';
 import type { WithEditState } from '@/lib/stickerPlacements';
 
 interface PostViewModalProps {
@@ -263,6 +263,11 @@ export function PostViewModal({
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold leading-tight">
                       {profile.display_name || profile.username}
+                      <PostCollaboratorByline
+                        postId={post.id}
+                        isOwner={isOwnProfile}
+                        className="ml-1 text-sm"
+                      />
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
                       {profile.username ? `@${profile.username} \u00b7 ` : ''}
@@ -300,11 +305,6 @@ export function PostViewModal({
                 )}
 
                 <div className="px-4 py-3">
-                  <PostCollaboratorsCard
-                    postId={post.id}
-                    isOwner={isOwnProfile}
-                    className="mb-3"
-                  />
                   <CommentsSection postId={post.id} />
                 </div>
               </div>
