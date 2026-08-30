@@ -13,6 +13,13 @@ import {
   type TransitRoute,
   type TransitStop,
 } from '@/lib/transit';
+import {
+  fetchTransitArrivals,
+  fetchTransitRealtimeStatus,
+  fetchTransitVehicles,
+  type TransitRealtimeStatus,
+  type TransitRealtimeVehicle,
+} from '@/lib/transitRealtime';
 
 interface Center {
   latitude: number;
@@ -127,46 +134,70 @@ export function useNearbyStops(center?: Center | null, radiusM = 1500) {
 }
 
 /** Bekatga keladigan marshrutlar + real vaqt (mavjud bo'lsa). */
-export function useStopRoutes(stopId?: string | null) {
+export function useStopRoutes(stop?: TransitStop | null) {
   const [routes, setRoutes] = useState<TransitRoute[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [realtimeConfigured, setRealtimeConfigured] = useState(false);
+  const [realtimeFresh, setRealtimeFresh] = useState(false);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
-      if (!stopId) {
+      if (!stop?.id) {
         setRoutes([]);
+        setRealtimeFresh(false);
         return;
       }
       setLoading(true);
       setError(null);
       try {
-        const base = await fetchStopRoutes(stopId, { signal });
-        const realtime = await fetchRealtimeArrivals(stopId, signal);
+        const base = await fetchStopRoutes(stop.id, { signal });
+
+        // Asosiy realtime manba: server-side GTFS gateway.
+        const edgeRealtime = await fetchTransitArrivals({
+          stopId: stop.id,
+          latitude: stop.latitude,
+          longitude: stop.longitude,
+        });
+        setRealtimeConfigured(Boolean(edgeRealtime?.configured));
+        setRealtimeFresh(Boolean(edgeRealtime?.realtime && !edgeRealtime?.stale));
+
+        const byRef = new Map<string, number[]>();
+        for (const arrival of edgeRealtime?.arrivals ?? []) {
+          if (!arrival.ref || !Number.isFinite(arrival.minutes)) continue;
+          const list = byRef.get(arrival.ref) ?? [];
+          list.push(arrival.minutes);
+          byRef.set(arrival.ref, list.sort((a, b) => a - b));
+        }
+
+        // Eski normalized VITE adapteri backward-compatible fallback sifatida qoladi.
+        const legacyRealtime =
+          byRef.size === 0 ? await fetchRealtimeArrivals(stop.id, signal) : null;
+
         setRoutes(
-          realtime
-            ? base.map((route) =>
-                realtime[route.ref]?.length
-                  ? { ...route, nextArrivalsMin: realtime[route.ref], realtime: true }
-                  : route,
-              )
-            : base,
+          base.map((route) => {
+            const arrivals = byRef.get(route.ref) ?? legacyRealtime?.[route.ref] ?? [];
+            return arrivals.length
+              ? { ...route, nextArrivalsMin: arrivals, realtime: true }
+              : route;
+          }),
         );
       } catch (err) {
         if ((err as Error).name === 'AbortError') return;
         setError('Marshrutlar yuklanmadi.');
         setRoutes([]);
+        setRealtimeFresh(false);
       } finally {
         setLoading(false);
       }
     },
-    [stopId],
+    [stop?.id, stop?.latitude, stop?.longitude],
   );
 
   useEffect(() => {
     const controller = new AbortController();
     void load(controller.signal);
-    // Har 30 sekundda yangilanadi - kelish vaqtlari "tirik" bo'lib turadi.
+    // GTFS-RT best practice bilan mos: 30 sekundda yangilash.
     const timer = setInterval(() => void load(), 30000);
     return () => {
       controller.abort();
@@ -174,5 +205,65 @@ export function useStopRoutes(stopId?: string | null) {
     };
   }, [load]);
 
-  return { routes, loading, error, reload: () => void load() };
+  return {
+    routes,
+    loading,
+    error,
+    realtimeConfigured,
+    realtimeFresh,
+    reload: () => void load(),
+  };
+}
+
+export function useTransitRealtimeStatus() {
+  const [status, setStatus] = useState<TransitRealtimeStatus>({ configured: false });
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchTransitRealtimeStatus().then((next) => {
+      if (!cancelled) setStatus(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return status;
+}
+
+export function useTransitVehicles(
+  bounds?: { south: number; west: number; north: number; east: number } | null,
+  enabled = false,
+) {
+  const [vehicles, setVehicles] = useState<TransitRealtimeVehicle[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [realtime, setRealtime] = useState(false);
+
+  useEffect(() => {
+    if (!enabled || !bounds) {
+      setVehicles([]);
+      setRealtime(false);
+      return;
+    }
+
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      const result = await fetchTransitVehicles(bounds);
+      if (!cancelled) {
+        setVehicles(result?.vehicles ?? []);
+        setRealtime(Boolean(result?.realtime && !result?.stale));
+        setLoading(false);
+      }
+    };
+
+    void load();
+    const timer = setInterval(() => void load(), 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [enabled, bounds?.south, bounds?.west, bounds?.north, bounds?.east]);
+
+  return { vehicles, loading, realtime };
 }
