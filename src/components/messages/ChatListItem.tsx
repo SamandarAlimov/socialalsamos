@@ -422,6 +422,10 @@ export function ChatListItem({
   // Faqat O'ZIMIZ yuborgan oxirgi xabar uchun ptichkalar ko'rsatiladi
   const isOwnLastMessage = Boolean(user?.id && lastMeta?.sender_id && lastMeta.sender_id === user.id);
   const lastMessageRead = Boolean(lastMeta?.is_read || lastMeta?.read_at || lastMeta?.seen);
+  const rawDraft = conversation.draft?.trim() || '';
+  const cleanedDraft = rawDraft ? cleanPreview(stripFormatting(rawDraft) || rawDraft).text : '';
+  const draftPreview = cleanedDraft || rawDraft.replace(/\s+/g, ' ').trim();
+  const hasDraft = draftPreview.length > 0;
 
   const myUsername = (
     (user as unknown as { user_metadata?: { username?: string } })?.user_metadata?.username || ''
@@ -751,7 +755,7 @@ export function ChatListItem({
               </div>
               <div className="flex items-center gap-1 flex-shrink-0 ml-2">
                 {/* Telegramdek: o'zimiz yuborgan oxirgi xabarda bitta/ikkita ptichka */}
-                {isOwnLastMessage && (
+                {isOwnLastMessage && !hasDraft && (
                   lastMessageRead ? (
                     <CheckCheck className="h-4 w-4 md:h-3.5 md:w-3.5 shrink-0 text-sky-500" />
                   ) : (
@@ -759,7 +763,10 @@ export function ChatListItem({
                   )
                 )}
                 <span className="text-sm md:text-xs text-muted-foreground">
-                  {conversation.last_message_at && formatTime(conversation.last_message_at)}
+                  {(hasDraft ? conversation.draft_updated_at : conversation.last_message_at) &&
+                    formatTime(
+                      (hasDraft ? conversation.draft_updated_at : conversation.last_message_at) as string
+                    )}
                 </span>
               </div>
             </div>
@@ -772,15 +779,27 @@ export function ChatListItem({
                   : 'text-muted-foreground'
               )}
               >
-                {(() => {
-                  const formatted = formatLastMessage(conversation.last_message, conversation.last_message_meta);
-                  return (
-                    <>
-                      {formatted.icon}
-                      <span className="truncate min-w-0 flex-1">{formatted.text}</span>
-                    </>
-                  );
-                })()}
+                {hasDraft ? (
+                  <>
+                    <span className="shrink-0 font-medium text-destructive">Qoralama:</span>
+                    <span className="truncate min-w-0 flex-1 text-muted-foreground">
+                      {draftPreview}
+                    </span>
+                  </>
+                ) : (
+                  (() => {
+                    const formatted = formatLastMessage(
+                      conversation.last_message,
+                      conversation.last_message_meta
+                    );
+                    return (
+                      <>
+                        {formatted.icon}
+                        <span className="truncate min-w-0 flex-1">{formatted.text}</span>
+                      </>
+                    );
+                  })()
+                )}
               </p>
 
               <div className="flex items-center gap-1.5 flex-shrink-0">
