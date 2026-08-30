@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Camera,
   ChevronDown,
+  Image as ImageIcon,
   ImagePlus,
   Loader2,
   Music2,
@@ -27,6 +28,7 @@ import type { PostMusicInput } from '@/lib/postMeta';
 import { supabase } from '@/integrations/supabase/client';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Slider } from '@/components/ui/slider';
 import {
   Select,
   SelectContent,
@@ -43,6 +45,7 @@ import {
   canRenderReelSequence,
   renderReelSequence,
 } from '@/lib/reelRender';
+import { captureVideoPoster } from '@/lib/mediaMetadata';
 
 interface CollaboratorProfile {
   id: string;
@@ -66,6 +69,12 @@ const VISIBILITIES: Array<{
   { id: 'friends', label: 'Do‘stlar' },
   { id: 'private', label: 'Faqat men' },
 ];
+
+function formatSeconds(value: number): string {
+  const total = Math.max(0, Math.round(value));
+  const minutes = Math.floor(total / 60);
+  return `${minutes}:${String(total % 60).padStart(2, '0')}`;
+}
 
 function draftMusicObject(
   input?: PostMusicInput | null,
@@ -112,6 +121,8 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
   const [isPosting, setIsPosting] = useState(false);
   const [isCombining, setIsCombining] = useState(false);
   const [combineProgress, setCombineProgress] = useState(0);
+  const [coverSecond, setCoverSecond] = useState(0);
+  const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
   const {
@@ -123,6 +134,7 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
     reorderAttachments,
     replaceAttachmentFile,
     replaceAllWithRenderedFile,
+    setEditState,
     markAttachmentsPublished,
     uploadAll,
   } = usePostAttachments({
@@ -146,6 +158,72 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
     () => attachments.find((item) => item.id === videoTargetId) ?? null,
     [attachments, videoTargetId],
   );
+
+  const totalDuration = useMemo(
+    () =>
+      attachments.reduce(
+        (sum, item) => sum + Math.max(0, item.durationSeconds ?? 0),
+        0,
+      ),
+    [attachments],
+  );
+
+  useEffect(() => {
+    if (totalDuration <= 0) {
+      setCoverSecond(0);
+      return;
+    }
+    setCoverSecond((current) =>
+      Math.max(0, Math.min(current, Math.max(0, totalDuration - 0.05))),
+    );
+  }, [totalDuration]);
+
+  useEffect(() => {
+    if (attachments.length === 0 || totalDuration <= 0) {
+      setCoverPreviewUrl(null);
+      return;
+    }
+
+    let cancelled = false;
+    let objectUrl: string | null = null;
+
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        let remaining = coverSecond;
+        let target = attachments[attachments.length - 1];
+        let localSecond = Math.max(0, target.durationSeconds ?? 0) * 0.5;
+
+        for (const clip of attachments) {
+          const duration = Math.max(0, clip.durationSeconds ?? 0);
+          if (remaining <= duration || clip === attachments[attachments.length - 1]) {
+            target = clip;
+            localSecond = Math.max(
+              0,
+              Math.min(
+                Math.max(0, duration - 0.05),
+                remaining,
+              ),
+            );
+            break;
+          }
+          remaining -= duration;
+        }
+
+        if (!target.previewUrl) return;
+        const blob = await captureVideoPoster(target.previewUrl, localSecond);
+        if (!blob || cancelled) return;
+
+        objectUrl = URL.createObjectURL(blob);
+        setCoverPreviewUrl(objectUrl);
+      })();
+    }, 160);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [attachments, coverSecond, totalDuration]);
 
   useEffect(() => {
     if (attachments.length === 0) {
@@ -308,6 +386,9 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
             clipCount: sourceClipCount,
             renderedAt: new Date().toISOString(),
           },
+          reelCover: {
+            second: coverSecond,
+          },
         });
 
         if (!collapsed) {
@@ -316,6 +397,16 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
         }
         setSelectedClipId(collapsed.id);
         setIsCombining(false);
+      }
+
+      if (attachments.length === 1) {
+        const only = attachments[0];
+        setEditState(only.id, {
+          ...(only.editState ?? {}),
+          reelCover: {
+            second: coverSecond,
+          },
+        });
       }
 
       const { media, failed } = await uploadAll();
@@ -362,6 +453,7 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
     caption,
     clearAttachments,
     collaborators,
+    coverSecond,
     createPost,
     isCombining,
     isPosting,
@@ -371,6 +463,7 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
     navigate,
     onDraftStateChange,
     replaceAllWithRenderedFile,
+    setEditState,
     uploadAll,
     visibility,
   ]);
@@ -692,6 +785,37 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
               </span>
             </button>
           </div>
+
+          {attachments.length > 0 && totalDuration > 0 && (
+            <div className="flex items-center gap-3 rounded-3xl border border-border/60 bg-card p-3 shadow-sm">
+              <div className="flex h-16 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted">
+                {coverPreviewUrl ? (
+                  <img
+                    src={coverPreviewUrl}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="mb-2 flex items-center justify-between text-xs">
+                  <span className="font-semibold">Muqova</span>
+                  <span className="text-muted-foreground">
+                    {formatSeconds(coverSecond)}
+                  </span>
+                </div>
+                <Slider
+                  value={[coverSecond]}
+                  min={0}
+                  max={Math.max(0.1, totalDuration - 0.05)}
+                  step={0.1}
+                  onValueChange={([value]) => setCoverSecond(value ?? 0)}
+                />
+              </div>
+            </div>
+          )}
 
           {(music || collaborators.length > 0) && (
             <div className="space-y-2 rounded-3xl border border-border/60 bg-card p-3 shadow-sm">
