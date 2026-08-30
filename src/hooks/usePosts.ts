@@ -13,6 +13,11 @@ import {
 } from '@/lib/postMeta';
 import { MAX_COLLABORATORS } from '@/lib/postComposer';
 import type { AlsamosRichTextDocument } from '@/lib/richTextDocument';
+import { appendLocationMarker } from '@/lib/postMarkers';
+import {
+  readStructuredPostSchemaCapability,
+  writeStructuredPostSchemaCapability,
+} from '@/lib/structuredPostSchema';
 import db from '@/lib/supabaseAny';
 
 export interface Post {
@@ -224,6 +229,7 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
       if (rawPosts.length > 0) {
         const hasPostKindColumn = Object.prototype.hasOwnProperty.call(rawPosts[0], 'post_kind');
         writeAtomicPublishCapability(hasPostKindColumn ? 'available' : 'missing');
+        writeStructuredPostSchemaCapability(hasPostKindColumn ? 'available' : 'missing');
       }
 
       const visiblePosts = rawPosts.filter((post) => post.post_kind !== 'story');
@@ -336,8 +342,9 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
       let rpcPostId: unknown = null;
       let publishError: unknown = null;
       const atomicCapability = readAtomicPublishCapability();
+      const structuredCapability = readStructuredPostSchemaCapability();
 
-      if (atomicCapability !== 'missing') {
+      if (atomicCapability !== 'missing' && structuredCapability !== 'missing') {
         const rpcResult = await (supabase as any).rpc(
           'publish_post_draft',
           { p_payload: payload },
@@ -366,25 +373,47 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
         );
 
         const publishedAt = isScheduled ? null : new Date().toISOString();
-        let insertResult = await db
-          .from('posts')
-          .insert({
-            user_id: user.id,
-            content,
-            media_urls: mediaUrls,
-            media_type: mediaType,
-            visibility,
-            post_kind: options.postKind ?? 'post',
-            status: isScheduled ? 'scheduled' : 'published',
-            scheduled_at: options.scheduledAt ?? null,
-            published_at: publishedAt,
-            formatted_content: options.formattedContent ?? null,
-            edit_state: options.editState ?? null,
-          })
-          .select('*')
-          .single();
+        const knownLegacySchema = readStructuredPostSchemaCapability() === 'missing';
+        const compatibilityContent =
+          knownLegacySchema && options.location
+            ? appendLocationMarker(content, options.location)
+            : content;
+
+        let insertResult = knownLegacySchema
+          ? await db
+              .from('posts')
+              .insert({
+                user_id: user.id,
+                content: compatibilityContent,
+                media_urls: mediaUrls,
+                media_type: mediaType,
+                visibility,
+              })
+              .select('*')
+              .single()
+          : await db
+              .from('posts')
+              .insert({
+                user_id: user.id,
+                content: compatibilityContent,
+                media_urls: mediaUrls,
+                media_type: mediaType,
+                visibility,
+                post_kind: options.postKind ?? 'post',
+                status: isScheduled ? 'scheduled' : 'published',
+                scheduled_at: options.scheduledAt ?? null,
+                published_at: publishedAt,
+                formatted_content: options.formattedContent ?? null,
+                edit_state: options.editState ?? null,
+              })
+              .select('*')
+              .single();
+
+        if (knownLegacySchema) usedMinimalSchema = true;
 
         if (insertResult.error && isSchemaCompatibilityError(insertResult.error)) {
+          writeStructuredPostSchemaCapability('missing');
+
           if (isScheduled) {
             throw new Error(
               'Rejalashtirilgan post uchun production Supabase migratsiyalarini yangilash kerak.',
@@ -392,11 +421,15 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
           }
 
           usedMinimalSchema = true;
+          const minimalContent = options.location
+            ? appendLocationMarker(content, options.location)
+            : content;
+
           insertResult = await db
             .from('posts')
             .insert({
               user_id: user.id,
-              content,
+              content: minimalContent,
               media_urls: mediaUrls,
               media_type: mediaType,
               visibility,
@@ -411,6 +444,7 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
 
         postId = String(insertResult.data.id);
         directPost = insertResult.data as Post;
+        if (usedMinimalSchema) writeStructuredPostSchemaCapability('missing');
 
         // Compatibility path keeps the post usable while the DB migration is
         // being deployed. Structured extras are best-effort and reported.
@@ -432,12 +466,24 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
           }
         }
 
-        if (options.location) {
+        if (options.location && readStructuredPostSchemaCapability() !== 'missing') {
           try {
             await savePostLocation(postId, options.location, user.id);
           } catch (metaError) {
-            console.warn('Compatibility publish: joylashuv saqlanmadi:', metaError);
-            metaErrors.push('joylashuv');
+            console.warn('Compatibility publish: joylashuv strukturali jadvalga saqlanmadi:', metaError);
+            writeStructuredPostSchemaCapability('missing');
+
+            const markerContent = appendLocationMarker(content, options.location);
+            const { error: markerError } = await db
+              .from('posts')
+              .update({ content: markerContent })
+              .eq('id', postId);
+
+            if (markerError) {
+              metaErrors.push('joylashuv');
+            } else if (directPost) {
+              directPost = { ...directPost, content: markerContent };
+            }
           }
         }
 
