@@ -10,6 +10,35 @@ interface ActiveShare {
 
 const activeShares = new Map<string, ActiveShare>();
 const MIN_UPDATE_INTERVAL_MS = 8_000;
+const LIVE_RESUME_SCHEMA_KEY = 'alsamos.live-location-resume-schema-missing-at';
+const LIVE_RESUME_RETRY_MS = 10 * 60 * 1000;
+
+function isMissingResumeRpc(error: unknown): boolean {
+  const code = String((error as { code?: string } | null)?.code ?? '');
+  const message = String((error as { message?: string } | null)?.message ?? '');
+  return (
+    code === 'PGRST202' ||
+    code === '42883' ||
+    /my_active_live_locations|schema cache|could not find the function|does not exist/i.test(message)
+  );
+}
+
+function resumeProbeSuppressed(): boolean {
+  try {
+    const at = Number(sessionStorage.getItem(LIVE_RESUME_SCHEMA_KEY) || '0');
+    return Number.isFinite(at) && at > 0 && Date.now() - at < LIVE_RESUME_RETRY_MS;
+  } catch {
+    return false;
+  }
+}
+
+function markResumeSchemaMissing() {
+  try {
+    sessionStorage.setItem(LIVE_RESUME_SCHEMA_KEY, String(Date.now()));
+  } catch {
+    // Optional optimization only.
+  }
+}
 
 function clearShare(postId: string) {
   const active = activeShares.get(postId);
@@ -96,7 +125,7 @@ export function startLiveLocationSharing(postId: string, liveUntil: string | nul
 }
 
 export async function resumeMyLiveLocationSharing() {
-  if (!('geolocation' in navigator)) return;
+  if (!('geolocation' in navigator) || resumeProbeSuppressed()) return;
 
   try {
     const { data, error } = await db.rpc('my_active_live_locations');
@@ -108,7 +137,12 @@ export async function resumeMyLiveLocationSharing() {
       }
     }
   } catch (error) {
-    // Migration hali deploy bo'lmagan bo'lishi mumkin; boshqa sahifalar buzilmaydi.
+    // Missing migration is a capability gap, not a runtime failure. Remember it
+    // for this tab so every route mount does not hammer PostgREST with 404s.
+    if (isMissingResumeRpc(error)) {
+      markResumeSchemaMissing();
+      return;
+    }
     console.warn('Aktiv jonli joylashuvlarni tiklab bo‘lmadi:', error);
   }
 }
