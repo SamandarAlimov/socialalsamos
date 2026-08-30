@@ -61,8 +61,17 @@ export default function ComposePage() {
 
   useEffect(() => {
     const next = searchParams.get('mode');
-    setMode(next === 'story' ? 'story' : 'post');
-  }, [searchParams]);
+    const nextMode: CreateMode = next === 'story' ? 'story' : 'post';
+
+    if (storyDraftActive && mode === 'story' && nextMode !== 'story') {
+      const params = new URLSearchParams(searchParams);
+      params.set('mode', 'story');
+      setSearchParams(params, { replace: true });
+      return;
+    }
+
+    setMode(nextMode);
+  }, [mode, searchParams, setSearchParams, storyDraftActive]);
 
   const meta = MODE_META[mode];
 
@@ -82,9 +91,17 @@ export default function ComposePage() {
         <div className="mx-auto flex h-[68px] w-full max-w-[1500px] items-center gap-3 px-3 sm:px-5 lg:px-8">
           <button
             type="button"
-            onClick={() => navigate(-1)}
+            onClick={() => {
+              if (!storyDraftActive) navigate(-1);
+            }}
+            disabled={storyDraftActive}
+            title={
+              storyDraftActive
+                ? 'Avval Story qoralamasini joylang yoki bekor qiling'
+                : 'Orqaga'
+            }
             aria-label="Orqaga"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-card text-muted-foreground shadow-sm transition hover:bg-muted hover:text-foreground active:scale-95"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-card text-muted-foreground shadow-sm transition hover:bg-muted hover:text-foreground active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
@@ -174,6 +191,12 @@ export default function ComposePage() {
               key={id}
               type="button"
               onClick={() => selectMode(id)}
+              disabled={storyDraftActive && mode === 'story' && id !== 'story'}
+              title={
+                storyDraftActive && mode === 'story' && id !== 'story'
+                  ? 'Avval Story qoralamasini joylang yoki bekor qiling'
+                  : undefined
+              }
               className={cn(
                 'flex h-11 min-w-28 items-center justify-center gap-2 rounded-xl px-4 text-sm transition',
                 mode === id
