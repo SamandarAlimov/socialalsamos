@@ -393,6 +393,9 @@ export default function MapPage() {
   const [params] = useSearchParams();
   const isMobile = useIsMobile();
   const mapRef = useRef<MapEngineController | null>(null);
+  const [mapEngine, setMapEngine] = useState<MapEngineId>(() =>
+    readPreferredMapEngine(params),
+  );
   const hasDestinationParam = params.has('destLat') && params.has('destLng');
   const restoredNavigation = useRef(
     hasDestinationParam ? null : readNavigationSession(),
