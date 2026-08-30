@@ -16,6 +16,9 @@ export interface MessageInsertArgs {
   mediaType?: string;
   replyToId?: string | null;
   clientMessageId?: string;
+  metadata?: Record<string, unknown>;
+  locationPayload?: Record<string, unknown>;
+  liveLocationExpiresAt?: string;
 }
 
 export function buildMessageInsertPayload({
@@ -26,6 +29,9 @@ export function buildMessageInsertPayload({
   mediaType,
   replyToId,
   clientMessageId,
+  metadata,
+  locationPayload,
+  liveLocationExpiresAt,
 }: MessageInsertArgs): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     conversation_id: conversationId,
@@ -38,6 +44,9 @@ export function buildMessageInsertPayload({
   // Oddiy xabar reply schema/cache holatiga umuman bog'lanmasin.
   if (replyToId) payload.reply_to_id = replyToId;
   if (clientMessageId) payload.client_message_id = clientMessageId;
+  if (metadata && Object.keys(metadata).length > 0) payload.metadata = metadata;
+  if (locationPayload) payload.location_payload = locationPayload;
+  if (liveLocationExpiresAt) payload.live_location_expires_at = liveLocationExpiresAt;
 
   return payload;
 }

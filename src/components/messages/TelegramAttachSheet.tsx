@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import {
+  BarChart3,
   BookOpen,
   Camera,
   Check,
@@ -16,7 +17,7 @@ import {
 import { cn } from '@/lib/utils';
 import { LocationShareButton } from './LocationShareButton';
 
-type AttachTab = 'gallery' | 'article' | 'location' | 'file';
+type AttachTab = 'gallery' | 'article' | 'location' | 'poll' | 'file';
 
 interface PickedFile {
   file: File;
@@ -34,7 +35,14 @@ interface TelegramAttachSheetProps {
     latitude: number;
     longitude: number;
     address?: string;
+    liveDurationSeconds?: number;
   }) => void;
+  onCreatePoll?: (poll: {
+    question: string;
+    options: string[];
+    multiple: boolean;
+    anonymous: boolean;
+  }) => void | Promise<void>;
   maxFileMb?: number;
 }
 
@@ -42,6 +50,7 @@ const TABS: Array<{ id: AttachTab; label: string; icon: typeof Images }> = [
   { id: 'gallery', label: 'Galereya', icon: Images },
   { id: 'article', label: 'Maqola', icon: BookOpen },
   { id: 'location', label: 'Joylashuv', icon: MapPin },
+  { id: 'poll', label: "So'rovnoma", icon: BarChart3 },
   { id: 'file', label: 'Fayl', icon: FileIcon },
 ];
 
@@ -81,10 +90,16 @@ export function TelegramAttachSheet({
   onPickFiles,
   onArticle,
   onShareLocation,
+  onCreatePoll,
   maxFileMb = 50,
 }: TelegramAttachSheetProps) {
   const [tab, setTab] = useState<AttachTab>('gallery');
   const [picked, setPicked] = useState<PickedFile[]>([]);
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [pollOptions, setPollOptions] = useState(['', '']);
+  const [pollMultiple, setPollMultiple] = useState(false);
+  const [pollAnonymous, setPollAnonymous] = useState(false);
+  const [pollSending, setPollSending] = useState(false);
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -103,6 +118,11 @@ export function TelegramAttachSheet({
     if (!open) {
       clearPicked();
       setTab('gallery');
+      setPollQuestion('');
+      setPollOptions(['', '']);
+      setPollMultiple(false);
+      setPollAnonymous(false);
+      setPollSending(false);
     }
   }, [open, clearPicked]);
 
@@ -352,6 +372,127 @@ export function TelegramAttachSheet({
                   Bu chatda joylashuv ulashish mavjud emas.
                 </p>
               )}
+            </div>
+          )}
+
+          {tab === 'poll' && (
+            <div className="space-y-3 py-2">
+              <div className="flex items-start gap-3 rounded-2xl bg-muted/50 p-3">
+                <BarChart3 className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">So'rovnoma yaratish</p>
+                  <p className="text-xs text-muted-foreground">
+                    Variantlar ikkala Alsamos mijozida ham interaktiv ko'rinadi va ovozlar sinxronlanadi.
+                  </p>
+                </div>
+              </div>
+
+              <input
+                value={pollQuestion}
+                onChange={(event) => setPollQuestion(event.target.value)}
+                placeholder="Savol"
+                maxLength={300}
+                className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+
+              <div className="space-y-2">
+                {pollOptions.map((option, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border text-[11px] text-muted-foreground">
+                      {index + 1}
+                    </span>
+                    <input
+                      value={option}
+                      onChange={(event) =>
+                        setPollOptions((current) =>
+                          current.map((value, optionIndex) =>
+                            optionIndex === index ? event.target.value : value
+                          )
+                        )
+                      }
+                      placeholder={`Variant ${index + 1}`}
+                      maxLength={150}
+                      className="h-9 min-w-0 flex-1 rounded-xl border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    {pollOptions.length > 2 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPollOptions((current) => current.filter((_, optionIndex) => optionIndex !== index))
+                        }
+                        className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                        aria-label="Variantni o'chirish"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {pollOptions.length < 10 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-9 w-full rounded-xl"
+                  onClick={() => setPollOptions((current) => [...current, ''])}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Variant qo'shish
+                </Button>
+              )}
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPollMultiple((value) => !value)}
+                  className={cn(
+                    'rounded-xl border px-3 py-2 text-left text-xs tg-transition',
+                    pollMultiple ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background'
+                  )}
+                >
+                  <span className="block font-medium">Ko'p tanlov</span>
+                  <span className="text-[10px] opacity-70">Bir nechta variant</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPollAnonymous((value) => !value)}
+                  className={cn(
+                    'rounded-xl border px-3 py-2 text-left text-xs tg-transition',
+                    pollAnonymous ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background'
+                  )}
+                >
+                  <span className="block font-medium">Anonim</span>
+                  <span className="text-[10px] opacity-70">Kim ovoz bergani yashirin</span>
+                </button>
+              </div>
+
+              <Button
+                className="w-full rounded-xl"
+                disabled={
+                  pollSending ||
+                  !onCreatePoll ||
+                  !pollQuestion.trim() ||
+                  pollOptions.filter((option) => option.trim()).length < 2
+                }
+                onClick={async () => {
+                  if (!onCreatePoll) return;
+                  setPollSending(true);
+                  try {
+                    await onCreatePoll({
+                      question: pollQuestion.trim(),
+                      options: pollOptions.map((option) => option.trim()).filter(Boolean),
+                      multiple: pollMultiple,
+                      anonymous: pollAnonymous,
+                    });
+                    onOpenChange(false);
+                  } finally {
+                    setPollSending(false);
+                  }
+                }}
+              >
+                {pollSending ? 'Yuborilmoqda...' : "So'rovnomani yuborish"}
+              </Button>
             </div>
           )}
 

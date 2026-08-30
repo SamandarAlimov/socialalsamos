@@ -53,7 +53,14 @@ interface MessageInputProps {
     latitude: number;
     longitude: number;
     address?: string;
+    liveDurationSeconds?: number;
   }) => void;
+  onCreatePoll?: (poll: {
+    question: string;
+    options: string[];
+    multiple: boolean;
+    anonymous: boolean;
+  }) => void | Promise<void>;
 }
 
 const MAX_FILE_MB = 50;
@@ -108,6 +115,7 @@ export function MessageInput({
   onCancelReply,
   disabled,
   onShareLocation,
+  onCreatePoll,
 }: MessageInputProps) {
   const { t } = useTranslation();
   const { draft: message, setDraft: setMessage, clearDraft } = useMessageDraft(conversationId);
@@ -809,6 +817,7 @@ export function MessageInput({
         }}
         onArticle={() => setShowArticleComposer(true)}
         onShareLocation={onShareLocation}
+        onCreatePoll={onCreatePoll}
       />
 
       {/* Rejalashtirish dialogi */}
