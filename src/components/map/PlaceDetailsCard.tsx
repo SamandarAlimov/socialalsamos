@@ -384,6 +384,7 @@ export function PlaceDetailsCard({
               latitude={place.latitude}
               longitude={place.longitude}
               areaName={place.address}
+              highContrast={highContrast}
             />
 
             <div className="grid grid-cols-2 gap-2">
