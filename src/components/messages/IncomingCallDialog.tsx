@@ -11,6 +11,7 @@ interface IncomingCallDialogProps {
   callType: 'audio' | 'video';
   onAccept: () => void;
   onDecline: () => void;
+  onMissed?: () => void;
   /** Javob berilmasa necha sekunddan keyin avtomatik yopilsin (Telegramda ~45s) */
   timeoutSeconds?: number;
 }
@@ -55,6 +56,7 @@ export function IncomingCallDialog({
   callType,
   onAccept,
   onDecline,
+  onMissed,
   timeoutSeconds = 45,
 }: IncomingCallDialogProps) {
   const [isRinging, setIsRinging] = useState(false);
@@ -99,7 +101,10 @@ export function IncomingCallDialog({
     }
     audioContextRef.current = null;
 
-    if ('vibrate' in navigator) {
+    if (
+      'vibrate' in navigator &&
+      (!navigator.userActivation || navigator.userActivation.hasBeenActive)
+    ) {
       try {
         navigator.vibrate(0);
       } catch {}
@@ -150,7 +155,10 @@ export function IncomingCallDialog({
     ringIntervalRef.current = setInterval(ring, 3000);
 
     // Telegramdek tebranish naqshi
-    if ('vibrate' in navigator) {
+    if (
+      'vibrate' in navigator &&
+      (!navigator.userActivation || navigator.userActivation.hasBeenActive)
+    ) {
       const vibrate = () => {
         if (mutedRef.current) return;
         try {
@@ -180,7 +188,8 @@ export function IncomingCallDialog({
 
       // Javob berilmasa avtomatik yopiladi
       timeoutRef.current = setTimeout(() => {
-        handleDecline();
+        stopRingtone();
+        (onMissed || onDecline)();
       }, timeoutSeconds * 1000);
     } else {
       setIsRinging(false);
