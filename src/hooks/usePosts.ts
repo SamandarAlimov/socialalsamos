@@ -10,6 +10,7 @@ import type {
 } from '@/lib/postMeta';
 import { MAX_COLLABORATORS } from '@/lib/postComposer';
 import type { AlsamosRichTextDocument } from '@/lib/richTextDocument';
+import db from '@/lib/supabaseAny';
 
 export interface Post {
   id: string;
@@ -72,7 +73,7 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
     try {
       // Feed query visibility bilan bir xil semantikaga ega bo'lishi kerak.
       // RLS oxirgi himoya qatlamidir; client esa keraksiz qatorlarni so'ramaydi.
-      let query = supabase
+      let query = db
         .from('posts')
         .select(`
           *,
