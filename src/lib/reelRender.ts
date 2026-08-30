@@ -1,7 +1,10 @@
+export type ReelTransition = 'none' | 'fade';
+
 export interface ReelSequenceClip {
   file: File;
   durationSeconds?: number | null;
   playbackRate?: number | null;
+  transition?: ReelTransition | null;
 }
 
 export interface ReelSequenceRenderOptions {
@@ -145,7 +148,9 @@ export async function renderReelSequence(
   const audioContext = new AudioContextConstructor();
   const destination = audioContext.createMediaStreamDestination();
   const audioSource = audioContext.createMediaElementSource(video);
-  audioSource.connect(destination);
+  const audioGain = audioContext.createGain();
+  audioSource.connect(audioGain);
+  audioGain.connect(destination);
 
   const stream = canvas.captureStream(frameRate);
   destination.stream.getAudioTracks().forEach((track) => stream.addTrack(track));
@@ -203,9 +208,43 @@ export async function renderReelSequence(
         video.defaultPlaybackRate = playbackRate;
 
         const ended = waitForMedia(video, 'ended');
+        const transitionSeconds = Math.min(
+          0.28,
+          Math.max(0.12, expectedDurations[index] * 0.12),
+        );
+        const fadeIn = index > 0 && clips[index - 1]?.transition === 'fade';
+        const fadeOut =
+          index < clips.length - 1 && clip.transition === 'fade';
 
         const draw = () => {
           drawCover(context, canvas, video);
+
+          const sourceTime = Math.max(0, video.currentTime);
+          const outputTime = sourceTime / playbackRate;
+          const outputRemaining =
+            Math.max(0, actualDuration - sourceTime) / playbackRate;
+
+          const inOpacity = fadeIn
+            ? Math.max(0, 1 - outputTime / transitionSeconds)
+            : 0;
+          const outOpacity = fadeOut
+            ? Math.max(0, 1 - outputRemaining / transitionSeconds)
+            : 0;
+          const transitionOpacity = Math.max(inOpacity, outOpacity);
+
+          if (transitionOpacity > 0) {
+            context.save();
+            context.globalAlpha = Math.min(1, transitionOpacity);
+            context.fillStyle = '#000';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            context.restore();
+          }
+
+          audioGain.gain.setValueAtTime(
+            Math.max(0, 1 - transitionOpacity),
+            audioContext.currentTime,
+          );
+
           const clipProgress = Math.max(
             0,
             Math.min(1, video.currentTime / Math.max(0.1, actualDuration)),
@@ -226,6 +265,10 @@ export async function renderReelSequence(
           }
         };
 
+        audioGain.gain.setValueAtTime(
+          fadeIn ? 0 : 1,
+          audioContext.currentTime,
+        );
         draw();
         await video.play();
         await ended;
@@ -262,6 +305,7 @@ export async function renderReelSequence(
     if (recorder.state !== 'inactive') recorder.stop();
     stream.getTracks().forEach((track) => track.stop());
     audioSource.disconnect();
+    audioGain.disconnect();
     if (audioContext.state !== 'closed') {
       await audioContext.close().catch(() => undefined);
     }
