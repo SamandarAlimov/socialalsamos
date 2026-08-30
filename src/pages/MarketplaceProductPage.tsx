@@ -20,6 +20,15 @@ export default function MarketplaceProductPage() {
   const [showCheckout, setShowCheckout] = useState(false);
 
   useEffect(() => {
+    if (!product) return;
+    const previousTitle = document.title;
+    document.title = `${product.title} | Alsamos Bozor`;
+    return () => {
+      document.title = previousTitle;
+    };
+  }, [product]);
+
+  useEffect(() => {
     if (!productId) {
       setLoadError(true);
       setIsLoading(false);

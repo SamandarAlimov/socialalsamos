@@ -89,10 +89,9 @@ export default function MarketplacePage() {
     navigate(`/marketplace/product/${productId}`, { replace: true });
   }, [navigate, searchParams]);
 
-  // Seller links are URL-addressable so product page -> store -> back works naturally.
+  // Seller links are URL-addressable; URL is the single source of truth.
   useEffect(() => {
-    const sellerId = searchParams.get('seller');
-    if (sellerId) setSelectedSellerId(sellerId);
+    setSelectedSellerId(searchParams.get('seller'));
   }, [searchParams]);
 
   // Debounced search: one query per pause, not one per keystroke.
