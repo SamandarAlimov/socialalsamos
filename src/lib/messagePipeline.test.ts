@@ -62,6 +62,7 @@ describe('Messages regression pipeline', () => {
     expect(calls).toHaveLength(2);
     expect(calls[0]).toHaveProperty('reply_to_id', 'message-0');
     expect(calls[1]).not.toHaveProperty('reply_to_id');
+    expect(calls[1]).toHaveProperty('client_message_id', 'temp-reply-1');
   });
 
   it('send: never retries generic failures that could duplicate a persisted message', async () => {
