@@ -22,6 +22,13 @@ export interface RouteStep {
   modifier?: string;
 }
 
+export interface RouteLeg {
+  fromIndex: number;
+  toIndex: number;
+  distanceM: number;
+  durationS: number;
+}
+
 export interface RouteResult {
   mode: RouteMode;
   distanceM: number;
@@ -32,6 +39,8 @@ export interface RouteResult {
   label: string;
   /** Input checkpointlar (From, To, To...) route geometryda qayerga to'g'ri keladi. */
   checkpointIndices?: number[];
+  /** From→To, To→To segment metrikalari. */
+  legs?: RouteLeg[];
 }
 
 const PROFILE: Record<Exclude<RouteMode, 'transit'>, { prefix: string; profile: string }> = {
@@ -109,7 +118,7 @@ interface OsrmRoute {
   distance: number;
   duration: number;
   geometry: { coordinates: [number, number][] };
-  legs: { steps?: OsrmStep[] }[];
+  legs: { distance?: number; duration?: number; steps?: OsrmStep[] }[];
 }
 
 async function request(
@@ -195,6 +204,12 @@ function mapOsrmRoutes(
       ),
       label: labelFor(mode, index),
       checkpointIndices: nearestCheckpointIndices(coordinates, points),
+      legs: (route.legs ?? []).map((leg, legIndex) => ({
+        fromIndex: legIndex,
+        toIndex: legIndex + 1,
+        distanceM: Number(leg.distance) || 0,
+        durationS: Number(leg.duration) || 0,
+      })),
     };
   });
 }
@@ -209,6 +224,7 @@ async function fetchTransitThrough(
   const coordinates: [number, number][] = [];
   const steps: RouteStep[] = [];
   const checkpointIndices: number[] = [0];
+  const legs: RouteLeg[] = [];
 
   for (let index = 0; index < points.length - 1; index += 1) {
     const response = await fetchTransitJourneyRoutes({
@@ -224,8 +240,16 @@ async function fetchTransitThrough(
     const route = response?.routes?.[0];
     if (!route) return [];
 
-    totalDistanceM += Number(route.distanceM) || 0;
-    totalDurationS += Number(route.durationS) || 0;
+    const legDistanceM = Number(route.distanceM) || 0;
+    const legDurationS = Number(route.durationS) || 0;
+    totalDistanceM += legDistanceM;
+    totalDurationS += legDurationS;
+    legs.push({
+      fromIndex: index,
+      toIndex: index + 1,
+      distanceM: legDistanceM,
+      durationS: legDurationS,
+    });
 
     const legCoordinates = (route.coordinates ?? []).filter(
       (pair): pair is [number, number] =>
@@ -265,6 +289,7 @@ async function fetchTransitThrough(
       steps,
       label: 'Eng qulay yo‘l',
       checkpointIndices,
+      legs,
     },
   ];
 }
