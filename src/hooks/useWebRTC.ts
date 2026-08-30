@@ -34,6 +34,7 @@ const QUALITY_CHECK_INTERVAL = 5000;
 type SignalPayload = {
   from: string;
   to?: string;
+  signalId?: string;
   sdp?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
   mediaState?: {
@@ -76,6 +77,7 @@ export function useWebRTC(roomId: string | null) {
   const leavingRoomRef = useRef(false);
   const reconnectTimersRef = useRef<Map<string, number>>(new Map());
   const restartAttemptsRef = useRef<Map<string, number>>(new Map());
+  const seenSignalIdsRef = useRef<Set<string>>(new Set());
 
   // Perfect-negotiation helpers
   const makingOfferRef = useRef<Map<string, boolean>>(new Map());
@@ -111,52 +113,81 @@ export function useWebRTC(roomId: string | null) {
   );
 
   const startQualityMonitoring = useCallback(() => {
-    qualityIntervalRef.current = setInterval(async () => {
-      const pcs = Array.from(peerConnectionsRef.current.values());
-      if (pcs.length === 0) return;
+    if (qualityIntervalRef.current) return;
+
+    const collect = async () => {
+      const pcs = Array.from(peerConnectionsRef.current.entries());
+      if (pcs.length === 0) {
+        setConnectionQuality({ bitrate: 0, packetLoss: 0, latency: 0, quality: "disconnected" });
+        return;
+      }
 
       let totalBitrate = 0;
       let totalPacketLoss = 0;
       let totalLatency = 0;
-      let count = 0;
+      let latencySamples = 0;
+      let lossSamples = 0;
 
-      for (const pc of pcs) {
+      for (const [peerId, pc] of pcs) {
         try {
           const stats = await pc.getStats();
+          let bytes = 0;
+          let packetsLost = 0;
+          let packetsTotal = 0;
+
           stats.forEach((report) => {
-            if (report.type === "candidate-pair" && report.state === "succeeded") {
-              if ((report as any).currentRoundTripTime) {
-                totalLatency += ((report as any).currentRoundTripTime as number) * 1000;
-                count++;
-              }
+            if (
+              report.type === "candidate-pair" &&
+              report.state === "succeeded" &&
+              typeof (report as any).currentRoundTripTime === "number"
+            ) {
+              totalLatency += ((report as any).currentRoundTripTime as number) * 1000;
+              latencySamples += 1;
             }
-            if (report.type === "outbound-rtp" && (report as any).kind === "video") {
-              if ((report as any).bytesSent) {
-                totalBitrate += (((report as any).bytesSent as number) * 8) / ((report.timestamp as number) / 1000);
-              }
-              if ((report as any).packetsLost && (report as any).packetsSent) {
-                totalPacketLoss +=
-                  (((report as any).packetsLost as number) / ((report as any).packetsSent as number)) * 100;
-              }
+
+            if (
+              (report.type === "outbound-rtp" || report.type === "inbound-rtp") &&
+              !(report as any).isRemote
+            ) {
+              bytes += Number((report as any).bytesSent ?? (report as any).bytesReceived ?? 0);
+              packetsLost += Math.max(0, Number((report as any).packetsLost ?? 0));
+              packetsTotal += Math.max(
+                0,
+                Number((report as any).packetsSent ?? (report as any).packetsReceived ?? 0)
+              );
             }
           });
+
+          const now = Date.now();
+          const previous = qualityPreviousRef.current.get(peerId);
+          if (previous && now > previous.at && bytes >= previous.bytes) {
+            totalBitrate += ((bytes - previous.bytes) * 8 * 1000) / (now - previous.at);
+          }
+          qualityPreviousRef.current.set(peerId, { bytes, at: now });
+
+          if (packetsTotal > 0) {
+            totalPacketLoss += (packetsLost / (packetsTotal + packetsLost)) * 100;
+            lossSamples += 1;
+          }
         } catch {
-          // ignore
+          // A single peer failing stats collection must not break the call.
         }
       }
 
-      if (count > 0) {
-        const avgLatency = totalLatency / count;
-        const avgBitrate = totalBitrate / pcs.length;
-        const avgPacketLoss = totalPacketLoss / pcs.length;
-        setConnectionQuality({
-          bitrate: avgBitrate,
-          packetLoss: avgPacketLoss,
-          latency: avgLatency,
-          quality: calculateQuality(avgBitrate, avgPacketLoss, avgLatency),
-        });
-      }
-    }, QUALITY_CHECK_INTERVAL);
+      const avgLatency = latencySamples > 0 ? totalLatency / latencySamples : 0;
+      const avgPacketLoss = lossSamples > 0 ? totalPacketLoss / lossSamples : 0;
+      const avgBitrate = pcs.length > 0 ? totalBitrate / pcs.length : 0;
+
+      setConnectionQuality({
+        bitrate: avgBitrate,
+        packetLoss: avgPacketLoss,
+        latency: avgLatency,
+        quality: calculateQuality(avgBitrate, avgPacketLoss, avgLatency),
+      });
+    };
+
+    void collect();
+    qualityIntervalRef.current = setInterval(collect, QUALITY_CHECK_INTERVAL);
   }, [calculateQuality]);
 
   const stopQualityMonitoring = useCallback(() => {
@@ -164,6 +195,7 @@ export function useWebRTC(roomId: string | null) {
       clearInterval(qualityIntervalRef.current);
       qualityIntervalRef.current = null;
     }
+    qualityPreviousRef.current.clear();
   }, []);
 
   const isPoliteForPeer = useCallback(
@@ -178,24 +210,37 @@ export function useWebRTC(roomId: string | null) {
 
   /**
    * Durable signaling fallback.
-   * Broadcast is fast but lossy (a peer that has not subscribed yet never sees
-   * the frame). Every SDP/ICE frame is therefore ALSO persisted to
-   * `public.call_signals`, which both this client and the Flutter client read
-   * via postgres_changes + a backlog fetch on join. Signals are deduped by row id.
+   *
+   * Broadcast gives low latency. The same frame is persisted to call_signals so
+   * a peer that subscribes a moment late can replay the backlog. Each frame has
+   * a client-generated signalId, therefore receiving it from both transports is
+   * safe and idempotent.
    */
+  const markSignalSeen = useCallback((signalId?: string | null) => {
+    if (!signalId) return false;
+    if (seenSignalIdsRef.current.has(signalId)) return true;
+    seenSignalIdsRef.current.add(signalId);
+
+    // SDP/ICE sessions are short lived. Bound memory even on very long calls.
+    if (seenSignalIdsRef.current.size > 2000) {
+      const oldest = seenSignalIdsRef.current.values().next().value as string | undefined;
+      if (oldest) seenSignalIdsRef.current.delete(oldest);
+    }
+    return false;
+  }, []);
+
   const persistSignal = useCallback(
     async (event: "offer" | "answer" | "ice" | "leave", payload: SignalPayload) => {
       if (!roomId || !user?.id) return;
-      try {
-        await supabase.from("call_signals").insert({
-          call_id: roomId,
-          sender_id: user.id,
-          target_user_id: payload.to ?? undefined,
-          type: event,
-          payload: payload as unknown as Json,
-        });
-      } catch (e) {
-        console.warn("[WebRTC] persistSignal failed", e);
+      const { error: persistError } = await supabase.from("call_signals").insert({
+        call_id: roomId,
+        sender_id: user.id,
+        target_user_id: payload.to ?? null,
+        type: event,
+        payload: payload as unknown as Json,
+      });
+      if (persistError) {
+        console.warn("[WebRTC] persistSignal failed", persistError);
       }
     },
     [roomId, user?.id]
@@ -203,17 +248,32 @@ export function useWebRTC(roomId: string | null) {
 
   const sendSignal = useCallback(
     async (event: "offer" | "answer" | "ice" | "media" | "leave", payload: SignalPayload) => {
+      const frame: SignalPayload =
+        event === "media"
+          ? payload
+          : {
+              ...payload,
+              signalId:
+                payload.signalId ||
+                (typeof crypto !== "undefined" && "randomUUID" in crypto
+                  ? crypto.randomUUID()
+                  : `${Date.now()}-${Math.random().toString(36).slice(2)}`),
+            };
+
       const ch = channelRef.current;
       if (ch) {
-        await ch.send({
+        const status = await ch.send({
           type: "broadcast",
           event,
-          payload,
+          payload: frame,
         });
+        if (status !== "ok" && !leavingRoomRef.current) {
+          console.warn("[WebRTC] broadcast signal failed", event, status);
+        }
       }
-      // media state is ephemeral — never worth persisting
+
       if (event !== "media") {
-        void persistSignal(event, payload);
+        void persistSignal(event, frame);
       }
     },
     [persistSignal]
@@ -236,6 +296,40 @@ export function useWebRTC(roomId: string | null) {
     ignoreOfferRef.current.delete(peerId);
 
     setParticipants((prev) => prev.filter((p) => p.id !== peerId));
+  }, []);
+
+  const scheduleIceRestart = useCallback((peerId: string, pc: RTCPeerConnection) => {
+    if (leavingRoomRef.current || pc.connectionState === "closed") return;
+
+    const previousTimer = reconnectTimersRef.current.get(peerId);
+    if (previousTimer) window.clearTimeout(previousTimer);
+
+    const attempt = restartAttemptsRef.current.get(peerId) ?? 0;
+    if (attempt >= 4) {
+      setError("Peer connection could not be restored");
+      setIsReconnecting(false);
+      return;
+    }
+
+    setIsReconnecting(true);
+    const delay = Math.min(1000 * 2 ** attempt, 8000);
+    const timer = window.setTimeout(() => {
+      reconnectTimersRef.current.delete(peerId);
+      if (
+        pc.connectionState === "failed" ||
+        pc.connectionState === "disconnected" ||
+        pc.iceConnectionState === "failed" ||
+        pc.iceConnectionState === "disconnected"
+      ) {
+        restartAttemptsRef.current.set(peerId, attempt + 1);
+        try {
+          pc.restartIce();
+        } catch {
+          // A following state transition/backlog signal can still recover it.
+        }
+      }
+    }, delay);
+    reconnectTimersRef.current.set(peerId, timer);
   }, []);
 
   const ensurePeerConnection = useCallback(
@@ -304,21 +398,30 @@ export function useWebRTC(roomId: string | null) {
 
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === "connected") {
+          const timer = reconnectTimersRef.current.get(peerId);
+          if (timer) window.clearTimeout(timer);
+          reconnectTimersRef.current.delete(peerId);
+          restartAttemptsRef.current.delete(peerId);
           setIsConnected(true);
+          setIsReconnecting(false);
+          setError(null);
           void stampCallStartedAt();
+          return;
         }
-        if (pc.connectionState === "failed") {
-          pc.restartIce();
-        }
-        if (pc.connectionState === "disconnected") {
-          setTimeout(() => {
-            if (pc.connectionState === "disconnected") pc.restartIce();
-          }, 1500);
+
+        if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+          scheduleIceRestart(peerId, pc);
         }
       };
 
       pc.oniceconnectionstatechange = () => {
-        if (pc.iceConnectionState === "failed") pc.restartIce();
+        if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+          setIsReconnecting(false);
+          return;
+        }
+        if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "disconnected") {
+          scheduleIceRestart(peerId, pc);
+        }
       };
 
       // Add local tracks *after* handlers are attached so we don't miss negotiationneeded.
@@ -329,7 +432,7 @@ export function useWebRTC(roomId: string | null) {
       peerConnectionsRef.current.set(peerId, pc);
       return pc;
     },
-    [sendSignal, stampCallStartedAt, user?.id]
+    [scheduleIceRestart, sendSignal, stampCallStartedAt, user?.id]
   );
 
   const handleOffer = useCallback(
@@ -461,7 +564,9 @@ export function useWebRTC(roomId: string | null) {
   const joinRoom = useCallback(async (video = true) => {
     if (!roomId || !user?.id) return;
 
+    leavingRoomRef.current = false;
     setIsConnecting(true);
+    setIsReconnecting(false);
     setError(null);
     currentRoomRef.current = roomId;
 
@@ -553,18 +658,21 @@ export function useWebRTC(roomId: string | null) {
         const p = payload as SignalPayload;
         if (p.to && p.to !== user.id) return;
         if (p.from === user.id || !p.sdp) return;
+        if (markSignalSeen(p.signalId)) return;
         await handleOffer(p.from, p.sdp);
       })
       .on("broadcast", { event: "answer" }, async ({ payload }) => {
         const p = payload as SignalPayload;
         if (p.to && p.to !== user.id) return;
         if (p.from === user.id || !p.sdp) return;
+        if (markSignalSeen(p.signalId)) return;
         await handleAnswer(p.from, p.sdp);
       })
       .on("broadcast", { event: "ice" }, async ({ payload }) => {
         const p = payload as SignalPayload;
         if (p.to && p.to !== user.id) return;
         if (p.from === user.id || !p.candidate) return;
+        if (markSignalSeen(p.signalId)) return;
         await handleIce(p.from, p.candidate);
       })
       .on("broadcast", { event: "media" }, ({ payload }) => {
@@ -585,32 +693,87 @@ export function useWebRTC(roomId: string | null) {
       })
       .on("broadcast", { event: "leave" }, ({ payload }) => {
         const p = payload as SignalPayload;
+        if (markSignalSeen(p.signalId)) return;
         if (p.from && p.from !== user.id) closePeer(p.from);
-      });
+      })
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "call_signals",
+          filter: `call_id=eq.${roomId}`,
+        },
+        async ({ new: row }) => {
+          const signal = row as {
+            id: string;
+            sender_id: string;
+            target_user_id: string | null;
+            type: string;
+            payload: Json;
+          };
+          if (signal.sender_id === user.id) return;
+          if (signal.target_user_id && signal.target_user_id !== user.id) return;
+
+          const payload = (signal.payload || {}) as unknown as SignalPayload;
+          if (markSignalSeen(payload.signalId || signal.id)) return;
+
+          if (signal.type === "offer" && payload.sdp) await handleOffer(signal.sender_id, payload.sdp);
+          if (signal.type === "answer" && payload.sdp) await handleAnswer(signal.sender_id, payload.sdp);
+          if (signal.type === "ice" && payload.candidate) await handleIce(signal.sender_id, payload.candidate);
+          if (signal.type === "leave") closePeer(signal.sender_id);
+        }
+      );
 
     channelRef.current = channel;
 
     channel.subscribe(async (s) => {
       if (s === "SUBSCRIBED") {
         await channel.track({ online_at: new Date().toISOString() });
+
+        // Replay recent targeted/broadcast signaling frames that may have been
+        // emitted before this client finished subscribing.
+        const { data: backlog, error: backlogError } = await supabase
+          .from("call_signals")
+          .select("id, sender_id, target_user_id, type, payload, created_at")
+          .eq("call_id", roomId)
+          .neq("sender_id", user.id)
+          .or(`target_user_id.is.null,target_user_id.eq.${user.id}`)
+          .order("created_at", { ascending: true })
+          .limit(300);
+
+        if (!backlogError && backlog) {
+          for (const row of backlog) {
+            const payload = (row.payload || {}) as unknown as SignalPayload;
+            if (markSignalSeen(payload.signalId || row.id)) continue;
+            if (row.type === "offer" && payload.sdp) await handleOffer(row.sender_id, payload.sdp);
+            if (row.type === "answer" && payload.sdp) await handleAnswer(row.sender_id, payload.sdp);
+            if (row.type === "ice" && payload.candidate) await handleIce(row.sender_id, payload.candidate);
+            if (row.type === "leave") closePeer(row.sender_id);
+          }
+        }
+
         startQualityMonitoring();
         setIsConnecting(false);
-
-        // (call start time is stamped when peer connection reaches "connected")
       }
-      if (s === "CHANNEL_ERROR" || s === "TIMED_OUT" || s === "CLOSED") {
+      if (
+        (s === "CHANNEL_ERROR" || s === "TIMED_OUT" || s === "CLOSED") &&
+        !leavingRoomRef.current
+      ) {
         setError("Signaling connection error");
         setIsConnecting(false);
+        setIsReconnecting(true);
         toast({
-          title: "Connection Error",
-          description: "Failed to connect signaling channel.",
+          title: "Ulanish uzildi",
+          description: "Qo'ng'iroq signal kanali qayta tiklanmoqda.",
           variant: "destructive",
         });
       }
     });
-  }, [roomId, user?.id, startLocalStream, ensurePeerConnection, closePeer, handleOffer, handleAnswer, handleIce, startQualityMonitoring, toast, sendSignal]);
+  }, [roomId, user?.id, startLocalStream, ensurePeerConnection, closePeer, handleOffer, handleAnswer, handleIce, startQualityMonitoring, toast, sendSignal, markSignalSeen]);
 
   const leaveRoom = useCallback(() => {
+    leavingRoomRef.current = true;
     if (user?.id) {
       void sendSignal("leave", { from: user.id });
     }
@@ -623,6 +786,10 @@ export function useWebRTC(roomId: string | null) {
     pendingCandidatesRef.current.clear();
     makingOfferRef.current.clear();
     ignoreOfferRef.current.clear();
+    seenSignalIdsRef.current.clear();
+    reconnectTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    reconnectTimersRef.current.clear();
+    restartAttemptsRef.current.clear();
 
     // Stop local stream
     if (localStreamRef.current) {
@@ -638,6 +805,7 @@ export function useWebRTC(roomId: string | null) {
     setParticipants([]);
     setIsConnected(false);
     setIsConnecting(false);
+    setIsReconnecting(false);
     setIsMuted(false);
     setIsVideoOn(true);
     setIsScreenSharing(false);
@@ -744,6 +912,51 @@ export function useWebRTC(roomId: string | null) {
     }
   }, [broadcastMediaState, isHandRaised, isMuted, isScreenSharing, isVideoOn, screenStream]);
 
+  const switchCamera = useCallback(async (): Promise<boolean> => {
+    if (!localStreamRef.current || !isVideoOn) return false;
+
+    try {
+      const devices = (await navigator.mediaDevices.enumerateDevices()).filter(
+        (device) => device.kind === "videoinput"
+      );
+      if (devices.length < 2) return false;
+
+      const currentTrack = localStreamRef.current.getVideoTracks()[0];
+      const currentId = currentTrack?.getSettings().deviceId;
+      const currentIndex = Math.max(0, devices.findIndex((device) => device.deviceId === currentId));
+      const nextDevice = devices[(currentIndex + 1) % devices.length];
+
+      const replacement = await navigator.mediaDevices.getUserMedia({
+        video: {
+          deviceId: { exact: nextDevice.deviceId },
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
+          frameRate: { ideal: 30, max: 60 },
+        },
+        audio: false,
+      });
+      const nextTrack = replacement.getVideoTracks()[0];
+      if (!nextTrack) return false;
+
+      await Promise.all(
+        Array.from(peerConnectionsRef.current.values()).map(async (pc) => {
+          const sender = pc.getSenders().find((item) => item.track?.kind === "video");
+          if (sender && !isScreenSharing) await sender.replaceTrack(nextTrack);
+        })
+      );
+
+      const audioTracks = localStreamRef.current.getAudioTracks();
+      currentTrack?.stop();
+      const nextStream = new MediaStream([...audioTracks, nextTrack]);
+      localStreamRef.current = nextStream;
+      setLocalStream(nextStream);
+      return true;
+    } catch (cameraError) {
+      console.warn("[WebRTC] camera switch failed", cameraError);
+      return false;
+    }
+  }, [isScreenSharing, isVideoOn]);
+
   const toggleHandRaise = useCallback(() => {
     const next = !isHandRaised;
     setIsHandRaised(next);
@@ -762,6 +975,7 @@ export function useWebRTC(roomId: string | null) {
     participants,
     isConnected,
     isConnecting,
+    isReconnecting,
     isMuted,
     isVideoOn,
     isScreenSharing,
@@ -774,6 +988,7 @@ export function useWebRTC(roomId: string | null) {
     toggleMute,
     toggleVideo,
     toggleScreenShare,
+    switchCamera,
     toggleHandRaise,
   };
 }
