@@ -13,7 +13,6 @@ const CARTO_LABELS_URL = H + '{s}' + '.basemaps.cartocdn.com/light_only_labels/{
 const CARTO_DARK_URL = H + '{s}' + '.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 const TRANSIT_URL = H + 'tileserver.memomaps.de' + '/tilegen/{z}/{x}/{y}.png';
 const CYCLE_URL = H + '{s}' + '.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png';
-const TRAFFIC_URL = String(import.meta.env.VITE_TRAFFIC_TILE_URL ?? '').trim();
 
 const OSM_ATTR = 'OpenStreetMap';
 const ESRI_ATTR = 'Esri, Maxar, Earthstar Geographics';
@@ -73,17 +72,10 @@ export interface MapOverlayDef {
 }
 
 export const MAP_OVERLAYS: MapOverlayDef[] = [
-  ...(TRAFFIC_URL
-    ? [
-        {
-          id: 'traffic' as const,
-          label: 'Tirbandlik',
-          url: TRAFFIC_URL,
-          attribution: 'Traffic data provider',
-          opacity: 0.82,
-        },
-      ]
-    : []),
+  {
+    id: 'traffic',
+    label: 'Tirbandlik',
+  },
   { id: 'transit', label: 'Jamoat transporti', url: TRANSIT_URL, attribution: OSM_ATTR, opacity: 0.9 },
   { id: 'cycle', label: 'Velosiped yo\u2018llari', url: CYCLE_URL, attribution: OSM_ATTR, opacity: 0.8 },
   { id: 'stops', label: 'Bekatlar' },
