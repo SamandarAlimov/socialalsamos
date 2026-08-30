@@ -49,6 +49,29 @@ function createId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+
+async function cleanupUploadedObjects(attachment?: Attachment | null): Promise<void> {
+  if (!attachment) return;
+
+  const groups = new Map<string, string[]>();
+  const add = (bucket?: string, key?: string) => {
+    if (!bucket || !key) return;
+    const keys = groups.get(bucket) ?? [];
+    keys.push(key);
+    groups.set(bucket, keys);
+  };
+
+  add(attachment.storageBucket, attachment.storageKey);
+  add(attachment.thumbnailBucket, attachment.thumbnailKey);
+
+  await Promise.all(
+    Array.from(groups.entries()).map(async ([bucket, keys]) => {
+      const { error } = await supabase.storage.from(bucket).remove(keys);
+      if (error) console.warn('Eski attachment obyektini tozalab bo‘lmadi:', error);
+    }),
+  );
+}
+
 /**
  * Post ilovalarini (har qanday turdagi fayl) boshqarish.
  *
@@ -138,12 +161,53 @@ export function usePostAttachments(options?: {
     abortControllers.current.get(id)?.abort();
     abortControllers.current.delete(id);
 
-    setAttachments((current) => {
-      const target = current.find((item) => item.id === id);
-      revokePreviewUrls([target?.previewUrl]);
-      return current.filter((item) => item.id !== id);
-    });
+    const target = attachmentsRef.current.find((item) => item.id === id);
+    revokePreviewUrls([target?.previewUrl]);
+    void cleanupUploadedObjects(target);
+
+    setAttachments((current) => current.filter((item) => item.id !== id));
   }, []);
+
+  /** Real editor yangi fayl chiqarganda attachmentni atomik almashtiradi. */
+  const replaceAttachmentFile = useCallback(
+    async (
+      id: string,
+      file: File,
+      editState?: Record<string, unknown>,
+    ) => {
+      const target = attachmentsRef.current.find((item) => item.id === id);
+      if (!target) return;
+
+      abortControllers.current.get(id)?.abort();
+      abortControllers.current.delete(id);
+
+      const previewUrl = isPreviewable(target.kind) ? URL.createObjectURL(file) : undefined;
+      const meta = previewUrl ? await readMediaMetadata(target.kind, previewUrl) : {};
+
+      revokePreviewUrls([target.previewUrl]);
+      void cleanupUploadedObjects(target);
+
+      patch(id, {
+        file,
+        previewUrl,
+        status: 'pending',
+        progress: 0,
+        error: undefined,
+        uploadedUrl: undefined,
+        storageUrl: undefined,
+        storageBucket: undefined,
+        storageKey: undefined,
+        thumbnailUrl: undefined,
+        thumbnailStorageUrl: undefined,
+        thumbnailBucket: undefined,
+        thumbnailKey: undefined,
+        uploadedVisibility: undefined,
+        editState,
+        ...meta,
+      });
+    },
+    [patch],
+  );
 
   const clearAttachments = useCallback(() => {
     abortControllers.current.forEach((controller) => controller.abort());
@@ -379,6 +443,7 @@ export function usePostAttachments(options?: {
     retryAttachment,
     setEditState,
     setAltText,
+    replaceAttachmentFile,
     uploadAll,
   };
 }
