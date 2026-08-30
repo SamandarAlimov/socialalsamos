@@ -5,6 +5,14 @@ import { useToast } from '@/hooks/use-toast';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { unreadMessagesEmitter } from './useUnreadMessages';
 import { loadMessageDrafts, messageDraftsEmitter } from '@/lib/messageDrafts';
+import {
+  appendRealtimeMessage,
+  BASE_MESSAGE_SELECT,
+  buildMessageInsertPayload,
+  hydrateReplyTargets,
+  insertMessageWithReplyFallback,
+  replaceOptimisticMessage,
+} from '@/lib/messagePipeline';
 
 export interface LastMessageMeta {
   /** Oxirgi xabar id - o'qilganlik holatini aniqlash uchun kerak */
@@ -99,57 +107,6 @@ const LAST_MESSAGE_SCAN_LIMIT = 400;
 const UNREAD_SCAN_LIMIT = 1000;
 /** Realtime hodisalar ketma-ket kelganda ro'yxatni bir marta yangilash */
 const LIST_REFRESH_DEBOUNCE = 500;
-
-const BASE_MESSAGE_SELECT = `
-  *,
-  sender:profiles!messages_sender_id_fkey (
-    id,
-    username,
-    display_name,
-    avatar_url
-  )
-`;
-
-type ReplyTarget = NonNullable<Message['reply_to']>;
-
-/**
- * Reply preview core message queryni sindirmasligi kerak.
- * Avval xabarlar oddiy select bilan keladi, reply targetlar esa alohida hydrate qilinadi.
- * Production schema cache/FK embed vaqtincha mos kelmasa ham tarix va send ishlashda davom etadi.
- */
-async function hydrateReplyTargets<T extends { reply_to_id?: string | null }>(
-  rows: T[]
-): Promise<Array<T & { reply_to?: ReplyTarget | null }>> {
-  if (rows.length === 0) return [];
-
-  const replyIds = Array.from(
-    new Set(rows.map((row) => row.reply_to_id).filter((id): id is string => Boolean(id)))
-  );
-
-  if (replyIds.length === 0) {
-    return rows.map((row) => ({ ...row, reply_to: null }));
-  }
-
-  const { data, error } = await supabase
-    .from('messages')
-    .select(BASE_MESSAGE_SELECT)
-    .in('id', replyIds);
-
-  if (error) {
-    console.warn('Reply preview hydration failed; core messages remain available:', error);
-    return rows.map((row) => ({ ...row, reply_to: null }));
-  }
-
-  const replyMap = new Map<string, ReplyTarget>();
-  for (const row of (data || []) as any[]) {
-    replyMap.set(row.id, row as ReplyTarget);
-  }
-
-  return rows.map((row) => ({
-    ...row,
-    reply_to: row.reply_to_id ? replyMap.get(row.reply_to_id) ?? null : null,
-  }));
-}
 
 export function useConversations(
   type?: 'private' | 'group' | 'channel',
@@ -720,7 +677,18 @@ export function useMessages(conversationId: string | null) {
 
       const page = (data || []) as any[];
       setHasMore(page.length === MESSAGE_PAGE_SIZE);
-      const rows = await hydrateReplyTargets(page.slice().reverse());
+      const rows = await hydrateReplyTargets(page.slice().reverse(), async (replyIds) => {
+        const { data: replies, error: replyError } = await supabase
+          .from('messages')
+          .select(BASE_MESSAGE_SELECT)
+          .in('id', replyIds);
+
+        if (replyError) {
+          console.warn('Reply preview hydration failed; core messages remain available:', replyError);
+        }
+
+        return { data: (replies || []) as any[], error: replyError };
+      });
 
       let deletedForMeIds: Set<string> = new Set();
       if (user && rows.length > 0) {
@@ -783,7 +751,18 @@ export function useMessages(conversationId: string | null) {
       setHasMore(page.length === MESSAGE_PAGE_SIZE);
       if (page.length === 0) return;
 
-      const rows = await hydrateReplyTargets(page.slice().reverse());
+      const rows = await hydrateReplyTargets(page.slice().reverse(), async (replyIds) => {
+        const { data: replies, error: replyError } = await supabase
+          .from('messages')
+          .select(BASE_MESSAGE_SELECT)
+          .in('id', replyIds);
+
+        if (replyError) {
+          console.warn('Reply preview hydration failed; core messages remain available:', replyError);
+        }
+
+        return { data: (replies || []) as any[], error: replyError };
+      });
 
       let deletedForMeIds: Set<string> = new Set();
       if (user) {
@@ -854,54 +833,50 @@ export function useMessages(conversationId: string | null) {
       setMessages((prev) => [...prev, optimisticMessage]);
 
       try {
-        const insertPayload: Record<string, unknown> = {
-          conversation_id: conversationId,
-          sender_id: user.id,
+        const insertPayload = buildMessageInsertPayload({
+          conversationId,
+          senderId: user.id,
           content,
-          media_url: mediaUrl,
-          media_type: mediaType,
-        };
+          mediaUrl,
+          mediaType,
+          replyToId,
+        });
 
-        // Null reply_to_id ni yubormaymiz: eski production schema/cache bilan ham
-        // oddiy xabarlar jo'natilishi to'xtab qolmasin.
-        if (replyToId) insertPayload.reply_to_id = replyToId;
+        const insertResult = await insertMessageWithReplyFallback(
+          insertPayload,
+          async (payload) => {
+            const { data, error } = await supabase
+              .from('messages')
+              .insert(payload as any)
+              .select(BASE_MESSAGE_SELECT)
+              .single();
+            return { data, error };
+          }
+        );
 
-        let { data, error } = await supabase
-          .from('messages')
-          .insert(insertPayload as any)
-          .select(BASE_MESSAGE_SELECT)
-          .single();
-
-        // Reply kolonkasi productionda hali deploy bo'lmagan bo'lsa, xabarni
-        // yo'qotmaymiz: reply metadata'siz qayta yuboramiz.
-        if (error && replyToId) {
-          console.warn('Reply relationship insert failed, retrying core message without reply:', error);
-          const fallback = await supabase
-            .from('messages')
-            .insert({
-              conversation_id: conversationId,
-              sender_id: user.id,
-              content,
-              media_url: mediaUrl,
-              media_type: mediaType,
-            })
-            .select(BASE_MESSAGE_SELECT)
-            .single();
-          data = fallback.data;
-          error = fallback.error;
+        if (insertResult.usedFallback) {
+          console.warn('Reply schema/cache incompatible; core message sent without reply metadata.');
         }
 
+        const { data, error } = insertResult;
         if (error || !data) throw error ?? new Error('Xabar serverdan qaytmadi');
 
-        const [hydratedData] = await hydrateReplyTargets([data as any]);
+        const [hydratedData] = await hydrateReplyTargets([data as any], async (replyIds) => {
+          const { data: replies, error: replyError } = await supabase
+            .from('messages')
+            .select(BASE_MESSAGE_SELECT)
+            .in('id', replyIds);
+          return { data: (replies || []) as any[], error: replyError };
+        });
         const persisted = hydratedData ?? data;
 
         processedMessageIds.current.add(persisted.id);
 
         setMessages((prev) =>
-          prev.map((m) =>
-            m.tempId === tempId ? ({ ...persisted, status: 'sent' as const } as Message) : m
-          )
+          replaceOptimisticMessage(prev, tempId, {
+            ...persisted,
+            status: 'sent' as const,
+          } as Message)
         );
 
         void supabase
@@ -1096,13 +1071,21 @@ export function useMessages(conversationId: string | null) {
             .single();
 
           if (data) {
-            const [hydratedData] = await hydrateReplyTargets([data as any]);
+            const [hydratedData] = await hydrateReplyTargets([data as any], async (replyIds) => {
+              const { data: replies, error: replyError } = await supabase
+                .from('messages')
+                .select(BASE_MESSAGE_SELECT)
+                .in('id', replyIds);
+              return { data: (replies || []) as any[], error: replyError };
+            });
             const incoming = hydratedData ?? data;
 
-            setMessages((prev) => {
-              if (prev.some((m) => m.id === incoming.id)) return prev;
-              return [...prev, { ...incoming, status: 'sent' as const } as Message];
-            });
+            setMessages((prev) =>
+              appendRealtimeMessage(prev, {
+                ...incoming,
+                status: 'sent' as const,
+              } as Message)
+            );
 
             if (user && incoming.sender_id !== user.id) markRead([incoming.id]);
           }
