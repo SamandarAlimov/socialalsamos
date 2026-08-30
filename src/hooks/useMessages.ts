@@ -98,6 +98,16 @@ export interface Message {
   status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
   tempId?: string;
   client_message_id?: string | null;
+  metadata?: Record<string, unknown> | null;
+  location_payload?: Record<string, unknown> | null;
+  live_location_expires_at?: string | null;
+  live_location_stopped_at?: string | null;
+}
+
+export interface MessageSendExtras {
+  metadata?: Record<string, unknown>;
+  locationPayload?: Record<string, unknown>;
+  liveLocationExpiresAt?: string;
 }
 
 /** Telegramdek: chat oynasi faqat oxirgi sahifani yuklaydi, qolgani surilganda keladi */
@@ -801,7 +811,8 @@ export function useMessages(conversationId: string | null) {
       content: string,
       mediaUrl?: string,
       mediaType?: string,
-      replyToId?: string | null
+      replyToId?: string | null,
+      extras?: MessageSendExtras
     ) => {
       if (!conversationId || !user) return null;
 
@@ -816,6 +827,9 @@ export function useMessages(conversationId: string | null) {
         media_url: mediaUrl || null,
         media_type: mediaType || null,
         reply_to_id: replyToId || null,
+        metadata: extras?.metadata || null,
+        location_payload: extras?.locationPayload || null,
+        live_location_expires_at: extras?.liveLocationExpiresAt || null,
         story_id: null,
         shared_post_id: null,
         is_edited: false,
@@ -842,6 +856,9 @@ export function useMessages(conversationId: string | null) {
           mediaType,
           replyToId,
           clientMessageId: tempId,
+          metadata: extras?.metadata,
+          locationPayload: extras?.locationPayload,
+          liveLocationExpiresAt: extras?.liveLocationExpiresAt,
         });
 
         const insertResult = await insertMessageWithReplyFallback(
@@ -967,6 +984,9 @@ export function useMessages(conversationId: string | null) {
           mediaType: failedMessage.media_type || undefined,
           replyToId: failedMessage.reply_to_id || null,
           clientMessageId: optimisticId,
+          metadata: failedMessage.metadata || undefined,
+          locationPayload: failedMessage.location_payload || undefined,
+          liveLocationExpiresAt: failedMessage.live_location_expires_at || undefined,
         });
 
         const insertResult = await insertMessageWithReplyFallback(
