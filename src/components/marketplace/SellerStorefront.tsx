@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowLeft, ShieldCheck, Star, MapPin, MessageCircle, Package, Users, Heart, Grid3X3, LayoutList, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -11,6 +11,9 @@ import { Product } from '@/hooks/useMarketplace';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { marketplaceUz } from '@/i18n/marketplace';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface SellerStorefrontProps {
   sellerId: string | null;
@@ -25,9 +28,65 @@ export function SellerStorefront({
   onProductSelect,
   onMessageSeller,
 }: SellerStorefrontProps) {
+  const { user } = useAuth();
   const { seller, products, reviews, isLoading } = useSellerStore(sellerId || undefined);
   const [activeTab, setActiveTab] = useState<'products' | 'reviews'>('products');
   const [layout, setLayout] = useState<'grid' | 'list'>('grid');
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
+
+  useEffect(() => {
+    if (!user || !seller?.user_id || user.id === seller.user_id) {
+      setIsFollowing(false);
+      return;
+    }
+
+    let cancelled = false;
+    void supabase
+      .from('follows')
+      .select('following_id')
+      .eq('follower_id', user.id)
+      .eq('following_id', seller.user_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setIsFollowing(Boolean(data));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [seller?.user_id, user]);
+
+  const handleFollow = async () => {
+    if (!user || !seller?.user_id || user.id === seller.user_id || followLoading) return;
+
+    setFollowLoading(true);
+    const targetUserId = seller.user_id;
+
+    const { error } = isFollowing
+      ? await supabase
+          .from('follows')
+          .delete()
+          .eq('follower_id', user.id)
+          .eq('following_id', targetUserId)
+      : await supabase
+          .from('follows')
+          .insert({ follower_id: user.id, following_id: targetUserId });
+
+    setFollowLoading(false);
+
+    if (error) {
+      toast.error(marketplaceUz.storefront.followFailed);
+      return;
+    }
+
+    setIsFollowing(value => !value);
+    toast.success(
+      isFollowing
+        ? marketplaceUz.storefront.unfollowed
+        : marketplaceUz.storefront.followed,
+    );
+  };
 
   if (!sellerId) return null;
 
@@ -108,10 +167,25 @@ export function SellerStorefront({
                     <MessageCircle className="h-4 w-4 mr-1.5" />
                     {marketplaceUz.storefront.sendMessage}
                   </Button>
-                  <Button variant="outline" className="rounded-xl h-10" size="sm">
-                    <Users className="h-4 w-4 mr-1.5" />
-                    {marketplaceUz.storefront.follow}
-                  </Button>
+                  {user?.id !== seller.user_id && (
+                    <Button
+                      variant="outline"
+                      className="rounded-xl h-10"
+                      size="sm"
+                      onClick={handleFollow}
+                      disabled={followLoading}
+                      aria-pressed={isFollowing}
+                    >
+                      {followLoading ? (
+                        <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                      ) : (
+                        <Users className="h-4 w-4 mr-1.5" />
+                      )}
+                      {isFollowing
+                        ? marketplaceUz.storefront.following
+                        : marketplaceUz.storefront.follow}
+                    </Button>
+                  )}
                 </div>
 
                 {/* Tabs */}

@@ -90,6 +90,10 @@ export const marketplaceUz = {
   storefront: {
     sendMessage: 'Xabar yuborish',
     follow: 'Obuna',
+    following: 'Kuzatilmoqda',
+    followed: 'Sotuvchiga obuna bo‘ldingiz',
+    unfollowed: 'Obuna bekor qilindi',
+    followFailed: 'Obuna holatini o‘zgartirib bo‘lmadi',
     products: 'Mahsulotlar',
     reviews: 'Sharhlar',
     productCount: (count: number) => `${count} ta mahsulot`,
