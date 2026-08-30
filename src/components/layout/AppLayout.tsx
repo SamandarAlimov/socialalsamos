@@ -8,6 +8,7 @@ import { Loader2 } from 'lucide-react';
 import { useActivityTracking } from '@/hooks/useActivityTracking';
 import { LocationPermissionDialog } from '@/components/LocationPermissionDialog';
 import { cn } from '@/lib/utils';
+import { resumeMyLiveLocationSharing } from '@/lib/liveLocationSharing';
 
 export function AppLayout() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -25,6 +26,13 @@ export function AppLayout() {
   useEffect(() => {
     if (isAuthenticated) {
       startSession(location.pathname);
+    }
+  }, [isAuthenticated]);
+
+  // Reload / qayta kirishdan keyin tugamagan jonli joylashuvlarni tiklaymiz.
+  useEffect(() => {
+    if (isAuthenticated) {
+      void resumeMyLiveLocationSharing();
     }
   }, [isAuthenticated]);
   
