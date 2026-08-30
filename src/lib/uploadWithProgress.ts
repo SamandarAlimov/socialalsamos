@@ -1,5 +1,13 @@
 import { supabase } from '@/integrations/supabase/client';
-import { MEDIA_BUCKET, uploadMedia } from '@/lib/mediaUpload';
+import {
+  MEDIA_BUCKET,
+  PRIVATE_MEDIA_BUCKET,
+  bucketForMediaVisibility,
+  makeStorageReference,
+  resolveStorageUrl,
+  uploadMedia,
+  type MediaVisibility,
+} from '@/lib/mediaUpload';
 
 /**
  * Foizli progress bilan fayl yuklash.
@@ -14,7 +22,11 @@ import { MEDIA_BUCKET, uploadMedia } from '@/lib/mediaUpload';
  */
 
 export interface UploadProgressResult {
+  /** Joriy sessiyada preview uchun URL. */
   url: string;
+  /** DB uchun stable public URL yoki storage:// reference. */
+  storageUrl: string;
+  bucket: string;
   key: string;
   name: string;
   size: number;
@@ -27,6 +39,7 @@ export interface UploadWithProgressOptions {
   onProgress?: (percent: number) => void;
   /** Yuklashni bekor qilish uchun. */
   signal?: AbortSignal;
+  visibility?: MediaVisibility;
 }
 
 function safeFileName(name: string): string {
@@ -96,7 +109,7 @@ export async function uploadFileWithProgress(
   file: File,
   options: UploadWithProgressOptions = {},
 ): Promise<UploadProgressResult> {
-  const { kind = 'post', onProgress, signal } = options;
+  const { kind = 'post', onProgress, signal, visibility = 'public' } = options;
   const contentType = file.type || 'application/octet-stream';
 
   const { data: sessionData } = await supabase.auth.getSession();
@@ -107,10 +120,11 @@ export async function uploadFileWithProgress(
   }
 
   const key = `${userId}/${kind}/${Date.now()}-${randomId()}-${safeFileName(file.name)}`;
+  const bucket = bucketForMediaVisibility(visibility);
 
   try {
     const { data, error } = await supabase.storage
-      .from(MEDIA_BUCKET)
+      .from(bucket)
       .createSignedUploadUrl(key);
 
     if (error || !data?.signedUrl) {
@@ -120,10 +134,20 @@ export async function uploadFileWithProgress(
     onProgress?.(1);
     await putWithProgress(data.signedUrl, file, contentType, onProgress, signal);
 
-    const { data: publicData } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(key);
+    const storageUrl =
+      bucket === MEDIA_BUCKET
+        ? supabase.storage.from(bucket).getPublicUrl(key).data.publicUrl
+        : makeStorageReference(bucket, key);
+
+    const url =
+      bucket === PRIVATE_MEDIA_BUCKET
+        ? await resolveStorageUrl(storageUrl, bucket, key)
+        : storageUrl;
 
     return {
-      url: publicData.publicUrl,
+      url,
+      storageUrl,
+      bucket,
       key,
       name: file.name,
       size: file.size,
@@ -135,11 +159,13 @@ export async function uploadFileWithProgress(
     // Signed URL yo'li ishlamadi — eski, ishonchli yo'lga qaytamiz.
     console.warn('Progressli yuklash ishlamadi, uploadMedia() ishlatiladi:', error);
 
-    const uploaded = await uploadMedia(file, { type: kind, visibility: 'public' });
+    const uploaded = await uploadMedia(file, { type: kind, visibility });
     onProgress?.(100);
 
     return {
       url: uploaded.url,
+      storageUrl: uploaded.storageUrl,
+      bucket: uploaded.bucket,
       key: uploaded.key,
       name: uploaded.name,
       size: uploaded.size,
