@@ -236,6 +236,24 @@ function midpointOfGeometry(
   return null;
 }
 
+function incidentMagnitude(value: unknown): number {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return Math.max(0, Math.min(4, numeric));
+  switch (String(value ?? '').toLowerCase()) {
+    case 'minor':
+      return 1;
+    case 'moderate':
+      return 2;
+    case 'major':
+      return 3;
+    case 'indefinite':
+    case 'undefined':
+      return 4;
+    default:
+      return 0;
+  }
+}
+
 function incidentCategory(iconCategory: unknown): string {
   const raw = String(iconCategory ?? '').toLowerCase();
   const numeric = Number(iconCategory);
@@ -330,7 +348,7 @@ async function fetchTomTomIncidents(
         Accept: 'application/json',
         'Accept-Language': 'ru-RU,en-GB;q=0.8',
         Attributes:
-          'incidents(type,geometry(type,coordinates),properties(id,iconCategory,magnitudeOfDelay,events(description,code,iconCategory),startTime,endTime,from,to,length,delay,roadNumbers,timeValidity,probabilityOfOccurrence,lastReportTime))',
+          'incidents(type,geometry(type,coordinates),properties(id,iconCategory,magnitudeOfDelay,events(description,code,iconCategory),startTime,endTime,from,to,lengthInMeters,delayInSeconds,roadNumbers,timeValidity,probabilityOfOccurrence,lastReportTime))',
       },
     });
     if (!response.ok) {
@@ -359,12 +377,12 @@ async function fetchTomTomIncidents(
             id: String(properties.id || ''),
             category: incidentCategory(properties.iconCategory),
             iconCategory: properties.iconCategory ?? null,
-            magnitude: Number(properties.magnitudeOfDelay) || 0,
+            magnitude: incidentMagnitude(properties.magnitudeOfDelay),
             description: descriptions.join(' · ') || null,
             from: properties.from || null,
             to: properties.to || null,
-            delayS: Number(properties.delay) || 0,
-            lengthM: Number(properties.length) || 0,
+            delayS: Number(properties.delayInSeconds) || 0,
+            lengthM: Number(properties.lengthInMeters) || 0,
             startTime: properties.startTime || null,
             endTime: properties.endTime || null,
             lastReportTime: properties.lastReportTime || null,
