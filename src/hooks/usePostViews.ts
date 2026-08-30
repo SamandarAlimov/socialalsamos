@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { readStructuredPostSchemaCapability } from '@/lib/structuredPostSchema';
 
 /**
  * Post ko'rishlarini yozish.
@@ -39,7 +40,7 @@ export function usePostViews() {
   const recordView = useCallback(
     async (postId: string) => {
       if (!user || !postId) return;
-      if (viewTrackingDisabled) return;
+      if (viewTrackingDisabled || readStructuredPostSchemaCapability() === 'missing') return;
 
       const key = user.id + ':' + postId;
       if (recorded.has(key)) return;
