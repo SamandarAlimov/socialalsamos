@@ -12,6 +12,7 @@
     "typecheck:create": "tsc -p tsconfig.create.json --noEmit",
     "test:map": "vitest run src/lib/routing.test.ts src/lib/taxiProviders.test.ts",
     "test:messages": "vitest run src/lib/messagePipeline.test.ts",
+    "typecheck:messages": "tsc -p tsconfig.messages.json --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
