@@ -176,3 +176,33 @@ export function navigationArrowSvg(heading?: number | null): string {
     '</div>',
   ].join('');
 }
+
+
+/** Real traffic incident markeri: hodisa turiga qarab signal belgisi. */
+export function incidentSvg(
+  category: string,
+  color = '#F97316',
+): string {
+  const safeColor = /^#[0-9a-fA-F]{6}$/.test(color)
+    ? color
+    : '#F97316';
+  const glyph =
+    category === 'road_closed'
+      ? '×'
+      : category === 'road_works'
+        ? '!'
+        : category === 'accident'
+          ? '!'
+          : category === 'jam'
+            ? '≋'
+            : '!';
+  return [
+    '<div style="width:32px;height:32px;border-radius:11px;',
+    'display:flex;align-items:center;justify-content:center;',
+    'background:' + safeColor + ';color:#fff;',
+    'font:900 17px/1 system-ui;border:2px solid #fff;',
+    'box-shadow:0 6px 18px rgba(0,0,0,.28)">',
+    glyph,
+    '</div>',
+  ].join('');
+}
