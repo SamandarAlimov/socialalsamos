@@ -247,3 +247,27 @@ export function trafficIncidentLabel(
       return 'Yo‘ldagi hodisa';
   }
 }
+
+
+export function trafficIncidentColor(
+  category: TrafficIncident['category'],
+): string {
+  switch (category) {
+    case 'road_closed':
+      return '#DC2626';
+    case 'accident':
+      return '#EF4444';
+    case 'road_works':
+      return '#F97316';
+    case 'lane_closed':
+      return '#F59E0B';
+    case 'jam':
+      return '#E11D48';
+    case 'flood':
+      return '#0EA5E9';
+    case 'broken_vehicle':
+      return '#8B5CF6';
+    default:
+      return '#F97316';
+  }
+}
