@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  ArrowLeft,
+  ArrowRight,
   Camera,
   ChevronDown,
   ImagePlus,
   Loader2,
   Music2,
   Pencil,
+  Plus,
   Send,
+  Trash2,
   Users,
   Video,
   X,
@@ -34,6 +38,11 @@ import { CameraVideoRecorder } from '@/components/create/CameraVideoRecorder';
 import { MusicPicker } from '@/components/create/MusicPicker';
 import { MentionCollaborator } from '@/components/create/MentionCollaborator';
 import { VideoEditor, type VideoEditData } from '@/components/VideoEditor';
+import { MAX_REEL_CLIPS } from '@/lib/reelTimeline';
+import {
+  canRenderReelSequence,
+  renderReelSequence,
+} from '@/lib/reelRender';
 
 interface CollaboratorProfile {
   id: string;
@@ -99,7 +108,10 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
   const [showMusic, setShowMusic] = useState(false);
   const [showCollaborators, setShowCollaborators] = useState(false);
   const [videoTargetId, setVideoTargetId] = useState<string | null>(null);
+  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [isPosting, setIsPosting] = useState(false);
+  const [isCombining, setIsCombining] = useState(false);
+  const [combineProgress, setCombineProgress] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
 
   const {
@@ -108,23 +120,45 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
     addFiles,
     removeAttachment,
     clearAttachments,
+    reorderAttachments,
     replaceAttachmentFile,
+    replaceAllWithRenderedFile,
     markAttachmentsPublished,
     uploadAll,
   } = usePostAttachments({
-    maxFiles: 1,
+    maxFiles: MAX_REEL_CLIPS,
     uploadKind: 'reel',
     visibility,
   });
 
-  const videoAttachment = attachments[0] ?? null;
+  const activeClip = useMemo(
+    () =>
+      attachments.find((item) => item.id === selectedClipId) ??
+      attachments[0] ??
+      null,
+    [attachments, selectedClipId],
+  );
+  const activeClipIndex = useMemo(
+    () => attachments.findIndex((item) => item.id === activeClip?.id),
+    [activeClip?.id, attachments],
+  );
   const videoTarget = useMemo(
     () => attachments.find((item) => item.id === videoTargetId) ?? null,
     [attachments, videoTargetId],
   );
 
+  useEffect(() => {
+    if (attachments.length === 0) {
+      setSelectedClipId(null);
+      return;
+    }
+    if (!attachments.some((item) => item.id === selectedClipId)) {
+      setSelectedClipId(attachments[0].id);
+    }
+  }, [attachments, selectedClipId]);
+
   const hasDraft =
-    Boolean(videoAttachment) ||
+    attachments.length > 0 ||
     caption.trim().length > 0 ||
     Boolean(music) ||
     collaborators.length > 0;
@@ -161,39 +195,51 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
     setMusic(next);
   }, []);
 
-  const replaceVideo = useCallback(
-    async (file: File) => {
-      if (!file.type.startsWith('video/')) {
-        toast.error('Reel uchun video fayl tanlang');
+  const addVideoFiles = useCallback(
+    async (files: File[]) => {
+      const videos = files.filter((file) => file.type.startsWith('video/'));
+      if (videos.length === 0) {
+        toast.error('Video fayl tanlang');
         return;
       }
 
-      if (videoAttachment) {
-        removeAttachment(videoAttachment.id);
-      }
-
-      await addFiles([file]);
+      const created = await addFiles(videos);
+      const last = created[created.length - 1];
+      if (last) setSelectedClipId(last.id);
     },
-    [addFiles, removeAttachment, videoAttachment],
+    [addFiles],
   );
 
   const handleFileInput = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
+      const files = Array.from(event.target.files ?? []);
       event.target.value = '';
-      if (file) await replaceVideo(file);
+      if (files.length > 0) await addVideoFiles(files);
     },
-    [replaceVideo],
+    [addVideoFiles],
   );
 
   const handleDrop = useCallback(
     async (event: React.DragEvent<HTMLDivElement>) => {
       event.preventDefault();
       setIsDragging(false);
-      const file = event.dataTransfer.files?.[0];
-      if (file) await replaceVideo(file);
+      const files = Array.from(event.dataTransfer.files ?? []);
+      if (files.length > 0) await addVideoFiles(files);
     },
-    [replaceVideo],
+    [addVideoFiles],
+  );
+
+  const removeClip = useCallback(
+    (id: string) => {
+      const index = attachments.findIndex((item) => item.id === id);
+      const fallback =
+        attachments[index + 1]?.id ??
+        attachments[index - 1]?.id ??
+        null;
+      removeAttachment(id);
+      setSelectedClipId((current) => (current === id ? fallback : current));
+    },
+    [attachments, removeAttachment],
   );
 
   const handleRenderedVideo = useCallback(
@@ -223,16 +269,55 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
 
   const publishReel = useCallback(async () => {
     if (
-      !videoAttachment ||
-      videoAttachment.kind !== 'video' ||
+      attachments.length === 0 ||
       isPosting ||
-      isUploading
+      isUploading ||
+      isCombining
     ) {
       return;
     }
 
     setIsPosting(true);
     try {
+      if (attachments.length > 1) {
+        if (!canRenderReelSequence()) {
+          toast.error('Bu brauzerda multi-clip render mavjud emas');
+          return;
+        }
+
+        setIsCombining(true);
+        setCombineProgress(0);
+
+        const sourceClipCount = attachments.length;
+        const rendered = await renderReelSequence(
+          attachments.map((item) => ({
+            file: item.file,
+            durationSeconds: item.durationSeconds,
+          })),
+          {
+            width: 720,
+            height: 1280,
+            frameRate: 30,
+            onProgress: setCombineProgress,
+          },
+        );
+
+        const collapsed = await replaceAllWithRenderedFile(rendered, {
+          reelTimeline: {
+            rendered: true,
+            clipCount: sourceClipCount,
+            renderedAt: new Date().toISOString(),
+          },
+        });
+
+        if (!collapsed) {
+          toast.error('Reel videosini tayyorlab bo‘lmadi');
+          return;
+        }
+        setSelectedClipId(collapsed.id);
+        setIsCombining(false);
+      }
+
       const { media, failed } = await uploadAll();
 
       if (failed.length > 0 || media.length !== 1 || media[0]?.kind !== 'video') {
@@ -269,26 +354,29 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
       toast.success('Reel joylandi');
       navigate('/home');
     } finally {
+      setIsCombining(false);
       setIsPosting(false);
     }
   }, [
+    attachments,
     caption,
     clearAttachments,
     collaborators,
     createPost,
+    isCombining,
     isPosting,
     isUploading,
     markAttachmentsPublished,
     music,
     navigate,
     onDraftStateChange,
+    replaceAllWithRenderedFile,
     uploadAll,
-    videoAttachment,
     visibility,
   ]);
 
   const canPublish =
-    Boolean(videoAttachment?.kind === 'video') && !isPosting && !isUploading;
+    attachments.length > 0 && !isPosting && !isUploading && !isCombining;
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 pb-8 pt-4 sm:px-5 lg:px-6">
@@ -313,14 +401,14 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
               onDragLeave={() => setIsDragging(false)}
               onDrop={(event) => void handleDrop(event)}
             >
-              {videoAttachment?.previewUrl ? (
+              {activeClip?.previewUrl ? (
                 <video
-                  src={videoAttachment.previewUrl}
+                  src={activeClip.previewUrl}
                   muted
                   loop
                   autoPlay
                   playsInline
-                  className="h-full w-full object-contain"
+                  className="h-full w-full object-cover"
                 />
               ) : (
                 <button
@@ -369,6 +457,7 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
               ref={fileInputRef}
               type="file"
               accept="video/*"
+              multiple
               className="hidden"
               onChange={handleFileInput}
             />
@@ -380,7 +469,7 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
                 className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-border/60 bg-background text-xs font-medium transition hover:border-primary/25 hover:bg-primary/[0.035]"
               >
                 <ImagePlus className="h-4 w-4 text-primary" />
-                {videoAttachment ? 'Almashtirish' : 'Qurilmadan'}
+                {attachments.length > 0 ? 'Klip qo‘shish' : 'Qurilmadan'}
               </button>
               <button
                 type="button"
@@ -392,15 +481,100 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
               </button>
             </div>
 
-            {videoAttachment && (
+            {activeClip && (
               <button
                 type="button"
-                onClick={() => setVideoTargetId(videoAttachment.id)}
+                onClick={() => setVideoTargetId(activeClip.id)}
                 className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-muted/60 text-xs font-medium transition hover:bg-muted"
               >
                 <Pencil className="h-4 w-4" />
                 Tahrirlash
               </button>
+            )}
+
+            {attachments.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {attachments.map((clip, index) => (
+                    <button
+                      key={clip.id}
+                      type="button"
+                      onClick={() => setSelectedClipId(clip.id)}
+                      className={cn(
+                        'relative h-20 w-14 shrink-0 overflow-hidden rounded-xl border-2 bg-black transition',
+                        clip.id === activeClip?.id
+                          ? 'border-primary'
+                          : 'border-transparent opacity-70 hover:opacity-100',
+                      )}
+                    >
+                      {clip.previewUrl ? (
+                        <video
+                          src={clip.previewUrl}
+                          muted
+                          playsInline
+                          preload="metadata"
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <Video className="absolute inset-0 m-auto h-5 w-5 text-white/60" />
+                      )}
+                      <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[9px] text-white">
+                        {index + 1}
+                      </span>
+                    </button>
+                  ))}
+
+                  {attachments.length < MAX_REEL_CLIPS && (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex h-20 w-14 shrink-0 items-center justify-center rounded-xl border border-dashed border-border/70 text-muted-foreground transition hover:border-primary/40 hover:text-primary"
+                    >
+                      <Plus className="h-5 w-5" />
+                    </button>
+                  )}
+                </div>
+
+                {activeClip && (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-muted-foreground">
+                      {activeClipIndex + 1}/{attachments.length}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={activeClipIndex <= 0}
+                        onClick={() =>
+                          reorderAttachments(activeClipIndex, activeClipIndex - 1)
+                        }
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted disabled:opacity-30"
+                        aria-label="Oldinga"
+                      >
+                        <ArrowLeft className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={activeClipIndex < 0 || activeClipIndex >= attachments.length - 1}
+                        onClick={() =>
+                          reorderAttachments(activeClipIndex, activeClipIndex + 1)
+                        }
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted disabled:opacity-30"
+                        aria-label="Keyinga"
+                      >
+                        <ArrowRight className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeClip(activeClip.id)}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                        aria-label="Klipni o‘chirish"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </section>
@@ -563,16 +737,18 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
             onClick={() => void publishReel()}
             className="flex h-13 min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isPosting || isUploading ? (
+            {isPosting || isUploading || isCombining ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Send className="h-4 w-4" />
             )}
-            {isUploading
-              ? 'Video yuklanmoqda...'
-              : isPosting
-                ? 'Reel joylanmoqda...'
-                : 'Reel joylash'}
+            {isCombining
+              ? `Tayyorlanmoqda ${Math.round(combineProgress * 100)}%`
+              : isUploading
+                ? 'Yuklanmoqda...'
+                : isPosting
+                  ? 'Joylanmoqda...'
+                  : 'Reel joylash'}
           </button>
         </aside>
       </div>
@@ -584,7 +760,7 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
           onClose={() => setShowCamera(false)}
           onCapture={(file, type, sourceUrl) => {
             if (type === 'video') {
-              void replaceVideo(file);
+              void addVideoFiles([file]);
             }
             if (sourceUrl.startsWith('blob:')) URL.revokeObjectURL(sourceUrl);
             setShowCamera(false);
