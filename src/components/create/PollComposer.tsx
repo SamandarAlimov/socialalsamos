@@ -179,7 +179,7 @@ export function PollComposer({ open, onClose, onSave, initialPoll }: PollCompose
 
   const toggleRow = (
     label: string,
-    description: string,
+    _description: string,
     value: boolean,
     onToggle: (value: boolean) => void,
     icon?: React.ReactNode,
@@ -190,10 +190,7 @@ export function PollComposer({ open, onClose, onSave, initialPoll }: PollCompose
       className="flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-background px-3 py-3 text-left transition hover:border-primary/20 hover:bg-primary/[0.025]"
     >
       {icon && <span className="shrink-0 text-muted-foreground">{icon}</span>}
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-medium">{label}</span>
-        <span className="block text-xs text-muted-foreground">{description}</span>
-      </span>
+      <span className="min-w-0 flex-1 text-sm font-medium">{label}</span>
       <span
         className={cn(
           'flex h-6 w-10 shrink-0 items-center rounded-full p-0.5 transition',
@@ -218,10 +215,7 @@ export function PollComposer({ open, onClose, onSave, initialPoll }: PollCompose
             <BarChart3 className="h-5 w-5" />
           </span>
           <div className="min-w-0 flex-1">
-            <h2 className="text-sm font-semibold sm:text-base">So‘rovnoma yaratish</h2>
-            <p className="truncate text-xs text-muted-foreground">
-              Oddiy poll yoki viktorina · {options.length}/{POLL_MAX_OPTIONS} variant
-            </p>
+            <h2 className="text-sm font-semibold sm:text-base">So‘rovnoma</h2>
           </div>
 
           <button
@@ -277,14 +271,9 @@ export function PollComposer({ open, onClose, onSave, initialPoll }: PollCompose
 
             <div className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-sm">
               <div className="flex items-center justify-between border-b border-border/50 px-4 py-3 sm:px-5">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                    Javob variantlari
-                  </p>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">
-                    {quizMode ? 'To‘g‘ri javobni belgilang' : 'Variantlar tartibini boshqaring'}
-                  </p>
-                </div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Variantlar
+                </p>
                 <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-medium text-muted-foreground">
                   {options.length}/{POLL_MAX_OPTIONS}
                 </span>
@@ -434,7 +423,7 @@ export function PollComposer({ open, onClose, onSave, initialPoll }: PollCompose
             <div className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-sm">
               <div className="border-b border-border/50 px-4 py-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Poll sozlamalari
+                  Sozlamalar
                 </p>
               </div>
 
@@ -557,7 +546,7 @@ export function PollComposer({ open, onClose, onSave, initialPoll }: PollCompose
           className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-semibold text-primary-foreground"
         >
           <Check className="h-4 w-4" />
-          So‘rovnomani saqlash
+          Saqlash
         </button>
       </div>
     </div>
