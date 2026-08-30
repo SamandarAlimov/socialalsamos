@@ -49,6 +49,7 @@ interface LeafletMapSurfaceProps {
   referenceCenter: { latitude: number; longitude: number };
   highContrast?: boolean;
   traffic?: TrafficProviderStatus | null;
+  trafficRevision?: number;
   onViewport: (viewport: MapViewport) => void;
   onMovedCenter: (
     center: { latitude: number; longitude: number } | null,
@@ -285,6 +286,7 @@ export function LeafletMapSurface({
   referenceCenter,
   highContrast = false,
   traffic = null,
+  trafficRevision = 0,
   onViewport,
   onMovedCenter,
   onMapClick,
@@ -327,10 +329,13 @@ export function LeafletMapSurface({
         <TileLayer
           key={
             'traffic:' +
-            (layerId === 'night' ? 'dark' : 'light')
+            (layerId === 'night' ? 'dark' : 'light') +
+            ':' +
+            trafficRevision
           }
           url={trafficTileTemplate(
             layerId === 'night' ? 'dark' : 'light',
+            trafficRevision,
           )}
           attribution={traffic.attribution ?? undefined}
           minZoom={traffic.minZoom}
