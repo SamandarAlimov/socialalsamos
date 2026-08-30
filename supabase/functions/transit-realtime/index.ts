@@ -852,15 +852,6 @@ async function arrivals(payload: Record<string, any>) {
     };
   }
 
-
-  const lat = Number(payload.latitude);
-  const lng = Number(payload.longitude);
-  const matched = staticData && Number.isFinite(lat) && Number.isFinite(lng)
-    ? nearestStop(staticData, lat, lng)
-    : null;
-
-  const requestedStopId = String(payload.gtfsStopId || "");
-  const stopId = requestedStopId || matched?.id || "";
   if (!stopId) {
     return {
       ...providerMeta(),
