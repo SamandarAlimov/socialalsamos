@@ -57,6 +57,89 @@ create policy "posts_select_visible"
   for select
   using (public.can_view_post(id));
 
+
+-- post_hashtags eski DBlarda noma'lum SELECT policy bilan kelgan bo'lishi mumkin.
+-- Barcha SELECT policy nomlarini katalogdan olib tashlab, bitta canonical policy
+-- yaratamiz. Write'lar posts triggeri orqali SECURITY DEFINER bilan bajariladi.
+do $
+declare
+  v_policy record;
+begin
+  for v_policy in
+    select policyname
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'post_hashtags'
+      and cmd = 'SELECT'
+  loop
+    execute format(
+      'drop policy if exists %I on public.post_hashtags',
+      v_policy.policyname
+    );
+  end loop;
+end
+$;
+
+create policy "post_hashtags_select"
+  on public.post_hashtags
+  for select
+  using (public.can_view_post(post_id));
+
+-- Public hashtag katalogi private/friends postlar borligini count/search orqali
+-- oshkor qilmasin. Faqat public postlar katalog countiga kiradi.
+create or replace function public.sync_hashtag_counts()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $
+declare
+  v_id uuid;
+begin
+  v_id := coalesce(new.hashtag_id, old.hashtag_id);
+
+  update public.hashtags h
+  set posts_count = (
+    select count(*)
+    from public.post_hashtags ph
+    join public.posts p on p.id = ph.post_id
+    where ph.hashtag_id = h.id
+      and p.visibility = 'public'
+  )
+  where h.id = v_id;
+
+  return null;
+end
+$;
+
+update public.hashtags h
+set posts_count = (
+  select count(*)
+  from public.post_hashtags ph
+  join public.posts p on p.id = ph.post_id
+  where ph.hashtag_id = h.id
+    and p.visibility = 'public'
+);
+
+create or replace function public.search_hashtags(p_query text, p_limit int default 12)
+returns table (id uuid, tag text, posts_count int)
+language sql
+stable
+security definer
+set search_path = public
+as $
+  with q as (select lower(trim(both '#' from coalesce(p_query, ''))) as term)
+  select h.id, h.tag, h.posts_count
+  from public.hashtags h, q
+  where h.posts_count > 0
+    and (q.term = '' or h.tag like q.term || '%' or h.tag % q.term)
+  order by
+    case when q.term <> '' and h.tag like q.term || '%' then 0 else 1 end,
+    h.posts_count desc,
+    h.last_used_at desc
+  limit greatest(1, least(coalesce(p_limit, 12), 50));
+$;
+
 -- ---------------------------------------------------------------------------
 -- 2. Stable Storage references
 --    Private signed URL vaqtinchalik bo'lgani uchun DB ga URL emas,
