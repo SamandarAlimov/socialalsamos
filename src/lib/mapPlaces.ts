@@ -342,7 +342,7 @@ async function overpass(
     // Public Overpass mirrorlar vaqti-vaqti bilan sekinlashadi yoki bitta regionda
     // bloklanadi. Birinchi ikkita mirrorni parallel sinab, birinchi sog'lom
     // javobni olamiz. Bu foydalanuvchini 8-10 sekund ketma-ket kutishdan saqlaydi.
-    const primaryTimeout = Math.min(5200, totalBudgetMs);
+    const primaryTimeout = Math.min(3800, totalBudgetMs);
     let data: any;
     try {
       data = await Promise.any(
@@ -356,7 +356,7 @@ async function overpass(
       if (!fallbackEndpoint) throw primaryError;
       data = await request(
         fallbackEndpoint,
-        Math.max(2200, Math.min(4200, totalBudgetMs)),
+        Math.max(1800, Math.min(2400, totalBudgetMs)),
       );
     }
 
