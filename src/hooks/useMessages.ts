@@ -685,7 +685,7 @@ export function useMessages(conversationId: string | null) {
 
       const messagesWithStatus = filteredMessages.map((m) => ({
         ...m,
-        status: 'delivered' as const,
+        status: 'sent' as const,
       }));
 
       setMessages(messagesWithStatus as Message[]);
@@ -745,7 +745,7 @@ export function useMessages(conversationId: string | null) {
 
       const older = rows
         .filter((m) => !deletedForMeIds.has(m.id))
-        .map((m) => ({ ...m, status: 'delivered' as const })) as Message[];
+        .map((m) => ({ ...m, status: 'sent' as const })) as Message[];
 
       for (const m of older) processedMessageIds.current.add(m.id);
       oldestLoadedRef.current = older[0]?.created_at ?? before;
@@ -1010,7 +1010,7 @@ export function useMessages(conversationId: string | null) {
           if (data) {
             setMessages((prev) => {
               if (prev.some((m) => m.id === data.id)) return prev;
-              return [...prev, { ...data, status: 'delivered' as const } as Message];
+              return [...prev, { ...data, status: 'sent' as const } as Message];
             });
 
             if (user && data.sender_id !== user.id) markRead([data.id]);
