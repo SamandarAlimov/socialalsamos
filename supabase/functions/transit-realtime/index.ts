@@ -324,6 +324,64 @@ async function arrivals(payload: Record<string, any>) {
   };
 }
 
+async function journeyRoute(payload: Record<string, any>) {
+  const router = env("TRANSIT_ROUTER_URL").replace(/\/+$/, "");
+  if (!router) {
+    return { configured: false, routes: [] };
+  }
+
+  const from = payload.from ?? {};
+  const to = payload.to ?? {};
+  const body = {
+    from: {
+      latitude: Number(from.latitude),
+      longitude: Number(from.longitude),
+      name: String(from.name || "Boshlanish nuqtasi"),
+    },
+    to: {
+      latitude: Number(to.latitude),
+      longitude: Number(to.longitude),
+      name: String(to.name || "Manzil"),
+    },
+    arriveBy: Boolean(payload.arriveBy),
+    departureTime: payload.departureTime || null,
+    alternatives: true,
+  };
+
+  if (
+    !Number.isFinite(body.from.latitude) ||
+    !Number.isFinite(body.from.longitude) ||
+    !Number.isFinite(body.to.latitude) ||
+    !Number.isFinite(body.to.longitude)
+  ) {
+    return { configured: true, routes: [], error: "Invalid route coordinates" };
+  }
+
+  const response = await fetch(router + "/route", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...providerHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error("Transit router HTTP " + response.status);
+
+  const data = await response.json();
+  const routes = Array.isArray(data?.routes) ? data.routes : [];
+  return {
+    configured: true,
+    routes: routes.slice(0, 4).map((route: any, index: number) => ({
+      mode: "transit",
+      durationS: Number(route.durationS ?? route.duration ?? 0),
+      distanceM: Number(route.distanceM ?? route.distance ?? 0),
+      coordinates: Array.isArray(route.coordinates) ? route.coordinates : [],
+      steps: Array.isArray(route.steps) ? route.steps : [],
+      label: String(route.label || (index === 0 ? "Eng tez transport" : "Muqobil transport")),
+      transfers: Number(route.transfers ?? 0),
+      fare: route.fare ?? null,
+      legs: Array.isArray(route.legs) ? route.legs : [],
+    })),
+  };
+}
+
 async function vehicles(payload: Record<string, any>) {
   const normalized = await normalizedRequest("vehicles", payload);
   if (normalized) return normalized;
@@ -409,6 +467,7 @@ Deno.serve(async (req) => {
         staticGtfs: Boolean(env("TRANSIT_GTFS_STATIC_URL")),
         arrivals: Boolean(env("TRANSIT_NORMALIZED_URL") || env("TRANSIT_GTFS_RT_TRIP_UPDATES_URL")),
         vehicles: Boolean(env("TRANSIT_NORMALIZED_URL") || env("TRANSIT_GTFS_RT_VEHICLES_URL")),
+        routing: Boolean(env("TRANSIT_ROUTER_URL")),
       }, 200, { "Cache-Control": "public, max-age=30" });
     }
 
@@ -421,6 +480,12 @@ Deno.serve(async (req) => {
     if (action === "vehicles") {
       return jsonResponse(req, await vehicles(payload), 200, {
         "Cache-Control": "public, max-age=10",
+      });
+    }
+
+    if (action === "route") {
+      return jsonResponse(req, await journeyRoute(payload), 200, {
+        "Cache-Control": "private, max-age=15",
       });
     }
 
