@@ -69,11 +69,17 @@ export async function fetchTrafficProviderStatus(
 
 export function trafficTileTemplate(
   style: TrafficStyle,
+  revision?: number,
 ): string {
+  const version =
+    revision != null && Number.isFinite(revision)
+      ? '&v=' + Math.max(0, Math.floor(revision))
+      : '';
   return (
     '/api/traffic?action=tile' +
     '&style=' +
     style +
-    '&z={z}&x={x}&y={y}'
+    '&z={z}&x={x}&y={y}' +
+    version
   );
 }
