@@ -4,13 +4,16 @@ import { MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap, useMapEvent
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
+  ArrowDown,
   ArrowDownUp,
+  ArrowUp,
   Bike,
   Bookmark,
   Car,
   ChevronDown,
   Clock,
   Crosshair,
+  GripVertical,
   History,
   Loader2,
   MapPin,
@@ -433,6 +436,8 @@ export default function MapPage() {
   const [routeEditQuery, setRouteEditQuery] = useState('');
   const [routeMapPickTarget, setRouteMapPickTarget] =
     useState<RouteEditTarget | null>(null);
+  const [draggedRouteStopIndex, setDraggedRouteStopIndex] =
+    useState<number | null>(null);
   const [navigationActive, setNavigationActive] = useState(
     restoredNavigation?.active ?? false,
   );
@@ -978,6 +983,47 @@ export default function MapPage() {
     [
       routeWaypoints,
       destination,
+      routeMode,
+      routeOrigin,
+      buildRoute,
+    ],
+  );
+
+  const reorderRouteStop = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      if (!destination) return;
+
+      const stops = [...routeWaypoints, destination];
+      if (
+        fromIndex < 0 ||
+        toIndex < 0 ||
+        fromIndex >= stops.length ||
+        toIndex >= stops.length ||
+        fromIndex === toIndex
+      ) {
+        return;
+      }
+
+      const nextStops = [...stops];
+      const [moved] = nextStops.splice(fromIndex, 1);
+      nextStops.splice(toIndex, 0, moved);
+
+      const nextDestination = nextStops[nextStops.length - 1];
+      const nextWaypoints = nextStops.slice(0, -1);
+
+      setRouteWaypoints(nextWaypoints);
+      setDestination(nextDestination);
+      setSelectedPlace(nextDestination);
+      void buildRoute(
+        nextDestination,
+        routeMode,
+        routeOrigin,
+        nextWaypoints,
+      );
+    },
+    [
+      destination,
+      routeWaypoints,
       routeMode,
       routeOrigin,
       buildRoute,
