@@ -766,7 +766,23 @@ export async function resolveMapClickPlace(
     return candidates[0] ?? null;
   })();
 
-  const reverseTask = reverseNominatimPlace(point, signal);
+  const reverseTask = reverseNominatimPlace(point, signal).then((place) => {
+    if (!place) return null;
+    const genericTypes = new Set([
+      'road',
+      'street',
+      'residential',
+      'service',
+      'path',
+      'footway',
+      'cycleway',
+      'track',
+    ]);
+    if (!place.categoryId && genericTypes.has(String(place.categoryLabel || '').toLowerCase())) {
+      return null;
+    }
+    return place;
+  });
 
   try {
     const place = await Promise.any(
