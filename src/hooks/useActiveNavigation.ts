@@ -35,6 +35,13 @@ interface UseActiveNavigationOptions {
   onArrive?: () => void;
 }
 
+interface RouteProjection {
+  coordinate: [number, number];
+  segmentIndex: number;
+  progressM: number;
+  distanceM: number;
+}
+
 const EMPTY_SNAPSHOT: NavigationSnapshot = {
   remainingDistanceM: 0,
   remainingDurationS: 0,
@@ -61,6 +68,11 @@ function bearingDegrees(
   return (((Math.atan2(y, x) * 180) / Math.PI) + 360) % 360;
 }
 
+function angularBlend(previous: number, next: number, alpha: number): number {
+  const delta = ((next - previous + 540) % 360) - 180;
+  return (previous + delta * alpha + 360) % 360;
+}
+
 function cumulativeRouteDistances(coordinates: [number, number][]): number[] {
   if (!coordinates.length) return [];
   const cumulative = [0];
@@ -75,40 +87,116 @@ function cumulativeRouteDistances(coordinates: [number, number][]): number[] {
   return cumulative;
 }
 
-function nearestCoordinateIndex(
+function projectPointToSegment(
+  point: { latitude: number; longitude: number },
+  start: [number, number],
+  end: [number, number],
+): { coordinate: [number, number]; ratio: number; distanceM: number } {
+  // Mahalliy masofalarda equirectangular proyeksiya route snap uchun yetarlicha
+  // aniq va har GPS sample uchun og'ir geometriya kutubxonasini talab qilmaydi.
+  const lat0 = ((point.latitude + start[0] + end[0]) / 3 * Math.PI) / 180;
+  const scaleX = Math.max(0.2, Math.cos(lat0));
+  const px = point.longitude * scaleX;
+  const py = point.latitude;
+  const ax = start[1] * scaleX;
+  const ay = start[0];
+  const bx = end[1] * scaleX;
+  const by = end[0];
+
+  const abX = bx - ax;
+  const abY = by - ay;
+  const lengthSq = abX * abX + abY * abY;
+  const ratio =
+    lengthSq <= Number.EPSILON
+      ? 0
+      : Math.max(
+          0,
+          Math.min(1, ((px - ax) * abX + (py - ay) * abY) / lengthSq),
+        );
+
+  const coordinate: [number, number] = [
+    start[0] + (end[0] - start[0]) * ratio,
+    start[1] + (end[1] - start[1]) * ratio,
+  ];
+
+  return {
+    coordinate,
+    ratio,
+    distanceM: distanceMeters(
+      point.latitude,
+      point.longitude,
+      coordinate[0],
+      coordinate[1],
+    ),
+  };
+}
+
+function nearestRouteProjection(
   point: { latitude: number; longitude: number },
   coordinates: [number, number][],
+  cumulative: number[],
   hint: number,
-): { index: number; distanceM: number } {
-  if (!coordinates.length) return { index: 0, distanceM: Infinity };
-
-  const search = (from: number, to: number) => {
-    let bestIndex = from;
-    let bestDistance = Infinity;
-    for (let index = from; index <= to; index += 1) {
-      const coordinate = coordinates[index];
-      const distance = distanceMeters(
+): RouteProjection {
+  if (!coordinates.length) {
+    return {
+      coordinate: [point.latitude, point.longitude],
+      segmentIndex: 0,
+      progressM: 0,
+      distanceM: Infinity,
+    };
+  }
+  if (coordinates.length === 1) {
+    return {
+      coordinate: coordinates[0],
+      segmentIndex: 0,
+      progressM: 0,
+      distanceM: distanceMeters(
         point.latitude,
         point.longitude,
-        coordinate[0],
-        coordinate[1],
+        coordinates[0][0],
+        coordinates[0][1],
+      ),
+    };
+  }
+
+  const scan = (from: number, to: number): RouteProjection => {
+    let best: RouteProjection = {
+      coordinate: coordinates[Math.max(0, Math.min(hint, coordinates.length - 1))],
+      segmentIndex: Math.max(0, Math.min(hint, coordinates.length - 2)),
+      progressM: cumulative[Math.max(0, Math.min(hint, cumulative.length - 1))] ?? 0,
+      distanceM: Infinity,
+    };
+
+    for (let index = from; index <= to; index += 1) {
+      const projected = projectPointToSegment(
+        point,
+        coordinates[index],
+        coordinates[index + 1],
       );
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestIndex = index;
-      }
+      if (projected.distanceM >= best.distanceM) continue;
+
+      const segmentLength =
+        (cumulative[index + 1] ?? cumulative[index] ?? 0) -
+        (cumulative[index] ?? 0);
+      best = {
+        coordinate: projected.coordinate,
+        segmentIndex: index,
+        progressM:
+          (cumulative[index] ?? 0) + Math.max(0, segmentLength) * projected.ratio,
+        distanceM: projected.distanceM,
+      };
     }
-    return { index: bestIndex, distanceM: bestDistance };
+    return best;
   };
 
-  const windowed = search(
-    Math.max(0, hint - 35),
-    Math.min(coordinates.length - 1, hint + 260),
+  const maxSegment = coordinates.length - 2;
+  const windowed = scan(
+    Math.max(0, hint - 30),
+    Math.min(maxSegment, hint + 220),
   );
 
-  // GPS sakrashi yoki reroute paytida hint noto'g'ri bo'lishi mumkin.
-  if (windowed.distanceM <= 220 || coordinates.length <= 300) return windowed;
-  return search(0, coordinates.length - 1);
+  if (windowed.distanceM <= 220 || coordinates.length <= 280) return windowed;
+  return scan(0, maxSegment);
 }
 
 function stepProgress(
@@ -142,35 +230,100 @@ function stepProgress(
   };
 }
 
-function snappedNavigationPosition(
-  position: NavigationPosition,
-  route: RouteResult,
-  nearestIndex: number,
-  distanceToRouteM: number,
+function smoothPosition(
+  raw: NavigationPosition,
+  previous: NavigationPosition | null,
 ): NavigationPosition {
-  const coordinate = route.coordinates[nearestIndex];
-  if (!coordinate) return position;
+  if (!previous) return raw;
 
-  // Marker yo'l bo'ylab silliq ko'rinishi uchun GPS juda yaqin bo'lsa route
-  // geometriyasiga snap qilamiz. Yo'ldan chiqib ketganda esa raw GPS saqlanadi.
-  const snapThreshold = Math.max(
-    18,
-    Math.min(48, Math.max(1, position.accuracyM) * 1.25),
+  const elapsedS = Math.max(0.25, (raw.timestamp - previous.timestamp) / 1000);
+  const movedM = distanceMeters(
+    previous.latitude,
+    previous.longitude,
+    raw.latitude,
+    raw.longitude,
   );
-  if (distanceToRouteM > snapThreshold) return position;
+  const derivedSpeed = movedM / elapsedS;
+
+  // Juda yomon GPS sample eski yaxshi fixni sakratib yubormasin.
+  if (
+    raw.accuracyM > 120 &&
+    previous.accuracyM < 70 &&
+    elapsedS < 8 &&
+    derivedSpeed > 45
+  ) {
+    return {
+      ...previous,
+      timestamp: raw.timestamp,
+      accuracyM: raw.accuracyM,
+    };
+  }
+
+  const speed =
+    raw.speedMps != null
+      ? raw.speedMps
+      : Number.isFinite(derivedSpeed)
+        ? Math.min(70, derivedSpeed)
+        : 0;
+  const accuracyFactor = Math.max(0.16, Math.min(0.78, 45 / Math.max(12, raw.accuracyM)));
+  const motionFactor = Math.max(0.22, Math.min(0.9, speed / 14 + 0.18));
+  const alpha = Math.max(0.18, Math.min(0.88, accuracyFactor * 0.55 + motionFactor * 0.45));
+
+  const latitude =
+    previous.latitude + (raw.latitude - previous.latitude) * alpha;
+  const longitude =
+    previous.longitude + (raw.longitude - previous.longitude) * alpha;
+
+  let heading = raw.heading;
+  if (heading == null && movedM >= 2.5) {
+    heading = bearingDegrees(previous, raw);
+  }
+  if (heading != null && previous.heading != null) {
+    const headingAlpha = speed >= 7 ? 0.5 : speed >= 2 ? 0.34 : 0.2;
+    heading = angularBlend(previous.heading, heading, headingAlpha);
+  } else if (heading == null) {
+    heading = previous.heading;
+  }
+
+  const speedMps =
+    raw.speedMps == null
+      ? previous.speedMps
+      : previous.speedMps == null
+        ? raw.speedMps
+        : previous.speedMps + (raw.speedMps - previous.speedMps) * 0.38;
 
   return {
-    ...position,
-    latitude: coordinate[0],
-    longitude: coordinate[1],
+    ...raw,
+    latitude,
+    longitude,
+    heading,
+    speedMps,
   };
 }
 
-function offRouteThreshold(mode: RouteMode): number {
-  if (mode === 'foot') return 45;
-  if (mode === 'bike') return 60;
-  if (mode === 'transit') return 90;
-  return 85;
+function snappedNavigationPosition(
+  position: NavigationPosition,
+  projection: RouteProjection,
+): NavigationPosition {
+  const snapThreshold = Math.max(
+    18,
+    Math.min(52, Math.max(1, position.accuracyM) * 1.35),
+  );
+  if (projection.distanceM > snapThreshold) return position;
+
+  return {
+    ...position,
+    latitude: projection.coordinate[0],
+    longitude: projection.coordinate[1],
+  };
+}
+
+function offRouteThreshold(mode: RouteMode, accuracyM: number): number {
+  const accuracyAllowance = Math.max(0, Math.min(45, accuracyM * 0.45));
+  if (mode === 'foot') return 38 + accuracyAllowance;
+  if (mode === 'bike') return 52 + accuracyAllowance;
+  if (mode === 'transit') return 85 + accuracyAllowance;
+  return 68 + accuracyAllowance;
 }
 
 export function useActiveNavigation({
@@ -186,9 +339,10 @@ export function useActiveNavigation({
   const [snapshot, setSnapshot] = useState<NavigationSnapshot>(EMPTY_SNAPSHOT);
   const [error, setError] = useState<string | null>(null);
 
-  const previousPositionRef = useRef<NavigationPosition | null>(null);
+  const smoothedPositionRef = useRef<NavigationPosition | null>(null);
   const nearestIndexRef = useRef(0);
   const lastRerouteAtRef = useRef(0);
+  const offRouteSamplesRef = useRef(0);
   const arrivedRef = useRef(false);
   const reroutingRef = useRef(false);
 
@@ -199,6 +353,7 @@ export function useActiveNavigation({
 
   useEffect(() => {
     nearestIndexRef.current = 0;
+    offRouteSamplesRef.current = 0;
     arrivedRef.current = false;
     setSnapshot((current) => ({
       ...EMPTY_SNAPSHOT,
@@ -218,19 +373,18 @@ export function useActiveNavigation({
         return;
       }
 
-      const nearest = nearestCoordinateIndex(
+      const projection = nearestRouteProjection(
         next,
         route.coordinates,
+        cumulative,
         nearestIndexRef.current,
       );
-      nearestIndexRef.current = Math.max(nearestIndexRef.current, nearest.index);
-
-      const displayPosition = snappedNavigationPosition(
-        next,
-        route,
-        nearest.index,
-        nearest.distanceM,
+      nearestIndexRef.current = Math.max(
+        nearestIndexRef.current,
+        projection.segmentIndex,
       );
+
+      const displayPosition = snappedNavigationPosition(next, projection);
       setPosition(displayPosition);
       onPosition?.(displayPosition);
 
@@ -238,8 +392,8 @@ export function useActiveNavigation({
       const routeTotalM =
         cumulative[lastIndex] || Math.max(1, Number(route.distanceM) || 1);
       const routeRemainingM =
-        Math.max(0, routeTotalM - (cumulative[nearest.index] ?? 0)) +
-        Math.min(nearest.distanceM, 120);
+        Math.max(0, routeTotalM - projection.progressM) +
+        Math.min(projection.distanceM, 100);
       const ratio = Math.max(
         0,
         Math.min(1, routeRemainingM / Math.max(1, routeTotalM)),
@@ -259,7 +413,7 @@ export function useActiveNavigation({
             destination.longitude,
           )
         : routeRemainingM;
-      const arrived = destinationDistanceM <= 35 || routeRemainingM <= 25;
+      const arrived = destinationDistanceM <= 35 || routeRemainingM <= 22;
 
       if (arrived && !arrivedRef.current) {
         arrivedRef.current = true;
@@ -269,8 +423,8 @@ export function useActiveNavigation({
       setSnapshot((current) => ({
         remainingDistanceM: routeRemainingM,
         remainingDurationS,
-        distanceToRouteM: nearest.distanceM,
-        nearestRouteIndex: nearest.index,
+        distanceToRouteM: projection.distanceM,
+        nearestRouteIndex: projection.segmentIndex,
         currentStepIndex: step.index,
         currentStep: arrived ? null : step.step,
         distanceToManeuverM: arrived ? 0 : step.distanceToManeuverM,
@@ -278,17 +432,27 @@ export function useActiveNavigation({
         rerouting: current.rerouting,
       }));
 
-      const accurateEnough = next.accuracyM <= 65;
+      const threshold = offRouteThreshold(mode, next.accuracyM);
+      const accurateEnough = next.accuracyM <= 75;
+      if (!arrived && accurateEnough && projection.distanceM > threshold) {
+        offRouteSamplesRef.current += 1;
+      } else {
+        offRouteSamplesRef.current = Math.max(0, offRouteSamplesRef.current - 1);
+      }
+
+      const speedMps = next.speedMps ?? 0;
+      const samplesRequired = speedMps >= 8 ? 2 : speedMps >= 2 ? 3 : 4;
       const shouldReroute =
         !arrived &&
         accurateEnough &&
-        nearest.distanceM > offRouteThreshold(mode) &&
-        Date.now() - lastRerouteAtRef.current > 12_000 &&
+        offRouteSamplesRef.current >= samplesRequired &&
+        Date.now() - lastRerouteAtRef.current > 15_000 &&
         !reroutingRef.current &&
         Boolean(onReroute);
 
       if (shouldReroute && onReroute) {
         lastRerouteAtRef.current = Date.now();
+        offRouteSamplesRef.current = 0;
         reroutingRef.current = true;
         setSnapshot((current) => ({ ...current, rerouting: true }));
         try {
@@ -302,13 +466,16 @@ export function useActiveNavigation({
         }
       }
     },
-    [route, cumulative, destination, mode, onArrive, onReroute],
+    [route, cumulative, destination, mode, onArrive, onReroute, onPosition],
   );
 
+  // Navigatsiya vaqtida ekran o'chmasin. Browser backgrounddan qaytganda
+  // wake lock avtomatik bekor bo'lishi mumkin, shuning uchun visible bo'lganda
+  // qayta so'raymiz.
   useEffect(() => {
     if (!active || typeof navigator === 'undefined') return;
 
-    let released = false;
+    let disposed = false;
     let lock: { release: () => Promise<void> } | null = null;
     const wakeNavigator = navigator as Navigator & {
       wakeLock?: {
@@ -316,21 +483,35 @@ export function useActiveNavigation({
       };
     };
 
-    if (wakeNavigator.wakeLock?.request) {
-      void wakeNavigator.wakeLock
-        .request('screen')
-        .then((value) => {
-          if (released) {
-            void value.release().catch(() => undefined);
-            return;
-          }
-          lock = value;
-        })
-        .catch(() => undefined);
-    }
+    const requestWakeLock = async () => {
+      if (
+        disposed ||
+        document.visibilityState !== 'visible' ||
+        !wakeNavigator.wakeLock?.request
+      ) {
+        return;
+      }
+      try {
+        lock = await wakeNavigator.wakeLock.request('screen');
+        if (disposed && lock) {
+          await lock.release().catch(() => undefined);
+          lock = null;
+        }
+      } catch {
+        // Wake Lock optional; navigation GPS ishlashda davom etadi.
+      }
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void requestWakeLock();
+    };
+
+    void requestWakeLock();
+    document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
-      released = true;
+      disposed = true;
+      document.removeEventListener('visibilitychange', onVisibility);
       if (lock) void lock.release().catch(() => undefined);
     };
   }, [active]);
@@ -339,8 +520,9 @@ export function useActiveNavigation({
     if (!active) {
       setError(null);
       setPosition(null);
-      previousPositionRef.current = null;
+      smoothedPositionRef.current = null;
       nearestIndexRef.current = 0;
+      offRouteSamplesRef.current = 0;
       reroutingRef.current = false;
       setSnapshot(EMPTY_SNAPSHOT);
       return;
@@ -353,34 +535,34 @@ export function useActiveNavigation({
 
     const watchId = navigator.geolocation.watchPosition(
       (geolocation) => {
-        const previous = previousPositionRef.current;
-        const rawHeading = geolocation.coords.heading;
-        const nextBase = {
+        const rawBase = {
           latitude: geolocation.coords.latitude,
           longitude: geolocation.coords.longitude,
         };
+        const previous = smoothedPositionRef.current;
 
         let heading =
-          rawHeading != null && Number.isFinite(rawHeading)
-            ? Number(rawHeading)
+          geolocation.coords.heading != null &&
+          Number.isFinite(geolocation.coords.heading)
+            ? Number(geolocation.coords.heading)
             : null;
 
         if (heading == null && previous) {
           const moved = distanceMeters(
             previous.latitude,
             previous.longitude,
-            nextBase.latitude,
-            nextBase.longitude,
+            rawBase.latitude,
+            rawBase.longitude,
           );
-          if (moved >= 3) {
-            heading = bearingDegrees(previous, nextBase);
+          if (moved >= 2.5) {
+            heading = bearingDegrees(previous, rawBase);
           } else {
             heading = previous.heading;
           }
         }
 
-        const next: NavigationPosition = {
-          ...nextBase,
+        const raw: NavigationPosition = {
+          ...rawBase,
           heading,
           speedMps:
             geolocation.coords.speed != null &&
@@ -391,7 +573,8 @@ export function useActiveNavigation({
           timestamp: geolocation.timestamp || Date.now(),
         };
 
-        previousPositionRef.current = next;
+        const next = smoothPosition(raw, previous);
+        smoothedPositionRef.current = next;
         setError(null);
         void evaluate(next);
       },
@@ -406,13 +589,13 @@ export function useActiveNavigation({
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 1000,
+        maximumAge: 700,
         timeout: 10_000,
       },
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [active, evaluate, onPosition]);
+  }, [active, evaluate]);
 
   return {
     position,
