@@ -418,18 +418,72 @@ function categoryFromTags(tags: Record<string, string>): PlaceCategory | undefin
   return undefined;
 }
 
+function categoryFromName(name?: string | null): PlaceCategory | undefined {
+  const value = normalizeQuery(name ?? '');
+  if (!value) return undefined;
+
+  if (
+    /(^|[\s'’-])(masjid|masjidi|mosque|мечеть|jome|juma|jom'e|jom’e)([\s'’-]|$)/i.test(value)
+  ) {
+    return findCategory('mosque');
+  }
+
+  for (const category of PLACE_CATEGORIES) {
+    if (category.id === 'mosque') continue;
+    const matched = category.keywords.some((keyword) => {
+      const key = normalizeQuery(keyword);
+      return key.length >= 4 && (value === key || value.includes(key));
+    });
+    if (matched) return category;
+  }
+  return undefined;
+}
+
+function semanticCategoryLabel(
+  name: string,
+  category?: PlaceCategory,
+  rawKey?: string | null,
+  rawValue?: string | null,
+): string | undefined {
+  if (category) return category.label;
+
+  const normalizedName = normalizeQuery(name);
+  if (/madrasa|madrasasi|madrasah|медресе/.test(normalizedName)) return 'Madrasa';
+  if (/cherkov|church|церковь/.test(normalizedName)) return 'Cherkov';
+  if (/synagogue|синагог/.test(normalizedName)) return 'Sinagoga';
+
+  const key = normalizeQuery(rawKey ?? '');
+  const value = normalizeQuery(rawValue ?? '');
+
+  if (key === 'amenity' && value === 'place_of_worship') return 'Ibodatxona';
+  if (key === 'building' && value === 'yes') return 'Bino';
+  if (value === 'yes' || value === 'no') return undefined;
+
+  return rawValue ? rawValue.replace(/_/g, ' ') : undefined;
+}
+
+function providerCategory(
+  name: string,
+  tags: Record<string, string>,
+): PlaceCategory | undefined {
+  return categoryFromTags(tags) ?? categoryFromName(name);
+}
+
 function elementToPlace(element: any): MapPlace | null {
   const position = elementLatLng(element);
   if (!position) return null;
   const tags: Record<string, string> = element.tags ?? {};
-  const category = categoryFromTags(tags);
-  const name =
+  const rawName =
     tags.name ||
     tags['name:uz'] ||
     tags['name:ru'] ||
     tags['name:en'] ||
     tags.brand ||
     tags.operator ||
+    '';
+  const category = providerCategory(rawName, tags);
+  const name =
+    rawName ||
     category?.label ||
     'Nomsiz joy';
 
@@ -650,7 +704,6 @@ async function reverseNominatimPlace(
     ...(item.type ? { [String(item.category || 'type')]: String(item.type) } : {}),
   };
 
-  const category = categoryFromTags(tags);
   const name =
     namedetails.name ||
     namedetails['name:uz'] ||
@@ -664,8 +717,9 @@ async function reverseNominatimPlace(
     address.house_name ||
     address.road ||
     String(item.display_name ?? '').split(',')[0] ||
-    category?.label ||
     'Joy';
+
+  const category = providerCategory(name, tags);
 
   return {
     id:
@@ -677,8 +731,12 @@ async function reverseNominatimPlace(
     name,
     categoryId: category?.id,
     categoryLabel:
-      category?.label ||
-      (item.type ? String(item.type).replace(/_/g, ' ') : 'Joy'),
+      semanticCategoryLabel(
+        name,
+        category,
+        typeof item.category === 'string' ? item.category : null,
+        typeof item.type === 'string' ? item.type : null,
+      ) || 'Joy',
     latitude: Number(item.lat),
     longitude: Number(item.lon),
     address: item.display_name ?? null,
@@ -1017,14 +1075,24 @@ async function searchByNominatim(
   return ((data ?? []) as any[])
     .map((item): MapPlace | null => {
       if (!item?.lat || !item?.lon) return null;
+      const name =
+        item.name || String(item.display_name ?? '').split(',')[0] || 'Nomsiz joy';
+      const rawKey = typeof item.category === 'string' ? item.category : null;
+      const rawValue = typeof item.type === 'string' ? item.type : null;
+      const tags: Record<string, string> =
+        rawKey && rawValue ? { [rawKey]: rawValue } : {};
+      const category = providerCategory(name, tags);
+
       return {
         id: 'nominatim/' + (item.osm_type ?? 'x') + '/' + (item.osm_id ?? item.place_id),
         source: 'nominatim',
-        name: item.name || String(item.display_name ?? '').split(',')[0] || 'Nomsiz joy',
+        name,
+        categoryId: category?.id,
+        categoryLabel: semanticCategoryLabel(name, category, rawKey, rawValue),
         latitude: Number(item.lat),
         longitude: Number(item.lon),
         address: item.display_name ?? null,
-        categoryLabel: item.type ?? null,
+        tags,
       };
     })
     .filter((place): place is MapPlace => place !== null);
@@ -1057,17 +1125,26 @@ async function searchByPhoton(
       const coords = feature?.geometry?.coordinates;
       const props = feature?.properties ?? {};
       if (!Array.isArray(coords) || coords.length < 2) return null;
+      const name = props.name || props.street || props.city || 'Nomsiz joy';
+      const rawKey = typeof props.osm_key === 'string' ? props.osm_key : null;
+      const rawValue = typeof props.osm_value === 'string' ? props.osm_value : null;
+      const tags: Record<string, string> =
+        rawKey && rawValue ? { [rawKey]: rawValue } : {};
+      const category = providerCategory(name, tags);
+
       return {
         id: 'photon/' + (props.osm_id ?? coords.join(',')),
         source: 'photon',
-        name: props.name || props.street || props.city || 'Nomsiz joy',
+        name,
+        categoryId: category?.id,
+        categoryLabel: semanticCategoryLabel(name, category, rawKey, rawValue),
         latitude: Number(coords[1]),
         longitude: Number(coords[0]),
         address:
           [props.street, props.housenumber, props.city, props.state, props.country]
             .filter(Boolean)
             .join(', ') || null,
-        categoryLabel: props.osm_value || props.osm_key || null,
+        tags,
       };
     })
     .filter((place): place is MapPlace => place !== null);
