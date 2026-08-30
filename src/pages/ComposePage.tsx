@@ -107,8 +107,8 @@ export default function ComposePage() {
         </div>
       </header>
 
-      <main className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
-        <div className="mx-auto w-full max-w-6xl pb-12 lg:py-3">
+      <main className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] lg:overflow-hidden">
+        <div className="mx-auto w-full max-w-6xl pb-12 lg:h-full lg:pb-0 lg:py-3">
           {mode === 'post' ? (
             <PostComposer />
           ) : mode === 'story' ? (
