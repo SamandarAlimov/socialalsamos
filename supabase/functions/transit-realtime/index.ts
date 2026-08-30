@@ -195,7 +195,6 @@ function gtfsRouteMode(
   if (type === 2) return "train";
   if (type === 3) return "bus";
   if (type === 11) return "trolleybus";
-  if (type === 200 || type === 700 || type === 800) return "bus";
   return "other";
 }
 
