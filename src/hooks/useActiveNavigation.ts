@@ -31,6 +31,7 @@ interface UseActiveNavigationOptions {
   onPosition?: (position: NavigationPosition) => void;
   onReroute?: (
     from: { latitude: number; longitude: number },
+    context: { nearestRouteIndex: number },
   ) => Promise<void> | void;
   onArrive?: () => void;
 }
@@ -456,10 +457,13 @@ export function useActiveNavigation({
         reroutingRef.current = true;
         setSnapshot((current) => ({ ...current, rerouting: true }));
         try {
-          await onReroute({
-            latitude: next.latitude,
-            longitude: next.longitude,
-          });
+          await onReroute(
+            {
+              latitude: next.latitude,
+              longitude: next.longitude,
+            },
+            { nearestRouteIndex: projection.segmentIndex },
+          );
         } finally {
           reroutingRef.current = false;
           setSnapshot((current) => ({ ...current, rerouting: false }));
