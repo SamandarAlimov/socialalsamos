@@ -1713,6 +1713,18 @@ export default function MapPage() {
                   </button>
                 )}
 
+                <button
+                  type="button"
+                  onClick={() => beginMapEndpointPick(routeEditField)}
+                  className="flex w-full items-center gap-2.5 border-b border-border/[0.40] px-3 py-2.5 text-left text-sm hover:bg-muted/[0.50]"
+                >
+                  <MapPinned className="h-4 w-4 text-primary" />
+                  <span className="font-medium">Xaritadan tanlash</span>
+                  <span className="ml-auto text-[11px] text-muted-foreground">
+                    Nuqtani bosing
+                  </span>
+                </button>
+
                 {routeEndpointSearch.loading && (
                   <div className="flex items-center gap-2 px-3 py-3 text-xs text-muted-foreground">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
