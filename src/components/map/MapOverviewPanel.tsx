@@ -5,7 +5,6 @@ import {
   Fuel,
   History,
   Layers,
-  MapPinned,
   MoonStar,
   CircleParking,
   Pill,
@@ -48,22 +47,7 @@ export function MapOverviewPanel({
 }: MapOverviewPanelProps) {
   return (
     <div className={cn('min-h-full px-3.5 py-3.5', className)}>
-      <div className="rounded-[22px] border border-border/45 bg-background/52 p-4 shadow-sm backdrop-blur-xl">
-        <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/12 text-primary shadow-sm ring-1 ring-primary/10">
-            <MapPinned className="h-5 w-5" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[15px] font-bold tracking-tight">Alsamos Xarita</p>
-            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-              Joy qidiring, yaqin xizmatlarni toping, bekatlarni ko‘ring va marshrut tuzing.
-            </p>
-          </div>
-        </div>
-
-      </div>
-
-      <div className="mt-4">
+      <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Yaqin atrofda
         </p>
