@@ -20,7 +20,7 @@ import { PostViewModal } from '@/components/PostViewModal';
 import { PollDisplay, parsePollFromContent } from '@/components/PollDisplay';
 import { RichText } from '@/components/RichText';
 import { PostExtras } from '@/components/PostExtras';
-import { PostCollaboratorsCard } from '@/components/PostCollaboratorsCard';
+import { PostCollaboratorByline } from '@/components/PostCollaboratorByline';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
@@ -445,6 +445,11 @@ function PostCard({
               {post.profile?.is_verified && (
                 <VerifiedBadge size="xs" />
               )}
+              <PostCollaboratorByline
+                postId={post.id}
+                isOwner={isOwner}
+                className="truncate text-sm"
+              />
             </div>
             <p className="text-[11px] md:text-xs text-muted-foreground">
               <span 
@@ -488,12 +493,6 @@ function PostCard({
           </>
         );
       })()}
-
-      <PostCollaboratorsCard
-        postId={post.id}
-        isOwner={isOwner}
-        className="mx-3 mb-3 md:mx-4"
-      />
 
       {/*
         Fayllar (har qanday tur), so‘rovnoma va joylashuv.
