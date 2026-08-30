@@ -72,6 +72,10 @@ import { useMapSearchHistory } from '@/hooks/useMapSearchHistory';
 import { useActiveNavigation } from '@/hooks/useActiveNavigation';
 import { useNavigationVoice } from '@/hooks/useNavigationVoice';
 import { ActiveNavigationPanel } from '@/components/map/ActiveNavigationPanel';
+import {
+  readNavigationSession,
+  writeNavigationSession,
+} from '@/lib/navigationSession';
 
 const DEFAULT_CENTER = { latitude: 41.311081, longitude: 69.240562 };
 
@@ -312,6 +316,7 @@ export default function MapPage() {
   const [params] = useSearchParams();
   const isMobile = useIsMobile();
   const mapRef = useRef<L.Map | null>(null);
+  const restoredNavigation = useRef(readNavigationSession()).current;
 
   const [center, setCenter] = useState(DEFAULT_CENTER);
   const [me, setMe] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -328,20 +333,32 @@ export default function MapPage() {
   const [panel, setPanel] = useState<PanelMode>('search');
   const [snap, setSnap] = useState<MapSheetSnap>('peek');
 
-  const [routeMode, setRouteMode] = useState<RouteMode>('car');
-  const [routes, setRoutes] = useState<RouteResult[]>([]);
-  const [routeIndex, setRouteIndex] = useState(0);
+  const [routeMode, setRouteMode] = useState<RouteMode>(
+    restoredNavigation?.mode ?? 'car',
+  );
+  const [routes, setRoutes] = useState<RouteResult[]>(
+    restoredNavigation?.routes ?? [],
+  );
+  const [routeIndex, setRouteIndex] = useState(
+    restoredNavigation?.routeIndex ?? 0,
+  );
   const [routeLoading, setRouteLoading] = useState(false);
-  const [destination, setDestination] = useState<MapPlace | null>(null);
+  const [destination, setDestination] = useState<MapPlace | null>(
+    restoredNavigation?.destination ?? null,
+  );
   const [routeOrigin, setRouteOrigin] = useState<{
     latitude: number;
     longitude: number;
     name: string;
-  } | null>(null);
+  } | null>(restoredNavigation?.routeOrigin ?? null);
   const [routeEditField, setRouteEditField] = useState<'origin' | 'destination' | null>(null);
   const [routeEditQuery, setRouteEditQuery] = useState('');
-  const [navigationActive, setNavigationActive] = useState(false);
-  const [navigationFollowing, setNavigationFollowing] = useState(true);
+  const [navigationActive, setNavigationActive] = useState(
+    restoredNavigation?.active ?? false,
+  );
+  const [navigationFollowing, setNavigationFollowing] = useState(
+    restoredNavigation?.following ?? true,
+  );
 
   const [sheetHeightPx, setSheetHeightPx] = useState(112);
   const [movedCenter, setMovedCenter] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -483,6 +500,21 @@ export default function MapPage() {
     },
     [],
   );
+
+  // Restored active route/navigation session: refresh qilinganda navigator
+  // yo'qolmaydi. GPS watch qayta boshlanadi va route state sessionStorage'dan keladi.
+  useEffect(() => {
+    if (!restoredNavigation) return;
+    setPanel('route');
+    setSnap(restoredNavigation.active ? 'peek' : 'half');
+    if (restoredNavigation.destination) {
+      setSelectedPlace(restoredNavigation.destination);
+      setCenter({
+        latitude: restoredNavigation.destination.latitude,
+        longitude: restoredNavigation.destination.longitude,
+      });
+    }
+  }, [restoredNavigation]);
 
   // Sahifa ochilganda joylashuvni bir marta yumshoq aniqlaymiz.
   useEffect(() => {
@@ -996,6 +1028,27 @@ export default function MapPage() {
       { enableHighAccuracy: true, timeout: 10_000, maximumAge: 2_000 },
     );
   }, [destination, routes, routeIndex, routeMode, routeOrigin, me]);
+
+  useEffect(() => {
+    if (!destination || !routes.length) return;
+    writeNavigationSession({
+      active: navigationActive,
+      following: navigationFollowing,
+      mode: routeMode,
+      routeIndex,
+      routeOrigin,
+      destination,
+      routes,
+    });
+  }, [
+    navigationActive,
+    navigationFollowing,
+    routeMode,
+    routeIndex,
+    routeOrigin,
+    destination,
+    routes,
+  ]);
 
   const activeRoute = routes[routeIndex] ?? null;
   const navigation = useActiveNavigation({
