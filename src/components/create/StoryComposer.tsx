@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Camera,
   Check,
+  ChevronDown,
   ChevronRight,
   Globe2,
   ImagePlus,
@@ -16,6 +17,15 @@ import {
   Wand2,
 } from 'lucide-react';
 import { db } from '@/lib/db';
+import { useAuth } from '@/contexts/AuthContext';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { usePosts, type PostVisibility } from '@/hooks/usePosts';
@@ -69,6 +79,7 @@ function storyPayload(
 export function StoryComposer() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { profile } = useAuth();
   // usePosts hook feed state is not used, but keeps shared post types/context loaded.
   usePosts();
 
@@ -327,94 +338,120 @@ export function StoryComposer() {
     !isCreatingDraft;
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 pb-8 pt-4">
-      <div className="grid gap-5 md:grid-cols-[minmax(0,340px)_1fr]">
-        <section>
-          <div
-            className={cn(
-              'relative mx-auto aspect-[9/16] w-full max-w-[340px] overflow-hidden rounded-[28px] border bg-black shadow-xl',
-              isDragging ? 'border-primary ring-4 ring-primary/15' : 'border-border/70',
-            )}
-            onDragEnter={(event) => {
-              event.preventDefault();
-              if (!storyDraft) setIsDragging(true);
-            }}
-            onDragOver={(event) => {
-              event.preventDefault();
-              event.dataTransfer.dropEffect = 'copy';
-            }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={(event) => void handleDrop(event)}
-          >
-            {attachment?.previewUrl ? (
-              attachment.kind === 'video' ? (
-                <video
-                  src={attachment.previewUrl}
-                  muted
-                  loop
-                  autoPlay
-                  playsInline
-                  className="h-full w-full object-contain"
-                />
+    <div className="mx-auto w-full max-w-6xl px-4 pb-8 pt-4 sm:px-5 lg:px-6">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] lg:items-start">
+        <section className="lg:sticky lg:top-4">
+          <div className="rounded-[32px] border border-border/60 bg-card p-3 shadow-[0_18px_60px_rgba(0,0,0,0.12)] sm:p-4">
+            <div
+              className={cn(
+                'relative mx-auto aspect-[9/16] w-full max-w-[390px] overflow-hidden rounded-[26px] border bg-black',
+                isDragging ? 'border-primary ring-4 ring-primary/15' : 'border-white/10',
+              )}
+              onDragEnter={(event) => {
+                event.preventDefault();
+                if (!storyDraft) setIsDragging(true);
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'copy';
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(event) => void handleDrop(event)}
+            >
+              {attachment?.previewUrl ? (
+                attachment.kind === 'video' ? (
+                  <video
+                    src={attachment.previewUrl}
+                    muted
+                    loop
+                    autoPlay
+                    playsInline
+                    className="h-full w-full object-contain"
+                  />
+                ) : (
+                  <img
+                    src={attachment.previewUrl}
+                    alt="Story preview"
+                    className="h-full w-full object-contain"
+                  />
+                )
               ) : (
-                <img
-                  src={attachment.previewUrl}
-                  alt="Story preview"
-                  className="h-full w-full object-contain"
-                />
-              )
-            ) : (
+                <button
+                  type="button"
+                  disabled={Boolean(storyDraft)}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex h-full w-full flex-col items-center justify-center gap-4 bg-[radial-gradient(circle_at_top,hsl(var(--primary)/0.18),transparent_42%),linear-gradient(to_bottom,#171717,#050505)] px-6 text-center text-white"
+                >
+                  <span className="flex h-16 w-16 items-center justify-center rounded-[22px] border border-white/10 bg-white/10 shadow-xl backdrop-blur">
+                    <ImagePlus className="h-7 w-7" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold">Story canvas</p>
+                    <p className="mt-1 max-w-xs text-xs leading-relaxed text-white/55">
+                      Rasm yoki video tanlang, kamera ishlating yoki desktopda faylni shu yerga tashlang.
+                    </p>
+                  </div>
+                </button>
+              )}
+
+              <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2">
+                <span className="rounded-full border border-white/10 bg-black/50 px-2.5 py-1 text-[10px] font-semibold text-white backdrop-blur">
+                  9:16
+                </span>
+                {storyDraft && (
+                  <span className="rounded-full border border-white/10 bg-black/50 px-2.5 py-1 text-[10px] font-semibold text-amber-300 backdrop-blur">
+                    Qoralama
+                  </span>
+                )}
+              </div>
+
+              {caption.trim() && (
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/35 to-transparent px-5 pb-6 pt-14">
+                  <p className="line-clamp-4 whitespace-pre-wrap break-words text-sm font-medium leading-relaxed text-white drop-shadow">
+                    {caption}
+                  </p>
+                </div>
+              )}
+
+              {isDragging && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-primary/25 backdrop-blur-sm">
+                  <div className="rounded-2xl border border-white/15 bg-black/65 px-5 py-3 text-center text-sm font-semibold text-white">
+                    Story faylini tashlang
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,video/*"
+              className="hidden"
+              onChange={handleFileInput}
+            />
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
               <button
                 type="button"
                 disabled={Boolean(storyDraft)}
                 onClick={() => fileInputRef.current?.click()}
-                className="flex h-full w-full flex-col items-center justify-center gap-4 bg-gradient-to-b from-neutral-900 to-black px-6 text-center text-white"
+                className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-border/60 bg-background text-xs font-medium transition hover:border-primary/25 hover:bg-primary/[0.035] disabled:opacity-50"
               >
-                <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 backdrop-blur">
-                  <ImagePlus className="h-6 w-6" />
-                </span>
-                <div>
-                  <p className="text-sm font-semibold">9:16 Story media</p>
-                  <p className="mt-1 text-xs leading-relaxed text-white/60">
-                    Rasm yoki videoni tanlang, yoxud desktopda shu yerga tashlang
-                  </p>
-                </div>
+                <ImagePlus className="h-4 w-4 text-primary" />
+                {attachment ? 'Almashtirish' : 'Qurilmadan'}
               </button>
-            )}
-
-            {isDragging && (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-primary/25 backdrop-blur-sm">
-                <div className="rounded-2xl bg-black/70 px-4 py-3 text-center text-sm font-semibold text-white">
-                  Story faylini tashlang
-                </div>
-              </div>
-            )}
-
-            {storyDraft && (
-              <div className="absolute left-3 top-3 rounded-full border border-white/15 bg-black/55 px-3 py-1 text-[11px] font-semibold text-white backdrop-blur">
-                Qoralama · hali live emas
-              </div>
-            )}
-          </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,video/*"
-            className="hidden"
-            onChange={handleFileInput}
-          />
-
-          {attachment && !storyDraft && (
-            <div className="mx-auto mt-3 flex max-w-[340px] gap-2">
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-border/60 text-xs font-medium transition hover:bg-muted"
+                disabled={Boolean(storyDraft)}
+                onClick={() => setShowCamera(true)}
+                className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-border/60 bg-background text-xs font-medium transition hover:border-primary/25 hover:bg-primary/[0.035] disabled:opacity-50"
               >
-                <ImagePlus className="h-4 w-4" />
-                Almashtirish
+                <Camera className="h-4 w-4 text-primary" />
+                Kamera
               </button>
+            </div>
+
+            {attachment && !storyDraft && (
               <button
                 type="button"
                 onClick={() =>
@@ -422,113 +459,135 @@ export function StoryComposer() {
                     ? setImageTargetId(attachment.id)
                     : setVideoTargetId(attachment.id)
                 }
-                className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-border/60 text-xs font-medium transition hover:bg-muted"
+                className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-muted/60 text-xs font-medium transition hover:bg-muted"
               >
                 <Pencil className="h-4 w-4" />
-                Tahrirlash
+                Media tahrirlash
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </section>
 
-        <section className="min-w-0 space-y-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" />
-              <h2 className="text-sm font-semibold">Story Studio</h2>
+        <aside className="min-w-0 space-y-4">
+          <div className="flex items-center gap-3 rounded-3xl border border-border/60 bg-gradient-to-br from-card via-card to-primary/[0.045] p-4 shadow-sm">
+            <Avatar className="h-12 w-12 shrink-0 border-2 border-background shadow-sm ring-1 ring-border/60">
+              <AvatarImage src={profile?.avatar_url ?? ''} />
+              <AvatarFallback className="font-semibold">
+                {(profile?.display_name || profile?.username || 'U').charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">
+                {profile?.display_name || profile?.username || 'Foydalanuvchi'}
+              </p>
+              <div className="mt-1.5">
+                <Select
+                  value={visibility}
+                  disabled={Boolean(storyDraft)}
+                  onValueChange={(value) => setVisibility(value as PostVisibility)}
+                >
+                  <SelectTrigger className="h-8 w-auto min-w-32 gap-1 rounded-full border-border/60 bg-background px-3 text-xs shadow-none">
+                    <SelectValue />
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {VISIBILITIES.map(({ id, label, icon: Icon }) => (
+                      <SelectItem key={id} value={id}>
+                        <span className="flex items-center gap-2">
+                          <Icon className="h-3.5 w-3.5" />
+                          {label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Media avval qoralama sifatida tayyorlanadi. Interaktiv stikerlar saqlangachgina Story live bo‘ladi.
-            </p>
+
+            <span className="hidden rounded-full border border-border/60 bg-background px-3 py-1.5 text-[10px] text-muted-foreground sm:block">
+              24 soat
+            </span>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
-            {VISIBILITIES.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                disabled={Boolean(storyDraft)}
-                onClick={() => setVisibility(id)}
-                className={cn(
-                  'flex min-h-16 flex-col items-center justify-center gap-1 rounded-2xl border px-2 text-center transition disabled:cursor-not-allowed disabled:opacity-60',
-                  visibility === id
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border/60 bg-background text-muted-foreground hover:bg-muted',
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                <span className="text-[11px] font-medium">{label}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="rounded-2xl border border-border/60 bg-muted/20 p-3">
-            <label className="text-xs font-medium text-muted-foreground">
-              Caption
-            </label>
+          <div className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-sm">
+            <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Story matni
+                </p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  Preview canvasda darhol ko‘rinadi
+                </p>
+              </div>
+              <span className="text-[10px] text-muted-foreground">{caption.length}/1000</span>
+            </div>
             <textarea
               value={caption}
               disabled={Boolean(storyDraft)}
               onChange={(event) => setCaption(event.target.value.slice(0, 1000))}
               placeholder="Story haqida qisqa yozuv..."
-              rows={4}
-              className="mt-2 w-full resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:opacity-70"
+              rows={6}
+              className="min-h-36 w-full resize-none bg-transparent px-4 py-4 text-sm leading-relaxed outline-none placeholder:text-muted-foreground disabled:opacity-70"
             />
-            <p className="mt-1 text-right text-[10px] text-muted-foreground">
-              {caption.length}/1000
-            </p>
           </div>
 
           {!storyDraft ? (
-            <>
-              <div className="grid grid-cols-2 gap-2">
+            <div className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-sm">
+              <div className="border-b border-border/50 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    Story workflow
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-3 p-4">
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  {[
+                    ['1', 'Media'],
+                    ['2', 'Stiker'],
+                    ['3', 'Joylash'],
+                  ].map(([step, label]) => (
+                    <div key={step} className="rounded-2xl bg-muted/45 px-2 py-3">
+                      <span className="mx-auto flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary">
+                        {step}
+                      </span>
+                      <p className="mt-1.5 text-[10px] font-medium">{label}</p>
+                    </div>
+                  ))}
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-2xl border border-border/60 transition hover:border-primary/25 hover:bg-primary/[0.035]"
+                  disabled={!canContinue}
+                  onClick={() => void createHiddenDraft()}
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <ImagePlus className="h-5 w-5 text-primary" />
-                  <span className="text-xs font-medium">Qurilmadan</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowCamera(true)}
-                  className="flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-2xl border border-border/60 transition hover:border-primary/25 hover:bg-primary/[0.035]"
-                >
-                  <Camera className="h-5 w-5 text-primary" />
-                  <span className="text-xs font-medium">Kamera</span>
+                  {isCreatingDraft || isUploading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Wand2 className="h-4 w-4" />
+                  )}
+                  {isUploading
+                    ? 'Media yuklanmoqda...'
+                    : isCreatingDraft
+                      ? 'Qoralama tayyorlanmoqda...'
+                      : 'Stiker bosqichiga o‘tish'}
+                  {!isCreatingDraft && !isUploading && <ChevronRight className="h-4 w-4" />}
                 </button>
               </div>
-
-              <button
-                type="button"
-                disabled={!canContinue}
-                onClick={() => void createHiddenDraft()}
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isCreatingDraft || isUploading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Wand2 className="h-4 w-4" />
-                )}
-                {isUploading
-                  ? 'Media yuklanmoqda...'
-                  : isCreatingDraft
-                    ? 'Qoralama tayyorlanmoqda...'
-                    : 'Davom etish · stikerlar'}
-                {!isCreatingDraft && !isUploading && <ChevronRight className="h-4 w-4" />}
-              </button>
-            </>
+            </div>
           ) : (
-            <div className="space-y-3 rounded-2xl border border-primary/25 bg-primary/[0.045] p-4">
+            <div className="space-y-3 rounded-3xl border border-primary/25 bg-primary/[0.045] p-4 shadow-sm">
               <div className="flex items-start gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                   <ShieldCheck className="h-4 w-4" />
                 </span>
                 <div>
-                  <p className="text-sm font-semibold">Story qoralamasi xavfsiz tayyor</p>
+                  <p className="text-sm font-semibold">Hidden draft tayyor</p>
                   <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                    Hali hech kimga ko‘rinmaydi. Stikerlarni sozlang yoki stikersiz joylang.
+                    Story hali hech kimga ko‘rinmaydi. Stikerlarni sozlang yoki darhol live qiling.
                   </p>
                 </div>
               </div>
@@ -536,7 +595,7 @@ export function StoryComposer() {
               <button
                 type="button"
                 onClick={() => setShowStickers(true)}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-primary-foreground"
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-semibold text-primary-foreground shadow-sm"
               >
                 <Sparkles className="h-4 w-4" />
                 Interaktiv stikerlar
@@ -546,7 +605,7 @@ export function StoryComposer() {
                 type="button"
                 disabled={isFinalizing}
                 onClick={() => void activateStory()}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-border/60 bg-background text-sm font-medium transition hover:bg-muted disabled:opacity-50"
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-border/60 bg-background text-sm font-medium transition hover:bg-muted disabled:opacity-50"
               >
                 {isFinalizing ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -560,7 +619,7 @@ export function StoryComposer() {
                 type="button"
                 disabled={isDiscarding || isFinalizing}
                 onClick={() => void discardDraft()}
-                className="flex h-10 w-full items-center justify-center gap-2 rounded-xl text-xs font-medium text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                className="flex h-10 w-full items-center justify-center gap-2 rounded-2xl text-xs font-medium text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
               >
                 {isDiscarding ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -572,11 +631,15 @@ export function StoryComposer() {
             </div>
           )}
 
-          <div className="rounded-2xl border border-border/60 bg-muted/20 p-3 text-xs leading-relaxed text-muted-foreground">
-            <strong className="font-medium text-foreground">Hozir real ishlaydi:</strong>{' '}
-            camera/device media, private/friends visibility, image render, video edit graph va interaktiv poll/quiz/question/slider/location/mention/hashtag/link/countdown stikerlari.
+          <div className="rounded-3xl border border-border/60 bg-muted/25 p-4">
+            <div className="flex items-start gap-3">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Private/friends Story media public URL sifatida saqlanmaydi. Interaktiv stickerlar Story live bo‘lishidan oldin tayyorlanadi.
+              </p>
+            </div>
           </div>
-        </section>
+        </aside>
       </div>
 
       {attachment && (
@@ -588,7 +651,7 @@ export function StoryComposer() {
           onRetry={() => undefined}
           onEditImage={(item) => !storyDraft && setImageTargetId(item.id)}
           onEditVideo={(item) => !storyDraft && setVideoTargetId(item.id)}
-          className="mt-5 md:hidden"
+          className="mt-5 lg:hidden"
         />
       )}
 
