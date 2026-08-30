@@ -217,13 +217,13 @@
   /* Map floating panel: slim Alsamos-branded scrollbar instead of browser default. */
   .map-panel-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: hsl(var(--primary) / 0.72) transparent;
+    scrollbar-color: hsl(var(--primary) / 0.5) transparent;
     scrollbar-gutter: stable;
   }
 
   .map-panel-scrollbar::-webkit-scrollbar {
-    width: 7px;
-    height: 7px;
+    width: 5px;
+    height: 5px;
   }
 
   .map-panel-scrollbar::-webkit-scrollbar-track {
@@ -234,13 +234,68 @@
     min-height: 44px;
     border: 2px solid transparent;
     border-radius: 999px;
-    background: hsl(var(--primary) / 0.62);
+    background: hsl(var(--primary) / 0.46);
     background-clip: padding-box;
   }
 
   .map-panel-scrollbar::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--primary) / 0.88);
     background-clip: padding-box;
+  }
+
+
+  /* Satellite/Hybrid: imagery is visually busy, so controls use a dark glass
+     surface with white text instead of inheriting light-theme gray tokens. */
+  .map-imagery-panel {
+    background: rgb(15 23 42 / 0.86) !important;
+    border-color: rgb(255 255 255 / 0.16) !important;
+    color: rgb(255 255 255 / 0.96) !important;
+  }
+
+  .map-imagery-panel .text-muted-foreground {
+    color: rgb(255 255 255 / 0.68) !important;
+  }
+
+  .map-imagery-panel .text-foreground {
+    color: rgb(255 255 255 / 0.96) !important;
+  }
+
+  .map-imagery-panel [class*="bg-background/"] {
+    background-color: rgb(255 255 255 / 0.08) !important;
+  }
+
+  .map-imagery-panel [class*="border-border/"] {
+    border-color: rgb(255 255 255 / 0.16) !important;
+  }
+
+  .map-imagery-panel [class*="hover:bg-background"]:hover {
+    background-color: rgb(255 255 255 / 0.14) !important;
+  }
+
+  .map-imagery-search {
+    background: rgb(15 23 42 / 0.86) !important;
+    border-color: rgb(255 255 255 / 0.18) !important;
+    color: rgb(255 255 255 / 0.96) !important;
+  }
+
+  .map-imagery-search .text-muted-foreground,
+  .map-imagery-search input::placeholder {
+    color: rgb(255 255 255 / 0.62) !important;
+  }
+
+  .map-imagery-controls {
+    background: rgb(15 23 42 / 0.84) !important;
+    border-color: rgb(255 255 255 / 0.16) !important;
+    color: rgb(255 255 255 / 0.96) !important;
+  }
+
+  .map-imagery-controls button:not(.bg-primary) {
+    background: transparent !important;
+    color: rgb(255 255 255 / 0.94) !important;
+  }
+
+  .map-imagery-controls button:not(.bg-primary):hover {
+    background: rgb(255 255 255 / 0.12) !important;
   }
 
   /* Animation Utilities */
