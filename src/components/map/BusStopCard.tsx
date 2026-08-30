@@ -225,7 +225,7 @@ export function BusStopCard({
               onClick={() => onRouteSelect?.(route)}
               disabled={!onRouteSelect}
               className={cn(
-                'mx-3 my-2 flex w-[calc(100%-1.5rem)] items-center gap-3 rounded-2xl px-3 py-3 text-left transition',
+                'mx-3 my-2 flex w-[calc(100%_-_1.5rem)] items-center gap-3 rounded-2xl px-3 py-3 text-left transition',
                 highContrast ? 'bg-white/[0.055]' : 'bg-muted/30',
                 onRouteSelect && 'hover:ring-1 hover:ring-primary/25',
                 selectedRouteId === route.id &&
