@@ -42,6 +42,7 @@ interface VideoEditorProps {
   open: boolean;
   initialEditData?: VideoEditData | null;
   sourceFile?: File | null;
+  allowGraphOnly?: boolean;
 }
 
 export type VideoEditData = VideoRenderEdit;
@@ -128,6 +129,7 @@ export function VideoEditor({
   open,
   initialEditData,
   sourceFile,
+  allowGraphOnly = true,
 }: VideoEditorProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const cropSurfaceRef = useRef<HTMLDivElement>(null);
@@ -477,7 +479,11 @@ export function VideoEditor({
               </p>
             </div>
             <span className="hidden rounded-full border border-border/60 bg-muted/40 px-3 py-1 text-[10px] font-medium text-muted-foreground sm:block">
-              {renderSupported ? 'Real render mavjud' : 'Edit graph'}
+              {renderSupported
+                ? 'Real render mavjud'
+                : allowGraphOnly
+                  ? 'Edit graph'
+                  : 'Render qo‘llanmaydi'}
             </span>
           </div>
         </DialogHeader>
@@ -798,8 +804,12 @@ export function VideoEditor({
 
               <div className="rounded-2xl border border-border/60 bg-muted/25 p-3 text-[11px] leading-relaxed text-muted-foreground">
                 {renderSupported
-                  ? 'Render tugmasi yangi video fayl yaratadi. Xohlasangiz faqat edit holatini ham saqlashingiz mumkin.'
-                  : 'Bu qurilmada real browser render mavjud emas. Edit holati saqlanadi va keyingi render engine ishlatishi mumkin.'}
+                  ? allowGraphOnly
+                    ? 'Render tugmasi yangi video fayl yaratadi. Xohlasangiz faqat edit holatini ham saqlashingiz mumkin.'
+                    : 'Reel uchun o‘zgartirish faqat real render orqali qo‘llanadi.'
+                  : allowGraphOnly
+                    ? 'Bu qurilmada real browser render mavjud emas. Edit holati saqlanadi va keyingi render engine ishlatishi mumkin.'
+                    : 'Bu qurilmada real video render mavjud emas. Original videoni o‘zgartirmasdan ishlatishingiz mumkin.'}
               </div>
             </div>
           </aside>
@@ -832,7 +842,7 @@ export function VideoEditor({
             Bekor qilish
           </Button>
 
-          {renderSupported && (
+          {renderSupported && allowGraphOnly && (
             <Button
               type="button"
               variant="ghost"
@@ -846,7 +856,7 @@ export function VideoEditor({
 
           <Button
             type="button"
-            disabled={isRendering}
+            disabled={isRendering || (!renderSupported && !allowGraphOnly)}
             onClick={() => void renderAndSave()}
             className="rounded-xl"
           >
@@ -855,7 +865,11 @@ export function VideoEditor({
             ) : (
               <Check className="mr-2 h-4 w-4" />
             )}
-            {renderSupported ? 'Render va saqlash' : 'Tahrirni saqlash'}
+            {renderSupported
+              ? 'Render va saqlash'
+              : allowGraphOnly
+                ? 'Tahrirni saqlash'
+                : 'Render mavjud emas'}
           </Button>
         </DialogFooter>
       </DialogContent>
