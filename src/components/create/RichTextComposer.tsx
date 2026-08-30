@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   $createParagraphNode,
+  $createTextNode,
   $getRoot,
   $getSelection,
   $isLineBreakNode,
@@ -32,6 +33,8 @@ import {
   QuoteNode,
 } from '@lexical/rich-text';
 import {
+  $createListItemNode,
+  $createListNode,
   $isListItemNode,
   $isListNode,
   INSERT_UNORDERED_LIST_COMMAND,
@@ -155,6 +158,68 @@ function blockFromElement(node: LexicalNode): RichBlock[] {
   if ($isQuoteNode(node)) return [{ type: 'quote', tokens }];
 
   return [{ type: 'paragraph', tokens }];
+}
+
+function textNodeFromToken(token: InlineToken) {
+  const node = $createTextNode(token.text);
+
+  if (token.bold) node.toggleFormat('bold');
+  if (token.italic) node.toggleFormat('italic');
+  if (token.strike) node.toggleFormat('strikethrough');
+  if (token.underline) node.toggleFormat('underline');
+  if (token.code) node.toggleFormat('code');
+
+  if (token.color) {
+    const color = TEXT_COLORS.find((item) => item.id === token.color);
+    if (color) node.setStyle(`color: ${color.cssValue}`);
+  }
+
+  return node;
+}
+
+function appendTokens(parent: ElementNode, tokens: InlineToken[]) {
+  for (const token of tokens) {
+    parent.append(textNodeFromToken(token));
+  }
+}
+
+function initializeFromDocument(document: AlsamosRichTextDocument | null | undefined) {
+  const root = $getRoot();
+  root.clear();
+
+  if (!document || document.blocks.length === 0) {
+    root.append($createParagraphNode());
+    return;
+  }
+
+  for (const block of document.blocks) {
+    if (block.type === 'bullet') {
+      const list = $createListNode('bullet');
+      const item = $createListItemNode();
+      appendTokens(item, block.tokens);
+      list.append(item);
+      root.append(list);
+      continue;
+    }
+
+    if (block.type === 'quote') {
+      const quote = $createQuoteNode();
+      appendTokens(quote, block.tokens);
+      root.append(quote);
+      continue;
+    }
+
+    if (block.type === 'h1' || block.type === 'h2' || block.type === 'h3') {
+      const heading = $createHeadingNode(block.type);
+      appendTokens(heading, block.tokens);
+      root.append(heading);
+      continue;
+    }
+
+    const paragraph = $createParagraphNode();
+    appendTokens(paragraph, block.tokens);
+    root.append(paragraph);
+  }
 }
 
 function serializeEditorState(editorState: EditorState): RichTextComposerValue {
@@ -387,23 +452,27 @@ export function RichTextComposer({
   className,
 }: RichTextComposerProps) {
   const editorRef = useRef<LexicalEditor | null>(null);
+  const initialValueRef = useRef<AlsamosRichTextDocument | null | undefined>(value);
   const [hashtagQuery, setHashtagQuery] = useState<string | null>(null);
 
-  const initialConfig = useMemo(
-    () => ({
+  const initialConfig = useMemo(() => {
+    const initialValue = initialValueRef.current;
+
+    return {
       namespace: 'AlsamosPostComposer',
       theme,
       nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode],
       editorState:
-        value?.lexical && typeof value.lexical === 'object'
-          ? JSON.stringify(value.lexical)
-          : undefined,
+        initialValue?.lexical && typeof initialValue.lexical === 'object'
+          ? JSON.stringify(initialValue.lexical)
+          : initialValue
+            ? () => initializeFromDocument(initialValue)
+            : undefined,
       onError(error: Error) {
         throw error;
       },
-    }),
-    [],
-  );
+    };
+  }, []);
 
   const handleChange = useCallback(
     (editorState: EditorState) => {
