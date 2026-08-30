@@ -467,6 +467,16 @@ export default function MapPage() {
   const mapClickAbortRef = useRef<AbortController | null>(null);
   const [mapClickLoading, setMapClickLoading] = useState(false);
 
+  useEffect(() => {
+    setPendingNavigationStart(null);
+  }, [
+    routeMode,
+    routeOrigin?.latitude,
+    routeOrigin?.longitude,
+    destination?.id,
+    routeWaypoints,
+  ]); // custom-start choice only belongs to the current itinerary
+
   const layer = getLayer(layerId);
   const imageryLayer = layerId === 'satellite' || layerId === 'hybrid';
   const contrastLayer = imageryLayer || layerId === 'night';
@@ -1319,6 +1329,7 @@ export default function MapPage() {
         if (!result.length) return;
         setRouteOrigin({ ...from, name: 'Joriy joylashuv' });
         setRouteWaypoints(remainingWaypoints);
+        setReachedNavigationStop(null);
         setRoutes(result);
         setRouteIndex(0);
       } catch {
