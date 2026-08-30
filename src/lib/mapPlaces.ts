@@ -303,14 +303,16 @@ function writeSearchCache(key: string, data: SearchResult): void {
   mapSearchCache.set(key, { at: Date.now(), data });
 }
 
-async function overpass(query: string, signal?: AbortSignal): Promise<any> {
+async function overpass(
+  query: string,
+  signal?: AbortSignal,
+  totalBudgetMs = 8000,
+): Promise<any> {
   const cached = overpassCache.get(query);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.data;
 
   let lastError: unknown = null;
   const startedAt = Date.now();
-  const totalBudgetMs = 8000;
-
   for (const endpoint of OVERPASS_ENDPOINTS) {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     const remaining = totalBudgetMs - (Date.now() - startedAt);
@@ -440,7 +442,7 @@ export async function fetchPlacesByCategory(
   if (!category) return [];
 
   const limit = options?.limit ?? 60;
-  const radii = options?.radiusM ? [options.radiusM] : [5000, 20000];
+  const radii = options?.radiusM ? [options.radiusM] : [15000];
 
   for (const radius of radii) {
     const body = category.filters
@@ -595,7 +597,7 @@ async function searchByNameOverpass(
     'nwr["alt_name"~"' + pattern + '",i]' + area + ';\n' +
     ');\nout tags center 60;';
 
-  const data = await overpass(query1, signal);
+  const data = await overpass(query1, signal, 4200);
   return ((data?.elements ?? []) as any[])
     .map(elementToPlace)
     .filter((place): place is MapPlace => place !== null);
