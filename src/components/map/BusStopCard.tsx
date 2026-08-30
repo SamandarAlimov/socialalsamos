@@ -76,7 +76,7 @@ export function BusStopCard({
               className={cn(
                 'flex h-8 w-8 items-center justify-center rounded-xl transition',
                 highContrast
-                  ? 'bg-white/[0.06] text-white/60 hover:bg-white/[0.12] hover:text-white'
+                  ? 'bg-white/[0.06] text-white/[0.60] hover:bg-white/[0.12] hover:text-white'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground',
               )}
               aria-label="Yangilash"
@@ -91,7 +91,7 @@ export function BusStopCard({
               className={cn(
                 'flex h-8 w-8 items-center justify-center rounded-xl transition',
                 highContrast
-                  ? 'bg-white/[0.06] text-white/60 hover:bg-white/[0.12] hover:text-white'
+                  ? 'bg-white/[0.06] text-white/[0.60] hover:bg-white/[0.12] hover:text-white'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground',
               )}
               aria-label="Yopish"
@@ -108,7 +108,7 @@ export function BusStopCard({
             className={cn(
               'border-b px-4 py-2.5 text-[11px] leading-relaxed',
               highContrast
-                ? 'border-white/10 bg-white/[0.04] text-white/55'
+                ? 'border-white/10 bg-white/[0.04] text-white/[0.55]'
                 : 'border-border/50 bg-muted/40 text-muted-foreground',
             )}
           >
