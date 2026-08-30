@@ -408,12 +408,7 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
                   <span className="flex h-16 w-16 items-center justify-center rounded-[22px] border border-white/10 bg-white/10 shadow-xl backdrop-blur">
                     <ImagePlus className="h-7 w-7" />
                   </span>
-                  <div>
-                    <p className="text-sm font-semibold">Story canvas</p>
-                    <p className="mt-1 max-w-xs text-xs leading-relaxed text-white/55">
-                      Rasm yoki video tanlang, kamera ishlating yoki desktopda faylni shu yerga tashlang.
-                    </p>
-                  </div>
+                  <p className="text-sm font-semibold">Rasm yoki video</p>
                 </button>
               )}
 
@@ -535,14 +530,9 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
 
           <div className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-sm">
             <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Story matni
-                </p>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">
-                  Preview canvasda darhol ko‘rinadi
-                </p>
-              </div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Matn
+              </p>
               <span className="text-[10px] text-muted-foreground">{caption.length}/1000</span>
             </div>
             <textarea
@@ -561,26 +551,11 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-primary" />
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                    Story workflow
+                    Davom etish
                   </p>
                 </div>
               </div>
               <div className="space-y-3 p-4">
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  {[
-                    ['1', 'Media'],
-                    ['2', 'Stiker'],
-                    ['3', 'Joylash'],
-                  ].map(([step, label]) => (
-                    <div key={step} className="rounded-2xl bg-muted/45 px-2 py-3">
-                      <span className="mx-auto flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary">
-                        {step}
-                      </span>
-                      <p className="mt-1.5 text-[10px] font-medium">{label}</p>
-                    </div>
-                  ))}
-                </div>
-
                 <button
                   type="button"
                   disabled={!canContinue}
@@ -609,9 +584,7 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
                 </span>
                 <div>
                   <p className="text-sm font-semibold">Hidden draft tayyor</p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                    Story hali hech kimga ko‘rinmaydi. Stikerlarni sozlang yoki darhol live qiling.
-                  </p>
+
                 </div>
               </div>
 
@@ -654,14 +627,7 @@ export function StoryComposer({ onDraftStateChange }: StoryComposerProps) {
             </div>
           )}
 
-          <div className="rounded-3xl border border-border/60 bg-muted/25 p-4">
-            <div className="flex items-start gap-3">
-              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                Private/friends Story media public URL sifatida saqlanmaydi. Interaktiv stickerlar Story live bo‘lishidan oldin tayyorlanadi.
-              </p>
-            </div>
-          </div>
+
         </aside>
       </div>
 
