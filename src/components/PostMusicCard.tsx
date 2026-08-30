@@ -7,29 +7,67 @@ import { formatTrackDuration, type PostMusic } from '@/lib/postMarkers';
 interface PostMusicCardProps {
   music: PostMusic;
   className?: string;
+  startSeconds?: number;
+  endSeconds?: number | null;
+  volume?: number;
 }
 
 /**
  * Postga bog'langan audio uchun premium ko'rinishdagi karta.
  * Ilgari bu joyda `[MUSIC]{...}` xom JSON matn bo'lib chiqardi.
  */
-export function PostMusicCard({ music, className }: PostMusicCardProps) {
+export function PostMusicCard({
+  music,
+  className,
+  startSeconds = 0,
+  endSeconds = null,
+  volume = 1,
+}: PostMusicCardProps) {
   const { t } = useTranslation();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
     const audio = audioRef.current;
-    return () => {
-      audio?.pause();
+    if (!audio) return;
+
+    audio.volume = Math.min(1, Math.max(0, volume));
+
+    const onLoaded = () => {
+      if (startSeconds > 0 && startSeconds < audio.duration) {
+        audio.currentTime = startSeconds;
+      }
     };
-  }, []);
+
+    const onTime = () => {
+      if (endSeconds != null && audio.currentTime >= endSeconds) {
+        audio.pause();
+        audio.currentTime = Math.max(0, startSeconds);
+        setIsPlaying(false);
+      }
+    };
+
+    audio.addEventListener('loadedmetadata', onLoaded);
+    audio.addEventListener('timeupdate', onTime);
+
+    return () => {
+      audio.pause();
+      audio.removeEventListener('loadedmetadata', onLoaded);
+      audio.removeEventListener('timeupdate', onTime);
+    };
+  }, [endSeconds, startSeconds, volume]);
 
   const toggle = () => {
     const audio = audioRef.current;
     if (!audio) return;
 
     if (audio.paused) {
+      if (
+        audio.currentTime < startSeconds ||
+        (endSeconds != null && audio.currentTime >= endSeconds)
+      ) {
+        audio.currentTime = Math.max(0, startSeconds);
+      }
       void audio.play().catch(() => setIsPlaying(false));
     } else {
       audio.pause();
