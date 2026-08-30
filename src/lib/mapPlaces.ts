@@ -1064,6 +1064,8 @@ async function searchByNominatim(
   const params = new URLSearchParams({
     format: 'jsonv2',
     addressdetails: '1',
+    extratags: '1',
+    namedetails: '1',
     limit: '20',
     countrycodes: 'uz',
     'accept-language': 'uz,ru,en',
@@ -1093,12 +1095,24 @@ async function searchByNominatim(
   return ((data ?? []) as any[])
     .map((item): MapPlace | null => {
       if (!item?.lat || !item?.lon) return null;
+      const namedetails =
+        item.namedetails && typeof item.namedetails === 'object' ? item.namedetails : {};
+      const extras: Record<string, string> =
+        item.extratags && typeof item.extratags === 'object' ? item.extratags : {};
       const name =
-        item.name || String(item.display_name ?? '').split(',')[0] || 'Nomsiz joy';
+        namedetails.name ||
+        namedetails['name:uz'] ||
+        namedetails['name:ru'] ||
+        namedetails['name:en'] ||
+        item.name ||
+        String(item.display_name ?? '').split(',')[0] ||
+        'Nomsiz joy';
       const rawKey = typeof item.category === 'string' ? item.category : null;
       const rawValue = typeof item.type === 'string' ? item.type : null;
-      const tags: Record<string, string> =
-        rawKey && rawValue ? { [rawKey]: rawValue } : {};
+      const tags: Record<string, string> = {
+        ...extras,
+        ...(rawKey && rawValue ? { [rawKey]: rawValue } : {}),
+      };
       const category = providerCategory(name, tags);
 
       return {
@@ -1110,6 +1124,12 @@ async function searchByNominatim(
         latitude: Number(item.lat),
         longitude: Number(item.lon),
         address: item.display_name ?? null,
+        phone: extras.phone || extras['contact:phone'] || null,
+        website: extras.website || extras['contact:website'] || null,
+        openingHours: extras.opening_hours || null,
+        brand: extras.brand || extras.operator || null,
+        cuisine: extras.cuisine || null,
+        wheelchair: extras.wheelchair || null,
         tags,
       };
     })
