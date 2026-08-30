@@ -6,8 +6,8 @@
  * relatsiyalarini olamiz (`route=bus|trolleybus|minibus|tram|subway`), keyin
  * `interval` / `headway` teglaridan kelish vaqtini hisoblaymiz.
  *
- * Agar shaharning real GTFS-RT manbasi ulansa (`VITE_TRANSIT_RT_URL`),
- * `fetchRealtimeArrivals` shu manbadan aniq vaqtlarni oladi.
+ * Real ETA faqat GTFS/GTFS-Realtime gateway yoki explicit legacy realtime
+ * provider bergan qiymatdan ko‘rsatiladi; OSM intervaldan ETA uydirilmaydi.
  */
 
 import { distanceMeters } from './geocoding';
@@ -131,24 +131,6 @@ function routeMode(tags: Record<string, string>): TransitRoute['mode'] {
   return 'other';
 }
 
-/**
- * Taxminiy kelish vaqtlari: qatnov oralig'i va joriy daqiqadan kelib chiqib
- * barqaror (bir xil daqiqada bir xil natija beruvchi) prognoz.
- */
-function estimateArrivals(intervalMin: number, seed: string): number[] {
-  // Interval tegi bo'lmasa kelish vaqtini uydirmaymiz. Real-time feed yoki
-  // haqiqiy jadval mavjud bo'lgandagina ETA ko'rsatish kerak.
-  if (intervalMin <= 0) return [];
-  const interval = intervalMin;
-  let hash = 0;
-  for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) % 997;
-  const now = new Date();
-  const minuteOfDay = now.getHours() * 60 + now.getMinutes();
-  const offset = (hash + minuteOfDay) % interval;
-  const first = Math.max(1, interval - offset);
-  return [first, first + interval, first + interval * 2];
-}
-
 /** Bekatga keladigan marshrutlar. */
 export async function fetchStopRoutes(
   stopId: string,
@@ -184,7 +166,9 @@ export async function fetchStopRoutes(
         operator: tags.operator ?? null,
         colour: tags.colour ?? null,
         intervalMin,
-        nextArrivalsMin: estimateArrivals(intervalMin, 'relation/' + element.id),
+        // OSM interval — bu faqat qatnov oralig‘i. Undan sun’iy ETA
+        // hosil qilmaymiz; aniq kelish vaqti faqat GTFS-RT'dan keladi.
+        nextArrivalsMin: [],
         realtime: false,
       };
     })
