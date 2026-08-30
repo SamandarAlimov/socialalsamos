@@ -40,14 +40,14 @@ export function MapLayerSwitcher({
       <button
         type="button"
         onClick={() => onOpenChange(!open)}
-        className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/95 text-foreground shadow-md ring-1 ring-border/60 backdrop-blur"
+        className="flex h-10 w-10 items-center justify-center rounded-2xl bg-background/82 text-foreground shadow-lg ring-1 ring-border/45 backdrop-blur-2xl transition hover:bg-background/95 hover:shadow-xl"
         aria-label="Qatlamlar"
       >
         <Layers className="h-5 w-5" />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-12 z-[1200] w-64 rounded-2xl border border-border/60 bg-background/98 p-3 shadow-xl backdrop-blur">
+        <div className="absolute right-0 top-12 z-[1200] w-64 rounded-[22px] border border-border/45 bg-background/88 p-3 shadow-2xl backdrop-blur-2xl">
           <div className="mb-2 flex items-center justify-between">
             <p className="text-sm font-semibold">Qatlamlar</p>
             <button
