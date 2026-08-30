@@ -69,7 +69,10 @@ import { MapBottomSheet, type MapSheetSnap } from '@/components/map/MapBottomShe
 import { MapOverviewPanel } from '@/components/map/MapOverviewPanel';
 import { MapSearchSuggestions } from '@/components/map/MapSearchSuggestions';
 import { useMapSearchHistory } from '@/hooks/useMapSearchHistory';
-import { useActiveNavigation } from '@/hooks/useActiveNavigation';
+import {
+  useActiveNavigation,
+  type NavigationPosition,
+} from '@/hooks/useActiveNavigation';
 import { useNavigationVoice } from '@/hooks/useNavigationVoice';
 import { ActiveNavigationPanel } from '@/components/map/ActiveNavigationPanel';
 import {
@@ -300,6 +303,41 @@ function liveVehicleIcon(ref: string, color?: string | null, bearing?: number | 
     iconSize: [42, 38],
     iconAnchor: [21, 32],
   });
+}
+
+function navigationCameraTarget(
+  position: NavigationPosition,
+): { latitude: number; longitude: number } {
+  if (position.heading == null || !Number.isFinite(position.heading)) {
+    return {
+      latitude: position.latitude,
+      longitude: position.longitude,
+    };
+  }
+
+  const speedMps = Math.max(0, position.speedMps ?? 0);
+  const lookAheadM = Math.max(28, Math.min(135, 35 + speedMps * 4.5));
+  const radiusM = 6_371_000;
+  const bearing = (position.heading * Math.PI) / 180;
+  const lat1 = (position.latitude * Math.PI) / 180;
+  const lng1 = (position.longitude * Math.PI) / 180;
+  const angular = lookAheadM / radiusM;
+
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(angular) +
+      Math.cos(lat1) * Math.sin(angular) * Math.cos(bearing),
+  );
+  const lng2 =
+    lng1 +
+    Math.atan2(
+      Math.sin(bearing) * Math.sin(angular) * Math.cos(lat1),
+      Math.cos(angular) - Math.sin(lat1) * Math.sin(lat2),
+    );
+
+  return {
+    latitude: (lat2 * 180) / Math.PI,
+    longitude: (lng2 * 180) / Math.PI,
+  };
 }
 
 function navigationArrowIcon(heading?: number | null) {
@@ -917,7 +955,7 @@ export default function MapPage() {
   );
 
   const handleNavigationPosition = useCallback(
-    (position: { latitude: number; longitude: number }) => {
+    (position: NavigationPosition) => {
       const point = {
         latitude: position.latitude,
         longitude: position.longitude,
@@ -926,13 +964,17 @@ export default function MapPage() {
 
       if (!navigationFollowing) return;
 
-      setCenter(point);
+      // Vanilla Leaflet raster xaritani barqaror aylantirmaydi. Shu sabab hozir
+      // "heading-up" hissini camera look-ahead bilan beramiz: marker ekran
+      // markazidan biroz pastroqda qoladi va oldindagi yo'l ko'proq ko'rinadi.
+      const camera = navigationCameraTarget(position);
+      setCenter(camera);
       setMovedCenter(null);
 
       const map = mapRef.current;
       if (map) {
         map.setView(
-          [point.latitude, point.longitude],
+          [camera.latitude, camera.longitude],
           Math.max(17, map.getZoom()),
           { animate: true },
         );
