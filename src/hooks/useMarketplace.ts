@@ -1065,7 +1065,16 @@ export function useProductActions() {
       .from('product_variants')
       .select('id')
       .limit(1);
-    return !error;
+
+    if (error) {
+      toast({
+        title: 'Variantlar hali tayyor emas',
+        description: 'Marketplace variant migrationini deploy qilib, qayta urinib ko‘ring.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+    return true;
   };
 
   const createProductVariants = async (
