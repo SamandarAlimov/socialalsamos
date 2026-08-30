@@ -76,7 +76,7 @@ function InfoRow({
       <span
         className={cn(
           'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl',
-          highContrast ? 'bg-white/8 text-white/70' : 'bg-background text-muted-foreground',
+          highContrast ? 'bg-white/[0.08] text-white/70' : 'bg-background text-muted-foreground',
         )}
       >
         {icon}
@@ -85,7 +85,7 @@ function InfoRow({
         <span
           className={cn(
             'block text-[11px] font-semibold uppercase tracking-wide',
-            highContrast ? 'text-white/45' : 'text-muted-foreground',
+            highContrast ? 'text-white/[0.45]' : 'text-muted-foreground',
           )}
         >
           {title}
@@ -138,7 +138,7 @@ export function PlaceDetailsCard({
   };
 
   const secondaryButton = highContrast
-    ? 'border-white/12 bg-white/[0.055] text-white/82 hover:bg-white/[0.1] hover:text-white'
+    ? 'border-white/12 bg-white/[0.055] text-white/[0.82] hover:bg-white/[0.1] hover:text-white'
     : 'border-border/60 bg-background/65 text-foreground hover:bg-muted/60';
 
   return (
@@ -199,7 +199,7 @@ export function PlaceDetailsCard({
             <p
               className={cn(
                 'mt-1 line-clamp-2 text-xs leading-relaxed',
-                highContrast ? 'text-white/58' : 'text-muted-foreground',
+                highContrast ? 'text-white/[0.58]' : 'text-muted-foreground',
               )}
             >
               {displayAddress}
@@ -209,7 +209,7 @@ export function PlaceDetailsCard({
           <span
             className={cn(
               'shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold',
-              highContrast ? 'bg-white/8' : 'bg-muted/55',
+              highContrast ? 'bg-white/[0.08]' : 'bg-muted/55',
             )}
             style={{ color: ui.color }}
           >
@@ -222,12 +222,12 @@ export function PlaceDetailsCard({
             <span
               className={cn(
                 'flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold',
-                highContrast ? 'bg-amber-400/12 text-amber-300' : 'bg-amber-500/10 text-amber-600',
+                highContrast ? 'bg-amber-400/[0.12] text-amber-300' : 'bg-amber-500/10 text-amber-600',
               )}
             >
               <Star className="h-3.5 w-3.5 fill-current" />
               {summary.average.toFixed(1)}
-              <span className={highContrast ? 'text-white/45' : 'text-muted-foreground'}>
+              <span className={highContrast ? 'text-white/[0.45]' : 'text-muted-foreground'}>
                 ({summary.total})
               </span>
             </span>
@@ -239,10 +239,10 @@ export function PlaceDetailsCard({
                 'rounded-full px-2 py-1 text-[11px] font-semibold',
                 open
                   ? highContrast
-                    ? 'bg-emerald-400/12 text-emerald-300'
+                    ? 'bg-emerald-400/[0.12] text-emerald-300'
                     : 'bg-emerald-500/10 text-emerald-600'
                   : highContrast
-                    ? 'bg-red-400/12 text-red-300'
+                    ? 'bg-red-400/[0.12] text-red-300'
                     : 'bg-destructive/10 text-destructive',
               )}
             >
@@ -254,7 +254,7 @@ export function PlaceDetailsCard({
             <span
               className={cn(
                 'rounded-full px-2 py-1 text-[11px] font-semibold',
-                highContrast ? 'bg-white/8 text-white/65' : 'bg-muted/55 text-muted-foreground',
+                highContrast ? 'bg-white/[0.08] text-white/[0.65]' : 'bg-muted/55 text-muted-foreground',
               )}
             >
               {formatDistance(place.distanceM)}
@@ -326,7 +326,7 @@ export function PlaceDetailsCard({
                   ? 'text-white'
                   : 'text-foreground'
                 : highContrast
-                  ? 'text-white/45 hover:text-white/80'
+                  ? 'text-white/[0.45] hover:text-white/80'
                   : 'text-muted-foreground hover:text-foreground',
             )}
           >
