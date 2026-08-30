@@ -599,15 +599,19 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         initial={{ opacity: 0, y: 10, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 8, scale: 0.97 }}
-        className="absolute bottom-[calc(100%+0.5rem)] right-2 z-40 flex w-[min(88vw,300px)] flex-col items-center gap-3 rounded-[28px] border border-border/80 bg-card/95 p-3 shadow-2xl backdrop-blur-xl sm:right-3"
+        className={VIDEO_NOTE_PANEL_CLASS}
+        style={VIDEO_NOTE_PANEL_STYLE}
+        data-video-note-surface
       >
-        <div className="relative h-[clamp(180px,48vw,240px)] w-[clamp(180px,48vw,240px)] shrink-0">
+        <div className={VIDEO_NOTE_CIRCLE_CLASS} style={VIDEO_NOTE_CIRCLE_STYLE}>
           <div className="absolute inset-[5px] overflow-hidden rounded-full bg-black shadow-inner">
             <video
               ref={videoPlaybackRef}
               src={mediaUrl}
               className="h-full w-full object-cover"
               playsInline
+              controls={false}
+              disablePictureInPicture
               loop
               preload="metadata"
               onPlay={() => setIsPlaying(true)}
@@ -661,34 +665,31 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
           </div>
         </div>
 
-        <div className="flex w-full items-center justify-center gap-3">
+        <div className="flex items-center justify-center gap-2 rounded-full border border-border/70 bg-background/90 p-1.5 shadow-lg backdrop-blur">
           <Button
             variant="ghost"
             size="icon"
-            className="h-10 w-10 rounded-full text-destructive hover:bg-destructive/10"
+            className="h-9 w-9 rounded-full text-destructive hover:bg-destructive/10"
             onClick={cancelRecording}
             aria-label="O'chirish"
             title="O'chirish"
           >
-            <Trash2 className="h-4.5 w-4.5" />
+            <Trash2 className="h-4 w-4" />
           </Button>
 
-          <div className="min-w-0 flex-1 text-center">
-            <p className="text-xs font-medium text-foreground">Video xabar tayyor</p>
-            <p className="text-[11px] text-muted-foreground">
-              Ko'rib chiqing yoki jo'nating
-            </p>
-          </div>
+          <span className="min-w-[54px] text-center text-[11px] font-medium tabular-nums text-muted-foreground">
+            {formatDuration(duration)}
+          </span>
 
           <Button
             variant="default"
             size="icon"
-            className="h-10 w-10 rounded-full"
+            className="h-9 w-9 rounded-full"
             onClick={handleSendFromPreview}
             aria-label="Jo'natish"
             title="Jo'natish"
           >
-            <Send className="h-4.5 w-4.5" />
+            <Send className="h-4 w-4" />
           </Button>
         </div>
       </motion.div>
@@ -703,15 +704,19 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         initial={{ opacity: 0, y: 10, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 8, scale: 0.97 }}
-        className="absolute bottom-[calc(100%+0.5rem)] right-2 z-40 flex w-[min(88vw,300px)] flex-col items-center gap-3 rounded-[28px] border border-border/80 bg-card/95 p-3 shadow-2xl backdrop-blur-xl sm:right-3"
+        className={VIDEO_NOTE_PANEL_CLASS}
+        style={VIDEO_NOTE_PANEL_STYLE}
+        data-video-note-surface
       >
-        <div className="relative h-[clamp(180px,48vw,240px)] w-[clamp(180px,48vw,240px)] shrink-0">
+        <div className={VIDEO_NOTE_CIRCLE_CLASS} style={VIDEO_NOTE_CIRCLE_STYLE}>
           <div className="absolute inset-[5px] overflow-hidden rounded-full bg-black shadow-inner">
             <video
               ref={videoPreviewRef}
               className="h-full w-full object-cover"
               style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
               playsInline
+              controls={false}
+              disablePictureInPicture
               muted
               autoPlay
             />
@@ -766,44 +771,39 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
           </Button>
         </div>
 
-        <div className="flex w-full items-center justify-center gap-3">
+        <div className="flex items-center justify-center gap-2 rounded-full border border-border/70 bg-background/90 p-1.5 shadow-lg backdrop-blur">
           <Button
             variant="ghost"
             size="icon"
-            className="h-10 w-10 rounded-full text-destructive hover:bg-destructive/10"
+            className="h-9 w-9 rounded-full text-destructive hover:bg-destructive/10"
             onClick={cancelRecording}
             aria-label="Bekor qilish"
             title="Bekor qilish"
           >
-            <X className="h-4.5 w-4.5" />
+            <X className="h-4 w-4" />
           </Button>
 
           <Button
             variant="outline"
             size="icon"
-            className="h-11 w-11 rounded-full"
+            className="h-10 w-10 rounded-full"
             onClick={stopToPreview}
             aria-label="To'xtatib ko'rish"
             title="To'xtatib ko'rish"
           >
-            <Square className="h-4 w-4 fill-current" />
+            <Square className="h-3.5 w-3.5 fill-current" />
           </Button>
 
           <Button
             variant="default"
             size="icon"
-            className="h-10 w-10 rounded-full"
+            className="h-9 w-9 rounded-full"
             onClick={finishAndSend}
             aria-label="Darhol jo'natish"
             title="Darhol jo'natish"
           >
             <Send className="h-4 w-4" />
           </Button>
-        </div>
-
-        <div className="flex w-full items-center justify-between px-1 text-[10px] text-muted-foreground">
-          <span>Video xabar</span>
-          <span>{VIDEO_NOTE_MAX_SECONDS} soniyagacha</span>
         </div>
       </motion.div>
     );
