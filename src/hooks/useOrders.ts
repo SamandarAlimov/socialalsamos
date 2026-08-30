@@ -7,6 +7,8 @@ import { useCart, Product } from '@/hooks/useMarketplace';
 export interface OrderItem {
   id: string;
   product_id: string;
+  product_variant_id?: string | null;
+  variant_options?: Record<string, string> | null;
   title: string;
   quantity: number;
   price: number;
@@ -59,7 +61,7 @@ const ORDER_SELECT = `
   *,
   seller:sellers(business_name, logo_url, is_verified),
   items:order_items(
-    id, product_id, title, quantity, price, total,
+    id, product_id, product_variant_id, variant_options, title, quantity, price, total,
     product:products(images:product_images(url))
   )
 `;
