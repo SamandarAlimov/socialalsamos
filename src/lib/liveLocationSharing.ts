@@ -59,24 +59,26 @@ export function startLiveLocationSharing(postId: string, liveUntil: string | nul
       current.sending = true;
       current.lastSentAt = Date.now();
 
-      void db
-        .from('post_locations')
-        .update({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy_m: position.coords.accuracy ?? null,
-          heading: position.coords.heading ?? null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('post_id', postId)
-        .eq('mode', 'live')
-        .then(({ error }) => {
+      void (async () => {
+        try {
+          const { error } = await db
+            .from('post_locations')
+            .update({
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              accuracy_m: position.coords.accuracy ?? null,
+              heading: position.coords.heading ?? null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('post_id', postId)
+            .eq('mode', 'live');
+
           if (error) console.warn('Jonli joylashuvni yangilab bo‘lmadi:', error);
-        })
-        .finally(() => {
+        } finally {
           const latest = activeShares.get(postId);
           if (latest) latest.sending = false;
-        });
+        }
+      })();
     },
     (error) => {
       console.warn('Jonli geolocation watcher xatosi:', error);
