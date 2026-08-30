@@ -641,6 +641,43 @@ export function PostComposer() {
     draftOwnerId,
   ]);
 
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key !== 'Enter') return;
+
+      const overlayOpen =
+        showPoll ||
+        showLocation ||
+        showMusic ||
+        showCollaborators ||
+        showSchedule ||
+        showPreview ||
+        Boolean(imageTarget) ||
+        Boolean(videoTarget) ||
+        Boolean(stickerTarget);
+
+      if (overlayOpen || !canSubmit) return;
+
+      event.preventDefault();
+      void handleSubmit();
+    };
+
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, [
+    canSubmit,
+    handleSubmit,
+    imageTarget,
+    showCollaborators,
+    showLocation,
+    showMusic,
+    showPoll,
+    showPreview,
+    showSchedule,
+    stickerTarget,
+    videoTarget,
+  ]);
+
   return (
     <div
       className="relative mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 pb-8 pt-4 sm:px-5 lg:px-6"
@@ -1008,6 +1045,9 @@ export function PostComposer() {
                 {scheduledAt
                   ? formatScheduledDate(scheduledAt)
                   : `${attachments.length} fayl · ${collaborators.length} hammuallif · ${VISIBILITIES.find((item) => item.id === visibility)?.label}`}
+              </p>
+              <p className="mt-1 text-[9px] text-muted-foreground/80">
+                Ctrl/⌘ + Enter · tez joylash
               </p>
             </div>
 
