@@ -1,4 +1,4 @@
-import type { InlineToken, RichBlock } from '@/lib/richText';
+import { parseRichText, type InlineToken, type RichBlock } from '@/lib/richText';
 
 export const RICH_TEXT_DOCUMENT_KIND = 'alsamos-rich-text';
 export const RICH_TEXT_DOCUMENT_VERSION = 1;
@@ -79,4 +79,17 @@ export function hasRichTextFormatting(document: AlsamosRichTextDocument): boolea
           Boolean(token.color),
       ),
   );
+}
+
+
+/**
+ * Legacy marker/plain matnni yangi versionlangan ASTga aylantiradi.
+ * Bu eski postni WYSIWYG editor orqali birinchi marta tahrirlashda ishlatiladi.
+ */
+export function richTextDocumentFromLegacyContent(content: string): AlsamosRichTextDocument {
+  return {
+    kind: RICH_TEXT_DOCUMENT_KIND,
+    version: RICH_TEXT_DOCUMENT_VERSION,
+    blocks: parseRichText(content),
+  };
 }
