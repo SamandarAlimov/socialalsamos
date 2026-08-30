@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "lib": ["ES2021", "DOM", "DOM.Iterable"],
+    "types": ["node", "vitest/globals", "vite/client"],
+    "noEmit": true
+  },
+  "include": [
+    "src/hooks/useMessages.ts",
+    "src/lib/messagePipeline.ts",
+    "src/lib/messagePipeline.test.ts",
+    "src/components/messages/EnhancedMessageBubble.tsx"
+  ]
+}
