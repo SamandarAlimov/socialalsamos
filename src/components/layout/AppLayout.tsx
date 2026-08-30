@@ -70,13 +70,13 @@ export function AppLayout() {
         <Outlet />
       </main>
 
-      {/* IMPORTANT: this control is outside AppSidebar and outside <main>.
-          It therefore cannot be painted underneath a page's overflow/z-index context. */}
+      {/* Keep the collapse control above normal page content, but below dialogs.
+          Modal backdrops/dialogs must be able to cover this control. */}
       <button
         type="button"
         aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         onClick={() => setSidebarCollapsed(value => !value)}
-        className="hidden md:flex fixed top-20 z-[2147483647] h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full bg-background border border-border shadow-md hover:bg-accent transition-colors pointer-events-auto"
+        className="hidden md:flex fixed top-20 z-40 h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full bg-background border border-border shadow-md hover:bg-accent transition-colors pointer-events-auto"
         style={{ left: sidebarCollapsed ? '72px' : '256px' }}
       >
         {sidebarCollapsed ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronLeft className="h-4 w-4 text-muted-foreground" />}
