@@ -2318,6 +2318,7 @@ export default function MapPage() {
           realtimeFresh={stopRoutes.realtimeFresh}
           providerName={transitStatus.providerName}
           authoritative={Boolean(transitStatus.authoritative)}
+          staticGtfsAvailable={Boolean(transitStatus.staticGtfs)}
           alerts={stopRoutes.alerts}
           highContrast={contrastLayer}
           onReload={stopRoutes.reload}
@@ -3462,13 +3463,17 @@ export default function MapPage() {
                 available: true,
                 detail: transitStatus.configured
                   ? transitStatus.authoritative
-                    ? transitStatus.providerName ||
-                      'Rasmiy GTFS/GTFS-RT ulangan'
+                    ? (transitStatus.providerName
+                        ? transitStatus.providerName + ' · '
+                        : '') +
+                      (transitStatus.arrivals || transitStatus.vehicles
+                        ? 'rasmiy GTFS/GTFS-RT'
+                        : 'rasmiy GTFS schedule')
                     : (transitStatus.providerName
                         ? transitStatus.providerName + ' · '
                         : '') +
                       'GTFS manbasi tasdiqlanmagan'
-                  : 'Static transport · live GTFS ulanmagan',
+                  : 'OSM transport · GTFS ulanmagan',
               },
             }}
             onToggleOverlay={(id) =>
