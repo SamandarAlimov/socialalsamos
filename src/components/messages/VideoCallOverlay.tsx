@@ -498,7 +498,7 @@ export function VideoCallOverlay({
             <AvatarImage src={displayAvatar} />
             <AvatarFallback className="bg-white/10 text-xs text-white">
               {displayName.slice(0, 2).toUpperCase()}
-            </Avatar>
+            </AvatarFallback>
           </Avatar>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold">{displayName}</p>
