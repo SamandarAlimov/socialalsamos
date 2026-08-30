@@ -41,6 +41,13 @@ const NEXT_ACTION: Partial<Record<OrderStatus, { to: OrderStatus; label: string;
   shipped: { to: 'delivered', label: marketplaceUz.sellerOrders.next.delivered, icon: CheckCircle },
 };
 
+function variantOptionsLabel(options?: Record<string, string> | null) {
+  if (!options) return '';
+  return Object.entries(options)
+    .map(([name, value]) => `${name}: ${value}`)
+    .join(' · ');
+}
+
 export function SellerOrdersView() {
   const { orders, sellerId, isLoading, error, refresh } = useSellerOrders();
   const { updateStatus, cancelOrder, updatingId } = useOrderActions();
@@ -207,8 +214,15 @@ export function SellerOrdersView() {
               {isOpen && (
                 <div className="mt-3 space-y-2">
                   {order.items.map(item => (
-                    <div key={item.id} className="flex justify-between text-xs p-2 rounded-lg bg-muted/20">
-                      <span className="truncate mr-2">{item.title}</span>
+                    <div key={item.id} className="flex justify-between gap-3 text-xs p-2 rounded-lg bg-muted/20">
+                      <div className="min-w-0">
+                        <p className="truncate">{item.title}</p>
+                        {variantOptionsLabel(item.variant_options) && (
+                          <p className="mt-0.5 truncate text-[10px] font-medium text-muted-foreground">
+                            {variantOptionsLabel(item.variant_options)}
+                          </p>
+                        )}
+                      </div>
                       <span className="tabular-nums shrink-0">
                         {item.quantity} × {formatPrice(item.price, order.currency)}
                       </span>
