@@ -15,6 +15,7 @@ import { distanceMeters } from '@/lib/geocoding';
 import { getLayer, getOverlay, type MapLayerId } from '@/lib/mapLayers';
 import {
   clusterSvg,
+  incidentSvg,
   meDotSvg,
   navigationArrowSvg,
   pinSvg,
@@ -89,6 +90,15 @@ function markerIcon(marker: MapSceneMarker) {
       className: 'alsamos-cluster',
       iconSize: [size, size],
       iconAnchor: [size / 2, size / 2],
+    });
+  }
+
+  if (marker.kind === 'incident') {
+    return L.divIcon({
+      html: incidentSvg(marker.label || 'incident', marker.color || '#F97316'),
+      className: 'alsamos-traffic-incident',
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
     });
   }
 
@@ -403,6 +413,7 @@ export function LeafletMapSurface({
               offset={[
                 0,
                 marker.kind === 'navigation' ||
+                marker.kind === 'incident' ||
                 marker.kind === 'cluster' ||
                 marker.kind === 'stop' ||
                 marker.kind === 'vehicle'
