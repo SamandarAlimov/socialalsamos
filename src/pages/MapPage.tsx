@@ -2232,12 +2232,54 @@ export default function MapPage() {
   ]);
 
   const vectorSceneLines = useMemo<MapSceneLine[]>(() => {
-    if (!activeRoute || activeRoute.coordinates.length < 2) return [];
+    const lines: MapSceneLine[] = [];
+
+    if (overlays.includes('traffic')) {
+      trafficIncidents.incidents.forEach((incident) => {
+        if (
+          incident.geometry?.type !== 'LineString' ||
+          !Array.isArray(incident.geometry.coordinates)
+        ) {
+          return;
+        }
+
+        const coordinates = incident.geometry.coordinates
+          .map((point) => {
+            if (
+              !Array.isArray(point) ||
+              point.length < 2 ||
+              !Number.isFinite(Number(point[0])) ||
+              !Number.isFinite(Number(point[1]))
+            ) {
+              return null;
+            }
+            return [
+              Number(point[1]),
+              Number(point[0]),
+            ] as [number, number];
+          })
+          .filter(
+            (point): point is [number, number] => point !== null,
+          );
+
+        if (coordinates.length < 2) return;
+        lines.push({
+          id: 'traffic-incident-line:' + incident.id,
+          coordinates,
+          color: trafficIncidentColor(incident.category),
+          width: selectedIncident?.id === incident.id ? 8 : 6,
+          opacity: selectedIncident?.id === incident.id ? 1 : 0.82,
+        });
+      });
+    }
+
+    if (!activeRoute || activeRoute.coordinates.length < 2) {
+      return lines;
+    }
 
     const currentCoordinates = navigationActive
       ? navigationRemainingCoordinates
       : activeRoute.coordinates;
-    const lines: MapSceneLine[] = [];
 
     if (
       navigationActive &&
@@ -2322,6 +2364,9 @@ export default function MapPage() {
     navigationActive,
     navigationRemainingCoordinates,
     navigationTravelledCoordinates,
+    overlays,
+    trafficIncidents.incidents,
+    selectedIncident?.id,
   ]);
 
   const handleVectorMarkerClick = useCallback(
