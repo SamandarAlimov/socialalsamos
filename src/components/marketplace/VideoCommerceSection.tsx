@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
-import { Play, ShoppingBag, Eye, Heart, Loader2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Eye, Heart, Loader2, Play, ShoppingBag } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { supabase } from '@/integrations/supabase/client';
+import { CategoryIcon } from '@/components/marketplace/CategoryIcon';
 import { Product } from '@/hooks/useMarketplace';
+import db from '@/lib/supabaseAny';
+import { formatPrice } from '@/lib/marketplace';
 import { motion } from 'framer-motion';
-import { cn } from '@/lib/utils';
 
 interface VideoPost {
   id: string;
@@ -23,83 +24,110 @@ interface VideoPost {
   };
 }
 
+interface VideoProductLink {
+  post_id: string;
+  position: number;
+  post: VideoPost;
+  product: Product;
+}
+
 interface VideoCommerceSectionProps {
   onProductSelect: (product: Product) => void;
 }
 
 export function VideoCommerceSection({ onProductSelect }: VideoCommerceSectionProps) {
-  const [videoPosts, setVideoPosts] = useState<VideoPost[]>([]);
-  const [linkedProducts, setLinkedProducts] = useState<Record<string, Product[]>>({});
+  const [links, setLinks] = useState<VideoProductLink[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+
     const fetchVideoCommerce = async () => {
-      // Fetch video posts that mention products or have commerce tags
-      const { data: videos } = await supabase
-        .from('posts')
+      setIsLoading(true);
+
+      const { data, error } = await db
+        .from('marketplace_video_products')
         .select(`
-          id, content, media_urls, media_type, views_count, likes_count, user_id, created_at,
-          user:profiles(username, display_name, avatar_url)
+          post_id,
+          position,
+          post:posts!inner(
+            id, content, media_urls, media_type, views_count, likes_count, user_id, created_at,
+            user:profiles(username, display_name, avatar_url)
+          ),
+          product:products!inner(
+            *,
+            seller:sellers(
+              id, user_id, business_name, business_type, logo_url, location,
+              is_verified, rating, total_sales,
+              profile:profiles(username, display_name, avatar_url)
+            ),
+            category:product_categories(id, name, slug, icon),
+            images:product_images(id, url, position)
+          )
         `)
-        .eq('media_type', 'video')
-        .not('media_urls', 'is', null)
-        .order('views_count', { ascending: false })
-        .limit(10);
+        .eq('post.media_type', 'video')
+        .eq('product.status', 'active')
+        .order('position', { ascending: true })
+        .limit(40);
 
-      if (videos && videos.length > 0) {
-        setVideoPosts(videos.map(v => ({
-          ...v,
-          user: v.user as any,
-          media_urls: v.media_urls || [],
-        })));
+      if (cancelled) return;
 
-        // Try to find products from the same users (creators who also sell)
-        const userIds = [...new Set(videos.map(v => v.user_id))];
-        
-        const { data: sellers } = await supabase
-          .from('sellers')
-          .select('id, user_id')
-          .in('user_id', userIds);
-
-        if (sellers && sellers.length > 0) {
-          const sellerIds = sellers.map(s => s.id);
-          const { data: products } = await supabase
-            .from('products')
-            .select(`
-              *,
-              seller:sellers(id, user_id, business_name, is_verified, logo_url),
-              images:product_images(id, url, position)
-            `)
-            .in('seller_id', sellerIds)
-            .eq('status', 'active')
-            .limit(20);
-
-          if (products) {
-            const grouped: Record<string, Product[]> = {};
-            for (const p of products) {
-              const sellerUserId = sellers.find(s => s.id === p.seller_id)?.user_id;
-              if (sellerUserId) {
-                const matchingVideos = videos.filter(v => v.user_id === sellerUserId);
-                for (const vid of matchingVideos) {
-                  if (!grouped[vid.id]) grouped[vid.id] = [];
-                  grouped[vid.id].push({
-                    ...p,
-                    seller: p.seller as any,
-                    images: (p.images as any[]).sort((a: any, b: any) => a.position - b.position),
-                  });
-                }
-              }
-            }
-            setLinkedProducts(grouped);
-          }
-        }
+      if (error) {
+        // Migration hali hosted DBga push qilinmagan muhitda Marketplace buzilmasin.
+        console.warn('Video shopping relation is unavailable:', error);
+        setLinks([]);
+      } else {
+        setLinks(
+          (data ?? []).map((row: any) => ({
+            post_id: row.post_id,
+            position: Number(row.position ?? 0),
+            post: {
+              ...row.post,
+              user: row.post?.user,
+              media_urls: row.post?.media_urls ?? [],
+            },
+            product: {
+              ...row.product,
+              seller: row.product?.seller,
+              category: row.product?.category,
+              images: ((row.product?.images ?? []) as Product['images'])
+                .slice()
+                .sort((a, b) => a.position - b.position),
+            } as Product,
+          })),
+        );
       }
 
       setIsLoading(false);
     };
 
-    fetchVideoCommerce();
+    void fetchVideoCommerce();
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const videoGroups = useMemo(() => {
+    const grouped = new Map<string, { video: VideoPost; products: Product[] }>();
+
+    for (const link of links) {
+      const existing = grouped.get(link.post_id);
+      if (existing) {
+        if (!existing.products.some(product => product.id === link.product.id)) {
+          existing.products.push(link.product);
+        }
+      } else {
+        grouped.set(link.post_id, {
+          video: link.post,
+          products: [link.product],
+        });
+      }
+    }
+
+    return [...grouped.values()]
+      .sort((a, b) => (b.video.views_count ?? 0) - (a.video.views_count ?? 0))
+      .slice(0, 10);
+  }, [links]);
 
   if (isLoading) {
     return (
@@ -109,31 +137,27 @@ export function VideoCommerceSection({ onProductSelect }: VideoCommerceSectionPr
     );
   }
 
-  const videosWithProducts = videoPosts.filter(v => linkedProducts[v.id]?.length > 0);
-
-  if (videosWithProducts.length === 0) return null;
+  if (videoGroups.length === 0) return null;
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-primary/10">
-            <Play className="h-4 w-4 text-primary" />
-          </div>
-          <h3 className="font-bold">Video Shopping</h3>
-          <Badge variant="outline" className="text-[10px] bg-primary/5 text-primary border-primary/20">
-            Yangi
-          </Badge>
+      <div className="flex items-center gap-2">
+        <div className="rounded-lg bg-primary/10 p-1.5">
+          <Play className="h-4 w-4 text-primary" />
         </div>
+        <h3 className="font-bold">Video orqali xarid</h3>
+        <Badge variant="outline" className="border-primary/20 bg-primary/5 text-[10px] text-primary">
+          Yangi
+        </Badge>
       </div>
 
       <ScrollArea className="w-full">
         <div className="flex gap-3 pb-2">
-          {videosWithProducts.map(video => (
+          {videoGroups.map(group => (
             <VideoCommerceCard
-              key={video.id}
-              video={video}
-              products={linkedProducts[video.id] || []}
+              key={group.video.id}
+              video={group.video}
+              products={group.products}
               onProductSelect={onProductSelect}
             />
           ))}
@@ -143,85 +167,103 @@ export function VideoCommerceSection({ onProductSelect }: VideoCommerceSectionPr
   );
 }
 
-function VideoCommerceCard({ video, products, onProductSelect }: { 
-  video: VideoPost; 
+function VideoCommerceCard({
+  video,
+  products,
+  onProductSelect,
+}: {
+  video: VideoPost;
   products: Product[];
   onProductSelect: (product: Product) => void;
 }) {
-  const thumbnail = video.media_urls?.[0] || '';
+  const videoUrl = video.media_urls?.[0] || '';
 
   return (
     <div className="w-44 shrink-0 space-y-2">
-      {/* Video Thumbnail */}
-      <div className="relative aspect-[9/16] rounded-2xl overflow-hidden bg-muted group cursor-pointer">
-        {thumbnail ? (
+      <div className="group relative aspect-[9/16] overflow-hidden rounded-2xl bg-muted">
+        {videoUrl ? (
           <video
-            src={thumbnail}
-            className="w-full h-full object-cover"
+            src={videoUrl}
+            className="h-full w-full object-cover"
             muted
+            playsInline
             preload="metadata"
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center">
+          <div className="flex h-full w-full items-center justify-center bg-muted">
             <Play className="h-8 w-8 text-muted-foreground/30" />
           </div>
         )}
 
-        {/* Overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-        
-        {/* Play Button */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-          <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-            <Play className="h-5 w-5 text-white fill-white" />
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+            <Play className="h-5 w-5 fill-white text-white" />
           </div>
         </div>
 
-        {/* Stats */}
         <div className="absolute bottom-2 left-2 right-2">
-          <div className="flex items-center gap-2 text-white text-[10px]">
-            <div className="flex items-center gap-0.5">
+          <div className="flex items-center gap-2 text-[10px] text-white">
+            <span className="flex items-center gap-0.5">
               <Eye className="h-3 w-3" />
               {video.views_count}
-            </div>
-            <div className="flex items-center gap-0.5">
+            </span>
+            <span className="flex items-center gap-0.5">
               <Heart className="h-3 w-3" />
               {video.likes_count}
-            </div>
+            </span>
           </div>
-          <p className="text-white text-[10px] font-medium mt-0.5 line-clamp-1">
-            @{video.user?.username}
+          <p className="mt-0.5 line-clamp-1 text-[10px] font-medium text-white">
+            @{video.user?.username || 'alsamos'}
           </p>
         </div>
 
-        {/* Product Count Badge */}
-        <div className="absolute top-2 right-2">
-          <Badge className="bg-primary/90 text-primary-foreground text-[9px] px-1.5 py-0.5 backdrop-blur-sm">
-            <ShoppingBag className="h-2.5 w-2.5 mr-0.5" />
+        <div className="absolute right-2 top-2">
+          <Badge className="bg-primary/90 px-1.5 py-0.5 text-[9px] text-primary-foreground backdrop-blur-sm">
+            <ShoppingBag className="mr-0.5 h-2.5 w-2.5" />
             {products.length}
           </Badge>
         </div>
       </div>
 
-      {/* Linked Products */}
       <div className="flex gap-1.5">
-        {products.slice(0, 2).map(product => (
-          <motion.div
-            key={product.id}
-            whileTap={{ scale: 0.95 }}
-            className="flex-1 cursor-pointer"
-            onClick={() => onProductSelect(product)}
-          >
-            <div className="aspect-square rounded-xl overflow-hidden bg-muted ring-1 ring-border/30">
-              <img
-                src={product.images?.[0]?.url || 'https://placehold.co/80x80?text=P'}
-                alt=""
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <p className="text-[10px] font-bold text-primary mt-0.5">${product.price}</p>
-          </motion.div>
-        ))}
+        {products.slice(0, 2).map(product => {
+          const image = product.images?.[0]?.url;
+          return (
+            <motion.button
+              type="button"
+              key={product.id}
+              whileTap={{ scale: 0.95 }}
+              className="min-w-0 flex-1 text-left"
+              onClick={() => onProductSelect(product)}
+            >
+              <div className="aspect-square overflow-hidden rounded-xl bg-muted ring-1 ring-border/30">
+                {image ? (
+                  <img
+                    src={image}
+                    alt={product.title}
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                    onError={event => {
+                      event.currentTarget.style.display = 'none';
+                      event.currentTarget.nextElementSibling?.classList.remove('hidden');
+                    }}
+                  />
+                ) : null}
+                <div className={image ? 'hidden h-full w-full items-center justify-center' : 'flex h-full w-full items-center justify-center'}>
+                  <CategoryIcon
+                    slug={product.category?.slug}
+                    name={product.category?.name}
+                    className="h-5 w-5 text-muted-foreground/50"
+                  />
+                </div>
+              </div>
+              <p className="mt-0.5 truncate text-[10px] font-bold text-primary">
+                {formatPrice(product.price, product.currency)}
+              </p>
+            </motion.button>
+          );
+        })}
       </div>
     </div>
   );
