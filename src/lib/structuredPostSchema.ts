@@ -2,20 +2,29 @@ const STRUCTURED_POST_SCHEMA_KEY = 'alsamos.create.structured-post-schema.v1';
 
 export type StructuredPostSchemaCapability = 'available' | 'missing' | null;
 
+let runtimeCapability: StructuredPostSchemaCapability = null;
+
 export function readStructuredPostSchemaCapability(): StructuredPostSchemaCapability {
+  if (runtimeCapability) return runtimeCapability;
   if (typeof window === 'undefined') return null;
 
   try {
     const value = sessionStorage.getItem(STRUCTURED_POST_SCHEMA_KEY);
-    return value === 'available' || value === 'missing' ? value : null;
+    if (value === 'available' || value === 'missing') {
+      runtimeCapability = value;
+      return value;
+    }
   } catch {
-    return null;
+    // Browser storage ishlamasa ham runtime cache ishlashda davom etadi.
   }
+
+  return null;
 }
 
 export function writeStructuredPostSchemaCapability(
   value: Exclude<StructuredPostSchemaCapability, null>,
 ): void {
+  runtimeCapability = value;
   if (typeof window === 'undefined') return;
 
   try {
