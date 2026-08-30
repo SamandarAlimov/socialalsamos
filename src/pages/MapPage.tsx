@@ -716,11 +716,11 @@ export default function MapPage() {
 
     if (panel === 'route') {
       return (
-        <div className={cn('flex h-full flex-col', imageryLayer && 'map-imagery-card')}>
+        <div className={cn('flex h-full flex-col', contrastLayer && 'map-imagery-card')}>
           <div
             className={cn(
               'shrink-0 border-b px-3 pb-3 pt-2 backdrop-blur-xl',
-              imageryLayer ? 'border-white/10 bg-black/10' : 'border-border/45 bg-background/35',
+              contrastLayer ? 'border-white/10 bg-black/10' : 'border-border/45 bg-background/35',
             )}
           >
             <div className="flex items-start gap-2">
@@ -979,7 +979,7 @@ export default function MapPage() {
                       key={index}
                       className={cn(
                         'flex items-start gap-3 rounded-xl px-3 py-2.5 text-sm',
-                        imageryLayer ? 'bg-white/[0.035]' : 'bg-muted/30',
+                        contrastLayer ? 'bg-white/[0.035]' : 'bg-muted/30',
                       )}
                     >
                       <span
@@ -1011,11 +1011,11 @@ export default function MapPage() {
 
     if (panel === 'saved') {
       return (
-        <div className={cn('flex h-full flex-col', imageryLayer && 'map-imagery-card')}>
+        <div className={cn('flex h-full flex-col', contrastLayer && 'map-imagery-card')}>
           <div
             className={cn(
               'flex shrink-0 items-center gap-2 border-b px-4 py-3',
-              imageryLayer ? 'border-white/10 bg-black/10' : 'border-border/60',
+              contrastLayer ? 'border-white/10 bg-black/10' : 'border-border/60',
             )}
           >
             <Bookmark className="h-4 w-4 text-primary" />
@@ -1098,11 +1098,11 @@ export default function MapPage() {
 
     if (panel === 'history') {
       return (
-        <div className={cn('flex h-full flex-col', imageryLayer && 'map-imagery-card')}>
+        <div className={cn('flex h-full flex-col', contrastLayer && 'map-imagery-card')}>
           <div
             className={cn(
               'flex shrink-0 items-center gap-2 border-b px-4 py-3',
-              imageryLayer ? 'border-white/10 bg-black/10' : 'border-border/60',
+              contrastLayer ? 'border-white/10 bg-black/10' : 'border-border/60',
             )}
           >
             <History className="h-4 w-4 text-primary" />
@@ -1326,6 +1326,7 @@ export default function MapPage() {
     useCurrentLocationAsOrigin,
     selectSearchPlace,
     imageryLayer,
+    contrastLayer,
   ]);
 
   return (
@@ -1720,7 +1721,7 @@ export default function MapPage() {
         snap={snap}
         onSnapChange={setSnap}
         onHeightChange={setSheetHeightPx}
-        className={imageryLayer ? 'map-imagery-panel md:ring-black/10' : undefined}
+        className={contrastLayer ? 'map-imagery-panel md:ring-black/10' : undefined}
       >
         {snap === 'peek' && panel === 'search' ? (
           <button
