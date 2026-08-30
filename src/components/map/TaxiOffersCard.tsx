@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
-import { Car, ExternalLink, Phone } from 'lucide-react';
-import { buildTaxiOffers, formatSum, type TaxiPoint } from '@/lib/taxiProviders';
+import { Car, ExternalLink, Loader2, Phone } from 'lucide-react';
+import { buildTaxiOffersWithProviders, formatSum, type TaxiPoint } from '@/lib/taxiProviders';
 import { cn } from '@/lib/utils';
+import { useTaxiProviders } from '@/hooks/useTaxiProviders';
 
 interface TaxiOffersCardProps {
   from: TaxiPoint;
@@ -22,9 +23,10 @@ export function TaxiOffersCard({
   durationMin,
   className,
 }: TaxiOffersCardProps) {
+  const { providers, loading } = useTaxiProviders();
   const offers = useMemo(
-    () => buildTaxiOffers(from, to, distanceKm, durationMin),
-    [from, to, distanceKm, durationMin],
+    () => buildTaxiOffersWithProviders(providers, from, to, distanceKm, durationMin),
+    [providers, from, to, distanceKm, durationMin],
   );
 
   if (!offers.length) return null;
@@ -34,6 +36,7 @@ export function TaxiOffersCard({
       <div className="mb-2 flex items-center gap-2">
         <Car className="h-4 w-4 text-primary" />
         <p className="text-sm font-semibold">Taksi chaqirish</p>
+        {loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
         <span className="ml-auto text-xs text-muted-foreground">
           {distanceKm.toFixed(1)} km \u00b7 {Math.round(durationMin)} daq
         </span>
@@ -51,7 +54,7 @@ export function TaxiOffersCard({
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{offer.provider.name}</p>
               <p className="text-xs text-muted-foreground">
-                {offer.estimate ? 'Taxminan ' + formatSum(offer.estimate) : offer.estimateLabel}
+                {offer.estimate > 0 ? 'Taxminan ' + formatSum(offer.estimate) : 'Narx ilovada'}
               </p>
             </div>
             {offer.provider.phone && (
@@ -64,10 +67,18 @@ export function TaxiOffersCard({
               </a>
             )}
             <a
-              href={offer.url}
+              href={offer.url || '#'}
+              onClick={(event) => {
+                if (!offer.url) event.preventDefault();
+              }}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-2.5 text-xs font-semibold text-primary-foreground"
+              className={cn(
+                'flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold',
+                offer.url
+                  ? 'bg-primary text-primary-foreground'
+                  : 'cursor-not-allowed bg-muted text-muted-foreground',
+              )}
             >
               Chaqirish
               <ExternalLink className="h-3.5 w-3.5" />
