@@ -288,6 +288,13 @@ export function VectorMapSurface({
   onError,
 }: VectorMapSurfaceProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const initialViewRef = useRef({
+    center,
+    zoom,
+    navigationActive,
+    navigationBearing,
+    navigationPitch,
+  });
   const mapRef = useRef<any>(null);
   const mapLibreRef = useRef<any>(null);
   const markerRefs = useRef<any[]>([]);
@@ -358,15 +365,20 @@ export function VectorMapSurface({
         map = new maplibregl.Map({
           container: containerRef.current,
           style: styleUrl,
-          center: [center.longitude, center.latitude],
-          zoom,
+          center: [
+            initialViewRef.current.center.longitude,
+            initialViewRef.current.center.latitude,
+          ],
+          zoom: initialViewRef.current.zoom,
           pitch:
-            navigationActive && navigationBearing != null
-              ? navigationPitch
+            initialViewRef.current.navigationActive &&
+            initialViewRef.current.navigationBearing != null
+              ? initialViewRef.current.navigationPitch
               : 0,
           bearing:
-            navigationActive && navigationBearing != null
-              ? navigationBearing
+            initialViewRef.current.navigationActive &&
+            initialViewRef.current.navigationBearing != null
+              ? initialViewRef.current.navigationBearing
               : 0,
           attributionControl: true,
           antialias: true,
@@ -521,9 +533,6 @@ export function VectorMapSurface({
   }, [
     buildings3d,
     controllerRef,
-    navigationActive,
-    navigationBearing,
-    navigationPitch,
     onError,
     onReady,
     publishViewport,
