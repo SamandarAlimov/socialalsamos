@@ -67,6 +67,26 @@ export interface CartItem {
   product?: Product;
 }
 
+const PRODUCT_PAGE_SIZE = 50;
+const categoryIdBySlug = new Map<string, string>();
+
+async function resolveCategoryId(slug?: string): Promise<string | null> {
+  if (!slug || slug === 'all') return null;
+
+  const cached = categoryIdBySlug.get(slug);
+  if (cached) return cached;
+
+  const { data, error } = await supabase
+    .from('product_categories')
+    .select('id')
+    .eq('slug', slug)
+    .maybeSingle();
+
+  if (error || !data?.id) return null;
+  categoryIdBySlug.set(slug, data.id);
+  return data.id;
+}
+
 export function useCategories() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -82,6 +102,7 @@ export function useCategories() {
       if (fetchError) {
         setError(fetchError.message);
       } else if (data) {
+        data.forEach(category => categoryIdBySlug.set(category.slug, category.id));
         setCategories(data);
       }
       setIsLoading(false);
@@ -103,88 +124,108 @@ export function useProducts(categorySlug?: string, searchQuery?: string) {
     setIsLoading(true);
     setError(null);
 
-    let query = supabase
-      .from('products')
-      .select(`
-        *,
-        seller:sellers(
-          id,
-          user_id,
-          business_name,
-          business_type,
-          logo_url,
-          location,
-          is_verified,
-          rating,
-          total_sales,
-          profile:profiles(username, display_name, avatar_url)
-        ),
-        category:product_categories(id, name, slug, icon),
-        images:product_images(id, url, position)
-      `)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false });
-
-    if (categorySlug && categorySlug !== 'all') {
-      const { data: cat } = await supabase
-        .from('product_categories')
-        .select('id')
-        .eq('slug', categorySlug)
-        .maybeSingle();
-
-      if (cat) {
-        query = query.eq('category_id', cat.id);
+    try {
+      const categoryId = await resolveCategoryId(categorySlug);
+      if (categorySlug && categorySlug !== 'all' && !categoryId) {
+        setProducts([]);
+        setIsLoading(false);
+        return;
       }
-    }
 
-    if (searchQuery) {
-      // Escape wildcard characters so a user typing % or _ cannot break the filter
-      const safe = searchQuery.replace(/[%_]/g, (m) => `\\${m}`);
-      query = query.or(`title.ilike.%${safe}%,description.ilike.%${safe}%`);
-    }
+      const safeSearch = searchQuery
+        ? searchQuery.replace(/[%_]/g, (match) => `\\${match}`)
+        : '';
 
-    const { data, error: fetchError } = await query.limit(50);
+      const rows: any[] = [];
+      let cursor: { created_at: string; id: string } | null = null;
 
-    if (fetchError) {
-      setError(fetchError.message);
-      setIsLoading(false);
-      return;
-    }
+      while (true) {
+        let pageQuery = supabase
+          .from('products')
+          .select(`
+            *,
+            seller:sellers(
+              id,
+              user_id,
+              business_name,
+              business_type,
+              logo_url,
+              location,
+              is_verified,
+              rating,
+              total_sales,
+              profile:profiles(username, display_name, avatar_url)
+            ),
+            category:product_categories(id, name, slug, icon),
+            images:product_images(id, url, position)
+          `)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
+          .limit(PRODUCT_PAGE_SIZE);
 
-    if (data) {
-      // Get user likes
+        if (categoryId) {
+          pageQuery = pageQuery.eq('category_id', categoryId);
+        }
+
+        if (safeSearch) {
+          pageQuery = pageQuery.or(
+            `title.ilike.%${safeSearch}%,description.ilike.%${safeSearch}%`,
+          );
+        }
+
+        if (cursor) {
+          pageQuery = pageQuery.or(
+            `created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`,
+          );
+        }
+
+        const { data, error: fetchError } = await pageQuery;
+        if (fetchError) throw fetchError;
+
+        const page = data ?? [];
+        rows.push(...page);
+
+        if (page.length < PRODUCT_PAGE_SIZE) break;
+
+        const last = page[page.length - 1];
+        if (!last?.created_at || !last?.id) break;
+
+        cursor = { created_at: last.created_at, id: last.id };
+      }
+
       let likedProductIds: string[] = [];
-      if (user) {
+      if (user && rows.length > 0) {
         const { data: likes } = await supabase
           .from('product_likes')
           .select('product_id')
           .eq('user_id', user.id);
 
-        likedProductIds = likes?.map(l => l.product_id) || [];
+        likedProductIds = likes?.map(like => like.product_id) || [];
       }
 
-      const productsWithLikes = data.map(p => ({
-        ...p,
-        seller: p.seller as unknown as Seller,
-        category: p.category as unknown as Category,
-        images: ((p.images ?? []) as { id: string; url: string; position: number }[])
+      setProducts(rows.map(row => ({
+        ...row,
+        seller: row.seller as unknown as Seller,
+        category: row.category as unknown as Category,
+        images: ((row.images ?? []) as { id: string; url: string; position: number }[])
           .slice()
           .sort((a, b) => a.position - b.position),
-        is_liked: likedProductIds.includes(p.id),
-      }));
-
-      setProducts(productsWithLikes);
+        is_liked: likedProductIds.includes(row.id),
+      })));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Mahsulotlar yuklanmadi');
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, [categorySlug, searchQuery, user]);
 
   useEffect(() => {
-    fetchProducts();
+    void fetchProducts();
   }, [fetchProducts]);
 
   return { products, isLoading, error, refresh: fetchProducts };
 }
-
 
 interface MarketplaceCenter {
   latitude: number;
