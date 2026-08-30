@@ -30,6 +30,8 @@ export interface RouteResult {
   coordinates: [number, number][];
   steps: RouteStep[];
   label: string;
+  /** Input checkpointlar (From, To, To...) route geometryda qayerga to'g'ri keladi. */
+  checkpointIndices?: number[];
 }
 
 const PROFILE: Record<Exclude<RouteMode, 'transit'>, { prefix: string; profile: string }> = {
@@ -113,13 +115,13 @@ interface OsrmRoute {
 async function request(
   base: string,
   mode: Exclude<RouteMode, 'transit'>,
-  from: RoutePoint,
-  to: RoutePoint,
+  points: RoutePoint[],
   signal?: AbortSignal,
   bare = false,
 ): Promise<OsrmRoute[]> {
-  const coords =
-    from.longitude + ',' + from.latitude + ';' + to.longitude + ',' + to.latitude;
+  const coords = points
+    .map((point) => point.longitude + ',' + point.latitude)
+    .join(';');
   const config = PROFILE[mode];
   const path = bare
     ? '/route/v1/' + config.profile + '/'
@@ -135,36 +137,110 @@ async function request(
   return data.routes ?? [];
 }
 
-export async function fetchRoutes(
-  mode: RouteMode,
-  from: RoutePoint,
-  to: RoutePoint,
-  signal?: AbortSignal,
+function nearestCheckpointIndices(
+  coordinates: [number, number][],
+  points: RoutePoint[],
+): number[] {
+  if (!coordinates.length) return points.map(() => 0);
+
+  let minIndex = 0;
+  return points.map((point) => {
+    let bestIndex = minIndex;
+    let bestDistance = Infinity;
+
+    for (let index = minIndex; index < coordinates.length; index += 1) {
+      const coordinate = coordinates[index];
+      const dLat = coordinate[0] - point.latitude;
+      const dLng = coordinate[1] - point.longitude;
+      const score = dLat * dLat + dLng * dLng;
+      if (score < bestDistance) {
+        bestDistance = score;
+        bestIndex = index;
+      }
+    }
+
+    minIndex = bestIndex;
+    return bestIndex;
+  });
+}
+
+function mapOsrmRoutes(
+  raw: OsrmRoute[],
+  mode: Exclude<RouteMode, 'transit'>,
+  points: RoutePoint[],
+): RouteResult[] {
+  return raw.slice(0, 3).map((route, index) => {
+    const coordinates = (route.geometry?.coordinates ?? []).map(
+      (pair) => [pair[1], pair[0]] as [number, number],
+    );
+
+    return {
+      mode,
+      distanceM: route.distance,
+      durationS: route.duration,
+      coordinates,
+      steps: (route.legs ?? []).flatMap((leg) =>
+        (leg.steps ?? []).map((step) => ({
+          distanceM: step.distance,
+          durationS: step.duration,
+          name: step.name ?? '',
+          maneuver: step.maneuver?.type ?? 'continue',
+          modifier: step.maneuver?.modifier,
+          instruction: maneuverText({
+            maneuver: step.maneuver?.type,
+            modifier: step.maneuver?.modifier,
+            name: step.name,
+          }),
+        })),
+      ),
+      label: labelFor(mode, index),
+      checkpointIndices: nearestCheckpointIndices(coordinates, points),
+    };
+  });
+}
+
+async function fetchTransitThrough(
+  points: RoutePoint[],
 ): Promise<RouteResult[]> {
-  // Transit faqat real multimodal router ulangan bo'lsa qaytadi.
-  if (mode === 'transit') {
+  if (points.length < 2) return [];
+
+  let totalDistanceM = 0;
+  let totalDurationS = 0;
+  const coordinates: [number, number][] = [];
+  const steps: RouteStep[] = [];
+  const checkpointIndices: number[] = [0];
+
+  for (let index = 0; index < points.length - 1; index += 1) {
     const response = await fetchTransitJourneyRoutes({
       from: {
-        latitude: from.latitude,
-        longitude: from.longitude,
+        latitude: points[index].latitude,
+        longitude: points[index].longitude,
       },
       to: {
-        latitude: to.latitude,
-        longitude: to.longitude,
+        latitude: points[index + 1].latitude,
+        longitude: points[index + 1].longitude,
       },
     });
-    return (response?.routes ?? []).map((route, index) => ({
-      mode: 'transit' as const,
-      distanceM: Number(route.distanceM) || 0,
-      durationS: Number(route.durationS) || 0,
-      coordinates: (route.coordinates ?? []).filter(
-        (pair): pair is [number, number] =>
-          Array.isArray(pair) &&
-          pair.length >= 2 &&
-          Number.isFinite(Number(pair[0])) &&
-          Number.isFinite(Number(pair[1])),
-      ),
-      steps: (route.steps ?? []).map((step) => ({
+    const route = response?.routes?.[0];
+    if (!route) return [];
+
+    totalDistanceM += Number(route.distanceM) || 0;
+    totalDurationS += Number(route.durationS) || 0;
+
+    const legCoordinates = (route.coordinates ?? []).filter(
+      (pair): pair is [number, number] =>
+        Array.isArray(pair) &&
+        pair.length >= 2 &&
+        Number.isFinite(Number(pair[0])) &&
+        Number.isFinite(Number(pair[1])),
+    );
+
+    if (coordinates.length && legCoordinates.length) legCoordinates.shift();
+    coordinates.push(...legCoordinates);
+    checkpointIndices.push(Math.max(0, coordinates.length - 1));
+
+    steps.push(
+      ...(route.steps ?? []).map((step) => ({
         distanceM: Number(step.distanceM) || 0,
         durationS: Number(step.durationS) || 0,
         name: step.name ?? step.routeRef ?? '',
@@ -177,40 +253,51 @@ export async function fetchRoutes(
             .join(' · ') ??
           'Jamoat transportida davom eting',
       })),
-      label: route.label || labelFor('transit', index),
-    }));
+    );
+  }
+
+  return [
+    {
+      mode: 'transit',
+      distanceM: totalDistanceM,
+      durationS: totalDurationS,
+      coordinates,
+      steps,
+      label: 'Eng qulay yo‘l',
+      checkpointIndices,
+    },
+  ];
+}
+
+export async function fetchRoutesThrough(
+  mode: RouteMode,
+  points: RoutePoint[],
+  signal?: AbortSignal,
+): Promise<RouteResult[]> {
+  if (points.length < 2) return [];
+
+  if (mode === 'transit') {
+    return fetchTransitThrough(points);
   }
 
   let raw: OsrmRoute[] = [];
   try {
-    raw = await request(PRIMARY, mode, from, to, signal);
+    raw = await request(PRIMARY, mode, points, signal);
   } catch {
-    // Public router.project-osrm.org faqat avtomobil profilini kafolatlaydi.
     if (mode !== 'car') throw new Error('routing provider unavailable');
-    raw = await request(FALLBACK_CAR, mode, from, to, signal, true);
+    raw = await request(FALLBACK_CAR, mode, points, signal, true);
   }
 
-  return raw.slice(0, 3).map((route, index) => ({
-    mode,
-    distanceM: route.distance,
-    durationS: route.duration,
-    coordinates: (route.geometry?.coordinates ?? []).map(
-      (pair) => [pair[1], pair[0]] as [number, number],
-    ),
-    steps: (route.legs?.[0]?.steps ?? []).map((step) => ({
-      distanceM: step.distance,
-      durationS: step.duration,
-      name: step.name ?? '',
-      maneuver: step.maneuver?.type ?? 'continue',
-      modifier: step.maneuver?.modifier,
-      instruction: maneuverText({
-        maneuver: step.maneuver?.type,
-        modifier: step.maneuver?.modifier,
-        name: step.name,
-      }),
-    })),
-    label: labelFor(mode, index),
-  }));
+  return mapOsrmRoutes(raw, mode, points);
+}
+
+export async function fetchRoutes(
+  mode: RouteMode,
+  from: RoutePoint,
+  to: RoutePoint,
+  signal?: AbortSignal,
+): Promise<RouteResult[]> {
+  return fetchRoutesThrough(mode, [from, to], signal);
 }
 
 export function formatKm(distanceM: number): string {
