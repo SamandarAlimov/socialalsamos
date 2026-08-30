@@ -10,6 +10,7 @@ export interface ScheduledMessage {
   content: string | null;
   media_url: string | null;
   media_type: string | null;
+  reply_to_id: string | null;
   scheduled_for: string;
   status: 'pending' | 'sent' | 'cancelled' | 'failed';
   created_at: string;
@@ -57,7 +58,8 @@ export function useScheduledMessages(conversationId?: string) {
     scheduledFor: Date,
     content?: string,
     mediaUrl?: string,
-    mediaType?: string
+    mediaType?: string,
+    replyToId?: string | null
   ) => {
     if (!user) {
       toast.error('You must be logged in to schedule messages');
@@ -78,6 +80,7 @@ export function useScheduledMessages(conversationId?: string) {
           content,
           media_url: mediaUrl,
           media_type: mediaType,
+          reply_to_id: replyToId || null,
           scheduled_for: scheduledFor.toISOString(),
           status: 'pending'
         })
