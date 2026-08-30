@@ -2,12 +2,17 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { resolveStorageUrl } from '@/lib/mediaUpload';
 
 export interface Story {
   id: string;
   user_id: string;
   media_url: string;
   media_type: string;
+  post_id?: string | null;
+  media_id?: string | null;
+  storage_bucket?: string | null;
+  storage_key?: string | null;
   caption: string | null;
   views_count: number;
   expires_at: string;
@@ -59,10 +64,31 @@ export function useStories() {
 
       if (error) throw error;
 
+      const resolvedStories = await Promise.all(
+        (data || []).map(async (story: any) => {
+          try {
+            const mediaUrl = await resolveStorageUrl(
+              String(story.media_url ?? ''),
+              story.storage_bucket ? String(story.storage_bucket) : null,
+              story.storage_key ? String(story.storage_key) : null,
+            );
+
+            return { ...story, media_url: mediaUrl } as Story & {
+              profile?: Story['profile'];
+            };
+          } catch (resolveError) {
+            console.warn('Story media URL olinmadi:', resolveError);
+            return { ...story, media_url: '' } as Story & {
+              profile?: Story['profile'];
+            };
+          }
+        }),
+      );
+
       // Group stories by user
       const groupsMap = new Map<string, StoryGroup>();
 
-      (data || []).forEach(story => {
+      resolvedStories.forEach((story) => {
         const userId = story.user_id;
         const profile = story.profile;
 
@@ -74,14 +100,14 @@ export function useStories() {
             avatar_url: profile?.avatar_url ?? null,
             is_verified: profile?.is_verified ?? false,
             stories: [],
-            has_unviewed: true, // Will be calculated by component using useStoryViews
+            has_unviewed: true,
             all_story_ids: [],
           });
         }
 
         const group = groupsMap.get(userId);
         if (group) {
-          group.stories.push(story as Story);
+          group.stories.push(story);
           group.all_story_ids.push(story.id);
         }
       });
