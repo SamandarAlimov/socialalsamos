@@ -215,6 +215,17 @@ function MapClickObserver({
   return null;
 }
 
+function NavigationInteractionObserver({
+  onManualPan,
+}: {
+  onManualPan: () => void;
+}) {
+  useMapEvents({
+    dragstart: () => onManualPan(),
+  });
+  return null;
+}
+
 type PlaceMarkerGroup =
   | { type: 'place'; place: MapPlace }
   | {
@@ -330,6 +341,7 @@ export default function MapPage() {
   const [routeEditField, setRouteEditField] = useState<'origin' | 'destination' | null>(null);
   const [routeEditQuery, setRouteEditQuery] = useState('');
   const [navigationActive, setNavigationActive] = useState(false);
+  const [navigationFollowing, setNavigationFollowing] = useState(true);
 
   const [sheetHeightPx, setSheetHeightPx] = useState(112);
   const [movedCenter, setMovedCenter] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -879,6 +891,9 @@ export default function MapPage() {
         longitude: position.longitude,
       };
       setMe(point);
+
+      if (!navigationFollowing) return;
+
       setCenter(point);
       setMovedCenter(null);
 
@@ -891,11 +906,12 @@ export default function MapPage() {
         );
       }
     },
-    [],
+    [navigationFollowing],
   );
 
   const stopNavigation = useCallback(() => {
     setNavigationActive(false);
+    setNavigationFollowing(true);
     setPanel('route');
     setSnap('half');
   }, []);
@@ -943,6 +959,7 @@ export default function MapPage() {
 
       setMe(point);
       setCenter(point);
+      setNavigationFollowing(true);
       setNavigationActive(true);
       setSearchFocused(false);
       setLayerOpen(false);
@@ -1799,6 +1816,11 @@ export default function MapPage() {
           onMovedCenter={setMovedCenter}
         />
         {!navigationActive && <MapClickObserver onMapClick={handleMapClick} />}
+        {navigationActive && (
+          <NavigationInteractionObserver
+            onManualPan={() => setNavigationFollowing(false)}
+          />
+        )}
 
         {me && !navigationActive && (
           <Marker position={[me.latitude, me.longitude]} icon={ME_ICON} />
@@ -2211,13 +2233,17 @@ export default function MapPage() {
           voiceEnabled={navigationVoice.enabled}
           voiceSupported={navigationVoice.supported}
           onToggleVoice={navigationVoice.toggle}
+          following={navigationFollowing}
           onRecenter={() => {
             if (!navigation.position || !mapRef.current) return;
+            setNavigationFollowing(true);
+            const point = {
+              latitude: navigation.position.latitude,
+              longitude: navigation.position.longitude,
+            };
+            setCenter(point);
             mapRef.current.setView(
-              [
-                navigation.position.latitude,
-                navigation.position.longitude,
-              ],
+              [point.latitude, point.longitude],
               Math.max(17, mapRef.current.getZoom()),
               { animate: true },
             );
