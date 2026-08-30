@@ -912,6 +912,93 @@ export function useWebRTC(roomId: string | null) {
     }
   }, [broadcastMediaState, isHandRaised, isMuted, isScreenSharing, isVideoOn, screenStream]);
 
+  const selectCamera = useCallback(
+    async (deviceId: string): Promise<boolean> => {
+      if (!localStreamRef.current || !deviceId) return false;
+
+      try {
+        const replacement = await navigator.mediaDevices.getUserMedia({
+          video: {
+            deviceId: { exact: deviceId },
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 },
+            frameRate: { ideal: 30, max: 60 },
+          },
+          audio: false,
+        });
+        const nextTrack = replacement.getVideoTracks()[0];
+        if (!nextTrack) return false;
+        nextTrack.enabled = isVideoOn;
+
+        if (!isScreenSharing) {
+          await Promise.all(
+            Array.from(peerConnectionsRef.current.values()).map(async (pc) => {
+              const sender = pc.getSenders().find((item) => item.track?.kind === "video");
+              if (sender) await sender.replaceTrack(nextTrack);
+            })
+          );
+        }
+
+        const previousStream = localStreamRef.current;
+        const previousVideo = previousStream.getVideoTracks()[0];
+        const audioTracks = previousStream.getAudioTracks();
+        const nextStream = new MediaStream([...audioTracks, nextTrack]);
+
+        previousVideo?.stop();
+        localStreamRef.current = nextStream;
+        setLocalStream(nextStream);
+        return true;
+      } catch (cameraError) {
+        console.warn("[WebRTC] camera selection failed", cameraError);
+        return false;
+      }
+    },
+    [isScreenSharing, isVideoOn]
+  );
+
+  const selectMicrophone = useCallback(
+    async (deviceId: string): Promise<boolean> => {
+      if (!localStreamRef.current || !deviceId) return false;
+
+      try {
+        const replacement = await navigator.mediaDevices.getUserMedia({
+          video: false,
+          audio: {
+            deviceId: { exact: deviceId },
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 48000,
+          },
+        });
+        const nextTrack = replacement.getAudioTracks()[0];
+        if (!nextTrack) return false;
+        nextTrack.enabled = !isMuted;
+
+        await Promise.all(
+          Array.from(peerConnectionsRef.current.values()).map(async (pc) => {
+            const sender = pc.getSenders().find((item) => item.track?.kind === "audio");
+            if (sender) await sender.replaceTrack(nextTrack);
+          })
+        );
+
+        const previousStream = localStreamRef.current;
+        const previousAudio = previousStream.getAudioTracks()[0];
+        const videoTracks = previousStream.getVideoTracks();
+        const nextStream = new MediaStream([...videoTracks, nextTrack]);
+
+        previousAudio?.stop();
+        localStreamRef.current = nextStream;
+        setLocalStream(nextStream);
+        return true;
+      } catch (microphoneError) {
+        console.warn("[WebRTC] microphone selection failed", microphoneError);
+        return false;
+      }
+    },
+    [isMuted]
+  );
+
   const switchCamera = useCallback(async (): Promise<boolean> => {
     if (!localStreamRef.current || !isVideoOn) return false;
 
@@ -925,37 +1012,12 @@ export function useWebRTC(roomId: string | null) {
       const currentId = currentTrack?.getSettings().deviceId;
       const currentIndex = Math.max(0, devices.findIndex((device) => device.deviceId === currentId));
       const nextDevice = devices[(currentIndex + 1) % devices.length];
-
-      const replacement = await navigator.mediaDevices.getUserMedia({
-        video: {
-          deviceId: { exact: nextDevice.deviceId },
-          width: { ideal: 1280, max: 1920 },
-          height: { ideal: 720, max: 1080 },
-          frameRate: { ideal: 30, max: 60 },
-        },
-        audio: false,
-      });
-      const nextTrack = replacement.getVideoTracks()[0];
-      if (!nextTrack) return false;
-
-      await Promise.all(
-        Array.from(peerConnectionsRef.current.values()).map(async (pc) => {
-          const sender = pc.getSenders().find((item) => item.track?.kind === "video");
-          if (sender && !isScreenSharing) await sender.replaceTrack(nextTrack);
-        })
-      );
-
-      const audioTracks = localStreamRef.current.getAudioTracks();
-      currentTrack?.stop();
-      const nextStream = new MediaStream([...audioTracks, nextTrack]);
-      localStreamRef.current = nextStream;
-      setLocalStream(nextStream);
-      return true;
+      return selectCamera(nextDevice.deviceId);
     } catch (cameraError) {
       console.warn("[WebRTC] camera switch failed", cameraError);
       return false;
     }
-  }, [isScreenSharing, isVideoOn]);
+  }, [isVideoOn, selectCamera]);
 
   const toggleHandRaise = useCallback(() => {
     const next = !isHandRaised;
@@ -988,6 +1050,8 @@ export function useWebRTC(roomId: string | null) {
     toggleMute,
     toggleVideo,
     toggleScreenShare,
+    selectCamera,
+    selectMicrophone,
     switchCamera,
     toggleHandRaise,
   };
