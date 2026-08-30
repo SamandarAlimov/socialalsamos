@@ -697,16 +697,121 @@ async function searchByPhoton(
     .filter((place): place is MapPlace => place !== null);
 }
 
-function scorePlace(place: MapPlace, queryTokens: string[]): number {
-  const haystack = normalizeQuery(place.name + ' ' + (place.address ?? ''));
-  let matched = 0;
-  for (const token of queryTokens) {
-    if (queryTokenVariants(token).some((variant) => haystack.includes(variant))) matched += 1;
+function editDistance(a: string, b: string): number {
+  const left = normalizeQuery(a);
+  const right = normalizeQuery(b);
+  if (left === right) return 0;
+  if (!left.length) return right.length;
+  if (!right.length) return left.length;
+
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= left.length; i += 1) {
+    const current = [i];
+    let rowMin = i;
+    for (let j = 1; j <= right.length; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      const value = Math.min(
+        current[j - 1] + 1,
+        previous[j] + 1,
+        previous[j - 1] + cost,
+      );
+      current.push(value);
+      rowMin = Math.min(rowMin, value);
+    }
+    // Map search tokens are short. If a row is already far away, continuing
+    // adds CPU but will never become a useful typo match.
+    if (rowMin > 4 && Math.abs(left.length - right.length) > 2) return rowMin;
+    previous.splice(0, previous.length, ...current);
   }
-  const ratio = queryTokens.length ? matched / queryTokens.length : 0;
-  const exact = normalizeQuery(place.name).startsWith(queryTokens[0] ?? '') ? 0.2 : 0;
-  const distancePenalty = Math.min((place.distanceM ?? 0) / 1000, 60) / 1000;
-  return ratio + exact - distancePenalty;
+  return previous[right.length];
+}
+
+function tokenSimilarity(queryToken: string, candidateToken: string): number {
+  const variants = queryTokenVariants(queryToken);
+  let best = 0;
+  for (const variant of variants) {
+    if (candidateToken === variant) return 1;
+    if (candidateToken.startsWith(variant) || variant.startsWith(candidateToken)) {
+      best = Math.max(best, 0.88);
+      continue;
+    }
+    if (candidateToken.includes(variant) || variant.includes(candidateToken)) {
+      best = Math.max(best, 0.78);
+      continue;
+    }
+    const maxLength = Math.max(variant.length, candidateToken.length);
+    if (maxLength < 4) continue;
+    const distance = editDistance(variant, candidateToken);
+    const similarity = 1 - distance / maxLength;
+    if (distance <= 2 || similarity >= 0.72) best = Math.max(best, similarity * 0.82);
+  }
+  return best;
+}
+
+export function searchCategorySuggestions(query: string, limit = 5): PlaceCategory[] {
+  const normalized = normalizeQuery(query);
+  if (normalized.length < 2) return [];
+  const queryTokens = normalized.split(/\s+/).filter(Boolean);
+
+  return PLACE_CATEGORIES
+    .map((category) => {
+      const candidates = [category.label, ...category.keywords]
+        .flatMap((value) => normalizeQuery(value).split(/\s+/))
+        .filter(Boolean);
+      let score = 0;
+      for (const queryToken of queryTokens) {
+        let tokenBest = 0;
+        for (const candidate of candidates) {
+          tokenBest = Math.max(tokenBest, tokenSimilarity(queryToken, candidate));
+        }
+        score += tokenBest;
+      }
+      score /= Math.max(1, queryTokens.length);
+      if (normalizeQuery(category.label).includes(normalized)) score += 0.25;
+      if (category.keywords.some((keyword) => normalizeQuery(keyword) === normalized)) score += 0.4;
+      return { category, score };
+    })
+    .filter((item) => item.score >= 0.48)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((item) => item.category);
+}
+
+function scorePlace(place: MapPlace, queryTokens: string[]): number {
+  const name = normalizeQuery(place.name);
+  const address = normalizeQuery(place.address ?? '');
+  const nameTokens = name.split(/[^\p{L}\p{N}']+/u).filter(Boolean);
+  const addressTokens = address.split(/[^\p{L}\p{N}']+/u).filter(Boolean);
+
+  let tokenScore = 0;
+  for (const token of queryTokens) {
+    let bestName = 0;
+    let bestAddress = 0;
+    for (const candidate of nameTokens) {
+      bestName = Math.max(bestName, tokenSimilarity(token, candidate));
+    }
+    for (const candidate of addressTokens) {
+      bestAddress = Math.max(bestAddress, tokenSimilarity(token, candidate) * 0.55);
+    }
+    tokenScore += Math.max(bestName, bestAddress);
+  }
+
+  const ratio = queryTokens.length ? tokenScore / queryTokens.length : 0;
+  const phrase = normalizeQuery(queryTokens.join(' '));
+  const exactPhrase = name === phrase ? 0.55 : name.startsWith(phrase) ? 0.32 : name.includes(phrase) ? 0.2 : 0;
+  const sourceBonus = place.source === 'overpass' ? 0.06 : place.source === 'nominatim' ? 0.03 : 0;
+
+  // Local intent is strong on maps: within 2 km gets a noticeable boost, while
+  // far-away weak matches should not outrank a good nearby result.
+  const distanceKm = (place.distanceM ?? 0) / 1000;
+  const localBonus =
+    distanceKm <= 2 ? 0.16 :
+    distanceKm <= 8 ? 0.1 :
+    distanceKm <= 25 ? 0.04 :
+    0;
+  const distancePenalty = Math.min(distanceKm, 100) / 1400;
+
+  return ratio + exactPhrase + sourceBonus + localBonus - distancePenalty;
 }
 
 /**
