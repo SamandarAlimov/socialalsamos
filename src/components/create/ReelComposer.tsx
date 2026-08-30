@@ -88,6 +88,13 @@ function clipPlaybackRate(
     : 1;
 }
 
+function clipTransition(
+  item: { editState?: Record<string, unknown> } | null | undefined,
+): 'none' | 'fade' {
+  const reelClip = (item?.editState?.reelClip ?? {}) as Record<string, unknown>;
+  return reelClip.transition === 'fade' ? 'fade' : 'none';
+}
+
 function draftMusicObject(
   input?: PostMusicInput | null,
 ): { bucket: string; key: string } | null {
@@ -379,7 +386,11 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
     try {
       const needsSequenceRender =
         attachments.length > 1 ||
-        attachments.some((item) => clipPlaybackRate(item) !== 1);
+        attachments.some(
+          (item) =>
+            clipPlaybackRate(item) !== 1 ||
+            clipTransition(item) !== 'none',
+        );
 
       if (needsSequenceRender) {
         if (!canRenderReelSequence()) {
@@ -396,6 +407,7 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
             file: item.file,
             durationSeconds: item.durationSeconds,
             playbackRate: clipPlaybackRate(item),
+            transition: clipTransition(item),
           })),
           {
             width: 720,
@@ -719,6 +731,37 @@ export function ReelComposer({ onDraftStateChange }: ReelComposerProps) {
                         )}
                       >
                         {speed}×
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {activeClip && activeClipIndex < attachments.length - 1 && (
+                  <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted/40 p-1">
+                    {[
+                      ['none', 'Oddiy'],
+                      ['fade', 'Fade'],
+                    ].map(([transition, label]) => (
+                      <button
+                        key={transition}
+                        type="button"
+                        onClick={() =>
+                          setEditState(activeClip.id, {
+                            ...(activeClip.editState ?? {}),
+                            reelClip: {
+                              ...((activeClip.editState?.reelClip ?? {}) as Record<string, unknown>),
+                              transition,
+                            },
+                          })
+                        }
+                        className={cn(
+                          'h-8 rounded-lg text-[10px] font-semibold transition',
+                          clipTransition(activeClip) === transition
+                            ? 'bg-background text-primary shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground',
+                        )}
+                      >
+                        {label}
                       </button>
                     ))}
                   </div>
