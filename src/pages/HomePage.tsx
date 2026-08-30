@@ -471,7 +471,11 @@ function PostCard({
           <>
             {cleanContent && (
               <div className="px-3 md:px-4 pb-2 md:pb-3">
-                <RichText content={cleanContent} className="text-sm leading-relaxed" />
+                <RichText
+                  content={cleanContent}
+                  formattedContent={post.formatted_content}
+                  className="text-sm leading-relaxed"
+                />
               </div>
             )}
             {/* Eski markerli so‘rovnomalar (migratsiyagacha) */}
