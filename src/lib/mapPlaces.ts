@@ -993,7 +993,7 @@ async function searchByNominatim(
   const response = await fetchWithTimeout(
     'https://nominatim.openstreetmap.org/search?' + params.toString(),
     { signal, headers: { Accept: 'application/json' } },
-    2800,
+    2200,
   );
   if (!response.ok) return [];
   const data = await response.json();
@@ -1031,7 +1031,7 @@ async function searchByPhoton(
       signal,
       headers: { Accept: 'application/json' },
     },
-    2400,
+    1800,
   );
   if (!response.ok) return [];
   const data = await response.json();
@@ -1107,7 +1107,11 @@ function editDistance(a: string, b: string): number {
 }
 
 function tokenSimilarity(queryToken: string, candidateToken: string): number {
-  const variants = queryTokenVariants(queryToken);
+  const variants = new Set<string>(queryTokenVariants(queryToken));
+  for (const variant of Array.from(variants)) {
+    variants.add(latinTokenToCyrillic(variant));
+  }
+
   let best = 0;
   for (const variant of variants) {
     if (candidateToken === variant) return 1;
@@ -1241,6 +1245,24 @@ export async function searchMapPlaces(
     new Set([term, ...cyrillicVariants.slice(0, 2), ...latinAliases.slice(0, 1)]),
   ).slice(0, 4);
 
+  const merged = new Map<string, MapPlace>();
+  const mergePlaces = (items: MapPlace[]) => {
+    for (const place of items) {
+      const key =
+        normalizeQuery(place.name) +
+        '@' +
+        place.latitude.toFixed(4) +
+        ',' +
+        place.longitude.toFixed(4);
+      const existing = merged.get(key);
+      if (!existing || (existing.source !== 'overpass' && place.source === 'overpass')) {
+        merged.set(key, place);
+      }
+    }
+  };
+
+  // Barcha muhim transliteratsiya variantlari parallel ketadi, lekin har biri
+  // 1.8-2.2 sekunddan ortiq UI'ni ushlab turmaydi.
   const fastRequests: Promise<MapPlace[]>[] = fastTerms.map((value) =>
     searchByPhoton(value, center, signal),
   );
@@ -1249,21 +1271,25 @@ export async function searchMapPlaces(
     fastRequests.push(searchByNominatim(cyrillicVariants[0], center, signal));
   }
 
-  let places = await firstNonEmptyPlaces(fastRequests, signal);
+  const settledFast = await Promise.allSettled(fastRequests);
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+  for (const result of settledFast) {
+    if (result.status === 'fulfilled') mergePlaces(result.value);
+  }
 
-  // Agar tez geocoderlar topa olmasa, OSM name qidiruviga o'tamiz.
-  if (!places.length) {
+  // Faqat tez providerlar umuman natija bermasa Overpass'ga murojaat qilamiz.
+  if (!merged.size) {
     const osmTerms = Array.from(
       new Set([term, ...cyrillicVariants.slice(0, 1), ...latinAliases.slice(0, 1)]),
     ).slice(0, 3);
-
-    places = await firstNonEmptyPlaces(
+    const osmResults = await firstNonEmptyPlaces(
       osmTerms.map((value) => searchByNameOverpass(value, center, signal)),
       signal,
     );
+    mergePlaces(osmResults);
   }
 
-  places = withDistance(places, center)
+  let places = withDistance(Array.from(merged.values()), center)
     .map((place) => ({ ...place, score: scorePlace(place, queryTokens) }))
     .sort((a, b) => {
       const categoryBonus = (place: MapPlace) =>
