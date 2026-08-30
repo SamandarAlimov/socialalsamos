@@ -217,6 +217,7 @@ export default function MessagesPage() {
     loadOlder: loadOlderMessages,
     typingUsers,
     sendMessage,
+    retryMessage,
     editMessage,
     deleteMessage,
     deleteMessageForMe,
@@ -2005,7 +2006,10 @@ export default function MessagesPage() {
                                     onPin={handlePin}
                                     onSelect={handleSelectMessage}
                                     onLongPress={handleEnterSelectionMode}
-                                    onJumpToMessage={handleJumpToMessage}
+                                onJumpToMessage={handleJumpToMessage}
+                                onRetry={(failedMessage) => {
+                                      void retryMessage(failedMessage.tempId || failedMessage.id);
+                                    }}
                                     isPinned={isMessagePinned(message.id)}
                                     isSelected={selectedMessages.has(message.id)}
                                     isSelectionMode={isSelectionMode}
@@ -2077,6 +2081,9 @@ export default function MessagesPage() {
                                 onSelect={handleSelectMessage}
                                 onLongPress={handleEnterSelectionMode}
                                     onJumpToMessage={handleJumpToMessage}
+                                    onRetry={(failedMessage) => {
+                                      void retryMessage(failedMessage.tempId || failedMessage.id);
+                                    }}
                                 isPinned={isMessagePinned(message.id)}
                                 isSelected={selectedMessages.has(message.id)}
                                 isSelectionMode={isSelectionMode}
