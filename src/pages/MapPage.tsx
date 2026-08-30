@@ -260,6 +260,7 @@ export default function MapPage() {
 
   const [center, setCenter] = useState(DEFAULT_CENTER);
   const [me, setMe] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locating, setLocating] = useState(false);
   const [layerId, setLayerId] = useState<MapLayerId>('map');
   const [overlays, setOverlays] = useState<string[]>([]);
   const [layerOpen, setLayerOpen] = useState(false);
@@ -369,7 +370,27 @@ export default function MapPage() {
   );
   const liveVehicles = useTransitVehicles(viewport, liveTransitEnabled);
 
-  // Joylashuvni aniqlash
+  const focusMapOnPoint = useCallback(
+    (point: { latitude: number; longitude: number }, zoom = 16) => {
+      setCenter({ ...point });
+      setMovedCenter(null);
+
+      // Route fitBounds yoki tanlangan POI markazi faol bo'lsa ham current-location
+      // tugmasi darhol ishlashi kerak. Shu sabab xaritani state effektini kutmasdan
+      // Leaflet instance orqali bevosita markazlaymiz.
+      const map = mapRef.current;
+      if (map) {
+        const targetZoom = Math.max(map.getZoom(), zoom);
+        map.flyTo([point.latitude, point.longitude], targetZoom, {
+          animate: true,
+          duration: 0.65,
+        });
+      }
+    },
+    [],
+  );
+
+  // Sahifa ochilganda joylashuvni bir marta yumshoq aniqlaymiz.
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
@@ -382,20 +403,20 @@ export default function MapPage() {
         setCenter(point);
       },
       () => undefined,
-      { enableHighAccuracy: true, timeout: 12000 },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
     );
   }, []);
 
   const centerOnMe = useCallback(() => {
-    if (me) {
-      setCenter({ ...me });
-      setMovedCenter(null);
-      return;
-    }
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       toast.error('Joylashuv bu qurilmada mavjud emas.');
       return;
     }
+
+    // Oldingi aniq koordinata bo'lsa, foydalanuvchi bosgan zahoti feedback beramiz.
+    if (me) focusMapOnPoint(me, 16);
+
+    setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const point = {
@@ -403,13 +424,34 @@ export default function MapPage() {
           longitude: position.coords.longitude,
         };
         setMe(point);
-        setCenter(point);
-        setMovedCenter(null);
+        focusMapOnPoint(point, 16);
+        setLocating(false);
       },
-      () => toast.error('Joylashuvni aniqlab bo‘lmadi. Ruxsatni tekshiring.'),
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 15000 },
+      (error) => {
+        setLocating(false);
+        if (me) {
+          // Eski koordinata bilan markazlash allaqachon bajarilgan.
+          if (error.code === error.PERMISSION_DENIED) {
+            toast.error('Aniq joylashuv uchun brauzer ruxsatini yoqing.');
+          }
+          return;
+        }
+
+        const message =
+          error.code === error.PERMISSION_DENIED
+            ? 'Joylashuvga ruxsat berilmagan. Brauzer sozlamasidan ruxsatni yoqing.'
+            : error.code === error.TIMEOUT
+              ? 'Joylashuvni aniqlash vaqti tugadi. Qayta urinib ko‘ring.'
+              : 'Joylashuvni aniqlab bo‘lmadi.';
+        toast.error(message);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 5000,
+      },
     );
-  }, [me]);
+  }, [me, focusMapOnPoint]);
 
   // Boshqa sahifadan kelgan manzil: /map?destLat=..&destLng=..&destName=..
   useEffect(() => {
@@ -1408,10 +1450,18 @@ export default function MapPage() {
         <button
           type="button"
           onClick={centerOnMe}
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-background/68 text-foreground transition hover:bg-background/95 hover:shadow-sm"
-          aria-label="Mening joylashuvim"
+          disabled={locating}
+          className={cn(
+            'flex h-10 w-10 items-center justify-center rounded-xl bg-background/68 text-foreground transition hover:bg-background/95 hover:shadow-sm disabled:cursor-wait',
+            locating && 'bg-primary/12 text-primary',
+          )}
+          aria-label={locating ? 'Joylashuv aniqlanmoqda' : 'Mening joylashuvim'}
         >
-          <Crosshair className="h-5 w-5" />
+          {locating ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : (
+            <Crosshair className="h-5 w-5" />
+          )}
         </button>
         <button
           type="button"
