@@ -33,11 +33,13 @@ export function VoiceMessagePlayer({
     isPlaying: globalIsPlaying,
     currentTime: globalCurrentTime,
     duration: globalDuration,
+    playbackSpeed,
     play,
     pause,
     resume,
     seek,
     setPlaylist,
+    setPlaybackSpeed,
   } = useAudioPlayer();
 
   const isThisTrack = currentTrack?.url === url;
@@ -47,8 +49,14 @@ export function VoiceMessagePlayer({
 
   const [localDuration, setLocalDuration] = useState(duration || 0);
   const [isLoading, setIsLoading] = useState(!duration);
-  const [playbackRate, setPlaybackRate] = useState(1);
-  const [listened, setListened] = useState(false);
+  const [listened, setListened] = useState(() => {
+    if (isMine || !messageId || typeof window === 'undefined') return false;
+    try {
+      return window.localStorage.getItem('alsamos:voice-listened:' + messageId) === '1';
+    } catch {
+      return false;
+    }
+  });
   const containerRef = useRef<HTMLDivElement>(null);
 
   // URL asosida barqaror waveform (har safar bir xil ko'rinadi)
@@ -84,10 +92,18 @@ export function VoiceMessagePlayer({
     setIsLoading(false);
   }, [url, duration, isThisTrack]);
 
-  // Bir marta eshitilgandan keyin "yangi" nuqtasi o'chadi (Telegramdek)
+  // Bir marta eshitilgandan keyin "yangi" nuqtasi qayta mount bo'lganda ham
+  // qaytib chiqmasin. Server-side listen receipt keyingi bosqichda qo'shiladi.
   useEffect(() => {
-    if (isPlaying) setListened(true);
-  }, [isPlaying]);
+    if (!isPlaying || isMine) return;
+    setListened(true);
+    if (!messageId || typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem('alsamos:voice-listened:' + messageId, '1');
+    } catch {
+      // Private mode / quota: joriy sessiyadagi state baribir ishlaydi.
+    }
+  }, [isPlaying, isMine, messageId]);
 
   const buildTrack = useCallback(
     (): MediaTrack => ({
@@ -157,12 +173,11 @@ export function VoiceMessagePlayer({
     (e: React.MouseEvent) => {
       e.stopPropagation();
       const rates = [1, 1.5, 2];
-      const nextRate = rates[(rates.indexOf(playbackRate) + 1) % rates.length];
-      setPlaybackRate(nextRate);
-      const el = document.querySelector('audio');
-      if (el instanceof HTMLAudioElement) el.playbackRate = nextRate;
+      const currentIndex = rates.indexOf(playbackSpeed);
+      const nextRate = rates[(currentIndex >= 0 ? currentIndex + 1 : 0) % rates.length];
+      setPlaybackSpeed(nextRate);
     },
-    [playbackRate]
+    [playbackSpeed, setPlaybackSpeed]
   );
 
   const formatTime = (seconds: number): string => {
@@ -261,7 +276,7 @@ export function VoiceMessagePlayer({
             {isPlaying || displayTime > 0 ? formatTime(displayTime) : formatTime(totalDuration)}
           </span>
 
-          {(isPlaying || playbackRate !== 1) && (
+          {(isPlaying || playbackSpeed !== 1) && (
             <button
               type="button"
               onClick={cyclePlaybackRate}
@@ -272,7 +287,7 @@ export function VoiceMessagePlayer({
                   : 'text-muted-foreground hover:bg-muted'
               )}
             >
-              {playbackRate}x
+              {playbackSpeed}x
             </button>
           )}
         </div>
