@@ -1,4 +1,4 @@
-import { Bike, Bus, Car, Check, Layers, MapPin, Moon, Map as MapIcon, Satellite, X } from 'lucide-react';
+import { Bike, Bus, Car, Check, Layers, Loader2, MapPin, Moon, Map as MapIcon, Satellite, X } from 'lucide-react';
 import { MAP_LAYERS, MAP_OVERLAYS, type MapLayerId } from '@/lib/mapLayers';
 import { cn } from '@/lib/utils';
 
@@ -10,6 +10,14 @@ interface MapLayerSwitcherProps {
   overlays: string[];
   onToggleOverlay: (id: string) => void;
   highContrast?: boolean;
+  overlayMeta?: Record<
+    string,
+    {
+      available: boolean;
+      loading?: boolean;
+      detail?: string | null;
+    }
+  >;
   className?: string;
 }
 
@@ -35,6 +43,7 @@ export function MapLayerSwitcher({
   overlays,
   onToggleOverlay,
   highContrast = false,
+  overlayMeta = {},
   className,
 }: MapLayerSwitcherProps) {
   return (
@@ -116,15 +125,25 @@ export function MapLayerSwitcher({
             {MAP_OVERLAYS.map((overlay) => {
               const Icon = OVERLAY_ICON[overlay.id] ?? Layers;
               const active = overlays.includes(overlay.id);
+              const meta = overlayMeta[overlay.id];
+              const disabled = meta ? !meta.available : false;
+              const loading = Boolean(meta?.loading);
               return (
                 <button
                   key={overlay.id}
                   type="button"
+                  disabled={disabled || loading}
                   onClick={() => onToggleOverlay(overlay.id)}
                   className={cn(
-                    'flex w-full items-center gap-2 rounded-lg px-1.5 py-2 text-sm',
+                    'flex w-full items-center gap-2 rounded-lg px-1.5 py-2 text-sm transition',
                     highContrast ? 'text-white/90 hover:bg-white/10' : 'hover:bg-muted',
+                    (disabled || loading) && 'cursor-not-allowed opacity-45',
                   )}
+                  title={
+                    disabled
+                      ? meta?.detail || 'Provider ulanmagan'
+                      : meta?.detail || undefined
+                  }
                 >
                   <Icon
                     className={cn(
@@ -132,15 +151,35 @@ export function MapLayerSwitcher({
                       highContrast ? 'text-white/70' : 'text-muted-foreground',
                     )}
                   />
-                  <span className="flex-1 text-left">{overlay.label}</span>
-                  <span
-                    className={cn(
-                      'flex h-4 w-4 items-center justify-center rounded border',
-                      active ? 'border-primary bg-primary text-primary-foreground' : 'border-border',
+                  <span className="min-w-0 flex-1 text-left">
+                    <span className="block">{overlay.label}</span>
+                    {meta?.detail && (
+                      <span
+                        className={cn(
+                          'block truncate text-[10px] font-normal',
+                          highContrast
+                            ? 'text-white/45'
+                            : 'text-muted-foreground',
+                        )}
+                      >
+                        {meta.detail}
+                      </span>
                     )}
-                  >
-                    {active && <Check className="h-3 w-3" />}
                   </span>
+                  {loading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                  ) : (
+                    <span
+                      className={cn(
+                        'flex h-4 w-4 items-center justify-center rounded border',
+                        active
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border',
+                      )}
+                    >
+                      {active && <Check className="h-3 w-3" />}
+                    </span>
+                  )}
                 </button>
               );
             })}
