@@ -41,7 +41,6 @@ import { resolveMapClickPlace, type MapPlace } from '@/lib/mapPlaces';
 import type { TransitStop } from '@/lib/transit';
 import {
   arrivalTime,
-  fetchRoutes,
   fetchRoutesThrough,
   formatKm,
   formatMinutes,
@@ -1379,6 +1378,7 @@ export default function MapPage() {
         routeIndex,
         routeOrigin,
         destination,
+        routeWaypoints,
         routes,
       });
     }, 30_000);
