@@ -21,6 +21,7 @@ export interface LastMessageMeta {
   media_type: string | null;
   media_url: string | null;
   media_file_name: string | null;
+  metadata?: Record<string, unknown> | null;
   sender_id: string | null;
   /**
    * Telegramdek ptichkalar uchun: o'zimiz yuborgan oxirgi xabarni suhbatdagi
@@ -67,6 +68,9 @@ export interface Message {
   content: string | null;
   media_url: string | null;
   media_type: string | null;
+  media_file_name?: string | null;
+  mime_type?: string | null;
+  media_size_bytes?: number | null;
   reply_to_id: string | null;
   story_id: string | null;
   shared_post_id: string | null;
@@ -106,6 +110,9 @@ export interface Message {
 
 export interface MessageSendExtras {
   metadata?: Record<string, unknown>;
+  mediaFileName?: string;
+  mimeType?: string;
+  mediaSizeBytes?: number;
   locationPayload?: Record<string, unknown>;
   liveLocationExpiresAt?: string;
 }
@@ -238,7 +245,7 @@ export function useConversations(
       const lastMessageMap = new Map<string, LastMessageMeta>();
       const { data: recentMessages } = await supabase
         .from('messages')
-        .select('id, conversation_id, content, media_type, media_url, media_file_name, sender_id, created_at')
+        .select('id, conversation_id, content, media_type, media_url, media_file_name, metadata, sender_id, created_at')
         .in('conversation_id', ids)
         .eq('is_deleted', false)
         .order('created_at', { ascending: false })
@@ -251,7 +258,13 @@ export function useConversations(
           content: msg.content,
           media_type: msg.media_type,
           media_url: msg.media_url,
-          media_file_name: (msg as any).media_file_name ?? null,
+          media_file_name:
+            (msg as any).media_file_name ??
+            ((msg as any).metadata?.file_name as string | undefined) ??
+            ((msg as any).metadata?.filename as string | undefined) ??
+            null,
+          metadata:
+            ((msg as any).metadata as Record<string, unknown> | null | undefined) ?? null,
           sender_id: msg.sender_id,
           is_read: false,
         });
@@ -826,6 +839,9 @@ export function useMessages(conversationId: string | null) {
         content,
         media_url: mediaUrl || null,
         media_type: mediaType || null,
+        media_file_name: extras?.mediaFileName || null,
+        mime_type: extras?.mimeType || null,
+        media_size_bytes: extras?.mediaSizeBytes ?? null,
         reply_to_id: replyToId || null,
         metadata: extras?.metadata || null,
         location_payload: extras?.locationPayload || null,
@@ -854,6 +870,9 @@ export function useMessages(conversationId: string | null) {
           content,
           mediaUrl,
           mediaType,
+          mediaFileName: extras?.mediaFileName,
+          mimeType: extras?.mimeType,
+          mediaSizeBytes: extras?.mediaSizeBytes,
           replyToId,
           clientMessageId: tempId,
           metadata: extras?.metadata,
