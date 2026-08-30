@@ -252,6 +252,7 @@ const mapClickPlaceCache = new Map<string, { at: number; place: MapPlace | null 
 const MAP_CLICK_CACHE_TTL_MS = 10 * 60 * 1000;
 const MAP_CLICK_CACHE_MAX = 120;
 
+let mapGatewayBackoffUntil = 0;
 
 /**
  * Public geocoder/Overpass endpointlari ba'zan TCP/fetch darajasida javobsiz
@@ -287,6 +288,45 @@ async function fetchWithTimeout(
   } finally {
     window.clearTimeout(timer);
     parentSignal?.removeEventListener('abort', abortFromParent);
+  }
+}
+
+async function fetchMapGatewayJson(
+  action: string,
+  params: Record<string, string | number | null | undefined> = {},
+  init: RequestInit = {},
+  timeoutMs = 2200,
+): Promise<any> {
+  if (Date.now() < mapGatewayBackoffUntil) {
+    throw new Error('Map gateway backoff');
+  }
+
+  const searchParams = new URLSearchParams({ action });
+  for (const [key, value] of Object.entries(params)) {
+    if (value == null || value === '') continue;
+    searchParams.set(key, String(value));
+  }
+
+  try {
+    const response = await fetchWithTimeout(
+      '/api/map-places?' + searchParams.toString(),
+      {
+        ...init,
+        headers: {
+          Accept: 'application/json',
+          ...(init.headers ?? {}),
+        },
+      },
+      timeoutMs,
+    );
+    if (!response.ok) throw new Error('Map gateway ' + response.status);
+    return await response.json();
+  } catch (error) {
+    if (init.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    // Local dev yoki deploydan oldingi production gateway mavjud bo'lmasa har
+    // keypressda 404/timeout kutib qolmasin. Direct fallback darhol ishlaydi.
+    mapGatewayBackoffUntil = Date.now() + 30_000;
+    throw error;
   }
 }
 
@@ -353,10 +393,31 @@ async function overpass(
   };
 
   try {
-    // Public Overpass mirrorlar vaqti-vaqti bilan sekinlashadi yoki bitta regionda
-    // bloklanadi. Birinchi ikkita mirrorni parallel sinab, birinchi sog'lom
-    // javobni olamiz. Bu foydalanuvchini 8-10 sekund ketma-ket kutishdan saqlaydi.
-    const primaryTimeout = Math.min(3800, totalBudgetMs);
+    // Productionda provider requestlari avval Alsamos gateway orqali o'tadi:
+    // server cache/CORS/failover bitta joyda boshqariladi. Gateway ishlamasa
+    // brauzer direct mirror fallback bilan funksiyani saqlab qoladi.
+    try {
+      const gatewayData = await fetchMapGatewayJson(
+        'overpass',
+        {},
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query }),
+          signal: raceController.signal,
+        },
+        Math.min(3000, totalBudgetMs),
+      );
+      if (gatewayData && Array.isArray(gatewayData.elements)) {
+        overpassCache.set(query, { at: Date.now(), data: gatewayData });
+        return gatewayData;
+      }
+    } catch (gatewayError) {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    }
+
+    // Public Overpass mirrorlar gateway zaxirasi sifatida qoladi.
+    const primaryTimeout = Math.min(3200, totalBudgetMs);
     let data: any;
     try {
       data = await Promise.any(
@@ -679,6 +740,18 @@ async function reverseNominatimPlace(
   point: { latitude: number; longitude: number },
   signal?: AbortSignal,
 ): Promise<MapPlace | null> {
+  let gatewayItem: any = null;
+  try {
+    gatewayItem = await fetchMapGatewayJson(
+      'reverse',
+      { lat: point.latitude, lng: point.longitude },
+      { signal },
+      1800,
+    );
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') throw error;
+  }
+
   const params = new URLSearchParams({
     format: 'jsonv2',
     lat: String(point.latitude),
@@ -690,17 +763,19 @@ async function reverseNominatimPlace(
     'accept-language': 'uz,ru,en',
   });
 
-  const response = await fetchWithTimeout(
-    'https://nominatim.openstreetmap.org/reverse?' + params.toString(),
-    {
-      signal,
-      headers: { Accept: 'application/json' },
-    },
-    2200,
-  );
-  if (!response.ok) return null;
-
-  const item = await response.json();
+  let item = gatewayItem;
+  if (!item) {
+    const response = await fetchWithTimeout(
+      'https://nominatim.openstreetmap.org/reverse?' + params.toString(),
+      {
+        signal,
+        headers: { Accept: 'application/json' },
+      },
+      1900,
+    );
+    if (!response.ok) return null;
+    item = await response.json();
+  }
   if (!item?.lat || !item?.lon) return null;
 
   const extra: Record<string, string> =
@@ -1084,13 +1159,31 @@ async function searchByNominatim(
     );
   }
 
-  const response = await fetchWithTimeout(
-    'https://nominatim.openstreetmap.org/search?' + params.toString(),
-    { signal, headers: { Accept: 'application/json' } },
-    2200,
-  );
-  if (!response.ok) return [];
-  const data = await response.json();
+  let data: any = null;
+  try {
+    data = await fetchMapGatewayJson(
+      'nominatim',
+      {
+        q: query,
+        lat: center?.latitude,
+        lng: center?.longitude,
+      },
+      { signal },
+      1800,
+    );
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') throw error;
+  }
+
+  if (!data) {
+    const response = await fetchWithTimeout(
+      'https://nominatim.openstreetmap.org/search?' + params.toString(),
+      { signal, headers: { Accept: 'application/json' } },
+      1900,
+    );
+    if (!response.ok) return [];
+    data = await response.json();
+  }
 
   return ((data ?? []) as any[])
     .map((item): MapPlace | null => {
@@ -1147,16 +1240,34 @@ async function searchByPhoton(
     params.set('lat', String(center.latitude));
     params.set('lon', String(center.longitude));
   }
-  const response = await fetchWithTimeout(
-    'https://photon.komoot.io/api/?' + params.toString(),
-    {
-      signal,
-      headers: { Accept: 'application/json' },
-    },
-    1800,
-  );
-  if (!response.ok) return [];
-  const data = await response.json();
+  let data: any = null;
+  try {
+    data = await fetchMapGatewayJson(
+      'photon',
+      {
+        q: query,
+        lat: center?.latitude,
+        lng: center?.longitude,
+      },
+      { signal },
+      1500,
+    );
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') throw error;
+  }
+
+  if (!data) {
+    const response = await fetchWithTimeout(
+      'https://photon.komoot.io/api/?' + params.toString(),
+      {
+        signal,
+        headers: { Accept: 'application/json' },
+      },
+      1500,
+    );
+    if (!response.ok) return [];
+    data = await response.json();
+  }
 
   return ((data?.features ?? []) as any[])
     .map((feature): MapPlace | null => {
