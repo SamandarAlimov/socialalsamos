@@ -482,6 +482,8 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
 
   const handleHoldStart = () => {
     if (state !== 'idle') return;
+    holdActiveRef.current = true;
+    releaseBeforeRecorderRef.current = false;
     holdTriggeredRef.current = false;
     setIsHolding(true);
     clearHoldTimer();
@@ -492,27 +494,49 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
   };
 
   const handleHoldEnd = () => {
+    if (!holdActiveRef.current) return;
+    holdActiveRef.current = false;
     setIsHolding(false);
     clearHoldTimer();
+
     if (!holdTriggeredRef.current) {
       // Bir marta bosish rejimni almashtiradi (mikrofon <-> video xabar)
       setMode((prev) => (prev === 'voice' ? 'video' : 'voice'));
+    } else if (modeRef.current === 'voice' && !lockedRef.current) {
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== 'inactive') {
+        finishAndSend();
+      } else {
+        // Permission prompt ochiq paytda pointer-up yo'qolib ketmasin.
+        releaseBeforeRecorderRef.current = true;
+      }
     }
+
     holdTriggeredRef.current = false;
   };
 
   const handleHoldCancel = () => {
+    if (!holdActiveRef.current) return;
+    holdActiveRef.current = false;
     setIsHolding(false);
     clearHoldTimer();
     holdTriggeredRef.current = false;
   };
 
-  /* ---------- Ovoz yozish paytidagi pointer (qo'yib yuborilsa jo'natiladi) ---------- */
+  useEffect(() => {
+    if (!isHolding) return;
 
-  const handleRecordingPointerUp = () => {
-    if (state !== 'recording' || modeRef.current !== 'voice' || lockedRef.current) return;
-    finishAndSend();
-  };
+    const handleWindowPointerUp = () => handleHoldEnd();
+    const handleWindowPointerCancel = () => handleHoldCancel();
+
+    window.addEventListener('pointerup', handleWindowPointerUp);
+    window.addEventListener('pointercancel', handleWindowPointerCancel);
+
+    return () => {
+      window.removeEventListener('pointerup', handleWindowPointerUp);
+      window.removeEventListener('pointercancel', handleWindowPointerCancel);
+    };
+  }, [isHolding, state]);
 
   const lockRecording = () => {
     lockedRef.current = true;
@@ -746,7 +770,6 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         className="flex items-center gap-2"
-        onPointerUp={handleRecordingPointerUp}
       >
         <Button
           variant="ghost"
