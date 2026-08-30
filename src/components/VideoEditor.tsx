@@ -442,7 +442,7 @@ export function VideoEditor({
       });
 
       await onSave(editData, renderedFile);
-      toast.success('Video real faylga render qilindi');
+      toast.success('Video saqlandi');
     } catch (error) {
       console.error('Video render xatosi:', error);
       toast.error(
@@ -469,23 +469,7 @@ export function VideoEditor({
     <Dialog open={open} onOpenChange={(next) => !next && onCancel()}>
       <DialogContent className="flex h-[92dvh] max-h-[920px] max-w-6xl flex-col overflow-hidden p-0">
         <DialogHeader className="shrink-0 border-b border-border/60 bg-background/90 px-5 py-4 backdrop-blur">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <DialogTitle className="text-base">Video tahrirlash</DialogTitle>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {renderSupported
-                  ? 'Trim, crop va transformni yangi video faylga real render qilish mumkin.'
-                  : 'Bu brauzerda edit graph saqlanadi; real render mavjud emas.'}
-              </p>
-            </div>
-            <span className="hidden rounded-full border border-border/60 bg-muted/40 px-3 py-1 text-[10px] font-medium text-muted-foreground sm:block">
-              {renderSupported
-                ? 'Real render mavjud'
-                : allowGraphOnly
-                  ? 'Edit graph'
-                  : 'Render qo‘llanmaydi'}
-            </span>
-          </div>
+          <DialogTitle className="text-base">Video tahrirlash</DialogTitle>
         </DialogHeader>
 
         <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -644,7 +628,7 @@ export function VideoEditor({
                   <div>
                     <h4 className="text-sm font-semibold">Video oralig‘i</h4>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Boshlanish va tugash vaqtini belgilang.
+                      
                     </p>
                   </div>
 
@@ -724,7 +708,7 @@ export function VideoEditor({
                   <div>
                     <h4 className="text-sm font-semibold">Kadr formati</h4>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Formatni tanlang, keyin crop maydonini videoda suring.
+                      
                     </p>
                   </div>
 
@@ -757,7 +741,7 @@ export function VideoEditor({
                   <div>
                     <h4 className="text-sm font-semibold">Transform</h4>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Videoni burish yoki akslantirish.
+                      
                     </p>
                   </div>
 
@@ -802,15 +786,7 @@ export function VideoEditor({
                 </div>
               )}
 
-              <div className="rounded-2xl border border-border/60 bg-muted/25 p-3 text-[11px] leading-relaxed text-muted-foreground">
-                {renderSupported
-                  ? allowGraphOnly
-                    ? 'Render tugmasi yangi video fayl yaratadi. Xohlasangiz faqat edit holatini ham saqlashingiz mumkin.'
-                    : 'Reel uchun o‘zgartirish faqat real render orqali qo‘llanadi.'
-                  : allowGraphOnly
-                    ? 'Bu qurilmada real browser render mavjud emas. Edit holati saqlanadi va keyingi render engine ishlatishi mumkin.'
-                    : 'Bu qurilmada real video render mavjud emas. Original videoni o‘zgartirmasdan ishlatishingiz mumkin.'}
-              </div>
+
             </div>
           </aside>
         </div>
@@ -850,7 +826,7 @@ export function VideoEditor({
               onClick={() => void saveEditGraph()}
               className="rounded-xl"
             >
-              Faqat editni saqlash
+              Saqlash
             </Button>
           )}
 
@@ -866,10 +842,10 @@ export function VideoEditor({
               <Check className="mr-2 h-4 w-4" />
             )}
             {renderSupported
-              ? 'Render va saqlash'
+              ? 'Saqlash'
               : allowGraphOnly
-                ? 'Tahrirni saqlash'
-                : 'Render mavjud emas'}
+                ? 'Saqlash'
+                : 'Qo‘llab-quvvatlanmaydi'}
           </Button>
         </DialogFooter>
       </DialogContent>
