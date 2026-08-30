@@ -1,4 +1,8 @@
 import { fetchTransitJourneyRoutes } from './transitRealtime';
+import {
+  fetchTrafficAwareRoutes,
+  type TrafficAwareRouteSection,
+} from './traffic';
 
 /** Marshrut hisoblash (OSRM). URL manzillar bo'laklardan yig'iladi. */
 
@@ -49,6 +53,14 @@ export interface RouteResult {
   checkpointIndices?: number[];
   /** From→To, To→To segment metrikalari. */
   legs?: RouteLeg[];
+  /** Real traffic provider summary, faqat mavjud bo‘lsa. */
+  trafficDelayS?: number;
+  trafficLengthM?: number;
+  noTrafficDurationS?: number | null;
+  historicTrafficDurationS?: number | null;
+  liveTrafficDurationS?: number | null;
+  trafficSections?: TrafficAwareRouteSection[];
+  trafficProvider?: string | null;
 }
 
 const PROFILE: Record<Exclude<RouteMode, 'transit'>, { prefix: string; profile: string }> = {
@@ -246,6 +258,65 @@ function mapOsrmRoutes(
   });
 }
 
+function mapTrafficAwareRoutes(
+  raw: Awaited<ReturnType<typeof fetchTrafficAwareRoutes>>,
+  points: RoutePoint[],
+): RouteResult[] {
+  if (!raw?.length) return [];
+
+  return raw.map((route, index) => {
+    const coordinates = (route.coordinates ?? []).filter(
+      (pair): pair is [number, number] =>
+        Array.isArray(pair) &&
+        pair.length >= 2 &&
+        Number.isFinite(Number(pair[0])) &&
+        Number.isFinite(Number(pair[1])),
+    );
+
+    return {
+      mode: 'car',
+      distanceM: Number(route.distanceM) || 0,
+      durationS: Number(route.durationS) || 0,
+      coordinates,
+      steps: (route.steps ?? []).map((step) => ({
+        distanceM: Number(step.distanceM) || 0,
+        durationS: Number(step.durationS) || 0,
+        instruction: step.instruction || 'Yo‘lda davom eting',
+        name: step.name || '',
+        maneuver: step.maneuver || 'straight',
+      })),
+      label:
+        route.label ||
+        (index === 0
+          ? 'Tirbandlik bilan eng tez'
+          : labelFor('car', index)),
+      checkpointIndices: nearestCheckpointIndices(
+        coordinates,
+        points,
+      ),
+      legs: route.legs ?? [],
+      trafficDelayS: Math.max(0, Number(route.trafficDelayS) || 0),
+      trafficLengthM: Math.max(0, Number(route.trafficLengthM) || 0),
+      noTrafficDurationS:
+        route.noTrafficDurationS == null
+          ? null
+          : Number(route.noTrafficDurationS),
+      historicTrafficDurationS:
+        route.historicTrafficDurationS == null
+          ? null
+          : Number(route.historicTrafficDurationS),
+      liveTrafficDurationS:
+        route.liveTrafficDurationS == null
+          ? null
+          : Number(route.liveTrafficDurationS),
+      trafficSections: Array.isArray(route.trafficSections)
+        ? route.trafficSections
+        : [],
+      trafficProvider: route.provider ?? 'tomtom',
+    };
+  });
+}
+
 async function fetchTransitThrough(
   points: RoutePoint[],
 ): Promise<RouteResult[]> {
@@ -335,6 +406,20 @@ export async function fetchRoutesThrough(
 
   if (mode === 'transit') {
     return fetchTransitThrough(points);
+  }
+
+  if (mode === 'car') {
+    const trafficAware = await fetchTrafficAwareRoutes(
+      points,
+      signal,
+    );
+    const normalizedTraffic = mapTrafficAwareRoutes(
+      trafficAware,
+      points,
+    );
+    if (normalizedTraffic.length) {
+      return normalizedTraffic;
+    }
   }
 
   let raw: OsrmRoute[] = [];
