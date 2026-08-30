@@ -91,7 +91,7 @@ function markerHtml(marker: MapSceneMarker): string {
       return stopSvg();
     case 'incident':
       return incidentSvg(
-        marker.label || 'incident',
+        marker.variant || 'incident',
         marker.color || '#F97316',
       );
     case 'vehicle':
@@ -890,6 +890,7 @@ export function VectorMapSurface({
             marker.active ? '1' : '0',
             marker.count ?? '',
             marker.bearing ?? '',
+            marker.variant ?? '',
           ].join(':'),
         )
         .join('|'),
