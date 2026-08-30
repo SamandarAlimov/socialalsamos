@@ -26,7 +26,15 @@ import {
 import { toast } from 'sonner';
 
 import { getLayer, getOverlay, type MapLayerId } from '@/lib/mapLayers';
-import { categoryUi, clusterSvg, meDotSvg, pinSvg, stopSvg, vehicleSvg } from '@/lib/placeIcons';
+import {
+  categoryUi,
+  clusterSvg,
+  meDotSvg,
+  navigationArrowSvg,
+  pinSvg,
+  stopSvg,
+  vehicleSvg,
+} from '@/lib/placeIcons';
 import { resolveMapClickPlace, type MapPlace } from '@/lib/mapPlaces';
 import type { TransitStop } from '@/lib/transit';
 import {
@@ -61,6 +69,8 @@ import { MapBottomSheet, type MapSheetSnap } from '@/components/map/MapBottomShe
 import { MapOverviewPanel } from '@/components/map/MapOverviewPanel';
 import { MapSearchSuggestions } from '@/components/map/MapSearchSuggestions';
 import { useMapSearchHistory } from '@/hooks/useMapSearchHistory';
+import { useActiveNavigation } from '@/hooks/useActiveNavigation';
+import { ActiveNavigationPanel } from '@/components/map/ActiveNavigationPanel';
 
 const DEFAULT_CENTER = { latitude: 41.311081, longitude: 69.240562 };
 
@@ -276,6 +286,15 @@ function liveVehicleIcon(ref: string, color?: string | null, bearing?: number | 
   });
 }
 
+function navigationArrowIcon(heading?: number | null) {
+  return L.divIcon({
+    html: navigationArrowSvg(heading),
+    className: 'alsamos-navigation-arrow',
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+  });
+}
+
 export default function MapPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -309,6 +328,7 @@ export default function MapPage() {
   } | null>(null);
   const [routeEditField, setRouteEditField] = useState<'origin' | 'destination' | null>(null);
   const [routeEditQuery, setRouteEditQuery] = useState('');
+  const [navigationActive, setNavigationActive] = useState(false);
 
   const [sheetHeightPx, setSheetHeightPx] = useState(112);
   const [movedCenter, setMovedCenter] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -835,8 +855,180 @@ export default function MapPage() {
     toast.success(added ? 'Saqlangan joylarga qo\u2019shildi' : 'Saqlangan joylardan olindi');
   };
 
+  const rerouteNavigation = useCallback(
+    async (from: { latitude: number; longitude: number }) => {
+      if (!destination || routeMode === 'transit') return;
+      try {
+        const result = await fetchRoutes(routeMode, from, destination);
+        if (!result.length) return;
+        setRouteOrigin({ ...from, name: 'Joriy joylashuv' });
+        setRoutes(result);
+        setRouteIndex(0);
+      } catch {
+        toast.error('Yangi marshrutni hisoblab bo‘lmadi.');
+      }
+    },
+    [destination, routeMode],
+  );
+
+  const handleNavigationPosition = useCallback(
+    (position: { latitude: number; longitude: number }) => {
+      const point = {
+        latitude: position.latitude,
+        longitude: position.longitude,
+      };
+      setMe(point);
+      setCenter(point);
+      setMovedCenter(null);
+
+      const map = mapRef.current;
+      if (map) {
+        map.setView(
+          [point.latitude, point.longitude],
+          Math.max(17, map.getZoom()),
+          { animate: true },
+        );
+      }
+    },
+    [],
+  );
+
+  const stopNavigation = useCallback(() => {
+    setNavigationActive(false);
+    setPanel('route');
+    setSnap('half');
+  }, []);
+
+  const startNavigation = useCallback(async () => {
+    if (!destination || !routes[routeIndex]) {
+      toast.error('Avval marshrutni tanlang.');
+      return;
+    }
+    if (routeMode === 'transit') {
+      toast.error('Active navigation hozircha avtomobil, piyoda va velosiped uchun.');
+      return;
+    }
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      toast.error('Navigatsiya uchun joylashuv xizmati kerak.');
+      return;
+    }
+
+    const begin = async (point: { latitude: number; longitude: number }) => {
+      const originDistance = routeOrigin
+        ? distanceMeters(
+            point.latitude,
+            point.longitude,
+            routeOrigin.latitude,
+            routeOrigin.longitude,
+          )
+        : 0;
+
+      if (originDistance > 150) {
+        try {
+          const result = await fetchRoutes(routeMode, point, destination);
+          if (result.length) {
+            setRouteOrigin({ ...point, name: 'Joriy joylashuv' });
+            setRoutes(result);
+            setRouteIndex(0);
+          }
+        } catch {
+          // Existing route bilan navigation boshlanadi; hook off-route bo'lsa reroute qiladi.
+        }
+      }
+
+      setMe(point);
+      setCenter(point);
+      setNavigationActive(true);
+      setSearchFocused(false);
+      setLayerOpen(false);
+      setSnap('peek');
+
+      const map = mapRef.current;
+      if (map) {
+        map.setView([point.latitude, point.longitude], 17, { animate: true });
+      }
+    };
+
+    if (me) {
+      await begin(me);
+      return;
+    }
+
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocating(false);
+        void begin({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+      },
+      (error) => {
+        setLocating(false);
+        toast.error(
+          error.code === error.PERMISSION_DENIED
+            ? 'Navigatsiya uchun joylashuv ruxsatini yoqing.'
+            : 'Joriy joylashuvni aniqlab bo‘lmadi.',
+        );
+      },
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 2_000 },
+    );
+  }, [destination, routes, routeIndex, routeMode, routeOrigin, me]);
+
   const activeRoute = routes[routeIndex] ?? null;
-  const fitTo = activeRoute?.coordinates?.length ? activeRoute.coordinates : null;
+  const navigation = useActiveNavigation({
+    active: navigationActive,
+    route: activeRoute,
+    mode: routeMode,
+    destination: destination
+      ? { latitude: destination.latitude, longitude: destination.longitude }
+      : null,
+    onPosition: handleNavigationPosition,
+    onReroute: rerouteNavigation,
+    onArrive: () => toast.success('Manzilga yetib keldingiz.'),
+  });
+  const fitTo =
+    navigationActive || !activeRoute?.coordinates?.length
+      ? null
+      : activeRoute.coordinates;
+
+  const navigationRemainingCoordinates = useMemo(() => {
+    if (!navigationActive || !activeRoute?.coordinates?.length) {
+      return activeRoute?.coordinates ?? [];
+    }
+    const start = Math.max(
+      0,
+      Math.min(
+        navigation.snapshot.nearestRouteIndex,
+        activeRoute.coordinates.length - 1,
+      ),
+    );
+    const remaining = activeRoute.coordinates.slice(start);
+    if (navigation.position) {
+      return [
+        [navigation.position.latitude, navigation.position.longitude] as [number, number],
+        ...remaining,
+      ];
+    }
+    return remaining;
+  }, [
+    navigationActive,
+    activeRoute,
+    navigation.snapshot.nearestRouteIndex,
+    navigation.position,
+  ]);
+
+  const navigationTravelledCoordinates = useMemo(() => {
+    if (!navigationActive || !activeRoute?.coordinates?.length) return [];
+    const end = Math.max(
+      0,
+      Math.min(
+        navigation.snapshot.nearestRouteIndex + 1,
+        activeRoute.coordinates.length,
+      ),
+    );
+    return activeRoute.coordinates.slice(0, end);
+  }, [navigationActive, activeRoute, navigation.snapshot.nearestRouteIndex]);
 
   const panelBody = useMemo(() => {
     if (panel === 'place' && selectedPlace) {
@@ -1135,12 +1327,33 @@ export default function MapPage() {
               })}
             </div>
 
+            {activeRoute && destination && routeMode !== 'transit' && (
+              <button
+                type="button"
+                onClick={() => void startNavigation()}
+                disabled={locating || navigationActive}
+                className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 text-sm font-extrabold text-primary-foreground shadow-md transition hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-wait disabled:opacity-70"
+              >
+                {locating ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Navigation className="h-5 w-5" />
+                )}
+                Navigatsiyani boshlash
+                <span className="ml-1 text-xs font-semibold opacity-80">
+                  {formatMinutes(activeRoute.durationS)} · {formatKm(activeRoute.distanceM)}
+                </span>
+              </button>
+            )}
+
             {activeRoute && destination && routeMode === 'car' && (
               <TaxiOffersCard
                 className="mt-3"
                 from={{
-                  ...(me ?? center),
-                  label: me ? 'Joriy joylashuv' : 'Boshlanish nuqtasi',
+                  ...(routeOrigin ?? me ?? center),
+                  label:
+                    routeOrigin?.name ||
+                    (me ? 'Joriy joylashuv' : 'Boshlanish nuqtasi'),
                 }}
                 to={{
                   latitude: destination.latitude,
@@ -1515,6 +1728,9 @@ export default function MapPage() {
     contrastLayer,
     sendPlaceToChat,
     sharePlace,
+    startNavigation,
+    navigationActive,
+    locating,
   ]);
 
   return (
@@ -1569,9 +1785,21 @@ export default function MapPage() {
           onViewport={setViewport}
           onMovedCenter={setMovedCenter}
         />
-        <MapClickObserver onMapClick={handleMapClick} />
+        {!navigationActive && <MapClickObserver onMapClick={handleMapClick} />}
 
-        {me && <Marker position={[me.latitude, me.longitude]} icon={ME_ICON} />}
+        {me && !navigationActive && (
+          <Marker position={[me.latitude, me.longitude]} icon={ME_ICON} />
+        )}
+        {navigationActive && navigation.position && (
+          <Marker
+            position={[
+              navigation.position.latitude,
+              navigation.position.longitude,
+            ]}
+            icon={navigationArrowIcon(navigation.position.heading)}
+            zIndexOffset={1000}
+          />
+        )}
 
         {markerGroups.map((group) =>
           group.type === 'cluster' ? (
@@ -1691,13 +1919,39 @@ export default function MapPage() {
 
         {activeRoute && activeRoute.coordinates.length > 1 && (
           <>
-            <Polyline positions={activeRoute.coordinates} color="#ffffff" weight={9} opacity={0.9} />
-            <Polyline positions={activeRoute.coordinates} color="#2F6FED" weight={5} />
+            {navigationActive && navigationTravelledCoordinates.length > 1 && (
+              <Polyline
+                positions={navigationTravelledCoordinates}
+                color="#7B8494"
+                weight={5}
+                opacity={0.55}
+              />
+            )}
+            <Polyline
+              positions={
+                navigationActive
+                  ? navigationRemainingCoordinates
+                  : activeRoute.coordinates
+              }
+              color="#ffffff"
+              weight={9}
+              opacity={0.9}
+            />
+            <Polyline
+              positions={
+                navigationActive
+                  ? navigationRemainingCoordinates
+                  : activeRoute.coordinates
+              }
+              color="#2F6FED"
+              weight={5}
+            />
           </>
         )}
       </MapContainer>
 
       {/* Yuqoridagi qidiruv qatori */}
+      {!navigationActive && (
       <div className="pointer-events-none absolute inset-x-0 top-0 z-[1100] px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:left-[404px] md:pt-3">
         <div className="pointer-events-auto mx-auto flex max-w-xl items-center gap-2">
           <div className="relative min-w-0 flex-1">
@@ -1804,8 +2058,9 @@ export default function MapPage() {
           />
         </div>
       </div>
+      )}
 
-      {mapClickLoading && (
+      {mapClickLoading && !navigationActive && (
         <div className="pointer-events-none absolute inset-x-0 top-[72px] z-[1095] flex justify-center md:left-[404px]">
           <div
             className={cn(
@@ -1821,7 +2076,7 @@ export default function MapPage() {
         </div>
       )}
 
-      {movedCenter && (
+      {movedCenter && !navigationActive && (
         <div className="pointer-events-none absolute inset-x-0 top-[72px] z-[1090] flex justify-center md:left-[404px]">
           <button
             type="button"
@@ -1842,6 +2097,7 @@ export default function MapPage() {
       )}
 
       {/* O'ng tomondagi tez amallar */}
+      {!navigationActive && (
       <div
         className={cn(
           'absolute right-3 z-[1100] flex flex-col gap-1.5 rounded-[18px] border p-1.5 text-foreground shadow-xl backdrop-blur-2xl transition-[bottom] duration-300 md:bottom-auto md:top-1/2 md:-translate-y-1/2',
@@ -1927,8 +2183,33 @@ export default function MapPage() {
           <Bookmark className="h-5 w-5" />
         </button>
       </div>
+      )}
+
+      {navigationActive && destination && (
+        <ActiveNavigationPanel
+          snapshot={navigation.snapshot}
+          position={navigation.position}
+          destinationName={destination.name}
+          mode={routeMode}
+          error={navigation.error}
+          highContrast={contrastLayer}
+          onRecenter={() => {
+            if (!navigation.position || !mapRef.current) return;
+            mapRef.current.setView(
+              [
+                navigation.position.latitude,
+                navigation.position.longitude,
+              ],
+              Math.max(17, mapRef.current.getZoom()),
+              { animate: true },
+            );
+          }}
+          onStop={stopNavigation}
+        />
+      )}
 
       {/* Pastdagi suzuvchi panel */}
+      {!navigationActive && (
       <MapBottomSheet
         snap={snap}
         onSnapChange={setSnap}
@@ -1956,6 +2237,7 @@ export default function MapPage() {
           {panelBody}
         </div>
       </MapBottomSheet>
+      )}
 
     </div>
   );
