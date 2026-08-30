@@ -60,6 +60,32 @@ function maneuverRotation(modifier?: string): number {
   }
 }
 
+function laneSymbol(indications: string[]): string {
+  const values = indications.map((item) => item.toLowerCase());
+  if (values.some((item) => item.includes('uturn'))) return '↩';
+  if (
+    values.some(
+      (item) =>
+        item.includes('sharp left') ||
+        item.includes('left') ||
+        item.includes('slight left'),
+    )
+  ) {
+    return '↖';
+  }
+  if (
+    values.some(
+      (item) =>
+        item.includes('sharp right') ||
+        item.includes('right') ||
+        item.includes('slight right'),
+    )
+  ) {
+    return '↗';
+  }
+  return '↑';
+}
+
 function modeLabel(mode: RouteMode): string {
   if (mode === 'foot') return 'Piyoda';
   if (mode === 'bike') return 'Velosiped';
@@ -204,6 +230,42 @@ export function ActiveNavigationPanel({
               </button>
             </div>
           </div>
+
+          {Boolean(
+            snapshot.currentStep?.lanes?.length &&
+              !snapshot.arrived &&
+              snapshot.distanceToManeuverM <= 900,
+          ) && (
+            <div
+              className={cn(
+                'flex items-center justify-center gap-1.5 border-t px-4 py-2.5',
+                highContrast
+                  ? 'border-white/[0.10] bg-black/[0.08]'
+                  : 'border-border/[0.45] bg-muted/[0.16]',
+              )}
+            >
+              {snapshot.currentStep?.lanes?.map((lane, index) => (
+                <span
+                  key={
+                    index +
+                    ':' +
+                    lane.indications.join('-')
+                  }
+                  className={cn(
+                    'flex h-9 min-w-9 items-center justify-center rounded-xl border px-2 text-lg font-black transition',
+                    lane.valid || lane.active
+                      ? 'border-primary/[0.38] bg-primary/[0.12] text-primary'
+                      : highContrast
+                        ? 'border-white/[0.08] bg-white/[0.03] text-white/[0.28]'
+                        : 'border-border/[0.40] bg-background/[0.45] text-muted-foreground/45',
+                  )}
+                  title={lane.indications.join(', ') || 'to‘g‘ri'}
+                >
+                  {laneSymbol(lane.indications)}
+                </span>
+              ))}
+            </div>
+          )}
 
           {reachedStopName ? (
             <div
