@@ -97,6 +97,7 @@ export interface Message {
   is_read?: boolean;
   status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
   tempId?: string;
+  client_message_id?: string | null;
 }
 
 /** Telegramdek: chat oynasi faqat oxirgi sahifani yuklaydi, qolgani surilganda keladi */
@@ -840,6 +841,7 @@ export function useMessages(conversationId: string | null) {
           mediaUrl,
           mediaType,
           replyToId,
+          clientMessageId: tempId,
         });
 
         const insertResult = await insertMessageWithReplyFallback(
@@ -926,6 +928,37 @@ export function useMessages(conversationId: string | null) {
       );
 
       try {
+        // Agar oldingi urinish DBga yozilib, faqat javob tarmoqda yo'qolgan bo'lsa,
+        // Telegramdek qayta insert qilmaymiz - client_message_id orqali server yozuvini tiklaymiz.
+        const { data: alreadyPersisted, error: recoveryError } = await supabase
+          .from('messages')
+          .select(BASE_MESSAGE_SELECT)
+          .eq('sender_id', user.id)
+          .eq('client_message_id', optimisticId)
+          .maybeSingle();
+
+        if (!recoveryError && alreadyPersisted) {
+          const [hydratedExisting] = await hydrateReplyTargets(
+            [alreadyPersisted as any],
+            async (replyIds) => {
+              const { data: replies, error: replyError } = await supabase
+                .from('messages')
+                .select(BASE_MESSAGE_SELECT)
+                .in('id', replyIds);
+              return { data: (replies || []) as any[], error: replyError };
+            }
+          );
+          const recovered = hydratedExisting ?? alreadyPersisted;
+          processedMessageIds.current.add(recovered.id);
+          setMessages((prev) =>
+            replaceOptimisticMessage(prev, optimisticId, {
+              ...recovered,
+              status: 'sent' as const,
+            } as Message)
+          );
+          return recovered;
+        }
+
         const insertPayload = buildMessageInsertPayload({
           conversationId,
           senderId: user.id,
@@ -933,6 +966,7 @@ export function useMessages(conversationId: string | null) {
           mediaUrl: failedMessage.media_url || undefined,
           mediaType: failedMessage.media_type || undefined,
           replyToId: failedMessage.reply_to_id || null,
+          clientMessageId: optimisticId,
         });
 
         const insertResult = await insertMessageWithReplyFallback(
