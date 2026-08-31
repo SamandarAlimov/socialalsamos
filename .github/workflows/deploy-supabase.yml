@@ -1,0 +1,84 @@
+name: Deploy Supabase
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/**"
+      - ".github/workflows/deploy-supabase.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: supabase-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      ALSAMOS_SEARCH_API_KEY: ${{ secrets.ALSAMOS_SEARCH_API_KEY }}
+      CRAWLER_SECRET: ${{ secrets.CRAWLER_SECRET }}
+      PROJECT_REF: mbhjganbihamoiqmankv
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check deployment credentials
+        id: gate
+        shell: bash
+        run: |
+          if [ -n "$SUPABASE_ACCESS_TOKEN" ] && [ -n "$SUPABASE_DB_PASSWORD" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Supabase deploy skipped: add SUPABASE_ACCESS_TOKEN and SUPABASE_DB_PASSWORD repository secrets."
+          fi
+
+      - name: Setup Supabase CLI
+        if: steps.gate.outputs.enabled == 'true'
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link production project
+        if: steps.gate.outputs.enabled == 'true'
+        shell: bash
+        run: supabase link --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Sync search secrets
+        if: steps.gate.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          if [ -n "$ALSAMOS_SEARCH_API_KEY" ]; then
+            supabase secrets set ALSAMOS_SEARCH_API_KEY="$ALSAMOS_SEARCH_API_KEY" --project-ref "$PROJECT_REF"
+          else
+            echo "::notice::ALSAMOS_SEARCH_API_KEY is not configured; realtime Global Search will use the Alsamos index fallback."
+          fi
+
+          if [ -n "$CRAWLER_SECRET" ]; then
+            supabase secrets set CRAWLER_SECRET="$CRAWLER_SECRET" --project-ref "$PROJECT_REF"
+          fi
+
+      - name: Push database migrations
+        if: steps.gate.outputs.enabled == 'true'
+        shell: bash
+        run: supabase db push --linked --include-all
+
+      - name: Deploy Global Search
+        if: steps.gate.outputs.enabled == 'true'
+        shell: bash
+        run: supabase functions deploy global-search --project-ref "$PROJECT_REF"
+
+      - name: Deploy web crawler
+        if: steps.gate.outputs.enabled == 'true'
+        shell: bash
+        run: supabase functions deploy web-crawler --project-ref "$PROJECT_REF" --no-verify-jwt
+
+      - name: Deploy AI assistant
+        if: steps.gate.outputs.enabled == 'true'
+        shell: bash
+        run: supabase functions deploy ai-assistant --project-ref "$PROJECT_REF" --no-verify-jwt
