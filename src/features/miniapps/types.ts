@@ -72,6 +72,11 @@ export interface MiniApp {
   supportUrl: string | null;
   deepLink: string | null;
   isPinned: boolean;
+  /**
+   * `mini_apps.frame_blocked` — sayt to'g'ridan-to'g'ri iframe'ni bloklaydi.
+   * Bu holda ochish rejasi `direct` qadamini tashlab, darhol proksiga o'tadi.
+   */
+  frameBlocked?: boolean;
   ownerId: string | null;
   publisher: {
     id: string | null;
