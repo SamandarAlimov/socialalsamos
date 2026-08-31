@@ -135,13 +135,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    supabase.auth.getSession().then(({ data: { session: existing } }) => {
-      setSession(existing);
-      setUser(existing?.user ?? null);
-      userIdRef.current = existing?.user?.id ?? null;
-      if (existing?.user) fetchProfile(existing.user.id);
-      setIsLoading(false);
-    });
+    void supabase.auth.getSession()
+      .then(({ data: { session: existing }, error }) => {
+        if (error) {
+          console.error('Error restoring auth session:', error);
+        }
+
+        setSession(existing);
+        setUser(existing?.user ?? null);
+        userIdRef.current = existing?.user?.id ?? null;
+
+        if (existing?.user) {
+          void fetchProfile(existing.user.id);
+        } else {
+          setProfile(null);
+        }
+      })
+      .catch((error) => {
+        // Auth bootstrap must never leave every protected route behind an
+        // infinite fullscreen spinner. A storage/runtime failure is treated as
+        // a signed-out state and can recover on the next explicit login.
+        console.error('Auth session bootstrap failed:', error);
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+        userIdRef.current = null;
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
 
     const handleUnload = () => {
       const uid = userIdRef.current;
