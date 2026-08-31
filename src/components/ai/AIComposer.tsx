@@ -29,6 +29,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
 import { AIModelPicker } from './AIModelPicker';
+import { AIGithubDialog } from './AIGithubDialog';
 import type { AIMode, ModelId, ToolGroupId } from '@/lib/ai/capabilities';
 
 const PLACEHOLDERS = [
@@ -107,6 +108,7 @@ export function AIComposer({
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [slashOpen, setSlashOpen] = useState(false);
+  const [githubOpen, setGithubOpen] = useState(false);
 
   const voice = useVoiceInput();
   const voiceBaseRef = useRef('');
@@ -122,7 +124,7 @@ export function AIComposer({
 
   const openGithub = () => {
     if (onOpenGithub) onOpenGithub();
-    else onOpenConnectors?.();
+    else setGithubOpen(true);
   };
 
   const openPlugins = () => {
@@ -197,6 +199,16 @@ export function AIComposer({
 
   return (
     <div className="px-3 pb-3 sm:px-4 sm:pb-4">
+      <AIGithubDialog
+        open={githubOpen}
+        onOpenChange={setGithubOpen}
+        onPickRepo={(repo) => {
+          const prefix = value.trim() ? `${value.trim()} ` : '';
+          onChange(`${prefix}${repo.fullName} repozitoriysi bo'yicha: `);
+          textareaRef.current?.focus();
+        }}
+      />
+
       <div className="mx-auto w-full max-w-3xl">
         {slashMatches.length > 0 && (
           <div className="mb-2 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-lg">
