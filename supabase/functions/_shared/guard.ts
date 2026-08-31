@@ -37,10 +37,26 @@ function allowedOrigins(): string[] {
     .filter(Boolean);
 }
 
+function isAlsamosOrigin(origin: string): boolean {
+  if (!origin) return false;
+  try {
+    const url = new URL(origin);
+    const host = url.hostname.toLowerCase();
+    return url.protocol === "https:" && (host === "alsamos.com" || host.endsWith(".alsamos.com"));
+  } catch {
+    return false;
+  }
+}
+
 export function corsHeaders(req: Request, methods = "POST, OPTIONS"): Record<string, string> {
   const list = allowedOrigins();
   const origin = req.headers.get("origin") ?? "";
-  const allowOrigin = list.length === 0 ? "*" : list.includes(origin) ? origin : list[0];
+  const allowOrigin =
+    list.length === 0
+      ? "*"
+      : list.includes(origin) || isAlsamosOrigin(origin)
+        ? origin
+        : list[0];
 
   const headers: Record<string, string> = {
     "Access-Control-Allow-Origin": allowOrigin,
