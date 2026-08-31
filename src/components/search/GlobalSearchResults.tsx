@@ -184,7 +184,13 @@ export function GlobalSearchResults({ query, locale = 'uz' }: { query: string; l
       {!loading && meta && items.length > 0 && (
         <p className="text-[11px] text-muted-foreground px-0.5">
           {items.length} ta natija · {meta.tookMs} ms
-          {meta.engine ? ` · ${meta.engine === 'grounded-realtime-web' ? 'jonli internet' : meta.engine === 'programmable-web' ? 'web index' : 'Alsamos index'}` : ''}
+          {meta.engine
+            ? ` · ${
+                meta.engine.startsWith('yacy-') || meta.engine === 'duckduckgo-html'
+                  ? 'jonli internet'
+                  : meta.engine
+              }`
+            : ''}
         </p>
       )}
 
@@ -393,7 +399,9 @@ function ErrorState({ error }: { error: { code: string; message: string } }) {
           ? 'Global Search backend hali deploy qilinmagan'
           : error.code === 'NETWORK_ERROR'
             ? 'Global Search Edge Function topilmadi'
-            : 'Internet qidiruvi vaqtincha mavjud emas';
+            : error.code === 'NO_RESULTS'
+              ? 'Natija topilmadi'
+              : 'Internet qidiruvi vaqtincha mavjud emas';
 
   return (
     <div className="p-5 rounded-2xl bg-card/60 border border-border/40 backdrop-blur-sm text-center">
