@@ -242,6 +242,26 @@ export function useProductVariants(productId?: string | null) {
 }
 
 const PRODUCT_PAGE_SIZE = 50;
+
+// Ilgari paginatsiya `while (true)` bilan katalogning HAMMASINI o'qib olardi:
+// mahsulotlar soni o'sishi bilan Marketplace birinchi renderni kutib qotib
+// qolardi (va sekin tarmoqda "yuklanmadi" ga aylanardi). Endi qattiq chegara
+// bor; qolgani `hasMore` orqali bildiriladi.
+const MAX_PRODUCT_PAGES = 6;
+
+/**
+ * PostgREST'da so'rovda `or=` parametri faqat bitta bo'ladi. Ikki marta
+ * `.or(...)` chaqirilsa shartlardan biri (qidiruv yoki keyset kursor) jimgina
+ * tushib qolib, natijalar noto'g'ri yoki takroriy bo'lardi. Shartlarni bitta
+ * `and(or(...),or(...))` ifodasiga birlashtiramiz.
+ */
+function combineOrExpressions(expressions: string[]): string | null {
+  const parts = expressions.filter((expression) => expression.trim().length > 0);
+  if (parts.length === 0) return null;
+  if (parts.length === 1) return parts[0];
+  return `and(${parts.map((expression) => `or(${expression})`).join(',')})`;
+}
+
 const categoryIdBySlug = new Map<string, string>();
 
 async function resolveCategoryId(slug?: string): Promise<string | null> {
@@ -294,6 +314,7 @@ export function useProducts(categorySlug?: string, searchQuery?: string) {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
 
   const fetchProducts = useCallback(async () => {
     setIsLoading(true);
@@ -303,6 +324,7 @@ export function useProducts(categorySlug?: string, searchQuery?: string) {
       const categoryId = await resolveCategoryId(categorySlug);
       if (categorySlug && categorySlug !== 'all' && !categoryId) {
         setProducts([]);
+        setHasMore(false);
         setIsLoading(false);
         return;
       }
@@ -313,8 +335,9 @@ export function useProducts(categorySlug?: string, searchQuery?: string) {
 
       const rows: any[] = [];
       let cursor: { created_at: string; id: string } | null = null;
+      let reachedPageLimit = false;
 
-      while (true) {
+      for (let pageIndex = 0; pageIndex < MAX_PRODUCT_PAGES; pageIndex += 1) {
         const currentCursor = cursor;
 
         const { data, error: fetchError } = await runProductQuery((select) => {
@@ -330,16 +353,18 @@ export function useProducts(categorySlug?: string, searchQuery?: string) {
             pageQuery = pageQuery.eq('category_id', categoryId);
           }
 
-          if (safeSearch) {
-            pageQuery = pageQuery.or(
-              `title.ilike.%${safeSearch}%,description.ilike.%${safeSearch}%`,
-            );
-          }
+          // Qidiruv va keyset kursor bitta `or=` ifodasiga birlashtiriladi.
+          const combinedFilter = combineOrExpressions([
+            safeSearch
+              ? `title.ilike.%${safeSearch}%,description.ilike.%${safeSearch}%`
+              : '',
+            currentCursor
+              ? `created_at.lt.${currentCursor.created_at},and(created_at.eq.${currentCursor.created_at},id.lt.${currentCursor.id})`
+              : '',
+          ]);
 
-          if (currentCursor) {
-            pageQuery = pageQuery.or(
-              `created_at.lt.${currentCursor.created_at},and(created_at.eq.${currentCursor.created_at},id.lt.${currentCursor.id})`,
-            );
+          if (combinedFilter) {
+            pageQuery = pageQuery.or(combinedFilter);
           }
 
           return pageQuery;
@@ -356,6 +381,10 @@ export function useProducts(categorySlug?: string, searchQuery?: string) {
         if (!last?.created_at || !last?.id) break;
 
         cursor = { created_at: last.created_at, id: last.id };
+
+        if (pageIndex === MAX_PRODUCT_PAGES - 1) {
+          reachedPageLimit = true;
+        }
       }
 
       let likedProductIds: string[] = [];
@@ -369,11 +398,19 @@ export function useProducts(categorySlug?: string, searchQuery?: string) {
       }
 
       setProducts(rows.map(row => mapMarketplaceProduct(row, likedProductIds)));
+      setHasMore(reachedPageLimit);
+
+      if (reachedPageLimit) {
+        console.info(
+          `Marketplace: ${MAX_PRODUCT_PAGES * PRODUCT_PAGE_SIZE} mahsulot yuklandi, qolganlari filtr/qidiruv bilan ochiladi.`,
+        );
+      }
     } catch (err) {
       // Log the raw object: the message alone hides the PostgREST code that
       // says whether this is a missing table, a broken embed or RLS.
       console.error('Marketplace products failed:', err);
       setProducts([]);
+      setHasMore(false);
       setError(describeSupabaseError(err, 'Mahsulotlar yuklanmadi'));
     } finally {
       setIsLoading(false);
@@ -384,7 +421,7 @@ export function useProducts(categorySlug?: string, searchQuery?: string) {
     void fetchProducts();
   }, [fetchProducts]);
 
-  return { products, isLoading, error, refresh: fetchProducts };
+  return { products, isLoading, error, hasMore, refresh: fetchProducts };
 }
 
 interface MarketplaceCenter {
