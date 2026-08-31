@@ -2,6 +2,22 @@ import { useCallback, useEffect, useState } from 'react';
 import { db } from '@/lib/supabaseAny';
 import { useAuth } from '@/contexts/AuthContext';
 
+/**
+ * Saqlangan joylar.
+ *
+ * `saved_places` jadvali ikki mijoz uchun umumiy va uning kanonik shakli
+ * `alsamos-superapp/supabase/migrations/20260712200000_map_p0_features.sql`
+ * ichida belgilangan. Muhim tafsilotlar:
+ *
+ * - Izoh ustuni `notes` deb nomlanadi, `note` emas.
+ * - Guruhlash asli `list_id` -> `saved_place_lists` orqali. Matnli `collection`
+ *   ustuni keyin qo'shildi va trigger uni ro'yxat nomidan to'ldiradi, shuning
+ *   uchun ikkala mijoz ham o'zi biladigan nom bilan ishlay oladi.
+ * - `place_key` ni klient yozmaydi: uni trigger koordinatalardan hosil qiladi.
+ *
+ * `external_id` va `external_source` ustunlari mavjud emas. OSM havolasi
+ * `place_key` orqali saqlanadi.
+ */
 export interface SavedPlace {
   id: string;
   name: string;
@@ -10,7 +26,9 @@ export interface SavedPlace {
   latitude: number;
   longitude: number;
   collection: string;
-  note: string | null;
+  notes: string | null;
+  listId: string | null;
+  isFavorite: boolean;
   created_at: string;
 }
 
@@ -20,12 +38,31 @@ export interface SavePlaceInput {
   category?: string | null;
   latitude: number;
   longitude: number;
-  externalId?: string | null;
-  externalSource?: string | null;
+  notes?: string | null;
   collection?: string;
+  isFavorite?: boolean;
 }
 
+const COLUMNS =
+  'id, name, address, category, latitude, longitude, collection, notes, list_id, is_favorite, created_at';
+
 const ROUND = (value: number) => Math.round(value * 100000) / 100000;
+
+function toSavedPlace(row: Record<string, unknown>): SavedPlace {
+  return {
+    id: String(row.id),
+    name: String(row.name ?? ''),
+    address: (row.address as string | null) ?? null,
+    category: (row.category as string | null) ?? null,
+    latitude: Number(row.latitude),
+    longitude: Number(row.longitude),
+    collection: String(row.collection ?? 'default'),
+    notes: (row.notes as string | null) ?? null,
+    listId: (row.list_id as string | null) ?? null,
+    isFavorite: Boolean(row.is_favorite),
+    created_at: String(row.created_at ?? ''),
+  };
+}
 
 export function useSavedPlaces() {
   const { user } = useAuth();
@@ -41,11 +78,11 @@ export function useSavedPlaces() {
     try {
       const { data } = await db
         .from('saved_places')
-        .select('id, name, address, category, latitude, longitude, collection, note, created_at')
+        .select(COLUMNS)
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(200);
-      setPlaces(data ?? []);
+      setPlaces(((data ?? []) as Array<Record<string, unknown>>).map(toSavedPlace));
     } catch {
       setPlaces([]);
     } finally {
@@ -93,13 +130,13 @@ export function useSavedPlaces() {
           category: input.category ?? null,
           latitude: input.latitude,
           longitude: input.longitude,
-          external_id: input.externalId ?? null,
-          external_source: input.externalSource ?? null,
+          notes: input.notes ?? null,
+          is_favorite: input.isFavorite ?? false,
           collection: input.collection ?? 'favorites',
         })
-        .select('id, name, address, category, latitude, longitude, collection, note, created_at')
+        .select(COLUMNS)
         .single();
-      if (data) setPlaces((prev) => [data, ...prev]);
+      if (data) setPlaces((prev) => [toSavedPlace(data as Record<string, unknown>), ...prev]);
       return true;
     },
     [user, findSaved],
