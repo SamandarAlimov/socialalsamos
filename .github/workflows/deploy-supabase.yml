@@ -20,6 +20,8 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       ALSAMOS_SEARCH_API_KEY: ${{ secrets.ALSAMOS_SEARCH_API_KEY }}
+      FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+      LOVABLE_API_KEY: ${{ secrets.LOVABLE_API_KEY }}
       CRAWLER_SECRET: ${{ secrets.CRAWLER_SECRET }}
       PROJECT_REF: mbhjganbihamoiqmankv
 
@@ -59,6 +61,16 @@ jobs:
             echo "::notice::ALSAMOS_SEARCH_API_KEY is not configured; realtime Global Search will use the Alsamos index fallback."
           fi
 
+          if [ -n "$FIRECRAWL_API_KEY" ]; then
+            supabase secrets set FIRECRAWL_API_KEY="$FIRECRAWL_API_KEY" --project-ref "$PROJECT_REF"
+          else
+            echo "::notice::FIRECRAWL_API_KEY GitHub secret is not configured; existing Supabase secret is preserved."
+          fi
+
+          if [ -n "$LOVABLE_API_KEY" ]; then
+            supabase secrets set LOVABLE_API_KEY="$LOVABLE_API_KEY" --project-ref "$PROJECT_REF"
+          fi
+
           if [ -n "$CRAWLER_SECRET" ]; then
             supabase secrets set CRAWLER_SECRET="$CRAWLER_SECRET" --project-ref "$PROJECT_REF"
           fi
@@ -71,7 +83,34 @@ jobs:
       - name: Deploy Global Search
         if: steps.gate.outputs.enabled == 'true'
         shell: bash
-        run: supabase functions deploy global-search --project-ref "$PROJECT_REF"
+        run: supabase functions deploy global-search --project-ref "$PROJECT_REF" --no-verify-jwt
+
+      - name: Smoke Firecrawl Global Search
+        if: steps.gate.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://${PROJECT_REF}.supabase.co/functions/v1/global-search"
+          BODY='{"query":"OpenAI","category":"web","page":1,"pageSize":5,"locale":"en"}'
+          TMP="$(mktemp)"
+
+          for attempt in $(seq 1 8); do
+            echo "Global Search smoke attempt $attempt"
+            if curl --fail --silent --show-error --max-time 45 \
+              -H 'Content-Type: application/json' \
+              -d "$BODY" "$URL" -o "$TMP"; then
+              cat "$TMP"
+              echo
+              if python -c 'import json,sys; d=json.load(open(sys.argv[1],encoding="utf-8")); r=d.get("results") or []; e=str(d.get("engine") or ""); err=d.get("error"); print("engine:",e,"results:",len(r),"error:",err); raise SystemExit(0 if e.startswith("firecrawl-") and len(r)>0 and not err else 1)' "$TMP"; then
+                echo "Firecrawl Global Search is live."
+                exit 0
+              fi
+            fi
+            sleep 8
+          done
+
+          echo "::error::Firecrawl Global Search did not become live. Check FIRECRAWL_API_KEY / Lovable Firecrawl connection."
+          exit 1
 
       - name: Deploy web crawler
         if: steps.gate.outputs.enabled == 'true'
