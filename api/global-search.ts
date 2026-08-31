@@ -37,6 +37,89 @@ function setCors(res: any) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
+function cacheGet(key: string) {
+  const hit = memoryCache.get(key);
+  if (!hit) return null;
+
+  if (Date.now() - hit.at > CACHE_TTL_MS) {
+    memoryCache.delete(key);
+    return null;
+  }
+
+  return hit.payload;
+}
+
+function cacheSet(key: string, payload: any) {
+  if (memoryCache.size >= CACHE_MAX) {
+    const first = memoryCache.keys().next().value as string | undefined;
+    if (first) memoryCache.delete(first);
+  }
+
+  memoryCache.set(key, { at: Date.now(), payload });
+}
+
+async function hashId(input: string) {
+  const bytes = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(input),
+  );
+
+  return Array.from(new Uint8Array(bytes))
+    .slice(0, 16)
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+function displayUrl(raw: string) {
+  try {
+    const url = new URL(raw);
+    const path = url.pathname
+      .split('/')
+      .filter(Boolean)
+      .slice(0, 3)
+      .map((part) => {
+        try {
+          return decodeURIComponent(part);
+        } catch {
+          return part;
+        }
+      })
+      .join(' › ');
+
+    return url.hostname.replace(/^www\./, '') + (path ? ' › ' + path : '');
+  } catch {
+    return raw;
+  }
+}
+
+function sourceFromUrl(raw: string) {
+  try {
+    return new URL(raw).hostname.replace(/^www\./, '');
+  } catch {
+    return 'web';
+  }
+}
+
+function typeFromCategory(
+  category: GlobalCategory,
+  url: string,
+  title: string,
+): ResultType {
+  if (category === 'images') return 'image';
+  if (category === 'videos') return 'video';
+  if (category === 'news') return 'news';
+
+  if (
+    category === 'wikipedia' ||
+    /wikipedia\.org/i.test(url) ||
+    /wikipedia/i.test(title)
+  ) {
+    return 'wikipedia';
+  }
+
+  return 'web';
+}
+
 function yacyBaseUrls() {
   const configured = (process.env.YACY_SEARCH_BASES || process.env.YACY_SEARCH_BASE || '')
     .split(',')
