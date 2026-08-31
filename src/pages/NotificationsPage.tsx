@@ -1,10 +1,35 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { isToday, isYesterday, isThisWeek, isThisMonth, differenceInMinutes } from 'date-fns';
+import {
+  isToday,
+  isYesterday,
+  isThisWeek,
+  isThisMonth,
+  differenceInMinutes,
+} from 'date-fns';
 import { useTranslation } from 'react-i18next';
 import { formatRelative, formatDate } from '@/lib/i18n-format';
-import { Heart, MessageCircle, UserPlus, AtSign, Check, X, Bell, BellOff, Settings, Trash2, MoreHorizontal, ChevronRight, Sparkles, Users } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Heart,
+  MessageCircle,
+  UserPlus,
+  AtSign,
+  Check,
+  X,
+  Bell,
+  BellOff,
+  Settings,
+  Trash2,
+  MoreHorizontal,
+  ChevronRight,
+  Users,
+  Image as ImageIcon,
+  Play,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
+} from 'lucide-react';
+import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -23,7 +48,42 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 
-type NotificationFilter = 'all' | 'likes' | 'comments' | 'follows' | 'mentions' | 'collaborations';
+type NotificationFilter =
+  | 'all'
+  | 'likes'
+  | 'comments'
+  | 'follows'
+  | 'mentions'
+  | 'collaborations';
+
+const FILTER_LABELS: Record<NotificationFilter, string> = {
+  all: 'Hammasi',
+  likes: 'Yoqtirishlar',
+  comments: 'Izohlar',
+  follows: 'Obunalar',
+  mentions: 'Eslatishlar',
+  collaborations: 'Hammualliflik',
+};
+
+const FILTER_EMPTY_TEXT: Record<NotificationFilter, string> = {
+  all: 'Kimdir postingizni yoqtirsa, izoh qoldirsa yoki sizga obuna bo‘lsa — shu yerda ko‘rinadi.',
+  likes: 'Hozircha yoqtirishlar yo‘q.',
+  comments: 'Hozircha izohlar yo‘q.',
+  follows: 'Hozircha yangi obunachilar yo‘q.',
+  mentions: 'Hozircha sizni hech kim eslatib o‘tmagan.',
+  collaborations: 'Hozircha hammualliflik takliflari yo‘q.',
+};
+
+const COLLABORATION_TYPES: Notification['type'][] = [
+  'collaboration_invite',
+  'collaboration_accepted',
+  'collaboration_declined',
+  'collaboration_revoked',
+  'collaboration_removed',
+  'collaboration_left',
+];
+
+const VIDEO_PATTERN = /\.(mp4|webm|mov|m4v|ogv)(\?|#|$)/i;
 
 interface GroupedNotification {
   id: string;
@@ -48,33 +108,32 @@ interface TimeGroupedNotifications {
   older: GroupedNotification[];
 }
 
-const NotificationIcon = ({ type, className, size = 'default' }: { type: Notification['type']; className?: string; size?: 'default' | 'large' }) => {
-  const sizeClass = size === 'large' ? 'h-5 w-5' : 'h-4 w-4';
-  const iconClass = cn(sizeClass, className);
-  
+const NotificationIcon = ({ type }: { type: Notification['type'] }) => {
+  const iconClass = 'h-4 w-4 text-white';
+
   switch (type) {
     case 'like':
       return (
-        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-red-500 to-pink-500 flex items-center justify-center shadow-lg shadow-red-500/25">
-          <Heart className={cn(iconClass, 'text-white')} fill="currentColor" />
+        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-red-500 to-pink-500 flex items-center justify-center ring-2 ring-background">
+          <Heart className={iconClass} fill="currentColor" />
         </div>
       );
     case 'comment':
       return (
-        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/25">
-          <MessageCircle className={cn(iconClass, 'text-white')} fill="currentColor" />
+        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center ring-2 ring-background">
+          <MessageCircle className={iconClass} fill="currentColor" />
         </div>
       );
     case 'follow':
       return (
-        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-green-500/25">
-          <UserPlus className={cn(iconClass, 'text-white')} />
+        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center ring-2 ring-background">
+          <UserPlus className={iconClass} />
         </div>
       );
     case 'mention':
       return (
-        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-purple-500 to-violet-500 flex items-center justify-center shadow-lg shadow-purple-500/25">
-          <AtSign className={cn(iconClass, 'text-white')} />
+        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-purple-500 to-violet-500 flex items-center justify-center ring-2 ring-background">
+          <AtSign className={iconClass} />
         </div>
       );
     case 'collaboration_invite':
@@ -84,39 +143,97 @@ const NotificationIcon = ({ type, className, size = 'default' }: { type: Notific
     case 'collaboration_removed':
     case 'collaboration_left':
       return (
-        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center shadow-lg shadow-orange-500/25">
-          <Users className={cn(iconClass, 'text-white')} />
+        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center ring-2 ring-background">
+          <Users className={iconClass} />
         </div>
       );
     default:
       return (
-        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center">
+        <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center ring-2 ring-background">
           <Bell className={iconClass} />
         </div>
       );
   }
 };
 
-// Group notifications by type and post within a timeframe (30 minutes)
+/**
+ * Post rasmi o'chirilgan yoki video bo'lsa ham sahifa buzilmasligi uchun
+ * xavfsiz thumbnail. Ilgari <img alt="Post"> ishlatilgani uchun rasm
+ * yuklanmasa ro'yxatda "Post" degan buzilgan matn ko'rinardi.
+ */
+function PostThumbnail({
+  url,
+  onClick,
+}: {
+  url: string;
+  onClick: (event: React.MouseEvent) => void;
+}) {
+  const [failed, setFailed] = useState(false);
+  const isVideo = VIDEO_PATTERN.test(url);
+  const baseClass =
+    'relative flex-shrink-0 h-14 w-14 rounded-xl overflow-hidden bg-muted flex items-center justify-center transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+
+  if (failed) {
+    return (
+      <button type="button" onClick={onClick} className={baseClass} aria-label="Postni ochish">
+        <ImageIcon className="h-5 w-5 text-muted-foreground" />
+      </button>
+    );
+  }
+
+  return (
+    <button type="button" onClick={onClick} className={baseClass} aria-label="Postni ochish">
+      {isVideo ? (
+        <>
+          <video
+            src={url}
+            className="h-full w-full object-cover"
+            muted
+            playsInline
+            preload="metadata"
+            onError={() => setFailed(true)}
+          />
+          <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+            <Play className="h-4 w-4 text-white" fill="currentColor" />
+          </span>
+        </>
+      ) : (
+        <img
+          src={url}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="h-full w-full object-cover"
+          onError={() => setFailed(true)}
+        />
+      )}
+    </button>
+  );
+}
+
+// 30 daqiqalik oyna ichida bir xil tur va bir xil post bo'yicha guruhlash
 function consolidateNotifications(notifications: Notification[]): GroupedNotification[] {
   const groups: Map<string, GroupedNotification> = new Map();
   const CONSOLIDATION_WINDOW_MINUTES = 30;
-  
-  const sorted = [...notifications].sort((a, b) => 
-    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+
+  const sorted = [...notifications].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
   );
-  
+
   sorted.forEach((notification) => {
     const data = notification.data as Record<string, unknown>;
-    const postId = data?.post_id as string | undefined;
+    const postId = typeof data?.post_id === 'string' ? (data.post_id as string) : undefined;
     const actor = notification.actor;
     const post = notification.post;
-    
-    const postThumbnail = post?.media_urls?.[0];
-    
-    const baseGroupKey = notification.type === 'follow'
-      ? `follow-${notification.type}`
-      : `${notification.type}-${postId || 'no-post'}`;
+
+    const postThumbnail = post?.media_urls?.find(
+      (media) => typeof media === 'string' && media.length > 0,
+    );
+
+    const baseGroupKey =
+      notification.type === 'follow'
+        ? `follow-${notification.type}`
+        : `${notification.type}-${postId || 'no-post'}`;
     const canConsolidate =
       notification.type === 'like' ||
       notification.type === 'comment' ||
@@ -125,15 +242,15 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
     const groupKey = canConsolidate ? baseGroupKey : `${baseGroupKey}-${notification.id}`;
 
     const existing = groups.get(groupKey);
-    
+
     if (existing) {
       const timeDiff = differenceInMinutes(
         new Date(existing.latestAt),
-        new Date(notification.created_at)
+        new Date(notification.created_at),
       );
-      
-      if (timeDiff <= CONSOLIDATION_WINDOW_MINUTES && actor) {
-        if (!existing.actors.find(a => a.id === actor.id)) {
+
+      if (timeDiff <= CONSOLIDATION_WINDOW_MINUTES) {
+        if (actor && !existing.actors.find((a) => a.id === actor.id)) {
           existing.actors.push({
             id: actor.id,
             username: actor.username,
@@ -142,10 +259,13 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
           });
         }
         existing.notifications.push(notification);
+        if (!existing.postThumbnail && postThumbnail) {
+          existing.postThumbnail = postThumbnail;
+        }
         return;
       }
     }
-    
+
     groups.set(groupKey, {
       id: notification.id,
       type: notification.type,
@@ -153,22 +273,26 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
       latestAt: notification.created_at,
       postId,
       postThumbnail,
-      actors: actor ? [{
-        id: actor.id,
-        username: actor.username,
-        displayName: actor.display_name,
-        avatar: actor.avatar_url,
-      }] : [],
+      actors: actor
+        ? [
+            {
+              id: actor.id,
+              username: actor.username,
+              displayName: actor.display_name,
+              avatar: actor.avatar_url,
+            },
+          ]
+        : [],
     });
   });
-  
-  return Array.from(groups.values()).sort((a, b) => 
-    new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime()
+
+  return Array.from(groups.values()).sort(
+    (a, b) => new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime(),
   );
 }
 
-function GroupedNotificationItem({ 
-  group, 
+function GroupedNotificationItem({
+  group,
   onMarkAsRead,
   onDelete,
   onRespondCollaboration,
@@ -176,70 +300,60 @@ function GroupedNotificationItem({
 }: {
   group: GroupedNotification;
   onMarkAsRead: (id: string) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => Promise<void> | void;
   onRespondCollaboration: (collaborationId: string, accept: boolean) => Promise<void>;
   index: number;
 }) {
   const navigate = useNavigate();
-  const hasUnread = group.notifications.some(n => !n.is_read);
+  const hasUnread = group.notifications.some((n) => !n.is_read);
   const firstActor = group.actors[0];
-  const otherActorsCount = group.actors.length - 1;
+  const otherActorsCount = Math.max(0, group.actors.length - 1);
   const [collaborationBusy, setCollaborationBusy] = useState<'accept' | 'decline' | null>(null);
   const collaborationId = group.notifications[0]?.data?.collaboration_id as string | undefined;
-  
-  const handleItemClick = () => {
-    group.notifications.forEach(n => {
+  const { i18n: i18nInst } = useTranslation();
+
+  const markGroupRead = () => {
+    group.notifications.forEach((n) => {
       if (!n.is_read) onMarkAsRead(n.id);
     });
-    
-    if (
-      (
-        group.type === 'like' ||
-        group.type === 'comment' ||
-        group.type === 'mention' ||
-        group.type === 'collaboration_accepted' ||
-        group.type === 'collaboration_declined' ||
-        group.type === 'collaboration_revoked' ||
-        group.type === 'collaboration_removed' ||
-        group.type === 'collaboration_left'
-      ) &&
-      group.postId
-    ) {
+  };
+
+  const openTarget = () => {
+    markGroupRead();
+
+    if (group.postId && group.type !== 'follow') {
       navigate(`/home?post=${group.postId}`);
     } else if (group.type === 'follow' && firstActor) {
       navigate(`/user/${firstActor.username || firstActor.id}`);
     }
   };
-  
-  const handleActorClick = (e: React.MouseEvent, actor: typeof firstActor) => {
-    e.stopPropagation();
-    if (actor) {
-      group.notifications.forEach(n => {
-        if (!n.is_read) onMarkAsRead(n.id);
-      });
-      navigate(`/user/${actor.username || actor.id}`);
-    }
-  };
-  
-  const handlePostClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (group.postId) {
-      group.notifications.forEach(n => {
-        if (!n.is_read) onMarkAsRead(n.id);
-      });
-      navigate(`/home?post=${group.postId}`);
-    }
-  };
-  
-  const handleDelete = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    group.notifications.forEach(n => onDelete(n.id));
+
+  const handleActorClick = (event: React.MouseEvent, actor: typeof firstActor) => {
+    event.stopPropagation();
+    if (!actor) return;
+    markGroupRead();
+    navigate(`/user/${actor.username || actor.id}`);
   };
 
-  const handleCollaborationResponse = async (
-    event: React.MouseEvent,
-    accept: boolean,
-  ) => {
+  const handlePostClick = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (!group.postId) return;
+    markGroupRead();
+    navigate(`/home?post=${group.postId}`);
+  };
+
+  const handleDelete = async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    try {
+      await Promise.all(group.notifications.map((n) => onDelete(n.id)));
+      toast.success('Bildirishnoma o‘chirildi');
+    } catch (error) {
+      console.error('Bildirishnomani o‘chirish xatosi:', error);
+      toast.error('Bildirishnomani o‘chirib bo‘lmadi');
+    }
+  };
+
+  const handleCollaborationResponse = async (event: React.MouseEvent, accept: boolean) => {
     event.stopPropagation();
     if (!collaborationId || collaborationBusy) return;
 
@@ -255,106 +369,102 @@ function GroupedNotificationItem({
     }
   };
 
-  const { i18n: i18nInst } = useTranslation();
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
-    if (isToday(date)) {
-      return formatDate(date, 'HH:mm', i18nInst.language);
-    }
+    if (Number.isNaN(date.getTime())) return '';
+
+    const minutesAgo = differenceInMinutes(new Date(), date);
+    if (minutesAgo < 1) return 'hozirgina';
+    if (minutesAgo < 60) return `${minutesAgo} daqiqa oldin`;
+    if (isToday(date)) return formatDate(date, 'HH:mm', i18nInst.language);
     return formatRelative(date, i18nInst.language);
   };
-  
-  const getNotificationText = () => {
-    const actorName = firstActor?.displayName || firstActor?.username;
-    
-  const usernameElement = actorName ? (
-      <span 
-        className="font-semibold text-foreground hover:underline cursor-pointer"
-        onClick={(e) => {
-          e.stopPropagation();
-          if (firstActor) navigate(`/user/${firstActor.username || firstActor.id}`);
-        }}
-      >
-        {actorName}
-      </span>
-    ) : (
-      <span className="font-semibold">Someone</span>
-    );
-    
-    if (otherActorsCount > 0) {
-      const othersText = otherActorsCount === 1 
-        ? 'and 1 other' 
-        : `and ${otherActorsCount} others`;
-      
-      switch (group.type) {
-        case 'like':
-          return <>{usernameElement} <span className="text-muted-foreground">{othersText} liked your post</span></>;
-        case 'comment':
-          return <>{usernameElement} <span className="text-muted-foreground">{othersText} commented on your post</span></>;
-        case 'follow':
-          return <>{usernameElement} <span className="text-muted-foreground">{othersText} started following you</span></>;
-        case 'mention':
-          return <>{usernameElement} <span className="text-muted-foreground">{othersText} mentioned you</span></>;
-        default:
-          return <>{usernameElement} <span className="text-muted-foreground">{othersText}</span></>;
-      }
-    }
-    
+
+  const actorName = firstActor?.displayName || firstActor?.username || 'Foydalanuvchi';
+
+  const actionText = (() => {
     switch (group.type) {
       case 'like':
-        return <>{usernameElement} <span className="text-muted-foreground">liked your post</span></>;
+        return 'postingizni yoqtirdi';
       case 'comment':
-        return <>{usernameElement} <span className="text-muted-foreground">commented on your post</span></>;
+        return 'postingizga izoh qoldirdi';
       case 'follow':
-        return <>{usernameElement} <span className="text-muted-foreground">started following you</span></>;
+        return 'sizga obuna bo‘ldi';
       case 'mention':
-        return <>{usernameElement} <span className="text-muted-foreground">mentioned you</span></>;
+        return 'sizni eslatib o‘tdi';
+      case 'message':
+        return 'sizga xabar yubordi';
       case 'collaboration_invite':
-        return <>{usernameElement} <span className="text-muted-foreground">wants to collaborate with you</span></>;
+        return 'sizni hammualliflikka taklif qildi';
       case 'collaboration_accepted':
-        return <>{usernameElement} <span className="text-muted-foreground">hammualliflik taklifingizni qabul qildi</span></>;
+        return 'hammualliflik taklifingizni qabul qildi';
       case 'collaboration_declined':
-        return <>{usernameElement} <span className="text-muted-foreground">hammualliflik taklifingizni rad etdi</span></>;
+        return 'hammualliflik taklifingizni rad etdi';
       case 'collaboration_revoked':
-        return <>{usernameElement} <span className="text-muted-foreground">hammualliflik taklifini bekor qildi</span></>;
+        return 'hammualliflik taklifini bekor qildi';
       case 'collaboration_removed':
-        return <>{usernameElement} <span className="text-muted-foreground">sizni hammualliflikdan olib tashladi</span></>;
+        return 'sizni hammualliflikdan olib tashladi';
       case 'collaboration_left':
-        return <>{usernameElement} <span className="text-muted-foreground">post hammuallifligidan chiqdi</span></>;
+        return 'post hammuallifligidan chiqdi';
       default:
-        return usernameElement;
+        return '';
     }
-  };
-  
+  })();
+
+  const othersText =
+    otherActorsCount > 0
+      ? otherActorsCount === 1
+        ? ' va yana 1 kishi'
+        : ` va yana ${otherActorsCount} kishi`
+      : '';
+
+  const ariaLabel = `${actorName}${othersText} ${actionText}, ${formatTime(group.latestAt)}`;
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: index * 0.05 }}
+      transition={{ duration: 0.2, delay: Math.min(index, 8) * 0.03 }}
+      role="button"
+      tabIndex={0}
+      aria-label={ariaLabel}
       className={cn(
-        'group flex items-start gap-3 p-4 cursor-pointer transition-all duration-200',
-        'hover:bg-accent/50 active:scale-[0.99]',
-        hasUnread && 'bg-primary/5 dark:bg-primary/10'
+        'group relative flex items-start gap-3 p-4 cursor-pointer transition-colors duration-150',
+        'hover:bg-accent/50 focus-visible:outline-none focus-visible:bg-accent/60',
+        hasUnread && 'bg-primary/5 dark:bg-primary/10',
       )}
-      onClick={handleItemClick}
+      onClick={openTarget}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openTarget();
+        }
+      }}
     >
-      {/* Avatar section */}
+      {hasUnread && (
+        <span
+          aria-hidden
+          className="absolute left-0 top-0 h-full w-0.5 bg-primary"
+        />
+      )}
+
+      {/* Avatarlar */}
       <div className="relative flex-shrink-0">
         {group.actors.length > 1 ? (
           <div className="relative h-12 w-16">
             {group.actors.slice(0, 3).map((actor, i) => (
-              <Avatar 
-                key={actor.id} 
+              <Avatar
+                key={actor.id}
                 className={cn(
-                  'h-10 w-10 absolute border-2 border-background cursor-pointer hover:z-10 transition-transform hover:scale-110',
+                  'h-10 w-10 absolute border-2 border-background cursor-pointer transition-transform hover:z-10 hover:scale-105',
                   i === 0 && 'left-0 top-0 z-[3]',
                   i === 1 && 'left-4 top-1 z-[2]',
-                  i === 2 && 'left-8 top-0 z-[1]'
+                  i === 2 && 'left-8 top-0 z-[1]',
                 )}
-                onClick={(e) => handleActorClick(e, actor)}
+                onClick={(event) => handleActorClick(event, actor)}
               >
                 <AvatarImage src={actor.avatar || undefined} className="object-cover" />
-                <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-sm font-medium">
+                <AvatarFallback className="bg-muted text-sm font-medium">
                   {(actor.displayName || actor.username || '?').charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
@@ -366,33 +476,41 @@ function GroupedNotificationItem({
             )}
           </div>
         ) : (
-          <div 
-            className="relative cursor-pointer group/avatar"
-            onClick={(e) => handleActorClick(e, firstActor)}
+          <div
+            className="relative cursor-pointer"
+            onClick={(event) => handleActorClick(event, firstActor)}
           >
-            <Avatar className="h-12 w-12 ring-2 ring-transparent group-hover/avatar:ring-primary/20 transition-all">
+            <Avatar className="h-12 w-12">
               <AvatarImage src={firstActor?.avatar || undefined} className="object-cover" />
-              <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-sm font-medium">
-                {(firstActor?.displayName || firstActor?.username || '?').charAt(0).toUpperCase()}
+              <AvatarFallback className="bg-muted text-sm font-medium">
+                {(firstActor?.displayName || firstActor?.username || '?')
+                  .charAt(0)
+                  .toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div className="absolute -bottom-1 -right-1">
-              <NotificationIcon type={group.type} size="default" />
+              <NotificationIcon type={group.type} />
             </div>
           </div>
         )}
       </div>
-      
-      {/* Content */}
+
+      {/* Matn */}
       <div className="flex-1 min-w-0 pt-0.5">
         <p className="text-sm leading-snug">
-          {getNotificationText()}
+          <span
+            className="font-semibold text-foreground hover:underline"
+            onClick={(event) => handleActorClick(event, firstActor)}
+          >
+            {actorName}
+          </span>
+          <span className="text-muted-foreground">
+            {othersText} {actionText}
+          </span>
         </p>
         <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
           <span>{formatTime(group.latestAt)}</span>
-          {hasUnread && (
-            <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-          )}
+          {hasUnread && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
         </p>
 
         {group.type === 'collaboration_invite' && collaborationId && (
@@ -404,7 +522,11 @@ function GroupedNotificationItem({
               disabled={collaborationBusy !== null}
               onClick={(event) => void handleCollaborationResponse(event, true)}
             >
-              <Check className="mr-1.5 h-3.5 w-3.5" />
+              {collaborationBusy === 'accept' ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Check className="mr-1.5 h-3.5 w-3.5" />
+              )}
               {collaborationBusy === 'accept' ? 'Qabul qilinmoqda...' : 'Qabul qilish'}
             </Button>
             <Button
@@ -415,7 +537,11 @@ function GroupedNotificationItem({
               disabled={collaborationBusy !== null}
               onClick={(event) => void handleCollaborationResponse(event, false)}
             >
-              <X className="mr-1.5 h-3.5 w-3.5" />
+              {collaborationBusy === 'decline' ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <X className="mr-1.5 h-3.5 w-3.5" />
+              )}
               {collaborationBusy === 'decline' ? 'Rad etilmoqda...' : 'Rad etish'}
             </Button>
             {group.postId && (
@@ -432,78 +558,68 @@ function GroupedNotificationItem({
           </div>
         )}
       </div>
-      
-      {/* Post thumbnail */}
+
+      {/* Post rasmi */}
       {group.postThumbnail && (
-        <div 
-          className="flex-shrink-0 h-14 w-14 rounded-xl overflow-hidden bg-muted cursor-pointer hover:opacity-90 transition-all hover:scale-105 shadow-md"
-          onClick={handlePostClick}
-        >
-          <img 
-            src={group.postThumbnail} 
-            alt="Post" 
-            className="h-full w-full object-cover"
-          />
-        </div>
+        <PostThumbnail url={group.postThumbnail} onClick={handlePostClick} />
       )}
-      
-      {/* Action button for posts without thumbnail */}
-      {!group.postThumbnail && (group.type === 'like' || group.type === 'comment' || group.type === 'mention') && group.postId && (
-        <Button 
-          variant="ghost" 
-          size="icon"
-          className="flex-shrink-0 h-10 w-10 rounded-full hover:bg-primary/10"
-          onClick={handlePostClick}
+
+      {!group.postThumbnail &&
+        group.postId &&
+        (group.type === 'like' || group.type === 'comment' || group.type === 'mention') && (
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Postni ochish"
+            className="flex-shrink-0 h-10 w-10 rounded-full"
+            onClick={handlePostClick}
+          >
+            <ChevronRight className="h-5 w-5 text-muted-foreground" />
+          </Button>
+        )}
+
+      {group.type === 'follow' && firstActor && (
+        <Button
+          variant="secondary"
+          size="sm"
+          className="flex-shrink-0 rounded-full px-4"
+          onClick={(event) => handleActorClick(event, firstActor)}
         >
-          <ChevronRight className="h-5 w-5 text-muted-foreground" />
+          Profil
         </Button>
       )}
-      
-      {/* Follow button */}
-      {group.type === 'follow' && (
-        <Button 
-          variant="default" 
-          size="sm" 
-          className="flex-shrink-0 rounded-full px-4 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/25"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (firstActor) {
-              navigate(`/user/${firstActor.username || firstActor.id}`);
-            }
-          }}
-        >
-          View
-        </Button>
-      )}
-      
-      {/* More options */}
+
+      {/* Qo'shimcha amallar */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="flex-shrink-0 h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={(e) => e.stopPropagation()}
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Boshqa amallar"
+            className="flex-shrink-0 h-8 w-8 opacity-60 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 transition-opacity"
+            onClick={(event) => event.stopPropagation()}
           >
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuContent align="end" className="w-52">
           {hasUnread && (
-            <DropdownMenuItem onClick={(e) => {
-              e.stopPropagation();
-              group.notifications.forEach(n => onMarkAsRead(n.id));
-            }}>
+            <DropdownMenuItem
+              onClick={(event) => {
+                event.stopPropagation();
+                markGroupRead();
+              }}
+            >
               <Check className="h-4 w-4 mr-2" />
-              Mark as read
+              O‘qilgan deb belgilash
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem 
-            onClick={handleDelete}
+          <DropdownMenuItem
+            onClick={(event) => void handleDelete(event)}
             className="text-destructive focus:text-destructive"
           >
             <Trash2 className="h-4 w-4 mr-2" />
-            Delete
+            O‘chirish
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -511,8 +627,8 @@ function GroupedNotificationItem({
   );
 }
 
-function NotificationGroup({ 
-  title, 
+function NotificationGroup({
+  title,
   groups,
   onMarkAsRead,
   onDelete,
@@ -522,17 +638,16 @@ function NotificationGroup({
   title: string;
   groups: GroupedNotification[];
   onMarkAsRead: (id: string) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => Promise<void> | void;
   onRespondCollaboration: (collaborationId: string, accept: boolean) => Promise<void>;
   startIndex: number;
 }) {
   if (groups.length === 0) return null;
-  
+
   return (
-    <div>
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3 flex items-center gap-2">
-          <Sparkles className="h-3 w-3" />
+    <section aria-label={title}>
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5">
           {title}
         </h3>
       </div>
@@ -548,7 +663,7 @@ function NotificationGroup({
           />
         ))}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -568,42 +683,49 @@ function NotificationSkeleton() {
 function PushNotificationBanner() {
   const { permission, supported, requestPermission } = useNotificationPermission();
   const navigate = useNavigate();
-  
-  if (!supported || permission === 'granted') return null;
-  
+  const [dismissed, setDismissed] = useState(false);
+
+  if (!supported || permission === 'granted' || permission === 'denied' || dismissed) {
+    return null;
+  }
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: -20 }}
+      initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="mx-4 mt-4 p-4 rounded-2xl bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/20"
+      className="mx-4 mt-4 p-4 rounded-2xl border border-primary/20 bg-primary/5"
     >
       <div className="flex items-start gap-3">
-        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-lg shadow-primary/25">
-          <Bell className="h-5 w-5 text-white" />
+        <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+          <Bell className="h-5 w-5 text-primary-foreground" />
         </div>
-        <div className="flex-1">
-          <h4 className="font-semibold text-sm">Enable Push Notifications</h4>
+        <div className="flex-1 min-w-0">
+          <h4 className="font-semibold text-sm">Push bildirishnomalarni yoqing</h4>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Stay updated when someone likes, comments, or follows you
+            Kimdir postingizni yoqtirsa, izoh qoldirsa yoki obuna bo‘lsa — darhol xabar beramiz.
           </p>
+          <div className="flex flex-wrap gap-2 mt-3">
+            <Button size="sm" className="rounded-full px-4" onClick={requestPermission}>
+              Yoqish
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="rounded-full px-4"
+              onClick={() => navigate('/settings')}
+            >
+              Sozlamalar
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="rounded-full px-4 text-muted-foreground"
+              onClick={() => setDismissed(true)}
+            >
+              Keyinroq
+            </Button>
+          </div>
         </div>
-      </div>
-      <div className="flex gap-2 mt-3 pl-13">
-        <Button 
-          size="sm" 
-          className="rounded-full px-4 bg-gradient-to-r from-primary to-primary/80"
-          onClick={requestPermission}
-        >
-          Enable
-        </Button>
-        <Button 
-          size="sm" 
-          variant="ghost" 
-          className="rounded-full px-4"
-          onClick={() => navigate('/settings')}
-        >
-          Settings
-        </Button>
       </div>
     </motion.div>
   );
@@ -611,44 +733,54 @@ function PushNotificationBanner() {
 
 export default function NotificationsPage() {
   const isMobile = useIsMobile();
-  const { 
-    notifications, 
-    unreadCount, 
-    loading, 
-    markAsRead, 
-    markAllAsRead, 
+  const {
+    notifications,
+    unreadCount,
+    loading,
+    isLoadingMore,
+    hasMore,
+    error,
+    loadMore,
+    markAsRead,
+    markAllAsRead,
     deleteNotification,
     respondToCollaboration,
     refetch,
   } = useNotifications();
   const [filter, setFilter] = useState<NotificationFilter>('all');
+  const [markingAll, setMarkingAll] = useState(false);
   const navigate = useNavigate();
 
   const handleRefresh = useCallback(async () => {
-    if (refetch) {
-      await refetch();
-    }
+    await refetch();
   }, [refetch]);
+
+  const handleMarkAllAsRead = useCallback(async () => {
+    if (markingAll) return;
+    setMarkingAll(true);
+    try {
+      await markAllAsRead();
+      toast.success('Hammasi o‘qilgan deb belgilandi');
+    } catch (err) {
+      console.error('Hammasini o‘qilgan deb belgilash xatosi:', err);
+      toast.error('Bildirishnomalarni belgilab bo‘lmadi');
+    } finally {
+      setMarkingAll(false);
+    }
+  }, [markAllAsRead, markingAll]);
 
   const filteredNotifications = useMemo(() => {
     if (filter === 'all') return notifications;
-    
+
     const typeMap: Record<NotificationFilter, Notification['type'][]> = {
       all: [],
       likes: ['like'],
       comments: ['comment'],
       follows: ['follow'],
       mentions: ['mention'],
-      collaborations: [
-        'collaboration_invite',
-        'collaboration_accepted',
-        'collaboration_declined',
-        'collaboration_revoked',
-        'collaboration_removed',
-        'collaboration_left',
-      ],
+      collaborations: COLLABORATION_TYPES,
     };
-    
+
     return notifications.filter((n) => typeMap[filter].includes(n.type));
   }, [notifications, filter]);
 
@@ -663,12 +795,16 @@ export default function NotificationsPage() {
 
     filteredNotifications.forEach((notification) => {
       const date = new Date(notification.created_at);
-      
+      if (Number.isNaN(date.getTime())) {
+        timeGroups.older.push(notification);
+        return;
+      }
+
       if (isToday(date)) {
         timeGroups.today.push(notification);
       } else if (isYesterday(date)) {
         timeGroups.yesterday.push(notification);
-      } else if (isThisWeek(date)) {
+      } else if (isThisWeek(date, { weekStartsOn: 1 })) {
         timeGroups.thisWeek.push(notification);
       } else if (isThisMonth(date)) {
         timeGroups.thisMonth.push(notification);
@@ -686,23 +822,18 @@ export default function NotificationsPage() {
     };
   }, [filteredNotifications]);
 
-  const filterCounts = useMemo(() => ({
-    all: notifications.length,
-    likes: notifications.filter(n => n.type === 'like').length,
-    comments: notifications.filter(n => n.type === 'comment').length,
-    follows: notifications.filter(n => n.type === 'follow').length,
-    mentions: notifications.filter(n => n.type === 'mention').length,
-    collaborations: notifications.filter(n =>
-      n.type === 'collaboration_invite' ||
-      n.type === 'collaboration_accepted' ||
-      n.type === 'collaboration_declined' ||
-      n.type === 'collaboration_revoked' ||
-      n.type === 'collaboration_removed' ||
-      n.type === 'collaboration_left'
-    ).length,
-  }), [notifications]);
+  const filterCounts = useMemo(
+    () => ({
+      all: notifications.length,
+      likes: notifications.filter((n) => n.type === 'like').length,
+      comments: notifications.filter((n) => n.type === 'comment').length,
+      follows: notifications.filter((n) => n.type === 'follow').length,
+      mentions: notifications.filter((n) => n.type === 'mention').length,
+      collaborations: notifications.filter((n) => COLLABORATION_TYPES.includes(n.type)).length,
+    }),
+    [notifications],
+  );
 
-  // Calculate start indices for animation
   let currentIndex = 0;
   const getStartIndex = (groups: GroupedNotification[]) => {
     const start = currentIndex;
@@ -712,34 +843,39 @@ export default function NotificationsPage() {
 
   const pageContent = (
     <div className="flex flex-col h-full bg-background pb-20 md:pb-4">
-      {/* Header */}
+      {/* Sarlavha */}
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80 border-b">
         <div className="flex items-center justify-between px-4 py-4">
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
-              Notifications
-            </h1>
+            <h1 className="text-xl font-bold">Bildirishnomalar</h1>
             {unreadCount > 0 && (
-              <Badge variant="default" className="rounded-full px-2.5 py-0.5 text-xs bg-gradient-to-r from-primary to-primary/80 shadow-lg shadow-primary/25">
-                {unreadCount}
+              <Badge variant="default" className="rounded-full px-2.5 py-0.5 text-xs">
+                {unreadCount > 99 ? '99+' : unreadCount}
               </Badge>
             )}
           </div>
           <div className="flex items-center gap-1">
             {unreadCount > 0 && (
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={markAllAsRead}
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={markingAll}
+                onClick={() => void handleMarkAllAsRead()}
                 className="text-primary hover:text-primary hover:bg-primary/10 rounded-full"
               >
-                <Check className="h-4 w-4 mr-1.5" />
-                Mark all
+                {markingAll ? (
+                  <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4 mr-1.5" />
+                )}
+                <span className="hidden sm:inline">Hammasini o‘qildi</span>
+                <span className="sm:hidden">O‘qildi</span>
               </Button>
             )}
             <Button
               variant="ghost"
               size="icon"
+              aria-label="Bildirishnoma sozlamalari"
               className="rounded-full"
               onClick={() => navigate('/settings')}
             >
@@ -747,46 +883,45 @@ export default function NotificationsPage() {
             </Button>
           </div>
         </div>
-        
-        {/* Filter Tabs */}
+
+        {/* Filtrlar */}
         <div className="px-4 pb-3">
           <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-            {(['all', 'likes', 'comments', 'follows', 'mentions', 'collaborations'] as NotificationFilter[]).map((f) => {
+            {(
+              ['all', 'likes', 'comments', 'follows', 'mentions', 'collaborations'] as NotificationFilter[]
+            ).map((f) => {
               const isActive = filter === f;
               const count = filterCounts[f];
-              
+
               return (
-                <motion.button
+                <button
                   key={f}
+                  type="button"
+                  aria-pressed={isActive}
                   onClick={() => setFilter(f)}
-                  whileTap={{ scale: 0.95 }}
                   className={cn(
-                    'px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200',
+                    'px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors',
                     isActive
-                      ? 'bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-lg shadow-primary/25'
-                      : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground',
                   )}
                 >
-                  {f.charAt(0).toUpperCase() + f.slice(1)}
+                  {FILTER_LABELS[f]}
                   {count > 0 && (
-                    <span className={cn(
-                      "ml-1.5 text-xs",
-                      isActive ? "opacity-80" : "opacity-60"
-                    )}>
+                    <span className={cn('ml-1.5 text-xs', isActive ? 'opacity-80' : 'opacity-60')}>
                       {count}
                     </span>
                   )}
-                </motion.button>
+                </button>
               );
             })}
           </div>
         </div>
       </div>
 
-      {/* Push Notification Banner */}
       <PushNotificationBanner />
 
-      {/* Notifications List */}
+      {/* Ro'yxat */}
       <ScrollArea className="flex-1">
         {loading ? (
           <div className="divide-y divide-border/50">
@@ -794,64 +929,115 @@ export default function NotificationsPage() {
               <NotificationSkeleton key={i} />
             ))}
           </div>
+        ) : error && notifications.length === 0 ? (
+          <div className="p-8 text-center">
+            <div className="h-16 w-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+              <AlertCircle className="h-8 w-8 text-destructive" />
+            </div>
+            <h3 className="font-semibold text-base">{error}</h3>
+            <p className="text-muted-foreground text-sm mt-2 max-w-xs mx-auto">
+              Internet aloqangizni tekshirib, qaytadan urinib ko‘ring.
+            </p>
+            <Button className="mt-4 rounded-full" onClick={() => void refetch()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Qayta urinish
+            </Button>
+          </div>
         ) : filteredNotifications.length === 0 ? (
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-8 text-center"
-          >
-            <div className="h-20 w-20 rounded-full bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center mx-auto mb-4 shadow-inner">
+          <div className="p-8 text-center">
+            <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
               <BellOff className="h-10 w-10 text-muted-foreground/50" />
             </div>
-            <h3 className="font-semibold text-lg">No notifications yet</h3>
+            <h3 className="font-semibold text-lg">Bildirishnomalar yo‘q</h3>
             <p className="text-muted-foreground text-sm mt-2 max-w-xs mx-auto">
-              When someone interacts with your content, you'll see it here.
+              {FILTER_EMPTY_TEXT[filter]}
             </p>
-          </motion.div>
+            {filter !== 'all' && (
+              <Button
+                variant="ghost"
+                className="mt-4 rounded-full"
+                onClick={() => setFilter('all')}
+              >
+                Hammasini ko‘rsatish
+              </Button>
+            )}
+          </div>
         ) : (
           <div className="pb-24">
-            <AnimatePresence>
-              <NotificationGroup 
-                title="Today" 
-                groups={groupedNotifications.today}
-                onMarkAsRead={markAsRead}
-                onDelete={deleteNotification}
-                onRespondCollaboration={respondToCollaboration}
-                startIndex={getStartIndex(groupedNotifications.today)}
-              />
-              <NotificationGroup 
-                title="Yesterday" 
-                groups={groupedNotifications.yesterday}
-                onMarkAsRead={markAsRead}
-                onDelete={deleteNotification}
-                onRespondCollaboration={respondToCollaboration}
-                startIndex={getStartIndex(groupedNotifications.yesterday)}
-              />
-              <NotificationGroup 
-                title="This Week" 
-                groups={groupedNotifications.thisWeek}
-                onMarkAsRead={markAsRead}
-                onDelete={deleteNotification}
-                onRespondCollaboration={respondToCollaboration}
-                startIndex={getStartIndex(groupedNotifications.thisWeek)}
-              />
-              <NotificationGroup 
-                title="This Month" 
-                groups={groupedNotifications.thisMonth}
-                onMarkAsRead={markAsRead}
-                onDelete={deleteNotification}
-                onRespondCollaboration={respondToCollaboration}
-                startIndex={getStartIndex(groupedNotifications.thisMonth)}
-              />
-              <NotificationGroup 
-                title="Older" 
-                groups={groupedNotifications.older}
-                onMarkAsRead={markAsRead}
-                onDelete={deleteNotification}
-                onRespondCollaboration={respondToCollaboration}
-                startIndex={getStartIndex(groupedNotifications.older)}
-              />
-            </AnimatePresence>
+            {error && (
+              <div className="mx-4 mt-3 flex items-center gap-2 rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                <span className="flex-1">{error}</span>
+                <button
+                  type="button"
+                  className="font-semibold underline"
+                  onClick={() => void refetch()}
+                >
+                  Yangilash
+                </button>
+              </div>
+            )}
+
+            <NotificationGroup
+              title="Bugun"
+              groups={groupedNotifications.today}
+              onMarkAsRead={markAsRead}
+              onDelete={deleteNotification}
+              onRespondCollaboration={respondToCollaboration}
+              startIndex={getStartIndex(groupedNotifications.today)}
+            />
+            <NotificationGroup
+              title="Kecha"
+              groups={groupedNotifications.yesterday}
+              onMarkAsRead={markAsRead}
+              onDelete={deleteNotification}
+              onRespondCollaboration={respondToCollaboration}
+              startIndex={getStartIndex(groupedNotifications.yesterday)}
+            />
+            <NotificationGroup
+              title="Shu hafta"
+              groups={groupedNotifications.thisWeek}
+              onMarkAsRead={markAsRead}
+              onDelete={deleteNotification}
+              onRespondCollaboration={respondToCollaboration}
+              startIndex={getStartIndex(groupedNotifications.thisWeek)}
+            />
+            <NotificationGroup
+              title="Shu oy"
+              groups={groupedNotifications.thisMonth}
+              onMarkAsRead={markAsRead}
+              onDelete={deleteNotification}
+              onRespondCollaboration={respondToCollaboration}
+              startIndex={getStartIndex(groupedNotifications.thisMonth)}
+            />
+            <NotificationGroup
+              title="Avvalroq"
+              groups={groupedNotifications.older}
+              onMarkAsRead={markAsRead}
+              onDelete={deleteNotification}
+              onRespondCollaboration={respondToCollaboration}
+              startIndex={getStartIndex(groupedNotifications.older)}
+            />
+
+            {hasMore && (
+              <div className="flex justify-center py-6">
+                <Button
+                  variant="outline"
+                  className="rounded-full px-6"
+                  disabled={isLoadingMore}
+                  onClick={() => void loadMore()}
+                >
+                  {isLoadingMore ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Yuklanmoqda...
+                    </>
+                  ) : (
+                    'Ko‘proq yuklash'
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </ScrollArea>
