@@ -130,8 +130,21 @@ function typeFromCategory(
   return 'web';
 }
 
-function yacyBaseUrl() {
-  return (process.env.YACY_SEARCH_BASE || 'https://peer.yacy.space').replace(/\/+$/, '');
+function yacyBaseUrls() {
+  const configured = (process.env.YACY_SEARCH_BASES || process.env.YACY_SEARCH_BASE || '')
+    .split(',')
+    .map((value) => value.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+
+  if (configured.length > 0) return configured;
+
+  return [
+    'https://peer.yacy.space',
+    'https://yacy.searchlab.eu',
+    'https://search.lomig.me',
+    'https://yacy.ecosys.eu',
+    'https://search.webproject.link',
+  ];
 }
 
 function yacyQuery(query: string, category: GlobalCategory) {
@@ -153,16 +166,15 @@ function normalizePublishedAt(value: unknown): string | null {
   return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
 }
 
-async function runYacySearch(input: {
+async function fetchYacyPeer(input: {
+  baseUrl: string;
   query: string;
   category: GlobalCategory;
   page: number;
   pageSize: number;
-  locale: Locale;
 }) {
-  const { query, category, page, pageSize } = input;
+  const { baseUrl, query, category, page, pageSize } = input;
   const startRecord = (page - 1) * pageSize;
-
   const params = new URLSearchParams({
     query: yacyQuery(query, category),
     resource: 'global',
@@ -176,11 +188,11 @@ async function runYacySearch(input: {
   });
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 14000);
+  const timer = setTimeout(() => controller.abort(), 7500);
 
   try {
     const response = await fetch(
-      yacyBaseUrl() + '/yacysearch.json?' + params.toString(),
+      baseUrl + '/yacysearch.json?' + params.toString(),
       {
         method: 'GET',
         signal: controller.signal,
@@ -191,14 +203,11 @@ async function runYacySearch(input: {
       },
     );
 
-    if (!response.ok) {
-      throw new Error('YaCy HTTP ' + response.status);
-    }
+    if (!response.ok) throw new Error(baseUrl + ' HTTP ' + response.status);
 
     const data = await response.json();
     const channel = Array.isArray(data?.channels) ? data.channels[0] : null;
     const items = Array.isArray(channel?.items) ? channel.items : [];
-
     const seen = new Set<string>();
     const results: SearchResult[] = [];
 
@@ -237,10 +246,11 @@ async function runYacySearch(input: {
       channel?.totalResults ??
       channel?.['opensearch:totalResults'] ??
       results.length;
-
-    const totalEstimated = Number(String(totalRaw).replace(/[^0-9]/g, '')) || results.length;
+    const totalEstimated =
+      Number(String(totalRaw).replace(/[^0-9]/g, '')) || results.length;
 
     return {
+      baseUrl,
       results,
       totalEstimated,
       hasMore:
@@ -251,6 +261,82 @@ async function runYacySearch(input: {
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function runYacySearch(input: {
+  query: string;
+  category: GlobalCategory;
+  page: number;
+  pageSize: number;
+  locale: Locale;
+}) {
+  const peers = yacyBaseUrls();
+
+  const settled = await Promise.allSettled(
+    peers.map((baseUrl) =>
+      fetchYacyPeer({
+        baseUrl,
+        query: input.query,
+        category: input.category,
+        page: input.page,
+        pageSize: input.pageSize,
+      }),
+    ),
+  );
+
+  const successful = settled
+    .filter((entry): entry is PromiseFulfilledResult<Awaited<ReturnType<typeof fetchYacyPeer>>> =>
+      entry.status === 'fulfilled',
+    )
+    .map((entry) => entry.value)
+    .sort((a, b) => b.results.length - a.results.length);
+
+  if (successful.length === 0) {
+    const reasons = settled
+      .filter((entry): entry is PromiseRejectedResult => entry.status === 'rejected')
+      .map((entry) =>
+        entry.reason instanceof Error ? entry.reason.message : String(entry.reason),
+      )
+      .join(' | ');
+    throw new Error(reasons || 'No YaCy peer responded');
+  }
+
+  return successful[0];
+}
+
+function navigationalResult(
+  query: string,
+  category: GlobalCategory,
+): Promise<SearchResult | null> {
+  if (category !== 'all' && category !== 'web') return Promise.resolve(null);
+
+  const value = query.trim().toLowerCase();
+  if (
+    /\s/.test(value) ||
+    !/^(?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s]*)?$/.test(value)
+  ) {
+    return Promise.resolve(null);
+  }
+
+  const url = /^https?:\/\//.test(value) ? value : 'https://' + value;
+  const host = sourceFromUrl(url);
+  if (!host || host === 'web') return Promise.resolve(null);
+
+  return hashId('nav:' + url).then((id) => ({
+    id,
+    type: 'web',
+    title: host,
+    snippet: "To'g'ridan-to'g'ri veb-manzil.",
+    url,
+    displayUrl: displayUrl(url),
+    thumbnailUrl: null,
+    source: host,
+    publishedAt: null,
+    author: null,
+    width: null,
+    height: null,
+    durationSeconds: null,
+  }));
 }
 
 function categoryInstruction(category: GlobalCategory) {
@@ -558,6 +644,7 @@ export default async function handler(req: any, res: any) {
       });
       results = yacy.results;
       totalEstimated = yacy.totalEstimated;
+      engine = 'yacy-freeworld:' + sourceFromUrl(yacy.baseUrl);
     } catch (error) {
       upstreamErrors.push(
         'yacy: ' + (error instanceof Error ? error.message : String(error)),
@@ -585,6 +672,14 @@ export default async function handler(req: any, res: any) {
         upstreamErrors.push(
           'gemini: ' + (error instanceof Error ? error.message : String(error)),
         );
+      }
+    }
+
+    if (page === 1) {
+      const direct = await navigationalResult(query, category);
+      if (direct && !results.some((item) => item.url === direct.url)) {
+        results = [direct, ...results].slice(0, pageSize);
+        totalEstimated = Math.max(totalEstimated, results.length);
       }
     }
 
