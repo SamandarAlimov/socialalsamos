@@ -14,7 +14,9 @@ Reference implementations:
 | Repo | File |
 |---|---|
 | socialalsamos | `src/lib/messageStructuredPayload.ts` |
+| socialalsamos | `src/components/messages/EnhancedMessageBubble.tsx` |
 | alsamos-superapp | `lib/features/messages/data/models/message_payload_compat.dart` |
+| alsamos-superapp | `lib/features/messages/data/models/message_model.dart` |
 
 ---
 
@@ -41,7 +43,7 @@ legacy rows predate it.
 |---|---|---|
 | `content` | text | Human-readable transport text. Never the only source of truth. |
 | `media_type` | text | Discriminator. See the registry in section 5. |
-| `media_url` | text | For location types: `"<latitude>,<longitude>"`. |
+| `media_url` | text | Media file URL. For location types: `"<latitude>,<longitude>"`. |
 | `metadata` | jsonb | Canonical structured payload. Primary source of truth. |
 | `location_payload` | jsonb | Denormalized canonical location. Mirror of `metadata.location`. |
 | `live_location_expires_at` | timestamptz | Live location expiry. |
@@ -113,28 +115,29 @@ Coordinate regex, identical in both clients:
 Older rows and share links encode location inside `content`:
 
 ```
-\u{1F4CD} LOCATION:<lat>,<lng>|<address>
-\u{1F4CD} LOCATION:<lat>,<lng>|<address>|LIVE:<expiresAt>
+<pushpin> LOCATION:<lat>,<lng>|<address>
+<pushpin> LOCATION:<lat>,<lng>|<address>|LIVE:<expiresAt>
 ```
 
-The prefix is literally the round-pushpin emoji, a space, then `LOCATION:`.
+The prefix is literally the round-pushpin emoji (U+1F4CD), a space, then
+`LOCATION:`.
 
 **This is a data protocol, not UI text.** It MUST NOT be shown to the user raw.
 
-> **Known divergence D1.** The TS client parses this prefix explicitly, including
-> the `LIVE:` segment. The Dart client does not: it only regex-scans `content`
-> for `lat,lng`, and only when `media_type` is already `location` or
-> `live_location`. Consequences on Flutter:
-> - a legacy row with `media_type` null or `text` renders as raw
->   `LOCATION:...` text
-> - the `LIVE:` segment is ignored, so a live location degrades to static
->
-> Required fix, Dart side: add a `LOCATION:` prefix branch to the location
-> resolution that runs regardless of `media_type`, and read the `LIVE:` segment
-> into `expiresAt` / `live: true`.
+Both clients now parse it **independently of `media_type`**, because legacy rows
+frequently carry a null or `text` media type:
+
+| Client | Entry point |
+|---|---|
+| TS | `parseMessageLocation()` |
+| Dart | `parseLegacyLocationContent()`, wired into `hydrateStructuredMessageMetadata()` and `normalizeLocationContentForLegacyRenderer()` |
+
+The `LIVE:<expiresAt>` segment maps to `live: true` and `expiresAt`.
 
 New writers MUST NOT emit this format. Write the canonical payload instead.
 The parser stays for backward compatibility only.
+
+> Was tracked as **D1**. Resolved.
 
 ---
 
@@ -142,26 +145,63 @@ The parser stays for backward compatibility only.
 
 Adding a value here without implementing it in both clients is a protocol break.
 
-| `media_type` | Canonical payload | TS | Dart |
+| `media_type` | Source of truth | Web | Flutter |
 |---|---|---|---|
-| `text` | - | yes | yes |
-| `image` | - | yes | yes |
-| `video` | - | yes | yes |
-| `audio` | - | yes | yes |
-| `document` | - | yes | yes |
+| `text` | `content` | yes | yes |
+| `image` | `media_url` | yes | yes |
+| `video` | `media_url` | yes | yes |
+| `audio` | `media_url` | yes | yes |
+| `document` | `media_url` | yes | yes |
 | `location` | `metadata.location` | yes | yes |
 | `live_location` | `metadata.location` with `live: true` | yes | yes |
 | `poll` | `metadata.poll` | yes | yes |
-| `sticker` | `metadata.sticker` | yes | **unverified** |
-| `gif` | `metadata.gif` | yes | **unverified** |
-| `call_history` | `metadata.call` | yes | **unverified** |
+| `sticker` | `media_url` | yes | model ok |
+| `gif` | `media_url` | yes | model ok |
+| `call_history` | `content` as JSON | yes | **missing** |
 
-> **Open item D2.** `sticker`, `gif` and `call_history` are produced by the web
-> client but their canonical payload shape is not yet defined in this document
-> and the Dart read path has not been confirmed. Until that is closed, a sticker
-> or GIF sent from web may render as a plain image or plain text on Flutter.
-> Next step: define the payload shapes below and verify
-> `lib/features/messages/data/models/message_model.dart` handles them.
+### `sticker` and `gif`
+
+No structured payload. The renderer needs only:
+
+- `media_type` = `sticker` or `gif`
+- `media_url` = the sticker / GIF file URL
+
+`content` is unused and MUST be ignored for these types. Both are rendered
+without a bubble background and without a tail. On the web this is
+`StickerMessage`; on Flutter `Message.mediaUrl` and `Message.mediaType` carry
+everything needed, so only the presentation layer has to opt into the
+background-less style.
+
+Optional metadata, additive and non-breaking: `metadata.sticker_pack_id`,
+`metadata.sticker_emoji`, `metadata.width`, `metadata.height`.
+
+### `call_history`
+
+`content` holds a JSON document, not prose:
+
+```json
+{
+  "type": "audio",
+  "status": "ended",
+  "duration": 154,
+  "timestamp": "2026-08-31T04:12:00.000Z",
+  "caller_id": "<uuid>",
+  "callee_id": "<uuid>"
+}
+```
+
+- `type`: `audio` or `video`
+- `duration`: seconds, optional
+- "mine" is decided by `caller_id == currentUserId`, **not** by `sender_id`
+
+Legacy fallback, still accepted on read: a human-readable string beginning with
+the telephone-receiver emoji (U+1F4DE), where `video` anywhere in the string
+means a video call and the first `mm:ss` or `hh:mm:ss` match is the duration.
+
+> **Open item D2.** The Dart `Message` model has no `call_history` parser, so
+> such a row currently surfaces as raw JSON text on Flutter. Required fix,
+> Dart side: add a `callHistory` getter mirroring the shape above plus the
+> legacy fallback, and render it as a system-style row rather than a bubble.
 
 ---
 
@@ -188,6 +228,11 @@ Rules:
 - `multiple` accepts aliases `allowMultiple`, `allows_multiple`.
   `anonymous` accepts `isAnonymous`, `is_anonymous`.
 
+Live vote counts are **not** stored in `metadata`. They live in the
+`message_poll_votes` table, keyed by `message_id`, `user_id`, `option_id`.
+The `votes` field in the payload is a placeholder and MUST NOT be trusted as a
+tally.
+
 ### Read precedence
 
 1. `metadata.poll`
@@ -198,17 +243,18 @@ Rules:
 
 ### Transport text suppression
 
-When `media_type = 'poll'` and a canonical poll resolves, the native poll widget
-is authoritative and `content` MUST NOT be rendered as a second text bubble.
+When a canonical poll resolves, the native poll widget is authoritative and
+`content` MUST NOT be rendered as a second text bubble.
 
-> **Known divergence D3.** The Dart client enforces this in
-> `normalizeLocationContentForLegacyRenderer`, which returns an empty string for
-> a recognized poll. The TS client has no equivalent suppression helper, so the
-> web bubble can render the question and option lines as text in addition to the
-> poll widget.
->
-> Required fix, TS side: suppress `content` in the bubble when
-> `parseMessagePoll()` returns non-null.
+Both clients satisfy this today:
+
+- **Web**: `EnhancedMessageBubble` renders the `MessagePoll` branch instead of
+  the text branch, and the text branch is additionally gated on `!pollData`.
+- **Flutter**: `normalizeLocationContentForLegacyRenderer()` returns an empty
+  string once a poll is recognized.
+
+> Was tracked as **D3**. Not a real divergence - closed after inspecting the
+> web bubble. Do not "fix" it again.
 
 ---
 
@@ -256,14 +302,16 @@ TS reference: `buildPollMessageFields()`.
    platform.
 4. Never repurpose an existing `media_type` value. Add a new one.
 5. Never delete a legacy parser. Old rows live forever.
+6. Before recording a divergence here, read the actual renderer on both sides.
+   D3 was recorded from an assumption and turned out to be already handled.
 
 ---
 
-## 9. Open items summary
+## 9. Open items
 
-| ID | Side | Item |
-|---|---|---|
-| D1 | Dart | Parse the legacy `LOCATION:` content protocol, including `LIVE:` |
-| D2 | Both | Define `sticker`, `gif`, `call_history` payload shapes; verify Dart read path |
-| D3 | TS | Suppress poll transport text when a canonical poll resolves |
-| D4 | Dart | Audit `messages_repository.dart` against the write contract |
+| ID | Side | Status | Item |
+|---|---|---|---|
+| D1 | Dart | **done** | Parse the legacy `LOCATION:` content protocol, including `LIVE:` |
+| D2 | Dart | open | `call_history` parser and renderer. `sticker` / `gif` need only presentation styling |
+| D3 | - | **not an issue** | Poll transport text was already suppressed on both sides |
+| D4 | Dart | open | Audit `messages_repository.dart` against the write contract |
