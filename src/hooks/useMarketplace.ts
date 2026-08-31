@@ -85,6 +85,106 @@ export interface CartItem {
   variant?: ProductVariant | null;
 }
 
+// =====================================================================
+// Error handling
+// ---------------------------------------------------------------------
+// Supabase rejects with a plain object ({ message, details, hint, code }),
+// not an Error. Code that tested `err instanceof Error` therefore discarded
+// every real database message and showed a generic fallback instead, which is
+// how an empty catalogue could look identical to a broken query.
+// =====================================================================
+
+function describeSupabaseError(error: unknown, fallback: string): string {
+  if (!error) return fallback;
+  if (error instanceof Error) return error.message || fallback;
+
+  if (typeof error === 'object') {
+    const e = error as { message?: string; details?: string; hint?: string; code?: string };
+    const parts = [e.message, e.details, e.hint].filter(Boolean) as string[];
+    if (parts.length > 0) {
+      return e.code ? `${parts.join(' — ')} (${e.code})` : parts.join(' — ');
+    }
+  }
+
+  return typeof error === 'string' && error ? error : fallback;
+}
+
+/**
+ * True for "I cannot join these two tables" errors, i.e. a missing foreign key
+ * rather than a missing row. PGRST200/PGRST201 fail the *entire* request, so a
+ * single unresolvable embed returns zero products.
+ */
+function isRelationshipError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const e = error as { message?: string; details?: string; hint?: string; code?: string };
+  const code = String(e.code ?? '');
+  if (code === 'PGRST200' || code === 'PGRST201') return true;
+
+  const text = `${e.message ?? ''} ${e.details ?? ''} ${e.hint ?? ''}`.toLowerCase();
+  return text.includes('relationship') || text.includes('could not embed');
+}
+
+// =====================================================================
+// Product select
+// ---------------------------------------------------------------------
+// `profile:profiles(...)` nested inside `sellers` needs a foreign key between
+// sellers and profiles. Where sellers.user_id references auth.users instead,
+// the embed is unresolvable and the catalogue query dies. The nested profile is
+// cosmetic (avatar, online dot), so it must never be able to hide the products.
+// =====================================================================
+
+const SELLER_EMBED_WITH_PROFILE = `seller:sellers(
+      id, user_id, business_name, business_type, description, logo_url, location,
+      is_verified, rating, total_sales,
+      profile:profiles(username, display_name, avatar_url, is_online, last_seen, followers_count)
+    )`;
+
+const SELLER_EMBED_PLAIN = `seller:sellers(
+      id, user_id, business_name, business_type, description, logo_url, location,
+      is_verified, rating, total_sales
+    )`;
+
+// Sticky for the session: once the join is known to be missing, stop paying for
+// a failing round trip on every query.
+let sellerProfileEmbedUnavailable = false;
+
+function productSelect(): string {
+  const sellerEmbed = sellerProfileEmbedUnavailable
+    ? SELLER_EMBED_PLAIN
+    : SELLER_EMBED_WITH_PROFILE;
+
+  return `
+    *,
+    ${sellerEmbed},
+    category:product_categories(id, name, slug, icon),
+    images:product_images(id, url, position)
+  `;
+}
+
+type QueryResult = { data: any[] | null; error: any };
+
+/**
+ * Runs a product query and, if the seller->profile join turns out not to
+ * exist, retries once without it. Any other error is returned untouched so the
+ * caller can surface it.
+ */
+async function runProductQuery(
+  build: (select: string) => PromiseLike<QueryResult>,
+): Promise<QueryResult> {
+  const first = await build(productSelect());
+
+  if (first.error && isRelationshipError(first.error) && !sellerProfileEmbedUnavailable) {
+    console.warn(
+      'Marketplace: seller profile embed unavailable, retrying without it.',
+      first.error,
+    );
+    sellerProfileEmbedUnavailable = true;
+    return build(productSelect());
+  }
+
+  return first;
+}
+
 export function getCartItemUnitPrice(item: CartItem): number {
   return Number(item.variant?.price ?? item.product?.price ?? 0);
 }
@@ -174,7 +274,8 @@ export function useCategories() {
         .order('position');
 
       if (fetchError) {
-        setError(fetchError.message);
+        console.error('Marketplace categories failed:', fetchError);
+        setError(describeSupabaseError(fetchError, 'Kategoriyalar yuklanmadi'));
       } else if (data) {
         data.forEach(category => categoryIdBySlug.set(category.slug, category.id));
         setCategories(data);
@@ -214,47 +315,36 @@ export function useProducts(categorySlug?: string, searchQuery?: string) {
       let cursor: { created_at: string; id: string } | null = null;
 
       while (true) {
-        let pageQuery = supabase
-          .from('products')
-          .select(`
-            *,
-            seller:sellers(
-              id,
-              user_id,
-              business_name,
-              business_type,
-              logo_url,
-              location,
-              is_verified,
-              rating,
-              total_sales,
-              profile:profiles(username, display_name, avatar_url, is_online, last_seen, followers_count)
-            ),
-            category:product_categories(id, name, slug, icon),
-            images:product_images(id, url, position)
-          `)
-          .eq('status', 'active')
-          .order('created_at', { ascending: false })
-          .order('id', { ascending: false })
-          .limit(PRODUCT_PAGE_SIZE);
+        const currentCursor = cursor;
 
-        if (categoryId) {
-          pageQuery = pageQuery.eq('category_id', categoryId);
-        }
+        const { data, error: fetchError } = await runProductQuery((select) => {
+          let pageQuery = db
+            .from('products')
+            .select(select)
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .order('id', { ascending: false })
+            .limit(PRODUCT_PAGE_SIZE);
 
-        if (safeSearch) {
-          pageQuery = pageQuery.or(
-            `title.ilike.%${safeSearch}%,description.ilike.%${safeSearch}%`,
-          );
-        }
+          if (categoryId) {
+            pageQuery = pageQuery.eq('category_id', categoryId);
+          }
 
-        if (cursor) {
-          pageQuery = pageQuery.or(
-            `created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`,
-          );
-        }
+          if (safeSearch) {
+            pageQuery = pageQuery.or(
+              `title.ilike.%${safeSearch}%,description.ilike.%${safeSearch}%`,
+            );
+          }
 
-        const { data, error: fetchError } = await pageQuery;
+          if (currentCursor) {
+            pageQuery = pageQuery.or(
+              `created_at.lt.${currentCursor.created_at},and(created_at.eq.${currentCursor.created_at},id.lt.${currentCursor.id})`,
+            );
+          }
+
+          return pageQuery;
+        });
+
         if (fetchError) throw fetchError;
 
         const page = data ?? [];
@@ -278,17 +368,13 @@ export function useProducts(categorySlug?: string, searchQuery?: string) {
         likedProductIds = likes?.map(like => like.product_id) || [];
       }
 
-      setProducts(rows.map(row => ({
-        ...row,
-        seller: row.seller as unknown as Seller,
-        category: row.category as unknown as Category,
-        images: ((row.images ?? []) as { id: string; url: string; position: number }[])
-          .slice()
-          .sort((a, b) => a.position - b.position),
-        is_liked: likedProductIds.includes(row.id),
-      })));
+      setProducts(rows.map(row => mapMarketplaceProduct(row, likedProductIds)));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Mahsulotlar yuklanmadi');
+      // Log the raw object: the message alone hides the PostgREST code that
+      // says whether this is a missing table, a broken embed or RLS.
+      console.error('Marketplace products failed:', err);
+      setProducts([]);
+      setError(describeSupabaseError(err, 'Mahsulotlar yuklanmadi'));
     } finally {
       setIsLoading(false);
     }
@@ -343,27 +429,20 @@ export function useNearbyMarketplaceProducts(center?: MarketplaceCenter | null, 
       const dLat = radiusKm / 111;
       const dLng = radiusKm / (111 * Math.max(0.2, Math.cos((center.latitude * Math.PI) / 180)));
 
-      const { data, error: fetchError } = await db
-        .from('products')
-        .select(`
-          *,
-          seller:sellers(
-            id, user_id, business_name, business_type, logo_url, location,
-            is_verified, rating, total_sales,
-            profile:profiles(username, display_name, avatar_url, is_online, last_seen, followers_count)
-          ),
-          category:product_categories(id, name, slug, icon),
-          images:product_images(id, url, position)
-        `)
-        .eq('status', 'active')
-        .not('latitude', 'is', null)
-        .not('longitude', 'is', null)
-        .gte('latitude', center.latitude - dLat)
-        .lte('latitude', center.latitude + dLat)
-        .gte('longitude', center.longitude - dLng)
-        .lte('longitude', center.longitude + dLng)
-        .order('created_at', { ascending: false })
-        .limit(100);
+      const { data, error: fetchError } = await runProductQuery((select) =>
+        db
+          .from('products')
+          .select(select)
+          .eq('status', 'active')
+          .not('latitude', 'is', null)
+          .not('longitude', 'is', null)
+          .gte('latitude', center.latitude - dLat)
+          .lte('latitude', center.latitude + dLat)
+          .gte('longitude', center.longitude - dLng)
+          .lte('longitude', center.longitude + dLng)
+          .order('created_at', { ascending: false })
+          .limit(100),
+      );
 
       if (fetchError) throw fetchError;
 
@@ -401,8 +480,9 @@ export function useNearbyMarketplaceProducts(center?: MarketplaceCenter | null, 
 
       setProducts(result);
     } catch (err) {
+      console.error("Marketplace nearby listings failed:", err);
       setProducts([]);
-      setError(err instanceof Error ? err.message : "Yaqin e'lonlar yuklanmadi");
+      setError(describeSupabaseError(err, "Yaqin e'lonlar yuklanmadi"));
     } finally {
       setIsLoading(false);
     }
@@ -419,23 +499,22 @@ export function useNearbyMarketplaceProducts(center?: MarketplaceCenter | null, 
 /** Marketplace deep-link kartasini ID bo'yicha to'liq yuklaydi. */
 export async function fetchMarketplaceProductById(productId: string): Promise<Product | null> {
   if (!productId) return null;
-  const { data, error } = await db
-    .from('products')
-    .select(`
-      *,
-      seller:sellers(
-        id, user_id, business_name, business_type, description, logo_url, location,
-        is_verified, rating, total_sales,
-        profile:profiles(username, display_name, avatar_url, is_online, last_seen, followers_count)
-      ),
-      category:product_categories(id, name, slug, icon),
-      images:product_images(id, url, position)
-    `)
-    .eq('id', productId)
-    .maybeSingle();
 
-  if (error || !data) return null;
-  return mapMarketplaceProduct(data);
+  const { data, error } = await runProductQuery((select) =>
+    db
+      .from('products')
+      .select(select)
+      .eq('id', productId)
+      .limit(1),
+  );
+
+  if (error) {
+    console.error('Marketplace product lookup failed:', error);
+    return null;
+  }
+
+  const row = (data ?? [])[0];
+  return row ? mapMarketplaceProduct(row) : null;
 }
 
 const RECENTLY_VIEWED_KEY = 'alsamos:marketplace:recently-viewed';
@@ -497,22 +576,18 @@ export function useSellerResponseStats(sellerUserId?: string | null) {
 async function fetchMarketplaceProductsByIds(ids: string[]): Promise<Product[]> {
   if (ids.length === 0) return [];
 
-  const { data, error } = await db
-    .from('products')
-    .select(`
-      *,
-      seller:sellers(
-        id, user_id, business_name, business_type, description, logo_url, location,
-        is_verified, rating, total_sales,
-        profile:profiles(username, display_name, avatar_url, is_online, last_seen, followers_count)
-      ),
-      category:product_categories(id, name, slug, icon),
-      images:product_images(id, url, position)
-    `)
-    .in('id', ids)
-    .eq('status', 'active');
+  const { data, error } = await runProductQuery((select) =>
+    db
+      .from('products')
+      .select(select)
+      .in('id', ids)
+      .eq('status', 'active'),
+  );
 
-  if (error || !data) return [];
+  if (error || !data) {
+    if (error) console.warn('Recently viewed products unavailable:', error);
+    return [];
+  }
 
   const byId = new Map((data as any[]).map(row => [row.id, mapMarketplaceProduct(row)]));
   return ids.map(id => byId.get(id)).filter(Boolean) as Product[];
@@ -719,6 +794,7 @@ export function useCart() {
       })));
     } else {
       // Production may briefly lag the frontend migration. Keep legacy carts usable.
+      console.warn('Cart variant query failed, falling back to legacy cart:', variantQuery.error);
       const legacyQuery = await supabase
         .from('cart_items')
         .select(`
