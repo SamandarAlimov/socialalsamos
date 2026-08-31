@@ -18,6 +18,11 @@ import {
   readStructuredPostSchemaCapability,
   writeStructuredPostSchemaCapability,
 } from '@/lib/structuredPostSchema';
+import {
+  createProfileEmbedGuard,
+  runWithProfileEmbedFallback,
+  type EmbedQueryResult,
+} from '@/lib/profileEmbed';
 import db from '@/lib/supabaseAny';
 
 export interface Post {
@@ -49,6 +54,26 @@ export interface Post {
 }
 
 export type PostVisibility = 'public' | 'friends' | 'private';
+
+// `posts_user_id_fkey` nomli FK production bazada bo'lmasa PostgREST butun
+// so'rovni PGRST200 bilan rad etadi va feed bo'sh qoladi. Shu sababli embedsiz
+// variant ham saqlanadi: profillar keyin alohida so'rov bilan to'ldiriladi.
+const POST_SELECT_WITH_PROFILE = `
+  *,
+  profile:profiles!posts_user_id_fkey (
+    id,
+    username,
+    display_name,
+    avatar_url,
+    is_verified
+  )
+`;
+
+const POST_SELECT_PLAIN = '*';
+
+const postEmbedGuard = createProfileEmbedGuard();
+
+type PostRow = Record<string, unknown>;
 
 function errorText(error: unknown): string {
   const value = error as {
@@ -197,31 +222,32 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
       // post_kind is intentionally not used as a REST filter here. Production
       // can temporarily run an older posts schema while migrations catch up;
       // selecting "*" works on both schemas and stories are filtered client-side.
-      let query = db
-        .from('posts')
-        .select(`
-          *,
-          profile:profiles!posts_user_id_fkey (
-            id,
-            username,
-            display_name,
-            avatar_url,
-            is_verified
-          )
-        `)
-        .order('created_at', { ascending: false })
-        .range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1);
+      const { data, error } = await runWithProfileEmbedFallback<PostRow>(
+        postEmbedGuard,
+        (select) => {
+          let query = db
+            .from('posts')
+            .select(select)
+            .order('created_at', { ascending: false })
+            .range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1);
 
-      query = Array.isArray(visibility)
-        ? query.in('visibility', visibility)
-        : query.eq('visibility', visibility);
+          query = Array.isArray(visibility)
+            ? query.in('visibility', visibility)
+            : query.eq('visibility', visibility);
 
-      if (allowedUserIds) query = query.in('user_id', allowedUserIds);
+          if (allowedUserIds) query = query.in('user_id', allowedUserIds);
 
-      const { data, error } = await query;
+          return query as unknown as PromiseLike<EmbedQueryResult<PostRow>>;
+        },
+        {
+          embedSelect: POST_SELECT_WITH_PROFILE,
+          plainSelect: POST_SELECT_PLAIN,
+        },
+      );
+
       if (error) throw error;
 
-      const rawPosts = (data ?? []) as Array<Post & { post_kind?: string | null }>;
+      const rawPosts = (data ?? []) as unknown as Array<Post & { post_kind?: string | null }>;
 
       // select("*") da post_kind ustuni production schema'da mavjud bo'lsa
       // har bir row obyektida key sifatida keladi. U yo'q bo'lsa atomic publish
@@ -550,20 +576,23 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
 
       if (!postId) throw new Error('Post identifikatori qaytmadi');
 
-      const { data, error } = await supabase
-        .from('posts')
-        .select(`
-          *,
-          profile:profiles!posts_user_id_fkey (
-            id,
-            username,
-            display_name,
-            avatar_url,
-            is_verified
-          )
-        `)
-        .eq('id', postId)
-        .single();
+      // Yangi postni UI uchun qayta o'qish. Profil embed mavjud bo'lmasa ham
+      // post ko'rinishi kerak, shuning uchun fallback ishlatiladi.
+      const { data: refetched, error } = await runWithProfileEmbedFallback<PostRow>(
+        postEmbedGuard,
+        (select) =>
+          supabase
+            .from('posts')
+            .select(select)
+            .eq('id', postId as string)
+            .limit(1) as unknown as PromiseLike<EmbedQueryResult<PostRow>>,
+        {
+          embedSelect: POST_SELECT_WITH_PROFILE,
+          plainSelect: POST_SELECT_PLAIN,
+        },
+      );
+
+      const data = (refetched ?? [])[0] as unknown as Post | undefined;
 
       const fallbackPost: Post = directPost ?? {
         id: postId,
@@ -584,7 +613,7 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
         updated_at: new Date().toISOString(),
       };
 
-      const createdPost = error || !data ? fallbackPost : (data as Post);
+      const createdPost = error || !data ? fallbackPost : data;
 
       if (error) {
         console.warn('Post yaratildi, lekin UI refetch bajarilmadi:', error);
@@ -687,9 +716,14 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
     }
   }, [toast]);
 
+  // fetchPosts identity filter va user ga bog'liq. Ilgari deps faqat [filter]
+  // edi, shuning uchun login/logout dan keyin feed qayta yuklanmasdan eski
+  // (yoki bo'sh) holatda qolib ketardi.
   useEffect(() => {
+    setPage(0);
+    setHasMore(true);
     fetchPosts(0, true);
-  }, [filter]);
+  }, [fetchPosts]);
 
   // Real-time subscription
   useEffect(() => {
@@ -705,24 +739,33 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
         async (payload) => {
           if (payload.new.post_kind === 'story') return;
 
-          // Fetch the full post with profile
-          const { data } = await supabase
-            .from('posts')
-            .select(`
-              *,
-              profile:profiles!posts_user_id_fkey (
-                id,
-                username,
-                display_name,
-                avatar_url,
-                is_verified
-              )
-            `)
-            .eq('id', payload.new.id)
-            .single();
+          const newId = (payload.new as { id?: string } | null)?.id;
+          if (!newId) return;
+
+          // Fetch the full post with profile (embed yo'q bo'lsa ham ishlaydi)
+          const { data: rows, error } = await runWithProfileEmbedFallback<PostRow>(
+            postEmbedGuard,
+            (select) =>
+              supabase
+                .from('posts')
+                .select(select)
+                .eq('id', newId)
+                .limit(1) as unknown as PromiseLike<EmbedQueryResult<PostRow>>,
+            {
+              embedSelect: POST_SELECT_WITH_PROFILE,
+              plainSelect: POST_SELECT_PLAIN,
+            },
+          );
+
+          if (error) {
+            console.warn('Realtime post yuklanmadi:', error);
+            return;
+          }
+
+          const data = (rows ?? [])[0] as unknown as Post | undefined;
 
           if (data && data.user_id !== user?.id) {
-            setPosts(prev => [data as Post, ...prev]);
+            setPosts(prev => (prev.some(p => p.id === data.id) ? prev : [data, ...prev]));
           }
         }
       )
