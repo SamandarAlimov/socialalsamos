@@ -112,7 +112,7 @@ export default function SearchPage() {
 
   const [query, setQuery] = useState(searchParams.get('q') || '');
   const debouncedQuery = useDebounce(query, 300);
-  const [activeTab, setActiveTab] = useState<TabKey>('all');
+  const [activeTab, setActiveTab] = useState<TabKey>('global');
   const [isFocused, setIsFocused] = useState(false);
 
   // Data states
