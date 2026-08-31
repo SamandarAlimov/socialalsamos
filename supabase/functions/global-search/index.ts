@@ -101,6 +101,195 @@ function categoryType(category: Category, url: string): ResultType {
   return 'web';
 }
 
+function firecrawlQuery(query: string, category: Category) {
+  if (category === 'wikipedia') return query + ' site:wikipedia.org';
+  if (category === 'videos') return query + ' (site:youtube.com OR site:vimeo.com)';
+  return query;
+}
+
+function firecrawlSources(category: Category): string[] {
+  if (category === 'images') return ['images'];
+  if (category === 'news') return ['news'];
+  if (category === 'all') return ['web', 'news', 'images'];
+  return ['web'];
+}
+
+function firecrawlPublished(value: unknown): string | null {
+  if (!value) return null;
+  const timestamp = Date.parse(String(value));
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+}
+
+async function firecrawlSearch(
+  query: string,
+  category: Category,
+  page: number,
+  pageSize: number,
+): Promise<{ results: SearchResult[]; engine: string }> {
+  const firecrawlKey = env('FIRECRAWL_API_KEY');
+  const lovableKey = env('LOVABLE_API_KEY');
+
+  if (!firecrawlKey) throw new Error('FIRECRAWL_API_KEY_NOT_CONFIGURED');
+
+  const limit = Math.min(100, Math.max(pageSize, page * pageSize));
+  const body = {
+    query: firecrawlQuery(query, category),
+    limit,
+    sources: firecrawlSources(category),
+    safe: true,
+    timeout: 30000,
+    ignoreInvalidURLs: true,
+  };
+
+  const attempts: Array<{
+    name: string;
+    url: string;
+    headers: Record<string, string>;
+  }> = [];
+
+  // This is the exact realtime search connector used in
+  // SamandarAlimov/instant-find-it.
+  if (lovableKey) {
+    attempts.push({
+      name: 'firecrawl-lovable',
+      url: 'https://connector-gateway.lovable.dev/firecrawl/v2/search',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + lovableKey,
+        'X-Connection-Api-Key': firecrawlKey,
+      },
+    });
+  }
+
+  // Also support a normal Firecrawl API token.
+  attempts.push({
+    name: 'firecrawl-direct',
+    url: 'https://api.firecrawl.dev/v2/search',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer ' + firecrawlKey,
+    },
+  });
+
+  const errors: string[] = [];
+
+  for (const attempt of attempts) {
+    try {
+      const response = await fetch(attempt.url, {
+        method: 'POST',
+        headers: attempt.headers,
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(35000),
+      });
+      const raw = await response.text();
+      let payload: any = {};
+      try {
+        payload = raw ? JSON.parse(raw) : {};
+      } catch {
+        payload = {};
+      }
+
+      if (!response.ok || payload?.success === false) {
+        errors.push(
+          attempt.name + ' ' + response.status + ': ' +
+            String(payload?.error || raw).slice(0, 240),
+        );
+        continue;
+      }
+
+      const data = payload?.data ?? payload ?? {};
+      const web = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.web) ? data.web : [];
+      const news = Array.isArray(data?.news) ? data.news : [];
+      const images = Array.isArray(data?.images) ? data.images : [];
+
+      const rows: Array<{ kind: ResultType; item: any }> = [];
+      if (category === 'images') {
+        images.forEach((item: any) => rows.push({ kind: 'image', item }));
+      } else if (category === 'news') {
+        news.forEach((item: any) => rows.push({ kind: 'news', item }));
+      } else if (category === 'all') {
+        web.forEach((item: any) =>
+          rows.push({ kind: categoryType(category, String(item?.url || '')), item })
+        );
+        news.forEach((item: any) => rows.push({ kind: 'news', item }));
+        images.forEach((item: any) => rows.push({ kind: 'image', item }));
+      } else {
+        web.forEach((item: any) =>
+          rows.push({ kind: categoryType(category, String(item?.url || '')), item })
+        );
+      }
+
+      const start = Math.max(0, (page - 1) * pageSize);
+      const selected = rows.slice(start, start + pageSize);
+      const seen = new Set<string>();
+      const results: SearchResult[] = [];
+
+      for (const row of selected) {
+        const item = row.item ?? {};
+        const pageUrl = String(
+          item?.url || item?.metadata?.sourceURL || item?.metadata?.url || '',
+        ).trim();
+        const imageUrl = String(item?.imageUrl || '').trim();
+        const targetUrl = pageUrl || (row.kind === 'image' ? imageUrl : '');
+        if (!targetUrl || seen.has(targetUrl)) continue;
+        seen.add(targetUrl);
+
+        const title = String(
+          item?.title || item?.metadata?.title || sourceName(targetUrl),
+        ).trim();
+        const snippet = String(
+          item?.description ||
+            item?.snippet ||
+            item?.metadata?.description ||
+            item?.markdown ||
+            '',
+        )
+          .replace(/[#*_>\[\]`]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 700);
+
+        results.push({
+          id: await hashId('firecrawl:' + targetUrl),
+          type: row.kind,
+          title,
+          snippet,
+          url: pageUrl || targetUrl,
+          displayUrl: toDisplayUrl(pageUrl || targetUrl),
+          thumbnailUrl:
+            row.kind === 'image'
+              ? imageUrl || null
+              : String(item?.imageUrl || item?.screenshot || '').trim() || null,
+          source: sourceName(pageUrl || targetUrl),
+          publishedAt: firecrawlPublished(item?.date || item?.publishedAt),
+          author: typeof item?.author === 'string' ? item.author : null,
+          width: Number.isFinite(Number(item?.imageWidth))
+            ? Number(item.imageWidth)
+            : null,
+          height: Number.isFinite(Number(item?.imageHeight))
+            ? Number(item.imageHeight)
+            : null,
+          durationSeconds: null,
+        });
+      }
+
+      if (results.length > 0) {
+        return { results, engine: attempt.name };
+      }
+      errors.push(attempt.name + ': no results');
+    } catch (error) {
+      errors.push(
+        attempt.name + ': ' +
+          (error instanceof Error ? error.message : String(error)),
+      );
+    }
+  }
+
+  throw new Error(errors.join(' | ') || 'Firecrawl search failed');
+}
+
 async function googleProgrammableSearch(
   query: string,
   category: Category,
@@ -389,6 +578,7 @@ Deno.serve(async (req) => {
         })
       : null;
 
+    const firecrawlKey = env('FIRECRAWL_API_KEY');
     const webApiKey =
       env('ALSAMOS_SEARCH_API_KEY') ||
       env('GEMINI_API_KEY') ||
@@ -435,8 +625,29 @@ Deno.serve(async (req) => {
     let searchSuggestionHtml: string | null = null;
     let searchQueries: string[] = [];
 
+    // Firecrawl from instant-find-it is the primary realtime provider.
+    if (firecrawlKey) {
+      try {
+        const firecrawl = await firecrawlSearch(
+          query,
+          category,
+          page,
+          pageSize,
+        );
+        results = firecrawl.results;
+        totalEstimated = (page - 1) * pageSize + results.length +
+          (results.length === pageSize ? pageSize : 0);
+        engine = firecrawl.engine;
+      } catch (error) {
+        errors.push(
+          'firecrawl: ' +
+            (error instanceof Error ? error.message : String(error)),
+        );
+      }
+    }
+
     // If a Programmable Search Engine ID exists, use it for classic SERP rows.
-    if (webApiKey && programmableCx && category !== 'videos') {
+    if (results.length === 0 && webApiKey && programmableCx && category !== 'videos') {
       try {
         const out = await googleProgrammableSearch(
           query,
@@ -512,10 +723,12 @@ Deno.serve(async (req) => {
       searchQueries,
       error: results.length === 0
         ? {
-            code: webApiKey ? 'SEARCH_UNAVAILABLE' : 'SEARCH_API_KEY_MISSING',
-            message: webApiKey
+            code: firecrawlKey || webApiKey
+              ? 'SEARCH_UNAVAILABLE'
+              : 'SEARCH_PROVIDER_NOT_CONFIGURED',
+            message: firecrawlKey || webApiKey
               ? "Internet qidiruvi hozir javob bermadi. Birozdan so'ng qayta urinib ko'ring."
-              : 'Alsamos Search server API kaliti hali Edge Function secret sifatida sozlanmagan.',
+              : 'Firecrawl yoki boshqa realtime search provider hali production backendga ulanmagan.',
           }
         : null,
     };
