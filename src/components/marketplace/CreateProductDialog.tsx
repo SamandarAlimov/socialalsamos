@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Plus, Loader2, Trash2, SlidersHorizontal } from 'lucide-react';
+import { X, Plus, Loader2, Trash2, SlidersHorizontal, Play } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,9 +11,20 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { CategoryIcon } from '@/components/marketplace/CategoryIcon';
 import { useCategories, useProductActions } from '@/hooks/useMarketplace';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 import { marketplaceUz } from '@/i18n/marketplace';
 import { cn } from '@/lib/utils';
-import { uploadMedia } from '@/lib/mediaUpload';
+import {
+  MAX_PRODUCT_MEDIA,
+  MAX_PRODUCT_VIDEOS,
+  PRODUCT_MEDIA_ACCEPT,
+  ProductMediaDraft,
+  ProductMediaError,
+  formatMediaDuration,
+  prepareProductMedia,
+  productMediaErrorMessage,
+  syncProductMedia,
+} from '@/lib/productMedia';
 
 interface CreateProductDialogProps {
   open: boolean;
@@ -32,6 +43,7 @@ const conditions = [
 export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreateProductDialogProps) {
   const { user } = useAuth();
   const { categories } = useCategories();
+  const { toast } = useToast();
   const {
     createProduct,
     checkProductVariantsReady,
@@ -49,7 +61,7 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
   const [isNegotiable, setIsNegotiable] = useState(false);
   const [shippingAvailable, setShippingAvailable] = useState(true);
   const [shippingPrice, setShippingPrice] = useState('0');
-  const [images, setImages] = useState<string[]>([]);
+  const [media, setMedia] = useState<ProductMediaDraft[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasVariants, setHasVariants] = useState(false);
@@ -62,28 +74,45 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
     { optionsText: '', price: '', quantity: '1', sku: '' },
   ]);
 
-  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const videoCount = media.filter(item => item.mediaType === 'video').length;
+
+  const handleMediaUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || !user) return;
 
+    const selected = Array.from(files);
+    // Bir xil xatoni har bir fayl uchun takrorlab ko'rsatmaymiz.
+    const reported = new Set<string>();
     setIsUploading(true);
-    const uploadedUrls: string[] = [];
 
-    for (const file of Array.from(files)) {
+    // Ketma-ket: har bir fayl o'zidan oldingilarni hisobga olib tekshiriladi,
+    // aks holda 10/2 limitlarini bir vaqtda tanlangan fayllar buzib ketardi.
+    let accepted: ProductMediaDraft[] = media;
+    for (const file of selected) {
       try {
-        const uploaded = await uploadMedia(file, { type: 'product', visibility: 'public' });
-        uploadedUrls.push(uploaded.url);
+        const prepared = await prepareProductMedia(file, accepted);
+        accepted = [...accepted, prepared];
+        setMedia(accepted);
       } catch (error) {
-        console.error('Product image upload failed:', error);
+        const code = error instanceof ProductMediaError ? error.code : 'upload_failed';
+        if (!reported.has(code)) {
+          reported.add(code);
+          toast({
+            title: file.name,
+            description: productMediaErrorMessage(code),
+            variant: 'destructive',
+          });
+        }
+        if (code === 'too_many_media') break;
       }
     }
 
-    setImages(previous => [...previous, ...uploadedUrls].slice(0, 10));
     setIsUploading(false);
+    event.target.value = '';
   };
 
-  const removeImage = (index: number) => {
-    setImages(previous => previous.filter((_, current) => current !== index));
+  const removeMedia = (index: number) => {
+    setMedia(previous => previous.filter((_, current) => current !== index));
   };
 
   const addVariantDraft = () => {
@@ -130,7 +159,7 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
   };
 
   const handleSubmit = async () => {
-    if (!title.trim() || !price) return;
+    if (!title.trim() || !price || isUploading) return;
 
     const parsedVariants = hasVariants
       ? variantDrafts
@@ -159,6 +188,8 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
     );
 
     setIsSubmitting(true);
+    // Media satrlari syncProductMedia orqali yoziladi — faqat o'sha yerda
+    // media_type, poster va tartib to'g'ri o'rnatiladi.
     const result = await createProduct({
       title: title.trim(),
       description: description.trim() || undefined,
@@ -170,11 +201,23 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
       is_negotiable: isNegotiable,
       shipping_available: shippingAvailable,
       shipping_price: parseFloat(shippingPrice) || 0,
-    }, images);
+    }, []);
 
     if (!result) {
       setIsSubmitting(false);
       return;
+    }
+
+    if (media.length > 0) {
+      const mediaSaved = await syncProductMedia(result.id, media);
+      if (!mediaSaved) {
+        toast({
+          title: copy.photos,
+          description:
+            "Mahsulot saqlandi, lekin media yozilmadi. Tahrirlash orqali qayta yuklang.",
+          variant: 'destructive',
+        });
+      }
     }
 
     if (hasVariants) {
@@ -197,7 +240,7 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
     setIsNegotiable(false);
     setShippingAvailable(true);
     setShippingPrice('0');
-    setImages([]);
+    setMedia([]);
     setHasVariants(false);
     setVariantDrafts([{ optionsText: '', price: '', quantity: '1', sku: '' }]);
     onSuccess();
@@ -214,33 +257,68 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
         <ScrollArea className="max-h-[calc(90vh-120px)]">
           <div className="p-4 space-y-6">
             <div className="space-y-2">
-              <Label>{copy.photos}</Label>
+              <div className="flex items-baseline justify-between gap-3">
+                <Label>{copy.photos}</Label>
+                <span className="text-[11px] text-muted-foreground">
+                  {media.length}/{MAX_PRODUCT_MEDIA} · video {videoCount}/{MAX_PRODUCT_VIDEOS}
+                </span>
+              </div>
               <div className="grid grid-cols-4 gap-2">
-                {images.map((url, index) => (
-                  <div key={url} className="relative aspect-square rounded-lg overflow-hidden bg-muted">
-                    <img src={url} alt="" className="w-full h-full object-cover" />
+                {media.map((item, index) => (
+                  <div
+                    key={item.url}
+                    className="relative aspect-square overflow-hidden rounded-lg bg-muted"
+                  >
+                    <img
+                      src={item.mediaType === 'video' ? item.thumbnailUrl || item.url : item.url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+
+                    {item.mediaType === 'video' && (
+                      <>
+                        <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/55 backdrop-blur-sm">
+                            <Play className="h-4 w-4 fill-white text-white" />
+                          </span>
+                        </span>
+                        {item.durationSeconds ? (
+                          <span className="pointer-events-none absolute bottom-1 left-1 rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                            {formatMediaDuration(item.durationSeconds)}
+                          </span>
+                        ) : null}
+                      </>
+                    )}
+
+                    {index === 0 && (
+                      <span className="pointer-events-none absolute left-1 top-1 rounded bg-primary px-1.5 py-0.5 text-[9px] font-bold text-primary-foreground">
+                        Muqova
+                      </span>
+                    )}
+
                     <Button
                       variant="destructive"
                       size="icon"
-                      className="absolute top-1 right-1 h-6 w-6"
-                      onClick={() => removeImage(index)}
+                      className="absolute right-1 top-1 h-6 w-6"
+                      onClick={() => removeMedia(index)}
                     >
                       <X className="h-3 w-3" />
                     </Button>
                   </div>
                 ))}
 
-                {images.length < 10 && (
+                {media.length < MAX_PRODUCT_MEDIA && (
                   <label className={cn(
                     'aspect-square rounded-lg border-2 border-dashed border-muted-foreground/30',
                     'flex flex-col items-center justify-center cursor-pointer',
                     'hover:border-primary hover:bg-primary/5 transition-colors',
+                    isUploading && 'pointer-events-none opacity-60',
                   )}>
                     <input
                       type="file"
-                      accept="image/*"
+                      accept={PRODUCT_MEDIA_ACCEPT}
                       multiple
-                      onChange={handleImageUpload}
+                      onChange={handleMediaUpload}
                       className="hidden"
                       disabled={isUploading}
                     />
@@ -255,6 +333,9 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
                   </label>
                 )}
               </div>
+              <p className="text-[11px] text-muted-foreground">
+                Rasm yoki video (MP4 / WebM / MOV), video 60 soniyagacha. Birinchi rasm muqova bo‘ladi.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -495,6 +576,7 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
               !title.trim() ||
               !price ||
               isSubmitting ||
+              isUploading ||
               (hasVariants && !variantDrafts.some(draft => Object.keys(parseVariantOptions(draft.optionsText)).length > 0))
             }
           >
