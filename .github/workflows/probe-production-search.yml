@@ -1,0 +1,38 @@
+name: Probe Production Search
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/probe-production-search.yml"
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe production Supabase Global Search
+        shell: bash
+        run: |
+          set -u
+          URL='https://mbhjganbihamoiqmankv.supabase.co/functions/v1/global-search'
+          BODY='{"query":"OpenAI","category":"web","page":1,"pageSize":5,"locale":"en"}'
+          echo "POST $URL"
+          status=$(curl --silent --show-error --max-time 50             -o response.json -w '%{http_code}'             -H 'Content-Type: application/json'             -d "$BODY" "$URL" || true)
+          echo "HTTP $status"
+          cat response.json || true
+          echo
+          python - <<'PY'
+import json, pathlib
+p=pathlib.Path("response.json")
+if not p.exists():
+    raise SystemExit(1)
+try:
+    d=json.loads(p.read_text())
+except Exception:
+    raise SystemExit(1)
+print("engine:", d.get("engine"))
+print("results:", len(d.get("results") or []))
+print("error:", d.get("error"))
+PY
