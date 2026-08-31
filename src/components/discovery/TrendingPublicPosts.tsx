@@ -5,6 +5,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { PostViewModal } from '@/components/PostViewModal';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
+import {
+  PostPreviewContent,
+  getPostPreviewText,
+} from '@/components/discovery/PostPreviewContent';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
@@ -131,7 +135,7 @@ export function TrendingPublicPosts({ refreshKey = 0 }: TrendingPublicPostsProps
       } catch (error) {
         console.error('Like saqlanmadi:', error);
         applyLocal(wasLiked);
-        toast.error('Like saqlanmadi, qayta urinib ko\u2018ring');
+        toast.error('Like saqlanmadi, qayta urinib koring');
       }
     },
     [triggerHaptic, user],
@@ -179,7 +183,7 @@ export function TrendingPublicPosts({ refreshKey = 0 }: TrendingPublicPostsProps
       <section>
         {header}
         <div className="rounded-xl border border-dashed p-6 text-center">
-          <p className="mb-3 text-sm text-muted-foreground">Trend postlarni yuklab bo'lmadi.</p>
+          <p className="mb-3 text-sm text-muted-foreground">Trend postlarni yuklab bolmadi.</p>
           <Button variant="outline" size="sm" onClick={fetchPosts}>
             Qayta urinish
           </Button>
@@ -211,14 +215,16 @@ export function TrendingPublicPosts({ refreshKey = 0 }: TrendingPublicPostsProps
                   {cover ? (
                     <img
                       src={cover}
-                      alt={post.content?.slice(0, 60) || 'Post'}
+                      alt={getPostPreviewText(post.content).slice(0, 60)}
                       loading="lazy"
                       className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                     />
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center p-4">
-                      <p className="line-clamp-6 text-sm text-muted-foreground">{post.content}</p>
-                    </div>
+                    <PostPreviewContent
+                      content={post.content}
+                      className="p-4"
+                      clampClassName="line-clamp-6"
+                    />
                   )}
                   {post.media_type === 'video' && (
                     <span className="absolute right-2 top-2 rounded-full bg-black/60 p-1.5 text-white">

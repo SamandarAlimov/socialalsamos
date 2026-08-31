@@ -5,6 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PostViewModal } from '@/components/PostViewModal';
 import { PostThumbnailStickers } from '@/components/stickers/PostThumbnailStickers';
+import {
+  PostPreviewContent,
+  getPostPreviewText,
+} from '@/components/discovery/PostPreviewContent';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
@@ -217,14 +221,18 @@ export function ForYouSection({ refreshKey = 0 }: ForYouSectionProps) {
                 {cover ? (
                   <img
                     src={cover}
-                    alt={post.content?.slice(0, 60) || 'Post'}
+                    alt={getPostPreviewText(post.content).slice(0, 60)}
                     loading="lazy"
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                   />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center p-3">
-                    <p className="line-clamp-5 text-xs text-muted-foreground">{post.content}</p>
-                  </div>
+                  <PostPreviewContent
+                    content={post.content}
+                    className="p-3"
+                    clampClassName="line-clamp-4"
+                    textClassName="text-xs text-muted-foreground"
+                    compact
+                  />
                 )}
 
                 {post.media_type === 'video' && (
