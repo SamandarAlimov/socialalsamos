@@ -277,7 +277,7 @@ export function useOrderActions() {
   ): Promise<OrderStatusResult> => {
     setUpdatingId(orderId);
     try {
-      const { data, error } = await supabase.rpc('marketplace_update_order_status', {
+      const { data, error } = await db.rpc('marketplace_update_order_status', {
         _order_id: orderId,
         _status: status,
         _reason: reason ?? null,
