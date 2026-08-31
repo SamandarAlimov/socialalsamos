@@ -252,22 +252,24 @@ export default function SearchPage() {
     setAiError(null);
 
     try {
-      // AI Search is grounded by Alsamos' own Global Search index.
-      const { data: searchData } = await supabase.functions.invoke<{
-        results?: GlobalSearchResult[];
-      }>('global-search', {
-        body: {
+      // AI Search uses the exact same realtime web retrieval as Global Search.
+      const searchResponse = await fetch('/api/global-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
           query: cleanQuery,
           category: 'all',
           page: 1,
           pageSize: 8,
           locale: 'uz',
-        },
+        }),
       });
+      const searchData = await searchResponse.json().catch(() => ({}));
 
       if (controller.signal.aborted) return;
 
-      const sources = (searchData?.results ?? []).slice(0, 8);
+      const sources = (Array.isArray(searchData?.results) ? searchData.results : []).slice(0, 8);
       setAiSources(sources);
 
       const grounding = sources.length
