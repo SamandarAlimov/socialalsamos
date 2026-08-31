@@ -210,31 +210,38 @@ export function useProductVariants(productId?: string | null) {
   const refresh = useCallback(async () => {
     if (!productId) {
       setVariants([]);
+      setIsLoading(false);
       return;
     }
 
     setIsLoading(true);
-    const { data, error } = await db
-      .from('product_variants')
-      .select('*')
-      .eq('product_id', productId)
-      .eq('is_active', true)
-      .order('position', { ascending: true })
-      .order('created_at', { ascending: true });
+    try {
+      const { data, error } = await db
+        .from('product_variants')
+        .select('*')
+        .eq('product_id', productId)
+        .eq('is_active', true)
+        .order('position', { ascending: true })
+        .order('created_at', { ascending: true });
 
-    if (error) {
-      console.warn('Product variants unavailable:', error);
+      if (error) {
+        console.warn('Product variants unavailable:', error);
+        setVariants([]);
+      } else {
+        setVariants((data ?? []).map((row: any) => ({
+          ...row,
+          price: row.price == null ? null : Number(row.price),
+          compare_at_price: row.compare_at_price == null ? null : Number(row.compare_at_price),
+          quantity: Number(row.quantity ?? 0),
+          options: row.options ?? {},
+        })) as ProductVariant[]);
+      }
+    } catch (error) {
+      console.error('Product variants loading crashed:', error);
       setVariants([]);
-    } else {
-      setVariants((data ?? []).map((row: any) => ({
-        ...row,
-        price: row.price == null ? null : Number(row.price),
-        compare_at_price: row.compare_at_price == null ? null : Number(row.compare_at_price),
-        quantity: Number(row.quantity ?? 0),
-        options: row.options ?? {},
-      })) as ProductVariant[]);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, [productId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
@@ -268,22 +275,32 @@ export function useCategories() {
 
   useEffect(() => {
     const fetchCategories = async () => {
-      const { data, error: fetchError } = await supabase
-        .from('product_categories')
-        .select('*')
-        .order('position');
+      setIsLoading(true);
+      setError(null);
+      try {
+        const { data, error: fetchError } = await supabase
+          .from('product_categories')
+          .select('*')
+          .order('position');
 
-      if (fetchError) {
-        console.error('Marketplace categories failed:', fetchError);
-        setError(describeSupabaseError(fetchError, 'Kategoriyalar yuklanmadi'));
-      } else if (data) {
-        data.forEach(category => categoryIdBySlug.set(category.slug, category.id));
-        setCategories(data);
+        if (fetchError) {
+          console.error('Marketplace categories failed:', fetchError);
+          setError(describeSupabaseError(fetchError, 'Kategoriyalar yuklanmadi'));
+        } else {
+          const rows = data ?? [];
+          rows.forEach(category => categoryIdBySlug.set(category.slug, category.id));
+          setCategories(rows);
+        }
+      } catch (error) {
+        console.error('Marketplace categories loading crashed:', error);
+        setCategories([]);
+        setError(describeSupabaseError(error, 'Kategoriyalar yuklanmadi'));
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
-    fetchCategories();
+    void fetchCategories();
   }, []);
 
   return { categories, isLoading, error };
@@ -656,22 +673,38 @@ export function useSellerProducts() {
 
   const fetchSellerProducts = useCallback(async () => {
     if (!user) {
+      setSeller(null);
+      setProducts([]);
       setIsLoading(false);
       return;
     }
 
-    // Get seller profile
-    const { data: sellerData } = await supabase
-      .from('sellers')
-      .select('id, user_id, business_name, business_type, description, logo_url, cover_url, location, website, is_verified, rating, total_reviews, total_sales, status, created_at, updated_at')
-      .eq('user_id', user.id)
-      .maybeSingle();
+    setIsLoading(true);
+    try {
+      // Get seller profile
+      const { data: sellerData, error: sellerError } = await supabase
+        .from('sellers')
+        .select('id, user_id, business_name, business_type, description, logo_url, cover_url, location, website, is_verified, rating, total_reviews, total_sales, status, created_at, updated_at')
+        .eq('user_id', user.id)
+        .maybeSingle();
 
-    if (sellerData) {
+      if (sellerError) {
+        console.error('Seller profile failed to load:', sellerError);
+        setSeller(null);
+        setProducts([]);
+        return;
+      }
+
+      if (!sellerData) {
+        setSeller(null);
+        setProducts([]);
+        return;
+      }
+
       setSeller(sellerData as Seller);
 
       // Get seller's products
-      const { data } = await supabase
+      const { data, error: productsError } = await supabase
         .from('products')
         .select(`
           *,
@@ -682,17 +715,25 @@ export function useSellerProducts() {
         .neq('status', 'deleted')
         .order('created_at', { ascending: false });
 
-      if (data) {
-        setProducts(data.map(p => ({
-          ...p,
-          category: p.category as unknown as Category,
-          images: ((p.images ?? []) as { id: string; url: string; position: number }[])
-            .slice()
-            .sort((a, b) => a.position - b.position),
-        })));
+      if (productsError) {
+        console.error('Seller products failed to load:', productsError);
+        setProducts([]);
+        return;
       }
+
+      setProducts((data ?? []).map(p => ({
+        ...p,
+        category: p.category as unknown as Category,
+        images: ((p.images ?? []) as { id: string; url: string; position: number }[])
+          .slice()
+          .sort((a, b) => a.position - b.position),
+      })));
+    } catch (error) {
+      console.error('Seller products loading crashed:', error);
+      setProducts([]);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, [user]);
 
   useEffect(() => {
@@ -714,21 +755,28 @@ export function useSavedProducts() {
       return;
     }
 
-    const { data } = await supabase
-      .from('product_likes')
-      .select(`
-        product:products(
-          *,
-          seller:sellers(id, business_name, logo_url, is_verified, rating, location),
-          category:product_categories(id, name, slug, icon),
-          images:product_images(id, url, position)
-        )
-      `)
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('product_likes')
+        .select(`
+          product:products(
+            *,
+            seller:sellers(id, business_name, logo_url, is_verified, rating, location),
+            category:product_categories(id, name, slug, icon),
+            images:product_images(id, url, position)
+          )
+        `)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
 
-    if (data) {
-      const savedProducts = data
+      if (error) {
+        console.error('Saved products failed to load:', error);
+        setProducts([]);
+        return;
+      }
+
+      const savedProducts = (data ?? [])
         .map(d => d.product)
         .filter(Boolean)
         .map(p => ({
@@ -736,8 +784,12 @@ export function useSavedProducts() {
           is_liked: true,
         }));
       setProducts(savedProducts);
+    } catch (error) {
+      console.error('Saved products loading crashed:', error);
+      setProducts([]);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, [user]);
 
   useEffect(() => {
