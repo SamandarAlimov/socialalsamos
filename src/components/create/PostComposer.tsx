@@ -1,24 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  BarChart3,
-  CalendarClock,
-  Eye,
-  Globe2,
-  Loader2,
-  Lock,
-  MapPin,
-  Music2,
-  Paperclip,
-  Save,
-  Send,
-  Sticker as StickerIcon,
-  Trash2,
-  UploadCloud,
-  Users,
-  UsersRound,
-  X,
-} from 'lucide-react';
+import { Globe2, Lock, UploadCloud, UsersRound } from 'lucide-react';
+
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -32,12 +15,23 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { usePosts, type PostVisibility } from '@/hooks/usePosts';
 import { usePostAttachments } from '@/hooks/usePostAttachments';
-import { ACCEPT_ANY_FILE, MAX_COLLABORATORS, MAX_FILES_PER_POST } from '@/lib/postComposer';
+import { ACCEPT_ANY_FILE, MAX_COLLABORATORS } from '@/lib/postComposer';
 import type { PollInput } from '@/lib/polls';
 import type { PostLocationInput, PostMusicInput } from '@/lib/postMeta';
 import type { StickerPlacement } from '@/lib/stickers';
 import { readStickerPlacements } from '@/lib/stickerPlacements';
+import {
+  cleanupDraftMusic,
+  clearStoredPostDraft,
+  POST_DRAFT_VERSION,
+  readStoredPostDraft,
+  sameDraftMusicObject,
+  writeStoredPostDraft,
+  type CollaboratorProfile,
+} from '@/lib/postDraft';
 import { PostMediaComposer } from '@/components/create/PostMediaComposer';
+import { PostComposerExtras } from '@/components/create/PostComposerExtras';
+import { PostComposerToolbar } from '@/components/create/PostComposerToolbar';
 import { PollComposer } from '@/components/create/PollComposer';
 import { LocationPicker } from '@/components/create/LocationPicker';
 import { MusicPicker } from '@/components/create/MusicPicker';
@@ -47,23 +41,11 @@ import { StickerMediaEditor } from '@/components/create/StickerMediaEditor';
 import { ImageEditor } from '@/components/create/ImageEditor';
 import { VideoEditor, type VideoEditData } from '@/components/VideoEditor';
 import { startLiveLocationSharing } from '@/lib/liveLocationSharing';
-import { parseStorageReference } from '@/lib/mediaUpload';
-import { supabase } from '@/integrations/supabase/client';
 import { RichTextComposer } from '@/components/create/RichTextComposer';
 import { PostDraftPreview } from '@/components/create/PostDraftPreview';
-import {
-  normalizeAlsamosRichTextDocument,
-  type AlsamosRichTextDocument,
-} from '@/lib/richTextDocument';
+import type { AlsamosRichTextDocument } from '@/lib/richTextDocument';
 
-/** MentionCollaborator ichidagi Profile bilan bir xil shakl. */
-interface CollaboratorProfile {
-  id: string;
-  username: string;
-  display_name: string;
-  avatar_url: string | null;
-  is_verified?: boolean;
-}
+export type { CollaboratorProfile } from '@/lib/postDraft';
 
 const VISIBILITIES: Array<{
   id: PostVisibility;
@@ -74,124 +56,6 @@ const VISIBILITIES: Array<{
   { id: 'friends', label: 'Do‘stlar', icon: UsersRound },
   { id: 'private', label: 'Faqat men', icon: Lock },
 ];
-
-function formatScheduledDate(date: Date): string {
-  return new Intl.DateTimeFormat('uz-UZ', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
-}
-
-
-const POST_DRAFT_VERSION = 1;
-const POST_DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
-interface StoredPostDraft {
-  version: number;
-  savedAt: number;
-  content: string;
-  formattedContent: AlsamosRichTextDocument | null;
-  visibility: PostVisibility;
-  poll: PollInput | null;
-  location: PostLocationInput | null;
-  music: PostMusicInput | null;
-  collaborators: CollaboratorProfile[];
-  scheduledAt: string | null;
-  hadMedia: boolean;
-}
-
-function postDraftKey(userId: string): string {
-  return `alsamos.create.post.draft.v${POST_DRAFT_VERSION}:${userId}`;
-}
-
-function readStoredPostDraft(userId: string): StoredPostDraft | null {
-  try {
-    const raw = localStorage.getItem(postDraftKey(userId));
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw) as Partial<StoredPostDraft>;
-    if (
-      parsed.version !== POST_DRAFT_VERSION ||
-      typeof parsed.savedAt !== 'number' ||
-      Date.now() - parsed.savedAt > POST_DRAFT_TTL_MS
-    ) {
-      localStorage.removeItem(postDraftKey(userId));
-      return null;
-    }
-
-    return {
-      version: POST_DRAFT_VERSION,
-      savedAt: parsed.savedAt,
-      content: typeof parsed.content === 'string' ? parsed.content : '',
-      formattedContent: normalizeAlsamosRichTextDocument(parsed.formattedContent),
-      visibility:
-        parsed.visibility === 'friends' || parsed.visibility === 'private'
-          ? parsed.visibility
-          : 'public',
-      poll: parsed.poll ?? null,
-      location: parsed.location ?? null,
-      // Device audio binary lifecycle localStorage bilan ishonchli tiklanmaydi.
-      music:
-        parsed.music?.track?.source === 'device'
-          ? null
-          : (parsed.music ?? null),
-      collaborators: Array.isArray(parsed.collaborators)
-        ? parsed.collaborators.filter(
-            (item): item is CollaboratorProfile =>
-              Boolean(item) &&
-              typeof item.id === 'string' &&
-              typeof item.username === 'string',
-          )
-        : [],
-      scheduledAt:
-        typeof parsed.scheduledAt === 'string' ? parsed.scheduledAt : null,
-      hadMedia: Boolean(parsed.hadMedia),
-    };
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredPostDraft(userId: string, draft: StoredPostDraft): void {
-  try {
-    localStorage.setItem(postDraftKey(userId), JSON.stringify(draft));
-  } catch {
-    // Storage quota yoki private mode draftni bloklasa Create ishlashda davom etadi.
-  }
-}
-
-function clearStoredPostDraft(userId: string): void {
-  try {
-    localStorage.removeItem(postDraftKey(userId));
-  } catch {
-    // no-op
-  }
-}
-
-function draftMusicObject(input?: PostMusicInput | null): { bucket: string; key: string } | null {
-  if (!input?.track || input.trackId || input.track.source !== 'device') return null;
-  if (input.track.storageBucket && input.track.storageKey) {
-    return { bucket: input.track.storageBucket, key: input.track.storageKey };
-  }
-  return parseStorageReference(input.track.audioUrl);
-}
-
-function sameDraftMusicObject(a?: PostMusicInput | null, b?: PostMusicInput | null): boolean {
-  const left = draftMusicObject(a);
-  const right = draftMusicObject(b);
-  return Boolean(left && right && left.bucket === right.bucket && left.key === right.key);
-}
-
-async function cleanupDraftMusic(input?: PostMusicInput | null): Promise<void> {
-  const object = draftMusicObject(input);
-  if (!object) return;
-
-  const { error } = await supabase.storage.from(object.bucket).remove([object.key]);
-  if (error) console.warn('Draft music obyektini tozalab bo‘lmadi:', error);
-}
 
 /**
  * Yangi post yaratish oynasi.
@@ -204,6 +68,10 @@ async function cleanupDraftMusic(input?: PostMusicInput | null): Promise<void> {
  *  - hammuallif 5 ta bilan cheklangandi → endi 10 ta
  *  - stikerlar matnga emoji sifatida qo‘shilardi → endi media ustiga
  *    haqiqiy qatlam sifatida qo‘yiladi
+ *
+ * Komponent faqat holat, yuklash va oynalarni boshqaradi: qoralama saqlash
+ * `@/lib/postDraft` da, qo‘shimchalar ro‘yxati va asboblar paneli esa alohida
+ * komponentlarda.
  */
 export function PostComposer() {
   const navigate = useNavigate();
@@ -250,7 +118,6 @@ export function PostComposer() {
     attachments,
     isUploading,
     canAddMore,
-    remainingSlots,
     addFiles,
     removeAttachment,
     clearAttachments,
@@ -419,6 +286,13 @@ export function PostComposer() {
       ),
     [isPosting, isUploading, content, attachments.length, poll, location, music],
   );
+
+  const canSaveDraft =
+    content.trim().length > 0 ||
+    attachments.length > 0 ||
+    Boolean(poll) ||
+    Boolean(location) ||
+    Boolean(music);
 
   /** Stiker qo‘yish mumkin bo‘lgan fayllar (faqat rasm va video). */
   const stickerableAttachments = useMemo(
@@ -834,234 +708,56 @@ export function PostComposer() {
           </div>
         )}
 
-        {(poll || location || music || collaborators.length > 0 || scheduledAt || totalStickers > 0) && (
-          <div
-            className={cn(
-              'border-t border-border/50',
-              attachments.length > 0 &&
-                'lg:col-start-1 lg:row-start-2 lg:max-h-44 lg:overflow-y-auto',
-            )}
-          >
-            {poll && (
-              <div className="flex min-h-12 items-center gap-3 px-4 py-2.5 sm:px-5">
-                <BarChart3 className="h-4 w-4 shrink-0 text-primary" />
-                <button
-                  type="button"
-                  onClick={() => setShowPoll(true)}
-                  className="min-w-0 flex-1 text-left"
-                >
-                  <p className="truncate text-xs font-medium">{poll.question}</p>
-                  <p className="text-[10px] text-muted-foreground">{poll.options.length} variant</p>
-                </button>
-                <button type="button" onClick={() => setPoll(null)} aria-label="So‘rovnomani olib tashlash" className="p-1 text-muted-foreground hover:text-destructive">
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            )}
-
-            {location && (
-              <div className="flex min-h-12 items-center gap-3 border-t border-border/40 px-4 py-2.5 first:border-t-0 sm:px-5">
-                <MapPin className="h-4 w-4 shrink-0 text-primary" />
-                <button
-                  type="button"
-                  onClick={() => setShowLocation(true)}
-                  className="min-w-0 flex-1 text-left"
-                >
-                  <p className="truncate text-xs font-medium">
-                    {location.place?.name ?? location.label ?? 'Joylashuv'}
-                  </p>
-                  <p className="truncate text-[10px] text-muted-foreground">
-                    {location.mode === 'live' ? 'Jonli joylashuv' : location.place?.address ?? 'Aniq nuqta'}
-                  </p>
-                </button>
-                <button type="button" onClick={() => setLocation(null)} aria-label="Joylashuvni olib tashlash" className="p-1 text-muted-foreground hover:text-destructive">
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            )}
-
-            {music && (
-              <div className="flex min-h-12 items-center gap-3 border-t border-border/40 px-4 py-2.5 first:border-t-0 sm:px-5">
-                <Music2 className="h-4 w-4 shrink-0 text-primary" />
-                <button
-                  type="button"
-                  onClick={() => setShowMusic(true)}
-                  className="min-w-0 flex-1 text-left"
-                >
-                  <p className="truncate text-xs font-medium">{music.track?.title ?? 'Musiqa'}</p>
-                  <p className="truncate text-[10px] text-muted-foreground">{music.track?.artist ?? 'Katalog'}</p>
-                </button>
-                <button type="button" onClick={() => handleMusicChange(null)} aria-label="Musiqani olib tashlash" className="p-1 text-muted-foreground hover:text-destructive">
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            )}
-
-            {collaborators.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowCollaborators(true)}
-                className="flex min-h-12 w-full items-center gap-3 border-t border-border/40 px-4 py-2.5 text-left first:border-t-0 sm:px-5"
-              >
-                <Users className="h-4 w-4 shrink-0 text-primary" />
-                <span className="min-w-0 flex-1 truncate text-xs font-medium">
-                  {collaborators.map((item) => '@' + item.username).join(', ')}
-                </span>
-                <span className="text-[10px] text-muted-foreground">{collaborators.length}/{MAX_COLLABORATORS}</span>
-              </button>
-            )}
-
-            {scheduledAt && (
-              <div className="flex min-h-12 items-center gap-3 border-t border-border/40 px-4 py-2.5 first:border-t-0 sm:px-5">
-                <CalendarClock className="h-4 w-4 shrink-0 text-primary" />
-                <button
-                  type="button"
-                  onClick={() => setShowSchedule(true)}
-                  className="min-w-0 flex-1 truncate text-left text-xs font-medium"
-                >
-                  {formatScheduledDate(scheduledAt)}
-                </button>
-                <button type="button" onClick={() => setScheduledAt(null)} aria-label="Rejani olib tashlash" className="p-1 text-muted-foreground hover:text-destructive">
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            )}
-
-            {totalStickers > 0 && (
-              <button
-                type="button"
-                onClick={() => openStickerEditor()}
-                className="flex min-h-12 w-full items-center gap-3 border-t border-border/40 px-4 py-2.5 text-left first:border-t-0 sm:px-5"
-              >
-                <StickerIcon className="h-4 w-4 shrink-0 text-primary" />
-                <span className="flex-1 text-xs font-medium">{totalStickers} stiker</span>
-                <span className="text-[10px] text-primary">Tahrirlash</span>
-              </button>
-            )}
-          </div>
-        )}
-
-        <div
+        <PostComposerExtras
+          poll={poll}
+          location={location}
+          music={music}
+          collaborators={collaborators}
+          scheduledAt={scheduledAt}
+          stickerCount={totalStickers}
           className={cn(
-            'flex items-center gap-1 border-t border-border/60 px-2 py-2 sm:px-3',
-            attachments.length > 0 && 'lg:col-start-1 lg:row-start-3',
+            attachments.length > 0 &&
+              'lg:col-start-1 lg:row-start-2 lg:max-h-44 lg:overflow-y-auto',
           )}
-        >
-          <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
-            {[
-              {
-                label: 'Fayl',
-                icon: Paperclip,
-                action: () => fileInputRef.current?.click(),
-                disabled: !canAddMore,
-                active: attachments.length > 0,
-              },
-              {
-                label: 'Stiker',
-                icon: StickerIcon,
-                action: () => openStickerEditor(),
-                disabled: stickerableAttachments.length === 0,
-                active: totalStickers > 0,
-              },
-              {
-                label: 'So‘rovnoma',
-                icon: BarChart3,
-                action: () => setShowPoll(true),
-                disabled: false,
-                active: Boolean(poll),
-              },
-              {
-                label: 'Joylashuv',
-                icon: MapPin,
-                action: () => setShowLocation(true),
-                disabled: false,
-                active: Boolean(location),
-              },
-              {
-                label: 'Musiqa',
-                icon: Music2,
-                action: () => setShowMusic(true),
-                disabled: false,
-                active: Boolean(music),
-              },
-              {
-                label: 'Hammuallif',
-                icon: Users,
-                action: () => setShowCollaborators(true),
-                disabled: false,
-                active: collaborators.length > 0,
-              },
-              {
-                label: 'Rejalashtirish',
-                icon: CalendarClock,
-                action: () => setShowSchedule(true),
-                disabled: location?.mode === 'live',
-                active: Boolean(scheduledAt),
-              },
-              {
-                label: 'Ko‘rish',
-                icon: Eye,
-                action: () => setShowPreview(true),
-                disabled: !canSubmit,
-                active: false,
-              },
-            ].map(({ label, icon: Icon, action, disabled, active }) => (
-              <button
-                key={label}
-                type="button"
-                title={label}
-                aria-label={label}
-                onClick={action}
-                disabled={disabled}
-                className={cn(
-                  'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30',
-                  active && 'bg-primary/10 text-primary',
-                )}
-              >
-                <Icon className="h-[18px] w-[18px]" />
-              </button>
-            ))}
-          </div>
+          onEditPoll={() => setShowPoll(true)}
+          onRemovePoll={() => setPoll(null)}
+          onEditLocation={() => setShowLocation(true)}
+          onRemoveLocation={() => setLocation(null)}
+          onEditMusic={() => setShowMusic(true)}
+          onRemoveMusic={() => handleMusicChange(null)}
+          onEditCollaborators={() => setShowCollaborators(true)}
+          onEditSchedule={() => setShowSchedule(true)}
+          onRemoveSchedule={() => setScheduledAt(null)}
+          onEditStickers={() => openStickerEditor()}
+        />
 
-          <button
-            type="button"
-            onClick={saveDraftNow}
-            disabled={
-              content.trim().length === 0 &&
-              attachments.length === 0 &&
-              !poll &&
-              !location &&
-              !music
-            }
-            className={cn(
-              'ml-1 flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-30',
-              draftSavedAt
-                ? 'bg-muted text-foreground'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-            )}
-          >
-            <Save className="h-4 w-4" />
-            <span className="hidden sm:inline">Qoralama</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => void handleSubmit()}
-            disabled={!canSubmit}
-            className="ml-1 flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-4 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-45"
-          >
-            {isPosting || isUploading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : scheduledAt ? (
-              <CalendarClock className="h-4 w-4" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-            <span className="hidden sm:inline">
-              {scheduledAt ? 'Rejalashtirish' : 'Joylash'}
-            </span>
-          </button>
-        </div>
+        <PostComposerToolbar
+          className={cn(attachments.length > 0 && 'lg:col-start-1 lg:row-start-3')}
+          canAddMore={canAddMore}
+          hasAttachments={attachments.length > 0}
+          canAddStickers={stickerableAttachments.length > 0}
+          stickerCount={totalStickers}
+          hasPoll={Boolean(poll)}
+          hasLocation={Boolean(location)}
+          hasMusic={Boolean(music)}
+          collaboratorCount={collaborators.length}
+          hasSchedule={Boolean(scheduledAt)}
+          isLiveLocation={location?.mode === 'live'}
+          canSubmit={canSubmit}
+          canSaveDraft={canSaveDraft}
+          isBusy={isPosting || isUploading}
+          draftSaved={Boolean(draftSavedAt)}
+          onPickFiles={() => fileInputRef.current?.click()}
+          onStickers={() => openStickerEditor()}
+          onPoll={() => setShowPoll(true)}
+          onLocation={() => setShowLocation(true)}
+          onMusic={() => setShowMusic(true)}
+          onCollaborators={() => setShowCollaborators(true)}
+          onSchedule={() => setShowSchedule(true)}
+          onPreview={() => setShowPreview(true)}
+          onSaveDraft={saveDraftNow}
+          onSubmit={() => void handleSubmit()}
+        />
 
         <input
           ref={fileInputRef}
