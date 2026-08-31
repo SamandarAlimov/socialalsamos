@@ -132,6 +132,7 @@ export default function SearchPage() {
   const [aiSources, setAiSources] = useState<GlobalSearchResult[]>([]);
   const [aiError, setAiError] = useState<string | null>(null);
   const aiAbortRef = useRef<AbortController | null>(null);
+  const aiQueryRef = useRef('');
 
   const hashtagQuery = debouncedQuery.trim() ? debouncedQuery.replace(/^#/, '') : null;
   const { suggestions: hashtags, isLoading: hashtagsLoading } = useHashtagSearch(hashtagQuery, 20);
@@ -240,8 +241,13 @@ export default function SearchPage() {
 
   const handleAISearch = useCallback(async (searchTerm: string) => {
     const cleanQuery = searchTerm.trim();
-    if (!cleanQuery || activeTab !== 'ai') return;
+    if (!cleanQuery) return;
 
+    // Tab switching must never regenerate the same AI answer.
+    // Only a changed search query is allowed to start a new request.
+    if (aiQueryRef.current === cleanQuery) return;
+
+    aiQueryRef.current = cleanQuery;
     aiAbortRef.current?.abort();
     const controller = new AbortController();
     aiAbortRef.current = controller;
@@ -371,20 +377,34 @@ export default function SearchPage() {
         setAiLoading(false);
       }
     }
-  }, [activeTab]);
+  }, []);
 
   useEffect(() => {
-    if (activeTab === 'ai' && debouncedQuery.trim()) {
-      void handleAISearch(debouncedQuery);
-    } else if (activeTab !== 'ai') {
+    const cleanQuery = debouncedQuery.trim();
+
+    if (!cleanQuery) {
       aiAbortRef.current?.abort();
+      aiAbortRef.current = null;
+      aiQueryRef.current = '';
+      setAiResponse('');
+      setAiSources([]);
+      setAiError(null);
       setAiLoading(false);
+      return;
     }
 
-    return () => {
-      if (activeTab === 'ai') aiAbortRef.current?.abort();
-    };
+    if (activeTab === 'ai') {
+      void handleAISearch(cleanQuery);
+    }
   }, [activeTab, debouncedQuery, handleAISearch]);
+
+  // Leaving the AI tab does not abort or restart the current answer.
+  // The request keeps running in SearchPage state and is reused when the user returns.
+  useEffect(() => {
+    return () => {
+      aiAbortRef.current?.abort();
+    };
+  }, []);
 
   const hasResults = users.length > 0 || posts.length > 0 || groups.length > 0 || channels.length > 0 || products.length > 0 || hashtags.length > 0;
   const hasQuery = query.trim().length > 0;
