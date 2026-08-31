@@ -2,6 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import {
+  attachProfiles,
+  createProfileEmbedGuard,
+  runWithProfileEmbedFallback,
+  type EmbedQueryResult,
+} from '@/lib/profileEmbed';
 
 export interface Comment {
   id: string;
@@ -22,6 +28,26 @@ export interface Comment {
   replies?: Comment[];
 }
 
+// Named FK embed faqat `comments_user_id_fkey` constraint bazada bo'lsa
+// ishlaydi. Bo'lmasa PostgREST butun so'rovni rad etadi, shuning uchun
+// embedsiz variant ham saqlanadi (profil keyin alohida olinadi).
+const COMMENT_SELECT_WITH_PROFILE = `
+  *,
+  profile:profiles!comments_user_id_fkey (
+    id,
+    username,
+    display_name,
+    avatar_url,
+    is_verified
+  )
+`;
+
+const COMMENT_SELECT_PLAIN = '*';
+
+const commentEmbedGuard = createProfileEmbedGuard();
+
+type CommentRow = Record<string, unknown>;
+
 export function useComments(postId: string | null) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -32,25 +58,28 @@ export function useComments(postId: string | null) {
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase
-        .from('comments')
-        .select(`
-          *,
-          profile:profiles!comments_user_id_fkey (
-            id,
-            username,
-            display_name,
-            avatar_url,
-            is_verified
-          )
-        `)
-        .eq('post_id', postId)
-        .order('created_at', { ascending: true });
+      const { data: rows, error } = await runWithProfileEmbedFallback<CommentRow>(
+        commentEmbedGuard,
+        (select) =>
+          supabase
+            .from('comments')
+            .select(select)
+            .eq('post_id', postId)
+            .order('created_at', { ascending: true }) as unknown as PromiseLike<
+            EmbedQueryResult<CommentRow>
+          >,
+        {
+          embedSelect: COMMENT_SELECT_WITH_PROFILE,
+          plainSelect: COMMENT_SELECT_PLAIN,
+        },
+      );
 
       if (error) throw error;
 
+      const data = (rows ?? []) as unknown as Comment[];
+
       // Check likes if user is logged in
-      if (user && data) {
+      if (user && data.length > 0) {
         const commentIds = data.map(c => c.id);
         const { data: likes } = await supabase
           .from('comment_likes')
@@ -59,7 +88,7 @@ export function useComments(postId: string | null) {
           .in('comment_id', commentIds);
 
         const likedIds = new Set(likes?.map(l => l.comment_id) || []);
-        
+
         // Organize into tree structure
         const commentsMap = new Map<string, Comment>();
         const rootComments: Comment[] = [];
@@ -86,10 +115,11 @@ export function useComments(postId: string | null) {
 
         setComments(rootComments);
       } else {
-        setComments(data as Comment[]);
+        setComments(data);
       }
     } catch (error) {
       console.error('Error fetching comments:', error);
+      toast.error("Izohlarni yuklab bo'lmadi");
     } finally {
       setIsLoading(false);
     }
@@ -128,6 +158,8 @@ export function useComments(postId: string | null) {
     if (!user || !postId) return null;
 
     try {
+      // Insert dan keyin embed talab qilmaymiz: aks holda FK nomi yo'q bo'lsa
+      // izoh saqlangan bo'lsa ham xato ko'rsatilardi.
       const { data, error } = await supabase
         .from('comments')
         .insert({
@@ -136,22 +168,17 @@ export function useComments(postId: string | null) {
           content,
           parent_id: parentId || null,
         })
-        .select(`
-          *,
-          profile:profiles!comments_user_id_fkey (
-            id,
-            username,
-            display_name,
-            avatar_url,
-            is_verified
-          )
-        `)
+        .select(COMMENT_SELECT_PLAIN)
         .single();
 
       if (error) throw error;
 
+      const [withProfile] = await attachProfiles([
+        (data ?? {}) as CommentRow,
+      ]);
+
       toast.success('Comment added');
-      return data;
+      return withProfile as unknown as Comment;
     } catch (error) {
       console.error('Error adding comment:', error);
       toast.error('Failed to add comment');
