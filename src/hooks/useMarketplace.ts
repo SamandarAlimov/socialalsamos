@@ -4,6 +4,12 @@ import { db } from '@/lib/supabaseAny';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { getShippingCost } from '@/lib/marketplace';
+import {
+  isNetworkError,
+  networkErrorMessage,
+  onNetworkRestored,
+  withNetworkRetry,
+} from '@/lib/supabaseRetry';
 
 export interface Category {
   id: string;
@@ -92,10 +98,15 @@ export interface CartItem {
 // not an Error. Code that tested `err instanceof Error` therefore discarded
 // every real database message and showed a generic fallback instead, which is
 // how an empty catalogue could look identical to a broken query.
+//
+// Transport failures arrive in that same shape ({ message: 'TypeError: Failed
+// to fetch', details: <stack> }), so they are classified separately: the user
+// gets a human sentence, never a minified stack trace.
 // =====================================================================
 
 function describeSupabaseError(error: unknown, fallback: string): string {
   if (!error) return fallback;
+  if (isNetworkError(error)) return networkErrorMessage();
   if (error instanceof Error) return error.message || fallback;
 
   if (typeof error === 'object') {
@@ -167,11 +178,16 @@ type QueryResult = { data: any[] | null; error: any };
  * Runs a product query and, if the seller->profile join turns out not to
  * exist, retries once without it. Any other error is returned untouched so the
  * caller can surface it.
+ *
+ * Each attempt is additionally wrapped in withNetworkRetry, so a dropped
+ * request is retried at the transport level before it is ever reported as a
+ * failed query.
  */
 async function runProductQuery(
   build: (select: string) => PromiseLike<QueryResult>,
+  label = 'products',
 ): Promise<QueryResult> {
-  const first = await build(productSelect());
+  const first = await withNetworkRetry<any[]>(() => build(productSelect()), { label });
 
   if (first.error && isRelationshipError(first.error) && !sellerProfileEmbedUnavailable) {
     console.warn(
@@ -179,7 +195,7 @@ async function runProductQuery(
       first.error,
     );
     sellerProfileEmbedUnavailable = true;
-    return build(productSelect());
+    return withNetworkRetry<any[]>(() => build(productSelect()), { label });
   }
 
   return first;
@@ -214,13 +230,17 @@ export function useProductVariants(productId?: string | null) {
     }
 
     setIsLoading(true);
-    const { data, error } = await db
-      .from('product_variants')
-      .select('*')
-      .eq('product_id', productId)
-      .eq('is_active', true)
-      .order('position', { ascending: true })
-      .order('created_at', { ascending: true });
+    const { data, error } = await withNetworkRetry<any[]>(
+      () =>
+        db
+          .from('product_variants')
+          .select('*')
+          .eq('product_id', productId)
+          .eq('is_active', true)
+          .order('position', { ascending: true })
+          .order('created_at', { ascending: true }),
+      { label: 'product variants' },
+    );
 
     if (error) {
       console.warn('Product variants unavailable:', error);
@@ -270,11 +290,15 @@ async function resolveCategoryId(slug?: string): Promise<string | null> {
   const cached = categoryIdBySlug.get(slug);
   if (cached) return cached;
 
-  const { data, error } = await supabase
-    .from('product_categories')
-    .select('id')
-    .eq('slug', slug)
-    .maybeSingle();
+  const { data, error } = await withNetworkRetry<any>(
+    () =>
+      supabase
+        .from('product_categories')
+        .select('id')
+        .eq('slug', slug)
+        .maybeSingle(),
+    { label: 'category lookup' },
+  );
 
   if (error || !data?.id) return null;
   categoryIdBySlug.set(slug, data.id);
@@ -286,27 +310,40 @@ export function useCategories() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchCategories = async () => {
-      const { data, error: fetchError } = await supabase
-        .from('product_categories')
-        .select('*')
-        .order('position');
+  const fetchCategories = useCallback(async () => {
+    setIsLoading(true);
 
-      if (fetchError) {
-        console.error('Marketplace categories failed:', fetchError);
-        setError(describeSupabaseError(fetchError, 'Kategoriyalar yuklanmadi'));
-      } else if (data) {
-        data.forEach(category => categoryIdBySlug.set(category.slug, category.id));
-        setCategories(data);
-      }
-      setIsLoading(false);
-    };
+    const { data, error: fetchError } = await withNetworkRetry<any[]>(
+      () =>
+        supabase
+          .from('product_categories')
+          .select('*')
+          .order('position'),
+      { label: 'categories' },
+    );
 
-    fetchCategories();
+    if (fetchError) {
+      console.error('Marketplace categories failed:', fetchError);
+      setError(describeSupabaseError(fetchError, 'Kategoriyalar yuklanmadi'));
+    } else if (data) {
+      setError(null);
+      data.forEach((category: any) => categoryIdBySlug.set(category.slug, category.id));
+      setCategories(data as Category[]);
+    }
+    setIsLoading(false);
   }, []);
 
-  return { categories, isLoading, error };
+  useEffect(() => {
+    void fetchCategories();
+  }, [fetchCategories]);
+
+  // Kategoriya qatori bo'sh qolib ketmasin: aloqa tiklanganda o'zi qayta yuklanadi.
+  useEffect(() => {
+    if (!error) return;
+    return onNetworkRestored(() => { void fetchCategories(); });
+  }, [error, fetchCategories]);
+
+  return { categories, isLoading, error, refresh: fetchCategories };
 }
 
 export function useProducts(categorySlug?: string, searchQuery?: string) {
@@ -389,12 +426,16 @@ export function useProducts(categorySlug?: string, searchQuery?: string) {
 
       let likedProductIds: string[] = [];
       if (user && rows.length > 0) {
-        const { data: likes } = await supabase
-          .from('product_likes')
-          .select('product_id')
-          .eq('user_id', user.id);
+        const { data: likes } = await withNetworkRetry<any[]>(
+          () =>
+            supabase
+              .from('product_likes')
+              .select('product_id')
+              .eq('user_id', user.id),
+          { label: 'liked products' },
+        );
 
-        likedProductIds = likes?.map(like => like.product_id) || [];
+        likedProductIds = (likes ?? []).map((like: any) => like.product_id);
       }
 
       setProducts(rows.map(row => mapMarketplaceProduct(row, likedProductIds)));
@@ -420,6 +461,13 @@ export function useProducts(categorySlug?: string, searchQuery?: string) {
   useEffect(() => {
     void fetchProducts();
   }, [fetchProducts]);
+
+  // Uzilishdan keyin foydalanuvchi "Qayta urinish" ni bosishini kutmaymiz:
+  // aloqa tiklanishi yoki tabga qaytish katalogni o'zi qayta yuklaydi.
+  useEffect(() => {
+    if (!error) return;
+    return onNetworkRestored(() => { void fetchProducts(); });
+  }, [error, fetchProducts]);
 
   return { products, isLoading, error, hasMore, refresh: fetchProducts };
 }
@@ -466,19 +514,21 @@ export function useNearbyMarketplaceProducts(center?: MarketplaceCenter | null, 
       const dLat = radiusKm / 111;
       const dLng = radiusKm / (111 * Math.max(0.2, Math.cos((center.latitude * Math.PI) / 180)));
 
-      const { data, error: fetchError } = await runProductQuery((select) =>
-        db
-          .from('products')
-          .select(select)
-          .eq('status', 'active')
-          .not('latitude', 'is', null)
-          .not('longitude', 'is', null)
-          .gte('latitude', center.latitude - dLat)
-          .lte('latitude', center.latitude + dLat)
-          .gte('longitude', center.longitude - dLng)
-          .lte('longitude', center.longitude + dLng)
-          .order('created_at', { ascending: false })
-          .limit(100),
+      const { data, error: fetchError } = await runProductQuery(
+        (select) =>
+          db
+            .from('products')
+            .select(select)
+            .eq('status', 'active')
+            .not('latitude', 'is', null)
+            .not('longitude', 'is', null)
+            .gte('latitude', center.latitude - dLat)
+            .lte('latitude', center.latitude + dLat)
+            .gte('longitude', center.longitude - dLng)
+            .lte('longitude', center.longitude + dLng)
+            .order('created_at', { ascending: false })
+            .limit(100),
+        'nearby listings',
       );
 
       if (fetchError) throw fetchError;
@@ -486,11 +536,15 @@ export function useNearbyMarketplaceProducts(center?: MarketplaceCenter | null, 
       let likedProductIds: string[] = [];
       if (user && data?.length) {
         const ids = data.map((row: any) => row.id);
-        const { data: likes } = await db
-          .from('product_likes')
-          .select('product_id')
-          .eq('user_id', user.id)
-          .in('product_id', ids);
+        const { data: likes } = await withNetworkRetry<any[]>(
+          () =>
+            db
+              .from('product_likes')
+              .select('product_id')
+              .eq('user_id', user.id)
+              .in('product_id', ids),
+          { label: 'liked products' },
+        );
         likedProductIds = (likes ?? []).map((row: any) => row.product_id);
       }
 
@@ -537,12 +591,14 @@ export function useNearbyMarketplaceProducts(center?: MarketplaceCenter | null, 
 export async function fetchMarketplaceProductById(productId: string): Promise<Product | null> {
   if (!productId) return null;
 
-  const { data, error } = await runProductQuery((select) =>
-    db
-      .from('products')
-      .select(select)
-      .eq('id', productId)
-      .limit(1),
+  const { data, error } = await runProductQuery(
+    (select) =>
+      db
+        .from('products')
+        .select(select)
+        .eq('id', productId)
+        .limit(1),
+    'product lookup',
   );
 
   if (error) {
@@ -613,12 +669,14 @@ export function useSellerResponseStats(sellerUserId?: string | null) {
 async function fetchMarketplaceProductsByIds(ids: string[]): Promise<Product[]> {
   if (ids.length === 0) return [];
 
-  const { data, error } = await runProductQuery((select) =>
-    db
-      .from('products')
-      .select(select)
-      .in('id', ids)
-      .eq('status', 'active'),
+  const { data, error } = await runProductQuery(
+    (select) =>
+      db
+        .from('products')
+        .select(select)
+        .in('id', ids)
+        .eq('status', 'active'),
+    'recently viewed',
   );
 
   if (error || !data) {
@@ -698,29 +756,37 @@ export function useSellerProducts() {
     }
 
     // Get seller profile
-    const { data: sellerData } = await supabase
-      .from('sellers')
-      .select('id, user_id, business_name, business_type, description, logo_url, cover_url, location, website, is_verified, rating, total_reviews, total_sales, status, created_at, updated_at')
-      .eq('user_id', user.id)
-      .maybeSingle();
+    const { data: sellerData } = await withNetworkRetry<any>(
+      () =>
+        supabase
+          .from('sellers')
+          .select('id, user_id, business_name, business_type, description, logo_url, cover_url, location, website, is_verified, rating, total_reviews, total_sales, status, created_at, updated_at')
+          .eq('user_id', user.id)
+          .maybeSingle(),
+      { label: 'seller profile' },
+    );
 
     if (sellerData) {
       setSeller(sellerData as Seller);
 
       // Get seller's products
-      const { data } = await supabase
-        .from('products')
-        .select(`
+      const { data } = await withNetworkRetry<any[]>(
+        () =>
+          supabase
+            .from('products')
+            .select(`
           *,
           category:product_categories(id, name, slug, icon),
           images:product_images(id, url, position)
         `)
-        .eq('seller_id', sellerData.id)
-        .neq('status', 'deleted')
-        .order('created_at', { ascending: false });
+            .eq('seller_id', sellerData.id)
+            .neq('status', 'deleted')
+            .order('created_at', { ascending: false }),
+        { label: 'seller products' },
+      );
 
       if (data) {
-        setProducts(data.map(p => ({
+        setProducts(data.map((p: any) => ({
           ...p,
           category: p.category as unknown as Category,
           images: ((p.images ?? []) as { id: string; url: string; position: number }[])
@@ -751,9 +817,11 @@ export function useSavedProducts() {
       return;
     }
 
-    const { data } = await supabase
-      .from('product_likes')
-      .select(`
+    const { data } = await withNetworkRetry<any[]>(
+      () =>
+        supabase
+          .from('product_likes')
+          .select(`
         product:products(
           *,
           seller:sellers(id, business_name, logo_url, is_verified, rating, location),
@@ -761,14 +829,16 @@ export function useSavedProducts() {
           images:product_images(id, url, position)
         )
       `)
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false }),
+      { label: 'saved products' },
+    );
 
     if (data) {
       const savedProducts = data
-        .map(d => d.product)
+        .map((d: any) => d.product)
         .filter(Boolean)
-        .map(p => ({
+        .map((p: any) => ({
           ...(p as unknown as Product),
           is_liked: true,
         }));
@@ -797,9 +867,11 @@ export function useCart() {
       return;
     }
 
-    const variantQuery = await db
-      .from('cart_items')
-      .select(`
+    const variantQuery = await withNetworkRetry<any[]>(
+      () =>
+        db
+          .from('cart_items')
+          .select(`
         *,
         variant:product_variants(
           id, product_id, sku, options, price, compare_at_price, quantity,
@@ -812,8 +884,18 @@ export function useCart() {
           images:product_images(id, url, position)
         )
       `)
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false }),
+      { label: 'cart' },
+    );
+
+    // Aloqa uzilganda savatni bo'shatib yubormaymiz: eski holat ekranda qoladi,
+    // aks holda foydalanuvchi savati yo'qolgandek ko'rinadi.
+    if (variantQuery.error && isNetworkError(variantQuery.error)) {
+      console.warn('Cart unavailable (network):', variantQuery.error);
+      setIsLoading(false);
+      return;
+    }
 
     if (!variantQuery.error) {
       setItems(((variantQuery.data ?? []) as any[]).map(item => ({
@@ -832,9 +914,11 @@ export function useCart() {
     } else {
       // Production may briefly lag the frontend migration. Keep legacy carts usable.
       console.warn('Cart variant query failed, falling back to legacy cart:', variantQuery.error);
-      const legacyQuery = await supabase
-        .from('cart_items')
-        .select(`
+      const legacyQuery = await withNetworkRetry<any[]>(
+        () =>
+          supabase
+            .from('cart_items')
+            .select(`
           *,
           product:products(
             *,
@@ -842,17 +926,19 @@ export function useCart() {
             images:product_images(id, url, position)
           )
         `)
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false }),
+        { label: 'legacy cart' },
+      );
 
       if (legacyQuery.data) {
-        setItems(legacyQuery.data.map(item => ({
+        setItems(legacyQuery.data.map((item: any) => ({
           ...item,
           product_variant_id: null,
           variant: null,
           product: item.product as unknown as Product,
         })));
-      } else {
+      } else if (!isNetworkError(legacyQuery.error)) {
         setItems([]);
       }
     }
@@ -886,26 +972,38 @@ export function useCart() {
     }
 
     const requestedQty = Math.max(1, Math.floor(quantity));
-    const { data: product, error: productError } = await db
-      .from('products')
-      .select('id, title, quantity, status')
-      .eq('id', productId)
-      .maybeSingle();
+    const { data: product, error: productError } = await withNetworkRetry<any>(
+      () =>
+        db
+          .from('products')
+          .select('id, title, quantity, status')
+          .eq('id', productId)
+          .maybeSingle(),
+      { label: 'cart product check' },
+    );
 
     if (productError || !product) {
-      toast({ title: 'Xatolik', description: 'Mahsulot topilmadi', variant: 'destructive' });
+      toast({
+        title: 'Xatolik',
+        description: isNetworkError(productError) ? networkErrorMessage() : 'Mahsulot topilmadi',
+        variant: 'destructive',
+      });
       return false;
     }
 
     let variant: ProductVariant | null = null;
     if (productVariantId) {
-      const { data: row } = await db
-        .from('product_variants')
-        .select('id, product_id, sku, options, price, compare_at_price, quantity, image_url, is_active, position')
-        .eq('id', productVariantId)
-        .eq('product_id', productId)
-        .eq('is_active', true)
-        .maybeSingle();
+      const { data: row } = await withNetworkRetry<any>(
+        () =>
+          db
+            .from('product_variants')
+            .select('id, product_id, sku, options, price, compare_at_price, quantity, image_url, is_active, position')
+            .eq('id', productVariantId)
+            .eq('product_id', productId)
+            .eq('is_active', true)
+            .maybeSingle(),
+        { label: 'cart variant check' },
+      );
       if (!row) {
         toast({ title: 'Variant mavjud emas', variant: 'destructive' });
         return false;
@@ -947,7 +1045,11 @@ export function useCart() {
         });
 
     if (error) {
-      toast({ title: 'Xatolik', description: "Savatga qo'shilmadi", variant: 'destructive' });
+      toast({
+        title: 'Xatolik',
+        description: isNetworkError(error) ? networkErrorMessage() : "Savatga qo'shilmadi",
+        variant: 'destructive',
+      });
       return false;
     }
 
@@ -1079,7 +1181,11 @@ export function useProductActions() {
           .insert({ product_id: productId, user_id: user.id });
 
     if (error) {
-      toast({ title: 'Xatolik', description: error.message, variant: 'destructive' });
+      toast({
+        title: 'Xatolik',
+        description: isNetworkError(error) ? networkErrorMessage() : error.message,
+        variant: 'destructive',
+      });
       return false;
     }
 
