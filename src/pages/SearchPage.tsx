@@ -482,17 +482,35 @@ export default function SearchPage() {
         <AnimatePresence mode="wait">
           {!hasQuery ? (
             <motion.div
-              key="empty"
+              key={`empty-${activeTab}`}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.2 }}
             >
-              <EmptySearchState
-                recentSearches={recentSearches}
-                trendingSearches={trendingSearches}
-                onSelect={(text) => { triggerHaptic('light'); setQuery(text); }}
-              />
+              {activeTab === 'global' ? (
+                <SearchModeEmptyState
+                  icon={Globe}
+                  title="Alsamos Global Search"
+                  description="Internetdagi ochiq ma'lumotlarni qidiring. Natijalar real web manbalari va Alsamos indeksidan olinadi."
+                  examples={['OpenAI latest news', 'Toshkent ob-havo yangiliklari', 'JavaScript documentation']}
+                  onSelect={(text) => setQuery(text)}
+                />
+              ) : activeTab === 'ai' ? (
+                <SearchModeEmptyState
+                  icon={Sparkles}
+                  title="Alsamos AI Search"
+                  description="AI sahifadagi ayni Gemini yordamchisi Search ichida ham ishlaydi va mavjud web manbalar bilan javobni boyitadi."
+                  examples={['Alsamos haqida qisqacha ayt', 'Bugungi AI yangiliklarini tushuntir', 'Marketing trendlarini tahlil qil']}
+                  onSelect={(text) => setQuery(text)}
+                />
+              ) : (
+                <EmptySearchState
+                  recentSearches={recentSearches}
+                  trendingSearches={trendingSearches}
+                  onSelect={(text) => { triggerHaptic('light'); setQuery(text); }}
+                />
+              )}
             </motion.div>
           ) : (
             <motion.div
@@ -555,6 +573,44 @@ export default function SearchPage() {
     );
   }
   return pageContent;
+}
+
+function SearchModeEmptyState({
+  icon: Icon,
+  title,
+  description,
+  examples,
+  onSelect,
+}: {
+  icon: React.ElementType;
+  title: string;
+  description: string;
+  examples: string[];
+  onSelect: (text: string) => void;
+}) {
+  return (
+    <div className="rounded-3xl border border-border/40 bg-card/40 p-6 backdrop-blur-sm">
+      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
+        <Icon className="h-6 w-6 text-primary" />
+      </div>
+      <div className="mx-auto max-w-lg text-center">
+        <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{description}</p>
+      </div>
+      <div className="mx-auto mt-5 grid max-w-xl gap-2 sm:grid-cols-3">
+        {examples.map((example) => (
+          <button
+            key={example}
+            type="button"
+            onClick={() => onSelect(example)}
+            className="rounded-xl border border-border/30 bg-muted/30 px-3 py-2.5 text-left text-xs font-medium text-foreground transition-colors hover:bg-muted/60"
+          >
+            {example}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // ── Empty Search State ─────────────────────────────────
