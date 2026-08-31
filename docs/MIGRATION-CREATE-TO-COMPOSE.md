@@ -1,6 +1,6 @@
 # `/create` → `/compose` ko‘chish rejasi
 
-Holat: **boshlangan (M1 tugadi)** · Oxirgi yangilanish: 2026-08-29
+Holat: **boshlangan (M1 tugadi)** · Oxirgi yangilanish: 2026-08-31
 
 ## Nega bosqichma-bosqich
 
@@ -32,7 +32,7 @@ Shu hujjat. Har bir ko‘chirilgan modul yuqoridagi jadvalda belgilanadi.
 ### M2 — Mustaqil modullarni ko‘chirish
 Tashqi bog‘liqligi yo‘q va darhol ko‘chirila oladigan qismlar:
 1. `SchedulePostDialog` → `PostComposer` (baza tomoni tayyor: `scheduled_at`).
-2. `AspectRatioPicker` + `TextBackgroundPicker` → `StickerMediaEditor` yonига
+2. `AspectRatioPicker` + `TextBackgroundPicker` → `StickerMediaEditor` yoniga
    qo‘shiladi, natija `post_media.edit_state` ga yoziladi.
 3. `CameraVideoRecorder` → `usePostAttachments` ga to‘g‘ridan-to‘g‘ri fayl
    qo‘shish orqali ulanadi (`File` obyekti sifatida).
