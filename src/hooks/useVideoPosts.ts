@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import db from '@/lib/supabaseAny';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   attachProfiles,
@@ -50,6 +51,27 @@ const videoEmbedGuard = createProfileEmbedGuard();
 
 type PostRow = Record<string, unknown>;
 
+/**
+ * Deep-link qilingan post ID sini URL dan o'qiydi.
+ *
+ * Discover va qidiruv natijalari `/videos?v=<id>` ga o'tadi. Ilgari sahifa
+ * har doim eng yangi videodan boshlanar edi, ya'ni tugma bosilgani bilan
+ * boshqa video ochilardi. Shu sababli deep-link videosini ro'yxat boshiga
+ * chiqaramiz.
+ */
+function readDeepLinkVideoId(): string | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get('v') || params.get('post') || params.get('id');
+    const clean = raw?.trim();
+    return clean ? clean : null;
+  } catch {
+    return null;
+  }
+}
+
 export function useVideoPosts() {
   const [videos, setVideos] = useState<VideoPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -77,7 +99,41 @@ export function useVideoPosts() {
 
       if (error) throw error;
 
-      const data = (rows ?? []) as unknown as VideoPost[];
+      let data = (rows ?? []) as unknown as VideoPost[];
+
+      // ── Deep-link: aynan so'ralgan video birinchi bo'lib ko'rsatiladi ──
+      const deepLinkId = readDeepLinkVideoId();
+      if (deepLinkId) {
+        const existing = data.find((video) => video.id === deepLinkId);
+
+        if (existing) {
+          data = [existing, ...data.filter((video) => video.id !== deepLinkId)];
+        } else {
+          // Oxirgi 50 talikka tushmagan (eski) video ham ochilishi kerak.
+          const { data: singleRows, error: singleError } =
+            await runWithProfileEmbedFallback<PostRow>(
+              videoEmbedGuard,
+              (select) =>
+                supabase
+                  .from('posts')
+                  .select(select)
+                  .eq('id', deepLinkId)
+                  .limit(1) as unknown as PromiseLike<EmbedQueryResult<PostRow>>,
+              {
+                embedSelect: VIDEO_SELECT_WITH_PROFILE,
+                plainSelect: VIDEO_SELECT_PLAIN,
+              },
+            );
+
+          const single = !singleError
+            ? ((singleRows ?? [])[0] as unknown as VideoPost | undefined)
+            : undefined;
+
+          if (single?.media_urls?.length) {
+            data = [single, ...data.filter((video) => video.id !== single.id)];
+          }
+        }
+      }
 
       if (user && data.length > 0) {
         const postIds = data.map(p => p.id);
@@ -90,10 +146,29 @@ export function useVideoPosts() {
 
         const likedPostIds = new Set(likesData?.map(l => l.post_id) || []);
 
+        // Saqlanganlar (bookmark) holati: jadval mavjud bo'lmasa yoki ruxsat
+        // bo'lmasa sahifa ishlashda davom etadi, faqat holat bo'sh qoladi.
+        let bookmarkedPostIds = new Set<string>();
+        try {
+          const { data: bookmarksData, error: bookmarksError } = await db
+            .from('post_bookmarks')
+            .select('post_id')
+            .eq('user_id', user.id)
+            .in('post_id', postIds);
+
+          if (!bookmarksError) {
+            bookmarkedPostIds = new Set(
+              (bookmarksData ?? []).map((row: any) => row.post_id as string),
+            );
+          }
+        } catch (bookmarksError) {
+          console.warn('Bookmark holatini yuklab bolmadi:', bookmarksError);
+        }
+
         const videosWithStatus = data.map(post => ({
           ...post,
           is_liked: likedPostIds.has(post.id),
-          is_bookmarked: false,
+          is_bookmarked: bookmarkedPostIds.has(post.id),
         }));
 
         setVideos(videosWithStatus as VideoPost[]);
@@ -142,13 +217,41 @@ export function useVideoPosts() {
     }
   }, [user, videos]);
 
-  const toggleBookmark = useCallback((postId: string) => {
-    setVideos(prev => prev.map(v => 
-      v.id === postId 
-        ? { ...v, is_bookmarked: !v.is_bookmarked }
+  const toggleBookmark = useCallback(async (postId: string) => {
+    const video = videos.find(v => v.id === postId);
+    if (!video) return;
+
+    const wasBookmarked = !!video.is_bookmarked;
+
+    // Optimistik UI: tugma darhol javob beradi.
+    setVideos(prev => prev.map(v =>
+      v.id === postId
+        ? { ...v, is_bookmarked: !wasBookmarked }
         : v
     ));
-  }, []);
+
+    if (!user) return;
+
+    try {
+      if (wasBookmarked) {
+        const { error } = await db
+          .from('post_bookmarks')
+          .delete()
+          .eq('post_id', postId)
+          .eq('user_id', user.id);
+        if (error) throw error;
+      } else {
+        const { error } = await db
+          .from('post_bookmarks')
+          .insert({ post_id: postId, user_id: user.id });
+        if (error) throw error;
+      }
+    } catch (error) {
+      // Jadval hali yaratilmagan bo'lsa foydalanuvchini bezovta qilmaymiz,
+      // lekin holatni ham yolg'on ko'rsatmaslik uchun konsolga yozamiz.
+      console.warn('Bookmark saqlanmadi:', error);
+    }
+  }, [user, videos]);
 
   const refresh = useCallback(() => {
     fetchVideos();
