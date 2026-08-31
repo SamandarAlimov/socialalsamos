@@ -26,7 +26,11 @@ export const PROXY_TIMEOUT_MS = 15000;
 
 const BLOCKED_SCHEMES = ['javascript:', 'data:', 'blob:', 'file:', 'ftp:', 'ws:', 'wss:'];
 
-/** Iframe'ni to'liq bloklaydigan hostlar (X-Frame-Options / CSP frame-ancestors). */
+/**
+ * Iframe'ni to'liq bloklaydigan hostlar (X-Frame-Options / CSP frame-ancestors).
+ * Bu ro'yxat faqat "ma'lum" holatlar uchun; asosiy manba — bazadagi
+ * `mini_apps.frame_blocked` bayrog'i (mini-app-frame-check funksiyasi to'ldiradi).
+ */
 const FRAMING_BLOCKED_HOSTS = [
   'facebook.com',
   'instagram.com',
@@ -41,6 +45,8 @@ const FRAMING_BLOCKED_HOSTS = [
   'chat.openai.com',
   'github.com',
   'gmail.com',
+  // islom.uz: Content-Security-Policy: frame-ancestors 'self'
+  'islom.uz',
 ];
 
 export type UrlRejectReason =
@@ -198,6 +204,8 @@ export interface OpenPlan {
   error: UrlRejectReason | 'unsupported' | null;
   canonicalUrl: string | null;
   punycodeWarning: boolean;
+  /** Sayt iframe'ni bloklashi aniq — to'g'ridan-to'g'ri qadam o'tkazib yuborildi. */
+  framingBlocked: boolean;
 }
 
 export function buildProxyUrl(apiBase: string, targetUrl: string, cacheBuster?: string | number): string {
@@ -213,6 +221,8 @@ export interface BuildOpenPlanInput {
   deepLink?: string | null;
   apiBase?: string | null;
   cacheBuster?: string | number;
+  /** Bazadagi `mini_apps.frame_blocked` bayrog'i (server tekshiruvi natijasi). */
+  frameBlocked?: boolean;
 }
 
 /**
@@ -229,17 +239,31 @@ export function buildOpenPlan(input: BuildOpenPlanInput): OpenPlan {
           error: null,
           canonicalUrl: deepLink,
           punycodeWarning: false,
+          framingBlocked: false,
         }
-      : { steps: [], error: 'unsupported', canonicalUrl: null, punycodeWarning: false };
+      : {
+          steps: [],
+          error: 'unsupported',
+          canonicalUrl: null,
+          punycodeWarning: false,
+          framingBlocked: false,
+        };
   }
 
   const normalized = normalizeMiniAppUrl(input.url);
   if (!normalized.ok) {
-    return { steps: [], error: normalized.reason, canonicalUrl: null, punycodeWarning: false };
+    return {
+      steps: [],
+      error: normalized.reason,
+      canonicalUrl: null,
+      punycodeWarning: false,
+      framingBlocked: false,
+    };
   }
 
   const target = normalized.url;
   const embed = resolveEmbedUrl(target);
+  const blocked = Boolean(input.frameBlocked) || isFramingBlocked(target);
   const proxyStep: OpenStep | null = apiBase
     ? { kind: 'proxy', src: buildProxyUrl(apiBase, target, cacheBuster), timeoutMs: PROXY_TIMEOUT_MS }
     : null;
@@ -259,7 +283,8 @@ export function buildOpenPlan(input: BuildOpenPlanInput): OpenPlan {
   } else {
     // 'iframe' va 'webview' (web'da bir xil)
     if (embed) steps.push({ kind: 'embed', src: embed, timeoutMs: DIRECT_TIMEOUT_MS });
-    if (!isFramingBlocked(target)) {
+    // Bloklangani ma'lum bo'lsa, 8 soniya bo'sh kutishning ma'nosi yo'q.
+    if (!blocked) {
       steps.push({ kind: 'direct', src: target, timeoutMs: DIRECT_TIMEOUT_MS });
     }
     if (proxyStep) steps.push(proxyStep);
@@ -271,6 +296,7 @@ export function buildOpenPlan(input: BuildOpenPlanInput): OpenPlan {
     error: null,
     canonicalUrl: target,
     punycodeWarning: normalized.punycode,
+    framingBlocked: blocked,
   };
 }
 
