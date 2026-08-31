@@ -172,12 +172,13 @@ async function fetchYacyPeer(input: {
   category: GlobalCategory;
   page: number;
   pageSize: number;
+  resource: 'global' | 'local';
 }) {
-  const { baseUrl, query, category, page, pageSize } = input;
+  const { baseUrl, query, category, page, pageSize, resource } = input;
   const startRecord = (page - 1) * pageSize;
   const params = new URLSearchParams({
     query: yacyQuery(query, category),
-    resource: 'global',
+    resource,
     verify: 'false',
     maximumRecords: String(pageSize),
     startRecord: String(startRecord),
@@ -263,15 +264,16 @@ async function fetchYacyPeer(input: {
   }
 }
 
-async function runYacySearch(input: {
-  query: string;
-  category: GlobalCategory;
-  page: number;
-  pageSize: number;
-  locale: Locale;
-}) {
+async function queryYacyPool(
+  input: {
+    query: string;
+    category: GlobalCategory;
+    page: number;
+    pageSize: number;
+  },
+  resource: 'global' | 'local',
+) {
   const peers = yacyBaseUrls();
-
   const settled = await Promise.allSettled(
     peers.map((baseUrl) =>
       fetchYacyPeer({
@@ -280,28 +282,96 @@ async function runYacySearch(input: {
         category: input.category,
         page: input.page,
         pageSize: input.pageSize,
+        resource,
       }),
     ),
   );
 
-  const successful = settled
-    .filter((entry): entry is PromiseFulfilledResult<Awaited<ReturnType<typeof fetchYacyPeer>>> =>
-      entry.status === 'fulfilled',
+  const fulfilled = settled
+    .filter(
+      (entry): entry is PromiseFulfilledResult<
+        Awaited<ReturnType<typeof fetchYacyPeer>>
+      > => entry.status === 'fulfilled',
     )
-    .map((entry) => entry.value)
-    .sort((a, b) => b.results.length - a.results.length);
+    .map((entry) => entry.value);
 
-  if (successful.length === 0) {
-    const reasons = settled
-      .filter((entry): entry is PromiseRejectedResult => entry.status === 'rejected')
-      .map((entry) =>
-        entry.reason instanceof Error ? entry.reason.message : String(entry.reason),
-      )
-      .join(' | ');
-    throw new Error(reasons || 'No YaCy peer responded');
+  const failures = settled
+    .filter(
+      (entry): entry is PromiseRejectedResult => entry.status === 'rejected',
+    )
+    .map((entry) =>
+      entry.reason instanceof Error ? entry.reason.message : String(entry.reason),
+    );
+
+  // Merge results from every responsive peer. Public YaCy peers can return
+  // different slices of the freeworld index at the same moment, so selecting
+  // only one peer makes production unnecessarily flaky.
+  const seen = new Set<string>();
+  const merged: SearchResult[] = [];
+  let totalEstimated = 0;
+  const contributingPeers: string[] = [];
+
+  for (const result of fulfilled.sort((a, b) => b.results.length - a.results.length)) {
+    totalEstimated = Math.max(totalEstimated, result.totalEstimated);
+    if (result.results.length > 0) contributingPeers.push(result.baseUrl);
+
+    for (const item of result.results) {
+      if (seen.has(item.url)) continue;
+      seen.add(item.url);
+      merged.push(item);
+      if (merged.length >= input.pageSize) break;
+    }
+
+    if (merged.length >= input.pageSize) break;
   }
 
-  return successful[0];
+  return {
+    results: merged,
+    totalEstimated: Math.max(totalEstimated, merged.length),
+    contributingPeers,
+    failures,
+  };
+}
+
+async function runYacySearch(input: {
+  query: string;
+  category: GlobalCategory;
+  page: number;
+  pageSize: number;
+  locale: Locale;
+}) {
+  // First query the distributed freeworld network.
+  const global = await queryYacyPool(input, 'global');
+  if (global.results.length > 0) {
+    return {
+      ...global,
+      resource: 'global' as const,
+    };
+  }
+
+  // If the P2P query is temporarily empty, use each peer's local index.
+  // This avoids turning a transient freeworld miss into a user-visible outage.
+  const local = await queryYacyPool(input, 'local');
+  if (local.results.length > 0) {
+    return {
+      ...local,
+      resource: 'local' as const,
+      failures: [...global.failures, ...local.failures],
+    };
+  }
+
+  const failures = [...global.failures, ...local.failures];
+  if (failures.length >= yacyBaseUrls().length * 2) {
+    throw new Error(failures.join(' | ') || 'No YaCy peer responded');
+  }
+
+  return {
+    results: [] as SearchResult[],
+    totalEstimated: 0,
+    contributingPeers: [] as string[],
+    failures,
+    resource: 'global' as const,
+  };
 }
 
 function navigationalResult(
@@ -644,7 +714,19 @@ export default async function handler(req: any, res: any) {
       });
       results = yacy.results;
       totalEstimated = yacy.totalEstimated;
-      engine = 'yacy-freeworld:' + sourceFromUrl(yacy.baseUrl);
+      if (yacy.results.length > 0) {
+        const peerLabel = yacy.contributingPeers
+          .slice(0, 2)
+          .map((url) => sourceFromUrl(url))
+          .join(',');
+        engine =
+          yacy.resource === 'local'
+            ? 'yacy-local:' + peerLabel
+            : 'yacy-freeworld:' + peerLabel;
+      }
+      if (yacy.failures.length > 0) {
+        upstreamErrors.push(...yacy.failures.map((failure) => 'yacy-peer: ' + failure));
+      }
     } catch (error) {
       upstreamErrors.push(
         'yacy: ' + (error instanceof Error ? error.message : String(error)),
@@ -708,7 +790,9 @@ export default async function handler(req: any, res: any) {
             },
     };
 
-    cacheSet(cacheKey, payload);
+    if (results.length > 0 && !payload.error) {
+      cacheSet(cacheKey, payload);
+    }
 
     res.setHeader(
       'Cache-Control',
