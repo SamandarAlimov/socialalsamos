@@ -5,6 +5,7 @@
 import type { MiniAppDisplayMode } from './types';
 
 /**
+ * Oddiy (ishonchsiz) iframe uchun sandbox.
  * `allow-same-origin` ATAYLAB yo'q: `allow-scripts` bilan birga berilsa iframe
  * sandbox'dan chiqib, host sahifaning localStorage/tokenlariga kirishi mumkin.
  */
@@ -18,11 +19,23 @@ export const MINI_APP_IFRAME_SANDBOX = [
   'allow-presentation',
 ].join(' ');
 
+/**
+ * O'zimiz boshqaradigan proksi domeni (masalan proxy.alsamos.com) uchun sandbox.
+ * Bu yerda `allow-same-origin` XAVFSIZ, chunki proksi origini alsamos.com dan
+ * BOSHQA origin — iframe o'z origini bilan qoladi va host sahifaga tegolmaydi.
+ * Aynan shu ruxsat React/Next.js saytlarga localStorage, cookie va IndexedDB
+ * bilan ishlashga imkon beradi, ya'ni ular superapp ichida to'liq ishlaydi.
+ */
+export const MINI_APP_PROXY_IFRAME_SANDBOX = [MINI_APP_IFRAME_SANDBOX, 'allow-same-origin'].join(' ');
+
 /** Kamera/mikrofon/joylashuv faqat foydalanuvchi ruxsat bergan mini app uchun beriladi. */
 export const MINI_APP_IFRAME_ALLOW_BASE = 'clipboard-write; fullscreen';
 
 export const DIRECT_TIMEOUT_MS = 8000;
 export const PROXY_TIMEOUT_MS = 15000;
+
+/** Self-hosted proksidagi path prefiksi (workers/mini-app-proxy bilan bir xil). */
+export const MINI_APP_PROXY_PATH_PREFIX = '/p/';
 
 const BLOCKED_SCHEMES = ['javascript:', 'data:', 'blob:', 'file:', 'ftp:', 'ws:', 'wss:'];
 
@@ -30,6 +43,9 @@ const BLOCKED_SCHEMES = ['javascript:', 'data:', 'blob:', 'file:', 'ftp:', 'ws:'
  * Iframe'ni to'liq bloklaydigan hostlar (X-Frame-Options / CSP frame-ancestors).
  * Bu ro'yxat faqat "ma'lum" holatlar uchun; asosiy manba — bazadagi
  * `mini_apps.frame_blocked` bayrog'i (mini-app-frame-check funksiyasi to'ldiradi).
+ *
+ * Diqqat: bu ro'yxat faqat TO'G'RIDAN-TO'G'RI iframe qadamini o'tkazib yuboradi.
+ * Proksi qadami baribir sinaladi — maqsad ilovani superapp ICHIDA ochish.
  */
 const FRAMING_BLOCKED_HOSTS = [
   'facebook.com',
@@ -143,7 +159,6 @@ function youtubeEmbed(parsed: URL): string | null {
   if (list) return 'https://www.youtube.com/embed/videoseries?list=' + list;
 
   // Kanal yoki asosiy sahifa uchun embed mavjud emas.
-  // (Eski kod bu holatda buzilgan `?listType=search&list=` URL yasagan.)
   return null;
 }
 
@@ -183,7 +198,7 @@ export function resolveEmbedUrl(rawUrl: string): string | null {
   return null;
 }
 
-/** Sayt iframe'da ochilishini bloklaydimi? */
+/** Sayt to'g'ridan-to'g'ri iframe'da ochilishini bloklaydimi? */
 export function isFramingBlocked(rawUrl: string): boolean {
   const normalized = normalizeMiniAppUrl(rawUrl);
   if (!normalized.ok) return false;
@@ -196,6 +211,8 @@ export interface OpenStep {
   kind: OpenStepKind;
   src: string;
   timeoutMs: number;
+  /** Shu qadam uchun iframe sandbox qiymati. */
+  sandbox: string;
 }
 
 export interface OpenPlan {
@@ -206,12 +223,45 @@ export interface OpenPlan {
   punycodeWarning: boolean;
   /** Sayt iframe'ni bloklashi aniq — to'g'ridan-to'g'ri qadam o'tkazib yuborildi. */
   framingBlocked: boolean;
+  /** O'z domenimizdagi proksi sozlanganmi (superapp ichida to'liq ochish imkoni). */
+  inAppProxy: boolean;
 }
 
+/**
+ * `VITE_MINI_APP_PROXY_ORIGIN` — o'zimizning proksi domenimiz (workers/mini-app-proxy).
+ * Sozlanmagan bo'lsa Supabase Edge Function'ga qaytamiz, lekin u platforma
+ * sandbox sarlavhasi tufayli faqat statik sahifalarni ko'rsata oladi.
+ */
+function envProxyOrigin(): string | null {
+  try {
+    const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+    const value = env?.VITE_MINI_APP_PROXY_ORIGIN;
+    return value && value.trim() ? value.trim().replace(/\/+$/, '') : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Supabase Edge Function proksisi (zaxira variant). */
 export function buildProxyUrl(apiBase: string, targetUrl: string, cacheBuster?: string | number): string {
   const base = apiBase.replace(/\/+$/, '');
   const suffix = cacheBuster === undefined ? '' : '&_ts=' + encodeURIComponent(String(cacheBuster));
   return base + '/functions/v1/mini-app-proxy?url=' + encodeURIComponent(targetUrl) + suffix;
+}
+
+/** O'z domenimizdagi proksi (path-prefix shakli — nisbiy havolalar buzilmaydi). */
+export function buildInAppProxyUrl(
+  proxyOrigin: string,
+  targetUrl: string,
+  cacheBuster?: string | number,
+): string {
+  const origin = proxyOrigin.replace(/\/+$/, '');
+  let target = targetUrl;
+  if (cacheBuster !== undefined) {
+    const separator = target.includes('?') ? '&' : '?';
+    target = target + separator + '__mp=' + encodeURIComponent(String(cacheBuster));
+  }
+  return origin + MINI_APP_PROXY_PATH_PREFIX + target;
 }
 
 export interface BuildOpenPlanInput {
@@ -223,70 +273,104 @@ export interface BuildOpenPlanInput {
   cacheBuster?: string | number;
   /** Bazadagi `mini_apps.frame_blocked` bayrog'i (server tekshiruvi natijasi). */
   frameBlocked?: boolean;
+  /** O'z proksi domenimiz; berilmasa VITE_MINI_APP_PROXY_ORIGIN o'qiladi. */
+  proxyOrigin?: string | null;
+}
+
+function emptyPlan(error: OpenPlan['error']): OpenPlan {
+  return {
+    steps: [],
+    error,
+    canonicalUrl: null,
+    punycodeWarning: false,
+    framingBlocked: false,
+    inAppProxy: false,
+  };
 }
 
 /**
  * Ochish qadamlari tartibini docs/contracts/mini-apps/open-strategy.md bo'yicha tuzadi.
- * Har bir qadam muvaffaqiyatsiz bo'lsa (timeout/xato) keyingisiga o'tiladi.
+ * Asosiy tamoyil: mini app IMKON QADAR superapp ichida ochilishi kerak.
+ * Tashqi brauzer — faqat oxirgi zaxira variant.
  */
 export function buildOpenPlan(input: BuildOpenPlanInput): OpenPlan {
   const { displayMode = 'iframe', appType = 'link', deepLink, apiBase, cacheBuster } = input;
 
   if (appType === 'native') {
-    return deepLink
-      ? {
-          steps: [{ kind: 'native', src: deepLink, timeoutMs: 0 }],
-          error: null,
-          canonicalUrl: deepLink,
-          punycodeWarning: false,
-          framingBlocked: false,
-        }
-      : {
-          steps: [],
-          error: 'unsupported',
-          canonicalUrl: null,
-          punycodeWarning: false,
-          framingBlocked: false,
-        };
+    if (!deepLink) return emptyPlan('unsupported');
+    return {
+      steps: [{ kind: 'native', src: deepLink, timeoutMs: 0, sandbox: MINI_APP_IFRAME_SANDBOX }],
+      error: null,
+      canonicalUrl: deepLink,
+      punycodeWarning: false,
+      framingBlocked: false,
+      inAppProxy: false,
+    };
   }
 
   const normalized = normalizeMiniAppUrl(input.url);
-  if (!normalized.ok) {
-    return {
-      steps: [],
-      error: normalized.reason,
-      canonicalUrl: null,
-      punycodeWarning: false,
-      framingBlocked: false,
-    };
-  }
+  if (!normalized.ok) return emptyPlan(normalized.reason);
 
   const target = normalized.url;
   const embed = resolveEmbedUrl(target);
   const blocked = Boolean(input.frameBlocked) || isFramingBlocked(target);
-  const proxyStep: OpenStep | null = apiBase
-    ? { kind: 'proxy', src: buildProxyUrl(apiBase, target, cacheBuster), timeoutMs: PROXY_TIMEOUT_MS }
+
+  const proxyOrigin = input.proxyOrigin === undefined ? envProxyOrigin() : input.proxyOrigin;
+  const hasInAppProxy = Boolean(proxyOrigin);
+
+  const proxyStep: OpenStep | null = hasInAppProxy
+    ? {
+        kind: 'proxy',
+        src: buildInAppProxyUrl(proxyOrigin as string, target, cacheBuster),
+        timeoutMs: PROXY_TIMEOUT_MS,
+        sandbox: MINI_APP_PROXY_IFRAME_SANDBOX,
+      }
+    : apiBase
+      ? {
+          kind: 'proxy',
+          src: buildProxyUrl(apiBase, target, cacheBuster),
+          timeoutMs: PROXY_TIMEOUT_MS,
+          sandbox: MINI_APP_IFRAME_SANDBOX,
+        }
+      : null;
+
+  const embedStep: OpenStep | null = embed
+    ? { kind: 'embed', src: embed, timeoutMs: DIRECT_TIMEOUT_MS, sandbox: MINI_APP_IFRAME_SANDBOX }
     : null;
-  const externalStep: OpenStep = { kind: 'external', src: target, timeoutMs: 0 };
+  const directStep: OpenStep = {
+    kind: 'direct',
+    src: target,
+    timeoutMs: DIRECT_TIMEOUT_MS,
+    sandbox: MINI_APP_IFRAME_SANDBOX,
+  };
+  const externalStep: OpenStep = {
+    kind: 'external',
+    src: target,
+    timeoutMs: 0,
+    sandbox: MINI_APP_IFRAME_SANDBOX,
+  };
 
   const steps: OpenStep[] = [];
 
-  if (displayMode === 'external' || (appType === 'bot' && !embed)) {
+  if (appType === 'bot' && !embed) {
+    // Telegram bot havolasi faqat Telegram ilovasida ishlaydi.
+    steps.push(externalStep);
+  } else if (displayMode === 'external') {
+    // Baza `external` desa ham, o'z proksimiz bo'lsa avval ichkarida sinaymiz.
+    if (proxyStep && hasInAppProxy) steps.push(proxyStep);
     steps.push(externalStep);
   } else if (displayMode === 'proxy') {
     if (proxyStep) steps.push(proxyStep);
     steps.push(externalStep);
   } else if (displayMode === 'embed') {
-    if (embed) steps.push({ kind: 'embed', src: embed, timeoutMs: DIRECT_TIMEOUT_MS });
+    if (embedStep) steps.push(embedStep);
     if (proxyStep) steps.push(proxyStep);
     steps.push(externalStep);
   } else {
     // 'iframe' va 'webview' (web'da bir xil)
-    if (embed) steps.push({ kind: 'embed', src: embed, timeoutMs: DIRECT_TIMEOUT_MS });
+    if (embedStep) steps.push(embedStep);
     // Bloklangani ma'lum bo'lsa, 8 soniya bo'sh kutishning ma'nosi yo'q.
-    if (!blocked) {
-      steps.push({ kind: 'direct', src: target, timeoutMs: DIRECT_TIMEOUT_MS });
-    }
+    if (!blocked) steps.push(directStep);
     if (proxyStep) steps.push(proxyStep);
     steps.push(externalStep);
   }
@@ -297,6 +381,7 @@ export function buildOpenPlan(input: BuildOpenPlanInput): OpenPlan {
     canonicalUrl: target,
     punycodeWarning: normalized.punycode,
     framingBlocked: blocked,
+    inAppProxy: hasInAppProxy,
   };
 }
 
