@@ -1,3 +1,17 @@
+import { isVideoPipelineSupported, renderVideo } from '@/lib/videoPipeline';
+
+/**
+ * Tahrirlangan videoni fayl sifatida chiqarish.
+ *
+ * Ikki yo'l bor:
+ *  1. ffmpeg.wasm (`videoPipeline`) — asosiy yo'l. Aniq mp4 beradi, real
+ *     vaqtdan tez ishlaydi va musiqa qo'shishni ham qo'llab-quvvatlaydi.
+ *  2. MediaRecorder + canvas — zaxira yo'l. Videoni real vaqtda ijro etib
+ *     yozib oladi, shuning uchun sekin va Chrome'da ko'pincha webm chiqadi.
+ *     wasm yuklanmagan yoki kodlash muvaffaqiyatsiz bo'lgan qurilmalarda
+ *     funksiya butunlay yo'qolib qolmasligi uchun saqlanadi.
+ */
+
 export interface VideoRenderEdit {
   trimStart: number;
   trimEnd: number;
@@ -39,7 +53,8 @@ function recorderFormat(): RecorderFormat | null {
   );
 }
 
-export function canRenderEditedVideo(): boolean {
+/** Zaxira (canvas) yo'li ishlaydimi. */
+function canRecordWithCanvas(): boolean {
   if (typeof document === 'undefined') return false;
   const canvas = document.createElement('canvas');
 
@@ -48,6 +63,16 @@ export function canRenderEditedVideo(): boolean {
       typeof canvas.captureStream === 'function' &&
       (window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext),
   );
+}
+
+/**
+ * Qurilmada videoni umuman render qilish mumkinmi.
+ *
+ * wasm mavjud bo'lsa yetarli — MediaRecorder qo'llab-quvvatlanmasa ham
+ * ffmpeg yo'li ishlaydi.
+ */
+export function canRenderEditedVideo(): boolean {
+  return isVideoPipelineSupported() || canRecordWithCanvas();
 }
 
 function waitForEvent(
@@ -111,7 +136,53 @@ function outputDimensions(
   };
 }
 
+/**
+ * Asosiy chiqarish funksiyasi: avval ffmpeg, keyin zaxira canvas yo'li.
+ */
 export async function renderEditedVideo(
+  file: File,
+  edit: VideoRenderEdit,
+  options: VideoRenderOptions = {},
+): Promise<File> {
+  const maxDimension = Math.max(480, Math.min(1920, options.maxDimension ?? 1080));
+
+  if (isVideoPipelineSupported()) {
+    try {
+      const result = await renderVideo({
+        file,
+        trim: { startSeconds: edit.trimStart, endSeconds: edit.trimEnd },
+        crop: {
+          x: edit.cropX,
+          y: edit.cropY,
+          width: edit.cropWidth,
+          height: edit.cropHeight,
+        },
+        rotation: edit.rotation,
+        flipHorizontal: edit.flipHorizontal,
+        flipVertical: edit.flipVertical,
+        // Kvadrat ramka — uzun tomon maxDimension dan oshmaydi.
+        maxWidth: maxDimension,
+        maxHeight: maxDimension,
+        fps: options.frameRate ?? 30,
+        onProgress: options.onProgress,
+      });
+
+      options.onProgress?.(1);
+      return result.file;
+    } catch (error) {
+      // wasm yuklanmadi yoki kodlash yiqildi — funksiyani yo'qotmaymiz.
+      console.warn('ffmpeg yo‘li ishlamadi, canvas render sinaladi:', error);
+
+      if (!canRecordWithCanvas()) throw error;
+      options.onProgress?.(0);
+    }
+  }
+
+  return renderWithCanvas(file, edit, { ...options, maxDimension });
+}
+
+/** Zaxira yo'l: videoni ijro etib canvas orqali yozib olish. */
+async function renderWithCanvas(
   file: File,
   edit: VideoRenderEdit,
   options: VideoRenderOptions = {},

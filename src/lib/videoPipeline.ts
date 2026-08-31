@@ -41,8 +41,14 @@ export interface VideoTrim {
   endSeconds: number;
 }
 
-/** Kesish to'rtburchagi — manba piksellarida. */
-export interface VideoCrop {
+/**
+ * Kesish to'rtburchagi — manba o'lchamining foizida (0..100).
+ *
+ * Foiz ataylab tanlangan: tahrirlagich video piksel o'lchamini bilmasdan
+ * ham crop maydonini ko'rsatadi, ffmpeg esa iw/ih ifodalari bilan o'zi
+ * hisoblaydi.
+ */
+export interface VideoCropPercent {
   x: number;
   y: number;
   width: number;
@@ -62,7 +68,11 @@ export interface VideoAudioTrack {
 export interface VideoRenderRequest {
   file: File;
   trim?: VideoTrim | null;
-  crop?: VideoCrop | null;
+  crop?: VideoCropPercent | null;
+  /** 0, 90, 180 yoki 270 daraja (soat yo'nalishi bo'yicha). */
+  rotation?: number;
+  flipHorizontal?: boolean;
+  flipVertical?: boolean;
   /** Chiqish o'lchovi shu ramkaga sig'diriladi (nisbat saqlanadi). */
   maxWidth?: number;
   maxHeight?: number;
@@ -91,7 +101,10 @@ export interface FfmpegArgsInput {
   outputName: string;
   audioName?: string | null;
   trim?: VideoTrim | null;
-  crop?: VideoCrop | null;
+  crop?: VideoCropPercent | null;
+  rotation?: number;
+  flipHorizontal?: boolean;
+  flipVertical?: boolean;
   scale?: { maxWidth: number; maxHeight: number } | null;
   fps?: number | null;
   crf: number;
@@ -107,23 +120,53 @@ function round3(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
 
-/** Filtr zanjiri: kesish → o'lcham → kadr tezligi. */
+/** Foizni ffmpeg ifodasidagi ko'paytmaga aylantiradi. */
+function factor(percent: number, fallback: number): string {
+  const safe = Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : fallback;
+  return String(Math.round((safe / 100) * 100000) / 100000);
+}
+
+/** Burilishni 0/90/180/270 ga keltiradi. */
+export function normalizeRotation(rotation?: number): number {
+  if (!rotation || !Number.isFinite(rotation)) return 0;
+  return (((Math.round(rotation / 90) * 90) % 360) + 360) % 360;
+}
+
+/**
+ * Filtr zanjiri: crop → oyna → burilish → o'lcham → kadr tezligi.
+ *
+ * Tartib eski canvas render bilan bir xil, shuning uchun ikki yo'l bir xil
+ * natija beradi.
+ */
 function videoFilterChain(input: FfmpegArgsInput): string[] {
   const chain: string[] = [];
+  const crop = input.crop;
 
-  if (input.crop) {
-    const { width, height, x, y } = input.crop;
+  const cropsSomething =
+    crop &&
+    (crop.x > 0 || crop.y > 0 || crop.width < 100 || crop.height < 100);
+
+  if (crop && cropsSomething) {
     chain.push(
-      'crop=' +
-        Math.max(2, Math.round(width)) +
-        ':' +
-        Math.max(2, Math.round(height)) +
-        ':' +
-        Math.max(0, Math.round(x)) +
-        ':' +
-        Math.max(0, Math.round(y)),
+      'crop=iw*' +
+        factor(crop.width, 100) +
+        ':ih*' +
+        factor(crop.height, 100) +
+        ':iw*' +
+        factor(crop.x, 0) +
+        ':ih*' +
+        factor(crop.y, 0),
     );
   }
+
+  if (input.flipHorizontal) chain.push('hflip');
+  if (input.flipVertical) chain.push('vflip');
+
+  // transpose=1 — 90° soat yo'nalishi bo'yicha, transpose=2 — teskari.
+  const rotation = normalizeRotation(input.rotation);
+  if (rotation === 90) chain.push('transpose=1');
+  else if (rotation === 180) chain.push('transpose=1', 'transpose=1');
+  else if (rotation === 270) chain.push('transpose=2');
 
   if (input.scale) {
     // force_divisible_by=2 — x264 juft o'lcham talab qiladi.
@@ -333,7 +376,7 @@ async function toUint8Array(data: File | Blob): Promise<Uint8Array> {
 }
 
 /**
- * Videoni qirqadi, kesadi, siqadi va kerak bo'lsa musiqa qo'shadi.
+ * Videoni qirqadi, kesadi, buradi, siqadi va kerak bo'lsa musiqa qo'shadi.
  *
  * Natija — haqiqiy mp4 fayl, ya'ni tahrir faqat metadata sifatida qolib
  * ketmaydi.
@@ -356,6 +399,9 @@ export async function renderVideo(
     audioName: request.audio ? AUDIO_NAME : null,
     trim,
     crop: request.crop ?? null,
+    rotation: request.rotation ?? 0,
+    flipHorizontal: request.flipHorizontal ?? false,
+    flipVertical: request.flipVertical ?? false,
     scale: {
       maxWidth: request.maxWidth ?? 1080,
       maxHeight: request.maxHeight ?? 1920,

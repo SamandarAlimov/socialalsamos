@@ -4,6 +4,7 @@ import {
   assessClientRender,
   buildFfmpegArgs,
   CLIENT_RENDER_MAX_BYTES,
+  normalizeRotation,
   type FfmpegArgsInput,
 } from '@/lib/videoPipeline';
 
@@ -14,6 +15,9 @@ function baseInput(overrides: Partial<FfmpegArgsInput> = {}): FfmpegArgsInput {
     audioName: null,
     trim: null,
     crop: null,
+    rotation: 0,
+    flipHorizontal: false,
+    flipVertical: false,
     scale: null,
     fps: null,
     crf: 26,
@@ -62,22 +66,49 @@ describe('buildFfmpegArgs', () => {
     expect(args).not.toContain('-t');
   });
 
-  it('chains crop, scale and fps in that order', () => {
+  it('skips the crop filter when the crop covers the whole frame', () => {
+    const args = buildFfmpegArgs(
+      baseInput({ crop: { x: 0, y: 0, width: 100, height: 100 } }),
+    );
+
+    expect(args).not.toContain('-vf');
+  });
+
+  it('expresses a percent crop with iw/ih factors', () => {
+    const args = buildFfmpegArgs(
+      baseInput({ crop: { x: 10, y: 20, width: 50, height: 60 } }),
+    );
+
+    expect(valueAfter(args, '-vf')).toBe('crop=iw*0.5:ih*0.6:iw*0.1:ih*0.2');
+  });
+
+  it('chains crop, flips, rotation, scale and fps in canvas order', () => {
     const args = buildFfmpegArgs(
       baseInput({
-        crop: { x: 10.4, y: 20.6, width: 300, height: 400 },
-        scale: { maxWidth: 1080, maxHeight: 1920 },
+        crop: { x: 0, y: 0, width: 80, height: 100 },
+        flipHorizontal: true,
+        rotation: 90,
+        scale: { maxWidth: 1080, maxHeight: 1080 },
         fps: 30,
       }),
     );
 
-    const chain = valueAfter(args, '-vf') ?? '';
-    const parts = chain.split(',');
+    const parts = (valueAfter(args, '-vf') ?? '').split(',');
 
-    expect(parts[0]).toBe('crop=300:400:10:21');
-    expect(parts[1]).toContain('scale=1080:1920');
-    expect(parts[1]).toContain('force_divisible_by=2');
-    expect(parts[2]).toBe('fps=30');
+    expect(parts[0]).toBe('crop=iw*0.8:ih*1:iw*0:ih*0');
+    expect(parts[1]).toBe('hflip');
+    expect(parts[2]).toBe('transpose=1');
+    expect(parts[3]).toContain('scale=1080:1080');
+    expect(parts[3]).toContain('force_divisible_by=2');
+    expect(parts[4]).toBe('fps=30');
+  });
+
+  it('maps 180 and 270 degrees onto transpose steps', () => {
+    const half = buildFfmpegArgs(baseInput({ rotation: 180 }));
+    const threeQuarters = buildFfmpegArgs(baseInput({ rotation: 270 }));
+
+    expect(valueAfter(half, '-vf')).toBe('transpose=1,transpose=1');
+    expect(valueAfter(threeQuarters, '-vf')).toBe('transpose=2');
   });
 
   it('drops the audio stream entirely when muted without extra audio', () => {
@@ -139,6 +170,17 @@ describe('buildFfmpegArgs', () => {
     );
 
     expect(valueAfter(args, '-filter_complex')).toContain('[0:v]null[vout]');
+  });
+});
+
+describe('normalizeRotation', () => {
+  it('snaps arbitrary angles onto quarter turns', () => {
+    expect(normalizeRotation(0)).toBe(0);
+    expect(normalizeRotation(89)).toBe(90);
+    expect(normalizeRotation(450)).toBe(90);
+    expect(normalizeRotation(-90)).toBe(270);
+    expect(normalizeRotation(undefined)).toBe(0);
+    expect(normalizeRotation(Number.NaN)).toBe(0);
   });
 });
 
