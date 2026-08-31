@@ -130,6 +130,129 @@ function typeFromCategory(
   return 'web';
 }
 
+function yacyBaseUrl() {
+  return (process.env.YACY_SEARCH_BASE || 'https://peer.yacy.space').replace(/\/+$/, '');
+}
+
+function yacyQuery(query: string, category: GlobalCategory) {
+  if (category === 'wikipedia') return query + ' site:wikipedia.org';
+  if (category === 'news') return query + ' /date';
+  return query;
+}
+
+function yacyContentDomain(category: GlobalCategory) {
+  if (category === 'images') return 'image';
+  if (category === 'videos') return 'video';
+  return 'text';
+}
+
+function normalizePublishedAt(value: unknown): string | null {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const timestamp = Date.parse(raw);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+}
+
+async function runYacySearch(input: {
+  query: string;
+  category: GlobalCategory;
+  page: number;
+  pageSize: number;
+  locale: Locale;
+}) {
+  const { query, category, page, pageSize } = input;
+  const startRecord = (page - 1) * pageSize;
+
+  const params = new URLSearchParams({
+    query: yacyQuery(query, category),
+    resource: 'global',
+    verify: 'false',
+    maximumRecords: String(pageSize),
+    startRecord: String(startRecord),
+    contentdom: yacyContentDomain(category),
+    urlmaskfilter: '.*',
+    prefermaskfilter: '',
+    nav: 'all',
+  });
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 14000);
+
+  try {
+    const response = await fetch(
+      yacyBaseUrl() + '/yacysearch.json?' + params.toString(),
+      {
+        method: 'GET',
+        signal: controller.signal,
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': 'AlsamosSearch/1.0 (+https://www.alsamos.com/)',
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error('YaCy HTTP ' + response.status);
+    }
+
+    const data = await response.json();
+    const channel = Array.isArray(data?.channels) ? data.channels[0] : null;
+    const items = Array.isArray(channel?.items) ? channel.items : [];
+
+    const seen = new Set<string>();
+    const results: SearchResult[] = [];
+
+    for (const item of items) {
+      const rawUrl = String(item?.link || item?.url || '').trim();
+      if (!rawUrl || seen.has(rawUrl)) continue;
+      seen.add(rawUrl);
+
+      const title = String(item?.title || sourceFromUrl(rawUrl)).trim();
+      const snippet = String(item?.description || item?.content || '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      results.push({
+        id: await hashId('yacy:' + rawUrl),
+        type: typeFromCategory(category, rawUrl, title),
+        title,
+        snippet,
+        url: rawUrl,
+        displayUrl: displayUrl(rawUrl),
+        thumbnailUrl:
+          typeof item?.image === 'string' && item.image.trim()
+            ? item.image.trim()
+            : null,
+        source: sourceFromUrl(rawUrl),
+        publishedAt: normalizePublishedAt(item?.pubDate),
+        author: null,
+        width: null,
+        height: null,
+        durationSeconds: null,
+      });
+    }
+
+    const totalRaw =
+      channel?.totalResults ??
+      channel?.['opensearch:totalResults'] ??
+      results.length;
+
+    const totalEstimated = Number(String(totalRaw).replace(/[^0-9]/g, '')) || results.length;
+
+    return {
+      results,
+      totalEstimated,
+      hasMore:
+        Boolean(channel?.hasMoreResults) ||
+        results.length === pageSize ||
+        totalEstimated > startRecord + results.length,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function categoryInstruction(category: GlobalCategory) {
   switch (category) {
     case 'news':
@@ -388,24 +511,10 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
+  // Global Search must work without a proprietary API key.
+  // YaCy's public freeworld peer is the primary engine; Gemini grounding is only
+  // an optional fallback when a server-side key is configured.
   const apiKey = getApiKey();
-  if (!apiKey) {
-    res.status(503).json({
-      query,
-      category,
-      page,
-      totalEstimated: 0,
-      tookMs: 0,
-      results: [],
-      engine: 'gemini-google-search',
-      error: {
-        code: 'SEARCH_API_KEY_MISSING',
-        message:
-          'ALSAMOS_SEARCH_API_KEY server environment variable is not configured.',
-      },
-    });
-    return;
-  }
 
   const cacheKey = [
     query.toLowerCase(),
@@ -431,33 +540,76 @@ export default async function handler(req: any, res: any) {
   const startedAt = Date.now();
 
   try {
-    const grounded = await runGroundedSearch({
-      query,
-      category,
-      page,
-      pageSize,
-      locale,
-      apiKey,
-    });
+    let results: SearchResult[] = [];
+    let totalEstimated = 0;
+    let engine = 'yacy-freeworld';
+    let summary: string | null = null;
+    let searchSuggestionHtml: string | null = null;
+    let searchQueries: string[] = [];
+    const upstreamErrors: string[] = [];
+
+    try {
+      const yacy = await runYacySearch({
+        query,
+        category,
+        page,
+        pageSize,
+        locale,
+      });
+      results = yacy.results;
+      totalEstimated = yacy.totalEstimated;
+    } catch (error) {
+      upstreamErrors.push(
+        'yacy: ' + (error instanceof Error ? error.message : String(error)),
+      );
+    }
+
+    if (results.length === 0 && apiKey && page === 1) {
+      try {
+        const grounded = await runGroundedSearch({
+          query,
+          category,
+          page,
+          pageSize,
+          locale,
+          apiKey,
+        });
+
+        results = grounded.results;
+        totalEstimated = grounded.results.length;
+        summary = grounded.summary;
+        searchSuggestionHtml = grounded.searchSuggestionHtml;
+        searchQueries = grounded.searchQueries;
+        engine = 'gemini-google-search-fallback';
+      } catch (error) {
+        upstreamErrors.push(
+          'gemini: ' + (error instanceof Error ? error.message : String(error)),
+        );
+      }
+    }
+
+    if (upstreamErrors.length) {
+      console.warn('Alsamos Global Search upstream notes:', upstreamErrors);
+    }
 
     const payload = {
       query,
       category,
       page,
-      totalEstimated: grounded.results.length,
+      totalEstimated,
       tookMs: Date.now() - startedAt,
-      results: grounded.results,
-      engine: 'gemini-google-search',
-      summary: grounded.summary,
-      searchSuggestionHtml: grounded.searchSuggestionHtml,
-      searchQueries: grounded.searchQueries,
+      results,
+      engine,
+      summary,
+      searchSuggestionHtml,
+      searchQueries,
       error:
-        grounded.results.length > 0
+        results.length > 0
           ? null
           : {
-              code: 'NO_GROUNDED_RESULTS',
+              code: 'NO_RESULTS',
               message:
-                "Jonli internet qidiruvi bajarildi, lekin tekshiriladigan manba qaytmadi.",
+                "Internet qidiruvi bajarildi, lekin bu so'rov uchun natija topilmadi.",
             },
     };
 
@@ -477,7 +629,7 @@ export default async function handler(req: any, res: any) {
       totalEstimated: 0,
       tookMs: Date.now() - startedAt,
       results: [],
-      engine: 'gemini-google-search',
+      engine: 'yacy-freeworld',
       error: {
         code: 'SEARCH_UPSTREAM_ERROR',
         message:
