@@ -1,35 +1,78 @@
-import { useEffect, useRef, useState } from 'react';
-import { Paperclip, ArrowUp, Square, Mic, Loader2, X, FileText, Film, Music, Zap, ImageIcon } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ArrowUp,
+  Bot,
+  FileText,
+  Image as ImageIcon,
+  Loader2,
+  Mic,
+  MicOff,
+  Paperclip,
+  Plus,
+  Square,
+  X,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import { SLASH_COMMANDS, detectIntent } from '@/lib/aiIntent';
+import { useToast } from '@/hooks/use-toast';
+import { useVoiceInput } from '@/hooks/useVoiceInput';
+import { AIModelPicker } from './AIModelPicker';
+import { AIToolsMenu } from './AIToolsMenu';
+import type { AIMode, ModelId, ToolGroupId } from '@/lib/ai/capabilities';
+import { MODE_OPTIONS } from '@/lib/ai/capabilities';
 
-export interface ComposerAttachment {
+const PLACEHOLDERS = [
+  'Alsamos AI dan so\u2019rang\u2026',
+  'Kod yozib bering yoki xatoni tuzatib bering\u2026',
+  'Internetdan tekshirib, xulosa qilib bering\u2026',
+  'Rasm yarating: «tog\u2019 ustida quyosh chiqishi»',
+  'Bu haftaning rejasini tuzib bering\u2026',
+];
+
+type SlashCommand = {
+  cmd: string;
+  label: string;
+  hint: string;
+};
+
+const SLASH_COMMANDS: SlashCommand[] = [
+  { cmd: '/image', label: 'Rasm yaratish', hint: 'Matn asosida rasm generatsiya qilish' },
+  { cmd: '/video', label: 'Video yaratish', hint: 'Qisqa video navbatga qo\u2019yiladi' },
+  { cmd: '/code', label: 'Kod yozish', hint: 'To\u2019liq, ishlaydigan kod fayli' },
+  { cmd: '/run', label: 'Kodni ishga tushirish', hint: 'Sandbox\u2019da tekshirib ko\u2019rish' },
+  { cmd: '/web', label: 'Internetdan qidirish', hint: 'Manbalar bilan javob' },
+  { cmd: '/summarize', label: 'Qisqartirish', hint: 'Uzun matnni xulosalash' },
+  { cmd: '/translate', label: 'Tarjima', hint: 'Boshqa tilga o\u2019girish' },
+  { cmd: '/computer', label: 'Kompyuterda bajarish', hint: 'Alsamos Bridge orqali (tasdiq bilan)' },
+];
+
+export type ComposerAttachment = {
   url: string;
   name: string;
   type: string;
-}
+};
 
-interface Props {
+interface AIComposerProps {
   value: string;
-  onChange: (v: string) => void;
+  onChange: (value: string) => void;
   onSend: () => void;
-  onStop: () => void;
-  busy: boolean;
-  uploading: boolean;
+  onStop?: () => void;
+  busy?: boolean;
+  uploading?: boolean;
   attachments: ComposerAttachment[];
-  onPickFiles: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onDropFiles: (files: File[]) => void;
-  onRemoveAttachment: (index: number) => void;
+  onPickFiles: (files: FileList | null) => void;
+  onDropFiles?: (files: FileList | null) => void;
+  onRemoveAttachment: (url: string) => void;
+  mode: AIMode;
+  onModeChange: (mode: AIMode) => void;
+  model: ModelId;
+  onModelChange: (model: ModelId) => void;
+  activeModel?: string | null;
+  toolGroups: ToolGroupId[];
+  onToolGroupsChange: (groups: ToolGroupId[]) => void;
+  onOpenConnectors?: () => void;
 }
-
-const PLACEHOLDERS = [
-  'Savol bering, rasm yarating yoki kod yozing...',
-  'Masalan: "Bozor uchun reklama matni yoz"',
-  'Masalan: "Tog\' manzarasi rasmini chiz"',
-  'Masalan: "Ushbu matnni ingliz tiliga tarjima qil"',
-];
 
 export function AIComposer({
   value,
@@ -42,84 +85,109 @@ export function AIComposer({
   onPickFiles,
   onDropFiles,
   onRemoveAttachment,
-}: Props) {
+  mode,
+  onModeChange,
+  model,
+  onModelChange,
+  activeModel,
+  toolGroups,
+  onToolGroupsChange,
+  onOpenConnectors,
+}: AIComposerProps) {
+  const { toast } = useToast();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [placeholderIdx, setPlaceholderIdx] = useState(0);
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const [slashOpen, setSlashOpen] = useState(false);
 
-  // Rotating placeholder while the input is empty.
+  const voice = useVoiceInput();
+  const voiceBaseRef = useRef('');
+
+  // Placeholder aylanishi (faqat bo'sh maydonda).
   useEffect(() => {
     if (value) return;
-    const t = setInterval(() => setPlaceholderIdx((i) => (i + 1) % PLACEHOLDERS.length), 4000);
-    return () => clearInterval(t);
+    const timer = setInterval(
+      () => setPlaceholderIndex((i) => (i + 1) % PLACEHOLDERS.length),
+      4200,
+    );
+    return () => clearInterval(timer);
   }, [value]);
 
-  // Auto-grow
+  // Balandlikni avtomatik moslash.
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
   }, [value]);
 
-  const showSlash = value.startsWith('/') && !value.includes(' ');
-  const slashMatches = SLASH_COMMANDS.filter((c) => c.cmd.startsWith(value.toLowerCase()));
-  const intent = value.trim() ? detectIntent(value).intent : 'chat';
-  const canSend = (value.trim().length > 0 || attachments.length > 0) && !busy;
+  // Ovozdan matnga.
+  useEffect(() => {
+    if (!voice.listening) return;
+    const spoken = [voice.transcript, voice.interim].filter(Boolean).join(' ').trim();
+    if (!spoken) return;
+    const base = voiceBaseRef.current;
+    onChange(base ? `${base} ${spoken}` : spoken);
+  }, [voice.listening, voice.transcript, voice.interim, onChange]);
+
+  useEffect(() => {
+    if (voice.error) {
+      toast({ title: 'Ovozli kiritish', description: voice.error, variant: 'destructive' });
+    }
+  }, [voice.error, toast]);
+
+  const slashMatches = useMemo(() => {
+    if (!slashOpen) return [];
+    const query = value.trim().toLowerCase();
+    if (!query.startsWith('/')) return [];
+    return SLASH_COMMANDS.filter((c) => c.cmd.startsWith(query));
+  }, [slashOpen, value]);
+
+  const canSend = Boolean(value.trim()) && !busy && !uploading;
+
+  const handleMic = () => {
+    if (!voice.supported) {
+      toast({
+        title: "Qo'llab-quvvatlanmaydi",
+        description: 'Bu brauzerda ovozli kiritish mavjud emas. Chrome yoki Edge sinab ko\u2019ring.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (voice.listening) {
+      voice.stop();
+      voice.reset();
+      return;
+    }
+    voiceBaseRef.current = value.trim();
+    voice.reset();
+    voice.start();
+  };
+
+  const applyCommand = (cmd: string) => {
+    onChange(`${cmd} `);
+    setSlashOpen(false);
+    textareaRef.current?.focus();
+  };
 
   return (
-    <div className="border-t border-border/20 bg-background/80 p-3 backdrop-blur-xl pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-      <div className="mx-auto max-w-3xl">
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          className="hidden"
-          onChange={onPickFiles}
-          accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt,.md,.xlsx,.xls,.pptx,.ppt,.csv,.json,.zip,.rar,.7z"
-        />
-
-        {attachments.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-2">
-            {attachments.map((a, i) => (
-              <div
-                key={`${a.url}-${i}`}
-                className="flex max-w-[220px] items-center gap-2 rounded-lg border border-border/50 bg-muted/60 py-1 pl-2 pr-1 text-xs"
-              >
-                {a.type === 'image' ? (
-                  <img src={a.url} className="h-7 w-7 rounded object-cover" alt="" />
-                ) : a.type === 'video' ? (
-                  <Film className="h-4 w-4 shrink-0 text-alsamos-orange" />
-                ) : a.type === 'audio' ? (
-                  <Music className="h-4 w-4 shrink-0 text-alsamos-orange" />
-                ) : (
-                  <FileText className="h-4 w-4 shrink-0 text-alsamos-orange" />
-                )}
-                <span className="truncate">{a.name}</span>
-                <button
-                  onClick={() => onRemoveAttachment(i)}
-                  className="rounded p-0.5 hover:bg-background"
-                  aria-label="Olib tashlash"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {showSlash && slashMatches.length > 0 && (
-          <div className="mb-2 overflow-hidden rounded-xl border border-border/50 bg-card shadow-lg">
-            {slashMatches.map((c) => (
+    <div className="px-3 pb-3 sm:px-4 sm:pb-4">
+      <div className="mx-auto w-full max-w-3xl">
+        {slashMatches.length > 0 && (
+          <div className="mb-2 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-lg">
+            {slashMatches.map((command) => (
               <button
-                key={c.cmd}
-                onClick={() => onChange(`${c.cmd} `)}
+                key={command.cmd}
+                type="button"
+                onClick={() => applyCommand(command.cmd)}
                 className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-muted/60"
               >
-                <span className="font-mono text-xs text-alsamos-orange">{c.cmd}</span>
-                <span className="text-xs font-medium">{c.label}</span>
-                <span className="ml-auto truncate text-[10px] text-muted-foreground">{c.hint}</span>
+                <span className="font-mono text-xs text-alsamos-orange">{command.cmd}</span>
+                <span className="flex-1">
+                  <span className="block text-sm font-medium">{command.label}</span>
+                  <span className="block text-[11px] text-muted-foreground">{command.hint}</span>
+                </span>
               </button>
             ))}
           </div>
@@ -134,69 +202,149 @@ export function AIComposer({
           onDrop={(e) => {
             e.preventDefault();
             setDragging(false);
-            const files = Array.from(e.dataTransfer.files || []);
-            if (files.length) onDropFiles(files);
+            onDropFiles?.(e.dataTransfer?.files ?? null);
           }}
           className={cn(
-            'relative rounded-2xl border bg-card/80 shadow-lg transition-all duration-200',
-            dragging
-              ? 'border-alsamos-orange bg-alsamos-orange/5'
-              : 'border-border/50 focus-within:border-alsamos-orange/50 focus-within:shadow-alsamos-orange/10',
+            'rounded-3xl border bg-card/80 p-2 shadow-lg backdrop-blur-xl transition-colors',
+            dragging ? 'border-alsamos-orange bg-alsamos-orange/5' : 'border-border/60',
           )}
         >
+          {attachments.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2 px-1">
+              {attachments.map((file) => (
+                <div
+                  key={file.url}
+                  className="group relative flex items-center gap-1.5 rounded-xl border border-border/60 bg-muted/50 px-2 py-1"
+                >
+                  {file.type.startsWith('image') ? (
+                    <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                  ) : (
+                    <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                  )}
+                  <span className="max-w-[140px] truncate text-[11px]">{file.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => onRemoveAttachment(file.url)}
+                    className="rounded-full p-0.5 hover:bg-background"
+                    aria-label={`${file.name} ni olib tashlash`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <Textarea
             ref={textareaRef}
             value={value}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={(e) => {
+              onChange(e.target.value);
+              setSlashOpen(e.target.value.trimStart().startsWith('/'));
+            }}
             onKeyDown={(e) => {
+              if (e.key === 'Escape') setSlashOpen(false);
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
+                if (slashMatches.length > 0) {
+                  applyCommand(slashMatches[0].cmd);
+                  return;
+                }
                 if (canSend) onSend();
               }
             }}
+            placeholder={PLACEHOLDERS[placeholderIndex]}
             rows={1}
-            placeholder={PLACEHOLDERS[placeholderIdx]}
-            className="max-h-[200px] min-h-[52px] resize-none border-0 bg-transparent px-4 py-3.5 pr-28 text-sm placeholder:text-muted-foreground/60 focus-visible:ring-0"
+            className="min-h-[44px] resize-none border-0 bg-transparent px-2 text-sm shadow-none focus-visible:ring-0"
+            aria-label="AI ga xabar"
           />
 
-          <div className="absolute bottom-2 right-2 flex items-center gap-1">
+          <div className="flex items-center gap-1.5 px-1 pt-1">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              hidden
+              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt,.md,.xlsx,.xls,.pptx,.ppt,.csv,.json,.zip,.rar,.7z"
+              onChange={(e) => {
+                onPickFiles(e.target.files);
+                e.currentTarget.value = '';
+              }}
+            />
             <Button
               size="icon"
               variant="ghost"
-              className="h-8 w-8 rounded-lg text-muted-foreground hover:text-alsamos-orange"
+              className="h-8 w-8 shrink-0 rounded-full"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              aria-label="Fayl biriktirish"
+              aria-label="Fayl qo'shish"
             >
-              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+              {uploading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
             </Button>
+
+            <div className="flex shrink-0 items-center rounded-full border border-border/60 p-0.5">
+              {MODE_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  title={option.hint}
+                  onClick={() => onModeChange(option.id)}
+                  className={cn(
+                    'flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors',
+                    mode === option.id
+                      ? 'bg-alsamos-orange text-white'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {option.id === 'agent' && <Bot className="h-3.5 w-3.5" />}
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="hidden items-center gap-1.5 sm:flex">
+              <AIModelPicker value={model} onChange={onModelChange} activeModel={activeModel} />
+              <AIToolsMenu
+                selected={toolGroups}
+                onChange={onToolGroupsChange}
+                onOpenConnectors={onOpenConnectors}
+              />
+            </div>
+
+            <div className="flex-1" />
+
             <Button
               size="icon"
-              variant="ghost"
-              className="hidden h-8 w-8 rounded-lg text-muted-foreground sm:inline-flex"
-              disabled
-              aria-label="Ovozli kiritish (tez orada)"
+              variant={voice.listening ? 'default' : 'ghost'}
+              className={cn(
+                'h-8 w-8 shrink-0 rounded-full',
+                voice.listening && 'bg-destructive text-white hover:bg-destructive/90',
+              )}
+              onClick={handleMic}
+              aria-label={voice.listening ? "Ovozli kiritishni to'xtatish" : 'Ovozli kiritish'}
+              aria-pressed={voice.listening}
             >
-              <Mic className="h-4 w-4" />
+              {voice.listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
             </Button>
+
             {busy ? (
               <Button
                 size="icon"
-                className="h-8 w-8 rounded-xl bg-foreground text-background hover:opacity-90"
+                variant="secondary"
+                className="h-9 w-9 shrink-0 rounded-full"
                 onClick={onStop}
                 aria-label="To'xtatish"
               >
-                <Square className="h-3.5 w-3.5 fill-current" />
+                <Square className="h-3.5 w-3.5" />
               </Button>
             ) : (
               <Button
                 size="icon"
-                className={cn(
-                  'h-8 w-8 rounded-xl transition-all',
-                  canSend
-                    ? 'bg-gradient-to-r from-alsamos-orange to-alsamos-orange-dark text-white shadow-md shadow-alsamos-orange/20 hover:opacity-90'
-                    : 'bg-muted text-muted-foreground',
-                )}
+                className="h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-alsamos-orange to-alsamos-orange-dark text-white hover:opacity-90"
                 onClick={onSend}
                 disabled={!canSend}
                 aria-label="Yuborish"
@@ -205,21 +353,25 @@ export function AIComposer({
               </Button>
             )}
           </div>
+
+          <div className="flex items-center gap-1.5 px-1 pt-1.5 sm:hidden">
+            <AIModelPicker value={model} onChange={onModelChange} activeModel={activeModel} />
+            <AIToolsMenu
+              selected={toolGroups}
+              onChange={onToolGroupsChange}
+              onOpenConnectors={onOpenConnectors}
+            />
+          </div>
         </div>
 
-        <div className="mt-2 flex items-center justify-center gap-2 text-[10px] text-muted-foreground/70">
-          {intent === 'image' ? (
-            <span className="flex items-center gap-1 rounded-full bg-alsamos-orange/10 px-2 py-0.5 text-alsamos-orange">
-              <ImageIcon className="h-3 w-3" /> Rasm yaratish rejimi aniqlandi
-            </span>
-          ) : (
-            <span className="flex items-center gap-1">
-              <Zap className="h-3 w-3 text-alsamos-orange" /> Alsamos AI xato qilishi mumkin — muhim
-              ma'lumotlarni tekshiring.
-            </span>
-          )}
-        </div>
+        <p className="mt-2 text-center text-[10px] text-muted-foreground">
+          {voice.listening
+            ? 'Tinglanmoqda\u2026 gapiring'
+            : 'Enter — yuborish, Shift+Enter — yangi qator. AI xato qilishi mumkin, muhim ma\u2019lumotni tekshiring.'}
+        </p>
       </div>
     </div>
   );
 }
+
+export default AIComposer;

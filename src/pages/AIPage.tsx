@@ -2,7 +2,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { PanelLeft, Sparkles, Zap, Lightbulb, Code2, FileText, Globe, ShoppingBag, MapPin, X } from 'lucide-react';
+import {
+  Bot,
+  Code2,
+  FileText,
+  Globe,
+  Image as ImageIcon,
+  Lightbulb,
+  MapPin,
+  Monitor,
+  PanelLeft,
+  Plug,
+  ShoppingBag,
+  Sparkles,
+  X,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
@@ -15,13 +29,22 @@ import { AISidebar } from '@/components/ai/AISidebar';
 import { AIComposer, type ComposerAttachment } from '@/components/ai/AIComposer';
 import { AIMessageBubble, AIThinkingBubble } from '@/components/ai/AIMessageBubble';
 import { AIArtifactPanel } from '@/components/ai/AIArtifactPanel';
-import type { AIConversation, AIMessage } from '@/components/ai/types';
-import { detectIntent } from '@/lib/aiIntent';
+import { AIConnectorsDialog } from '@/components/ai/AIConnectorsDialog';
+import type { AIConversation, AIMessage, AISource, AIToolEvent } from '@/components/ai/types';
 import { extractArtifacts } from '@/lib/aiArtifacts';
-
+import { streamAgent } from '@/lib/ai/agentClient';
+import {
+  DEFAULT_TOOL_GROUPS,
+  groupsForMode,
+  toolLabel,
+  type AIMode,
+  type ModelId,
+  type ToolGroupId,
+} from '@/lib/ai/capabilities';
 
 const PIN_KEY = 'alsamos.ai.pinned';
 const TITLE_KEY = 'alsamos.ai.titles';
+const PREFS_KEY = 'alsamos.ai.prefs';
 
 const readMap = (key: string): Record<string, string> => {
   try {
@@ -38,6 +61,23 @@ const writeMap = (key: string, value: Record<string, string>) => {
   }
 };
 
+type Prefs = { mode: AIMode; model: ModelId; toolGroups: ToolGroupId[] };
+
+const readPrefs = (): Prefs => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+    return {
+      mode: parsed.mode === 'agent' ? 'agent' : 'chat',
+      model: (parsed.model as ModelId) || 'auto',
+      toolGroups: Array.isArray(parsed.toolGroups) && parsed.toolGroups.length
+        ? (parsed.toolGroups as ToolGroupId[])
+        : DEFAULT_TOOL_GROUPS,
+    };
+  } catch {
+    return { mode: 'chat', model: 'auto', toolGroups: DEFAULT_TOOL_GROUPS };
+  }
+};
+
 export default function AIPage() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
@@ -45,18 +85,26 @@ export default function AIPage() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const initialPrefs = useMemo(readPrefs, []);
+
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
-  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [statusLabel, setStatusLabel] = useState("O'ylayapman...");
   const [conversations, setConversations] = useState<AIConversation[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
-  // Cold start ALWAYS lands on a fresh conversation — never restore the last chat.
+  // Cold start ALWAYS lands on a fresh conversation.
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [artifactsOpen, setArtifactsOpen] = useState(false);
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [connectorsOpen, setConnectorsOpen] = useState(false);
+
+  const [mode, setMode] = useState<AIMode>(initialPrefs.mode);
+  const [model, setModel] = useState<ModelId>(initialPrefs.model);
+  const [toolGroups, setToolGroups] = useState<ToolGroupId[]>(initialPrefs.toolGroups);
+  const [activeModel, setActiveModel] = useState<string | null>(null);
 
   const [forwardedPost, setForwardedPost] = useState<{
     id: string;
@@ -69,11 +117,19 @@ export default function AIPage() {
   const abortRef = useRef<AbortController | null>(null);
   const { uploadFile, uploading, getFileType } = useFileUpload();
 
-  const busy = isStreaming || isGeneratingImage;
+  const busy = isStreaming;
 
   useEffect(() => {
     setSidebarOpen(!isMobile);
   }, [isMobile]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ mode, model, toolGroups }));
+    } catch {
+      /* ignore */
+    }
+  }, [mode, model, toolGroups]);
 
   /* ---------------- history ---------------- */
 
@@ -82,7 +138,7 @@ export default function AIPage() {
     if (id && overrides[id]) return overrides[id];
     const first = msgs.find((m) => m.role === 'user');
     if (!first) return 'Yangi suhbat';
-    return first.content.slice(0, 48) + (first.content.length > 48 ? '…' : '');
+    return first.content.slice(0, 48) + (first.content.length > 48 ? '\u2026' : '');
   }, []);
 
   useEffect(() => {
@@ -128,7 +184,12 @@ export default function AIPage() {
       setConversations((prev) =>
         prev.map((c) =>
           c.id === currentConversationId
-            ? { ...c, messages: newMessages, title: deriveTitle(newMessages, c.id), updatedAt: new Date() }
+            ? {
+                ...c,
+                messages: newMessages,
+                title: deriveTitle(newMessages, c.id),
+                updatedAt: new Date(),
+              }
             : c,
         ),
       );
@@ -192,9 +253,9 @@ export default function AIPage() {
   useEffect(() => {
     const el = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, isStreaming, isGeneratingImage]);
+  }, [messages, isStreaming]);
 
-  /* ---------------- actions ---------------- */
+  /* ---------------- conversation actions ---------------- */
 
   const startNew = () => {
     abortRef.current?.abort();
@@ -231,10 +292,15 @@ export default function AIPage() {
     if (pins[id]) delete pins[id];
     else pins[id] = '1';
     writeMap(PIN_KEY, pins);
-    setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, pinned: Boolean(pins[id]) } : c)));
+    setConversations((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, pinned: Boolean(pins[id]) } : c)),
+    );
   };
 
-  const uploadFiles = async (files: File[]) => {
+  /* ---------------- attachments ---------------- */
+
+  const uploadFiles = async (list: FileList | null) => {
+    const files = Array.from(list || []);
     for (const file of files) {
       if (file.size > 20 * 1024 * 1024) {
         sonnerToast.error(`${file.name}: 20MB dan katta`);
@@ -242,146 +308,162 @@ export default function AIPage() {
       }
       const res = await uploadFile(file);
       if (res) {
-        setAttachments((prev) => [...prev, { url: res.url, name: res.name, type: getFileType(res.type) }]);
+        setAttachments((prev) => [
+          ...prev,
+          { url: res.url, name: res.name, type: getFileType(res.type) },
+        ]);
       } else {
         sonnerToast.error(`${file.name} yuklanmadi`);
       }
     }
   };
 
-  const handlePickFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    e.target.value = '';
-    await uploadFiles(files);
-  };
+  /* ---------------- agent run ---------------- */
 
-  /* ---------------- generation ---------------- */
-
-  const runImageGeneration = async (prompt: string, baseMessages: AIMessage[]) => {
-    setIsGeneratingImage(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('ai-generate-image', { body: { prompt } });
-      if (error) throw error;
-      // The edge function returns { imageUrl, text }.
-      const imageUrl: string | undefined = data?.imageUrl;
-      if (!imageUrl) throw new Error("Rasm yaratilmadi. Tavsifni aniqroq yozib ko'ring.");
-
-      const assistant: AIMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: data?.text || 'Mana, so\'rovingiz bo\'yicha yaratilgan rasm.',
-        imageUrl,
-        timestamp: new Date(),
-      };
-      const updated = [...baseMessages, assistant];
-      setMessages(updated);
-      await saveConversation(updated);
-    } catch (err: any) {
-      const failure: AIMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: err?.message || 'Rasm yaratishda xatolik yuz berdi.',
-        error: true,
-        timestamp: new Date(),
-      };
-      setMessages([...baseMessages, failure]);
-    } finally {
-      setIsGeneratingImage(false);
-    }
-  };
-
-  const runChat = async (baseMessages: AIMessage[]) => {
+  const runAgent = async (baseMessages: AIMessage[]) => {
     setIsStreaming(true);
+    setStatusLabel(mode === 'agent' ? 'Vazifani rejalashtirmoqda\u2026' : "O'ylayapman...");
+
     const controller = new AbortController();
     abortRef.current = controller;
-    let assistantContent = '';
+
+    const assistantId = crypto.randomUUID();
+    let content = '';
+    const tools: AIToolEvent[] = [];
+    const images: string[] = [];
+    const sources: AISource[] = [];
+    let usedModel: string | null = null;
+    let notice: string | undefined;
+    let created = false;
+
+    const flush = () => {
+      const assistant: AIMessage = {
+        id: assistantId,
+        role: 'assistant',
+        content,
+        images: images.length ? [...images] : undefined,
+        sources: sources.length ? [...sources] : undefined,
+        tools: tools.length ? tools.map((t) => ({ ...t })) : undefined,
+        model: usedModel ?? undefined,
+        mode,
+        notice,
+        timestamp: new Date(),
+      };
+      setMessages(created ? (prev) => prev.map((m) => (m.id === assistantId ? assistant : m)) : [
+        ...baseMessages,
+        assistant,
+      ]);
+      created = true;
+      return assistant;
+    };
 
     try {
-      let contextInfo = '';
-      if (forwardedPost) {
-        contextInfo = `\n\n[Foydalanuvchi quyidagi postni AI ga yubordi]\nPost muallifi: ${
+      const history = baseMessages.map((m) => ({ role: m.role, content: m.content }));
+
+      if (forwardedPost && history.length > 0) {
+        const contextInfo = `\n\n[Foydalanuvchi quyidagi postni AI ga yubordi]\nPost muallifi: ${
           forwardedPost.authorName || "Noma'lum"
         }\nPost matni: ${forwardedPost.content || "(matn yo'q)"}\n${
           forwardedPost.mediaUrl ? `Media: ${forwardedPost.mediaUrl}` : ''
         }`;
+        history[0] = { ...history[0], content: history[0].content + contextInfo };
       }
 
-      const aiMessages = baseMessages.map((m) => ({ role: m.role, content: m.content }));
-      if (contextInfo && aiMessages.length > 0) {
-        aiMessages[0] = { ...aiMessages[0], content: aiMessages[0].content + contextInfo };
-      }
-
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-assistant`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({ messages: aiMessages, userId: user?.id }),
+      await streamAgent({
+        messages: history,
+        mode,
+        model,
+        toolGroups: groupsForMode(mode, toolGroups),
+        conversationId: currentConversationId,
         signal: controller.signal,
+        onEvent: (event) => {
+          switch (event.type) {
+            case 'meta': {
+              usedModel = event.model;
+              setActiveModel(event.model);
+              break;
+            }
+            case 'delta': {
+              content += event.text;
+              flush();
+              break;
+            }
+            case 'tool_call': {
+              const label = toolLabel(event.name);
+              setStatusLabel(`${label}\u2026`);
+              tools.push({
+                id: event.id || crypto.randomUUID(),
+                name: event.name,
+                label,
+                status: 'running',
+                args: event.args,
+                startedAt: Date.now(),
+              });
+              flush();
+              break;
+            }
+            case 'tool_result': {
+              const entry = tools.find((t) => t.id === event.id) ?? tools[tools.length - 1];
+              if (entry) {
+                entry.status = event.ok ? 'done' : 'error';
+                entry.summary = event.summary;
+                entry.data = event.data;
+                entry.finishedAt = Date.now();
+              }
+              const imageUrl = (event.data as any)?.imageUrl;
+              if (typeof imageUrl === 'string' && !images.includes(imageUrl)) {
+                images.push(imageUrl);
+              }
+              const found = (event.data as any)?.sources;
+              if (Array.isArray(found)) {
+                for (const source of found as AISource[]) {
+                  if (source?.url && !sources.some((s) => s.url === source.url)) {
+                    sources.push({ title: source.title, url: source.url });
+                  }
+                }
+              }
+              const jobId = (event.data as any)?.jobId;
+              if (jobId) {
+                sonnerToast.info('Video navbatga qo\u2019yildi', {
+                  description: 'Tayyor bo\u2019lgach shu suhbatda ko\u2019rinadi.',
+                });
+              }
+              const taskId = (event.data as any)?.taskId;
+              if (taskId) {
+                sonnerToast.warning('Kompyuter vazifasi tasdiq kutmoqda', {
+                  description: 'Alsamos Bridge ilovasida tasdiqlang.',
+                });
+              }
+              setStatusLabel('Javob tayyorlanmoqda\u2026');
+              flush();
+              break;
+            }
+            case 'notice': {
+              notice = event.message;
+              flush();
+              break;
+            }
+            case 'error': {
+              throw new Error(event.message);
+            }
+          }
+        },
       });
 
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || 'AI xizmati bilan xatolik');
+      if (!content && !images.length) {
+        content = "Javob bo'sh qaytdi. Iltimos, qaytadan urinib ko'ring.";
       }
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      if (!reader) throw new Error('Oqim mavjud emas');
-
-      let textBuffer = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        textBuffer += decoder.decode(value, { stream: true });
-        let idx: number;
-        while ((idx = textBuffer.indexOf('\n')) !== -1) {
-          let line = textBuffer.slice(0, idx);
-          textBuffer = textBuffer.slice(idx + 1);
-          if (line.endsWith('\r')) line = line.slice(0, -1);
-          if (line.startsWith(':') || line.trim() === '' || !line.startsWith('data: ')) continue;
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === '[DONE]') break;
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const delta = parsed.choices?.[0]?.delta?.content;
-            if (delta) {
-              assistantContent += delta;
-              setMessages((prev) => {
-                const last = prev[prev.length - 1];
-                if (last?.role === 'assistant' && !last.error) {
-                  return prev.map((m, i) =>
-                    i === prev.length - 1 ? { ...m, content: assistantContent } : m,
-                  );
-                }
-                return [
-                  ...prev,
-                  {
-                    id: crypto.randomUUID(),
-                    role: 'assistant' as const,
-                    content: assistantContent,
-                    timestamp: new Date(),
-                  },
-                ];
-              });
-            }
-          } catch {
-            textBuffer = line + '\n' + textBuffer;
-            break;
-          }
-        }
-      }
-
-      if (assistantContent) {
-        await saveConversation([
-          ...baseMessages,
-          { id: crypto.randomUUID(), role: 'assistant', content: assistantContent, timestamp: new Date() },
-        ]);
-      }
+      const final = flush();
+      await saveConversation([...baseMessages, final]);
       setForwardedPost(null);
     } catch (error: any) {
-      if (error?.name === 'AbortError') return;
+      if (error?.name === 'AbortError') {
+        if (content) {
+          const partial = flush();
+          await saveConversation([...baseMessages, partial]);
+        }
+        return;
+      }
       setMessages([
         ...baseMessages,
         {
@@ -389,6 +471,7 @@ export default function AIPage() {
           role: 'assistant',
           content: error?.message || "Javob olishda xatolik. Qaytadan urinib ko'ring.",
           error: true,
+          tools: tools.length ? tools : undefined,
           timestamp: new Date(),
         },
       ]);
@@ -404,7 +487,9 @@ export default function AIPage() {
 
     let content = raw;
     if (attachments.length > 0) {
-      const attachmentText = attachments.map((a) => `[${a.type}] ${a.name}: ${a.url}`).join('\n');
+      const attachmentText = attachments
+        .map((a) => `[${a.type}] ${a.name}: ${a.url}`)
+        .join('\n');
       content = content ? `${content}\n\n${attachmentText}` : attachmentText;
     }
 
@@ -412,6 +497,7 @@ export default function AIPage() {
       id: crypto.randomUUID(),
       role: 'user',
       content,
+      attachments: attachments.length ? [...attachments] : undefined,
       timestamp: new Date(),
     };
     const base = [...messages, userMsg];
@@ -419,23 +505,14 @@ export default function AIPage() {
     setInput('');
     setAttachments([]);
 
-    // Unified entry point: infer whether this is an image request.
-    const { intent, prompt } = detectIntent(raw);
-    if (intent === 'image' && attachments.length === 0) {
-      await runImageGeneration(prompt, base);
-    } else {
-      await runChat(base);
-    }
+    await runAgent(base);
   };
 
   const regenerateFrom = async (index: number) => {
-    const lastUser = [...messages.slice(0, index)].reverse().find((m) => m.role === 'user');
-    if (!lastUser) return;
     const base = messages.slice(0, index);
+    if (!base.some((m) => m.role === 'user')) return;
     setMessages(base);
-    const { intent, prompt } = detectIntent(lastUser.content);
-    if (intent === 'image') await runImageGeneration(prompt, base);
-    else await runChat(base);
+    await runAgent(base);
   };
 
   const stop = () => {
@@ -444,55 +521,105 @@ export default function AIPage() {
     setIsStreaming(false);
   };
 
-  /* ---------------- home suggestions ---------------- */
+  /* ---------------- suggestions ---------------- */
 
   const suggestions = useMemo(
     () => [
       {
+        icon: <Globe className="h-5 w-5" />,
+        title: 'Internetdan tekshirish',
+        desc: 'Manbalar bilan javob',
+        prompt:
+          "Internetdan qidirib, 2026-yilda O'zbekistonda eng ko'p ishlatilgan to'lov tizimlarini manbalar bilan tahlil qilib ber",
+        groups: ['web'] as ToolGroupId[],
+      },
+      {
+        icon: <Code2 className="h-5 w-5" />,
+        title: 'Kod yozib, tekshirish',
+        desc: 'Sandbox\u2019da ishga tushiradi',
+        prompt:
+          'JavaScriptda katta massivni tez saralaydigan funksiya yoz, so\u2019ng uni sandbox\u2019da testlar bilan tekshirib natijani ko\u2019rsat',
+        groups: ['code'] as ToolGroupId[],
+      },
+      {
+        icon: <ImageIcon className="h-5 w-5" />,
+        title: 'Rasm yaratish',
+        desc: 'Bir soniyada vizual',
+        prompt: 'Alsamos brendi uchun minimalistik logotip konsepti rasmini yarat: to\u2019q fon, apelsin rangli aksent',
+        groups: ['image'] as ToolGroupId[],
+      },
+      {
         icon: <ShoppingBag className="h-5 w-5" />,
         title: 'Bozordan tavsiya',
-        desc: 'Eng yaxshi takliflarni toping',
-        prompt: 'Bozorda arzon va sifatli mahsulotlarni topishga yordam ber',
+        desc: 'Alsamos marketplace',
+        prompt: 'Marketplace\u2019dan 2 mln so\u2019mgacha noutbuk aksessuarlarini topib, taqqoslab ber',
+        groups: ['alsamos'] as ToolGroupId[],
+      },
+      {
+        icon: <Monitor className="h-5 w-5" />,
+        title: 'Kompyuterda bajarish',
+        desc: 'Tasdiq bilan xavfsiz',
+        prompt:
+          'Kompyuterimdagi joriy papkadagi fayllar ro\u2019yxatini olib, eng katta 5 faylni aniqlab ber',
+        groups: ['computer'] as ToolGroupId[],
+      },
+      {
+        icon: <Plug className="h-5 w-5" />,
+        title: 'Pluginlar bilan ishlash',
+        desc: 'MCP konnektorlar',
+        prompt: 'Ulangan konnektorlarim va ularning vositalarini ko\u2019rsatib, nima qila olishimni tushuntir',
+        groups: ['connectors'] as ToolGroupId[],
+      },
+      {
+        icon: <Lightbulb className="h-5 w-5" />,
+        title: 'Kontent g\u2019oyalari',
+        desc: 'Postlar uchun',
+        prompt: 'Ijtimoiy tarmoq uchun 10 ta kontent g\u2019oyasi va sarlavhalarini taklif qil',
+        groups: [] as ToolGroupId[],
       },
       {
         icon: <MapPin className="h-5 w-5" />,
         title: 'Marshrut rejalash',
-        desc: "Xarita bo'yicha yordam",
-        prompt: "Toshkentda bir kunlik sayohat marshrutini rejalashtir",
-      },
-      {
-        icon: <Lightbulb className="h-5 w-5" />,
-        title: 'Kontent g\'oyalari',
-        desc: 'Postlar uchun g\'oyalar',
-        prompt: 'Ijtimoiy tarmoq uchun 10 ta kontent g\'oyasi taklif qil',
-      },
-      {
-        icon: <Code2 className="h-5 w-5" />,
-        title: 'Kod yozish',
-        desc: 'Dasturlashda yordam',
-        prompt: 'React komponent yaratishda yordam ber',
+        desc: 'Kunlik reja',
+        prompt: 'Toshkentda bir kunlik sayohat marshrutini vaqt va taxminiy xarajatlar bilan rejalashtir',
+        groups: ['web'] as ToolGroupId[],
       },
       {
         icon: <FileText className="h-5 w-5" />,
         title: 'Hisobot tayyorlash',
-        desc: 'Biznes matnlari',
-        prompt: 'Kichik biznes uchun oylik hisobot shabloni tayyorlab ber',
-      },
-      {
-        icon: <Globe className="h-5 w-5" />,
-        title: 'Tarjima',
-        desc: "Ko'p tilli tarjima",
-        prompt: 'Quyidagi matnni ingliz tiliga tarjima qil: ',
+        desc: 'Biznes hujjat',
+        prompt: 'Kichik biznes uchun oylik moliyaviy hisobot shablonini jadval ko\u2019rinishida tayyorla',
+        groups: [] as ToolGroupId[],
       },
     ],
     [],
   );
+
+  const applySuggestion = (suggestion: (typeof suggestions)[number]) => {
+    if (suggestion.groups.length) {
+      setToolGroups((prev) => {
+        const next = new Set(prev);
+        suggestion.groups.forEach((g) => next.add(g));
+        return [...next];
+      });
+      if (suggestion.groups.includes('computer')) setMode('agent');
+    }
+    void send(suggestion.prompt);
+  };
 
   const greetingName = profile?.display_name || profile?.username || '';
 
   const artifacts = useMemo(() => extractArtifacts(messages), [messages]);
   const showArtifacts = artifactsOpen && artifacts.length > 0;
 
+  useEffect(() => {
+    if (!user && messages.length > 0) {
+      toast({
+        title: 'Tizimga kiring',
+        description: "Suhbatlar saqlanishi va vositalar ishlashi uchun hisobga kirish kerak.",
+      });
+    }
+  }, [user, messages.length, toast]);
 
   return (
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-background md:h-[calc(100vh-2rem)]">
@@ -516,7 +643,9 @@ export default function AIPage() {
               transition={{ type: 'spring', damping: 26, stiffness: 300 }}
               className={cn(
                 'z-50 flex flex-col border-r border-border/50 bg-card/80 backdrop-blur-xl',
-                isMobile ? 'fixed bottom-0 left-0 top-0 w-[300px]' : 'relative w-[280px] lg:w-[300px]',
+                isMobile
+                  ? 'fixed bottom-0 left-0 top-0 w-[300px]'
+                  : 'relative w-[280px] lg:w-[300px]',
               )}
             >
               <AISidebar
@@ -556,6 +685,11 @@ export default function AIPage() {
               ? conversations.find((c) => c.id === currentConversationId)?.title || 'Suhbat'
               : 'Yangi suhbat'}
           </h1>
+          {mode === 'agent' && (
+            <span className="flex items-center gap-1 rounded-full bg-alsamos-orange/10 px-2 py-0.5 text-[10px] font-semibold text-alsamos-orange">
+              <Bot className="h-3 w-3" /> Agent
+            </span>
+          )}
           <div className="flex-1" />
           {artifacts.length > 0 && (
             <Button
@@ -569,11 +703,15 @@ export default function AIPage() {
               <span className="rounded-full bg-muted/70 px-1.5 text-[10px]">{artifacts.length}</span>
             </Button>
           )}
-
-          <div className="flex items-center gap-1.5 rounded-full bg-muted/40 px-2.5 py-1 text-[10px] text-muted-foreground">
-            <Zap className="h-3 w-3 text-alsamos-orange" />
-            <span className="hidden sm:inline">Avto model</span>
-          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 gap-1.5 rounded-lg px-2.5 text-[11px]"
+            onClick={() => setConnectorsOpen(true)}
+          >
+            <Plug className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Konnektorlar</span>
+          </Button>
         </header>
 
         <ScrollArea ref={scrollAreaRef} className="flex-1">
@@ -591,9 +729,9 @@ export default function AIPage() {
               <h2 className="mb-1.5 text-center font-display text-2xl font-bold sm:text-3xl">
                 {greetingName ? `Salom, ${greetingName}` : 'Alsamos AI'}
               </h2>
-              <p className="mb-7 max-w-md text-center text-sm text-muted-foreground">
-                Savol bering, rasm yarating, kod yozing yoki Alsamos modullari bo'yicha yordam so'rang — barchasi
-                bitta oynada.
+              <p className="mb-7 max-w-lg text-center text-sm text-muted-foreground">
+                Kod yozadi va ishga tushiradi, internetdan tekshiradi, rasm va video yaratadi,
+                pluginlar (MCP) bilan ishlaydi va ruxsat bilan kompyuteringizni boshqaradi.
               </p>
 
               {forwardedPost && (
@@ -618,19 +756,21 @@ export default function AIPage() {
                       />
                     )}
                     <p className="mb-1 text-xs text-muted-foreground">@{forwardedPost.authorName}</p>
-                    {forwardedPost.content && <p className="line-clamp-4 text-sm">{forwardedPost.content}</p>}
+                    {forwardedPost.content && (
+                      <p className="line-clamp-4 text-sm">{forwardedPost.content}</p>
+                    )}
                   </div>
                 </div>
               )}
 
-              <div className="grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid w-full max-w-3xl grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {suggestions.map((s, i) => (
                   <motion.button
                     key={s.title}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                    onClick={() => setInput(s.prompt)}
+                    transition={{ delay: i * 0.04 }}
+                    onClick={() => applySuggestion(s)}
                     className="group flex items-start gap-3 rounded-2xl border border-border/50 bg-card/50 p-3.5 text-left transition-all hover:border-alsamos-orange/30 hover:bg-card/80"
                   >
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-alsamos-orange/10 text-alsamos-orange">
@@ -650,13 +790,14 @@ export default function AIPage() {
                 <AIMessageBubble
                   key={msg.id}
                   message={msg}
-                  isStreaming={isStreaming && idx === messages.length - 1 && msg.role === 'assistant'}
+                  isStreaming={
+                    isStreaming && idx === messages.length - 1 && msg.role === 'assistant'
+                  }
                   onRegenerate={msg.role === 'assistant' ? () => regenerateFrom(idx) : undefined}
                 />
               ))}
-              {isGeneratingImage && <AIThinkingBubble label="Rasm yaratilmoqda..." />}
               {isStreaming && messages[messages.length - 1]?.role === 'user' && (
-                <AIThinkingBubble label="O'ylayapman..." />
+                <AIThinkingBubble label={statusLabel} />
               )}
             </div>
           )}
@@ -670,9 +811,19 @@ export default function AIPage() {
           busy={busy}
           uploading={uploading}
           attachments={attachments}
-          onPickFiles={handlePickFiles}
+          onPickFiles={uploadFiles}
           onDropFiles={uploadFiles}
-          onRemoveAttachment={(i) => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+          onRemoveAttachment={(url) =>
+            setAttachments((prev) => prev.filter((a) => a.url !== url))
+          }
+          mode={mode}
+          onModeChange={setMode}
+          model={model}
+          onModelChange={setModel}
+          activeModel={activeModel}
+          toolGroups={toolGroups}
+          onToolGroupsChange={setToolGroups}
+          onOpenConnectors={() => setConnectorsOpen(true)}
         />
       </div>
 
@@ -696,7 +847,12 @@ export default function AIPage() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
 
+      <AIConnectorsDialog
+        open={connectorsOpen}
+        onOpenChange={setConnectorsOpen}
+        userId={user?.id}
+      />
+    </div>
   );
 }
