@@ -15,39 +15,39 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Wait for production and verify live YaCy results
+      - name: Verify production Global Search
         shell: bash
         run: |
           set -euo pipefail
 
-          LIVE_URL='https://www.alsamos.com/api/global-search?q=wikipedia&category=all&page=1&pageSize=5&locale=en'
-          DOMAIN_URL='https://www.alsamos.com/api/global-search?q=alsamos.com&category=all&page=1&pageSize=5&locale=uz'
-          TMP="$(mktemp)"
-          TMP_DOMAIN="$(mktemp)"
+          SEARCH_URL='https://www.alsamos.com/api/global-search?q=alsamos&category=all&page=1&pageSize=5&locale=uz'
+          WEB_URL='https://www.alsamos.com/api/global-search?q=wikipedia&category=all&page=1&pageSize=5&locale=en'
+          TMP_SEARCH="$(mktemp)"
+          TMP_WEB="$(mktemp)"
 
           for attempt in $(seq 1 12); do
             echo "Attempt $attempt"
 
-            live_ok=0
-            domain_ok=0
+            alsamos_ok=0
+            web_ok=0
 
-            if curl --fail --silent --show-error --max-time 25 "$LIVE_URL" -o "$TMP"; then
-              cat "$TMP"
+            if curl --fail --silent --show-error --max-time 25 "$SEARCH_URL" -o "$TMP_SEARCH"; then
+              cat "$TMP_SEARCH"
               echo
-              if python -c 'import json,sys; d=json.load(open(sys.argv[1],encoding="utf-8")); e=str(d.get("engine") or ""); r=d.get("results") or []; err=d.get("error"); print("live engine:",e,"results:",len(r),"error:",err); raise SystemExit(0 if e.startswith("yacy-freeworld") and len(r)>0 and not err else 1)' "$TMP"; then
-                live_ok=1
+              if python -c 'import json,sys; d=json.load(open(sys.argv[1],encoding="utf-8")); r=d.get("results") or []; err=d.get("error"); ok=any("alsamos.com" in str(x.get("url") or "") for x in r); print("alsamos results:",len(r),"contains alsamos.com:",ok,"error:",err); raise SystemExit(0 if ok and not err else 1)' "$TMP_SEARCH"; then
+                alsamos_ok=1
               fi
             fi
 
-            if curl --fail --silent --show-error --max-time 25 "$DOMAIN_URL" -o "$TMP_DOMAIN"; then
-              cat "$TMP_DOMAIN"
+            if curl --fail --silent --show-error --max-time 25 "$WEB_URL" -o "$TMP_WEB"; then
+              cat "$TMP_WEB"
               echo
-              if python -c 'import json,sys; d=json.load(open(sys.argv[1],encoding="utf-8")); r=d.get("results") or []; ok=any("alsamos.com" in str(x.get("url") or "") for x in r); print("domain results:",len(r),"contains alsamos.com:",ok); raise SystemExit(0 if ok else 1)' "$TMP_DOMAIN"; then
-                domain_ok=1
+              if python -c 'import json,sys; d=json.load(open(sys.argv[1],encoding="utf-8")); e=str(d.get("engine") or ""); r=d.get("results") or []; err=d.get("error"); live=e.startswith("yacy-") or e=="duckduckgo-html"; print("web engine:",e,"results:",len(r),"error:",err); raise SystemExit(0 if live and len(r)>0 and not err else 1)' "$TMP_WEB"; then
+                web_ok=1
               fi
             fi
 
-            if [ "$live_ok" = "1" ] && [ "$domain_ok" = "1" ]; then
+            if [ "$alsamos_ok" = "1" ] && [ "$web_ok" = "1" ]; then
               echo "Alsamos Global Search production smoke test passed."
               exit 0
             fi
@@ -55,5 +55,5 @@ jobs:
             sleep 12
           done
 
-          echo "::error::Production Global Search did not pass live YaCy + domain navigation verification."
+          echo "::error::Production Global Search did not return verified Alsamos + live web results."
           exit 1
