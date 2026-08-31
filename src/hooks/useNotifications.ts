@@ -46,9 +46,15 @@ export function useNotifications() {
   const [loading, setLoading] = useState(true);
 
   const fetchNotifications = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setNotifications([]);
+      setUnreadCount(0);
+      setLoading(false);
+      return;
+    }
 
-    const { data, error } = await supabase
+    try {
+      const { data, error } = await supabase
       .from('notifications')
       .select('*')
       .eq('user_id', user.id)
@@ -119,8 +125,15 @@ export function useNotifications() {
 
       setNotifications(deduped);
       setUnreadCount(deduped.filter((n) => !n.is_read).length);
+      } else if (error) {
+        console.error('Notifications failed to load:', error);
+      }
+    } catch (error) {
+      console.error('Notifications loading crashed:', error);
+    } finally {
+      // Never strand the notifications route behind a permanent skeleton.
+      setLoading(false);
     }
-    setLoading(false);
   }, [user]);
 
   const markAsRead = useCallback(async (notificationId: string) => {
