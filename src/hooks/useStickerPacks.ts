@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import db from '@/lib/supabaseAny';
 import {
   RecentSticker,
   StickerKind,
