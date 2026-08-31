@@ -498,6 +498,69 @@ export function ProductDetail({
     </div>
   );
 
+  // Tavsif va Xususiyatlar: desktopda galereya tagida (chap ustunni to'ldiradi),
+  // mobilda esa pastki oqimda. Ikkala joy o'zaro istisno breakpointlarda, ya'ni
+  // bir vaqtda hech qachon ikkitasi chiqmaydi.
+  const descriptionBlock = product.description ? (
+    <div className="space-y-2">
+      <h3 className="text-sm font-semibold">{marketplaceUz.productDetail.description}</h3>
+      <div className={cn(
+        'relative whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground',
+        !descExpanded && 'max-h-32 overflow-hidden',
+      )}>
+        {product.description}
+        {!descExpanded && product.description.length > 220 && (
+          <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-background to-transparent" />
+        )}
+      </div>
+      {product.description.length > 220 && (
+        <button type="button" onClick={() => setDescExpanded(value => !value)} className="text-xs font-semibold text-primary">
+          {descExpanded ? marketplaceUz.productDetail.collapse : marketplaceUz.productDetail.readAll}
+        </button>
+      )}
+    </div>
+  ) : null;
+
+  const specsBlock = (
+    <div className="space-y-2">
+      <h3 className="text-sm font-semibold">{marketplaceUz.productDetail.properties}</h3>
+      <div className="overflow-hidden rounded-xl border border-border/30">
+        {[
+          { label: marketplaceUz.productDetail.condition, value: conditionLabel(product.condition) },
+          { label: marketplaceUz.productDetail.available, value: `${stock} dona` },
+          ...(selectedVariant?.sku
+            ? [{ label: 'SKU', value: selectedVariant.sku }]
+            : []),
+          { label: marketplaceUz.productDetail.category, value: product.category?.name || '—' },
+          {
+            label: marketplaceUz.productDetail.delivery,
+            value: product.shipping_available
+              ? (shippingCost > 0 ? formatPrice(shippingCost, currency) : 'Bepul')
+              : 'Olib ketish',
+          },
+          {
+            label: marketplaceUz.productDetail.posted,
+            value: product.created_at
+              ? `${formatDistanceToNow(new Date(product.created_at), { locale: uz })} oldin`
+              : '—',
+          },
+        ].map((row, index, rows) => (
+          <div
+            key={row.label}
+            className={cn(
+              'flex items-center justify-between px-3 py-2.5 text-sm',
+              index % 2 === 0 ? 'bg-muted/20' : 'bg-transparent',
+              index < rows.length - 1 && 'border-b border-border/20',
+            )}
+          >
+            <span className="text-muted-foreground">{row.label}</span>
+            <span className="text-right font-medium">{row.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
     <div className="relative min-h-full bg-background">
       <div className="sticky top-0 z-40 border-b border-border/35 bg-background/88 backdrop-blur-2xl">
@@ -595,7 +658,7 @@ export function ProductDetail({
       <div
         className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-5 md:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] md:items-start md:gap-8 lg:gap-10 lg:px-6"
       >
-            <div className="md:sticky md:top-20 md:self-start">
+            <div>
               <div
                 className="relative select-none overflow-hidden rounded-3xl border border-border/30 bg-muted/40 shadow-sm transition-[aspect-ratio] duration-300 md:max-h-[calc(100dvh-7rem)] md:bg-muted"
                 style={{ aspectRatio: frameRatio }}
@@ -723,6 +786,12 @@ export function ProductDetail({
                   </div>
                 </div>
               )}
+
+              {/* Desktopda galereya tagidagi joy bo'sh qolmasligi uchun. */}
+              <div className="mt-6 hidden space-y-6 md:block">
+                {descriptionBlock}
+                {specsBlock}
+              </div>
             </div>
 
             <div className="pb-36 md:sticky md:top-20 md:self-start md:pb-0">
@@ -1067,62 +1136,10 @@ export function ProductDetail({
       <div className="mx-auto w-full max-w-7xl px-4 pb-12 lg:px-6">
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.42fr)] lg:items-start">
           <div className="space-y-6">
-                {product.description && (
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-semibold">{marketplaceUz.productDetail.description}</h3>
-                    <div className={cn(
-                      'relative whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground',
-                      !descExpanded && 'max-h-32 overflow-hidden',
-                    )}>
-                      {product.description}
-                      {!descExpanded && product.description.length > 220 && (
-                        <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-background to-transparent" />
-                      )}
-                    </div>
-                    {product.description.length > 220 && (
-                      <button type="button" onClick={() => setDescExpanded(value => !value)} className="text-xs font-semibold text-primary">
-                        {descExpanded ? marketplaceUz.productDetail.collapse : marketplaceUz.productDetail.readAll}
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  <h3 className="text-sm font-semibold">{marketplaceUz.productDetail.properties}</h3>
-                  <div className="overflow-hidden rounded-xl border border-border/30">
-                    {[
-                      { label: marketplaceUz.productDetail.condition, value: conditionLabel(product.condition) },
-                      { label: marketplaceUz.productDetail.available, value: `${stock} dona` },
-                      ...(selectedVariant?.sku
-                        ? [{ label: 'SKU', value: selectedVariant.sku }]
-                        : []),
-                      { label: marketplaceUz.productDetail.category, value: product.category?.name || '—' },
-                      {
-                        label: marketplaceUz.productDetail.delivery,
-                        value: product.shipping_available
-                          ? (shippingCost > 0 ? formatPrice(shippingCost, currency) : 'Bepul')
-                          : 'Olib ketish',
-                      },
-                      {
-                        label: marketplaceUz.productDetail.posted,
-                        value: product.created_at
-                          ? `${formatDistanceToNow(new Date(product.created_at), { locale: uz })} oldin`
-                          : '—',
-                      },
-                    ].map((row, index, rows) => (
-                      <div
-                        key={row.label}
-                        className={cn(
-                          'flex items-center justify-between px-3 py-2.5 text-sm',
-                          index % 2 === 0 ? 'bg-muted/20' : 'bg-transparent',
-                          index < rows.length - 1 && 'border-b border-border/20',
-                        )}
-                      >
-                        <span className="text-muted-foreground">{row.label}</span>
-                        <span className="text-right font-medium">{row.value}</span>
-                      </div>
-                    ))}
-                  </div>
+                {/* Mobil oqim: desktopda bular galereya tagida turadi. */}
+                <div className="space-y-6 md:hidden">
+                  {descriptionBlock}
+                  {specsBlock}
                 </div>
 
                 <section className="space-y-4 rounded-2xl border border-border/30 bg-muted/10 p-4">
