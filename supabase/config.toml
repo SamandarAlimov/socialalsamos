@@ -133,3 +133,9 @@ verify_jwt = false
 # called by a scheduler/admin process and authenticates with CRAWLER_SECRET.
 [functions.web-crawler]
 verify_jwt = false
+
+
+# --- Realtime Global Search ------------------------------------------------
+# Public search endpoint. Provider credentials stay in Supabase secrets.
+[functions.global-search]
+verify_jwt = false
