@@ -77,6 +77,12 @@ verify_jwt = false
 [functions.send-scheduled-messages]
 verify_jwt = false
 
+# publish-scheduled-posts turns posts with status='scheduled' into published
+# posts by calling publish_due_scheduled_posts(). Cron sends no JWT, so the
+# function checks CRON_SECRET itself and logs rejected calls to function_usage.
+[functions.publish-scheduled-posts]
+verify_jwt = false
+
 [functions.rate-limit-notification]
 verify_jwt = false
 
