@@ -1110,7 +1110,7 @@ export function useProductActions() {
 
   /** Registers a product view (used by the detail sheet). */
   const registerView = async (productId: string) => {
-    await supabase.rpc('increment_product_views', { _product_id: productId });
+    await db.rpc('increment_product_views', { _product_id: productId });
   };
 
   const createSeller = async (businessName: string, businessType: string, description?: string) => {
