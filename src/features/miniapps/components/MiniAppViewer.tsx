@@ -21,12 +21,12 @@ interface MiniAppViewerProps {
 }
 
 const URL_ERROR_MESSAGES: Record<string, string> = {
-  empty: 'Ilova manzili ko\u2019rsatilmagan.',
-  malformed: 'Ilova manzili noto\u2019g\u2019ri formatda.',
+  empty: 'Ilova manzili ko’rsatilmagan.',
+  malformed: 'Ilova manzili noto’g’ri formatda.',
   scheme_not_allowed: 'Faqat https manzillarga ruxsat beriladi.',
   private_host: 'Bu manzil ichki tarmoqqa tegishli — xavfsizlik uchun bloklandi.',
   no_host: 'Ilova manzilida domen aniqlanmadi.',
-  unsupported: 'Bu ilova turi hozircha qo\u2019llab-quvvatlanmaydi.',
+  unsupported: 'Bu ilova turi hozircha qo’llab-quvvatlanmaydi.',
 };
 
 export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
@@ -57,14 +57,11 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
 
   const step: OpenStep | undefined = plan.steps[stepIndex];
 
-  const openExternal = useCallback(
-    (url: string) => {
-      window.open(url, '_blank', 'noopener,noreferrer');
-    },
-    [],
-  );
+  const openExternal = useCallback((url: string) => {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }, []);
 
-  // Ochilish telemetriyasi (bir marta) + yopilishda davomiylik.
+  // Ochilish telemetriyasi + yopilishda davomiylik (ranking shu eventlarga tayanadi).
   useEffect(() => {
     openedAt.current = Date.now();
     void trackMiniAppEvent(app.id, 'open', { sessionId: sessionId.current });
@@ -76,7 +73,7 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
     };
   }, [app.id]);
 
-  // Tashqi/native qadamlar iframe talab qilmaydi.
+  // Tashqi va native qadamlar iframe talab qilmaydi.
   useEffect(() => {
     if (!step) return;
     if (step.kind === 'external' || step.kind === 'native') {
@@ -116,7 +113,7 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Xatolik';
       toast({
-        title: 'Baholab bo\u2019lmadi',
+        title: 'Baholab bo’lmadi',
         description: message.includes('OPEN_REQUIRED')
           ? 'Baholash uchun ilovani kamida bir marta ochish kerak.'
           : message,
@@ -155,7 +152,7 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
           </p>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="hidden items-center gap-1 sm:flex">
           {[1, 2, 3, 4, 5].map((value) => (
             <button
               key={value}
@@ -204,7 +201,7 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
           <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
             <AlertTriangle className="h-10 w-10 text-destructive" />
             <p className="text-sm text-muted-foreground">
-              {URL_ERROR_MESSAGES[plan.error] ?? 'Ilovani ochib bo\u2019lmadi.'}
+              {URL_ERROR_MESSAGES[plan.error] ?? 'Ilovani ochib bo’lmadi.'}
             </p>
           </div>
         )}
@@ -213,8 +210,8 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
           <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
             <AlertTriangle className="h-10 w-10 text-amber-500" />
             <p className="max-w-sm text-sm text-muted-foreground">
-              Bu ilova Alsamos ichida yuklanmadi. Ehtimol sayt o\u2019zini boshqa sahifa ichida
-              ko\u2019rsatishga ruxsat bermaydi.
+              Bu ilova Alsamos ichida yuklanmadi. Ehtimol sayt o’zini boshqa sahifa ichida
+              ko’rsatishga ruxsat bermaydi.
             </p>
             <div className="flex gap-2">
               <Button variant="outline" onClick={handleReload}>
@@ -241,11 +238,10 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
               src={step.src}
               title={app.name}
               className="h-full w-full border-0"
-              // Diqqat: allow-same-origin ATAYLAB yo'q (sandbox escape xavfi).
+              // Diqqat: allow-same-origin ATAYLAB berilmaydi (sandbox escape xavfi).
               sandbox={MINI_APP_IFRAME_SANDBOX}
               allow={buildIframeAllow(app.permissions)}
               referrerPolicy="no-referrer"
-              loading="eager"
               onLoad={() => setFrameLoaded(true)}
               onError={() => {
                 if (stepIndex + 1 < plan.steps.length) {
@@ -261,9 +257,7 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
         {!plan.error && !failed && step && (step.kind === 'external' || step.kind === 'native') && (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
             <ExternalLink className="h-10 w-10 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              Bu ilova tashqi oynada ochiladi.
-            </p>
+            <p className="text-sm text-muted-foreground">Bu ilova tashqi oynada ochiladi.</p>
             <Button onClick={() => openExternal(step.src)}>Yana ochish</Button>
           </div>
         )}

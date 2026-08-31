@@ -39,7 +39,7 @@ interface MiniAppFormDialogProps {
 
 const URL_ERRORS: Record<string, string> = {
   empty: 'Manzil kiritilmagan',
-  malformed: 'Manzil formati noto\u2019g\u2019ri',
+  malformed: 'Manzil formati noto’g’ri',
   scheme_not_allowed: 'Faqat https manzillar qabul qilinadi',
   private_host: 'Ichki tarmoq manzillari qabul qilinmaydi',
   no_host: 'Domen aniqlanmadi',
@@ -134,7 +134,7 @@ export function MiniAppFormDialog({
 
       toast({
         title: app ? 'Saqlandi' : 'Yuborildi',
-        description: 'Ilova moderatsiyadan so\u2019ng ro\u2019yxatda ko\u2019rinadi.',
+        description: 'Ilova moderatsiyadan so’ng ro’yxatda ko’rinadi.',
       });
       onOpenChange(false);
       onSaved();
@@ -154,12 +154,12 @@ export function MiniAppFormDialog({
     setSaving(true);
     try {
       await deleteMiniApp(app.id);
-      toast({ title: 'O\u2019chirildi' });
+      toast({ title: 'O’chirildi' });
       onOpenChange(false);
       onSaved();
     } catch (error) {
       toast({
-        title: 'O\u2019chirilmadi',
+        title: 'O’chirilmadi',
         description: error instanceof Error ? error.message : 'Xatolik',
         variant: 'destructive',
       });
@@ -172,7 +172,7 @@ export function MiniAppFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{app ? 'Ilovani tahrirlash' : 'Mini app qo\u2019shish'}</DialogTitle>
+          <DialogTitle>{app ? 'Ilovani tahrirlash' : 'Mini app qo’shish'}</DialogTitle>
           <DialogDescription>
             Havola turi uchun API talab qilinmaydi — saytingiz manzilini kiritsangiz kifoya.
           </DialogDescription>
@@ -194,8 +194,8 @@ export function MiniAppFormDialog({
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              {appType === 'link' && 'Sayt yoki portfolio havolasi. Eng oson yo\u2019l.'}
-              {appType === 'webapp' && 'Alsamos SDK bilan ishlaydigan to\u2019liq web ilova.'}
+              {appType === 'link' && 'Sayt yoki portfolio havolasi. Eng oson yo’l.'}
+              {appType === 'webapp' && 'Alsamos SDK bilan ishlaydigan to’liq web ilova.'}
               {appType === 'bot' && 'Bot orqali ishlaydigan ilova (Telegram uslubida).'}
             </p>
           </div>
@@ -238,7 +238,7 @@ export function MiniAppFormDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="mini-app-description">To\u2019liq tavsif</Label>
+            <Label htmlFor="mini-app-description">To’liq tavsif</Label>
             <Textarea
               id="mini-app-description"
               value={description}
@@ -286,15 +286,15 @@ export function MiniAppFormDialog({
 
           <div className="flex items-start gap-2 rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-            Yangi yoki manzili o\u2019zgargan ilovalar moderatsiyaga tushadi. Kompaniya nomidan
-            e\u2019lon qilish uchun publisher profilini tasdiqlash talab qilinadi.
+            Yangi yoki manzili o’zgargan ilovalar moderatsiyaga tushadi. Kompaniya nomidan e’lon
+            qilish uchun publisher profilini tasdiqlash talab qilinadi.
           </div>
         </div>
 
         <DialogFooter className="gap-2 sm:justify-between">
           {app ? (
             <Button variant="destructive" disabled={saving} onClick={() => void handleDelete()}>
-              O\u2019chirish
+              O’chirish
             </Button>
           ) : (
             <span />
