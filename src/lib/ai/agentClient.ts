@@ -1,5 +1,10 @@
 // ai-agent yakuniy nuqtasi bilan ishlaydigan SSE klienti.
 // Kontrakt: docs/AI_PLATFORM_SPEC.md
+//
+// MUHIM: `ai-agent` funksiyasi Supabase'ga hali deploy qilinmagan bo'lsa,
+// brauzer "Failed to fetch" xatosini beradi. Shuning uchun bu klient avtomatik
+// ravishda allaqachon deploy qilingan `ai-assistant` funksiyasiga qaytadi
+// (fallback): chat doim ishlaydi, vositalar esa deploy'dan keyin qo'shiladi.
 
 import { supabase } from '@/integrations/supabase/client';
 import type { AgentEvent, AIMode, ModelId, ToolGroupId } from './capabilities';
@@ -16,6 +21,9 @@ export type StreamAgentOptions = {
 
 const FUNCTIONS_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 
+/** Agent funksiyasi mavjud emasligini bildiradi (deploy qilinmagan yoki o'chirilgan). */
+class AgentUnavailableError extends Error {}
+
 async function authHeaders(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -26,29 +34,12 @@ async function authHeaders(): Promise<Record<string, string>> {
   };
 }
 
-/** Agentni ishga tushiradi va hodisalarni real vaqtda uzatadi. */
-export async function streamAgent(options: StreamAgentOptions): Promise<void> {
-  const { messages, mode, model, toolGroups, conversationId, signal, onEvent } = options;
-
-  const res = await fetch(`${FUNCTIONS_BASE}/ai-agent`, {
-    method: 'POST',
-    headers: await authHeaders(),
-    body: JSON.stringify({ messages, mode, model, toolGroups, conversationId }),
-    signal,
-  });
-
-  if (!res.ok || !res.body) {
-    let message = `AI xizmatiga ulanib bo'lmadi (HTTP ${res.status}).`;
-    try {
-      const json = await res.json();
-      if (json?.message) message = json.message;
-    } catch {
-      // e'tiborsiz
-    }
-    throw new Error(message);
-  }
-
-  const reader = res.body.getReader();
+/** SSE oqimini satrma-satr o'qib, `data: ` qatorlarini qaytaradi. */
+async function readSse(
+  body: ReadableStream<Uint8Array>,
+  onLine: (payload: string) => void,
+): Promise<void> {
+  const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
 
@@ -66,13 +57,107 @@ export async function streamAgent(options: StreamAgentOptions): Promise<void> {
 
       const raw = line.slice(6).trim();
       if (!raw || raw === '[DONE]') continue;
-
-      try {
-        onEvent(JSON.parse(raw) as AgentEvent);
-      } catch {
-        // yarim kelgan bo'lak — e'tiborsiz
-      }
+      onLine(raw);
     }
+  }
+}
+
+/** To'liq agent (vositalar bilan) — `ai-agent` funksiyasi. */
+async function streamFromAgent(options: StreamAgentOptions): Promise<void> {
+  const { messages, mode, model, toolGroups, conversationId, signal, onEvent } = options;
+
+  let res: Response;
+  try {
+    res = await fetch(`${FUNCTIONS_BASE}/ai-agent`, {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: JSON.stringify({ messages, mode, model, toolGroups, conversationId }),
+      signal,
+    });
+  } catch (err) {
+    if (signal?.aborted) throw err;
+    // Tarmoq xatosi / funksiya mavjud emas — fallback'ga o'tamiz.
+    throw new AgentUnavailableError('ai-agent mavjud emas');
+  }
+
+  // 404/501/502/503/504 — funksiya deploy qilinmagan yoki vaqtincha ishlamayapti.
+  if ([404, 501, 502, 503, 504].includes(res.status)) {
+    throw new AgentUnavailableError(`ai-agent HTTP ${res.status}`);
+  }
+
+  if (!res.ok || !res.body) {
+    let message = `AI xizmatiga ulanib bo'lmadi (HTTP ${res.status}).`;
+    try {
+      const json = await res.json();
+      if (json?.message) message = json.message;
+      else if (json?.error) message = json.error;
+    } catch {
+      // e'tiborsiz
+    }
+    throw new Error(message);
+  }
+
+  await readSse(res.body, (raw) => {
+    try {
+      onEvent(JSON.parse(raw) as AgentEvent);
+    } catch {
+      // yarim kelgan bo'lak — e'tiborsiz
+    }
+  });
+}
+
+/** Zaxira yo'l — allaqachon deploy qilingan `ai-assistant` (oddiy chat oqimi). */
+async function streamFromAssistant(options: StreamAgentOptions): Promise<void> {
+  const { messages, signal, onEvent } = options;
+
+  const res = await fetch(`${FUNCTIONS_BASE}/ai-assistant`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ messages }),
+    signal,
+  });
+
+  if (!res.ok || !res.body) {
+    let message = `AI xizmatiga ulanib bo'lmadi (HTTP ${res.status}).`;
+    try {
+      const json = await res.json();
+      if (json?.error) message = json.error;
+      else if (json?.message) message = json.message;
+    } catch {
+      // e'tiborsiz
+    }
+    throw new Error(message);
+  }
+
+  onEvent({
+    type: 'meta',
+    model: res.headers.get('X-AI-Model') ?? 'auto',
+    task: res.headers.get('X-AI-Task') ?? 'general',
+    language: res.headers.get('X-AI-Language') ?? 'uz',
+    tools: [],
+  });
+
+  await readSse(res.body, (raw) => {
+    try {
+      const json = JSON.parse(raw) as {
+        choices?: Array<{ delta?: { content?: string }; message?: { content?: string } }>;
+      };
+      const text = json.choices?.[0]?.delta?.content ?? json.choices?.[0]?.message?.content ?? '';
+      if (text) onEvent({ type: 'delta', text });
+    } catch {
+      // e'tiborsiz
+    }
+  });
+}
+
+/** Agentni ishga tushiradi va hodisalarni real vaqtda uzatadi. */
+export async function streamAgent(options: StreamAgentOptions): Promise<void> {
+  try {
+    await streamFromAgent(options);
+  } catch (err) {
+    if (!(err instanceof AgentUnavailableError)) throw err;
+    // Agent yo'q — oddiy chatga o'tamiz, foydalanuvchi hech narsa yo'qotmaydi.
+    await streamFromAssistant(options);
   }
 }
 
@@ -93,7 +178,7 @@ export async function runInSandbox(code: string, timeoutMs = 5000): Promise<Sand
     body: JSON.stringify({ code, timeoutMs }),
   });
   if (!res.ok) {
-    throw new Error(`Sandbox xatosi (HTTP ${res.status}).`);
+    throw new Error(`Sandbox xatosi (HTTP ${res.status}). Funksiya deploy qilinganini tekshiring.`);
   }
   return (await res.json()) as SandboxRun;
 }
