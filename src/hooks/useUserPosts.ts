@@ -6,6 +6,11 @@ import {
   readStructuredPostSchemaCapability,
   writeStructuredPostSchemaCapability,
 } from '@/lib/structuredPostSchema';
+import {
+  createProfileEmbedGuard,
+  runWithProfileEmbedFallback,
+  type EmbedQueryResult,
+} from '@/lib/profileEmbed';
 
 export interface UserPost {
   id: string;
@@ -31,6 +36,25 @@ export interface UserPost {
   };
   is_liked?: boolean;
 }
+
+// `posts_user_id_fkey` FK nomi bazada bo'lmasa PostgREST butun so'rovni rad
+// etadi va profil sahifasidagi postlar bo'sh ko'rinadi.
+const USER_POST_SELECT_WITH_PROFILE = `
+  *,
+  profile:profiles!posts_user_id_fkey (
+    id,
+    username,
+    display_name,
+    avatar_url,
+    is_verified
+  )
+`;
+
+const USER_POST_SELECT_PLAIN = '*';
+
+const userPostEmbedGuard = createProfileEmbedGuard();
+
+type UserPostRow = Record<string, unknown>;
 
 export function useUserPosts(userId: string | undefined) {
   const [posts, setPosts] = useState<UserPost[]>([]);
@@ -68,35 +92,35 @@ export function useUserPosts(userId: string | undefined) {
         }
       }
 
-      let query = supabase
-        .from('posts')
-        .select(`
-          *,
-          profile:profiles!posts_user_id_fkey (
-            id,
-            username,
-            display_name,
-            avatar_url,
-            is_verified
-          )
-        `)
-        // Production DB migration ba'zan frontenddan keyinroq yetib keladi.
-        // post_kind'ni REST filterga qo'ymaymiz; mavjud bo'lsa clientda filtrlash xavfsiz.
-        .order('is_pinned', { ascending: false })
-        .order('created_at', { ascending: false });
+      const { data, error } = await runWithProfileEmbedFallback<UserPostRow>(
+        userPostEmbedGuard,
+        (select) => {
+          let query = supabase
+            .from('posts')
+            .select(select)
+            // Production DB migration ba'zan frontenddan keyinroq yetib keladi.
+            // post_kind'ni REST filterga qo'ymaymiz; mavjud bo'lsa clientda filtrlash xavfsiz.
+            .order('is_pinned', { ascending: false })
+            .order('created_at', { ascending: false });
 
-      query =
-        collaborationPostIds.length > 0
-          ? query.or(
-              `user_id.eq.${userId},id.in.(${collaborationPostIds.join(',')})`,
-            )
-          : query.eq('user_id', userId);
+          query =
+            collaborationPostIds.length > 0
+              ? query.or(
+                  `user_id.eq.${userId},id.in.(${collaborationPostIds.join(',')})`,
+                )
+              : query.eq('user_id', userId);
 
-      const { data, error } = await query;
+          return query as unknown as PromiseLike<EmbedQueryResult<UserPostRow>>;
+        },
+        {
+          embedSelect: USER_POST_SELECT_WITH_PROFILE,
+          plainSelect: USER_POST_SELECT_PLAIN,
+        },
+      );
 
       if (error) throw error;
 
-      const rawData = (data ?? []) as Array<UserPost & { post_kind?: string | null }>;
+      const rawData = (data ?? []) as unknown as Array<UserPost & { post_kind?: string | null }>;
 
       if (rawData.length > 0) {
         const hasPostKindColumn = Object.prototype.hasOwnProperty.call(rawData[0], 'post_kind');
