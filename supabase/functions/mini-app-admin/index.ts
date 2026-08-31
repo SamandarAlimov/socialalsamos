@@ -6,7 +6,7 @@
 //
 // POST { action: 'queue', status?, limit?, offset? }
 // POST { action: 'setStatus', appId, status, note? }
-// POST { action: 'verifyPublisher', publisherId, level }   // unverified|email_verified|domain_verified|official
+// POST { action: 'verifyPublisher', publisherId, level }
 //
 // Admin aniqlash tartibi:
 //   1) MINI_APP_ADMIN_IDS muhit o'zgaruvchisidagi UUID ro'yxati (vergul bilan)
@@ -49,10 +49,7 @@ async function isAdmin(admin: AdminClient, userId: string): Promise<boolean> {
   if (allowList.includes(userId)) return true;
 
   try {
-    const { data } = await admin
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', userId);
+    const { data } = await admin.from('user_roles').select('role').eq('user_id', userId);
     const roles = (data ?? []).map((row: { role?: string }) => String(row.role ?? ''));
     if (roles.includes('admin') || roles.includes('moderator')) return true;
   } catch {
@@ -133,11 +130,11 @@ Deno.serve(async (req: Request) => {
     if (!appId) return json({ error: 'APP_ID_REQUIRED' }, 400);
     if (!ALLOWED_STATUSES.includes(status)) return json({ error: 'BAD_STATUS' }, 400);
 
+    // mini_app_set_status(p_app_id uuid, p_status text, p_reason text)
     const { error } = await admin.rpc('mini_app_set_status', {
       p_app_id: appId,
       p_status: status,
-      p_note: typeof body.note === 'string' ? body.note : null,
-      p_actor: user.id,
+      p_reason: typeof body.note === 'string' && body.note ? body.note : null,
     });
     if (error) return json({ error: error.message }, 500);
     return json({ ok: true, appId, status });
@@ -150,8 +147,8 @@ Deno.serve(async (req: Request) => {
     if (!ALLOWED_LEVELS.includes(level)) return json({ error: 'BAD_LEVEL' }, 400);
 
     const { error } = await admin
-      .from('mini_app_publishers')
-      .update({ verification: level })
+      .from('publishers')
+      .update({ verification: level, updated_at: new Date().toISOString() })
       .eq('id', publisherId);
     if (error) return json({ error: error.message }, 500);
     return json({ ok: true, publisherId, level });

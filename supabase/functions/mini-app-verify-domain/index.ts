@@ -2,9 +2,10 @@
 //
 // POST /functions/v1/mini-app-verify-domain  { domainId }
 //
-// Foydalanuvchi avval `mini_app_publisher_add_domain` RPC orqali token oladi va uni
-// domenning TXT yozuviga (yoki `_alsamos.<domen>` ga) qo'yadi. Bu funksiya DNS-over-HTTPS
-// orqali tekshiradi va natijani `mini_app_publisher_domain_result` bilan yozadi.
+// Foydalanuvchi avval `mini_app_publisher_add_domain` RPC orqali token oladi
+// (format: alsamos-verify=<token>) va uni domenning TXT yozuviga yoki
+// `_alsamos.<domen>` ga qo'yadi. Bu funksiya DNS-over-HTTPS orqali tekshiradi va
+// natijani `mini_app_publisher_domain_result` bilan yozadi.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -15,6 +16,7 @@ const corsHeaders = {
 };
 
 const DNS_RESOLVER = 'https://dns.google/resolve';
+const TOKEN_PREFIX = 'alsamos-verify=';
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -78,26 +80,34 @@ Deno.serve(async (req: Request) => {
 
   const { data: domainRow } = await admin
     .from('publisher_domains')
-    .select('id, publisher_id, domain, verification_token, verified_at')
+    .select('id, publisher_id, domain, verify_token, verified_at')
     .eq('id', domainId)
     .maybeSingle();
 
   if (!domainRow) return json({ error: 'DOMAIN_NOT_FOUND' }, 404);
 
-  // Faqat publisher a'zosi tekshiruvni ishga tushira oladi.
-  const { data: membership } = await admin
-    .from('publisher_members')
-    .select('role')
-    .eq('publisher_id', domainRow.publisher_id)
-    .eq('user_id', user.id)
+  // Faqat publisher egasi yoki owner/admin a'zosi tekshiruvni ishga tushira oladi.
+  const { data: publisherRow } = await admin
+    .from('publishers')
+    .select('id, owner_id')
+    .eq('id', domainRow.publisher_id)
     .maybeSingle();
 
-  if (!membership || !['owner', 'admin'].includes(String(membership.role))) {
-    return json({ error: 'FORBIDDEN' }, 403);
+  let allowed = publisherRow?.owner_id === user.id;
+  if (!allowed) {
+    const { data: membership } = await admin
+      .from('publisher_members')
+      .select('role')
+      .eq('publisher_id', domainRow.publisher_id)
+      .eq('user_id', user.id)
+      .maybeSingle();
+    allowed = Boolean(membership) && ['owner', 'admin'].includes(String(membership?.role));
   }
+  if (!allowed) return json({ error: 'FORBIDDEN' }, 403);
 
-  const token = String(domainRow.verification_token ?? '');
-  if (!token) return json({ error: 'TOKEN_MISSING' }, 400);
+  const rawToken = String(domainRow.verify_token ?? '');
+  if (!rawToken) return json({ error: 'TOKEN_MISSING' }, 400);
+  const expectedToken = TOKEN_PREFIX + rawToken;
 
   const domain = String(domainRow.domain);
   let records: string[] = [];
@@ -117,7 +127,9 @@ Deno.serve(async (req: Request) => {
     return json({ verified: false, error: 'DNS_ERROR', details: message }, 502);
   }
 
-  const verified = records.some((record) => record.includes(token));
+  const verified = records.some(
+    (record) => record.includes(expectedToken) || record.trim() === rawToken,
+  );
 
   const { error: rpcError } = await admin.rpc('mini_app_publisher_domain_result', {
     p_domain_id: domainId,
@@ -132,7 +144,7 @@ Deno.serve(async (req: Request) => {
     verified,
     domain,
     checkedRecords: records.length,
-    expectedToken: token,
+    expectedToken,
     hint: verified
       ? null
       : 'TXT yozuvi topilmadi. DNS tarqalishi 24 soatgacha davom etishi mumkin.',
