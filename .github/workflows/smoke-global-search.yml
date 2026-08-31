@@ -15,45 +15,40 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Verify production Global Search
+      - name: Verify Firecrawl-backed production Global Search
         shell: bash
         run: |
           set -euo pipefail
 
-          SEARCH_URL='https://www.alsamos.com/api/global-search?q=alsamos&category=all&page=1&pageSize=5&locale=uz'
-          WEB_URL='https://www.alsamos.com/api/global-search?q=wikipedia&category=all&page=1&pageSize=5&locale=en'
-          TMP_SEARCH="$(mktemp)"
-          TMP_WEB="$(mktemp)"
+          REMOTE_URL='https://instant-find-it.lovable.app/api/search?q=OpenAI&category=web&page=1&pageSize=5&locale=en'
+          ALSAMOS_URL='https://www.alsamos.com/api/global-search?q=OpenAI&category=web&page=1&pageSize=5&locale=en'
+          TMP_REMOTE="$(mktemp)"
+          TMP_ALSAMOS="$(mktemp)"
+
+          remote_status=$(curl --silent --show-error --max-time 30 -o "$TMP_REMOTE" -w '%{http_code}' "$REMOTE_URL" || true)
+          echo "instant-find-it HTTP $remote_status"
+          cat "$TMP_REMOTE" || true
+          echo
+
+          if [ "$remote_status" != "200" ]; then
+            echo "::error::instant-find-it is not published/updated yet, so its Firecrawl API is not publicly reachable."
+            exit 1
+          fi
+
+          python -c 'import json,sys; d=json.load(open(sys.argv[1],encoding="utf-8")); r=d.get("results") or []; e=str(d.get("engine") or ""); err=d.get("error"); print("remote engine:",e,"results:",len(r),"error:",err); raise SystemExit(0 if e=="firecrawl-lovable" and len(r)>0 and not err else 1)' "$TMP_REMOTE"
 
           for attempt in $(seq 1 12); do
-            echo "Attempt $attempt"
-
-            alsamos_ok=0
-            web_ok=0
-
-            if curl --fail --silent --show-error --max-time 25 "$SEARCH_URL" -o "$TMP_SEARCH"; then
-              cat "$TMP_SEARCH"
+            echo "Alsamos production attempt $attempt"
+            if curl --fail --silent --show-error --max-time 45 "$ALSAMOS_URL" -o "$TMP_ALSAMOS"; then
+              cat "$TMP_ALSAMOS"
               echo
-              if python -c 'import json,sys; d=json.load(open(sys.argv[1],encoding="utf-8")); r=d.get("results") or []; err=d.get("error"); ok=any("alsamos.com" in str(x.get("url") or "") for x in r); print("alsamos results:",len(r),"contains alsamos.com:",ok,"error:",err); raise SystemExit(0 if ok and not err else 1)' "$TMP_SEARCH"; then
-                alsamos_ok=1
+              if python -c 'import json,sys; d=json.load(open(sys.argv[1],encoding="utf-8")); r=d.get("results") or []; e=str(d.get("engine") or ""); err=d.get("error"); print("Alsamos engine:",e,"results:",len(r),"error:",err); raise SystemExit(0 if e.startswith("instant-find-it:firecrawl-") and len(r)>0 and not err else 1)' "$TMP_ALSAMOS"; then
+                echo "Alsamos Firecrawl Global Search production smoke test passed."
+                exit 0
               fi
             fi
-
-            if curl --fail --silent --show-error --max-time 25 "$WEB_URL" -o "$TMP_WEB"; then
-              cat "$TMP_WEB"
-              echo
-              if python -c 'import json,sys; d=json.load(open(sys.argv[1],encoding="utf-8")); e=str(d.get("engine") or ""); r=d.get("results") or []; err=d.get("error"); live=e.startswith("yacy-") or e=="duckduckgo-html"; print("web engine:",e,"results:",len(r),"error:",err); raise SystemExit(0 if live and len(r)>0 and not err else 1)' "$TMP_WEB"; then
-                web_ok=1
-              fi
-            fi
-
-            if [ "$alsamos_ok" = "1" ] && [ "$web_ok" = "1" ]; then
-              echo "Alsamos Global Search production smoke test passed."
-              exit 0
-            fi
-
             sleep 12
           done
 
-          echo "::error::Production Global Search did not return verified Alsamos + live web results."
+          echo "::error::Alsamos production is not serving the Firecrawl-backed Global Search build yet."
           exit 1
