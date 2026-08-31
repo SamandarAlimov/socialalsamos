@@ -137,13 +137,26 @@ export default function MiniAppsPage() {
   const [normalizedAppUrl, setNormalizedAppUrl] = useState("");
 
   const fetchApps = async () => {
-    const { data, error } = await supabase
-      .from("mini_apps")
-      .select("*, profiles(username, display_name, avatar_url, is_verified)")
-      .order("created_at", { ascending: false });
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("mini_apps")
+        .select("*, profiles(username, display_name, avatar_url, is_verified)")
+        .order("created_at", { ascending: false });
 
-    if (!error && data) setApps(data as MiniApp[]);
-    setLoading(false);
+      if (error) {
+        console.error('Mini apps failed to load:', error);
+        setApps([]);
+        return;
+      }
+
+      setApps((data ?? []) as MiniApp[]);
+    } catch (error) {
+      console.error('Mini apps loading crashed:', error);
+      setApps([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { fetchApps(); }, []);
