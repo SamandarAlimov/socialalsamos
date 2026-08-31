@@ -120,6 +120,158 @@ function typeFromCategory(
   return 'web';
 }
 
+function decodeHtmlEntities(value: string) {
+  return value
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) =>
+      String.fromCharCode(parseInt(code, 16)),
+    )
+    .replace(/&#(\d+);/g, (_, code) =>
+      String.fromCharCode(Number(code)),
+    );
+}
+
+function plainText(value: string) {
+  return decodeHtmlEntities(
+    value
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' '),
+  )
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function duckDuckGoTarget(rawHref: string) {
+  const href = decodeHtmlEntities(rawHref.trim());
+  try {
+    const normalized = href.startsWith('//') ? 'https:' + href : href;
+    const url = new URL(normalized, 'https://html.duckduckgo.com');
+
+    const uddg = url.searchParams.get('uddg');
+    if (uddg) {
+      const decoded = decodeURIComponent(uddg);
+      const target = new URL(decoded);
+      if (target.protocol === 'http:' || target.protocol === 'https:') {
+        return target.toString();
+      }
+    }
+
+    if (url.hostname.endsWith('duckduckgo.com')) return null;
+    if (url.protocol === 'http:' || url.protocol === 'https:') return url.toString();
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function duckDuckGoQuery(query: string, category: GlobalCategory) {
+  if (category === 'wikipedia') return query + ' site:wikipedia.org';
+  if (category === 'news') return query + ' news';
+  return query;
+}
+
+async function runDuckDuckGoSearch(input: {
+  query: string;
+  category: GlobalCategory;
+  page: number;
+  pageSize: number;
+}) {
+  if (input.category === 'images' || input.category === 'videos') {
+    return {
+      results: [] as SearchResult[],
+      totalEstimated: 0,
+    };
+  }
+
+  const params = new URLSearchParams({
+    q: duckDuckGoQuery(input.query, input.category),
+    s: String(Math.max(0, (input.page - 1) * input.pageSize)),
+    kl: 'wt-wt',
+  });
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8500);
+
+  try {
+    const response = await fetch(
+      'https://html.duckduckgo.com/html/?' + params.toString(),
+      {
+        method: 'GET',
+        signal: controller.signal,
+        redirect: 'follow',
+        headers: {
+          Accept: 'text/html,application/xhtml+xml',
+          'Accept-Language': 'en-US,en;q=0.8',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+            '(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error('DuckDuckGo HTTP ' + response.status);
+    }
+
+    const html = await response.text();
+    const resultAnchor =
+      /<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+    const anchors = Array.from(html.matchAll(resultAnchor));
+    const results: SearchResult[] = [];
+    const seen = new Set<string>();
+
+    for (let index = 0; index < anchors.length; index += 1) {
+      const match = anchors[index];
+      const rawUrl = duckDuckGoTarget(match[1] || '');
+      if (!rawUrl || seen.has(rawUrl)) continue;
+      seen.add(rawUrl);
+
+      const title = plainText(match[2] || '') || sourceFromUrl(rawUrl);
+      const blockStart = match.index ?? 0;
+      const blockEnd =
+        index + 1 < anchors.length
+          ? anchors[index + 1].index ?? html.length
+          : Math.min(html.length, blockStart + 8000);
+      const block = html.slice(blockStart, blockEnd);
+      const snippetMatch =
+        /<(?:a|div)[^>]*class=["'][^"']*result__snippet[^"']*["'][^>]*>([\s\S]*?)<\/(?:a|div)>/i.exec(
+          block,
+        );
+      const snippet = snippetMatch ? plainText(snippetMatch[1]) : '';
+
+      results.push({
+        id: await hashId('ddg:' + rawUrl),
+        type: typeFromCategory(input.category, rawUrl, title),
+        title,
+        snippet,
+        url: rawUrl,
+        displayUrl: displayUrl(rawUrl),
+        thumbnailUrl: null,
+        source: sourceFromUrl(rawUrl),
+        publishedAt: null,
+        author: null,
+        width: null,
+        height: null,
+        durationSeconds: null,
+      });
+
+      if (results.length >= input.pageSize) break;
+    }
+
+    return {
+      results,
+      totalEstimated: results.length,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function yacyBaseUrls() {
   const configured = (process.env.YACY_SEARCH_BASES || process.env.YACY_SEARCH_BASE || '')
     .split(',')
@@ -477,8 +629,8 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
-  // Global Search is intentionally independent from proprietary search engines.
-  // It uses YaCy public/freeworld peers only.
+  // Global Search is keyless and independent from paid search APIs.
+  // YaCy is primary; DuckDuckGo HTML is a resilient web fallback.
 
   const cacheKey = [
     query.toLowerCase(),
@@ -536,6 +688,28 @@ export default async function handler(req: any, res: any) {
       upstreamErrors.push(
         'yacy: ' + (error instanceof Error ? error.message : String(error)),
       );
+    }
+
+    if (results.length === 0) {
+      try {
+        const ddg = await runDuckDuckGoSearch({
+          query,
+          category,
+          page,
+          pageSize,
+        });
+
+        if (ddg.results.length > 0) {
+          results = ddg.results;
+          totalEstimated = Math.max(totalEstimated, ddg.totalEstimated);
+          engine = 'duckduckgo-html';
+        }
+      } catch (error) {
+        upstreamErrors.push(
+          'duckduckgo: ' +
+            (error instanceof Error ? error.message : String(error)),
+        );
+      }
     }
 
     if (page === 1) {
