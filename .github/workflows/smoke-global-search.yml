@@ -30,27 +30,7 @@ jobs:
               cat "$TMP"
               echo
 
-              if python - "$TMP" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], "r", encoding="utf-8") as fh:
-    data = json.load(fh)
-
-engine = data.get("engine")
-results = data.get("results") or []
-error = data.get("error")
-
-print("engine:", engine)
-print("results:", len(results))
-print("error:", error)
-
-if engine == "yacy-freeworld" and len(results) > 0 and not error:
-    raise SystemExit(0)
-
-raise SystemExit(1)
-PY
-              then
+              if python -c 'import json,sys; data=json.load(open(sys.argv[1], encoding="utf-8")); engine=data.get("engine"); results=data.get("results") or []; error=data.get("error"); print("engine:", engine); print("results:", len(results)); print("error:", error); raise SystemExit(0 if engine=="yacy-freeworld" and len(results)>0 and not error else 1)' "$TMP"; then
                 echo "Alsamos Global Search is returning live YaCy results."
                 exit 0
               fi
