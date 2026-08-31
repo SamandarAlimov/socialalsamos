@@ -523,6 +523,25 @@ function navigationalResult(
   if (category !== 'all' && category !== 'web') return Promise.resolve(null);
 
   const value = query.trim().toLowerCase();
+
+  if (value === 'alsamos') {
+    const url = 'https://alsamos.com';
+    return hashId('nav:' + url).then((id) => ({
+      id,
+      type: 'web',
+      title: 'Alsamos',
+      snippet: 'Alsamos rasmiy sayti.',
+      url,
+      displayUrl: 'alsamos.com',
+      thumbnailUrl: null,
+      source: 'alsamos.com',
+      publishedAt: null,
+      author: null,
+      width: null,
+      height: null,
+      durationSeconds: null,
+    }));
+  }
   if (
     /\s/.test(value) ||
     !/^(?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s]*)?$/.test(value)
@@ -751,7 +770,9 @@ export default async function handler(req: any, res: any) {
 
     res.setHeader(
       'Cache-Control',
-      'private, max-age=60, s-maxage=180, stale-while-revalidate=300',
+      results.length > 0 && !payload.error
+        ? 'private, max-age=60, s-maxage=180, stale-while-revalidate=300'
+        : 'no-store',
     );
     res.status(200).json(payload);
   } catch (error) {
