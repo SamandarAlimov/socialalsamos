@@ -45,7 +45,8 @@ export function HashtagAutocomplete({
       const hashtagCounts: Record<string, number> = {};
       const hashtagRegex = /#([a-zA-Z0-9_]+)/g;
       
-      (data || []).forEach(post => {
+      const rows = (data ?? []) as Array<{ content: string | null }>;
+      rows.forEach(post => {
         if (post.content) {
           const matches = post.content.match(hashtagRegex) || [];
           matches.forEach(match => {

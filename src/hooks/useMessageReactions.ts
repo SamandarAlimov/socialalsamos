@@ -26,18 +26,29 @@ export function useMessageReactions(messageId: string | null) {
   const [isLoading, setIsLoading] = useState(false);
 
   const fetchReactions = useCallback(async () => {
-    if (!messageId || messageId.startsWith('temp-')) return;
+    if (!messageId || messageId.startsWith('temp-')) {
+      setIsLoading(false);
+      return;
+    }
 
     setIsLoading(true);
-    const { data, error } = await supabase
-      .from('message_reactions')
-      .select('*')
-      .eq('message_id', messageId);
+    try {
+      const { data, error } = await supabase
+        .from('message_reactions')
+        .select('*')
+        .eq('message_id', messageId);
 
-    if (!error && data) {
-      setReactions(data);
+      if (error) {
+        console.warn('Message reactions failed to load:', error);
+        return;
+      }
+
+      setReactions(data ?? []);
+    } catch (error) {
+      console.error('Message reactions loading crashed:', error);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, [messageId]);
 
   useEffect(() => {

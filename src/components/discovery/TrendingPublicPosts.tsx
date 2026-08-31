@@ -235,6 +235,7 @@ export function TrendingPublicPosts({ refreshKey = 0 }: TrendingPublicPostsProps
                   className="flex items-center gap-2 focus-visible:outline-none"
                 >
                   <StoryAvatar
+                    userId={post.profile?.id ?? post.id}
                     avatarUrl={post.profile?.avatar_url ?? null}
                     username={post.profile?.username ?? ''}
                     size="xs"

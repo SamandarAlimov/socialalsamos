@@ -65,6 +65,7 @@ export function useProductReviews(productId?: string | null) {
   const fetchReviews = useCallback(async (targetPage = page) => {
     if (!productId) {
       setReviews([]);
+      setIsLoading(false);
       return;
     }
 
@@ -72,27 +73,33 @@ export function useProductReviews(productId?: string | null) {
     const from = targetPage * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
 
-    const { data, error, count } = await db
-      .from('product_reviews')
-      .select(
-        `
-          id, product_id, user_id, order_id, rating, title, content, created_at, updated_at,
-          user:profiles(username, display_name, avatar_url)
-        `,
-        { count: 'exact' },
-      )
-      .eq('product_id', productId)
-      .order('created_at', { ascending: false })
-      .range(from, to);
+    try {
+      const { data, error, count } = await db
+        .from('product_reviews')
+        .select(
+          `
+            id, product_id, user_id, order_id, rating, title, content, created_at, updated_at,
+            user:profiles(username, display_name, avatar_url)
+          `,
+          { count: 'exact' },
+        )
+        .eq('product_id', productId)
+        .order('created_at', { ascending: false })
+        .range(from, to);
 
-    if (error) {
-      console.warn('Product reviews failed:', error);
+      if (error) {
+        console.warn('Product reviews failed:', error);
+        setReviews([]);
+      } else {
+        setReviews((data ?? []) as ProductReview[]);
+        setReviewCount(Number(count ?? 0));
+      }
+    } catch (error) {
+      console.error('Product reviews loading crashed:', error);
       setReviews([]);
-    } else {
-      setReviews((data ?? []) as ProductReview[]);
-      setReviewCount(Number(count ?? 0));
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, [page, productId]);
 
   const checkEligibility = useCallback(async () => {
@@ -109,7 +116,8 @@ export function useProductReviews(productId?: string | null) {
 
     setEligibility('loading');
 
-    const [existingResult, deliveredResult] = await Promise.all([
+    try {
+      const [existingResult, deliveredResult] = await Promise.all([
       db
         .from('product_reviews')
         .select('id')
@@ -138,8 +146,15 @@ export function useProductReviews(productId?: string | null) {
       return;
     }
 
-    setEligibleOrderId(null);
-    setEligibility('not_delivered');
+      setEligibleOrderId(null);
+      setEligibility('not_delivered');
+    } catch (error) {
+      console.error('Product review eligibility failed:', error);
+      setEligibleOrderId(null);
+      // No dedicated error state exists in the current UI; stop the permanent
+      // "loading" state and fall back to the non-actionable state.
+      setEligibility('not_delivered');
+    }
   }, [productId, user]);
 
   useEffect(() => {

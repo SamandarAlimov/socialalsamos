@@ -4,9 +4,10 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "lib": [
-      "ES2020",
+      "ES2022",
       "DOM",
-      "DOM.Iterable"
+      "DOM.Iterable",
+      "ES2022.Intl"
     ],
     "module": "ESNext",
     "moduleDetection": "force",

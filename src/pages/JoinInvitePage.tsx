@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import db from '@/lib/supabaseAny';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -133,7 +133,7 @@ export default function JoinInvitePage() {
       const needsApproval = invite.requiresApproval || invite.joinByRequest;
 
       if (needsApproval) {
-        const { error } = await supabase.from('conversation_join_requests').insert({
+        const { error } = await db.from('conversation_join_requests').insert({
           conversation_id: invite.conversationId,
           user_id: user.id,
           invite_link_id: invite.linkId,
@@ -144,7 +144,7 @@ export default function JoinInvitePage() {
         return;
       }
 
-      const { error } = await supabase.from('conversation_participants').insert({
+      const { error } = await db.from('conversation_participants').insert({
         conversation_id: invite.conversationId,
         user_id: user.id,
         role: 'member',

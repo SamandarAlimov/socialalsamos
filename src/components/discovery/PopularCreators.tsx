@@ -212,6 +212,7 @@ export function PopularCreators({ refreshKey = 0 }: PopularCreatorsProps) {
                 className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none"
               >
                 <StoryAvatar
+                  userId={creator.id}
                   avatarUrl={creator.avatar_url}
                   username={creator.username}
                   size="md"

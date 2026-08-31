@@ -91,13 +91,17 @@ export function useSellerDashboard() {
 
   const fetchSellerData = useCallback(async () => {
     if (!user) {
+      setSellerId(null);
+      setOrders([]);
       setIsLoading(false);
       return;
     }
 
+    setIsLoading(true);
     setError(null);
 
-    // Get seller (maybeSingle: `single` threw for users without a store)
+    try {
+      // Get seller (maybeSingle: `single` threw for users without a store)
     const { data: seller } = await supabase
       .from('sellers')
       .select('id')
@@ -188,15 +192,20 @@ export function useSellerDashboard() {
       }
     });
 
-    setRevenueData(
-      Object.entries(revenueByDate).map(([date, data]) => ({
-        date: format(new Date(date), 'MMM dd'),
-        revenue: data.revenue,
-        orders: data.orders,
-      })),
-    );
-
-    setIsLoading(false);
+      setRevenueData(
+        Object.entries(revenueByDate).map(([date, data]) => ({
+          date: format(new Date(date), 'MMM dd'),
+          revenue: data.revenue,
+          orders: data.orders,
+        })),
+      );
+    } catch (error) {
+      console.error('Seller dashboard failed to load:', error);
+      setError(error instanceof Error ? error.message : 'Sotuvchi ma’lumotlari yuklanmadi');
+    } finally {
+      // Seller tab must always leave its initial loading state.
+      setIsLoading(false);
+    }
   }, [user, dateRange]);
 
   useEffect(() => {
@@ -215,7 +224,7 @@ export function useSellerDashboard() {
     status: 'processing' | 'shipped' | 'delivered' | 'cancelled',
     reason?: string,
   ): Promise<{ success: boolean; error?: string; refunded?: number }> => {
-    const { data, error: rpcError } = await supabase.rpc('marketplace_update_order_status', {
+    const { data, error: rpcError } = await (supabase as any).rpc('marketplace_update_order_status', {
       _order_id: orderId,
       _status: status,
       _reason: reason ?? null,

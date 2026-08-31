@@ -20,6 +20,7 @@ import {
 } from '@/lib/payments';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import db from '@/lib/supabaseAny';
 import { formatPrice, getShippingCost, checkoutErrorMessage } from '@/lib/marketplace';
 import { getCartItemStock, getCartItemUnitPrice, getVariantOptionsLabel } from '@/hooks/useMarketplace';
 import { useMarketplaceDeliveryLocation } from '@/hooks/useMarketplaceDeliveryLocation';
@@ -172,7 +173,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
   const cancelOrphanOrders = async (orderIds: string[], reason: string) => {
     await Promise.all(orderIds.map(async orderId => {
       try {
-        await supabase.rpc('marketplace_update_order_status', {
+        await db.rpc('marketplace_update_order_status', {
           _order_id: orderId,
           _status: 'cancelled',
           _reason: reason,

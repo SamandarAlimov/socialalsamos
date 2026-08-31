@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import db from '@/lib/supabaseAny';
 import { useAuth } from '@/contexts/AuthContext';
 
 /** Guruh/kanal ruxsatlari (Telegramdek) */
@@ -341,7 +341,7 @@ export function useConversationPremium(conversationId: string | null) {
 
   const deleteInviteLink = useCallback(async (linkId: string) => {
     try {
-      await supabase.from('conversation_invite_links').delete().eq('id', linkId);
+      await db.from('conversation_invite_links').delete().eq('id', linkId);
       setInviteLinks((prev) => prev.filter((l) => l.id !== linkId));
       return true;
     } catch (error) {
@@ -355,7 +355,7 @@ export function useConversationPremium(conversationId: string | null) {
     async (request: JoinRequest) => {
       if (!conversationId) return false;
       try {
-        await supabase.from('conversation_participants').insert({
+        await db.from('conversation_participants').insert({
           conversation_id: conversationId,
           user_id: request.user_id,
           role: 'member',
@@ -401,7 +401,7 @@ export function useConversationPremium(conversationId: string | null) {
     ) => {
       if (!conversationId || !user) return false;
       try {
-        await supabase.from('conversation_bans').upsert(
+        await db.from('conversation_bans').upsert(
           {
             conversation_id: conversationId,
             user_id: targetUserId,
@@ -453,7 +453,7 @@ export function useConversationPremium(conversationId: string | null) {
     async (slots = 1) => {
       if (!conversationId || !user) return false;
       try {
-        await supabase.from('conversation_boosts').upsert(
+        await db.from('conversation_boosts').upsert(
           {
             conversation_id: conversationId,
             user_id: user.id,
@@ -531,7 +531,7 @@ export function useConversationPremium(conversationId: string | null) {
 
   const deleteTopic = useCallback(async (topicId: string) => {
     try {
-      await supabase.from('conversation_topics').delete().eq('id', topicId);
+      await db.from('conversation_topics').delete().eq('id', topicId);
       setTopics((prev) => prev.filter((t) => t.id !== topicId));
       return true;
     } catch (error) {

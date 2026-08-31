@@ -57,7 +57,8 @@ export function TrendingHashtags({ refreshKey = 0 }: TrendingHashtagsProps) {
       if (error) throw error;
 
       const counts: Record<string, number> = {};
-      (posts ?? []).forEach((post) => {
+      const rows = (posts ?? []) as Array<{ content: string | null }>;
+      rows.forEach((post) => {
         const matches = post.content?.match(/#[\p{L}\p{N}_]+/gu) ?? [];
         matches.forEach((tag) => {
           const clean = tag.slice(1).toLowerCase();

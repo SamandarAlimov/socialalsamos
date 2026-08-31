@@ -87,11 +87,11 @@ export function DiscoveryStoryBar({ refreshKey = 0 }: DiscoveryStoryBarProps) {
             aria-label={`${group.username} story`}
           >
             <StoryAvatar
+              userId={group.user_id}
               avatarUrl={group.avatar_url}
               username={group.username}
               size="lg"
               showRing
-              hasUnviewed={group.has_unviewed}
             />
             <span className="max-w-[64px] truncate text-xs">
               {group.user_id === user?.id ? 'Siz' : group.username}

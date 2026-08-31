@@ -40,14 +40,15 @@ export function useStickerTrends(windowHours = 48, limit = 24) {
             if (!previewUrl && !fullUrl) return null;
 
             return {
-              sticker: stickerFromUrl({
-                key: String(row.sticker_key ?? row.sticker_id ?? ''),
-                kind: (row.kind as StickerItem['kind']) ?? 'image',
-                previewUrl: previewUrl || fullUrl,
-                fullUrl,
-                name: 'Trend stiker',
-                stickerId: (row.sticker_id as string) ?? undefined,
-              }),
+              sticker: {
+                ...stickerFromUrl(fullUrl, {
+                  kind: (row.kind as StickerItem['kind']) ?? 'image',
+                  previewUrl: previewUrl || fullUrl,
+                  name: 'Trend stiker',
+                  stickerId: (row.sticker_id as string) ?? undefined,
+                }),
+                key: String(row.sticker_key ?? row.sticker_id ?? fullUrl),
+              },
               recentUses: Number(row.recent_uses ?? 0),
               totalUses: Number(row.total_uses ?? 0),
             };
