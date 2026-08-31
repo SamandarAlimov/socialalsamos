@@ -2,6 +2,21 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { db } from '@/lib/supabaseAny';
 import { useAuth } from '@/contexts/AuthContext';
 
+/**
+ * Joy izohlari va reytingi.
+ *
+ * `place_reviews` ikki mijoz uchun umumiy. Kanonik shakli
+ * `alsamos-superapp/supabase/migrations/20260803020000_social_map_features.sql`
+ * ichida, ustun taxalluslari esa `20260831053000_reconcile_map_schema.sql`
+ * ichida qo'shilgan. Yozishda e'tibor berilishi kerak bo'lgan joylar:
+ *
+ * - `place_key` va `comment` - taxallus ustunlar. Trigger ulardan majburiy
+ *   `place_id` va `place_name` ni to'ldiradi.
+ * - Koordinatalar jadvalda saqlanmaydi. Ular `place_key` ichida kodlangan.
+ * - `updated_at` ni klient yozmaydi.
+ * - `upsert` kaliti `(user_id, place_key)`, unga to'liq unique indeks kerak:
+ *   `20260831061000_place_reviews_upsert_key.sql`.
+ */
 export interface PlaceReview {
   id: string;
   user_id: string;
@@ -25,6 +40,8 @@ export interface PlaceRef {
   latitude: number;
   longitude: number;
 }
+
+const COLUMNS = 'id, user_id, place_key, place_name, rating, comment, created_at';
 
 /** Bir joyni turli manbalarda bir xil kalit bilan tanib olish. */
 export function placeKeyFor(place: PlaceRef): string {
@@ -58,7 +75,7 @@ export function usePlaceReviews(place: PlaceRef | null) {
     try {
       const { data } = await db
         .from('place_reviews')
-        .select('id, user_id, place_key, place_name, rating, comment, created_at')
+        .select(COLUMNS)
         .in('place_key', keys)
         .order('created_at', { ascending: false })
         .limit(50);
@@ -121,15 +138,13 @@ export function usePlaceReviews(place: PlaceRef | null) {
       if (!user || !place || !key) return false;
       setSaving(true);
       try {
+        // Faqat haqiqatda mavjud ustunlar. Koordinatalar place_key ichida.
         const payload = {
           user_id: user.id,
           place_key: key,
           place_name: place.name ?? null,
-          latitude: place.latitude,
-          longitude: place.longitude,
           rating,
           comment: comment.trim() ? comment.trim() : null,
-          updated_at: new Date().toISOString(),
         };
 
         const existing = reviews.find((review) => review.user_id === user.id);

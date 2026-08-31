@@ -13,36 +13,48 @@ Related contracts:
 
 ---
 
-## 1. Where migrations live
+## 1. Two migration streams, one database
 
-There are currently **three** places SQL has been authored. Only one of them is
-authoritative.
+**Correction.** An earlier version of this document claimed
+`alsamos-superapp/supabase/migrations/` was the single source of truth. That was
+wrong and caused real damage: work was authored against a schema that another
+active stream had already replaced. Both repositories carry large, actively
+maintained migration sets, and **neither is a superset of the other**.
 
-| Location | Count | Status |
-|---|---|---|
-| `alsamos-superapp/supabase/migrations/` | ~120 files | **Source of truth.** CLI-managed, timestamp-ordered, applied with `supabase db push`. |
-| `socialalsamos/supabase/migrations/` | small, recent | Secondary. Reconcile against the Flutter set before applying. |
-| `alsamos-superapp/*.sql` at repo root | 6 files | Ad-hoc operational scripts. Not migrations. Deprecated. |
+| Stream | Location | Size | Character |
+|---|---|---|---|
+| **A - Flutter** | `alsamos-superapp/supabase/migrations/` | ~120 files | Hand-authored, descriptive filenames, timestamp-ordered. Owns the older foundational schema. |
+| **B - Web** | `socialalsamos/supabase/migrations/` | ~110 files | Mixed: ~60 tool-generated UUID filenames (2025-12 to 2026-08), then ~45 hand-named files from `20260708` onward. Owns most recent feature work. |
+| Deprecated | `alsamos-superapp/*.sql` at repo root | 6 files | Ad-hoc operational scripts, not migrations. |
 
 ### Rule
 
-> New migrations are authored in `alsamos-superapp/supabase/migrations/` using
-> the `YYYYMMDDHHMMSS_description.sql` convention.
+> Before writing any migration, list **both** directories and search for the
+> table name in each. Assume the table already exists in the other stream.
 
-If a schema change is driven by web work, it still belongs in that directory.
-The web repo may keep a **copy** for its own tooling, but the Flutter directory
-is the one that defines the applied state.
+Ownership is per domain, not per repository. Section 3 records which stream owns
+which domain. Author new migrations in the stream that already owns the domain.
 
-### Root-level scripts
+### Known stream hazards
 
+**Duplicate timestamps in stream B.** Three timestamps are used by two files
+each, so their relative order is undefined:
+
+| Timestamp | Files |
+|---|---|
+| `20260828230000` | `create_flow_foundation.sql`, `map_premium.sql` |
+| `20260829010000` | `user_stickers.sql`, `map_premium_fix.sql` |
+| `20260830110000` | `publish_formatted_content.sql`, `verified_product_reviews.sql` |
+
+In each pair one file is now a retracted stub, so the ambiguity is currently
+harmless. Do not reintroduce it.
+
+**Root-level scripts (stream A).**
 `ADMIN_DIAGNOSTIC_COMPLETE.sql`, `ADMIN_FIX_UNIFIED.sql`,
 `APPLY_MIGRATION_NOW.sql`, `APPLY_NOW_PRODUCTION.sql`, `DEPLOY_ADMIN_NOW.sql`,
-`INTROSPECT_SCHEMA_NOW.sql`.
-
-These are one-off repair and introspection scripts. They are **not** part of the
-migration chain, are not timestamp-ordered, and may contain destructive
-statements. Action: audit each one, fold anything still needed into a proper
-timestamped migration, then move the originals to `docs/legacy-sql/`.
+`INTROSPECT_SCHEMA_NOW.sql`. One-off repair and introspection scripts, not
+timestamp-ordered, possibly destructive. Fold anything still needed into a
+proper migration, then move these to `docs/legacy-sql/`.
 
 ---
 
@@ -60,182 +72,227 @@ by the CLI and by hand in the Supabase SQL editor.
 - End with `NOTIFY pgrst, 'reload schema';`
 - Never `DROP TABLE`, never `DROP COLUMN`, never rename. Add and deprecate.
 
-### The index-before-column trap
+### Trap 1: index before column
 
-This is the single most expensive mistake made in this project so far. It has
-now caused two separate failures.
+The most expensive recurring mistake in this project.
 
 ```
 ERROR:  42703: column "collection" does not exist
 ERROR:  42703: column "is_public" does not exist
 ```
 
-Cause: `CREATE TABLE IF NOT EXISTS x (...)` is a **no-op** when `x` already
-exists. None of the new columns are created. The `CREATE INDEX` or
-`CREATE POLICY` that follows then references a column that was never added, and
-the whole migration aborts.
+`CREATE TABLE IF NOT EXISTS x (...)` is a **no-op** when `x` already exists. None
+of the new columns are created. The following `CREATE INDEX` or `CREATE POLICY`
+then references a column that was never added, and the migration aborts.
 
-> Whenever a migration creates a table with `IF NOT EXISTS`, it must also issue
+> When a migration creates a table with `IF NOT EXISTS`, it must also issue
 > `ADD COLUMN IF NOT EXISTS` for every column it depends on, **before** any
-> index or policy that references them.
+> index or policy referencing them.
 
-And more fundamentally:
+### Trap 2: competing compatibility triggers
 
-> Search the authoritative migration directory for the table name before
-> writing `CREATE TABLE`. Assume it already exists.
+When two streams name the same concept differently, the fix is a bridge: alias
+columns plus a `BEFORE INSERT OR UPDATE` trigger that mirrors them. But **only
+one bridge per table**. Two triggers mirroring overlapping column sets on the
+same row fight each other and the outcome depends on trigger name ordering.
 
----
+> Before adding a compatibility trigger, check `pg_trigger` and both migration
+> streams for an existing bridge on that table.
 
-## 3. Domain map
+### Trap 3: partial unique indexes and upserts
 
-Derived from the migration filenames in the authoritative directory.
-
-| Domain | Representative migrations |
-|---|---|
-| Chat core | `phase2_message_interactions`, `phase3_realtime_presence`, `phase4_chat_list`, `group_a_chat_list_discovery`, `add_client_message_id`, `fix_message_reads_upsert_policy`, `speed_up_messages_initial_load` |
-| Groups and channels | `group_b_groups_channels`, `channel_discussion_groups` |
-| Chat media and location | `group_c_media_location`, `chat_voice_video_messages`, `messages_map_integration` |
-| Mentions and hashtags | `message_mentions`, `message_hashtags` |
-| Stickers | `telegram_stickers`, `reconcile_sticker_schema`, `seed_stickers.sql` |
-| Calls | `group_e_calls_live`, `batch2_calls_live`, `fix_calls_realtime`, `add_default_turn_servers`, `fix_call_room_members_rls`, `fix_call_accept_rpc`, `realtime_calls_telegram_grade`, `repair_realtime_calls_runtime_contract`, `harden_realtime_calls_professional_runtime`, `repair_video_calls_status_contract`, `repair_call_runtime_contract_gaps`, `repair_heartbeat_video_call_rpc_signature`, `lovable_rtc_realtime_repair` |
-| Map | `map_p0_features`, `social_map_features`, `advanced_routing`, `messages_map_integration`, `reconcile_map_schema` |
-| Marketplace | `marketplace_tables`, `marketplace_p0_payments_escrow`, `marketplace_p1_seller_verification`, `marketplace_p2_search_notifications`, `marketplace_p3_analytics_inventory` |
-| Posts and content | `content_engine_foundation`, `harden_post_collaboration`, `harden_post_poll_votes`, `fix_posts_schema_mismatches`, `fix_post_hashtag_extraction_trigger`, `trending_public_posts` |
-| Search | `global_search`, `add_search_indexes_and_tags`, `add_search_tags_rpc`, `discovery_modernization` |
-| Admin | `add_admin_role_system`, `admin_and_history_tables`, `batch4_admin_reliability` |
-| Settings and privacy | `settings_backend_columns`, `granular_privacy_settings`, `privacy_features`, `notification_settings`, `data_storage_settings`, `user_settings_sync_columns`, `show_deleted_messages_setting` |
-| Identity | `username_reservation_system`, `seed_reserved_usernames`, `username_change_rules`, `profile_photo_history`, `active_session_devices` |
-| Views and analytics | `view_history`, `fix_unique_view_counts`, `fix_post_views_profile_lookup` |
-| Appearance | `chat_wallpaper_system` |
-| Test fixtures | `test_messages_data`, `create_test_conversations` |
+PostgREST `onConflict: 'a,b'` becomes `ON CONFLICT (a, b)`, which Postgres can
+only infer from a **non-partial** unique index on exactly those columns. A
+partial unique index (`WHERE b IS NOT NULL`) does not satisfy inference and
+fails with `42P10`. NULLs are distinct in unique indexes, so a full unique index
+is normally safe.
 
 ---
 
-## 4. Resolved schema collisions
+## 3. Domain ownership
 
-**Status: verified by reading both sides.** The web client authored map and
-sticker migrations without knowing the canonical set already covered those
-domains. Every one of the colliding files has been neutralised to a no-op and
-replaced by a reconciliation migration.
-
-| Deprecated web migration | Collides with | Replacement |
+| Domain | Owner | Notes |
 |---|---|---|
-| `20260828193000_sticker_packs.sql` | `20260716000000_telegram_stickers.sql` | `20260831052300_reconcile_sticker_schema.sql` |
-| `20260828230000_map_premium.sql` | `20260712200000_map_p0_features.sql` | `20260831053000_reconcile_map_schema.sql` |
-| `20260829010000_map_premium_fix.sql` | `20260712200000_map_p0_features.sql`, `20260803020000_social_map_features.sql` | `20260831053000_reconcile_map_schema.sql` |
+| Chat core, groups, channels | A | `phase2_message_interactions`, `group_b_groups_channels`, `speed_up_messages_initial_load` |
+| Mentions, hashtags | A, patched by B | B adds `hashtag_normalization_compat` |
+| Chat media and location | A | `group_c_media_location`, `messages_map_integration`; B adds `live_location_resume` |
+| Message drafts | **B** | `message_drafts`, `message_draft_tombstones` |
+| Polls | A, extended by B | B adds `poll_types_video_jobs_music_ingest`, `create_p0_poll_storage`. Tallies live in `message_poll_votes`. |
+| **Stickers** | **B (entirely)** | See 4.1. A's `telegram_stickers` is the historical base only. |
+| Calls | A, **canonicalised by B** | See 4.6. B adds `call_invite_lifecycle`, `canonical_call_history`. |
+| Map | **A** | `map_p0_features`, `social_map_features`, `advanced_routing`. B's map migrations are retracted. |
+| Marketplace | A, **actively extended by B** | B owns checkout, order lifecycle, variants, wallet top-ups, seller stats |
+| Posts, stories, create flow | **B** | `create_flow_foundation`, `unified_story_foundation`, `collaboration_lifecycle`, `scheduled_post_publisher` |
+| Search | split | A `global_search`, `discovery_modernization`; B `first_party_global_search` |
+| Auth and identity | **B** | `auth_alsamos_identity`, `auth_identifier_login`, `auth_2fa_devices`, `profile_photos` |
+| Admin | A | `add_admin_role_system`, `batch4_admin_reliability` |
+| Settings and privacy | A | `settings_backend_columns`, `privacy_features`, `notification_settings` |
+| Storage buckets | **B** | `media_storage_bucket`, `post_music_private_storage` |
+| Test fixtures | A | `test_messages_data`, `create_test_conversations` |
 
-### 4.1 `sticker_packs` and `stickers`
+---
 
-| Canonical | Web assumed |
+## 4. Collisions: resolved and retracted
+
+### 4.1 Stickers - RECONCILIATION RETRACTED
+
+**Stream B owns stickers completely.** Do not author sticker schema in stream A.
+
+B's sticker stack:
+
+| Migration | Adds |
 |---|---|
-| `sticker_packs(title, cover_url, cover_lottie_url, created_by, is_animated)` | `sticker_packs(slug, title, author_id, cover_url, is_public, sticker_count, install_count)` |
-| `stickers(emoji NOT NULL, image_url, lottie_url, video_url, thumbnail_url, type NOT NULL CHECK, position)` | `stickers(file_url NOT NULL, thumb_url, emoji, width, height, position)` |
-| `user_sticker_packs(user_id, pack_id, updated_at)` | `sticker_pack_installs(user_id, pack_id, position, installed_at)` |
-| `recent_stickers(user_id, sticker_id NOT NULL, use_count, last_used)` | `sticker_usage(user_id, file_url, kind, use_count, last_used_at)` |
+| `20260829000500_sticker_system.sql` | `slug`, `name`, `icon_url`, `default_kind`, `source`, `owner_id`, `is_premium`, `is_public`, `review_status` on packs; `kind`, `full_url`, `preview_url`, `keywords` on stickers |
+| `20260829010000_user_stickers.sql` | user-uploaded stickers |
+| `20260829020000_sticker_pack_sharing.sql` | pack sharing |
+| `20260829030000_story_stickers.sql` | story stickers |
+| `20260829040000_sticker_trends_moderation.sql` | `sticker_usage_events`, `sticker_reports`, `sticker_moderators`, `log_sticker_usage()`, `trending_stickers()`, NSFW fields |
+| `20260830162000_sticker_schema_compat.sql` | **the bridge**: triggers `sticker_pack_compat_columns`, `sticker_compat_columns` |
 
-Resolution:
+A's `20260716000000_telegram_stickers.sql` remains the historical base
+(`title`, `cover_url`, `created_by`, `is_animated`; `emoji`, `image_url`,
+`lottie_url`, `video_url`, `type`; `user_sticker_packs`, `recent_stickers`).
 
-- Canonical tables stay authoritative.
-- `slug`, `is_public`, `sticker_count`, `install_count` added to `sticker_packs`.
-- `file_url`, `thumb_url`, `width`, `height` added to `stickers` and backfilled
-  from `image_url` / `video_url` / `lottie_url` / `thumbnail_url`. A trigger
-  keeps both namings in sync in either direction.
-- `stickers.type` is `NOT NULL` with no default, which would break any web
-  insert. It now defaults to `'static'`.
-- `user_sticker_packs` is the single install table. It gained `position`.
-  **The web client must stop writing `sticker_pack_installs`.**
-- `sticker_usage` was kept, because it is the only genuinely new capability:
-  `recent_stickers.sticker_id` is a required foreign key, so externally hosted
-  GIFs have no row to point at. `touch_sticker_usage()` writes `sticker_usage`
-  and mirrors into `recent_stickers` when the item is a real sticker, so the
-  Flutter client keeps working unchanged.
+**Retracted:** `20260831052300_reconcile_sticker_schema.sql` (stream A) is now a
+no-op stub. It duplicated B's columns, added a **second** pair of compat
+triggers to the same tables (Trap 2), created a third parallel recents table,
+and was unaware of the constraint `stickers_public_requires_nsfw_check`
+(`is_public = false OR nsfw_checked_at IS NOT NULL`).
 
-Also note: the deprecated web migration ended with a `DO` block that dropped
-every check constraint on `messages` matching `message_type`. It was a no-op,
-because the column is called `media_type`, but it was dangerous and is gone.
+**Also retracted:** `socialalsamos/.../20260828193000_sticker_packs.sql`.
+
+**Kept:** `20260831060000_sticker_usage_bridge.sql` defines only
+`touch_sticker_usage(file_url, kind, sticker_id)`, the entry point
+`src/lib/stickerRecents.ts` calls. It creates no tables and fans out to
+`sticker_usage_events` and `recent_stickers`, guarded with `to_regclass` and
+`EXECUTE` so a missing table degrades to a no-op instead of failing a message
+send.
 
 ### 4.2 `saved_places`
 
-| Canonical | Web assumed |
+| Canonical (A) | Web assumed |
 |---|---|
 | `list_id uuid -> saved_place_lists(id)` | `collection text` |
-| `name, latitude, longitude, address, notes, icon, is_favorite, visited_at` | `name, latitude, longitude, address, category, place_key` |
+| `notes` | `note` |
+| no such columns | `external_id`, `external_source` |
 
-Grouping is canonically done through a real `saved_place_lists` table, not a
-free-text label. This mismatch produced the `collection` error.
+Grouping is canonically a real `saved_place_lists` table, not a free-text label.
+This produced the original `column "collection" does not exist` error.
 
-Resolution: `collection`, `category`, `place_key` added. A trigger derives
-`collection` from the linked list name and `place_key` from the coordinates, so
-rows created by either client group correctly on both.
+**Resolved** by `20260831053000_reconcile_map_schema.sql`: adds `collection`,
+`category`, `place_key`; a trigger derives `collection` from the linked list name
+and `place_key` from coordinates. External references are carried by `place_key`;
+`external_id` / `external_source` were never added and must not be used.
 
 ### 4.3 `place_reviews`
 
-| Canonical | Web assumed |
+| Canonical (A) | Web assumed |
 |---|---|
 | `place_id TEXT NOT NULL`, `place_name TEXT NOT NULL` | `place_key TEXT` |
 | `review_text` | `comment` |
-| `categories[]`, `category_ratings`, `photo_urls[]`, `helpful_count`, `visit_date` | none |
-| `UNIQUE(user_id, place_id)` | `UNIQUE(user_id, place_key)` |
+| no such columns | `latitude`, `longitude` |
+| `UNIQUE (user_id, place_id)` | upsert on `(user_id, place_key)` |
 
-Resolution: `place_key` and `comment` added as aliases and backfilled. A
-`BEFORE INSERT OR UPDATE` trigger fills the `NOT NULL` `place_id` and
-`place_name` from them, so web inserts no longer violate the constraints.
+**Resolved** by `20260831053000_reconcile_map_schema.sql` (alias columns plus a
+trigger filling the `NOT NULL` canonical fields) and
+`20260831061000_place_reviews_upsert_key.sql` (full unique index on
+`(user_id, place_key)`, required for upsert inference - Trap 3).
 
-The canonical set also already provides richer review features the web client
-does not use yet: `review_helpful_votes` with an automatic `helpful_count`
-trigger, and `get_place_reviews(place_id_param, limit_count)`.
+Coordinates are **not** stored on reviews. `place_key` encodes them
+(`geo:<lat>,<lng>` at 5 decimals) or an external id (`<source>:<id>`,
+`alsamos:<canonicalId>`).
+
+B's richer review features are unused by the web map so far:
+`review_helpful_votes` with an automatic `helpful_count` trigger, plus
+`get_place_reviews(place_id_param, limit_count)`.
 
 ### 4.4 Ratings
 
 The web client calls `place_rating_summary(p_place_key)`. The canonical
-equivalent is the `place_statistics` **materialized view**, refreshed only when
-`refresh_place_statistics()` runs. The reconciliation migration defines
-`place_rating_summary` against the base table so it stays live, and it matches
-on either `place_key` or `place_id`.
+equivalent is the `place_statistics` **materialized view**, refreshed only by
+`refresh_place_statistics()`. The reconciliation defines
+`place_rating_summary` against the base table so it stays live, matching on
+either `place_key` or `place_id`.
 
 ### 4.5 Genuinely new, kept
 
-- `place_visits` plus `track_place_visit()` - passive dwell tracking. Distinct
-  from `check_ins`, which is deliberate and social. `track_place_visit` extends
-  a recent nearby visit rather than inserting duplicates.
-- `taxi_providers` - external operators we deep-link into. Distinct from
-  `taxi_live_locations`, which tracks our own drivers. We are not running a
-  fleet, so deep-link templates and tariffs stay in the client and only the
-  enable/disable state and ordering are stored.
+- `place_visits` plus `track_place_visit()` - passive dwell tracking, distinct
+  from the deliberate social `check_ins`. Extends a recent nearby visit rather
+  than inserting duplicates (6 hour / 0.0015 degree window).
+- `taxi_providers` - external operators we deep-link into, distinct from
+  `taxi_live_locations` (our own drivers). Deep-link templates and tariffs stay
+  in `src/lib/taxiProviders.ts`; only enable state and ordering are stored.
 - `products.latitude` / `products.longitude` plus `products_geo_idx`.
 
-### 4.6 Still to verify
+### 4.6 `call_history` - VERIFIED ALIGNED
 
-- `20260803030000_messages_map_integration.sql` against the location fields in
-  `message-protocol.md`.
-- `20260803000000_advanced_routing.sql` against `src/lib/routing.ts`.
-- The map tables use the `earthdistance` extension (`ll_to_earth`, `earth_box`,
-  `earth_distance`). The web client uses plain bounding-box arithmetic. Not a
-  conflict, but the two produce slightly different results near the poles, which
-  is irrelevant for Uzbekistan.
+`20260830172000_canonical_call_history.sql` (stream B) makes the **database**
+the author of call history. A trigger on `video_calls` writes exactly one
+`call_history` row and one chat bubble per finished call, deduplicated by a
+partial unique index on `messages(call_id)`.
+
+The bubble's `content` is JSON:
+
+```json
+{
+  "call_id": "uuid",
+  "type": "audio | video",
+  "status": "ended | missed | declined | cancelled",
+  "duration": 42,
+  "timestamp": "...",
+  "caller_id": "uuid",
+  "callee_id": "uuid"
+}
+```
+
+This **matches** the shape already implemented in
+`message_payload_compat.dart` (`canonicalCallHistoryPayload`). Two notes:
+
+- `duration` is integer **seconds** and is `null` for calls that never started.
+- `call_id` is an additional field; clients should tolerate and ignore it.
+- `messages.call_id` is a real column now. Clients must not write
+  `call_history` messages themselves; the trigger owns that.
 
 ---
 
-## 5. Test data in the migration chain
+## 5. Client alignment log
+
+Schema fixes are only half a change. Recorded here so the other client can
+follow.
+
+| Change | File | Status |
+|---|---|---|
+| Read stickers via `full_url` with `file_url` fallback | `src/hooks/useStickerPacks.ts` | already handled by B |
+| Stop using `sticker_pack_installs`; use `user_sticker_packs` | web sticker install path | **open** |
+| `notes` not `note`; drop `external_id` / `external_source` | `src/hooks/useSavedPlaces.ts` | done |
+| Drop `latitude` / `longitude` / `updated_at` from review payload | `src/hooks/usePlaceReviews.ts` | done |
+| Render `sticker` / `gif` without a bubble background | Flutter presentation | **open** |
+| Render `Message.callHistory` as a system row | Flutter presentation | **open** |
+| Confirm `location_payload` and `metadata.location` are written together | `messages_repository.dart` | **open (D4)** |
+
+---
+
+## 6. Test data in the migration chain
 
 `20260625000001_test_messages_data.sql` and
-`20260625000002_create_test_conversations.sql` insert fixture rows. They are
-part of the ordered chain, so they run against production on a full replay.
-
-Action: confirm both are idempotent and either gate them behind an environment
-check or move them out of `migrations/` into a seed script.
+`20260625000002_create_test_conversations.sql` (stream A) insert fixture rows and
+are part of the ordered chain, so they run against production on a full replay.
+Confirm both are idempotent, then gate them behind an environment check or move
+them out of `migrations/`.
 
 ---
 
-## 6. Procedure for a schema change
+## 7. Procedure for a schema change
 
-1. Search the authoritative directory for the domain first. Assume it already
-   exists.
-2. If it exists, write an `ADD COLUMN IF NOT EXISTS` migration. Do not write a
-   new `CREATE TABLE`.
-3. If a naming mismatch is unavoidable, add the alias column and a sync trigger
-   rather than renaming anything.
-4. Add the columns and RPCs to section 3 of this file.
-5. If chat payloads are affected, update `message-protocol.md` in both repos.
-6. Ship the read path on both clients before enabling any writer.
-7. Apply with `supabase db push`, or paste into the SQL editor in filename order.
+1. List **both** migration directories. Search for the domain in each.
+2. Identify the owning stream from section 3. Author there.
+3. If the table exists, write `ADD COLUMN IF NOT EXISTS`. Never a new
+   `CREATE TABLE`.
+4. If a naming mismatch is unavoidable, check for an existing compatibility
+   bridge first. Extend it rather than adding a second one.
+5. If the client upserts, ensure a non-partial unique index matches the
+   conflict target exactly.
+6. Record the domain, columns and RPCs in section 3, and any client work in
+   section 5.
+7. If chat payloads are affected, update `message-protocol.md` in both repos.
+8. Ship the read path on both clients before enabling any writer.
