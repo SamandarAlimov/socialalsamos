@@ -1,0 +1,18 @@
+{
+  "name": "alsamos-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Alsamos Bridge - local agent that executes user-approved computer tasks",
+  "main": "index.mjs",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "dotenv": "^16.4.5"
+  }
+}
