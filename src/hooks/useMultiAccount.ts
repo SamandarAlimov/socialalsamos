@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { supabase } from '@/integrations/supabase/client';
+import db from '@/lib/supabaseAny';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   AlsamosAuthError,
@@ -114,13 +115,14 @@ async function probeOwnIdentity(userId: string): Promise<{
     return ownIdentityProbe.promise;
   }
 
-  const promise = supabase
+  const promise = Promise.resolve(
+    db
     .from('identity_accounts')
     .select('identity_id')
     .eq('user_id', userId)
     .neq('status', 'deleted')
-    .maybeSingle()
-    .then((result) => {
+    .maybeSingle(),
+  ).then((result: any) => {
       if (result.error && isSchemaMissingError(result.error)) {
         markSchemaMissing();
       } else if (!result.error) {
@@ -171,13 +173,13 @@ export function useMultiAccount(enabled = true) {
       }
 
       const [{ data: rows, error: rowsError }, { data: identity }] = await Promise.all([
-        supabase
+        db
           .from('identity_accounts')
           .select('id, user_id, slot_no, is_primary, status')
           .eq('identity_id', own.identity_id)
           .eq('status', 'active')
           .order('slot_no', { ascending: true }),
-        supabase
+        db
           .from('auth_identities')
           .select('alsamos_email, max_accounts')
           .eq('id', own.identity_id)
@@ -190,7 +192,7 @@ export function useMultiAccount(enabled = true) {
       const userIds = list.map((row) => row.user_id as string);
 
       const { data: profiles } = userIds.length
-        ? await supabase
+        ? await db
             .from('profiles')
             .select('id, username, display_name, avatar_url')
             .in('id', userIds)
