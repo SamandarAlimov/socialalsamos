@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { useDebounce } from '@/hooks/useDebounce';
+import { supabase } from '@/integrations/supabase/client';
 
 // ── Stable contract mirrored from supabase/functions/global-search ──────────
 export type GlobalCategory = 'all' | 'web' | 'wikipedia' | 'news' | 'images' | 'videos';
@@ -88,35 +89,23 @@ export function GlobalSearchResults({ query, locale = 'uz' }: { query: string; l
     const ticket = ++requestRef.current;
     replace ? setLoading(true) : setLoadingMore(true);
     try {
-      const response = await fetch('/api/global-search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: debouncedQuery,
-          category,
-          page: nextPage,
-          pageSize: PAGE_SIZE,
-          locale,
-        }),
-      });
-
-      const data = (await response.json().catch(() => null)) as GlobalSearchResponse | null;
+      const { data, error: functionError } =
+        await supabase.functions.invoke<GlobalSearchResponse>('global-search', {
+          body: {
+            query: debouncedQuery,
+            category,
+            page: nextPage,
+            pageSize: PAGE_SIZE,
+            locale,
+          },
+        });
 
       if (ticket !== requestRef.current) return;
 
-      if (!data) {
+      if (functionError || !data) {
         setError({
           code: 'NETWORK_ERROR',
-          message: "Global Search serveridan yaroqli javob kelmadi.",
-        });
-        if (replace) setItems([]);
-        return;
-      }
-
-      if (!response.ok && !data.error) {
-        setError({
-          code: 'NETWORK_ERROR',
-          message: "Global Search serveriga ulanib bo'lmadi.",
+          message: functionError?.message || "Global Search xizmatiga ulanib bo'lmadi.",
         });
         if (replace) setItems([]);
         return;
@@ -186,9 +175,11 @@ export function GlobalSearchResults({ query, locale = 'uz' }: { query: string; l
           {items.length} ta natija · {meta.tookMs} ms
           {meta.engine
             ? ` · ${
-                meta.engine.startsWith('yacy-') || meta.engine === 'duckduckgo-html'
+                meta.engine.startsWith('firecrawl-')
                   ? 'jonli internet'
-                  : meta.engine
+                  : meta.engine === 'alsamos-index'
+                    ? 'Alsamos index'
+                    : meta.engine
               }`
             : ''}
         </p>
@@ -387,12 +378,15 @@ function ErrorState({ error }: { error: { code: string; message: string } }) {
   const setupState =
     error.code === 'INDEX_EMPTY' ||
     error.code === 'INDEX_UNAVAILABLE' ||
-    error.code === 'SEARCH_API_KEY_MISSING';
+    error.code === 'SEARCH_API_KEY_MISSING' ||
+    error.code === 'SEARCH_PROVIDER_NOT_CONFIGURED';
   const Icon = setupState ? DatabaseZap : AlertCircle;
 
   const title =
-    error.code === 'SEARCH_API_KEY_MISSING'
-      ? 'Internet Search kaliti serverga ulanmagan'
+    error.code === 'SEARCH_PROVIDER_NOT_CONFIGURED'
+      ? 'Realtime Search provider ulanmagan'
+      : error.code === 'SEARCH_API_KEY_MISSING'
+        ? 'Internet Search kaliti serverga ulanmagan'
       : error.code === 'INDEX_EMPTY'
         ? 'Alsamos web indeksi kengaymoqda'
         : error.code === 'INDEX_UNAVAILABLE'
