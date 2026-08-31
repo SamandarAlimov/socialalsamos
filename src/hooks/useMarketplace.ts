@@ -812,7 +812,9 @@ export function useCart() {
       return;
     }
 
-    const variantQuery = await db
+    setIsLoading(true);
+    try {
+      const variantQuery = await db
       .from('cart_items')
       .select(`
         *,
@@ -870,8 +872,13 @@ export function useCart() {
       } else {
         setItems([]);
       }
+      }
+    } catch (error) {
+      console.error('Cart loading crashed:', error);
+      setItems([]);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, [user]);
 
   useEffect(() => {
