@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, X, Globe, Sparkles, LayoutGrid, User, FileText, Users, Radio, ShoppingBag, Hash, TrendingUp, Clock, ArrowLeft, Mic, SlidersHorizontal, ChevronRight, Heart, MessageCircle, Eye, Play, Star, MapPin, Verified, ExternalLink, Loader2 } from 'lucide-react';
-import { Input } from '@/components/ui/input';
+import { Search, X, Globe, Sparkles, LayoutGrid, User, FileText, Users, Radio, ShoppingBag, Hash, TrendingUp, Clock, ArrowLeft, Mic, ChevronRight, Heart, MessageCircle, Eye, Play, Star, ExternalLink, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -12,6 +11,8 @@ import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { OnlineIndicator } from '@/components/OnlineIndicator';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { PullToRefresh } from '@/components/PullToRefresh';
+import { PostViewModal } from '@/components/PostViewModal';
+import { getPostPreviewText } from '@/components/discovery/PostPreviewContent';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -23,7 +24,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 
-// ── Types ──────────────────────────────────────────────
+// ── Types ──────────────────────────────────
 interface SearchUser {
   id: string;
   username: string | null;
@@ -124,7 +125,7 @@ function writeLocalSearchHistory(items: string[]) {
   }
 }
 
-// ── Main Component ─────────────────────────────────────
+// ── Main Component ────────────────────────────
 export default function SearchPage() {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
@@ -151,6 +152,7 @@ export default function SearchPage() {
   const [products, setProducts] = useState<SearchProduct[]>([]);
   const [groups, setGroups] = useState<SearchGroup[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedPost, setSelectedPost] = useState<SearchPost | null>(null);
   const [aiResponse, setAiResponse] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSources, setAiSources] = useState<GlobalSearchResult[]>([]);
@@ -379,6 +381,29 @@ export default function SearchPage() {
     setActiveTab(tab);
   };
 
+  // Post natijasi ilgari `navigate('/')` qilardi: bu Auth route, ya'ni post
+  // ham, /home ham ochilmasdi. Endi video post Videolar sahifasida aynan
+  // o'sha video bilan, oddiy post esa modalda ochiladi.
+  const openPost = useCallback((post: SearchPost) => {
+    triggerHaptic('light');
+
+    if (post.media_type === 'video') {
+      navigate(`/videos?v=${post.id}`);
+      return;
+    }
+
+    setSelectedPost(post);
+  }, [navigate, triggerHaptic]);
+
+  // Teg tugmalari ilgari umuman bosilmasdi (onClick yo'q edi).
+  const openHashtag = useCallback((tag: string) => {
+    triggerHaptic('light');
+    const clean = tag.replace(/^#/, '');
+    setQuery(`#${clean}`);
+    rememberSearch(`#${clean}`);
+    setActiveTab('posts');
+  }, [rememberSearch, triggerHaptic]);
+
   const handleAISearch = useCallback(async (searchTerm: string) => {
     const cleanQuery = searchTerm.trim();
     if (!cleanQuery) return;
@@ -513,7 +538,6 @@ export default function SearchPage() {
     };
   }, []);
 
-  const hasResults = users.length > 0 || posts.length > 0 || groups.length > 0 || channels.length > 0 || products.length > 0 || hashtags.length > 0;
   const hasQuery = query.trim().length > 0;
 
   // Count helpers
@@ -693,13 +717,15 @@ export default function SearchPage() {
                   hashtags={hashtags}
                   isLoading={isLoading || hashtagsLoading} query={query} navigate={navigate}
                   onTabSwitch={handleTabChange}
+                  onOpenPost={openPost}
+                  onSelectHashtag={openHashtag}
                 />
               )}
               {activeTab === 'users' && (
                 <UsersTab users={users} isLoading={isLoading} navigate={navigate} />
               )}
               {activeTab === 'posts' && (
-                <PostsTab posts={posts} isLoading={isLoading} navigate={navigate} />
+                <PostsTab posts={posts} isLoading={isLoading} onOpenPost={openPost} />
               )}
               {activeTab === 'groups' && (
                 <GroupsTab groups={groups} isLoading={isLoading} navigate={navigate} />
@@ -711,12 +737,25 @@ export default function SearchPage() {
                 <ProductsTab products={products} isLoading={isLoading} navigate={navigate} />
               )}
               {activeTab === 'hashtags' && (
-                <HashtagsTab hashtags={hashtags} isLoading={hashtagsLoading} />
+                <HashtagsTab
+                  hashtags={hashtags}
+                  isLoading={hashtagsLoading}
+                  onSelectHashtag={openHashtag}
+                />
               )}
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+
+      {selectedPost && (
+        <PostViewModal
+          post={selectedPost as any}
+          profile={selectedPost.profile as any}
+          open={!!selectedPost}
+          onOpenChange={(open: boolean) => !open && setSelectedPost(null)}
+        />
+      )}
     </div>
   );
 
@@ -772,7 +811,7 @@ function RecentSearchHistory({
   );
 }
 
-// ── Empty Search State ─────────────────────────────────
+// ── Empty Search State ────────────────────────
 function EmptySearchState({ recentSearches, trendingSearches, onSelect, onClearHistory }: {
   recentSearches: string[];
   trendingSearches: { text: string; icon: React.ElementType }[];
@@ -842,13 +881,13 @@ function EmptySearchState({ recentSearches, trendingSearches, onSelect, onClearH
   );
 }
 
-// ── Global Tab ─────────────────────────────────────────
+// ── Global Tab ──────────────────────────────
 function GlobalTab({ query }: { query: string }) {
   return <GlobalSearchResults query={query} />;
 }
 
 
-// ── AI Tab ──────────────────────────────────────────────
+// ── AI Tab ─────────────────────────────────
 function AITab({
   query,
   response,
@@ -927,11 +966,12 @@ function AITab({
   );
 }
 
-// ── All Tab ─────────────────────────────────────────────
-function AllTab({ users, posts, groups, channels, products, hashtags, isLoading, query, navigate, onTabSwitch }: {
+// ── All Tab ────────────────────────────────
+function AllTab({ users, posts, groups, channels, products, hashtags, isLoading, query, navigate, onTabSwitch, onOpenPost, onSelectHashtag }: {
   users: SearchUser[]; posts: SearchPost[]; groups: SearchGroup[]; channels: SearchChannel[];
   products: SearchProduct[]; hashtags: HashtagSuggestion[]; isLoading: boolean; query: string;
   navigate: (path: string) => void; onTabSwitch: (tab: TabKey) => void;
+  onOpenPost: (post: SearchPost) => void; onSelectHashtag: (tag: string) => void;
 }) {
   if (isLoading) return <AllSkeleton />;
 
@@ -977,7 +1017,7 @@ function AllTab({ users, posts, groups, channels, products, hashtags, isLoading,
         >
           <div className="space-y-2">
             {posts.slice(0, 3).map((post) => (
-              <PremiumPostCard key={post.id} post={post} onClick={() => navigate(`/`)} />
+              <PremiumPostCard key={post.id} post={post} onClick={() => onOpenPost(post)} />
             ))}
           </div>
         </ResultSection>
@@ -995,7 +1035,7 @@ function AllTab({ users, posts, groups, channels, products, hashtags, isLoading,
               <GroupResultCard
                 key={group.id}
                 group={group}
-                onClick={() => navigate('/messages')}
+                onClick={() => navigate(`/messages?c=${group.id}`)}
               />
             ))}
           </div>
@@ -1011,7 +1051,7 @@ function AllTab({ users, posts, groups, channels, products, hashtags, isLoading,
         >
           <div className="flex flex-wrap gap-2">
             {hashtags.slice(0, 8).map((tag) => (
-              <HashtagChip key={tag.id} hashtag={tag} />
+              <HashtagChip key={tag.id} hashtag={tag} onSelect={onSelectHashtag} />
             ))}
           </div>
         </ResultSection>
@@ -1026,7 +1066,7 @@ function AllTab({ users, posts, groups, channels, products, hashtags, isLoading,
         >
           <div className="space-y-1.5">
             {channels.slice(0, 3).map((ch) => (
-              <PremiumChannelCard key={ch.id} channel={ch} onClick={() => navigate('/channels')} />
+              <PremiumChannelCard key={ch.id} channel={ch} onClick={() => navigate(`/channels?c=${ch.id}`)} />
             ))}
           </div>
         </ResultSection>
@@ -1050,7 +1090,7 @@ function AllTab({ users, posts, groups, channels, products, hashtags, isLoading,
   );
 }
 
-// ── Section Wrapper ─────────────────────────────────────
+// ── Section Wrapper ───────────────────────────
 function ResultSection({ title, count, icon: Icon, onSeeAll, children }: {
   title: string; count: number; icon: React.ElementType;
   onSeeAll: () => void; children: React.ReactNode;
@@ -1079,7 +1119,7 @@ function ResultSection({ title, count, icon: Icon, onSeeAll, children }: {
   );
 }
 
-// ── Users Tab ───────────────────────────────────────────
+// ── Users Tab ───────────────────────────────
 function UsersTab({ users, isLoading, navigate }: {
   users: SearchUser[]; isLoading: boolean; navigate: (path: string) => void;
 }) {
@@ -1094,22 +1134,22 @@ function UsersTab({ users, isLoading, navigate }: {
   );
 }
 
-// ── Posts Tab ────────────────────────────────────────────
-function PostsTab({ posts, isLoading, navigate }: {
-  posts: SearchPost[]; isLoading: boolean; navigate: (path: string) => void;
+// ── Posts Tab ────────────────────────────────
+function PostsTab({ posts, isLoading, onOpenPost }: {
+  posts: SearchPost[]; isLoading: boolean; onOpenPost: (post: SearchPost) => void;
 }) {
   if (isLoading) return <PostsSkeleton />;
   if (posts.length === 0) return <EmptyTabState icon={FileText} text="Post topilmadi" />;
   return (
     <div className="space-y-2">
       {posts.map((post) => (
-        <PremiumPostCard key={post.id} post={post} onClick={() => navigate('/')} />
+        <PremiumPostCard key={post.id} post={post} onClick={() => onOpenPost(post)} />
       ))}
     </div>
   );
 }
 
-// ── Groups Tab ──────────────────────────────────────────
+// ── Groups Tab ──────────────────────────────
 function GroupsTab({
   groups,
   isLoading,
@@ -1125,13 +1165,17 @@ function GroupsTab({
   return (
     <div className="space-y-1.5">
       {groups.map((group) => (
-        <GroupResultCard key={group.id} group={group} onClick={() => navigate('/messages')} />
+        <GroupResultCard
+          key={group.id}
+          group={group}
+          onClick={() => navigate(`/messages?c=${group.id}`)}
+        />
       ))}
     </div>
   );
 }
 
-// ── Channels Tab ────────────────────────────────────────
+// ── Channels Tab ────────────────────────────
 function ChannelsTab({ channels, isLoading, navigate }: {
   channels: SearchChannel[]; isLoading: boolean; navigate: (path: string) => void;
 }) {
@@ -1140,13 +1184,13 @@ function ChannelsTab({ channels, isLoading, navigate }: {
   return (
     <div className="space-y-1.5">
       {channels.map((ch) => (
-        <PremiumChannelCard key={ch.id} channel={ch} onClick={() => navigate('/channels')} />
+        <PremiumChannelCard key={ch.id} channel={ch} onClick={() => navigate(`/channels?c=${ch.id}`)} />
       ))}
     </div>
   );
 }
 
-// ── Products Tab ────────────────────────────────────────
+// ── Products Tab ────────────────────────────
 function ProductsTab({ products, isLoading, navigate }: {
   products: SearchProduct[]; isLoading: boolean; navigate: (path: string) => void;
 }) {
@@ -1155,19 +1199,23 @@ function ProductsTab({ products, isLoading, navigate }: {
   return (
     <div className="grid grid-cols-2 gap-2.5">
       {products.map((p) => (
-        <PremiumProductCard key={p.id} product={p} onClick={() => navigate('/marketplace')} />
+        // Ilgari bu yerda umumiy /marketplace ochilardi, AllTab esa mahsulot
+        // sahifasiga o'tardi. Endi ikkalasi ham bir xil ishlaydi.
+        <PremiumProductCard key={p.id} product={p} onClick={() => navigate(`/marketplace/product/${p.id}`)} />
       ))}
     </div>
   );
 }
 
-// ── Hashtags Tab ────────────────────────────────────────
+// ── Hashtags Tab ────────────────────────────
 function HashtagsTab({
   hashtags,
   isLoading,
+  onSelectHashtag,
 }: {
   hashtags: HashtagSuggestion[];
   isLoading: boolean;
+  onSelectHashtag: (tag: string) => void;
 }) {
   if (isLoading) return <UsersSkeleton />;
   if (hashtags.length === 0) return <EmptyTabState icon={Hash} text="Teg topilmadi" />;
@@ -1175,15 +1223,15 @@ function HashtagsTab({
   return (
     <div className="flex flex-wrap gap-2">
       {hashtags.map((tag) => (
-        <HashtagChip key={tag.id} hashtag={tag} />
+        <HashtagChip key={tag.id} hashtag={tag} onSelect={onSelectHashtag} />
       ))}
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════════════
-// ── PREMIUM CARDS ──────────────────────────────────────
-// ═══════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════
+// ── PREMIUM CARDS ─────────────────────────────
+// ══════════════════════════════════════════════════════
 
 function GroupResultCard({ group, onClick }: { group: SearchGroup; onClick: () => void }) {
   return (
@@ -1210,11 +1258,19 @@ function GroupResultCard({ group, onClick }: { group: SearchGroup; onClick: () =
   );
 }
 
-function HashtagChip({ hashtag }: { hashtag: HashtagSuggestion }) {
+function HashtagChip({
+  hashtag,
+  onSelect,
+}: {
+  hashtag: HashtagSuggestion;
+  onSelect: (tag: string) => void;
+}) {
   return (
     <button
       type="button"
-      className="rounded-xl border border-border/30 bg-muted/40 px-3 py-2 text-left transition-colors hover:bg-muted/70"
+      onClick={() => onSelect(hashtag.tag)}
+      aria-label={`#${hashtag.tag} bo'yicha qidirish`}
+      className="rounded-xl border border-border/30 bg-muted/40 px-3 py-2 text-left transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <span className="text-sm font-semibold text-foreground">#{hashtag.tag}</span>
       <span className="ml-2 text-[10px] text-muted-foreground">
@@ -1264,6 +1320,9 @@ function PremiumPostCard({ post, onClick }: { post: SearchPost; onClick: () => v
   const { triggerHaptic } = useHapticFeedback();
   const hasMedia = post.media_urls && post.media_urls.length > 0;
   const isVideo = post.media_type === 'video';
+  // Post matnida [MUSIC]/[LOCATION] markerlari bo'lishi mumkin: xom JSON
+  // qidiruv natijasida ko'rinmasligi kerak.
+  const previewText = getPostPreviewText(post.content, '');
 
   return (
     <motion.div
@@ -1287,7 +1346,9 @@ function PremiumPostCard({ post, onClick }: { post: SearchPost; onClick: () => v
             </span>
             {post.profile?.is_verified && <VerifiedBadge size="xs" />}
           </div>
-          <p className="text-sm text-foreground/90 line-clamp-2 leading-relaxed">{post.content}</p>
+          {previewText && (
+            <p className="text-sm text-foreground/90 line-clamp-2 leading-relaxed">{previewText}</p>
+          )}
           <div className="flex items-center gap-3 mt-2.5">
             <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
               <Heart className="h-3 w-3" /> {post.likes_count || 0}
@@ -1378,31 +1439,7 @@ function PremiumProductCard({ product, onClick }: { product: SearchProduct; onCl
   );
 }
 
-// ── Utility Components ──────────────────────────────────
-
-function GlassInfoCard({ icon: Icon, title, description, accent }: {
-  icon: React.ElementType; title: string; description: string; accent?: boolean;
-}) {
-  return (
-    <div className={cn(
-      "p-5 rounded-2xl backdrop-blur-sm border",
-      accent
-        ? "bg-primary/5 border-primary/15"
-        : "bg-card/50 border-border/20"
-    )}>
-      <div className="flex items-center gap-2.5 mb-2.5">
-        <div className={cn(
-          "h-9 w-9 rounded-xl flex items-center justify-center",
-          accent ? "bg-primary/15" : "bg-muted/60"
-        )}>
-          <Icon className={cn("h-4.5 w-4.5", accent ? "text-primary" : "text-muted-foreground")} />
-        </div>
-        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-      </div>
-      <p className="text-sm text-muted-foreground leading-relaxed">{description}</p>
-    </div>
-  );
-}
+// ── Utility Components ─────────────────────────
 
 function EmptyTabState({ icon: Icon, text }: { icon: React.ElementType; text: string }) {
   return (
@@ -1415,7 +1452,7 @@ function EmptyTabState({ icon: Icon, text }: { icon: React.ElementType; text: st
   );
 }
 
-// ── Skeletons ───────────────────────────────────────────
+// ── Skeletons ────────────────────────────────
 
 function AllSkeleton() {
   return (
@@ -1510,7 +1547,7 @@ function ProductsSkeleton() {
   );
 }
 
-// ── Utils ───────────────────────────────────────────────
+// ── Utils ────────────────────────────────────
 
 function formatCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
