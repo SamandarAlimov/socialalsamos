@@ -1,6 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  attachProfiles,
+  createProfileEmbedGuard,
+  runWithProfileEmbedFallback,
+  type EmbedQueryResult,
+} from '@/lib/profileEmbed';
 
 export interface VideoPost {
   id: string;
@@ -25,6 +31,25 @@ export interface VideoPost {
   is_bookmarked?: boolean;
 }
 
+// `posts_user_id_fkey` nomi bazada bo'lmasa PostgREST butun so'rovni rad etadi
+// va Videolar sahifasi bo'sh qoladi. Shuning uchun embedsiz variant ham bor.
+const VIDEO_SELECT_WITH_PROFILE = `
+  *,
+  profile:profiles!posts_user_id_fkey (
+    id,
+    username,
+    display_name,
+    avatar_url,
+    is_verified
+  )
+`;
+
+const VIDEO_SELECT_PLAIN = '*';
+
+const videoEmbedGuard = createProfileEmbedGuard();
+
+type PostRow = Record<string, unknown>;
+
 export function useVideoPosts() {
   const [videos, setVideos] = useState<VideoPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -34,28 +59,29 @@ export function useVideoPosts() {
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase
-        .from('posts')
-        .select(`
-          *,
-          profile:profiles!posts_user_id_fkey (
-            id,
-            username,
-            display_name,
-            avatar_url,
-            is_verified
-          )
-        `)
-        .eq('media_type', 'video')
-        .eq('visibility', 'public')
-        .order('created_at', { ascending: false })
-        .limit(50);
+      const { data: rows, error } = await runWithProfileEmbedFallback<PostRow>(
+        videoEmbedGuard,
+        (select) =>
+          supabase
+            .from('posts')
+            .select(select)
+            .eq('media_type', 'video')
+            .eq('visibility', 'public')
+            .order('created_at', { ascending: false })
+            .limit(50) as unknown as PromiseLike<EmbedQueryResult<PostRow>>,
+        {
+          embedSelect: VIDEO_SELECT_WITH_PROFILE,
+          plainSelect: VIDEO_SELECT_PLAIN,
+        },
+      );
 
       if (error) throw error;
 
-      if (user && data) {
+      const data = (rows ?? []) as unknown as VideoPost[];
+
+      if (user && data.length > 0) {
         const postIds = data.map(p => p.id);
-        
+
         const { data: likesData } = await supabase
           .from('post_likes')
           .select('post_id')
@@ -72,7 +98,7 @@ export function useVideoPosts() {
 
         setVideos(videosWithStatus as VideoPost[]);
       } else {
-        setVideos((data || []) as VideoPost[]);
+        setVideos(data);
       }
     } catch (error) {
       console.error('Error fetching videos:', error);
@@ -134,8 +160,8 @@ export function useVideoPosts() {
 
   // Real-time subscription for new videos, likes, and comments
   useEffect(() => {
-    const postIds = videos.map(v => v.id);
-    if (postIds.length === 0) return;
+    const hasVideos = videos.length > 0;
+    if (!hasVideos) return;
 
     const channel = supabase
       .channel('video-posts-realtime')
@@ -148,23 +174,32 @@ export function useVideoPosts() {
           filter: 'media_type=eq.video',
         },
         async (payload) => {
-          const { data } = await supabase
-            .from('posts')
-            .select(`
-              *,
-              profile:profiles!posts_user_id_fkey (
-                id,
-                username,
-                display_name,
-                avatar_url,
-                is_verified
-              )
-            `)
-            .eq('id', payload.new.id)
-            .single();
+          const newId = (payload.new as { id?: string } | null)?.id;
+          if (!newId) return;
+
+          const { data: rows, error } = await runWithProfileEmbedFallback<PostRow>(
+            videoEmbedGuard,
+            (select) =>
+              supabase
+                .from('posts')
+                .select(select)
+                .eq('id', newId)
+                .limit(1) as unknown as PromiseLike<EmbedQueryResult<PostRow>>,
+            {
+              embedSelect: VIDEO_SELECT_WITH_PROFILE,
+              plainSelect: VIDEO_SELECT_PLAIN,
+            },
+          );
+
+          if (error) {
+            console.error('Error loading new video:', error);
+            return;
+          }
+
+          const data = (rows ?? [])[0] as unknown as VideoPost | undefined;
 
           if (data && data.user_id !== user?.id) {
-            setVideos(prev => [data as VideoPost, ...prev]);
+            setVideos(prev => (prev.some(v => v.id === data.id) ? prev : [data, ...prev]));
           }
         }
       )
@@ -254,7 +289,7 @@ export function useVideoPosts() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id, videos.length > 0]);
+  }, [user?.id, videos.length]);
 
   return {
     videos,
