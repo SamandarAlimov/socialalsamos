@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Heart, MessageCircle, Send, Bookmark, Music2, Volume2, VolumeX, Play, Pause, Repeat2, ArrowLeft, Maximize2, Minimize2, X, ThumbsUp, ThumbsDown } from 'lucide-react';
-import { createPortal } from 'react-dom';
+import { Heart, MessageCircle, Send, Bookmark, Music2, Volume2, VolumeX, Play, Pause, Repeat2, ArrowLeft, Maximize2, Minimize2, ListVideo } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
@@ -12,33 +11,14 @@ import { SharePostDialog } from '@/components/SharePostDialog';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
-import { PostViewsDialog } from '@/components/PostViewsDialog';
 import { usePostViews } from '@/hooks/usePostViews';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { StoryStickerOverlay } from '@/components/stickers/StoryStickerOverlay';
 import { useTranslation } from 'react-i18next';
-
-function formatNumber(num: number): string {
-  if (num >= 1000000) {
-    return (num / 1000000).toFixed(1) + 'M';
-  }
-  if (num >= 1000) {
-    return (num / 1000).toFixed(1) + 'K';
-  }
-  return num.toString();
-}
-
-function formatTime(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
-  const total = Math.floor(seconds);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  return h > 0
-    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-    : `${m}:${String(s).padStart(2, '0')}`;
-}
-
+import { VideoScrubBar } from '@/components/video/VideoScrubBar';
+import { VideoWatchPanel } from '@/components/video/VideoWatchPanel';
+import { useVideoHeatmap } from '@/hooks/useVideoHeatmap';
+import { formatCompactNumber, formatMediaTime, resolveAspectKind } from '@/lib/videoFormat';
 
 interface VideoCardProps {
   video: VideoPost;
@@ -48,23 +28,34 @@ interface VideoCardProps {
   onCommentClick: () => void;
   onShareClick: () => void;
   onLikesClick: () => void;
+  onWatchClick: () => void;
+  onProfileClick: () => void;
   isMobile: boolean;
   globalMuted: boolean;
   onMuteToggle: () => void;
 }
 
-function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShareClick, onLikesClick, isMobile, globalMuted, onMuteToggle }: VideoCardProps) {
+function VideoCard({
+  video,
+  isActive,
+  onLike,
+  onBookmark,
+  onCommentClick,
+  onShareClick,
+  onLikesClick,
+  onWatchClick,
+  onProfileClick,
+  isMobile,
+  globalMuted,
+  onMuteToggle,
+}: VideoCardProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const ytVideoRef = useRef<HTMLVideoElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const hideControlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showPlayButton, setShowPlayButton] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [youtubeMode, setYoutubeMode] = useState(false);
-  const [ytPlaying, setYtPlaying] = useState(true);
-  const [ytMuted, setYtMuted] = useState(false);
   // Player state
   const [aspect, setAspect] = useState<number | null>(null);
   const [duration, setDuration] = useState(0);
@@ -78,6 +69,7 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
   const { t } = useTranslation();
   const { lightTap, successFeedback } = useHapticFeedback();
   const { recordView } = usePostViews();
+  const heatmap = useVideoHeatmap(video.id, 48);
 
   // Record view when video becomes active
   useEffect(() => {
@@ -87,12 +79,13 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
   }, [isActive, video.id, recordView]);
 
   const videoUrl = video.media_urls?.[0] || '';
-  const isLandscape = aspect !== null && aspect > 1.15;
-  const isSquareish = aspect !== null && aspect >= 0.9 && aspect <= 1.15;
+  const aspectKind = resolveAspectKind(aspect);
+  const isLandscape = aspectKind === 'landscape';
+  const isSquareish = aspectKind === 'square';
 
   useEffect(() => {
     if (!videoRef.current) return;
-    
+
     if (isActive) {
       videoRef.current.play().then(() => {
         setIsPlaying(true);
@@ -134,7 +127,7 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
   const togglePlay = () => {
     lightTap();
     if (!videoRef.current) return;
-    
+
     if (isPlaying) {
       videoRef.current.pause();
       setIsPlaying(false);
@@ -156,11 +149,11 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
     revealControls();
   }, [revealControls]);
 
-  const seekToRatio = useCallback((ratio: number) => {
+  const handleSeek = useCallback((time: number) => {
     const el = videoRef.current;
-    if (!el || !el.duration) return;
-    el.currentTime = Math.min(Math.max(0, ratio), 1) * el.duration;
-    setCurrentTime(el.currentTime);
+    if (!el) return;
+    el.currentTime = time;
+    setCurrentTime(time);
   }, []);
 
   const toggleFullscreen = useCallback(() => {
@@ -250,8 +243,6 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
     lightTap();
   };
 
-  const progress = duration > 0 ? currentTime / duration : 0;
-
   return (
     <div className="relative h-full w-full bg-black flex items-center justify-center snap-start snap-always">
       {/* Video Container — size adapts to the source aspect ratio */}
@@ -273,11 +264,35 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
               )
         )}
       >
+        {/*
+          Instagram Reels uslubi: 16:9 yoki 1:1 video 9:16 ekranda qora
+          bo'shliq qoldirmasligi uchun orqa fonda blur qilingan nusxa turadi.
+        */}
+        {isMobile && aspect !== null && aspectKind !== 'portrait' && videoUrl && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 overflow-hidden"
+          >
+            <video
+              src={videoUrl}
+              muted
+              playsInline
+              className="h-full w-full scale-110 object-cover opacity-45 blur-2xl"
+              ref={(el) => {
+                if (!el) return;
+                if (isActive) el.play().catch(() => {});
+                else el.pause();
+              }}
+              loop
+            />
+          </div>
+        )}
+
         {/* Video */}
         <video
           ref={videoRef}
           src={videoUrl}
-          className="absolute inset-0 h-full w-full object-contain bg-black"
+          className="absolute inset-0 h-full w-full object-contain"
           loop
           muted={globalMuted}
           playsInline
@@ -304,7 +319,7 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
         />
 
         {/* Play/Pause Overlay */}
-        <div 
+        <div
           className={cn(
             "absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-300",
             showPlayButton ? "opacity-100" : "opacity-0"
@@ -357,37 +372,20 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
           )}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Scrub bar */}
-          <div
-            className="group relative h-4 flex items-center cursor-pointer"
-            onPointerDown={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              const move = (clientX: number) => seekToRatio((clientX - rect.left) / rect.width);
-              move(e.clientX);
-              const onMove = (ev: PointerEvent) => move(ev.clientX);
-              const onUp = () => {
-                window.removeEventListener('pointermove', onMove);
-                window.removeEventListener('pointerup', onUp);
-              };
-              window.addEventListener('pointermove', onMove);
-              window.addEventListener('pointerup', onUp);
+          {/* Timeline: kadr preview + "eng ko'p ko'rilgan" grafigi bilan */}
+          <VideoScrubBar
+            src={videoUrl}
+            duration={duration}
+            currentTime={currentTime}
+            bufferedSeconds={buffered}
+            heatmap={heatmap}
+            onSeek={handleSeek}
+            onScrubStateChange={(scrubbing) => {
+              if (scrubbing) setShowControls(true);
+              else revealControls();
             }}
-          >
-            <div className="relative h-[3px] w-full rounded-full bg-white/25 overflow-hidden group-hover:h-[5px] transition-all">
-              <div
-                className="absolute inset-y-0 left-0 bg-white/35"
-                style={{ width: `${duration ? (buffered / duration) * 100 : 0}%` }}
-              />
-              <div
-                className="absolute inset-y-0 left-0 bg-primary"
-                style={{ width: `${progress * 100}%` }}
-              />
-            </div>
-            <div
-              className="absolute h-3 w-3 rounded-full bg-primary shadow -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
-              style={{ left: `${progress * 100}%` }}
-            />
-          </div>
+            enablePreview={duration > 0}
+          />
 
           {/* Control row */}
           <div className="flex items-center gap-2 pt-1 text-white">
@@ -414,7 +412,7 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
               />
             )}
             <span className="text-[11px] tabular-nums text-white/85 ml-0.5">
-              {formatTime(currentTime)} / {formatTime(duration)}
+              {formatMediaTime(currentTime)} / {formatMediaTime(duration)}
             </span>
             <div className="flex-1" />
             <button
@@ -429,8 +427,6 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
             </button>
           </div>
         </div>
-
-
 
         {/* Right side actions - Instagram-style, compact so they don't block the video */}
         <div className={cn(
@@ -460,7 +456,7 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
               className="flex flex-col items-center -mt-1 active:opacity-70"
             >
               <span className="text-white text-[10px] font-semibold tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] leading-tight">
-                {formatNumber(video.likes_count || 0)}
+                {formatCompactNumber(video.likes_count || 0)}
               </span>
             </button>
           </div>
@@ -482,7 +478,7 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
               />
             </button>
             <span className="text-white text-[10px] font-semibold tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] -mt-1">
-              {formatNumber(video.comments_count || 0)}
+              {formatCompactNumber(video.comments_count || 0)}
             </span>
           </div>
 
@@ -500,7 +496,7 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
             </button>
             {(video.shares_count || 0) > 0 && (
               <span className="text-white text-[10px] font-semibold tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] -mt-1">
-                {formatNumber(video.shares_count || 0)}
+                {formatCompactNumber(video.shares_count || 0)}
               </span>
             )}
           </div>
@@ -532,20 +528,20 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
             />
           </button>
 
-          {/* YouTube-style large viewer */}
+          {/* YouTube-style watch view: video tepada, pastda boshqa videolar */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               lightTap();
               if (videoRef.current) videoRef.current.pause();
-              setYoutubeMode(true);
+              onWatchClick();
             }}
             className="p-1.5 active:scale-90 transition-transform"
-            aria-label="Open large player"
+            aria-label="Boshqa videolarni ko'rish"
           >
-            <Maximize2
-              className="h-5 w-5 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
-              strokeWidth={2}
+            <ListVideo
+              className="h-6 w-6 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
+              strokeWidth={1.8}
             />
           </button>
         </div>
@@ -566,12 +562,19 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
               size="sm"
               showRing
             />
-            <div className="flex items-center gap-1.5 min-w-0">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onProfileClick();
+              }}
+              className="flex items-center gap-1.5 min-w-0"
+            >
               <span className="text-white font-semibold text-sm drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] truncate">
                 @{video.profile?.username || 'user'}
               </span>
               {video.profile?.is_verified && <VerifiedBadge size="xs" />}
-            </div>
+            </button>
             <Button
               variant="outline"
               size="sm"
@@ -634,7 +637,6 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
             </div>
           )}
 
-
           {/* Music/Sound */}
           <div className="flex items-center gap-2">
             <Music2 className="h-3.5 w-3.5 text-white animate-spin" style={{ animationDuration: '3s' }} />
@@ -644,159 +646,6 @@ function VideoCard({ video, isActive, onLike, onBookmark, onCommentClick, onShar
           </div>
         </div>
       </div>
-
-      {/* YouTube-style large viewer modal */}
-      {youtubeMode && createPortal(
-        <div
-          className="fixed inset-0 z-[9999] bg-background flex flex-col"
-          onClick={(e) => e.stopPropagation()}
-          onTouchStart={(e) => e.stopPropagation()}
-          onTouchMove={(e) => e.stopPropagation()}
-          onTouchEnd={(e) => e.stopPropagation()}
-        >
-          {/* Video frame - YouTube-style 16:9 centered, full width */}
-          <div className="relative w-full bg-black flex items-center justify-center" style={{ aspectRatio: '16/9' }}>
-            <video
-              ref={ytVideoRef}
-              src={videoUrl}
-              className="absolute inset-0 h-full w-full object-contain bg-black"
-              autoPlay
-              playsInline
-              loop
-              muted={ytMuted}
-              onClick={() => {
-                if (!ytVideoRef.current) return;
-                if (ytVideoRef.current.paused) {
-                  ytVideoRef.current.play();
-                  setYtPlaying(true);
-                } else {
-                  ytVideoRef.current.pause();
-                  setYtPlaying(false);
-                }
-              }}
-            />
-            {/* Close */}
-            <button
-              onClick={() => {
-                if (ytVideoRef.current) ytVideoRef.current.pause();
-                setYoutubeMode(false);
-              }}
-              className="absolute top-3 left-3 h-9 w-9 rounded-full bg-black/55 backdrop-blur-md flex items-center justify-center ring-1 ring-white/10"
-              aria-label="Close"
-              style={{ top: `calc(env(safe-area-inset-top, 0px) + 12px)` }}
-            >
-              <X className="h-5 w-5 text-white" />
-            </button>
-            {/* Mute */}
-            <button
-              onClick={() => setYtMuted((m) => !m)}
-              className="absolute right-3 h-9 w-9 rounded-full bg-black/55 backdrop-blur-md flex items-center justify-center ring-1 ring-white/10"
-              aria-label="Mute"
-              style={{ top: `calc(env(safe-area-inset-top, 0px) + 12px)` }}
-            >
-              {ytMuted ? <VolumeX className="h-4 w-4 text-white" /> : <Volume2 className="h-4 w-4 text-white" />}
-            </button>
-            {/* Play indicator */}
-            {!ytPlaying && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="h-16 w-16 rounded-full bg-black/50 flex items-center justify-center">
-                  <Play className="h-8 w-8 text-white ml-1" />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Scrollable info panel - YouTube style */}
-          <div className="flex-1 overflow-y-auto overscroll-contain bg-background">
-            <div className="px-4 pt-4 pb-3">
-              <h1 className="text-foreground text-[17px] font-semibold leading-snug">
-                {video.content?.split('\n')[0] || `@${video.profile?.username || 'user'}`}
-              </h1>
-              <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
-                <span>@{video.profile?.username || 'user'}</span>
-                <span>·</span>
-                <span>{formatNumber(video.views_count || 0)} views</span>
-              </div>
-            </div>
-
-            {/* Action row - YouTube-style pills */}
-            <div className="px-4 pb-3 flex items-center gap-2 overflow-x-auto scrollbar-hide">
-              <div className="flex items-center bg-muted rounded-full overflow-hidden shrink-0">
-                <button
-                  onClick={handleLike}
-                  className="flex items-center gap-1.5 px-3.5 py-2 active:bg-muted-foreground/10"
-                >
-                  <ThumbsUp className={cn("h-4 w-4", video.is_liked ? "fill-foreground" : "")} />
-                  <span className="text-xs font-semibold tabular-nums">{formatNumber(video.likes_count || 0)}</span>
-                </button>
-                <div className="h-5 w-px bg-border" />
-                <button className="px-3.5 py-2 active:bg-muted-foreground/10">
-                  <ThumbsDown className="h-4 w-4" />
-                </button>
-              </div>
-              <button
-                onClick={handleShare}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-muted rounded-full shrink-0 active:bg-muted-foreground/10"
-              >
-                <Send className="h-4 w-4" />
-                <span className="text-xs font-semibold">Share</span>
-              </button>
-              <button
-                onClick={handleBookmark}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-muted rounded-full shrink-0 active:bg-muted-foreground/10"
-              >
-                <Bookmark className={cn("h-4 w-4", video.is_bookmarked ? "fill-foreground" : "")} />
-                <span className="text-xs font-semibold">Save</span>
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); onCommentClick(); }}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-muted rounded-full shrink-0 active:bg-muted-foreground/10"
-              >
-                <MessageCircle className="h-4 w-4" />
-                <span className="text-xs font-semibold">{formatNumber(video.comments_count || 0)}</span>
-              </button>
-            </div>
-
-            {/* Channel row */}
-            <div className="px-4 py-3 border-t border-border flex items-center gap-3">
-              <StoryAvatar
-                userId={video.profile?.id || video.user_id}
-                username={video.profile?.username}
-                displayName={video.profile?.display_name}
-                avatarUrl={video.profile?.avatar_url}
-                isVerified={!!video.profile?.is_verified}
-                size="sm"
-                showRing
-              />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1">
-                  <span className="font-semibold text-sm truncate">
-                    {video.profile?.display_name || video.profile?.username}
-                  </span>
-                  {video.profile?.is_verified && <VerifiedBadge size="xs" />}
-                </div>
-              </div>
-              <Button
-                onClick={handleFollow}
-                size="sm"
-                className="h-8 rounded-full px-4 text-xs font-semibold"
-              >
-                {isFollowing ? t('common.following', 'Following') : t('common.follow', 'Follow')}
-              </Button>
-            </div>
-
-            {/* Description */}
-            {video.content && (
-              <div className="px-4 py-3 border-t border-border">
-                <p className="text-sm text-foreground whitespace-pre-wrap break-words leading-relaxed">
-                  {video.content}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>,
-        document.body
-      )}
     </div>
   );
 }
@@ -856,14 +705,25 @@ export default function VideosPage() {
   const [shareVideoId, setShareVideoId] = useState<string | null>(null);
   const [likesDialogOpen, setLikesDialogOpen] = useState(false);
   const [likesVideoId, setLikesVideoId] = useState<string | null>(null);
+  const [watchVideoId, setWatchVideoId] = useState<string | null>(null);
   const [globalMuted, setGlobalMuted] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
-  const { mediumTap } = useHapticFeedback();
-  
+  const { mediumTap, lightTap } = useHapticFeedback();
+
   // Touch gesture tracking
   const touchStartY = useRef<number>(0);
+  const touchStartX = useRef<number>(0);
   const touchStartTime = useRef<number>(0);
+  const horizontalDelta = useRef<number>(0);
+  const verticalDelta = useRef<number>(0);
   const [swipeProgress, setSwipeProgress] = useState(0);
+
+  const openProfile = useCallback((video?: VideoPost | null) => {
+    const username = video?.profile?.username;
+    if (!username) return;
+    lightTap();
+    navigate(`/user/${username}`);
+  }, [navigate, lightTap]);
 
   const handleMuteToggle = useCallback(() => {
     setGlobalMuted(prev => !prev);
@@ -871,12 +731,12 @@ export default function VideosPage() {
 
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
-    
+
     const container = containerRef.current;
     const scrollTop = container.scrollTop;
     const itemHeight = container.clientHeight;
     const newIndex = Math.round(scrollTop / itemHeight);
-    
+
     if (newIndex !== activeIndex && newIndex >= 0 && newIndex < videos.length) {
       mediumTap();
       setActiveIndex(newIndex);
@@ -886,20 +746,42 @@ export default function VideosPage() {
   // Swipe gesture handlers for mobile
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     touchStartY.current = e.touches[0].clientY;
+    touchStartX.current = e.touches[0].clientX;
     touchStartTime.current = Date.now();
+    horizontalDelta.current = 0;
+    verticalDelta.current = 0;
   }, []);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     const deltaY = e.touches[0].clientY - touchStartY.current;
+    const deltaX = e.touches[0].clientX - touchStartX.current;
+    verticalDelta.current = deltaY;
+    horizontalDelta.current = deltaX;
     const progress = Math.max(-1, Math.min(1, deltaY / 150));
     setSwipeProgress(progress);
   }, []);
 
   const handleTouchEnd = useCallback(() => {
+    const deltaX = horizontalDelta.current;
+    const deltaY = verticalDelta.current;
+
+    /*
+      Instagramdagi kabi: o'ngdan chapga surilsa — muallif profili ochiladi.
+      Vertikal snap-scroll buzilmasligi uchun harakat aniq gorizontal
+      bo'lgandagina ishlaydi.
+    */
+    if (deltaX < -70 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+      setSwipeProgress(0);
+      horizontalDelta.current = 0;
+      verticalDelta.current = 0;
+      openProfile(videos[activeIndex]);
+      return;
+    }
+
     const swipeThreshold = 0.3;
     const timeElapsed = Date.now() - touchStartTime.current;
     const isQuickSwipe = timeElapsed < 300;
-    
+
     if (Math.abs(swipeProgress) > swipeThreshold || (isQuickSwipe && Math.abs(swipeProgress) > 0.1)) {
       if (swipeProgress < 0 && activeIndex < videos.length - 1) {
         // Swipe up - next video
@@ -922,7 +804,9 @@ export default function VideosPage() {
       }
     }
     setSwipeProgress(0);
-  }, [swipeProgress, activeIndex, videos.length, mediumTap]);
+    horizontalDelta.current = 0;
+    verticalDelta.current = 0;
+  }, [swipeProgress, activeIndex, videos, mediumTap, openProfile]);
 
   const openComments = (videoId: string) => {
     setSelectedVideoId(videoId);
@@ -950,6 +834,19 @@ export default function VideosPage() {
     container.addEventListener('scroll', handleScroll);
     return () => container.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
+
+  // Watch view yopilganda feed o'sha videoga tenglashadi
+  const closeWatchPanel = useCallback(() => {
+    const index = videos.findIndex(v => v.id === watchVideoId);
+    setWatchVideoId(null);
+    if (index >= 0 && index !== activeIndex) {
+      setActiveIndex(index);
+      containerRef.current?.scrollTo({
+        top: index * (containerRef.current?.clientHeight || 0),
+        behavior: 'auto',
+      });
+    }
+  }, [videos, watchVideoId, activeIndex]);
 
   if (isLoading) {
     return (
@@ -1005,21 +902,35 @@ export default function VideosPage() {
           )}
         </div>
 
-        {/* Global Mute — moved to header */}
-        <button
-          onClick={handleMuteToggle}
-          aria-label={globalMuted ? 'Unmute' : 'Mute'}
-          className="pointer-events-auto h-9 w-9 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center active:scale-90 transition-all ring-1 ring-white/10"
-        >
-          {globalMuted ? (
-            <VolumeX className="h-4.5 w-4.5 text-white" strokeWidth={2} />
-          ) : (
-            <Volume2 className="h-4.5 w-4.5 text-white" strokeWidth={2} />
-          )}
-        </button>
+        <div className="pointer-events-auto flex items-center gap-2">
+          {/* Watch view — YouTube uslubidagi ro'yxatli ko'rinish */}
+          <button
+            onClick={() => {
+              lightTap();
+              setWatchVideoId(videos[activeIndex]?.id ?? null);
+            }}
+            aria-label="Watch view"
+            className="h-9 w-9 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center active:scale-90 transition-all ring-1 ring-white/10"
+          >
+            <ListVideo className="h-4.5 w-4.5 text-white" strokeWidth={2} />
+          </button>
+
+          {/* Global Mute */}
+          <button
+            onClick={handleMuteToggle}
+            aria-label={globalMuted ? 'Unmute' : 'Mute'}
+            className="h-9 w-9 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center active:scale-90 transition-all ring-1 ring-white/10"
+          >
+            {globalMuted ? (
+              <VolumeX className="h-4.5 w-4.5 text-white" strokeWidth={2} />
+            ) : (
+              <Volume2 className="h-4.5 w-4.5 text-white" strokeWidth={2} />
+            )}
+          </button>
+        </div>
       </div>
 
-      <div 
+      <div
         ref={containerRef}
         className="h-full w-full overflow-y-scroll snap-y snap-mandatory scrollbar-hide overscroll-contain"
         style={{ scrollSnapType: 'y mandatory', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
@@ -1032,12 +943,14 @@ export default function VideosPage() {
 
             <VideoCard
               video={video}
-              isActive={index === activeIndex}
+              isActive={index === activeIndex && !watchVideoId}
               onLike={() => likeVideo(video.id)}
               onBookmark={() => toggleBookmark(video.id)}
               onCommentClick={() => openComments(video.id)}
               onShareClick={() => openShareDialog(video.id)}
               onLikesClick={() => openLikesDialog(video.id)}
+              onWatchClick={() => setWatchVideoId(video.id)}
+              onProfileClick={() => openProfile(video)}
               isMobile={isMobile}
               globalMuted={globalMuted}
               onMuteToggle={handleMuteToggle}
@@ -1045,6 +958,21 @@ export default function VideosPage() {
           </div>
         ))}
       </div>
+
+      {/* YouTube uslubidagi watch ekrani: tepada video, pastda boshqa videolar */}
+      {watchVideoId && (
+        <VideoWatchPanel
+          videos={videos}
+          activeVideoId={watchVideoId}
+          onSelectVideo={(id) => setWatchVideoId(id)}
+          onClose={closeWatchPanel}
+          onLike={(id) => likeVideo(id)}
+          onBookmark={(id) => toggleBookmark(id)}
+          onShare={(item) => openShareDialog(item.id)}
+          onComments={(item) => openComments(item.id)}
+          onOpenProfile={(item) => openProfile(item)}
+        />
+      )}
 
       {/* Comments Sheet */}
       <VideoCommentsSheet
