@@ -675,6 +675,35 @@ export default async function handler(req: any, res: any) {
   const startedAt = Date.now();
 
   try {
+    // Exact site/domain navigation should never wait on public search peers.
+    // This also guarantees that searching "alsamos" opens the platform result instantly.
+    if (page === 1) {
+      const direct = await navigationalResult(query, category);
+      if (direct) {
+        const payload = {
+          query,
+          category,
+          page,
+          totalEstimated: 1,
+          tookMs: Date.now() - startedAt,
+          results: [direct],
+          engine: 'direct-navigation',
+          summary: null,
+          searchSuggestionHtml: null,
+          searchQueries: [],
+          error: null,
+        };
+
+        cacheSet(cacheKey, payload);
+        res.setHeader(
+          'Cache-Control',
+          'private, max-age=60, s-maxage=180, stale-while-revalidate=300',
+        );
+        res.status(200).json(payload);
+        return;
+      }
+    }
+
     let results: SearchResult[] = [];
     let totalEstimated = 0;
     let engine = 'yacy-freeworld';
@@ -728,14 +757,6 @@ export default async function handler(req: any, res: any) {
           'duckduckgo: ' +
             (error instanceof Error ? error.message : String(error)),
         );
-      }
-    }
-
-    if (page === 1) {
-      const direct = await navigationalResult(query, category);
-      if (direct && !results.some((item) => item.url === direct.url)) {
-        results = [direct, ...results].slice(0, pageSize);
-        totalEstimated = Math.max(totalEstimated, results.length);
       }
     }
 
