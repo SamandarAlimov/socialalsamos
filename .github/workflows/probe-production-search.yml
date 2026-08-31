@@ -19,20 +19,8 @@ jobs:
           URL='https://mbhjganbihamoiqmankv.supabase.co/functions/v1/global-search'
           BODY='{"query":"OpenAI","category":"web","page":1,"pageSize":5,"locale":"en"}'
           echo "POST $URL"
-          status=$(curl --silent --show-error --max-time 50             -o response.json -w '%{http_code}'             -H 'Content-Type: application/json'             -d "$BODY" "$URL" || true)
+          status=$(curl --silent --show-error --max-time 50 -o response.json -w '%{http_code}' -H 'Content-Type: application/json' -d "$BODY" "$URL" || true)
           echo "HTTP $status"
           cat response.json || true
           echo
-          python - <<'PY'
-import json, pathlib
-p=pathlib.Path("response.json")
-if not p.exists():
-    raise SystemExit(1)
-try:
-    d=json.loads(p.read_text())
-except Exception:
-    raise SystemExit(1)
-print("engine:", d.get("engine"))
-print("results:", len(d.get("results") or []))
-print("error:", d.get("error"))
-PY
+          python -c 'import json,pathlib; p=pathlib.Path("response.json"); d=json.loads(p.read_text()) if p.exists() and p.read_text().strip() else {}; print("engine:",d.get("engine")); print("results:",len(d.get("results") or [])); print("error:",d.get("error"))'
