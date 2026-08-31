@@ -7,6 +7,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchPageText, isPublicHttpUrl } from "./net.ts";
 import { runJavaScript } from "./sandbox.ts";
+import { duckDuckGoSearch, type WebHit } from "./webFallback.ts";
 
 export type ToolSpec = {
   type: "function";
@@ -262,7 +263,7 @@ export const TOOL_SPECS: Record<string, ToolSpec> = {
   },
 };
 
-/** UI dagi rejim -> ruxsat etilgan vositalar. */
+/** UI dagi imkoniyat guruhi -> vositalar. */
 export const TOOL_GROUPS: Record<string, string[]> = {
   web: ["web_search", "web_fetch"],
   image: ["generate_image"],
@@ -301,8 +302,6 @@ function fail(text: string): ToolOutcome {
 
 // ------------------------------------------------------------------ web
 
-type WebHit = { title: string; url: string; snippet: string };
-
 async function tavilySearch(key: string, query: string, max: number): Promise<WebHit[]> {
   const res = await fetch("https://api.tavily.com/search", {
     method: "POST",
@@ -315,7 +314,7 @@ async function tavilySearch(key: string, query: string, max: number): Promise<We
       include_answer: false,
     }),
   });
-  if (!res.ok) throw new Error(`Tavily ${res.status}`);
+  if (!res.ok) throw new Error(`Tavily HTTP ${res.status}`);
   const json = await res.json();
   return (json.results ?? []).map((r: Record<string, unknown>) => ({
     title: String(r.title ?? ""),
@@ -331,35 +330,13 @@ async function braveSearch(key: string, query: string, max: number): Promise<Web
   const res = await fetch(url, {
     headers: { Accept: "application/json", "X-Subscription-Token": key },
   });
-  if (!res.ok) throw new Error(`Brave ${res.status}`);
+  if (!res.ok) throw new Error(`Brave HTTP ${res.status}`);
   const json = await res.json();
   return (json.web?.results ?? []).map((r: Record<string, unknown>) => ({
     title: String(r.title ?? ""),
     url: String(r.url ?? ""),
     snippet: String(r.description ?? "").slice(0, 600),
   }));
-}
-
-async function duckDuckGoSearch(query: string, max: number): Promise<WebHit[]> {
-  const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-  const res = await fetch(url, {
-    headers: { "User-Agent": "AlsamosAI/1.0", Accept: "text/html" },
-  });
-  if (!res.ok) throw new Error(`DuckDuckGo ${res.status}`);
-  const html = await res.text();
-  const hits: WebHit[] = [];
-  const re =
-    /<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/g;
-  let m: RegExpExecArray | null;
-  const strip = (s: string) => s.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
-  while ((m = re.exec(html)) !== null && hits.length < max) {
-    let link = m[1];
-    const uddg = link.match(/uddg=([^&]+)/);
-    if (uddg) link = decodeURIComponent(uddg[1]);
-    if (!isPublicHttpUrl(link)) continue;
-    hits.push({ title: strip(m[2]), url: link, snippet: strip(m[3]).slice(0, 600) });
-  }
-  return hits;
 }
 
 async function webSearch(args: Record<string, unknown>): Promise<ToolOutcome> {
@@ -370,14 +347,14 @@ async function webSearch(args: Record<string, unknown>): Promise<ToolOutcome> {
   const tavily = Deno.env.get("TAVILY_API_KEY");
   const brave = Deno.env.get("BRAVE_SEARCH_API_KEY");
 
+  const attempts: Array<() => Promise<WebHit[]>> = [];
+  if (tavily) attempts.push(() => tavilySearch(tavily, query, max));
+  if (brave) attempts.push(() => braveSearch(brave, query, max));
+  attempts.push(() => duckDuckGoSearch(query, max));
+
   let hits: WebHit[] = [];
   const errors: string[] = [];
-  for (const attempt of [
-    tavily ? () => tavilySearch(tavily, query, max) : null,
-    brave ? () => braveSearch(brave, query, max) : null,
-    () => duckDuckGoSearch(query, max),
-  ]) {
-    if (!attempt) continue;
+  for (const attempt of attempts) {
     try {
       hits = await attempt();
       if (hits.length) break;
@@ -390,9 +367,7 @@ async function webSearch(args: Record<string, unknown>): Promise<ToolOutcome> {
     return fail(`Web qidiruv natija bermadi. ${errors.join("; ")}`.trim());
   }
 
-  const text = hits
-    .map((h, i) => `[${i + 1}] ${h.title}\n${h.url}\n${h.snippet}`)
-    .join("\n\n");
+  const text = hits.map((h, i) => `[${i + 1}] ${h.title}\n${h.url}\n${h.snippet}`).join("\n\n");
   return { ok: true, text, data: { sources: hits } };
 }
 
@@ -403,8 +378,14 @@ async function webFetch(args: Record<string, unknown>): Promise<ToolOutcome> {
     const page = await fetchPageText(url);
     return {
       ok: true,
-      text: `# ${page.title ?? page.url}\nURL: ${page.url}\n\n${page.text}${page.truncated ? "\n\n[...qisqartirildi]" : ""}`,
-      data: { sources: [{ title: page.title ?? page.url, url: page.url, snippet: page.text.slice(0, 300) }] },
+      text: `# ${page.title ?? page.url}\nURL: ${page.url}\n\n${page.text}${
+        page.truncated ? "\n\n[...qisqartirildi]" : ""
+      }`,
+      data: {
+        sources: [
+          { title: page.title ?? page.url, url: page.url, snippet: page.text.slice(0, 300) },
+        ],
+      },
     };
   } catch (error) {
     return fail(error instanceof Error ? error.message : String(error));
@@ -441,7 +422,9 @@ async function generateImage(args: Record<string, unknown>, ctx: ToolContext): P
     }),
   });
   if (!res.ok) {
-    return fail(res.status === 402 ? "AI kreditlari tugagan." : `Rasm yaratilmadi (HTTP ${res.status}).`);
+    return fail(
+      res.status === 402 ? "AI kreditlari tugagan." : `Rasm yaratilmadi (HTTP ${res.status}).`,
+    );
   }
   const json = await res.json();
   const imageUrl = json.choices?.[0]?.message?.images?.[0]?.image_url?.url ?? null;
@@ -458,9 +441,8 @@ async function generateVideo(args: Record<string, unknown>, ctx: ToolContext): P
   if (!prompt) return fail("prompt bo'sh.");
   if (!ctx.userId) return fail("Video yaratish uchun tizimga kirish kerak.");
   const seconds = clamp(args.seconds, 2, 12, 5);
-  const imageUrl = typeof args.image_url === "string" && isPublicHttpUrl(args.image_url)
-    ? args.image_url
-    : null;
+  const imageUrl =
+    typeof args.image_url === "string" && isPublicHttpUrl(args.image_url) ? args.image_url : null;
 
   const { data, error } = await ctx.admin
     .from("ai_media_jobs")
@@ -477,7 +459,9 @@ async function generateVideo(args: Record<string, unknown>, ctx: ToolContext): P
   if (error) return fail(`Video navbatga qo'shilmadi: ${error.message}`);
   return {
     ok: true,
-    text: `Video generatsiya navbatga qo'shildi. job_id=${data.id}, status=${data.status}, davomiylik=${seconds}s. Foydalanuvchiga tayyor bo'lgach chatda ko'rinishini aytib qo'ying.`,
+    text:
+      `Video generatsiya navbatga qo'shildi. job_id=${data.id}, status=${data.status}, ` +
+      `davomiylik=${seconds}s. Tayyor bo'lgach chatda ko'rinadi.`,
     data: { jobId: data.id, kind: "video", status: data.status, prompt, seconds },
   };
 }
@@ -518,7 +502,10 @@ async function searchPosts(args: Record<string, unknown>, ctx: ToolContext): Pro
   return { ok: true, text: JSON.stringify(data), data: { posts: data } };
 }
 
-async function searchMarketplace(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolOutcome> {
+async function searchMarketplace(
+  args: Record<string, unknown>,
+  ctx: ToolContext,
+): Promise<ToolOutcome> {
   const query = String(args.query ?? "").trim();
   const limit = clamp(args.limit, 1, 25, 12);
   let q = ctx.admin
@@ -571,7 +558,7 @@ async function mcpRpc(
   };
   if (connector.auth_token) {
     headers.Authorization =
-      connector.auth_type === "bearer" || !connector.auth_type
+      !connector.auth_type || connector.auth_type === "bearer"
         ? `Bearer ${connector.auth_token}`
         : connector.auth_token;
   }
@@ -595,11 +582,20 @@ async function mcpRpc(
   return json.result ?? {};
 }
 
-async function listConnectorTools(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolOutcome> {
+async function listConnectorTools(
+  args: Record<string, unknown>,
+  ctx: ToolContext,
+): Promise<ToolOutcome> {
   if (!ctx.connectors.length) {
-    return { ok: true, text: "Foydalanuvchida ulangan plugin yo'q. Sozlamalar > AI > Konnektorlar bo'limida qo'shish mumkin." };
+    return {
+      ok: true,
+      text:
+        "Foydalanuvchida ulangan plugin yo'q. AI sahifasidagi 'Konnektorlar' oynasidan MCP server qo'shish mumkin.",
+    };
   }
-  const targets = args.connector ? [findConnector(ctx, args.connector)].filter(Boolean) as ConnectorRow[] : ctx.connectors;
+  const targets = args.connector
+    ? ([findConnector(ctx, args.connector)].filter(Boolean) as ConnectorRow[])
+    : ctx.connectors;
   const lines: string[] = [];
   const catalog: Record<string, unknown>[] = [];
   for (const connector of targets) {
@@ -608,17 +604,24 @@ async function listConnectorTools(args: Record<string, unknown>, ctx: ToolContex
       const tools = (result.tools ?? []) as Array<Record<string, unknown>>;
       lines.push(
         `## ${connector.name} (id: ${connector.id})\n` +
-          tools.map((t) => `- ${t.name}: ${String(t.description ?? "").slice(0, 200)}`).join("\n"),
+          tools
+            .map((t) => `- ${t.name}: ${String(t.description ?? "").slice(0, 200)}`)
+            .join("\n"),
       );
       catalog.push({ connector: connector.name, id: connector.id, tools });
     } catch (error) {
-      lines.push(`## ${connector.name}: XATO — ${error instanceof Error ? error.message : String(error)}`);
+      lines.push(
+        `## ${connector.name}: XATO — ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
   return { ok: true, text: lines.join("\n\n"), data: { connectors: catalog } };
 }
 
-async function connectorCall(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolOutcome> {
+async function connectorCall(
+  args: Record<string, unknown>,
+  ctx: ToolContext,
+): Promise<ToolOutcome> {
   const connector = findConnector(ctx, args.connector);
   if (!connector) return fail("Bunday connector topilmadi.");
   const tool = String(args.tool ?? "").trim();
@@ -632,11 +635,7 @@ async function connectorCall(args: Record<string, unknown>, ctx: ToolContext): P
         .map((item) => (item.type === "text" ? String(item.text ?? "") : `[${item.type}]`))
         .join("\n")
         .slice(0, 12000) || JSON.stringify(result).slice(0, 12000);
-    return {
-      ok: !result.isError,
-      text,
-      data: { connector: connector.name, tool, result },
-    };
+    return { ok: !result.isError, text, data: { connector: connector.name, tool, result } };
   } catch (error) {
     return fail(error instanceof Error ? error.message : String(error));
   }
@@ -649,7 +648,7 @@ async function computerTask(args: Record<string, unknown>, ctx: ToolContext): Pr
   const action = String(args.action ?? "").trim();
   const reason = String(args.reason ?? "").trim().slice(0, 500);
   if (!action) return fail("action talab qilinadi.");
-  if (!reason) return fail("reason talab qilinadi — foydalanuvchi nima uchun ekanini ko'rishi kerak.");
+  if (!reason) return fail("reason talab qilinadi — foydalanuvchi sababini ko'rishi kerak.");
 
   const deviceId = typeof args.device_id === "string" && args.device_id ? args.device_id : null;
   const { data, error } = await ctx.admin
@@ -671,12 +670,15 @@ async function computerTask(args: Record<string, unknown>, ctx: ToolContext): Pr
     text:
       `Vazifa navbatga qo'yildi. task_id=${data.id}, status=${data.status}. ` +
       "Foydalanuvchi Alsamos Bridge ilovasida tasdiqlamaguncha bajarilmaydi. " +
-      "Foydalanuvchidan tasdiqlashni so'rang, so'ng computer_task_result bilan natijani tekshiring.",
+      "Tasdiqlashni so'rang, so'ng computer_task_result bilan natijani tekshiring.",
     data: { taskId: data.id, action, status: data.status, reason },
   };
 }
 
-async function computerTaskResult(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolOutcome> {
+async function computerTaskResult(
+  args: Record<string, unknown>,
+  ctx: ToolContext,
+): Promise<ToolOutcome> {
   if (!ctx.userId) return fail("Tizimga kirish kerak.");
   const taskId = String(args.task_id ?? "").trim();
   if (!taskId) return fail("task_id talab qilinadi.");
@@ -688,11 +690,7 @@ async function computerTaskResult(args: Record<string, unknown>, ctx: ToolContex
     .maybeSingle();
   if (error) return fail(error.message);
   if (!data) return fail("Vazifa topilmadi.");
-  return {
-    ok: true,
-    text: JSON.stringify(data).slice(0, 12000),
-    data: { task: data },
-  };
+  return { ok: true, text: JSON.stringify(data).slice(0, 12000), data: { task: data } };
 }
 
 // ------------------------------------------------------------------ dispatcher
