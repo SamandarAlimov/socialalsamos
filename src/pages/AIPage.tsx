@@ -3,17 +3,11 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import {
-  Bot,
   Code2,
   FileText,
   Globe,
   Image as ImageIcon,
-  Lightbulb,
-  MapPin,
-  Monitor,
   PanelLeft,
-  Plug,
-  ShoppingBag,
   Sparkles,
   X,
 } from 'lucide-react';
@@ -33,18 +27,26 @@ import { AIConnectorsDialog } from '@/components/ai/AIConnectorsDialog';
 import type { AIConversation, AIMessage, AISource, AIToolEvent } from '@/components/ai/types';
 import { extractArtifacts } from '@/lib/aiArtifacts';
 import { streamAgent } from '@/lib/ai/agentClient';
-import {
-  DEFAULT_TOOL_GROUPS,
-  groupsForMode,
-  toolLabel,
-  type AIMode,
-  type ModelId,
-  type ToolGroupId,
-} from '@/lib/ai/capabilities';
+import { toolLabel, type ModelId, type ToolGroupId } from '@/lib/ai/capabilities';
 
 const PIN_KEY = 'alsamos.ai.pinned';
 const TITLE_KEY = 'alsamos.ai.titles';
 const PREFS_KEY = 'alsamos.ai.prefs';
+
+/**
+ * Barcha vositalar doim yoqilgan: foydalanuvchi hech narsa tanlamaydi.
+ * "Rasm chizib ber" desa — model o'zi rasm vositasini chaqiradi.
+ * Yagona istisno — veb qidiruvni "+" menyusidan o'chirib qo'yish mumkin.
+ */
+const ALL_TOOL_GROUPS: ToolGroupId[] = [
+  'web',
+  'image',
+  'video',
+  'code',
+  'alsamos',
+  'connectors',
+  'computer',
+];
 
 const readMap = (key: string): Record<string, string> => {
   try {
@@ -61,20 +63,18 @@ const writeMap = (key: string, value: Record<string, string>) => {
   }
 };
 
-type Prefs = { mode: AIMode; model: ModelId; toolGroups: ToolGroupId[] };
-
-const readPrefs = (): Prefs => {
+const readPrefs = (): { model: ModelId; toolGroups: ToolGroupId[] } => {
   try {
     const parsed = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
     return {
-      mode: parsed.mode === 'agent' ? 'agent' : 'chat',
       model: (parsed.model as ModelId) || 'auto',
-      toolGroups: Array.isArray(parsed.toolGroups) && parsed.toolGroups.length
-        ? (parsed.toolGroups as ToolGroupId[])
-        : DEFAULT_TOOL_GROUPS,
+      toolGroups:
+        Array.isArray(parsed.toolGroups) && parsed.toolGroups.length
+          ? (parsed.toolGroups as ToolGroupId[])
+          : ALL_TOOL_GROUPS,
     };
   } catch {
-    return { mode: 'chat', model: 'auto', toolGroups: DEFAULT_TOOL_GROUPS };
+    return { model: 'auto', toolGroups: ALL_TOOL_GROUPS };
   }
 };
 
@@ -93,7 +93,6 @@ export default function AIPage() {
   const [statusLabel, setStatusLabel] = useState("O'ylayapman...");
   const [conversations, setConversations] = useState<AIConversation[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
-  // Cold start ALWAYS lands on a fresh conversation.
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [artifactsOpen, setArtifactsOpen] = useState(false);
@@ -101,7 +100,6 @@ export default function AIPage() {
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [connectorsOpen, setConnectorsOpen] = useState(false);
 
-  const [mode, setMode] = useState<AIMode>(initialPrefs.mode);
   const [model, setModel] = useState<ModelId>(initialPrefs.model);
   const [toolGroups, setToolGroups] = useState<ToolGroupId[]>(initialPrefs.toolGroups);
   const [activeModel, setActiveModel] = useState<string | null>(null);
@@ -125,11 +123,11 @@ export default function AIPage() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ mode, model, toolGroups }));
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ model, toolGroups }));
     } catch {
       /* ignore */
     }
-  }, [mode, model, toolGroups]);
+  }, [model, toolGroups]);
 
   /* ---------------- history ---------------- */
 
@@ -322,7 +320,7 @@ export default function AIPage() {
 
   const runAgent = async (baseMessages: AIMessage[]) => {
     setIsStreaming(true);
-    setStatusLabel(mode === 'agent' ? 'Vazifani rejalashtirmoqda\u2026' : "O'ylayapman...");
+    setStatusLabel("O'ylayapman...");
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -345,14 +343,15 @@ export default function AIPage() {
         sources: sources.length ? [...sources] : undefined,
         tools: tools.length ? tools.map((t) => ({ ...t })) : undefined,
         model: usedModel ?? undefined,
-        mode,
+        mode: 'agent',
         notice,
         timestamp: new Date(),
       };
-      setMessages(created ? (prev) => prev.map((m) => (m.id === assistantId ? assistant : m)) : [
-        ...baseMessages,
-        assistant,
-      ]);
+      setMessages(
+        created
+          ? (prev) => prev.map((m) => (m.id === assistantId ? assistant : m))
+          : [...baseMessages, assistant],
+      );
       created = true;
       return assistant;
     };
@@ -371,9 +370,9 @@ export default function AIPage() {
 
       await streamAgent({
         messages: history,
-        mode,
+        mode: 'agent',
         model,
-        toolGroups: groupsForMode(mode, toolGroups),
+        toolGroups,
         conversationId: currentConversationId,
         signal: controller.signal,
         onEvent: (event) => {
@@ -487,9 +486,7 @@ export default function AIPage() {
 
     let content = raw;
     if (attachments.length > 0) {
-      const attachmentText = attachments
-        .map((a) => `[${a.type}] ${a.name}: ${a.url}`)
-        .join('\n');
+      const attachmentText = attachments.map((a) => `[${a.type}] ${a.name}: ${a.url}`).join('\n');
       content = content ? `${content}\n\n${attachmentText}` : attachmentText;
     }
 
@@ -521,91 +518,36 @@ export default function AIPage() {
     setIsStreaming(false);
   };
 
-  /* ---------------- suggestions ---------------- */
+  /* ---------------- suggestions (kam va foydali) ---------------- */
 
   const suggestions = useMemo(
     () => [
       {
-        icon: <Globe className="h-5 w-5" />,
-        title: 'Internetdan tekshirish',
-        desc: 'Manbalar bilan javob',
-        prompt:
-          "Internetdan qidirib, 2026-yilda O'zbekistonda eng ko'p ishlatilgan to'lov tizimlarini manbalar bilan tahlil qilib ber",
-        groups: ['web'] as ToolGroupId[],
-      },
-      {
         icon: <Code2 className="h-5 w-5" />,
-        title: 'Kod yozib, tekshirish',
-        desc: 'Sandbox\u2019da ishga tushiradi',
+        title: 'Kod yozib bering',
         prompt:
-          'JavaScriptda katta massivni tez saralaydigan funksiya yoz, so\u2019ng uni sandbox\u2019da testlar bilan tekshirib natijani ko\u2019rsat',
-        groups: ['code'] as ToolGroupId[],
+          'JavaScriptda katta massivni tez saralaydigan funksiya yoz va uni testlar bilan tekshirib natijani ko\u2019rsat',
       },
       {
         icon: <ImageIcon className="h-5 w-5" />,
-        title: 'Rasm yaratish',
-        desc: 'Bir soniyada vizual',
-        prompt: 'Alsamos brendi uchun minimalistik logotip konsepti rasmini yarat: to\u2019q fon, apelsin rangli aksent',
-        groups: ['image'] as ToolGroupId[],
-      },
-      {
-        icon: <ShoppingBag className="h-5 w-5" />,
-        title: 'Bozordan tavsiya',
-        desc: 'Alsamos marketplace',
-        prompt: 'Marketplace\u2019dan 2 mln so\u2019mgacha noutbuk aksessuarlarini topib, taqqoslab ber',
-        groups: ['alsamos'] as ToolGroupId[],
-      },
-      {
-        icon: <Monitor className="h-5 w-5" />,
-        title: 'Kompyuterda bajarish',
-        desc: 'Tasdiq bilan xavfsiz',
+        title: 'Rasm yarating',
         prompt:
-          'Kompyuterimdagi joriy papkadagi fayllar ro\u2019yxatini olib, eng katta 5 faylni aniqlab ber',
-        groups: ['computer'] as ToolGroupId[],
+          'Alsamos brendi uchun minimalistik logotip konsepti rasmini yarat: to\u2019q fon, apelsin rangli aksent',
       },
       {
-        icon: <Plug className="h-5 w-5" />,
-        title: 'Pluginlar bilan ishlash',
-        desc: 'MCP konnektorlar',
-        prompt: 'Ulangan konnektorlarim va ularning vositalarini ko\u2019rsatib, nima qila olishimni tushuntir',
-        groups: ['connectors'] as ToolGroupId[],
-      },
-      {
-        icon: <Lightbulb className="h-5 w-5" />,
-        title: 'Kontent g\u2019oyalari',
-        desc: 'Postlar uchun',
-        prompt: 'Ijtimoiy tarmoq uchun 10 ta kontent g\u2019oyasi va sarlavhalarini taklif qil',
-        groups: [] as ToolGroupId[],
-      },
-      {
-        icon: <MapPin className="h-5 w-5" />,
-        title: 'Marshrut rejalash',
-        desc: 'Kunlik reja',
-        prompt: 'Toshkentda bir kunlik sayohat marshrutini vaqt va taxminiy xarajatlar bilan rejalashtir',
-        groups: ['web'] as ToolGroupId[],
+        icon: <Globe className="h-5 w-5" />,
+        title: 'Internetdan tekshiring',
+        prompt:
+          "Internetdan qidirib, 2026-yilda O'zbekistonda eng ko'p ishlatilgan to'lov tizimlarini manbalar bilan tahlil qilib ber",
       },
       {
         icon: <FileText className="h-5 w-5" />,
-        title: 'Hisobot tayyorlash',
-        desc: 'Biznes hujjat',
+        title: 'Hujjat tayyorlang',
         prompt: 'Kichik biznes uchun oylik moliyaviy hisobot shablonini jadval ko\u2019rinishida tayyorla',
-        groups: [] as ToolGroupId[],
       },
     ],
     [],
   );
-
-  const applySuggestion = (suggestion: (typeof suggestions)[number]) => {
-    if (suggestion.groups.length) {
-      setToolGroups((prev) => {
-        const next = new Set(prev);
-        suggestion.groups.forEach((g) => next.add(g));
-        return [...next];
-      });
-      if (suggestion.groups.includes('computer')) setMode('agent');
-    }
-    void send(suggestion.prompt);
-  };
 
   const greetingName = profile?.display_name || profile?.username || '';
 
@@ -616,7 +558,7 @@ export default function AIPage() {
     if (!user && messages.length > 0) {
       toast({
         title: 'Tizimga kiring',
-        description: "Suhbatlar saqlanishi va vositalar ishlashi uchun hisobga kirish kerak.",
+        description: 'Suhbatlar saqlanishi va vositalar ishlashi uchun hisobga kirish kerak.',
       });
     }
   }, [user, messages.length, toast]);
@@ -685,11 +627,6 @@ export default function AIPage() {
               ? conversations.find((c) => c.id === currentConversationId)?.title || 'Suhbat'
               : 'Yangi suhbat'}
           </h1>
-          {mode === 'agent' && (
-            <span className="flex items-center gap-1 rounded-full bg-alsamos-orange/10 px-2 py-0.5 text-[10px] font-semibold text-alsamos-orange">
-              <Bot className="h-3 w-3" /> Agent
-            </span>
-          )}
           <div className="flex-1" />
           {artifacts.length > 0 && (
             <Button
@@ -703,15 +640,6 @@ export default function AIPage() {
               <span className="rounded-full bg-muted/70 px-1.5 text-[10px]">{artifacts.length}</span>
             </Button>
           )}
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 gap-1.5 rounded-lg px-2.5 text-[11px]"
-            onClick={() => setConnectorsOpen(true)}
-          >
-            <Plug className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Konnektorlar</span>
-          </Button>
         </header>
 
         <ScrollArea ref={scrollAreaRef} className="flex-1">
@@ -729,9 +657,8 @@ export default function AIPage() {
               <h2 className="mb-1.5 text-center font-display text-2xl font-bold sm:text-3xl">
                 {greetingName ? `Salom, ${greetingName}` : 'Alsamos AI'}
               </h2>
-              <p className="mb-7 max-w-lg text-center text-sm text-muted-foreground">
-                Kod yozadi va ishga tushiradi, internetdan tekshiradi, rasm va video yaratadi,
-                pluginlar (MCP) bilan ishlaydi va ruxsat bilan kompyuteringizni boshqaradi.
+              <p className="mb-7 max-w-md text-center text-sm text-muted-foreground">
+                Nima kerakligini shunchaki yozing — kerakli vositani AI o\u2019zi tanlaydi.
               </p>
 
               {forwardedPost && (
@@ -763,23 +690,20 @@ export default function AIPage() {
                 </div>
               )}
 
-              <div className="grid w-full max-w-3xl grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid w-full max-w-2xl grid-cols-2 gap-2.5">
                 {suggestions.map((s, i) => (
                   <motion.button
                     key={s.title}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.04 }}
-                    onClick={() => applySuggestion(s)}
-                    className="group flex items-start gap-3 rounded-2xl border border-border/50 bg-card/50 p-3.5 text-left transition-all hover:border-alsamos-orange/30 hover:bg-card/80"
+                    onClick={() => void send(s.prompt)}
+                    className="group flex items-center gap-2.5 rounded-2xl border border-border/50 bg-card/50 p-3 text-left transition-all hover:border-alsamos-orange/30 hover:bg-card/80"
                   >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-alsamos-orange/10 text-alsamos-orange">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-alsamos-orange/10 text-alsamos-orange">
                       {s.icon}
                     </span>
-                    <span className="min-w-0">
-                      <span className="block text-[13px] font-semibold">{s.title}</span>
-                      <span className="block truncate text-[11px] text-muted-foreground">{s.desc}</span>
-                    </span>
+                    <span className="min-w-0 truncate text-[13px] font-medium">{s.title}</span>
                   </motion.button>
                 ))}
               </div>
@@ -813,11 +737,7 @@ export default function AIPage() {
           attachments={attachments}
           onPickFiles={uploadFiles}
           onDropFiles={uploadFiles}
-          onRemoveAttachment={(url) =>
-            setAttachments((prev) => prev.filter((a) => a.url !== url))
-          }
-          mode={mode}
-          onModeChange={setMode}
+          onRemoveAttachment={(url) => setAttachments((prev) => prev.filter((a) => a.url !== url))}
           model={model}
           onModelChange={setModel}
           activeModel={activeModel}
