@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://alsamos.uz/contracts/mini-app-manifest.schema.json",
+  "title": "Alsamos Mini App Manifest",
+  "type": "object",
+  "required": ["handle", "name", "app_type"],
+  "additionalProperties": false,
+  "properties": {
+    "handle": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]{3,32}$",
+      "description": "Global unikal handle: @instagram, @islomuz"
+    },
+    "name": { "type": "string", "minLength": 2, "maxLength": 64 },
+    "short_description": { "type": "string", "maxLength": 120 },
+    "description": { "type": "string", "maxLength": 4000 },
+    "app_type": { "enum": ["link", "webapp", "bot", "native"] },
+    "display_mode": { "enum": ["iframe", "embed", "proxy", "external", "webview"] },
+    "url": { "type": "string", "format": "uri", "pattern": "^https://" },
+    "deep_link": { "type": "string", "pattern": "^alsamos://" },
+    "icon_url": { "type": "string", "format": "uri" },
+    "screenshots": {
+      "type": "array",
+      "maxItems": 8,
+      "items": { "type": "string", "format": "uri" }
+    },
+    "category": { "type": "string" },
+    "locales": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z]{2}$" },
+      "default": ["uz"]
+    },
+    "countries": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[A-Z]{2}$" }
+    },
+    "age_rating": { "type": "integer", "minimum": 0, "maximum": 21 },
+    "price_model": { "enum": ["free", "freemium", "paid"], "default": "free" },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "profile",
+          "contacts",
+          "notifications",
+          "payments",
+          "location",
+          "camera",
+          "microphone",
+          "clipboard",
+          "storage"
+        ]
+      },
+      "default": []
+    },
+    "privacy_url": { "type": "string", "format": "uri" },
+    "terms_url": { "type": "string", "format": "uri" },
+    "support_url": { "type": "string", "format": "uri" },
+    "min_client_version": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "web": { "type": "string" },
+        "android": { "type": "string" },
+        "ios": { "type": "string" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "app_type": { "const": "native" } } },
+      "then": { "required": ["deep_link"] },
+      "else": { "required": ["url"] }
+    }
+  ]
+}
