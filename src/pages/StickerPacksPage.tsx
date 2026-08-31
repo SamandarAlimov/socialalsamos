@@ -114,14 +114,18 @@ export default function StickerPacksPage() {
 
       setGuestStickers(
         (data ?? []).map((row: Record<string, unknown>) =>
-          stickerFromUrl({
+          ({
+            ...stickerFromUrl(
+              (row.full_url as string) ?? (row.preview_url as string) ?? '',
+              {
+                kind: (row.kind as StickerItem['kind']) ?? 'image',
+                previewUrl: (row.preview_url as string) ?? (row.full_url as string) ?? '',
+                name: (row.name as string) ?? 'Stiker',
+                packId: pack.id,
+                stickerId: row.id as string,
+              },
+            ),
             key: `pack:${row.id as string}`,
-            kind: (row.kind as StickerItem['kind']) ?? 'image',
-            previewUrl: (row.preview_url as string) ?? (row.full_url as string) ?? '',
-            fullUrl: (row.full_url as string) ?? (row.preview_url as string) ?? '',
-            name: (row.name as string) ?? 'Stiker',
-            packId: pack.id,
-            stickerId: row.id as string,
           }),
         ),
       );
