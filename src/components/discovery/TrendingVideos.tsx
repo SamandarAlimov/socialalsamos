@@ -1,132 +1,108 @@
-import { useState, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TrendingUp, Play, Heart, MessageCircle, Eye } from 'lucide-react';
+import { Video, Play, Eye, Heart, RefreshCw } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
-import { PostThumbnailStickers } from '@/components/stickers/PostThumbnailStickers';
+import { cn } from '@/lib/utils';
+
+// Flutter: lib/features/discovery/presentation/widgets/trending_videos.dart
 
 interface TrendingVideo {
   id: string;
-  media_urls: string[];
-  likes_count: number;
-  comments_count: number;
   content: string | null;
-  profile?: {
-    username: string | null;
+  media_urls: string[] | null;
+  likes_count: number | null;
+  views_count: number | null;
+  created_at: string;
+  profile: {
+    username: string;
+    display_name: string | null;
     avatar_url: string | null;
-  };
+  } | null;
 }
 
-export function TrendingVideos() {
+interface TrendingVideosProps {
+  refreshKey?: number;
+}
+
+function formatCount(count: number | null) {
+  const value = count ?? 0;
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return value.toString();
+}
+
+export function TrendingVideos({ refreshKey = 0 }: TrendingVideosProps) {
   const navigate = useNavigate();
   const { triggerHaptic } = useHapticFeedback();
   const [videos, setVideos] = useState<TrendingVideo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [hoveredVideo, setHoveredVideo] = useState<string | null>(null);
-  const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
+  const [hasError, setHasError] = useState(false);
 
-  useEffect(() => {
-    async function fetchVideos() {
-      setIsLoading(true);
-      
-      const { data } = await supabase
+  const fetchVideos = useCallback(async () => {
+    setIsLoading(true);
+    setHasError(false);
+
+    try {
+      const { data, error } = await supabase
         .from('posts')
-        .select(`
-          id, media_urls, likes_count, comments_count, content,
-          profile:profiles!posts_user_id_fkey (username, avatar_url)
-        `)
-        .eq('media_type', 'video')
+        .select(
+          `id, content, media_urls, likes_count, views_count, created_at,
+           profile:profiles!posts_user_id_fkey (username, display_name, avatar_url)`,
+        )
         .eq('visibility', 'public')
-        .order('likes_count', { ascending: false })
-        .limit(12);
+        .eq('media_type', 'video')
+        .order('views_count', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(9);
 
-      if (data) {
-        setVideos(data as TrendingVideo[]);
-      }
-      
+      if (error) throw error;
+      setVideos((data ?? []) as unknown as TrendingVideo[]);
+    } catch (error) {
+      console.error('Trend videolarni yuklashda xatolik:', error);
+      setHasError(true);
+    } finally {
       setIsLoading(false);
     }
-
-    fetchVideos();
   }, []);
 
-  // Real-time subscription for video counts
   useEffect(() => {
-    if (videos.length === 0) return;
+    fetchVideos();
+  }, [fetchVideos, refreshKey]);
 
-    const channel = supabase
-      .channel('trending-videos-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'post_likes',
-        },
-        (payload) => {
-          const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
-          setVideos(prev => prev.map(v => {
-            if (v.id !== postId) return v;
-            const delta = payload.eventType === 'INSERT' ? 1 : payload.eventType === 'DELETE' ? -1 : 0;
-            return { ...v, likes_count: Math.max(0, v.likes_count + delta) };
-          }));
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'comments',
-        },
-        (payload) => {
-          const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
-          setVideos(prev => prev.map(v => {
-            if (v.id !== postId) return v;
-            const delta = payload.eventType === 'INSERT' ? 1 : payload.eventType === 'DELETE' ? -1 : 0;
-            return { ...v, comments_count: Math.max(0, v.comments_count + delta) };
-          }));
-        }
-      )
-      .subscribe();
+  const header = (
+    <div className="mb-4 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <Video className="h-5 w-5 text-primary" />
+        <h2 className="text-lg font-semibold">Trend videolar</h2>
+      </div>
+      <div className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            triggerHaptic('light');
+            fetchVideos();
+          }}
+          disabled={isLoading}
+          aria-label="Videolarni yangilash"
+        >
+          <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => navigate('/videos')}>
+          Barchasi
+        </Button>
+      </div>
+    </div>
+  );
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [videos.length]);
-
-  const handleMouseEnter = (videoId: string) => {
-    setHoveredVideo(videoId);
-    const video = videoRefs.current[videoId];
-    if (video) {
-      video.play().catch(() => {});
-    }
-  };
-
-  const handleMouseLeave = (videoId: string) => {
-    setHoveredVideo(null);
-    const video = videoRefs.current[videoId];
-    if (video) {
-      video.pause();
-      video.currentTime = 0;
-    }
-  };
-
-  const formatCount = (count: number) => {
-    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
-    if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
-    return count.toString();
-  };
-
-  if (isLoading) {
+  if (isLoading && videos.length === 0) {
     return (
-      <section>
-        <div className="flex items-center gap-2 mb-4">
-          <TrendingUp className="h-5 w-5 text-primary" />
-          <h2 className="font-semibold text-lg">Trending Videos</h2>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+      <section aria-busy="true">
+        {header}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="aspect-[9/16] rounded-xl" />
           ))}
@@ -135,17 +111,26 @@ export function TrendingVideos() {
     );
   }
 
+  if (hasError) {
+    return (
+      <section>
+        {header}
+        <div className="rounded-xl border border-dashed p-6 text-center">
+          <p className="mb-3 text-sm text-muted-foreground">Videolarni yuklab bolmadi.</p>
+          <Button variant="outline" size="sm" onClick={fetchVideos}>
+            Qayta urinish
+          </Button>
+        </div>
+      </section>
+    );
+  }
+
   if (videos.length === 0) {
     return (
       <section>
-        <div className="flex items-center gap-2 mb-4">
-          <TrendingUp className="h-5 w-5 text-primary" />
-          <h2 className="font-semibold text-lg">Trending Videos</h2>
-        </div>
-        <div className="text-center py-12 text-muted-foreground bg-muted/30 rounded-xl">
-          <Play className="h-12 w-12 mx-auto mb-2 opacity-50" />
-          <p>No trending videos yet</p>
-          <p className="text-sm">Be the first to post a video!</p>
+        {header}
+        <div className="rounded-xl border border-dashed p-8 text-center">
+          <p className="text-sm text-muted-foreground">Hozircha trend video yoq.</p>
         </div>
       </section>
     );
@@ -153,75 +138,57 @@ export function TrendingVideos() {
 
   return (
     <section>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5 text-primary" />
-          <h2 className="font-semibold text-lg">Trending Videos</h2>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+      {header}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
         {videos.map((video) => (
-          <div
+          <button
             key={video.id}
-            className="relative aspect-[9/16] bg-muted rounded-xl overflow-hidden cursor-pointer group"
+            type="button"
             onClick={() => {
-              triggerHaptic('medium');
+              triggerHaptic('light');
               navigate(`/videos?v=${video.id}`);
             }}
-            onMouseEnter={() => handleMouseEnter(video.id)}
-            onMouseLeave={() => handleMouseLeave(video.id)}
+            className="group relative aspect-[9/16] w-full overflow-hidden rounded-xl bg-muted text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="Videoni ochish"
           >
-            <video
-              ref={(el) => { videoRefs.current[video.id] = el; }}
-              src={video.media_urls[0]}
-              className="w-full h-full object-cover"
-              muted
-              playsInline
-              loop
-              preload="metadata"
-            />
-            
-            {/* Gradient overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+            {video.media_urls?.[0] ? (
+              <video
+                src={video.media_urls[0]}
+                muted
+                playsInline
+                preload="metadata"
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center">
+                <Play className="h-8 w-8 text-muted-foreground" />
+              </div>
+            )}
 
-            {/* Stikerlar — gradient ustida ko‘rinadi, bosishni to‘smaydi */}
-            <PostThumbnailStickers postId={video.id} />
-            
-            {/* Play icon */}
-            <div className={`absolute inset-0 flex items-center justify-center transition-opacity ${
-              hoveredVideo === video.id ? 'opacity-0' : 'opacity-100'
-            }`}>
-              <div className="bg-white/20 backdrop-blur-sm rounded-full p-3">
-                <Play className="h-6 w-6 text-white fill-white" />
-              </div>
-            </div>
-            
-            {/* Stats overlay */}
-            <div className="absolute bottom-0 left-0 right-0 p-2">
-              <div className="flex items-center justify-between text-white text-xs">
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1">
-                    <Heart className="h-3 w-3" />
-                    <span>{formatCount(video.likes_count || 0)}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <MessageCircle className="h-3 w-3" />
-                    <span>{formatCount(video.comments_count || 0)}</span>
-                  </div>
-                </div>
-              </div>
-              {video.profile && (
-                <p className="text-white text-xs mt-1 truncate">
-                  @{video.profile.username || 'user'}
-                </p>
-              )}
-            </div>
-            
-            {/* Hover ring */}
-            <div className={`absolute inset-0 ring-2 ring-primary rounded-xl transition-opacity ${
-              hoveredVideo === video.id ? 'opacity-100' : 'opacity-0'
-            }`} />
-          </div>
+            <span className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+
+            <span className="absolute left-2 right-2 bottom-2 space-y-1 text-white">
+              <span className="block truncate text-xs font-medium">
+                @{video.profile?.username}
+              </span>
+              <span className="flex items-center gap-3 text-[11px] opacity-90">
+                <span className="flex items-center gap-1">
+                  <Eye className="h-3 w-3" />
+                  {formatCount(video.views_count)}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Heart className="h-3 w-3" />
+                  {formatCount(video.likes_count)}
+                </span>
+              </span>
+            </span>
+
+            <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
+              <span className="rounded-full bg-black/60 p-3 text-white">
+                <Play className="h-5 w-5" />
+              </span>
+            </span>
+          </button>
         ))}
       </div>
     </section>

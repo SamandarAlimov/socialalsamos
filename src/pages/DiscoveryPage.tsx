@@ -1,143 +1,165 @@
-import { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Search, Compass, Flame, Users, Video, Sparkles } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useHapticFeedback } from '@/hooks/useHapticFeedback';
-import { TrendingHashtags } from '@/components/discovery/TrendingHashtags';
-import { PopularCreators } from '@/components/discovery/PopularCreators';
-import { TrendingVideos } from '@/components/discovery/TrendingVideos';
-import { ForYouSection } from '@/components/discovery/ForYouSection';
+import { useCallback, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Compass, Flame, RefreshCw, Search, Sparkles, Users, Video } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PullToRefresh } from '@/components/PullToRefresh';
+import { CategoryFilterBar } from '@/components/discovery/CategoryFilterBar';
+import { DiscoveryStoryBar } from '@/components/discovery/DiscoveryStoryBar';
+import { ForYouSection } from '@/components/discovery/ForYouSection';
+import { PopularCreators } from '@/components/discovery/PopularCreators';
+import { TrendingHashtags } from '@/components/discovery/TrendingHashtags';
+import { TrendingPublicPosts } from '@/components/discovery/TrendingPublicPosts';
+import { TrendingVideos } from '@/components/discovery/TrendingVideos';
+import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
+// Bu sahifa Flutter reposidagi
+// lib/features/discover/presentation/discover_page.dart bilan 1:1 mos:
+// bir xil tab tartibi (For You / Trending / Creators / Videos) va bir xil
+// bo'lim tartibi. Bittasini o'zgartirsangiz, ikkinchisini ham yangilang.
+
+const DISCOVER_TABS = [
+  { value: 'foryou', label: 'For You', icon: Sparkles },
+  { value: 'trending', label: 'Trending', icon: Flame },
+  { value: 'creators', label: 'Creators', icon: Users },
+  { value: 'videos', label: 'Videos', icon: Video },
+] as const;
+
+type DiscoverTab = (typeof DISCOVER_TABS)[number]['value'];
+
+function isDiscoverTab(value: string | null): value is DiscoverTab {
+  return !!value && DISCOVER_TABS.some((tab) => tab.value === value);
+}
+
 export default function DiscoveryPage() {
-  const isMobile = useIsMobile();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const { triggerHaptic } = useHapticFeedback();
-  const [activeTab, setActiveTab] = useState('foryou');
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const handleSearchFocus = () => {
-    triggerHaptic('light');
-    navigate('/search');
-  };
+  const tabFromUrl = searchParams.get('tab');
+  const activeTab: DiscoverTab = isDiscoverTab(tabFromUrl) ? tabFromUrl : 'foryou';
 
-  const handleTabChange = (value: string) => {
-    triggerHaptic('light');
-    setActiveTab(value);
-  };
+  // Har bir refresh bo'limlarga uzatiladi va ular ma'lumotni qaytadan yuklaydi.
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleTabChange = useCallback(
+    (value: string) => {
+      if (!isDiscoverTab(value)) return;
+      triggerHaptic('light');
+
+      const next = new URLSearchParams(searchParams);
+      if (value === 'foryou') {
+        next.delete('tab');
+      } else {
+        next.set('tab', value);
+      }
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams, triggerHaptic],
+  );
 
   const handleRefresh = useCallback(async () => {
-    // Simulate refresh - in real app would refetch data
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    setIsRefreshing(true);
+    setRefreshKey((key) => key + 1);
+    // Bo'limlar o'z ma'lumotini mustaqil yuklaydi; indikatorni qisqa ushlab turamiz.
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    setIsRefreshing(false);
   }, []);
 
-  const pageContent = (
-    <div className="min-h-screen bg-background pb-24 md:pb-4">
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-md border-b border-border">
-        <div className="max-w-6xl mx-auto px-4 py-3">
-          {/* Title and Search */}
-          <div className="flex items-center gap-3 mb-3">
-            <Compass className="h-6 w-6 text-primary" />
-            <h1 className="text-xl font-bold flex-1">Discover</h1>
-          </div>
-          
-          <div 
-            className="relative cursor-pointer mb-3"
-            onClick={handleSearchFocus}
-          >
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search videos, users, hashtags..."
-              className="pl-10 bg-muted/50 border-0 h-10"
-              readOnly
-            />
-          </div>
+  const openSearch = useCallback(() => {
+    triggerHaptic('light');
+    navigate('/search');
+  }, [navigate, triggerHaptic]);
 
-          {/* Navigation Tabs */}
-          <Tabs value={activeTab} onValueChange={handleTabChange}>
-            <TabsList className="w-full h-auto p-1 bg-muted/50 grid grid-cols-4">
-              <TabsTrigger 
-                value="foryou" 
-                className={cn(
-                  "flex items-center gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm",
-                  "py-2"
-                )}
-              >
-                <Sparkles className="h-4 w-4" />
-                <span className="hidden sm:inline">For You</span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="trending" 
-                className={cn(
-                  "flex items-center gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm",
-                  "py-2"
-                )}
-              >
-                <Flame className="h-4 w-4" />
-                <span className="hidden sm:inline">Trending</span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="creators" 
-                className={cn(
-                  "flex items-center gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm",
-                  "py-2"
-                )}
-              >
-                <Users className="h-4 w-4" />
-                <span className="hidden sm:inline">Creators</span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="videos" 
-                className={cn(
-                  "flex items-center gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm",
-                  "py-2"
-                )}
-              >
-                <Video className="h-4 w-4" />
-                <span className="hidden sm:inline">Videos</span>
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'trending':
+        return (
+          <div className="space-y-8">
+            <TrendingHashtags refreshKey={refreshKey} />
+            <TrendingPublicPosts refreshKey={refreshKey} />
+            <TrendingVideos refreshKey={refreshKey} />
+          </div>
+        );
+      case 'creators':
+        return <PopularCreators refreshKey={refreshKey} />;
+      case 'videos':
+        return <TrendingVideos refreshKey={refreshKey} />;
+      case 'foryou':
+      default:
+        return (
+          <div className="space-y-8">
+            <DiscoveryStoryBar refreshKey={refreshKey} />
+            <CategoryFilterBar refreshKey={refreshKey} />
+            <TrendingHashtags refreshKey={refreshKey} />
+            <TrendingPublicPosts refreshKey={refreshKey} />
+            <ForYouSection refreshKey={refreshKey} />
+          </div>
+        );
+    }
+  };
+
+  const content = (
+    <div className="mx-auto w-full max-w-6xl px-4 pb-24 pt-4 md:pb-10">
+      <header className="mb-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Compass className="h-6 w-6 text-primary" />
+          <h1 className="text-xl font-bold md:text-2xl">Discover</h1>
         </div>
-      </div>
 
-      {/* Content based on active tab */}
-      <div className="max-w-6xl mx-auto px-4 py-4">
-        {activeTab === 'foryou' && (
-          <div className="space-y-6">
-            <TrendingHashtags />
-            <ForYouSection />
-          </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          className="hidden md:inline-flex"
+          aria-label="Discover sahifasini yangilash"
+        >
+          <RefreshCw className={cn('mr-2 h-4 w-4', isRefreshing && 'animate-spin')} />
+          Yangilash
+        </Button>
+      </header>
+
+      {/* Qidiruv: ilgari readOnly input bo'lgani uchun klaviatura bilan ishlamasdi. */}
+      <button
+        type="button"
+        onClick={openSearch}
+        className={cn(
+          'mb-5 flex w-full items-center gap-2 rounded-full border bg-secondary/60 px-4 py-2.5 text-left',
+          'text-sm text-muted-foreground transition-colors hover:bg-secondary',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         )}
-        
-        {activeTab === 'trending' && (
-          <div className="space-y-6">
-            <TrendingHashtags />
-            <TrendingVideos />
-          </div>
-        )}
-        
-        {activeTab === 'creators' && (
-          <PopularCreators />
-        )}
-        
-        {activeTab === 'videos' && (
-          <TrendingVideos />
-        )}
-      </div>
+        aria-label="Qidiruv sahifasini ochish"
+      >
+        <Search className="h-4 w-4 shrink-0" />
+        Odamlar, postlar va hashtaglarni qidirish
+      </button>
+
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+        <TabsList className="mb-6 grid w-full grid-cols-4">
+          {DISCOVER_TABS.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <TabsTrigger key={tab.value} value={tab.value} className="gap-1.5">
+                <Icon className="h-4 w-4" />
+                <span className="hidden sm:inline">{tab.label}</span>
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
+      </Tabs>
+
+      {renderTabContent()}
     </div>
   );
 
-  if (isMobile) {
-    return (
-      <PullToRefresh onRefresh={handleRefresh} className="h-full">
-        {pageContent}
-      </PullToRefresh>
-    );
-  }
-
-  return pageContent;
+  return (
+    <PullToRefresh onRefresh={handleRefresh} disabled={!isMobile} className="min-h-screen">
+      {content}
+    </PullToRefresh>
+  );
 }

@@ -1,270 +1,273 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Heart, MessageCircle, Play, BarChart3, Eye } from 'lucide-react';
+import { Sparkles, Heart, MessageCircle, Play, RefreshCw } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { supabase } from '@/integrations/supabase/client';
-import { useHapticFeedback } from '@/hooks/useHapticFeedback';
-import { useAuth } from '@/contexts/AuthContext';
-import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { PostViewModal } from '@/components/PostViewModal';
-import { parsePollFromContent } from '@/components/PollDisplay';
 import { PostThumbnailStickers } from '@/components/stickers/PostThumbnailStickers';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { useHapticFeedback } from '@/hooks/useHapticFeedback';
+import { fetchLikedPostIds, togglePostLike } from '@/lib/postLikes';
+import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
-interface Post {
+// Flutter: lib/features/discovery/presentation/widgets/for_you_section.dart
+
+interface ForYouProfile {
+  id: string;
+  username: string;
+  display_name: string | null;
+  avatar_url: string | null;
+}
+
+interface ForYouPost {
   id: string;
   content: string | null;
   media_urls: string[] | null;
   media_type: string | null;
-  likes_count: number;
-  comments_count: number;
-  views_count: number;
+  likes_count: number | null;
+  comments_count: number | null;
+  views_count: number | null;
   created_at: string;
-  is_liked?: boolean;
-  profile?: {
-    id: string;
-    username: string | null;
-    avatar_url: string | null;
-    display_name: string | null;
-  };
+  is_liked: boolean;
+  profile: ForYouProfile | null;
 }
 
-export function ForYouSection() {
+interface ForYouSectionProps {
+  refreshKey?: number;
+}
+
+function formatCount(count: number | null) {
+  const value = count ?? 0;
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return value.toString();
+}
+
+export function ForYouSection({ refreshKey = 0 }: ForYouSectionProps) {
   const navigate = useNavigate();
-  const { triggerHaptic } = useHapticFeedback();
   const { user } = useAuth();
-  const [posts, setPosts] = useState<Post[]>([]);
+  const { triggerHaptic } = useHapticFeedback();
+  const [posts, setPosts] = useState<ForYouPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [hasError, setHasError] = useState(false);
+  const [selected, setSelected] = useState<ForYouPost | null>(null);
 
-  useEffect(() => {
-    async function fetchForYouPosts() {
-      setIsLoading(true);
-      
-      // Get random selection of popular posts
-      const { data } = await supabase
+  const fetchPosts = useCallback(async () => {
+    setIsLoading(true);
+    setHasError(false);
+
+    try {
+      const { data, error } = await supabase
         .from('posts')
-        .select(`
-          id, content, media_urls, media_type, likes_count, comments_count, views_count, created_at,
-          profile:profiles!posts_user_id_fkey (id, username, avatar_url, display_name)
-        `)
+        .select(
+          `id, content, media_urls, media_type, likes_count, comments_count, views_count, created_at,
+           profile:profiles!posts_user_id_fkey (id, username, display_name, avatar_url)`,
+        )
         .eq('visibility', 'public')
-        .order('likes_count', { ascending: false })
-        .limit(20);
+        .order('created_at', { ascending: false })
+        .limit(12);
 
-      if (data) {
-        // Shuffle and take random posts for variety
-        const shuffled = data.sort(() => Math.random() - 0.5).slice(0, 8);
-        setPosts(shuffled as Post[]);
-      }
-      
+      if (error) throw error;
+
+      const rows = (data ?? []) as unknown as Omit<ForYouPost, 'is_liked'>[];
+      const likedIds = await fetchLikedPostIds(
+        user?.id,
+        rows.map((row) => row.id),
+      );
+
+      setPosts(rows.map((row) => ({ ...row, is_liked: likedIds.has(row.id) })));
+    } catch (error) {
+      console.error('For You postlarini yuklashda xatolik:', error);
+      setHasError(true);
+    } finally {
       setIsLoading(false);
     }
+  }, [user?.id]);
 
-    fetchForYouPosts();
-  }, [user]);
-
-  // Real-time subscription for counts
   useEffect(() => {
-    if (posts.length === 0) return;
+    fetchPosts();
+  }, [fetchPosts, refreshKey]);
 
-    const channel = supabase
-      .channel('foryou-realtime-counts')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'post_likes' },
-        (payload) => {
-          const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
-          setPosts(prev => prev.map(p => {
-            if (p.id !== postId) return p;
-            const delta = payload.eventType === 'INSERT' ? 1 : payload.eventType === 'DELETE' ? -1 : 0;
-            return { ...p, likes_count: Math.max(0, p.likes_count + delta) };
-          }));
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'comments' },
-        (payload) => {
-          const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
-          setPosts(prev => prev.map(p => {
-            if (p.id !== postId) return p;
-            const delta = payload.eventType === 'INSERT' ? 1 : payload.eventType === 'DELETE' ? -1 : 0;
-            return { ...p, comments_count: Math.max(0, p.comments_count + delta) };
-          }));
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'post_views' },
-        (payload) => {
-          const postId = (payload.new as any)?.post_id;
-          setPosts(prev => prev.map(p => {
-            if (p.id !== postId) return p;
-            return { ...p, views_count: (p.views_count || 0) + 1 };
-          }));
-        }
-      )
-      .subscribe();
+  const handleLike = useCallback(
+    async (post: ForYouPost) => {
+      if (!user) {
+        toast.error('Like bosish uchun tizimga kiring');
+        return;
+      }
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [posts.length]);
+      triggerHaptic('light');
+      const wasLiked = post.is_liked;
 
-  const formatCount = (count: number) => {
-    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
-    if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
-    return count.toString();
-  };
+      const applyLocal = (isLiked: boolean) => {
+        const patch = (item: ForYouPost): ForYouPost => ({
+          ...item,
+          is_liked: isLiked,
+          likes_count: Math.max(0, (item.likes_count ?? 0) + (isLiked ? 1 : -1)),
+        });
+        setPosts((prev) => prev.map((item) => (item.id === post.id ? patch(item) : item)));
+        setSelected((prev) => (prev && prev.id === post.id ? patch(prev) : prev));
+      };
 
-  if (isLoading) {
+      applyLocal(!wasLiked);
+
+      try {
+        // Ilgari bu faqat local state edi - sahifa yangilanganda like yo'qolardi.
+        await togglePostLike(post.id, user.id, wasLiked);
+      } catch (error) {
+        console.error('Like saqlanmadi:', error);
+        applyLocal(wasLiked);
+        toast.error('Like saqlanmadi, qayta urinib koring');
+      }
+    },
+    [triggerHaptic, user],
+  );
+
+  const openPost = useCallback(
+    (post: ForYouPost) => {
+      triggerHaptic('light');
+      if (post.media_type === 'video') {
+        navigate(`/videos?v=${post.id}`);
+        return;
+      }
+      setSelected(post);
+    },
+    [navigate, triggerHaptic],
+  );
+
+  const header = (
+    <div className="mb-4 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <Sparkles className="h-5 w-5 text-primary" />
+        <h2 className="text-lg font-semibold">Siz uchun</h2>
+      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => {
+          triggerHaptic('light');
+          fetchPosts();
+        }}
+        disabled={isLoading}
+        aria-label="Siz uchun bolimini yangilash"
+      >
+        <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
+      </Button>
+    </div>
+  );
+
+  if (isLoading && posts.length === 0) {
     return (
-      <section>
-        <div className="flex items-center gap-2 mb-4">
-          <Sparkles className="h-5 w-5 text-primary" />
-          <h2 className="font-semibold text-lg">For You</h2>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="aspect-square rounded-xl" />
+      <section aria-busy="true">
+        {header}
+        <div className="grid grid-cols-3 gap-1 sm:gap-2">
+          {Array.from({ length: 9 }).map((_, i) => (
+            <Skeleton key={i} className="aspect-square rounded-lg" />
           ))}
         </div>
       </section>
     );
   }
 
+  if (hasError) {
+    return (
+      <section>
+        {header}
+        <div className="rounded-xl border border-dashed p-6 text-center">
+          <p className="mb-3 text-sm text-muted-foreground">Postlarni yuklab bolmadi.</p>
+          <Button variant="outline" size="sm" onClick={fetchPosts}>
+            Qayta urinish
+          </Button>
+        </div>
+      </section>
+    );
+  }
+
   if (posts.length === 0) {
-    return null;
+    return (
+      <section>
+        {header}
+        <div className="rounded-xl border border-dashed p-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            Hozircha ommaviy post yoq. Birinchi bolib post joylang!
+          </p>
+          <Button className="mt-3" size="sm" onClick={() => navigate('/create')}>
+            Post yaratish
+          </Button>
+        </div>
+      </section>
+    );
   }
 
   return (
     <section>
-      <div className="flex items-center gap-2 mb-4">
-        <Sparkles className="h-5 w-5 text-primary" />
-        <h2 className="font-semibold text-lg">For You</h2>
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {posts.map((post) => (
-          <div
-            key={post.id}
-            className="relative aspect-square bg-muted rounded-xl overflow-hidden cursor-pointer group"
-            onClick={() => {
-              triggerHaptic('light');
-              if (post.media_type === 'video') {
-                navigate(`/videos?v=${post.id}`);
-              } else {
-                setSelectedPost(post);
-              }
-            }}
-          >
-            {post.media_urls && post.media_urls.length > 0 ? (
-              post.media_type === 'video' ? (
-                <video
-                  src={post.media_urls[0]}
-                  className="w-full h-full object-cover"
-                  muted
-                  playsInline
-                  preload="metadata"
-                />
-              ) : (
-                <img
-                  src={post.media_urls[0]}
-                  alt=""
-                  className="w-full h-full object-cover"
-                />
-              )
-            ) : (
-              (() => {
-                const { pollData, cleanContent } = parsePollFromContent(post.content || '');
-                return pollData ? (
-                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5 p-4">
-                    <div className="flex flex-col items-center gap-2">
-                      <BarChart3 className="h-8 w-8 text-primary" />
-                      <p className="text-sm text-foreground line-clamp-2 text-center font-medium">
-                        {pollData.question}
-                      </p>
-                    </div>
-                  </div>
+      {header}
+      <div className="grid grid-cols-3 gap-1 sm:gap-2">
+        {posts.map((post) => {
+          const cover = post.media_urls?.[0];
+          return (
+            <div key={post.id} className="group relative">
+              <button
+                type="button"
+                onClick={() => openPost(post)}
+                className="relative block aspect-square w-full overflow-hidden rounded-lg bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Postni ochish"
+              >
+                {cover ? (
+                  <img
+                    src={cover}
+                    alt={post.content?.slice(0, 60) || 'Post'}
+                    loading="lazy"
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5 p-4">
-                    <p className="text-sm text-foreground line-clamp-4 text-center">
-                      {cleanContent || post.content}
-                    </p>
+                  <div className="flex h-full w-full items-center justify-center p-3">
+                    <p className="line-clamp-5 text-xs text-muted-foreground">{post.content}</p>
                   </div>
-                );
-              })()
-            )}
-            
-            {/* Media type indicator */}
-            {post.media_type === 'video' && (
-              <div className="absolute top-2 right-2 bg-black/50 rounded-full p-1">
-                <Play className="h-3 w-3 text-white fill-white" />
-              </div>
-            )}
-            
-            {/* Gradient overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                )}
 
-            {/* Stikerlar — gradientdan keyin, ya’ni uning ustida ko‘rinadi */}
-            {post.media_urls && post.media_urls.length > 0 && (
-              <PostThumbnailStickers postId={post.id} />
-            )}
-            
-            {/* Stats on hover */}
-            <div className="absolute inset-0 flex items-center justify-center gap-4 opacity-0 group-hover:opacity-100 transition-opacity">
-              <div className="flex items-center gap-1 text-white font-medium">
-                <Heart className="h-5 w-5" />
-                <span>{formatCount(post.likes_count || 0)}</span>
-              </div>
-              <div className="flex items-center gap-1 text-white font-medium">
-                <MessageCircle className="h-5 w-5" />
-                <span>{formatCount(post.comments_count || 0)}</span>
-              </div>
-              <div className="flex items-center gap-1 text-white font-medium">
-                <Eye className="h-5 w-5" />
-                <span>{formatCount(post.views_count || 0)}</span>
-              </div>
-            </div>
-            
-            {/* User info */}
-            <div className="absolute bottom-0 left-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-              <div className="flex items-center gap-2">
-                <StoryAvatar
-                  userId={post.profile?.id || ''}
-                  username={post.profile?.username}
-                  displayName={post.profile?.display_name}
-                  avatarUrl={post.profile?.avatar_url}
-                  size="xs"
-                  showRing
-                />
-                <span className="text-white text-xs truncate">
-                  @{post.profile?.username || 'user'}
+                {post.media_type === 'video' && (
+                  <span className="absolute right-1.5 top-1.5 rounded-full bg-black/60 p-1 text-white">
+                    <Play className="h-3 w-3" />
+                  </span>
+                )}
+
+                <span className="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-gradient-to-t from-black/70 to-transparent px-2 py-1.5 text-[11px] text-white opacity-0 transition-opacity group-hover:opacity-100">
+                  <span className="flex items-center gap-1">
+                    <Heart className="h-3 w-3" />
+                    {formatCount(post.likes_count)}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <MessageCircle className="h-3 w-3" />
+                    {formatCount(post.comments_count)}
+                  </span>
                 </span>
-              </div>
+
+                <PostThumbnailStickers postId={post.id} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleLike(post)}
+                className="absolute left-1.5 top-1.5 rounded-full bg-black/50 p-1.5 text-white transition-transform active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-pressed={post.is_liked}
+                aria-label={post.is_liked ? 'Like olib tashlash' : 'Like bosish'}
+              >
+                <Heart className={cn('h-3.5 w-3.5', post.is_liked && 'fill-red-500 text-red-500')} />
+              </button>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      {/* Post View Modal */}
-      {selectedPost && selectedPost.profile && (
+      {selected && (
         <PostViewModal
-          post={{
-            ...selectedPost,
-            is_liked: selectedPost.is_liked || false,
-          }}
-          profile={selectedPost.profile}
-          open={!!selectedPost}
-          onOpenChange={(open) => !open && setSelectedPost(null)}
-          onLike={() => {
-            // Toggle like in local state
-            setPosts(prev => prev.map(p => 
-              p.id === selectedPost.id 
-                ? { ...p, is_liked: !p.is_liked, likes_count: p.is_liked ? p.likes_count - 1 : p.likes_count + 1 }
-                : p
-            ));
-            setSelectedPost(prev => prev ? { ...prev, is_liked: !prev.is_liked } : null);
-          }}
+          post={selected as any}
+          profile={selected.profile as any}
+          open={!!selected}
+          onOpenChange={(open: boolean) => !open && setSelected(null)}
+          onLike={() => handleLike(selected)}
         />
       )}
     </section>
