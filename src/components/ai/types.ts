@@ -29,7 +29,7 @@ export interface AIMessage {
   imageUrl?: string;
   images?: string[];
   error?: boolean;
-  timestamp: number;
+  timestamp: Date;
   model?: string;
   mode?: AIMode;
   tools?: AIToolEvent[];
