@@ -18,9 +18,9 @@ import {
 import type { MiniAppStatus } from '@/features/miniapps/types';
 
 const TABS: Array<{ value: MiniAppStatus; label: string }> = [
-  { value: 'pending_review', label: 'Ko\u2019rib chiqilmoqda' },
+  { value: 'pending_review', label: 'Ko’rib chiqilmoqda' },
   { value: 'approved', label: 'Tasdiqlangan' },
-  { value: 'suspended', label: 'To\u2019xtatilgan' },
+  { value: 'suspended', label: 'To’xtatilgan' },
   { value: 'rejected', label: 'Rad etilgan' },
 ];
 
@@ -59,7 +59,7 @@ export default function MiniAppsModerationPage() {
     setBusyId(item.app_id);
     try {
       await setMiniAppStatus(item.app_id, next, notes[item.app_id]);
-      toast.success(item.name + ' \u2014 holat yangilandi');
+      toast.success(item.name + ' — holat yangilandi');
       setItems((current) => current.filter((row) => row.app_id !== item.app_id));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Amal bajarilmadi');
@@ -71,7 +71,7 @@ export default function MiniAppsModerationPage() {
   if (forbidden) {
     return (
       <div className="mx-auto max-w-2xl p-8 text-center">
-        <h1 className="text-xl font-semibold">Ruxsat yo\u2019q</h1>
+        <h1 className="text-xl font-semibold">Ruxsat yo’q</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Bu sahifa faqat moderatorlar uchun.
         </p>
@@ -84,7 +84,7 @@ export default function MiniAppsModerationPage() {
       <header className="mb-4">
         <h1 className="text-xl font-semibold">Mini Apps moderatsiyasi</h1>
         <p className="text-sm text-muted-foreground">
-          Yangi ilovalarni tekshiring, shikoyat kelganlarini to\u2019xtating.
+          Yangi ilovalarni tekshiring, shikoyat kelganlarini to’xtating.
         </p>
       </header>
 
@@ -102,10 +102,10 @@ export default function MiniAppsModerationPage() {
       </div>
 
       {isLoading ? (
-        <p className="py-12 text-center text-sm text-muted-foreground">Yuklanmoqda\u2026</p>
+        <p className="py-12 text-center text-sm text-muted-foreground">Yuklanmoqda…</p>
       ) : items.length === 0 ? (
         <p className="py-12 text-center text-sm text-muted-foreground">
-          Bu bo\u2019limda ilova yo\u2019q.
+          Bu bo’limda ilova yo’q.
         </p>
       ) : (
         <ul className="space-y-3">
@@ -138,8 +138,8 @@ export default function MiniAppsModerationPage() {
                   </div>
 
                   <p className="truncate text-sm text-muted-foreground">
-                    {item.publisher_name ?? 'Publisher yo\u2019q'}
-                    {item.publisher_handle ? ' \u00b7 @' + item.publisher_handle : ''}
+                    {item.publisher_name ?? 'Publisher yo’q'}
+                    {item.publisher_handle ? ' · @' + item.publisher_handle : ''}
                   </p>
 
                   {item.url && (
@@ -156,7 +156,7 @@ export default function MiniAppsModerationPage() {
                   <Textarea
                     className="mt-3"
                     rows={2}
-                    placeholder="Moderator izohi (rad etishda majburiy emas, lekin tavsiya etiladi)"
+                    placeholder="Moderator izohi"
                     value={notes[item.app_id] ?? ''}
                     onChange={(event) =>
                       setNotes((current) => ({
@@ -188,7 +188,7 @@ export default function MiniAppsModerationPage() {
                       disabled={busyId === item.app_id}
                       onClick={() => applyStatus(item, 'suspended')}
                     >
-                      To\u2019xtatish
+                      To’xtatish
                     </Button>
                   </div>
                 </div>

@@ -58,7 +58,7 @@ export default function PublisherOnboardingPage() {
       return;
     }
     if (name.trim().length < 2) {
-      toast.error('Nomni to\u2019liq kiriting');
+      toast.error('Nomni toliq kiriting');
       return;
     }
 
@@ -79,7 +79,7 @@ export default function PublisherOnboardingPage() {
   const onAddDomain = async (publisher: Publisher) => {
     const normalized = normalizeDomain(domainInput[publisher.id] ?? '');
     if (!normalized) {
-      toast.error('Domenni to\u2019g\u2019ri kiriting, masalan: islom.uz');
+      toast.error('Domenni togri kiriting, masalan: islom.uz');
       return;
     }
 
@@ -90,13 +90,13 @@ export default function PublisherOnboardingPage() {
       await loadDomains(publisher.id);
       toast.success('TXT yozuvi: ' + token, { duration: 12000 });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Domen qo\u2019shilmadi');
+      toast.error(error instanceof Error ? error.message : 'Domen qoshilmadi');
     } finally {
       setBusy(false);
     }
   };
 
-  const onVerify = async (publisherId: string, domain: PublisherDomain) => {
+  const onVerify = async (domain: PublisherDomain) => {
     setBusy(true);
     try {
       const { verified, hint } = await verifyPublisherDomain(domain.id);
@@ -134,7 +134,7 @@ export default function PublisherOnboardingPage() {
           <Input
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="Ko\u2019rinadigan nom"
+            placeholder="Ko’rinadigan nom"
           />
           <select
             className="h-10 rounded-md border bg-background px-3 text-sm"
@@ -156,7 +156,7 @@ export default function PublisherOnboardingPage() {
       <section>
         <h2 className="mb-3 font-medium">Mening publisherlarim</h2>
         {publishers.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Hozircha publisher yo\u2019q.</p>
+          <p className="text-sm text-muted-foreground">Hozircha publisher yo’q.</p>
         ) : (
           <ul className="space-y-4">
             {publishers.map((publisher) => (
@@ -192,7 +192,7 @@ export default function PublisherOnboardingPage() {
                     disabled={busy}
                     onClick={() => onAddDomain(publisher)}
                   >
-                    Domen qo\u2019shish
+                    Domen qo’shish
                   </Button>
                 </div>
 
@@ -207,7 +207,7 @@ export default function PublisherOnboardingPage() {
                         <div className="text-xs text-muted-foreground">
                           {domain.verified_at
                             ? 'Tasdiqlangan'
-                            : 'TXT: ' + (domain.verification_token ?? '\u2014')}
+                            : 'TXT: ' + (domain.verification_token ?? '—')}
                         </div>
                         {domain.check_error && !domain.verified_at && (
                           <div className="text-xs text-destructive">
@@ -222,7 +222,7 @@ export default function PublisherOnboardingPage() {
                           size="sm"
                           variant="outline"
                           disabled={busy}
-                          onClick={() => onVerify(publisher.id, domain)}
+                          onClick={() => onVerify(domain)}
                         >
                           Tekshirish
                         </Button>
@@ -233,7 +233,7 @@ export default function PublisherOnboardingPage() {
 
                 <p className="mt-3 text-xs text-muted-foreground">
                   TXT yozuvini domen ildiziga yoki <code>_alsamos.domen</code> ga
-                  qo\u2019ying. DNS tarqalishi 24 soatgacha davom etishi mumkin.
+                  qo’ying. DNS tarqalishi 24 soatgacha davom etishi mumkin.
                 </p>
               </li>
             ))}
