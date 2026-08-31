@@ -36,8 +36,14 @@ jobs:
       - name: Messages typecheck
         run: npm run typecheck:messages
 
-      - name: Typecheck
+      - name: Create regression tests
+        run: npm run test:create
+
+      - name: Create typecheck
         run: npm run typecheck:create
+
+      - name: Full app typecheck
+        run: npm run typecheck
 
       - name: Production build
         run: npm run build
