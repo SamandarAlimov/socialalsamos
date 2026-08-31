@@ -120,6 +120,16 @@ export function AIComposer({
     );
   };
 
+  const openGithub = () => {
+    if (onOpenGithub) onOpenGithub();
+    else onOpenConnectors?.();
+  };
+
+  const openPlugins = () => {
+    if (onOpenPlugins) onOpenPlugins();
+    else onOpenConnectors?.();
+  };
+
   useEffect(() => {
     if (value) return;
     const timer = setInterval(
@@ -305,20 +315,20 @@ export function AIComposer({
               <DropdownMenuContent align="start" className="w-60">
                 <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
                   <Paperclip className="mr-2 h-4 w-4" />
-                  Fayl yoki rasm qo\u2019shish
+                  {'Fayl yoki rasm qo\u2019shish'}
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onOpenGithub?.() ?? onOpenConnectors?.()}>
+                <DropdownMenuItem onClick={openGithub}>
                   <Github className="mr-2 h-4 w-4" />
-                  GitHub\u2019dan qo\u2019shish
+                  {'GitHub\u2019dan qo\u2019shish'}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => onOpenConnectors?.()}>
                   <Plug className="mr-2 h-4 w-4" />
                   Konnektorlar
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onOpenPlugins?.() ?? onOpenConnectors?.()}>
+                <DropdownMenuItem onClick={openPlugins}>
                   <Puzzle className="mr-2 h-4 w-4" />
-                  Plaginlar qo\u2019shish
+                  {'Plaginlar qo\u2019shish'}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
