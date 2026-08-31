@@ -37,99 +37,6 @@ function setCors(res: any) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
-function getApiKey(): string {
-  return (
-    process.env.ALSAMOS_SEARCH_API_KEY ||
-    process.env.GEMINI_API_KEY ||
-    process.env.GOOGLE_API_KEY ||
-    ''
-  ).trim();
-}
-
-function getModel(): string {
-  return (process.env.ALSAMOS_SEARCH_MODEL || 'gemini-2.5-flash').trim();
-}
-
-function cacheGet(key: string) {
-  const hit = memoryCache.get(key);
-  if (!hit) return null;
-  if (Date.now() - hit.at > CACHE_TTL_MS) {
-    memoryCache.delete(key);
-    return null;
-  }
-  return hit.payload;
-}
-
-function cacheSet(key: string, payload: any) {
-  if (memoryCache.size >= CACHE_MAX) {
-    const first = memoryCache.keys().next().value as string | undefined;
-    if (first) memoryCache.delete(first);
-  }
-  memoryCache.set(key, { at: Date.now(), payload });
-}
-
-async function hashId(input: string) {
-  const bytes = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(input),
-  );
-  return Array.from(new Uint8Array(bytes))
-    .slice(0, 16)
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-function displayUrl(raw: string) {
-  try {
-    const url = new URL(raw);
-    const path = url.pathname
-      .split('/')
-      .filter(Boolean)
-      .slice(0, 3)
-      .map((part) => {
-        try {
-          return decodeURIComponent(part);
-        } catch {
-          return part;
-        }
-      })
-      .join(' › ');
-
-    return (
-      url.hostname.replace(/^www\./, '') +
-      (path ? ' › ' + path : '')
-    );
-  } catch {
-    return raw;
-  }
-}
-
-function sourceFromUrl(raw: string) {
-  try {
-    return new URL(raw).hostname.replace(/^www\./, '');
-  } catch {
-    return 'web';
-  }
-}
-
-function typeFromCategory(
-  category: GlobalCategory,
-  url: string,
-  title: string,
-): ResultType {
-  if (category === 'images') return 'image';
-  if (category === 'videos') return 'video';
-  if (category === 'news') return 'news';
-  if (
-    category === 'wikipedia' ||
-    /wikipedia\.org/i.test(url) ||
-    /wikipedia/i.test(title)
-  ) {
-    return 'wikipedia';
-  }
-  return 'web';
-}
-
 function yacyBaseUrls() {
   const configured = (process.env.YACY_SEARCH_BASES || process.env.YACY_SEARCH_BASE || '')
     .split(',')
@@ -409,186 +316,6 @@ function navigationalResult(
   }));
 }
 
-function categoryInstruction(category: GlobalCategory) {
-  switch (category) {
-    case 'news':
-      return 'Prioritize recent news reporting and current authoritative sources.';
-    case 'wikipedia':
-      return 'Prioritize Wikipedia and encyclopedic reference pages.';
-    case 'images':
-      return 'Find authoritative pages containing images strongly related to the query.';
-    case 'videos':
-      return 'Find video pages and pages hosting relevant videos.';
-    case 'web':
-      return 'Prioritize general web pages that directly answer the query.';
-    default:
-      return 'Search broadly across the public web and use diverse authoritative sources.';
-  }
-}
-
-async function runGroundedSearch(input: {
-  query: string;
-  category: GlobalCategory;
-  page: number;
-  pageSize: number;
-  locale: Locale;
-  apiKey: string;
-}) {
-  const { query, category, page, pageSize, locale, apiKey } = input;
-  const model = getModel();
-
-  const prompt = [
-    'You are the retrieval engine for Alsamos Global Search.',
-    'Use Google Search grounding to search the live public web.',
-    'Return factual information supported by real web sources.',
-    'Never invent URLs or source titles.',
-    categoryInstruction(category),
-    'Search locale: ' + locale + '.',
-    'Requested result page: ' + page + '.',
-    'Aim for ' + Math.min(pageSize, 16) + ' distinct, useful sources.',
-    'Write one compact evidence sentence per important source so snippets can be derived from grounding supports.',
-    'Search query: ' + query,
-  ].join('\n');
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 18000);
-
-  try {
-    const response = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/' +
-        encodeURIComponent(model) +
-        ':generateContent',
-      {
-        method: 'POST',
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey,
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: 'user',
-              parts: [{ text: prompt }],
-            },
-          ],
-          tools: [{ google_search: {} }],
-          generationConfig: {
-            temperature: 0.05,
-            maxOutputTokens: 2200,
-          },
-        }),
-      },
-    );
-
-    const rawText = await response.text();
-    if (!response.ok) {
-      let detail = rawText.slice(0, 500);
-      try {
-        const parsed = JSON.parse(rawText);
-        detail =
-          parsed?.error?.message ||
-          parsed?.error?.status ||
-          detail;
-      } catch {
-        // keep raw detail
-      }
-      throw new Error(
-        'Gemini Search HTTP ' + response.status + ': ' + detail,
-      );
-    }
-
-    const data = JSON.parse(rawText);
-    const candidate = data?.candidates?.[0];
-    if (!candidate) {
-      throw new Error('Gemini Search returned no candidate.');
-    }
-
-    const summary = (candidate?.content?.parts || [])
-      .map((part: any) =>
-        typeof part?.text === 'string' ? part.text : '',
-      )
-      .join('')
-      .trim();
-
-    const metadata = candidate?.groundingMetadata || {};
-    const chunks = Array.isArray(metadata.groundingChunks)
-      ? metadata.groundingChunks
-      : [];
-    const supports = Array.isArray(metadata.groundingSupports)
-      ? metadata.groundingSupports
-      : [];
-
-    const snippetMap = new Map<number, string[]>();
-    for (const support of supports) {
-      const segment = String(support?.segment?.text || '')
-        .replace(/\s+/g, ' ')
-        .trim();
-      if (!segment) continue;
-
-      for (const rawIndex of support?.groundingChunkIndices || []) {
-        const index = Number(rawIndex);
-        if (!Number.isInteger(index)) continue;
-        const list = snippetMap.get(index) || [];
-        if (!list.includes(segment)) list.push(segment);
-        snippetMap.set(index, list);
-      }
-    }
-
-    const seen = new Set<string>();
-    const results: SearchResult[] = [];
-
-    for (
-      let index = 0;
-      index < chunks.length && results.length < pageSize;
-      index += 1
-    ) {
-      const web = chunks[index]?.web;
-      const url = String(web?.uri || '').trim();
-      if (!url || seen.has(url)) continue;
-      seen.add(url);
-
-      const title =
-        String(web?.title || '').trim() ||
-        sourceFromUrl(url);
-      const snippet =
-        (snippetMap.get(index) || []).join(' ').trim() ||
-        summary.slice(0, 420);
-
-      results.push({
-        id: await hashId('alsamos-global:' + url),
-        type: typeFromCategory(category, url, title),
-        title,
-        snippet,
-        url,
-        displayUrl: displayUrl(url),
-        thumbnailUrl: null,
-        source: sourceFromUrl(url),
-        publishedAt: null,
-        author: null,
-        width: null,
-        height: null,
-        durationSeconds: null,
-      });
-    }
-
-    return {
-      results,
-      summary,
-      searchSuggestionHtml:
-        typeof metadata?.searchEntryPoint?.renderedContent === 'string'
-          ? metadata.searchEntryPoint.renderedContent
-          : null,
-      searchQueries: Array.isArray(metadata?.webSearchQueries)
-        ? metadata.webSearchQueries.map(String)
-        : [],
-      finishReason: candidate?.finishReason || null,
-    };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 async function parseBody(req: any) {
   if (req.body && typeof req.body === 'object') return req.body;
   if (typeof req.body === 'string' && req.body.trim()) {
@@ -667,10 +394,8 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
-  // Global Search must work without a proprietary API key.
-  // YaCy's public freeworld peer is the primary engine; Gemini grounding is only
-  // an optional fallback when a server-side key is configured.
-  const apiKey = getApiKey();
+  // Global Search is intentionally independent from proprietary search engines.
+  // It uses YaCy public/freeworld peers only.
 
   const cacheKey = [
     query.toLowerCase(),
@@ -699,9 +424,6 @@ export default async function handler(req: any, res: any) {
     let results: SearchResult[] = [];
     let totalEstimated = 0;
     let engine = 'yacy-freeworld';
-    let summary: string | null = null;
-    let searchSuggestionHtml: string | null = null;
-    let searchQueries: string[] = [];
     const upstreamErrors: string[] = [];
 
     try {
@@ -733,30 +455,6 @@ export default async function handler(req: any, res: any) {
       );
     }
 
-    if (results.length === 0 && apiKey && page === 1) {
-      try {
-        const grounded = await runGroundedSearch({
-          query,
-          category,
-          page,
-          pageSize,
-          locale,
-          apiKey,
-        });
-
-        results = grounded.results;
-        totalEstimated = grounded.results.length;
-        summary = grounded.summary;
-        searchSuggestionHtml = grounded.searchSuggestionHtml;
-        searchQueries = grounded.searchQueries;
-        engine = 'gemini-google-search-fallback';
-      } catch (error) {
-        upstreamErrors.push(
-          'gemini: ' + (error instanceof Error ? error.message : String(error)),
-        );
-      }
-    }
-
     if (page === 1) {
       const direct = await navigationalResult(query, category);
       if (direct && !results.some((item) => item.url === direct.url)) {
@@ -777,9 +475,9 @@ export default async function handler(req: any, res: any) {
       tookMs: Date.now() - startedAt,
       results,
       engine,
-      summary,
-      searchSuggestionHtml,
-      searchQueries,
+      summary: null,
+      searchSuggestionHtml: null,
+      searchQueries: [],
       error:
         results.length > 0
           ? null
