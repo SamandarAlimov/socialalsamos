@@ -224,7 +224,7 @@ export function useSellerDashboard() {
     status: 'processing' | 'shipped' | 'delivered' | 'cancelled',
     reason?: string,
   ): Promise<{ success: boolean; error?: string; refunded?: number }> => {
-    const { data, error: rpcError } = await supabase.rpc('marketplace_update_order_status', {
+    const { data, error: rpcError } = await (supabase as any).rpc('marketplace_update_order_status', {
       _order_id: orderId,
       _status: status,
       _reason: reason ?? null,
