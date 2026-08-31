@@ -28,10 +28,18 @@ export default function ForgotPasswordPage() {
     }
 
     setLoading(true);
-    await requestPasswordReset(identityEmail);
-    setLoading(false);
-    // Always the same outcome, so nobody can probe which emails exist.
-    setSent(true);
+    try {
+      await requestPasswordReset(identityEmail);
+      // Always the same outcome, so nobody can probe which emails exist.
+      setSent(true);
+    } catch (resetError) {
+      // Keep the anti-enumeration response generic while ensuring the form is
+      // never left disabled forever by an unexpected auth/network exception.
+      console.error('Password reset request crashed:', resetError);
+      setSent(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
