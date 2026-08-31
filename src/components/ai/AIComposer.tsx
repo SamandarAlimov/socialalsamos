@@ -1,26 +1,35 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowUp,
-  Bot,
+  Check,
   FileText,
+  Github,
+  Globe,
   Image as ImageIcon,
   Loader2,
   Mic,
   MicOff,
   Paperclip,
+  Plug,
   Plus,
+  Puzzle,
   Square,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
 import { AIModelPicker } from './AIModelPicker';
-import { AIToolsMenu } from './AIToolsMenu';
 import type { AIMode, ModelId, ToolGroupId } from '@/lib/ai/capabilities';
-import { MODE_OPTIONS } from '@/lib/ai/capabilities';
 
 const PLACEHOLDERS = [
   'Alsamos AI dan so\u2019rang\u2026',
@@ -30,20 +39,15 @@ const PLACEHOLDERS = [
   'Bu haftaning rejasini tuzib bering\u2026',
 ];
 
-type SlashCommand = {
-  cmd: string;
-  label: string;
-  hint: string;
-};
+type SlashCommand = { cmd: string; label: string; hint: string };
 
+// Slash buyruqlar faqat "/" yozilganda ko'rinadi — interfeys toza qoladi.
 const SLASH_COMMANDS: SlashCommand[] = [
   { cmd: '/image', label: 'Rasm yaratish', hint: 'Matn asosida rasm generatsiya qilish' },
   { cmd: '/video', label: 'Video yaratish', hint: 'Qisqa video navbatga qo\u2019yiladi' },
   { cmd: '/code', label: 'Kod yozish', hint: 'To\u2019liq, ishlaydigan kod fayli' },
-  { cmd: '/run', label: 'Kodni ishga tushirish', hint: 'Sandbox\u2019da tekshirib ko\u2019rish' },
+  { cmd: '/run', label: 'Kodni ishga tushirish', hint: 'Sandbox\u2019da tekshirish' },
   { cmd: '/web', label: 'Internetdan qidirish', hint: 'Manbalar bilan javob' },
-  { cmd: '/summarize', label: 'Qisqartirish', hint: 'Uzun matnni xulosalash' },
-  { cmd: '/translate', label: 'Tarjima', hint: 'Boshqa tilga o\u2019girish' },
   { cmd: '/computer', label: 'Kompyuterda bajarish', hint: 'Alsamos Bridge orqali (tasdiq bilan)' },
 ];
 
@@ -64,14 +68,17 @@ interface AIComposerProps {
   onPickFiles: (files: FileList | null) => void;
   onDropFiles?: (files: FileList | null) => void;
   onRemoveAttachment: (url: string) => void;
-  mode: AIMode;
-  onModeChange: (mode: AIMode) => void;
   model: ModelId;
   onModelChange: (model: ModelId) => void;
   activeModel?: string | null;
-  toolGroups: ToolGroupId[];
-  onToolGroupsChange: (groups: ToolGroupId[]) => void;
+  /** Quyidagilar ixtiyoriy — UI sodda bo'lishi uchun endi ko'rsatilmaydi. */
+  mode?: AIMode;
+  onModeChange?: (mode: AIMode) => void;
+  toolGroups?: ToolGroupId[];
+  onToolGroupsChange?: (groups: ToolGroupId[]) => void;
   onOpenConnectors?: () => void;
+  onOpenGithub?: () => void;
+  onOpenPlugins?: () => void;
 }
 
 export function AIComposer({
@@ -85,14 +92,14 @@ export function AIComposer({
   onPickFiles,
   onDropFiles,
   onRemoveAttachment,
-  mode,
-  onModeChange,
   model,
   onModelChange,
   activeModel,
   toolGroups,
   onToolGroupsChange,
   onOpenConnectors,
+  onOpenGithub,
+  onOpenPlugins,
 }: AIComposerProps) {
   const { toast } = useToast();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -104,7 +111,15 @@ export function AIComposer({
   const voice = useVoiceInput();
   const voiceBaseRef = useRef('');
 
-  // Placeholder aylanishi (faqat bo'sh maydonda).
+  const webEnabled = toolGroups ? toolGroups.includes('web') : true;
+
+  const toggleWeb = () => {
+    if (!toolGroups || !onToolGroupsChange) return;
+    onToolGroupsChange(
+      webEnabled ? toolGroups.filter((g) => g !== 'web') : [...toolGroups, 'web'],
+    );
+  };
+
   useEffect(() => {
     if (value) return;
     const timer = setInterval(
@@ -114,7 +129,6 @@ export function AIComposer({
     return () => clearInterval(timer);
   }, [value]);
 
-  // Balandlikni avtomatik moslash.
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -122,7 +136,6 @@ export function AIComposer({
     el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
   }, [value]);
 
-  // Ovozdan matnga.
   useEffect(() => {
     if (!voice.listening) return;
     const spoken = [voice.transcript, voice.interim].filter(Boolean).join(' ').trim();
@@ -150,7 +163,8 @@ export function AIComposer({
     if (!voice.supported) {
       toast({
         title: "Qo'llab-quvvatlanmaydi",
-        description: 'Bu brauzerda ovozli kiritish mavjud emas. Chrome yoki Edge sinab ko\u2019ring.',
+        description:
+          'Bu brauzerda ovozli kiritish mavjud emas. Chrome yoki Edge sinab ko\u2019ring.',
         variant: 'destructive',
       });
       return;
@@ -271,51 +285,59 @@ export function AIComposer({
                 e.currentTarget.value = '';
               }}
             />
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8 shrink-0 rounded-full"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              aria-label="Fayl qo'shish"
-            >
-              {uploading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Plus className="h-4 w-4" />
-              )}
-            </Button>
 
-            <div className="flex shrink-0 items-center rounded-full border border-border/60 p-0.5">
-              {MODE_OPTIONS.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  title={option.hint}
-                  onClick={() => onModeChange(option.id)}
-                  className={cn(
-                    'flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors',
-                    mode === option.id
-                      ? 'bg-alsamos-orange text-white'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0 rounded-full"
+                  disabled={uploading}
+                  aria-label="Qo'shish"
                 >
-                  {option.id === 'agent' && <Bot className="h-3.5 w-3.5" />}
-                  {option.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="hidden items-center gap-1.5 sm:flex">
-              <AIModelPicker value={model} onChange={onModelChange} activeModel={activeModel} />
-              <AIToolsMenu
-                selected={toolGroups}
-                onChange={onToolGroupsChange}
-                onOpenConnectors={onOpenConnectors}
-              />
-            </div>
+                  {uploading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-60">
+                <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                  <Paperclip className="mr-2 h-4 w-4" />
+                  Fayl yoki rasm qo\u2019shish
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onOpenGithub?.() ?? onOpenConnectors?.()}>
+                  <Github className="mr-2 h-4 w-4" />
+                  GitHub\u2019dan qo\u2019shish
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => onOpenConnectors?.()}>
+                  <Plug className="mr-2 h-4 w-4" />
+                  Konnektorlar
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onOpenPlugins?.() ?? onOpenConnectors?.()}>
+                  <Puzzle className="mr-2 h-4 w-4" />
+                  Plaginlar qo\u2019shish
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    toggleWeb();
+                  }}
+                  disabled={!toolGroups || !onToolGroupsChange}
+                >
+                  <Globe className="mr-2 h-4 w-4" />
+                  <span className="flex-1">Veb qidiruv</span>
+                  {webEnabled && <Check className="h-4 w-4 text-alsamos-orange" />}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <div className="flex-1" />
+
+            <AIModelPicker value={model} onChange={onModelChange} activeModel={activeModel} />
 
             <Button
               size="icon"
@@ -352,15 +374,6 @@ export function AIComposer({
                 <ArrowUp className="h-4 w-4" />
               </Button>
             )}
-          </div>
-
-          <div className="flex items-center gap-1.5 px-1 pt-1.5 sm:hidden">
-            <AIModelPicker value={model} onChange={onModelChange} activeModel={activeModel} />
-            <AIToolsMenu
-              selected={toolGroups}
-              onChange={onToolGroupsChange}
-              onOpenConnectors={onOpenConnectors}
-            />
           </div>
         </div>
 
