@@ -1,10 +1,21 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Bot, Copy, Check, RotateCcw, Download, AlertTriangle, Maximize2 } from 'lucide-react';
+import {
+  Bot,
+  Copy,
+  Check,
+  RotateCcw,
+  Download,
+  AlertTriangle,
+  Maximize2,
+  Info,
+  Paperclip,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { AIMessage } from './types';
+import { AIToolTimeline } from './AIToolTimeline';
 
 function CodeBlock({ className, children }: { className?: string; children: React.ReactNode }) {
   const [copied, setCopied] = useState(false);
@@ -34,6 +45,36 @@ function CodeBlock({ className, children }: { className?: string; children: Reac
   );
 }
 
+function ImageCard({ url, id }: { url: string; id: string }) {
+  return (
+    <div className="relative mt-3 max-w-md overflow-hidden rounded-2xl border border-border/40 shadow-lg">
+      <img src={url} alt="AI yaratgan rasm" className="w-full" loading="lazy" />
+      <div className="absolute right-2 top-2 flex gap-1.5">
+        <Button
+          size="icon"
+          variant="secondary"
+          className="h-8 w-8 rounded-lg backdrop-blur"
+          onClick={() => window.open(url, '_blank')}
+          aria-label="To'liq ko'rish"
+        >
+          <Maximize2 className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          size="icon"
+          variant="secondary"
+          className="h-8 w-8 rounded-lg backdrop-blur"
+          asChild
+          aria-label="Yuklab olish"
+        >
+          <a href={url} download={`alsamos-ai-${id}.png`}>
+            <Download className="h-3.5 w-3.5" />
+          </a>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 interface Props {
   message: AIMessage;
   isStreaming?: boolean;
@@ -45,13 +86,35 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
 
   if (message.role === 'user') {
     return (
-      <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex flex-col items-end gap-1.5">
         <div className="max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-primary-foreground shadow-sm">
           <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
         </div>
+        {message.attachments && message.attachments.length > 0 && (
+          <div className="flex max-w-[85%] flex-wrap justify-end gap-1.5">
+            {message.attachments.map((file) => (
+              <a
+                key={file.url}
+                href={file.url}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="flex items-center gap-1 rounded-lg border border-border/60 bg-card px-2 py-1 text-[11px] hover:bg-muted"
+              >
+                <Paperclip className="h-3 w-3" />
+                <span className="max-w-[160px] truncate">{file.name}</span>
+              </a>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
+
+  const images = message.images?.length
+    ? message.images
+    : message.imageUrl
+      ? [message.imageUrl]
+      : [];
 
   return (
     <div className="group mb-6">
@@ -60,6 +123,8 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
           <Bot className="h-4 w-4 text-white" />
         </div>
         <div className="min-w-0 flex-1">
+          {message.tools && message.tools.length > 0 && <AIToolTimeline events={message.tools} />}
+
           {message.error ? (
             <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
@@ -110,32 +175,37 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
             </div>
           )}
 
-          {message.imageUrl && (
-            <div className="relative mt-3 max-w-md overflow-hidden rounded-2xl border border-border/40 shadow-lg">
-              <img src={message.imageUrl} alt="AI yaratgan rasm" className="w-full" loading="lazy" />
-              <div className="absolute right-2 top-2 flex gap-1.5">
-                <Button
-                  size="icon"
-                  variant="secondary"
-                  className="h-8 w-8 rounded-lg backdrop-blur"
-                  onClick={() => window.open(message.imageUrl, '_blank')}
-                  aria-label="To'liq ko'rish"
-                >
-                  <Maximize2 className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="secondary"
-                  className="h-8 w-8 rounded-lg backdrop-blur"
-                  asChild
-                  aria-label="Yuklab olish"
-                >
-                  <a href={message.imageUrl} download={`alsamos-ai-${message.id}.png`}>
-                    <Download className="h-3.5 w-3.5" />
-                  </a>
-                </Button>
-              </div>
+          {images.map((url) => (
+            <ImageCard key={url} url={url} id={message.id} />
+          ))}
+
+          {message.sources && message.sources.length > 0 && (
+            <div className="mt-3 rounded-xl border border-border/50 bg-card/40 p-2.5">
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Manbalar
+              </p>
+              <ol className="space-y-1">
+                {message.sources.slice(0, 8).map((source, index) => (
+                  <li key={`${source.url}-${index}`} className="flex gap-1.5 text-xs">
+                    <span className="font-mono text-[10px] text-muted-foreground">[{index + 1}]</span>
+                    <a
+                      href={source.url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="line-clamp-1 text-alsamos-orange hover:underline"
+                    >
+                      {source.title || source.url}
+                    </a>
+                  </li>
+                ))}
+              </ol>
             </div>
+          )}
+
+          {message.notice && (
+            <p className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <Info className="h-3 w-3" /> {message.notice}
+            </p>
           )}
 
           {!message.error && !isStreaming && (
@@ -163,6 +233,9 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
                 </Button>
+              )}
+              {message.model && (
+                <span className="ml-1 font-mono text-[10px] text-muted-foreground">{message.model}</span>
               )}
             </div>
           )}

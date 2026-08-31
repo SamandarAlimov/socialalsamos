@@ -42,7 +42,7 @@ export interface AIConversation {
   id: string;
   title: string;
   messages: AIMessage[];
-  updatedAt: number;
+  updatedAt: Date;
   pinned?: boolean;
 }
 
