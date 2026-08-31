@@ -32,6 +32,10 @@ interface GlobalSearchResponse {
   totalEstimated: number;
   tookMs: number;
   results: GlobalSearchResult[];
+  engine?: string;
+  summary?: string | null;
+  searchSuggestionHtml?: string | null;
+  searchQueries?: string[];
   error: { code: string; message: string } | null;
 }
 
@@ -67,7 +71,9 @@ export function GlobalSearchResults({ query, locale = 'uz' }: { query: string; l
   const [category, setCategory] = useState<GlobalCategory>('all');
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<GlobalSearchResult[]>([]);
-  const [meta, setMeta] = useState<{ tookMs: number; total: number } | null>(null);
+  const [meta, setMeta] = useState<{ tookMs: number; total: number; engine?: string } | null>(null);
+  const [summary, setSummary] = useState<string | null>(null);
+  const [searchSuggestionHtml, setSearchSuggestionHtml] = useState<string | null>(null);
   const [error, setError] = useState<GlobalSearchResponse['error']>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -77,7 +83,7 @@ export function GlobalSearchResults({ query, locale = 'uz' }: { query: string; l
 
   const runSearch = useCallback(async (nextPage: number, replace: boolean) => {
     if (!debouncedQuery) {
-      setItems([]); setMeta(null); setError(null);
+      setItems([]); setMeta(null); setSummary(null); setSearchSuggestionHtml(null); setError(null);
       return;
     }
     const ticket = ++requestRef.current;
@@ -93,7 +99,11 @@ export function GlobalSearchResults({ query, locale = 'uz' }: { query: string; l
         return;
       }
       setError(data.error);
-      setMeta({ tookMs: data.tookMs, total: data.totalEstimated });
+      setMeta({ tookMs: data.tookMs, total: data.totalEstimated, engine: data.engine });
+      if (replace) {
+        setSummary(data.summary || null);
+        setSearchSuggestionHtml(data.searchSuggestionHtml || null);
+      }
       setItems((prev) => (replace ? data.results : [...prev, ...data.results]));
     } catch {
       if (ticket === requestRef.current) {
@@ -151,7 +161,29 @@ export function GlobalSearchResults({ query, locale = 'uz' }: { query: string; l
       {!loading && meta && items.length > 0 && (
         <p className="text-[11px] text-muted-foreground px-0.5">
           {items.length} ta natija · {meta.tookMs} ms
+          {meta.engine ? ` · ${meta.engine === 'grounded-realtime-web' ? 'jonli internet' : meta.engine === 'programmable-web' ? 'web index' : 'Alsamos index'}` : ''}
         </p>
+      )}
+
+      {!loading && searchSuggestionHtml && (
+        <div
+          className="overflow-hidden rounded-xl border border-border/30 bg-card/50 px-3 py-2"
+          // Google Search grounding returns this render-ready Search Suggestions
+          // fragment and requires it to be shown with grounded results.
+          dangerouslySetInnerHTML={{ __html: searchSuggestionHtml }}
+        />
+      )}
+
+      {!loading && summary && items.length > 0 && category === 'all' && (
+        <div className="rounded-2xl border border-primary/10 bg-primary/[0.035] p-4">
+          <div className="mb-2 flex items-center gap-2">
+            <Globe className="h-4 w-4 text-primary" />
+            <span className="text-xs font-semibold text-foreground">Internetdan qisqa ko'rinish</span>
+          </div>
+          <p className="line-clamp-5 whitespace-pre-wrap text-[13px] leading-relaxed text-muted-foreground">
+            {summary}
+          </p>
+        </div>
       )}
 
       {loading && <ResultsSkeleton category={category} />}
@@ -323,18 +355,27 @@ function VideoGrid({ items }: { items: GlobalSearchResult[] }) {
 
 // ── States ─────────────────────────────────────────────────────────────────
 function ErrorState({ error }: { error: { code: string; message: string } }) {
-  const indexState = error.code === 'INDEX_EMPTY' || error.code === 'INDEX_UNAVAILABLE';
-  const Icon = indexState ? DatabaseZap : AlertCircle;
+  const setupState =
+    error.code === 'INDEX_EMPTY' ||
+    error.code === 'INDEX_UNAVAILABLE' ||
+    error.code === 'SEARCH_API_KEY_MISSING';
+  const Icon = setupState ? DatabaseZap : AlertCircle;
+
+  const title =
+    error.code === 'SEARCH_API_KEY_MISSING'
+      ? 'Internet Search kaliti serverga ulanmagan'
+      : error.code === 'INDEX_EMPTY'
+        ? 'Alsamos web indeksi kengaymoqda'
+        : error.code === 'INDEX_UNAVAILABLE'
+          ? 'Global Search backend hali deploy qilinmagan'
+          : error.code === 'NETWORK_ERROR'
+            ? 'Global Search Edge Function topilmadi'
+            : 'Internet qidiruvi vaqtincha mavjud emas';
+
   return (
     <div className="p-5 rounded-2xl bg-card/60 border border-border/40 backdrop-blur-sm text-center">
       <Icon className="h-6 w-6 text-muted-foreground mx-auto mb-2.5" />
-      <p className="text-sm font-medium text-foreground mb-1">
-        {error.code === 'INDEX_EMPTY'
-          ? 'Alsamos web indeksi kengaymoqda'
-          : error.code === 'INDEX_UNAVAILABLE'
-            ? 'Global Search indeksi hali deploy qilinmagan'
-            : 'Qidiruv vaqtincha mavjud emas'}
-      </p>
+      <p className="text-sm font-medium text-foreground mb-1">{title}</p>
       <p className="text-xs text-muted-foreground leading-relaxed">{error.message}</p>
     </div>
   );
