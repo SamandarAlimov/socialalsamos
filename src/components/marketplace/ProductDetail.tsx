@@ -31,6 +31,12 @@ import { cn } from '@/lib/utils';
 import { marketplaceUz } from '@/i18n/marketplace';
 import { useMarketplaceDeliveryLocation } from '@/hooks/useMarketplaceDeliveryLocation';
 
+// Galereya ramkasi rasmning haqiqiy nisbatiga moslashadi, lekin cheksiz emas:
+// juda cho'ziq panorama sahifani yorib yubormasligi, juda tik portret esa
+// ekranni egallab ketmasligi kerak. Nisbat = kenglik / balandlik.
+const MIN_MEDIA_RATIO = 4 / 5;   // 0.80 — eng tik ruxsat etilgan ramka
+const MAX_MEDIA_RATIO = 16 / 9;  // 1.78 — eng keng ruxsat etilgan ramka
+
 interface ProductDetailProps {
   product: Product | null;
   onClose: () => void;
@@ -109,6 +115,7 @@ export function ProductDetail({
   const [addedToCart, setAddedToCart] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
   const [imageFailed, setImageFailed] = useState<Record<number, boolean>>({});
+  const [imageRatio, setImageRatio] = useState<number | null>(null);
   const [isZoomed, setIsZoomed] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewTitle, setReviewTitle] = useState('');
@@ -128,6 +135,7 @@ export function ProductDetail({
     setAddedToCart(false);
     setDescExpanded(false);
     setImageFailed({});
+    setImageRatio(null);
     setIsZoomed(false);
     setReviewRating(5);
     setReviewTitle('');
@@ -193,6 +201,7 @@ export function ProductDetail({
   useEffect(() => {
     setCurrentImageIndex(0);
     setImageFailed({});
+    setImageRatio(null);
   }, [selectedVariant?.id]);
 
   useEffect(() => {
@@ -233,6 +242,20 @@ export function ProductDetail({
   const currentImage = images[currentImageIndex];
   const showFallback = !currentImage || imageFailed[currentImageIndex];
   const canGoBack = stack.length > 0;
+
+  // Rasm yuklanmaguncha 4/5 ishlatiladi (eski xatti-harakat), yuklangach ramka
+  // rasmning o'z nisbatiga tortiladi. Shu sababli 16:9 rasm tagida bo'sh
+  // kulrang tasma qolmaydi.
+  const frameRatio = showFallback || !imageRatio
+    ? MIN_MEDIA_RATIO
+    : Math.min(MAX_MEDIA_RATIO, Math.max(MIN_MEDIA_RATIO, imageRatio));
+
+  const handleImageLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
+    const { naturalWidth, naturalHeight } = event.currentTarget;
+    if (naturalWidth > 0 && naturalHeight > 0) {
+      setImageRatio(naturalWidth / naturalHeight);
+    }
+  };
 
   const shippingCost = product.shipping_available ? Number(product.shipping_price ?? 0) : 0;
   const lineTotal = displayPrice * quantity;
@@ -432,6 +455,10 @@ export function ProductDetail({
     },
   ];
 
+  // DIQQAT: bitta sahifada faqat BITTA ko'rinadigan nusxasi bo'lishi kerak.
+  // Hozir: o'ng ustun (md+) va mobil pastki panel (md dan kichik) — ular hech
+  // qachon bir vaqtda ko'rinmaydi. Xarid xulosasi kartasiga qo'shmang, aks
+  // holda 1024px dan katta ekranda ikkita bir xil tugmalar qatori chiqadi.
   const actionButtons = (
     <div className="flex w-full max-w-md items-stretch gap-2">
       <Button
@@ -570,7 +597,8 @@ export function ProductDetail({
       >
             <div className="md:sticky md:top-20 md:self-start">
               <div
-                className="relative aspect-[4/5] select-none overflow-hidden rounded-3xl border border-border/30 bg-muted/40 shadow-sm md:max-h-[calc(100dvh-7rem)] md:bg-muted"
+                className="relative select-none overflow-hidden rounded-3xl border border-border/30 bg-muted/40 shadow-sm transition-[aspect-ratio] duration-300 md:max-h-[calc(100dvh-7rem)] md:bg-muted"
+                style={{ aspectRatio: frameRatio }}
                 onTouchStart={handleTouchStart}
                 onTouchEnd={handleTouchEnd}
                 onDoubleClick={() => setIsZoomed(value => !value)}
@@ -581,19 +609,29 @@ export function ProductDetail({
                     <span className="text-xs">{marketplaceUz.productDetail.noImage}</span>
                   </div>
                 ) : (
-                  <AnimatePresence mode="wait">
-                    <motion.img
-                      key={currentImageIndex}
-                      src={currentImage}
-                      alt={product.title}
-                      draggable={false}
-                      className="absolute inset-0 h-full w-full object-contain"
-                      onError={() => setImageFailed(prev => ({ ...prev, [currentImageIndex]: true }))}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1, scale: isZoomed ? 1.5 : 1 }}
-                      exit={{ opacity: 0 }}
+                  <>
+                    {/* Nisbat cheklovga tirab qolganda qoladigan tasma tekis kulrang
+                        emas, o'sha rasmning xiralashtirilgan nusxasi bilan to'ladi. */}
+                    <div
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0 scale-110 bg-cover bg-center opacity-35 blur-2xl saturate-150"
+                      style={{ backgroundImage: `url("${currentImage}")` }}
                     />
-                  </AnimatePresence>
+                    <AnimatePresence mode="wait">
+                      <motion.img
+                        key={currentImageIndex}
+                        src={currentImage}
+                        alt={product.title}
+                        draggable={false}
+                        className="absolute inset-0 h-full w-full object-contain"
+                        onLoad={handleImageLoad}
+                        onError={() => setImageFailed(prev => ({ ...prev, [currentImageIndex]: true }))}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1, scale: isZoomed ? 1.5 : 1 }}
+                        exit={{ opacity: 0 }}
+                      />
+                    </AnimatePresence>
+                  </>
                 )}
 
                 <div className="absolute left-3 top-16 z-10 flex flex-col gap-1.5">
@@ -1314,14 +1352,39 @@ export function ProductDetail({
                 </div>
 
           </div>
+          {/* Xarid xulosasi: faqat hisob-kitob. Tugmalar yuqoridagi o'ng ustunda
+              turadi — bu yerga takrorlamang. */}
           <aside className="hidden space-y-4 lg:sticky lg:top-20 lg:block lg:self-start">
             <div className="rounded-2xl border border-border/30 bg-card p-4">
               <h3 className="text-sm font-semibold">{marketplaceUz.productDetail.purchaseSummary}</h3>
-              <div className="mt-3 flex items-baseline justify-between gap-3">
+              <div className="mt-3 space-y-1.5 text-xs text-muted-foreground">
+                <div className="flex items-center justify-between gap-3">
+                  <span>{marketplaceUz.productDetail.product} × {quantity}</span>
+                  <span className="font-medium text-foreground">{formatPrice(lineTotal, currency)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>{marketplaceUz.productDetail.delivery}</span>
+                  <span className="font-medium text-foreground">
+                    {shippingApplies
+                      ? formatPrice(shippingCost * quantity, currency)
+                      : marketplaceUz.productDetail.freeDelivery}
+                  </span>
+                </div>
+              </div>
+              <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-border/30 pt-3">
                 <span className="text-xs text-muted-foreground">{marketplaceUz.productDetail.total(quantity)}</span>
                 <strong className="text-xl text-primary">{formatPrice(grandTotal, currency)}</strong>
               </div>
-              <div className="mt-3">{actionButtons}</div>
+              {inCartQty > 0 && onOpenCart && (
+                <Button
+                  variant="ghost"
+                  className="mt-3 h-9 w-full rounded-xl text-xs text-primary"
+                  onClick={onOpenCart}
+                >
+                  <ShoppingCart className="mr-1.5 h-3.5 w-3.5" />
+                  Savatda {inCartQty} dona — savatni ochish
+                </Button>
+              )}
             </div>
           </aside>
         </div>
