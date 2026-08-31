@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Globe, BookOpen, Newspaper, ImageIcon, PlayCircle, LayoutGrid, ExternalLink, AlertCircle, Loader2, Clock, DatabaseZap } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -89,12 +88,36 @@ export function GlobalSearchResults({ query, locale = 'uz' }: { query: string; l
     const ticket = ++requestRef.current;
     replace ? setLoading(true) : setLoadingMore(true);
     try {
-      const { data, error: fnError } = await supabase.functions.invoke<GlobalSearchResponse>('global-search', {
-        body: { query: debouncedQuery, category, page: nextPage, pageSize: PAGE_SIZE, locale },
+      const response = await fetch('/api/global-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: debouncedQuery,
+          category,
+          page: nextPage,
+          pageSize: PAGE_SIZE,
+          locale,
+        }),
       });
+
+      const data = (await response.json().catch(() => null)) as GlobalSearchResponse | null;
+
       if (ticket !== requestRef.current) return;
-      if (fnError || !data) {
-        setError({ code: 'NETWORK_ERROR', message: "Qidiruv xizmatiga ulanib bo'lmadi." });
+
+      if (!data) {
+        setError({
+          code: 'NETWORK_ERROR',
+          message: "Global Search serveridan yaroqli javob kelmadi.",
+        });
+        if (replace) setItems([]);
+        return;
+      }
+
+      if (!response.ok && !data.error) {
+        setError({
+          code: 'NETWORK_ERROR',
+          message: "Global Search serveriga ulanib bo'lmadi.",
+        });
         if (replace) setItems([]);
         return;
       }
