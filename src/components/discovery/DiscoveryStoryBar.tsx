@@ -42,7 +42,7 @@ export function DiscoveryStoryBar({ refreshKey = 0 }: DiscoveryStoryBarProps) {
     );
   }
 
-  // O'z story'imiz doim birinchi bo'ladi (Flutter bilan bir xil tartib).
+  // O'z story'imiz doim birinchi (Flutter bilan bir xil tartib).
   const ordered = [...storyGroups].sort((a, b) => {
     if (a.user_id === user?.id) return -1;
     if (b.user_id === user?.id) return 1;
@@ -62,7 +62,7 @@ export function DiscoveryStoryBar({ refreshKey = 0 }: DiscoveryStoryBarProps) {
             navigate('/create');
           }}
           className="flex shrink-0 flex-col items-center gap-2 focus-visible:outline-none"
-          aria-label="Story qo\u2018shish"
+          aria-label="Yangi story yaratish"
         >
           <span
             className={cn(
@@ -72,7 +72,7 @@ export function DiscoveryStoryBar({ refreshKey = 0 }: DiscoveryStoryBarProps) {
           >
             <Plus className="h-6 w-6" />
           </span>
-          <span className="max-w-[64px] truncate text-xs text-muted-foreground">Qo\u2018shish</span>
+          <span className="max-w-[64px] truncate text-xs text-muted-foreground">Yangi</span>
         </button>
 
         {ordered.map((group, index) => (
@@ -84,7 +84,7 @@ export function DiscoveryStoryBar({ refreshKey = 0 }: DiscoveryStoryBarProps) {
               setActiveIndex(index);
             }}
             className="flex shrink-0 flex-col items-center gap-2 focus-visible:outline-none"
-            aria-label={`${group.username} story'sini ko\u2018rish`}
+            aria-label={`${group.username} story`}
           >
             <StoryAvatar
               avatarUrl={group.avatar_url}
