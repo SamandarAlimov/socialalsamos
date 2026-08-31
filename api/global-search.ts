@@ -120,6 +120,75 @@ function typeFromCategory(
   return 'web';
 }
 
+async function runInstantFindItSearch(input: {
+  query: string;
+  category: GlobalCategory;
+  page: number;
+  pageSize: number;
+  locale: Locale;
+}) {
+  const base = (
+    process.env.INSTANT_FIND_IT_SEARCH_BASE ||
+    'https://instant-find-it.lovable.app'
+  ).replace(/\/+$/, '');
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+
+  try {
+    const response = await fetch(base + '/api/search', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'User-Agent': 'AlsamosSearch/1.0 (+https://www.alsamos.com/)',
+      },
+      body: JSON.stringify(input),
+    });
+
+    const raw = await response.text();
+    let data: any = null;
+    try {
+      data = raw ? JSON.parse(raw) : null;
+    } catch {
+      data = null;
+    }
+
+    if (!response.ok || !data) {
+      throw new Error(
+        'instant-find-it HTTP ' +
+          response.status +
+          (raw ? ': ' + raw.slice(0, 160) : ''),
+      );
+    }
+
+    const results = Array.isArray(data.results)
+      ? (data.results as SearchResult[])
+      : [];
+
+    if (results.length === 0) {
+      throw new Error(
+        data?.error?.message ||
+          data?.error ||
+          'instant-find-it returned no results',
+      );
+    }
+
+    return {
+      results,
+      totalEstimated:
+        Number(data.totalEstimated) ||
+        (input.page - 1) * input.pageSize +
+          results.length +
+          (results.length === input.pageSize ? input.pageSize : 0),
+      engine: String(data.engine || 'firecrawl-lovable'),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function decodeHtmlEntities(value: string) {
   return value
     .replace(/&amp;/gi, '&')
@@ -648,8 +717,8 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
-  // Global Search is keyless and independent from paid search APIs.
-  // YaCy is primary; DuckDuckGo HTML is a resilient web fallback.
+  // Primary realtime search comes from instant-find-it's working Lovable
+  // Firecrawl connector. YaCy/DuckDuckGo remain as emergency fallbacks.
 
   const cacheKey = [
     query.toLowerCase(),
@@ -706,11 +775,30 @@ export default async function handler(req: any, res: any) {
 
     let results: SearchResult[] = [];
     let totalEstimated = 0;
-    let engine = 'yacy-freeworld';
+    let engine = 'none';
     const upstreamErrors: string[] = [];
 
     try {
-      const yacy = await runYacySearch({
+      const instant = await runInstantFindItSearch({
+        query,
+        category,
+        page,
+        pageSize,
+        locale,
+      });
+      results = instant.results;
+      totalEstimated = instant.totalEstimated;
+      engine = 'instant-find-it:' + instant.engine;
+    } catch (error) {
+      upstreamErrors.push(
+        'instant-find-it: ' +
+          (error instanceof Error ? error.message : String(error)),
+      );
+    }
+
+    if (results.length === 0) {
+      try {
+        const yacy = await runYacySearch({
         query,
         category,
         page,
@@ -732,10 +820,11 @@ export default async function handler(req: any, res: any) {
       if (yacy.failures.length > 0) {
         upstreamErrors.push(...yacy.failures.map((failure) => 'yacy-peer: ' + failure));
       }
-    } catch (error) {
-      upstreamErrors.push(
-        'yacy: ' + (error instanceof Error ? error.message : String(error)),
-      );
+      } catch (error) {
+        upstreamErrors.push(
+          'yacy: ' + (error instanceof Error ? error.message : String(error)),
+        );
+      }
     }
 
     if (results.length === 0) {
