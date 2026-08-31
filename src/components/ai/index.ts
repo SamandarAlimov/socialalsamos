@@ -1,3 +1,11 @@
+export { AIComposer } from './AIComposer';
+export { AISidebar } from './AISidebar';
+export { AIMessageBubble, AIThinkingBubble } from './AIMessageBubble';
+export { AIArtifactPanel } from './AIArtifactPanel';
+export { AIToolTimeline } from './AIToolTimeline';
+export { AIToolsMenu } from './AIToolsMenu';
+export { AIModelPicker } from './AIModelPicker';
+export { AIConnectorsDialog } from './AIConnectorsDialog';
 export { AIFloatingButton } from './AIFloatingButton';
-export { AIChatDialog } from './AIChatDialog';
 export { AITimeLimitAlert } from './AITimeLimitAlert';
+export * from './types';

@@ -1,11 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, Copy, Download, FileCode2, FileText, ImageIcon, X } from 'lucide-react';
+import {
+  Check,
+  Copy,
+  Download,
+  Eye,
+  FileCode2,
+  FileText,
+  ImageIcon,
+  Loader2,
+  Play,
+  X,
+} from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { extensionFor, type AIArtifact } from '@/lib/aiArtifacts';
+import { runInSandbox, type SandboxRun } from '@/lib/ai/agentClient';
+import { useToast } from '@/hooks/use-toast';
 
 interface AIArtifactPanelProps {
   artifacts: AIArtifact[];
@@ -18,6 +31,9 @@ interface AIArtifactPanelProps {
 const iconFor = (kind: AIArtifact['kind']) =>
   kind === 'code' ? FileCode2 : kind === 'image' ? ImageIcon : FileText;
 
+const RUNNABLE = ['javascript', 'js', 'typescript', 'ts', 'jsx', 'tsx'];
+const PREVIEWABLE = ['html', 'svg'];
+
 export function AIArtifactPanel({
   artifacts,
   activeId,
@@ -25,7 +41,11 @@ export function AIArtifactPanel({
   onClose,
   isMobile,
 }: AIArtifactPanelProps) {
+  const { toast } = useToast();
   const [copied, setCopied] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [run, setRun] = useState<SandboxRun | null>(null);
+  const [preview, setPreview] = useState(false);
 
   const active = useMemo(
     () => artifacts.find((a) => a.id === activeId) || artifacts[artifacts.length - 1],
@@ -34,13 +54,36 @@ export function AIArtifactPanel({
 
   useEffect(() => {
     setCopied(false);
+    setRun(null);
+    setPreview(false);
   }, [active?.id]);
+
+  const language = (active?.language ?? '').toLowerCase();
+  const canRun = active?.kind === 'code' && RUNNABLE.includes(language);
+  const canPreview = active?.kind === 'code' && PREVIEWABLE.includes(language);
 
   const copy = async () => {
     if (!active) return;
     await navigator.clipboard.writeText(active.content);
     setCopied(true);
     setTimeout(() => setCopied(false), 1600);
+  };
+
+  const execute = async () => {
+    if (!active) return;
+    setRunning(true);
+    try {
+      const result = await runInSandbox(active.content);
+      setRun(result);
+    } catch (error) {
+      toast({
+        title: "Ishga tushirilmadi",
+        description: error instanceof Error ? error.message : 'Kutilmagan xatolik',
+        variant: 'destructive',
+      });
+    } finally {
+      setRunning(false);
+    }
   };
 
   const download = () => {
@@ -75,6 +118,29 @@ export function AIArtifactPanel({
           {artifacts.length}
         </span>
         <div className="flex-1" />
+        {canRun && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 gap-1.5 rounded-lg text-xs"
+            onClick={execute}
+            disabled={running}
+          >
+            {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+            Ishga tushirish
+          </Button>
+        )}
+        {canPreview && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 gap-1.5 rounded-lg text-xs"
+            onClick={() => setPreview((v) => !v)}
+          >
+            <Eye className="h-3.5 w-3.5" />
+            {preview ? 'Kod' : "Ko'rish"}
+          </Button>
+        )}
         {active && (
           <>
             <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg" onClick={copy} aria-label="Nusxalash">
@@ -128,6 +194,13 @@ export function AIArtifactPanel({
           <div className="p-4">
             <img src={active.content} alt={active.title} className="w-full rounded-2xl border border-border/50" />
           </div>
+        ) : canPreview && preview ? (
+          <iframe
+            title={active.title}
+            sandbox="allow-scripts"
+            srcDoc={active.content}
+            className="h-full min-h-[420px] w-full border-0 bg-white"
+          />
         ) : active.kind === 'code' ? (
           <pre className="overflow-x-auto p-4 text-[12px] leading-relaxed">
             <code>{active.content}</code>
@@ -135,6 +208,29 @@ export function AIArtifactPanel({
         ) : (
           <div className="prose prose-sm max-w-none p-4 dark:prose-invert">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{active.content}</ReactMarkdown>
+          </div>
+        )}
+
+        {run && (
+          <div className="border-t border-border/40 p-3">
+            <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Natija
+              <span className={run.ok ? 'text-emerald-500' : 'text-destructive'}>
+                {run.ok ? 'muvaffaqiyatli' : 'xato'}
+              </span>
+              <span className="font-mono normal-case">{run.durationMs} ms</span>
+            </p>
+            {run.logs.length > 0 && (
+              <pre className="max-h-40 overflow-auto rounded-lg bg-muted/60 p-2 text-[11px]">
+                {run.logs.join('\n')}
+              </pre>
+            )}
+            {run.result !== undefined && run.result !== null && (
+              <pre className="mt-1 max-h-32 overflow-auto rounded-lg bg-muted/40 p-2 text-[11px]">
+                {`→ ${JSON.stringify(run.result, null, 2)}`}
+              </pre>
+            )}
+            {run.error && <p className="mt-1 text-[11px] text-destructive">{run.error}</p>}
           </div>
         )}
       </ScrollArea>
