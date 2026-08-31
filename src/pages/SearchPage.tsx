@@ -18,6 +18,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { GlobalSearchResults, type GlobalSearchResult } from '@/components/search/GlobalSearchResults';
 import { useHashtagSearch, type HashtagSuggestion } from '@/hooks/useHashtags';
 import { useVoiceSearch } from '@/hooks/useVoiceSearch';
+import { useAuth } from '@/contexts/AuthContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -101,7 +102,27 @@ const trendingSearches = [
   { text: 'music covers', icon: Star },
 ];
 
-const recentSearches = ['dance tutorial', 'cooking recipes', 'travel vlog', 'photography tips'];
+const SEARCH_HISTORY_KEY = 'alsamos.search.history.v1';
+
+function readLocalSearchHistory(): string[] {
+  try {
+    const raw = localStorage.getItem(SEARCH_HISTORY_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is string => typeof value === 'string').slice(0, 20)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalSearchHistory(items: string[]) {
+  try {
+    localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(items.slice(0, 20)));
+  } catch {
+    // Storage can be unavailable in private/restricted browser modes.
+  }
+}
 
 // ── Main Component ─────────────────────────────────────
 export default function SearchPage() {
@@ -109,6 +130,7 @@ export default function SearchPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { triggerHaptic } = useHapticFeedback();
+  const { user } = useAuth();
   const tabsRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -119,6 +141,8 @@ export default function SearchPage() {
     initialTab && TABS.some((tab) => tab.key === initialTab) ? initialTab : 'global',
   );
   const [isFocused, setIsFocused] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>(readLocalSearchHistory);
+  const platformSearchRequestRef = useRef(0);
 
   // Data states
   const [users, setUsers] = useState<SearchUser[]>([]);
@@ -161,24 +185,118 @@ export default function SearchPage() {
     }, { replace: true });
   }, [query, activeTab, setSearchParams]);
 
+  const rememberSearch = useCallback((value: string) => {
+    const clean = value.trim().replace(/\s+/g, ' ');
+    if (clean.length < 2) return;
+
+    setRecentSearches((current) => {
+      const next = [clean, ...current.filter((item) => item.toLocaleLowerCase() !== clean.toLocaleLowerCase())].slice(0, 20);
+      writeLocalSearchHistory(next);
+      return next;
+    });
+
+    if (user?.id) {
+      void (async () => {
+        try {
+          await supabase
+            .from('search_history')
+            .delete()
+            .eq('user_id', user.id)
+            .ilike('query', clean);
+
+          await supabase
+            .from('search_history')
+            .insert({ user_id: user.id, query: clean });
+        } catch (error) {
+          console.warn('[Search] history sync failed', error);
+        }
+      })();
+    }
+  }, [user?.id]);
+
+  const clearSearchHistory = useCallback(() => {
+    setRecentSearches([]);
+    writeLocalSearchHistory([]);
+
+    if (user?.id) {
+      void supabase
+        .from('search_history')
+        .delete()
+        .eq('user_id', user.id)
+        .then(({ error }) => {
+          if (error) console.warn('[Search] history clear failed', error);
+        });
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let cancelled = false;
+    void supabase
+      .from('search_history')
+      .select('query, created_at')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(20)
+      .then(({ data, error }) => {
+        if (cancelled || error || !data) return;
+
+        setRecentSearches((local) => {
+          const merged = [
+            ...data.map((row) => row.query),
+            ...local,
+          ].filter((value, index, all) =>
+            all.findIndex((candidate) => candidate.toLocaleLowerCase() === value.toLocaleLowerCase()) === index,
+          ).slice(0, 20);
+
+          writeLocalSearchHistory(merged);
+          return merged;
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  // Remember a query only after the user has stopped typing. This avoids
+  // storing every intermediate keystroke such as "a", "al", "als"...
+  useEffect(() => {
+    const clean = debouncedQuery.trim();
+    if (clean.length < 2) return;
+
+    const timer = window.setTimeout(() => rememberSearch(clean), 900);
+    return () => window.clearTimeout(timer);
+  }, [debouncedQuery, rememberSearch]);
+
   // Search logic
   const performSearch = useCallback(async (searchTerm: string) => {
-    if (!searchTerm.trim()) {
+    const requestId = ++platformSearchRequestRef.current;
+    const clean = searchTerm.trim();
+
+    if (!clean) {
       setUsers([]);
       setPosts([]);
       setChannels([]);
       setProducts([]);
       setGroups([]);
+      setIsLoading(false);
       return;
     }
-    setIsLoading(true);
-    const term = searchTerm.replace('#', '');
 
-    const [usersRes, postsRes, channelsRes, productsRes, groupsRes] = await Promise.all([
+    setIsLoading(true);
+
+    // PostgREST .or() uses commas/parentheses as syntax. Strip those control
+    // characters from free-form search text so one unusual query cannot break
+    // every platform tab.
+    const term = clean.replace(/^#/, '').replace(/[,()]/g, ' ').replace(/\s+/g, ' ').trim();
+
+    const requests = [
       supabase
         .from('profiles')
         .select('id, username, display_name, avatar_url, bio, followers_count, is_verified')
-        .or(`username.ilike.%${term}%,display_name.ilike.%${term}%`)
+        .or(`username.ilike.%${term}%,display_name.ilike.%${term}%,bio.ilike.%${term}%`)
         .limit(20),
       supabase
         .from('posts')
@@ -193,7 +311,7 @@ export default function SearchPage() {
       supabase
         .from('channels')
         .select('id, name, description, avatar_url, subscriber_count, channel_type, username')
-        .ilike('name', `%${term}%`)
+        .or(`name.ilike.%${term}%,username.ilike.%${term}%,description.ilike.%${term}%`)
         .limit(20),
       supabase
         .from('products')
@@ -210,14 +328,36 @@ export default function SearchPage() {
         .eq('type', 'group')
         .or(`name.ilike.%${term}%,description.ilike.%${term}%`)
         .limit(20),
-    ]);
+    ] as const;
 
-    if (usersRes.data) setUsers(usersRes.data);
-    if (postsRes.data) setPosts(postsRes.data as any);
-    if (channelsRes.data) setChannels(channelsRes.data);
-    if (productsRes.data) setProducts(productsRes.data as any);
-    if (groupsRes.data) setGroups(groupsRes.data as SearchGroup[]);
-    setIsLoading(false);
+    try {
+      const settled = await Promise.allSettled(requests);
+      if (requestId !== platformSearchRequestRef.current) return;
+
+      const read = <T,>(index: number): T[] => {
+        const entry = settled[index];
+        if (entry.status === 'rejected') {
+          console.warn('[Search] platform source rejected', index, entry.reason);
+          return [];
+        }
+
+        const result = entry.value as { data: T[] | null; error: { message?: string } | null };
+        if (result.error) {
+          console.warn('[Search] platform source error', index, result.error);
+          return [];
+        }
+
+        return result.data ?? [];
+      };
+
+      setUsers(read<SearchUser>(0));
+      setPosts(read<SearchPost>(1));
+      setChannels(read<SearchChannel>(2));
+      setProducts(read<SearchProduct>(3));
+      setGroups(read<SearchGroup>(4));
+    } finally {
+      if (requestId === platformSearchRequestRef.current) setIsLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -258,39 +398,9 @@ export default function SearchPage() {
     setAiError(null);
 
     try {
-      // AI Search uses the exact same realtime web retrieval as Global Search.
-      const searchResponse = await fetch('/api/global-search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({
-          query: cleanQuery,
-          category: 'all',
-          page: 1,
-          pageSize: 8,
-          locale: 'uz',
-        }),
-      });
-      const searchData = await searchResponse.json().catch(() => ({}));
-
-      if (controller.signal.aborted) return;
-
-      const sources = (Array.isArray(searchData?.results) ? searchData.results : []).slice(0, 8);
-      setAiSources(sources);
-
-      const grounding = sources.length
-        ? sources
-            .map(
-              (source, index) =>
-                `[${index + 1}] ${source.title}\nURL: ${source.url}\n${source.snippet}`,
-            )
-            .join('\n\n')
-        : 'Alsamos Global Search indexida bu so\'rov uchun tashqi manba topilmadi.';
-
-      const { data: sessionData } = await supabase.auth.getSession();
-      const bearer =
-        sessionData.session?.access_token ||
-        import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      // AI Search must remain usable even when Global Search is slow or down.
+      // It uses the exact same ai-assistant endpoint as AIPage.
+      setAiSources([]);
 
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-assistant`,
@@ -298,7 +408,7 @@ export default function SearchPage() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${bearer}`,
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
           signal: controller.signal,
           body: JSON.stringify({
@@ -314,13 +424,10 @@ export default function SearchPage() {
             ],
             context:
               '[SEARCH_GROUNDING]\n' +
-              'MODE=SEARCH_RESULT. Bu oddiy chat emas. Foydalanuvchi qidiruv inputiga so\'z yoki savol yozdi. ' +
-              'Javobning birinchi jumlasidanoq aynan shu query haqida ma\'lumot ber. ' +
-              'Query faqat nom/atama bo\'lsa va til aniqlanmasa, Search interfeysi tilida — o\'zbekcha — javob ber. ' +
-              'Salomlashish, Alsamos AI imkoniyatlarini sanash, foydalanuvchidan yana savol so\'rash taqiqlanadi. ' +
-              'Quyidagi web manbalar mavjud bo\'lsa, faktlarni ularga tayab yoz va [1], [2] ko\'rinishida iqtibos qil. ' +
-              'Manba yetarli bo\'lmasa buni qisqa ayt, lekin queryga umumiy model bilimi bilan bevosita javob ber; URL o\'ylab topma.\n\n' +
-              grounding,
+              'MODE=SEARCH_RESULT. Bu oddiy chat emas. Search inputidagi queryga darhol javob ber. ' +
+              'Salomlashma, o\'zingni tanishtirma, imkoniyatlaringni sanama va qo\'shimcha savol so\'rama. ' +
+              'Agar query ism, brend, tashkilot, joy, mahsulot yoki mavzu bo\'lsa, aynan shu narsa haqida qisqa, foydali va faktlarga boy javob ber. ' +
+              'Query tili aniq bo\'lmasa o\'zbekcha javob ber. Web manba berilmagan bo\'lsa ham umumiy model biliming bilan bevosita javob ber; URL o\'ylab topma.',
           }),
         },
       );
@@ -453,6 +560,11 @@ export default function SearchPage() {
                 ref={inputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    rememberSearch(query);
+                  }
+                }}
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
                 placeholder="Qidirish..."
@@ -538,12 +650,20 @@ export default function SearchPage() {
               transition={{ duration: 0.2 }}
             >
               {activeTab === 'global' || activeTab === 'ai' ? (
-                <div className="min-h-[42vh]" aria-hidden="true" />
+                <RecentSearchHistory
+                  items={recentSearches}
+                  onSelect={(text) => {
+                    triggerHaptic('light');
+                    setQuery(text);
+                  }}
+                  onClear={clearSearchHistory}
+                />
               ) : (
                 <EmptySearchState
                   recentSearches={recentSearches}
                   trendingSearches={trendingSearches}
                   onSelect={(text) => { triggerHaptic('light'); setQuery(text); }}
+                  onClearHistory={clearSearchHistory}
                 />
               )}
             </motion.div>
@@ -610,11 +730,54 @@ export default function SearchPage() {
   return pageContent;
 }
 
+function RecentSearchHistory({
+  items,
+  onSelect,
+  onClear,
+}: {
+  items: string[];
+  onSelect: (text: string) => void;
+  onClear: () => void;
+}) {
+  if (items.length === 0) return <div className="min-h-[42vh]" aria-hidden="true" />;
+
+  return (
+    <section className="pt-2">
+      <div className="mb-3 flex items-center gap-2">
+        <Clock className="h-4 w-4 text-muted-foreground" />
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Oxirgi qidiruvlar
+        </h3>
+        <button
+          type="button"
+          onClick={onClear}
+          className="ml-auto text-[11px] font-medium text-muted-foreground hover:text-foreground"
+        >
+          Tozalash
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {items.map((item) => (
+          <button
+            key={item}
+            type="button"
+            onClick={() => onSelect(item)}
+            className="rounded-xl border border-border/30 bg-muted/30 px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/60"
+          >
+            {item}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 // ── Empty Search State ─────────────────────────────────
-function EmptySearchState({ recentSearches, trendingSearches, onSelect }: {
+function EmptySearchState({ recentSearches, trendingSearches, onSelect, onClearHistory }: {
   recentSearches: string[];
   trendingSearches: { text: string; icon: React.ElementType }[];
   onSelect: (text: string) => void;
+  onClearHistory: () => void;
 }) {
   return (
     <div className="space-y-6">
@@ -653,6 +816,15 @@ function EmptySearchState({ recentSearches, trendingSearches, onSelect }: {
             <Clock className="h-4 w-4 text-muted-foreground" />
           </div>
           <h3 className="text-sm font-semibold text-foreground">Oxirgi qidiruvlar</h3>
+          {recentSearches.length > 0 && (
+            <button
+              type="button"
+              onClick={onClearHistory}
+              className="ml-auto text-[11px] font-medium text-muted-foreground hover:text-foreground"
+            >
+              Tozalash
+            </button>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {recentSearches.map((term) => (
