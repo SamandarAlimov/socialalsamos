@@ -50,9 +50,10 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
         appType: app.appType,
         deepLink: app.deepLink,
         apiBase: getApiBase(),
+        frameBlocked: app.frameBlocked,
         cacheBuster: reloadKey,
       }),
-    [app.url, app.displayMode, app.appType, app.deepLink, reloadKey],
+    [app.url, app.displayMode, app.appType, app.deepLink, app.frameBlocked, reloadKey],
   );
 
   const step: OpenStep | undefined = plan.steps[stepIndex];
@@ -73,15 +74,16 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
     };
   }, [app.id]);
 
-  // Tashqi va native qadamlar iframe talab qilmaydi.
+  // Native deep-link'dan boshqa hech narsa avtomatik tashqariga chiqmaydi:
+  // mini app maqsadi — superapp ichida ochilish.
   useEffect(() => {
     if (!step) return;
-    if (step.kind === 'external' || step.kind === 'native') {
+    if (step.kind === 'native') {
       openExternal(step.src);
     }
   }, [openExternal, step]);
 
-  // Har bir iframe qadami uchun kutish vaqti; tugasa keyingi qadamga o'tamiz.
+  // Har bir iframe qadami uchun kutish vaqti; tugasa keyingi qadamga o‘tamiz.
   useEffect(() => {
     if (!step || step.timeoutMs <= 0 || frameLoaded) return;
     const timer = setTimeout(() => {
@@ -210,8 +212,9 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
           <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
             <AlertTriangle className="h-10 w-10 text-amber-500" />
             <p className="max-w-sm text-sm text-muted-foreground">
-              Bu ilova Alsamos ichida yuklanmadi. Ehtimol sayt o’zini boshqa sahifa ichida
-              ko’rsatishga ruxsat bermaydi.
+              {plan.inAppProxy
+                ? 'Bu ilova Alsamos ichida yuklanmadi. Sayt javob bermayapti yoki proksi orqali ochilishini cheklagan.'
+                : 'Bu ilova Alsamos ichida yuklanmadi. Ichki proksi hali sozlanmagan (VITE_MINI_APP_PROXY_ORIGIN).'}
             </p>
             <div className="flex gap-2">
               <Button variant="outline" onClick={handleReload}>
@@ -238,8 +241,9 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
               src={step.src}
               title={app.name}
               className="h-full w-full border-0"
-              // Diqqat: allow-same-origin ATAYLAB berilmaydi (sandbox escape xavfi).
-              sandbox={MINI_APP_IFRAME_SANDBOX}
+              // Sandbox qadamga bog‘liq: `allow-same-origin` faqat o‘z proksi
+              // domenimiz uchun beriladi (u alohida origin — sandbox escape yo‘q).
+              sandbox={step.sandbox ?? MINI_APP_IFRAME_SANDBOX}
               allow={buildIframeAllow(app.permissions)}
               referrerPolicy="no-referrer"
               onLoad={() => setFrameLoaded(true)}
@@ -257,8 +261,12 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
         {!plan.error && !failed && step && (step.kind === 'external' || step.kind === 'native') && (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
             <ExternalLink className="h-10 w-10 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Bu ilova tashqi oynada ochiladi.</p>
-            <Button onClick={() => openExternal(step.src)}>Yana ochish</Button>
+            <p className="max-w-sm text-sm text-muted-foreground">
+              {step.kind === 'native'
+                ? 'Bu ilova qurilmadagi ilovada ochiladi.'
+                : 'Bu saytni Alsamos ichida ko’rsatib bo’lmadi. Uni yangi oynada ochishingiz mumkin.'}
+            </p>
+            <Button onClick={() => openExternal(step.src)}>Ochish</Button>
           </div>
         )}
       </div>
