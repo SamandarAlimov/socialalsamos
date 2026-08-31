@@ -1,0 +1,63 @@
+name: Smoke Global Search
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "api/global-search.ts"
+      - "src/components/search/GlobalSearchResults.tsx"
+      - "src/pages/SearchPage.tsx"
+      - ".github/workflows/smoke-global-search.yml"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Wait for production and verify live web results
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          URL='https://www.alsamos.com/api/global-search?q=alsamos&category=all&page=1&pageSize=5&locale=uz'
+          TMP="$(mktemp)"
+
+          for attempt in $(seq 1 24); do
+            echo "Attempt $attempt: $URL"
+
+            if curl --fail --silent --show-error --max-time 25 "$URL" -o "$TMP"; then
+              cat "$TMP"
+              echo
+
+              if python - "$TMP" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as fh:
+    data = json.load(fh)
+
+engine = data.get("engine")
+results = data.get("results") or []
+error = data.get("error")
+
+print("engine:", engine)
+print("results:", len(results))
+print("error:", error)
+
+if engine == "yacy-freeworld" and len(results) > 0 and not error:
+    raise SystemExit(0)
+
+raise SystemExit(1)
+PY
+              then
+                echo "Alsamos Global Search is returning live YaCy results."
+                exit 0
+              fi
+            fi
+
+            sleep 15
+          done
+
+          echo "::error::Production Global Search did not return verified YaCy results within the retry window."
+          exit 1
