@@ -10,12 +10,17 @@ import {
   Send,
   Sticker as StickerIcon,
   Users,
+  type LucideIcon,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
-interface PostComposerToolbarProps {
-  className?: string;
+/**
+ * Create asboblari bitta manbada aniqlanadi, chunki ular ikki joyda
+ * ko'rsatiladi: media yo'q holatdagi gorizontal panel va media ustidagi
+ * doiraviy shisha rail (CreateToolRail).
+ */
+export interface ComposerToolsInput {
   /** Yana fayl qo'shish mumkinmi (limit to'lmaganmi). */
   canAddMore: boolean;
   hasAttachments: boolean;
@@ -29,10 +34,7 @@ interface PostComposerToolbarProps {
   hasSchedule: boolean;
   /** Jonli joylashuvli postni rejalashtirib bo'lmaydi. */
   isLiveLocation: boolean;
-  canSubmit: boolean;
-  canSaveDraft: boolean;
-  isBusy: boolean;
-  draftSaved: boolean;
+  canPreview: boolean;
   onPickFiles: () => void;
   onStickers: () => void;
   onPoll: () => void;
@@ -41,99 +43,116 @@ interface PostComposerToolbarProps {
   onCollaborators: () => void;
   onSchedule: () => void;
   onPreview: () => void;
+}
+
+export interface ComposerTool {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  action: () => void;
+  disabled: boolean;
+  active: boolean;
+}
+
+export function buildComposerTools(input: ComposerToolsInput): ComposerTool[] {
+  return [
+    {
+      id: 'file',
+      label: 'Fayl',
+      icon: Paperclip,
+      action: input.onPickFiles,
+      disabled: !input.canAddMore,
+      active: input.hasAttachments,
+    },
+    {
+      id: 'sticker',
+      label: 'Stiker',
+      icon: StickerIcon,
+      action: input.onStickers,
+      disabled: !input.canAddStickers,
+      active: input.stickerCount > 0,
+    },
+    {
+      id: 'poll',
+      label: 'So‘rovnoma',
+      icon: BarChart3,
+      action: input.onPoll,
+      disabled: false,
+      active: input.hasPoll,
+    },
+    {
+      id: 'location',
+      label: 'Joylashuv',
+      icon: MapPin,
+      action: input.onLocation,
+      disabled: false,
+      active: input.hasLocation,
+    },
+    {
+      id: 'music',
+      label: 'Musiqa',
+      icon: Music2,
+      action: input.onMusic,
+      disabled: false,
+      active: input.hasMusic,
+    },
+    {
+      id: 'collaborators',
+      label: 'Hammuallif',
+      icon: Users,
+      action: input.onCollaborators,
+      disabled: false,
+      active: input.collaboratorCount > 0,
+    },
+    {
+      id: 'schedule',
+      label: 'Rejalashtirish',
+      icon: CalendarClock,
+      action: input.onSchedule,
+      disabled: input.isLiveLocation,
+      active: input.hasSchedule,
+    },
+    {
+      id: 'preview',
+      label: 'Ko‘rish',
+      icon: Eye,
+      action: input.onPreview,
+      disabled: !input.canPreview,
+      active: false,
+    },
+  ];
+}
+
+interface PostComposerToolbarProps {
+  className?: string;
+  tools: ComposerToolsInput;
+  /** Sheet layoutda asboblar rail'da turadi, panelda faqat amallar qoladi. */
+  showTools?: boolean;
+  canSubmit: boolean;
+  canSaveDraft: boolean;
+  isBusy: boolean;
+  draftSaved: boolean;
+  hasSchedule: boolean;
   onSaveDraft: () => void;
   onSubmit: () => void;
 }
 
 /**
- * Create asboblar paneli: chapda vector ikonkalar bilan qo'shimcha qo'shish
- * tugmalari, o'ngda qoralama va joylash tugmasi.
+ * Create asboblar paneli: chapda vector ikonkalar, o'ngda qoralama va joylash.
  */
 export function PostComposerToolbar({
   className,
-  canAddMore,
-  hasAttachments,
-  canAddStickers,
-  stickerCount,
-  hasPoll,
-  hasLocation,
-  hasMusic,
-  collaboratorCount,
-  hasSchedule,
-  isLiveLocation,
+  tools,
+  showTools = true,
   canSubmit,
   canSaveDraft,
   isBusy,
   draftSaved,
-  onPickFiles,
-  onStickers,
-  onPoll,
-  onLocation,
-  onMusic,
-  onCollaborators,
-  onSchedule,
-  onPreview,
+  hasSchedule,
   onSaveDraft,
   onSubmit,
 }: PostComposerToolbarProps) {
-  const tools = [
-    {
-      label: 'Fayl',
-      icon: Paperclip,
-      action: onPickFiles,
-      disabled: !canAddMore,
-      active: hasAttachments,
-    },
-    {
-      label: 'Stiker',
-      icon: StickerIcon,
-      action: onStickers,
-      disabled: !canAddStickers,
-      active: stickerCount > 0,
-    },
-    {
-      label: 'So‘rovnoma',
-      icon: BarChart3,
-      action: onPoll,
-      disabled: false,
-      active: hasPoll,
-    },
-    {
-      label: 'Joylashuv',
-      icon: MapPin,
-      action: onLocation,
-      disabled: false,
-      active: hasLocation,
-    },
-    {
-      label: 'Musiqa',
-      icon: Music2,
-      action: onMusic,
-      disabled: false,
-      active: hasMusic,
-    },
-    {
-      label: 'Hammuallif',
-      icon: Users,
-      action: onCollaborators,
-      disabled: false,
-      active: collaboratorCount > 0,
-    },
-    {
-      label: 'Rejalashtirish',
-      icon: CalendarClock,
-      action: onSchedule,
-      disabled: isLiveLocation,
-      active: hasSchedule,
-    },
-    {
-      label: 'Ko‘rish',
-      icon: Eye,
-      action: onPreview,
-      disabled: !canSubmit,
-      active: false,
-    },
-  ];
+  const items = showTools ? buildComposerTools(tools) : [];
 
   return (
     <div
@@ -143,9 +162,9 @@ export function PostComposerToolbar({
       )}
     >
       <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
-        {tools.map(({ label, icon: Icon, action, disabled, active }) => (
+        {items.map(({ id, label, icon: Icon, action, disabled, active }) => (
           <button
-            key={label}
+            key={id}
             type="button"
             title={label}
             aria-label={label}

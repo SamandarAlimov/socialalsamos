@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import type { SnapSheetSnap } from '@/components/ui/snap-sheet';
 import { useToast } from '@/hooks/use-toast';
 import { usePosts, type PostVisibility } from '@/hooks/usePosts';
 import { usePostAttachments } from '@/hooks/usePostAttachments';
@@ -31,7 +32,12 @@ import {
 } from '@/lib/postDraft';
 import { PostMediaComposer } from '@/components/create/PostMediaComposer';
 import { PostComposerExtras } from '@/components/create/PostComposerExtras';
-import { PostComposerToolbar } from '@/components/create/PostComposerToolbar';
+import {
+  PostComposerToolbar,
+  type ComposerToolsInput,
+} from '@/components/create/PostComposerToolbar';
+import { CreateToolRail } from '@/components/create/CreateToolRail';
+import { CreateSheetLayout } from '@/components/create/CreateSheetLayout';
 import { PollComposer } from '@/components/create/PollComposer';
 import { LocationPicker } from '@/components/create/LocationPicker';
 import { MusicPicker } from '@/components/create/MusicPicker';
@@ -69,9 +75,9 @@ const VISIBILITIES: Array<{
  *  - stikerlar matnga emoji sifatida qo‘shilardi → endi media ustiga
  *    haqiqiy qatlam sifatida qo‘yiladi
  *
- * Komponent faqat holat, yuklash va oynalarni boshqaradi: qoralama saqlash
- * `@/lib/postDraft` da, qo‘shimchalar ro‘yxati va asboblar paneli esa alohida
- * komponentlarda.
+ * Layout ikki holatda ishlaydi:
+ *  - media yo‘q: oddiy bir ustunli karta;
+ *  - media bor: xarita dizayn tilidagi media-first sheet (CreateSheetLayout).
  */
 export function PostComposer() {
   const navigate = useNavigate();
@@ -94,6 +100,7 @@ export function PostComposer() {
   const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
   const [isPosting, setIsPosting] = useState(false);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const [sheetSnap, setSheetSnap] = useState<SnapSheetSnap>('half');
 
   const [showPoll, setShowPoll] = useState(false);
   const [showLocation, setShowLocation] = useState(false);
@@ -128,6 +135,9 @@ export function PostComposer() {
     markAttachmentsPublished,
     uploadAll,
   } = usePostAttachments({ visibility });
+
+  /** Media bor bo‘lsa media-first sheet layout ishlatiladi. */
+  const sheetMode = attachments.length > 0;
 
   const draftOwnerId = user?.id ?? profile?.id ?? null;
 
@@ -603,11 +613,127 @@ export function PostComposer() {
     videoTarget,
   ]);
 
+  const toolsInput: ComposerToolsInput = {
+    canAddMore,
+    hasAttachments: attachments.length > 0,
+    canAddStickers: stickerableAttachments.length > 0,
+    stickerCount: totalStickers,
+    hasPoll: Boolean(poll),
+    hasLocation: Boolean(location),
+    hasMusic: Boolean(music),
+    collaboratorCount: collaborators.length,
+    hasSchedule: Boolean(scheduledAt),
+    isLiveLocation: location?.mode === 'live',
+    canPreview: canSubmit,
+    onPickFiles: () => fileInputRef.current?.click(),
+    onStickers: () => openStickerEditor(),
+    onPoll: () => setShowPoll(true),
+    onLocation: () => setShowLocation(true),
+    onMusic: () => setShowMusic(true),
+    onCollaborators: () => setShowCollaborators(true),
+    onSchedule: () => setShowSchedule(true),
+    onPreview: () => setShowPreview(true),
+  };
+
+  /** Muallif qatori va matn muharriri ikki layoutda ham bir xil. */
+  const authorAndEditor = (
+    <div className="flex items-start gap-3 px-4 pb-2 pt-4 sm:px-5 sm:pt-5">
+      <Avatar className="h-11 w-11 shrink-0">
+        <AvatarImage src={profile?.avatar_url ?? ''} />
+        <AvatarFallback className="font-semibold">
+          {(profile?.display_name || profile?.username || 'U').charAt(0).toUpperCase()}
+        </AvatarFallback>
+      </Avatar>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <p className="max-w-[220px] truncate text-sm font-semibold sm:text-base">
+            {profile?.display_name || profile?.username || 'Foydalanuvchi'}
+          </p>
+
+          <Select
+            value={visibility}
+            onValueChange={(value) => setVisibility(value as PostVisibility)}
+          >
+            <SelectTrigger className="h-7 w-auto min-w-0 gap-1 rounded-full border-0 bg-muted/55 px-2.5 text-[11px] font-medium shadow-none focus:ring-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {VISIBILITIES.map(({ id, label, icon: Icon }) => (
+                <SelectItem key={id} value={id}>
+                  <span className="flex items-center gap-2">
+                    <Icon className="h-3.5 w-3.5" />
+                    {label}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {collaborators.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowCollaborators(true)}
+              className="text-[11px] font-medium text-primary hover:underline"
+            >
+              +{collaborators.length} hammuallif
+            </button>
+          )}
+        </div>
+
+        <RichTextComposer
+          key={richEditorVersion}
+          value={formattedContent}
+          onChange={({ plainText, formattedContent: nextDocument }) => {
+            setContent(plainText);
+            setFormattedContent(nextDocument);
+          }}
+          placeholder="Nima yangilik?"
+          compact={sheetMode}
+          className="mt-2 border-0 bg-transparent p-0 shadow-none"
+        />
+      </div>
+    </div>
+  );
+
+  const extras = (
+    <PostComposerExtras
+      poll={poll}
+      location={location}
+      music={music}
+      collaborators={collaborators}
+      scheduledAt={scheduledAt}
+      stickerCount={totalStickers}
+      onEditPoll={() => setShowPoll(true)}
+      onRemovePoll={() => setPoll(null)}
+      onEditLocation={() => setShowLocation(true)}
+      onRemoveLocation={() => setLocation(null)}
+      onEditMusic={() => setShowMusic(true)}
+      onRemoveMusic={() => handleMusicChange(null)}
+      onEditCollaborators={() => setShowCollaborators(true)}
+      onEditSchedule={() => setShowSchedule(true)}
+      onRemoveSchedule={() => setScheduledAt(null)}
+      onEditStickers={() => openStickerEditor()}
+    />
+  );
+
+  const mediaStage = (
+    <PostMediaComposer
+      attachments={attachments}
+      onRemove={removeAttachment}
+      onRetry={retryAttachment}
+      onReorder={reorderAttachments}
+      onEditImage={openImageEditor}
+      onEditVideo={openVideoEditor}
+      onSticker={(item) => openStickerEditor(item)}
+    />
+  );
+
   return (
     <div
       className={cn(
-        'relative mx-auto w-full max-w-3xl px-0 pb-8 sm:px-4 sm:pt-4',
-        attachments.length > 0 && 'lg:max-w-6xl',
+        'relative w-full',
+        !sheetMode && 'mx-auto max-w-3xl px-0 pb-8 sm:px-4 sm:pt-4',
       )}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
@@ -615,7 +741,7 @@ export function PostComposer() {
       onDrop={handleDrop}
     >
       {isDraggingFiles && (
-        <div className="pointer-events-none fixed inset-0 z-[80] flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm">
+        <div className="pointer-events-none fixed inset-0 z-[1300] flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm">
           <div className="flex w-full max-w-md flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-primary bg-background px-8 py-12 text-center shadow-2xl">
             <UploadCloud className="h-8 w-8 text-primary" />
             <p className="font-semibold">Fayllarni shu yerga tashlang</p>
@@ -623,151 +749,55 @@ export function PostComposer() {
         </div>
       )}
 
-      <section
-        className={cn(
-          'overflow-hidden border-y border-border/60 bg-background sm:rounded-2xl sm:border',
-          attachments.length > 0 &&
-            'lg:grid lg:h-[calc(100dvh-7.5rem)] lg:grid-cols-[minmax(320px,0.82fr)_minmax(440px,1.18fr)] lg:grid-rows-[minmax(0,1fr)_auto_auto]',
-        )}
-      >
-        <div
-          className={cn(
-            'flex items-start gap-3 px-4 pb-2 pt-4 sm:px-5 sm:pt-5',
-            attachments.length > 0 &&
-              'lg:col-start-1 lg:row-start-1 lg:min-h-0 lg:overflow-y-auto',
-          )}
+      {sheetMode ? (
+        <CreateSheetLayout
+          media={mediaStage}
+          snap={sheetSnap}
+          onSnapChange={setSheetSnap}
+          rail={<CreateToolRail tools={toolsInput} />}
+          footer={
+            <PostComposerToolbar
+              tools={toolsInput}
+              showTools={false}
+              canSubmit={canSubmit}
+              canSaveDraft={canSaveDraft}
+              isBusy={isPosting || isUploading}
+              draftSaved={Boolean(draftSavedAt)}
+              hasSchedule={Boolean(scheduledAt)}
+              onSaveDraft={saveDraftNow}
+              onSubmit={() => void handleSubmit()}
+            />
+          }
         >
-          <Avatar className="h-11 w-11 shrink-0">
-            <AvatarImage src={profile?.avatar_url ?? ''} />
-            <AvatarFallback className="font-semibold">
-              {(profile?.display_name || profile?.username || 'U').charAt(0).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
+          {authorAndEditor}
+          {extras}
+        </CreateSheetLayout>
+      ) : (
+        <section className="overflow-hidden border-y border-border/60 bg-background sm:rounded-2xl sm:border">
+          {authorAndEditor}
+          {extras}
 
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-              <p className="max-w-[220px] truncate text-sm font-semibold sm:text-base">
-                {profile?.display_name || profile?.username || 'Foydalanuvchi'}
-              </p>
+          <PostComposerToolbar
+            tools={toolsInput}
+            canSubmit={canSubmit}
+            canSaveDraft={canSaveDraft}
+            isBusy={isPosting || isUploading}
+            draftSaved={Boolean(draftSavedAt)}
+            hasSchedule={Boolean(scheduledAt)}
+            onSaveDraft={saveDraftNow}
+            onSubmit={() => void handleSubmit()}
+          />
+        </section>
+      )}
 
-              <Select
-                value={visibility}
-                onValueChange={(value) => setVisibility(value as PostVisibility)}
-              >
-                <SelectTrigger className="h-7 w-auto min-w-0 gap-1 rounded-full border-0 bg-muted/55 px-2.5 text-[11px] font-medium shadow-none focus:ring-0">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {VISIBILITIES.map(({ id, label, icon: Icon }) => (
-                    <SelectItem key={id} value={id}>
-                      <span className="flex items-center gap-2">
-                        <Icon className="h-3.5 w-3.5" />
-                        {label}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {collaborators.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowCollaborators(true)}
-                  className="text-[11px] font-medium text-primary hover:underline"
-                >
-                  +{collaborators.length} hammuallif
-                </button>
-              )}
-            </div>
-
-            <RichTextComposer
-              key={richEditorVersion}
-              value={formattedContent}
-              onChange={({ plainText, formattedContent: nextDocument }) => {
-                setContent(plainText);
-                setFormattedContent(nextDocument);
-              }}
-              placeholder="Nima yangilik?"
-              compact={attachments.length > 0}
-              className="mt-2 border-0 bg-transparent p-0 shadow-none"
-            />
-          </div>
-        </div>
-
-        {attachments.length > 0 && (
-          <div className="border-t border-border/50 lg:col-start-2 lg:row-start-1 lg:row-span-3 lg:min-h-0 lg:border-l lg:border-t-0">
-            <PostMediaComposer
-              attachments={attachments}
-              onRemove={removeAttachment}
-              onRetry={retryAttachment}
-              onReorder={reorderAttachments}
-              onEditImage={openImageEditor}
-              onEditVideo={openVideoEditor}
-              onSticker={(item) => openStickerEditor(item)}
-            />
-          </div>
-        )}
-
-        <PostComposerExtras
-          poll={poll}
-          location={location}
-          music={music}
-          collaborators={collaborators}
-          scheduledAt={scheduledAt}
-          stickerCount={totalStickers}
-          className={cn(
-            attachments.length > 0 &&
-              'lg:col-start-1 lg:row-start-2 lg:max-h-44 lg:overflow-y-auto',
-          )}
-          onEditPoll={() => setShowPoll(true)}
-          onRemovePoll={() => setPoll(null)}
-          onEditLocation={() => setShowLocation(true)}
-          onRemoveLocation={() => setLocation(null)}
-          onEditMusic={() => setShowMusic(true)}
-          onRemoveMusic={() => handleMusicChange(null)}
-          onEditCollaborators={() => setShowCollaborators(true)}
-          onEditSchedule={() => setShowSchedule(true)}
-          onRemoveSchedule={() => setScheduledAt(null)}
-          onEditStickers={() => openStickerEditor()}
-        />
-
-        <PostComposerToolbar
-          className={cn(attachments.length > 0 && 'lg:col-start-1 lg:row-start-3')}
-          canAddMore={canAddMore}
-          hasAttachments={attachments.length > 0}
-          canAddStickers={stickerableAttachments.length > 0}
-          stickerCount={totalStickers}
-          hasPoll={Boolean(poll)}
-          hasLocation={Boolean(location)}
-          hasMusic={Boolean(music)}
-          collaboratorCount={collaborators.length}
-          hasSchedule={Boolean(scheduledAt)}
-          isLiveLocation={location?.mode === 'live'}
-          canSubmit={canSubmit}
-          canSaveDraft={canSaveDraft}
-          isBusy={isPosting || isUploading}
-          draftSaved={Boolean(draftSavedAt)}
-          onPickFiles={() => fileInputRef.current?.click()}
-          onStickers={() => openStickerEditor()}
-          onPoll={() => setShowPoll(true)}
-          onLocation={() => setShowLocation(true)}
-          onMusic={() => setShowMusic(true)}
-          onCollaborators={() => setShowCollaborators(true)}
-          onSchedule={() => setShowSchedule(true)}
-          onPreview={() => setShowPreview(true)}
-          onSaveDraft={saveDraftNow}
-          onSubmit={() => void handleSubmit()}
-        />
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept={ACCEPT_ANY_FILE}
-          onChange={handleFilesSelected}
-          className="hidden"
-        />
-      </section>
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept={ACCEPT_ANY_FILE}
+        onChange={handleFilesSelected}
+        className="hidden"
+      />
 
       {/* Oynalar */}
       <PostDraftPreview
