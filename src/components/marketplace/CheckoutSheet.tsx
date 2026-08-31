@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   MapPin, CreditCard, Truck, ShieldCheck, ChevronRight, Loader2, CheckCircle,
   Package, ArrowLeft, Wallet, Banknote, Plus, AlertCircle, AlertTriangle, ShoppingBag,
+  LocateFixed, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CategoryIcon } from '@/components/marketplace/CategoryIcon';
@@ -21,6 +22,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { formatPrice, getShippingCost, checkoutErrorMessage } from '@/lib/marketplace';
 import { getCartItemStock, getCartItemUnitPrice, getVariantOptionsLabel } from '@/hooks/useMarketplace';
+import { useMarketplaceDeliveryLocation } from '@/hooks/useMarketplaceDeliveryLocation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { marketplaceUz } from '@/i18n/marketplace';
@@ -34,8 +36,21 @@ interface CheckoutSheetProps {
 
 type Step = 'address' | 'payment' | 'review' | 'pending' | 'success' | 'failed';
 
+type PaymentInitOutcome = Awaited<ReturnType<typeof initPayment>>;
+
 const ENABLED_PAYMENT_PROVIDERS = getEnabledPaymentProviders();
 const PENDING_PAYMENT_PROVIDERS = getPendingPaymentProviders();
+
+/**
+ * Cash/card on delivery is the only rail that settles without a merchant
+ * contract. The wallet used to be preselected even though there is no top-up
+ * flow yet, so a first-time buyer always hit an insufficient-balance wall on
+ * the very first screen of the funnel.
+ */
+const DEFAULT_PAYMENT_PROVIDER: PaymentProviderId =
+  ENABLED_PAYMENT_PROVIDERS.find(provider => provider.id === 'card_on_delivery')?.id
+  ?? ENABLED_PAYMENT_PROVIDERS[0]?.id
+  ?? 'cash';
 
 const EMPTY_ADDRESS = {
   full_name: '',
@@ -56,10 +71,12 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
   const { user } = useAuth();
   const navigate = useNavigate();
   const { placeOrder, isProcessing, cartItems, cartTotal } = useCheckout();
+  const { location, isLocating, error: locationError, locate } = useMarketplaceDeliveryLocation();
   const [step, setStep] = useState<Step>('address');
   const [address, setAddress] = useState(EMPTY_ADDRESS);
+  const [useCoordinates, setUseCoordinates] = useState(true);
   const [notes, setNotes] = useState('');
-  const [paymentProviderId, setPaymentProviderId] = useState<PaymentProviderId>('wallet');
+  const [paymentProviderId, setPaymentProviderId] = useState<PaymentProviderId>(DEFAULT_PAYMENT_PROVIDER);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [walletLoading, setWalletLoading] = useState(false);
   const [lastResult, setLastResult] = useState<{
@@ -73,6 +90,9 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
   const currency = cartItems[0]?.product?.currency || 'USD';
   const selectedProvider = ENABLED_PAYMENT_PROVIDERS.find(provider => provider.id === paymentProviderId)
     ?? ENABLED_PAYMENT_PROVIDERS[0];
+
+  /** Coordinates are attached only when the buyer resolved a position and kept it. */
+  const attachedLocation = useCoordinates ? location : null;
 
   /**
    * Shipping used to be summed once per cart line, ignoring quantity and even
@@ -138,8 +158,41 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
     if (open) {
       setStep('address');
       setLastResult(null);
+      setPaymentProviderId(DEFAULT_PAYMENT_PROVIDER);
+      setUseCoordinates(true);
     }
   }, [open]);
+
+  /**
+   * Releases orders that were created but could not be paid for. Without this
+   * the buyer saw the failure screen while the orders stayed `pending` and the
+   * stock stayed reserved, so the seller could not sell the unit to anyone.
+   * The RPC also restores stock and refunds an already paid wallet order.
+   */
+  const cancelOrphanOrders = async (orderIds: string[], reason: string) => {
+    await Promise.all(orderIds.map(async orderId => {
+      try {
+        await supabase.rpc('marketplace_update_order_status', {
+          _order_id: orderId,
+          _status: 'cancelled',
+          _reason: reason,
+        });
+      } catch {
+        // Best effort: the buyer can still cancel manually from the orders tab.
+      }
+    }));
+  };
+
+  const failWithOrphanCleanup = async (
+    result: { order_ids?: string[] } | null,
+    error: string,
+    reason: string,
+  ) => {
+    const orderIds = result?.order_ids ?? [];
+    if (orderIds.length > 0) await cancelOrphanOrders(orderIds, reason);
+    setLastResult({ ...(result ?? {}), success: false, error });
+    setStep('failed');
+  };
 
   const handlePlaceOrder = async () => {
     if (isProcessing || !selectedProvider) return;
@@ -153,7 +206,19 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
       return;
     }
 
-    const result = await placeOrder(address, selectedProvider.method, notes || undefined);
+    /**
+     * Extra keys are preserved by process_marketplace_order, which validates
+     * only full_name/phone/street/city. Sending the resolved point lets the
+     * courier navigate to the door instead of guessing from a street name.
+     */
+    const shippingPayload: Record<string, unknown> = { ...address };
+    if (attachedLocation) {
+      shippingPayload.latitude = attachedLocation.latitude;
+      shippingPayload.longitude = attachedLocation.longitude;
+      if (attachedLocation.label) shippingPayload.geo_label = attachedLocation.label;
+    }
+
+    const result = await placeOrder(shippingPayload, selectedProvider.method, notes || undefined);
     setLastResult(result);
 
     if (!result?.success) {
@@ -173,20 +238,21 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
       .in('id', result.order_ids);
 
     if (orderError || !orderRows || orderRows.length !== result.order_ids.length) {
-      setLastResult({
-        ...result,
-        success: false,
-        error: "Buyurtma yaratildi, lekin to'lovni boshlash uchun ma'lumot olinmadi",
-      });
-      setStep('failed');
+      await failWithOrphanCleanup(
+        result,
+        "Buyurtma yaratildi, lekin to'lovni boshlash uchun ma'lumot olinmadi",
+        'payment_init_data_unavailable',
+      );
       return;
     }
 
-    let hasPending = false;
     const returnUrl = typeof window !== 'undefined'
       ? `${window.location.origin}/marketplace?tab=orders`
       : '/marketplace?tab=orders';
 
+    // Initialise every order first, then decide. The old loop navigated away on
+    // the first redirect and silently abandoned the remaining sellers' orders.
+    const outcomes: PaymentInitOutcome[] = [];
     for (const order of orderRows) {
       const paymentResult = await initPayment(paymentProviderId, {
         orderId: order.id,
@@ -195,37 +261,46 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
         currency: order.currency || currency,
         returnUrl,
       });
-
-      if (paymentResult.status === 'failed') {
-        setLastResult({
-          ...result,
-          success: false,
-          error: paymentResult.error || "To'lovni boshlashda xatolik yuz berdi",
-        });
-        setStep('failed');
-        return;
-      }
-
-      if (paymentResult.status === 'redirect') {
-        if (!paymentResult.redirectUrl) {
-          setLastResult({
-            ...result,
-            success: false,
-            error: "To'lov sahifasi manzili olinmadi",
-          });
-          setStep('failed');
-          return;
-        }
-        window.location.assign(paymentResult.redirectUrl);
-        return;
-      }
-
-      if (paymentResult.status === 'pending') {
-        hasPending = true;
-      }
+      outcomes.push(paymentResult);
+      if (paymentResult.status === 'failed') break;
     }
 
-    setStep(hasPending ? 'pending' : 'success');
+    const failed = outcomes.find(outcome => outcome.status === 'failed');
+    if (failed) {
+      await failWithOrphanCleanup(
+        result,
+        failed.error || "To'lovni boshlashda xatolik yuz berdi",
+        'payment_init_failed',
+      );
+      return;
+    }
+
+    const redirects = outcomes.filter(outcome => outcome.status === 'redirect');
+    if (redirects.length > 0) {
+      // A browser can only follow one payment page, so a multi-seller cart
+      // cannot be settled by a redirect provider in a single pass.
+      if (redirects.length > 1 || orderRows.length > 1) {
+        await failWithOrphanCleanup(
+          result,
+          "Bu to'lov usuli bir vaqtda bir nechta sotuvchiga to'lay olmaydi. Savatni sotuvchi bo'yicha alohida yakunlang.",
+          'multi_seller_redirect_unsupported',
+        );
+        return;
+      }
+      const redirectUrl = redirects[0].redirectUrl;
+      if (!redirectUrl) {
+        await failWithOrphanCleanup(
+          result,
+          "To'lov sahifasi manzili olinmadi",
+          'payment_redirect_url_missing',
+        );
+        return;
+      }
+      window.location.assign(redirectUrl);
+      return;
+    }
+
+    setStep(outcomes.some(outcome => outcome.status === 'pending') ? 'pending' : 'success');
   };
 
   const resetAndClose = () => {
@@ -351,6 +426,63 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                         <Input value={address.region} onChange={e => setAddress(p => ({ ...p, region: e.target.value }))} placeholder="Toshkent sh." className="rounded-xl h-11" />
                       </Field>
                     </div>
+
+                    {/* Exact delivery point. The courier gets coordinates, not just a street. */}
+                    <div className="space-y-2 rounded-xl border border-border/50 bg-muted/20 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">Aniq joylashuv</p>
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">
+                            Kuryer eshikkacha aniq yetib kelishi uchun
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant={attachedLocation ? 'outline' : 'secondary'}
+                          size="sm"
+                          className="h-9 shrink-0 rounded-xl"
+                          disabled={isLocating}
+                          onClick={() => { setUseCoordinates(true); void locate(); }}
+                        >
+                          {isLocating ? (
+                            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <LocateFixed className="mr-1.5 h-3.5 w-3.5" />
+                          )}
+                          {attachedLocation ? 'Yangilash' : 'Aniqlash'}
+                        </Button>
+                      </div>
+
+                      {attachedLocation && (
+                        <div className="flex items-start gap-2 rounded-lg bg-background/60 p-2.5">
+                          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                          <div className="min-w-0 flex-1">
+                            <p className="line-clamp-2 text-xs font-medium">
+                              {attachedLocation.label || 'Joylashuv aniqlandi'}
+                            </p>
+                            <p className="mt-0.5 text-[11px] tabular-nums text-muted-foreground">
+                              {attachedLocation.latitude.toFixed(5)}, {attachedLocation.longitude.toFixed(5)}
+                              {attachedLocation.accuracy
+                                ? ` • ±${Math.round(attachedLocation.accuracy)} m`
+                                : ''}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setUseCoordinates(false)}
+                            className="shrink-0 rounded-lg p-1 text-muted-foreground hover:bg-muted"
+                            aria-label="Joylashuvni olib tashlash"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
+
+                      {locationError && !attachedLocation && (
+                        <p className="text-[11px] text-destructive">{locationError}</p>
+                      )}
+                    </div>
+
                     <Field label={marketplaceUz.checkout.note}>
                       <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Qo'shimcha izoh..." className="rounded-xl resize-none" rows={2} />
                     </Field>
@@ -469,6 +601,15 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                     <p className="text-sm text-muted-foreground">
                       {address.street}, {address.city} {address.region}
                     </p>
+                    {attachedLocation && (
+                      <p className="flex items-center gap-1 text-[11px] text-primary">
+                        <LocateFixed className="h-3 w-3 shrink-0" />
+                        <span className="line-clamp-1">
+                          {attachedLocation.label
+                            || `${attachedLocation.latitude.toFixed(5)}, ${attachedLocation.longitude.toFixed(5)}`}
+                        </span>
+                      </p>
+                    )}
                   </div>
 
                   <div className="p-3 rounded-xl bg-muted/30 border border-border/20 flex items-center justify-between">
