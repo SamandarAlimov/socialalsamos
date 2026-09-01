@@ -577,7 +577,9 @@ export default function AIPage() {
   }, [user, messages.length, toast]);
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-background md:h-[calc(100vh-2rem)]">
+    // Balandlik layout konteyneriga to'liq teng: qattiq vh hisob-kitob yo'q,
+    // shuning uchun sahifa tagida oq bo'shliq qolmaydi.
+    <div className="flex h-full min-h-0 overflow-hidden bg-background">
       {/* Sidebar */}
       <AnimatePresence>
         {sidebarOpen && (
@@ -597,10 +599,10 @@ export default function AIPage() {
               exit={{ x: -320, opacity: 0 }}
               transition={{ type: 'spring', damping: 26, stiffness: 300 }}
               className={cn(
-                'z-50 flex flex-col border-r border-border/50 bg-card/80 backdrop-blur-xl',
+                'z-50 flex min-h-0 flex-col border-r border-border/50 bg-card/80 backdrop-blur-xl',
                 isMobile
                   ? 'fixed bottom-0 left-0 top-0 w-[300px]'
-                  : 'relative w-[280px] lg:w-[300px]',
+                  : 'relative h-full w-[280px] lg:w-[300px]',
               )}
             >
               <AISidebar
@@ -626,7 +628,7 @@ export default function AIPage() {
       </AnimatePresence>
 
       {/* Main */}
-      <div className="relative flex min-w-0 flex-1 flex-col">
+      <div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border/30 bg-background/80 px-3 backdrop-blur-xl sm:h-14 sm:px-4">
           {!sidebarOpen && (
             <Button
@@ -659,9 +661,9 @@ export default function AIPage() {
           )}
         </header>
 
-        <ScrollArea ref={scrollAreaRef} className="flex-1">
+        <ScrollArea ref={scrollAreaRef} className="min-h-0 flex-1">
           {messages.length === 0 ? (
-            <div className="flex min-h-[calc(100vh-16rem)] flex-col items-center justify-center px-4 py-8">
+            <div className="flex h-full min-h-[26rem] flex-col items-center justify-center px-4 py-8">
               <motion.div
                 initial={{ scale: 0.85, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -744,25 +746,27 @@ export default function AIPage() {
           )}
         </ScrollArea>
 
-        <AIComposer
-          value={input}
-          onChange={setInput}
-          onSend={() => send()}
-          onStop={stop}
-          busy={busy}
-          uploading={uploading}
-          attachments={attachments}
-          onPickFiles={uploadFiles}
-          onDropFiles={uploadFiles}
-          onRemoveAttachment={(url) => setAttachments((prev) => prev.filter((a) => a.url !== url))}
-          model={model}
-          onModelChange={setModel}
-          activeModel={activeModel}
-          toolGroups={toolGroups}
-          onToolGroupsChange={setToolGroups}
-          onOpenConnectors={() => setConnectorsOpen(true)}
-          onOpenGithub={() => setGithubOpen(true)}
-        />
+        <div className="shrink-0">
+          <AIComposer
+            value={input}
+            onChange={setInput}
+            onSend={() => send()}
+            onStop={stop}
+            busy={busy}
+            uploading={uploading}
+            attachments={attachments}
+            onPickFiles={uploadFiles}
+            onDropFiles={uploadFiles}
+            onRemoveAttachment={(url) => setAttachments((prev) => prev.filter((a) => a.url !== url))}
+            model={model}
+            onModelChange={setModel}
+            activeModel={activeModel}
+            toolGroups={toolGroups}
+            onToolGroupsChange={setToolGroups}
+            onOpenConnectors={() => setConnectorsOpen(true)}
+            onOpenGithub={() => setGithubOpen(true)}
+          />
+        </div>
       </div>
 
       {/* Artifacts */}
@@ -773,7 +777,10 @@ export default function AIPage() {
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: isMobile ? '100%' : 40, opacity: isMobile ? 1 : 0 }}
             transition={{ type: 'spring', damping: 28, stiffness: 320 }}
-            className={cn('z-50', isMobile ? 'fixed inset-0 bg-background' : 'relative shrink-0')}
+            className={cn(
+              'z-50',
+              isMobile ? 'fixed inset-0 bg-background' : 'relative h-full shrink-0',
+            )}
           >
             <AIArtifactPanel
               artifacts={artifacts}
