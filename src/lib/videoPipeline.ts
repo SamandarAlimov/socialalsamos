@@ -453,7 +453,7 @@ export async function renderVideo(
     const baseName = request.file.name.replace(/\.[^.]+$/, '') || 'video';
 
     return {
-      file: new File([bytes], baseName + '-edited.mp4', { type: 'video/mp4' }),
+      file: new File([bytes as BlobPart], baseName + '-edited.mp4', { type: 'video/mp4' }),
       args,
       durationSeconds: trim ? trim.endSeconds - Math.max(0, trim.startSeconds) : null,
     };

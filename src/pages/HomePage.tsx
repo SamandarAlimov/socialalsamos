@@ -107,7 +107,7 @@ export default function HomePage() {
           .single();
 
         if (data) {
-          setSelectedPostForModal(data as Post);
+          setSelectedPostForModal(data as unknown as Post);
         }
       }
       fetchPost();

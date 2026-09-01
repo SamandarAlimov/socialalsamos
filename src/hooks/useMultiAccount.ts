@@ -115,7 +115,8 @@ async function probeOwnIdentity(userId: string): Promise<{
     return ownIdentityProbe.promise;
   }
 
-  const promise = db
+  const promise = Promise.resolve(
+    db
     .from('identity_accounts')
     .select('identity_id')
     .eq('user_id', userId)
@@ -132,9 +133,9 @@ async function probeOwnIdentity(userId: string): Promise<{
         error: unknown | null;
       };
     })
-    .finally(() => {
-      if (ownIdentityProbe?.promise === promise) ownIdentityProbe = null;
-    });
+  ).finally(() => {
+    if (ownIdentityProbe?.promise === promise) ownIdentityProbe = null;
+  });
 
   ownIdentityProbe = { userId, promise };
   return promise;
@@ -198,7 +199,7 @@ export function useMultiAccount(enabled = true) {
         : { data: [] as Array<Record<string, unknown>> };
 
       const profileById = new Map(
-        (profiles ?? []).map((p) => [p.id as string, p as Record<string, unknown>]),
+        (profiles ?? []).map((p) => [p.id as string, p as Record<string, unknown>] as const),
       );
       const localSlots = occupiedSlots();
 

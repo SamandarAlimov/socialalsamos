@@ -655,7 +655,8 @@ export function useSellerResponseStats(sellerUserId?: string | null) {
           last_seen: row.last_seen ?? null,
         } : null);
       })
-      .finally(() => {
+      .then(undefined, () => undefined)
+      .then(() => {
         if (!cancelled) setIsLoading(false);
       });
 

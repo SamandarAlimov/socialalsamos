@@ -754,6 +754,7 @@ export default function SearchPage() {
           profile={selectedPost.profile as any}
           open={!!selectedPost}
           onOpenChange={(open: boolean) => !open && setSelectedPost(null)}
+          onLike={() => {}}
         />
       )}
     </div>

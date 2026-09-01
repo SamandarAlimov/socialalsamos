@@ -41,6 +41,8 @@ export interface SavePlaceInput {
   notes?: string | null;
   collection?: string;
   isFavorite?: boolean;
+  externalId?: string | null;
+  externalSource?: string | null;
 }
 
 const COLUMNS =

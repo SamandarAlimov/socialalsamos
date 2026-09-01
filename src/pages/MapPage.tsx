@@ -579,7 +579,7 @@ export default function MapPage() {
     240,
   );
   const categoryResults = usePlaceCategory(
-    isBusStopFilter ? null : category,
+    isBusStopFilter ? null : (category as never),
     mapQueryCenter,
   );
   const nearbyStops = useNearbyStops(

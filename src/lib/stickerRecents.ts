@@ -116,7 +116,7 @@ export async function fetchRecentStickers(
             stickerId: (row.sticker_id as string | null) ?? null,
             useCount: Number(row.use_count ?? 1),
             lastUsedAt: String(row.used_at ?? new Date().toISOString()),
-          } satisfies RecentSticker;
+          } as RecentSticker;
         })
         .filter((item): item is RecentSticker => Boolean(item))
         .filter((item) => !kind || item.kind === kind)
