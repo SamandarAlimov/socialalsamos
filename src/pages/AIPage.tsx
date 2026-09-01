@@ -29,6 +29,13 @@ import type { AIConversation, AIMessage, AISource, AIToolEvent } from '@/compone
 import { extractArtifacts } from '@/lib/aiArtifacts';
 import { streamAgent } from '@/lib/ai/agentClient';
 import { buildRepoContext, detectRepoRefs, githubReady, githubRepoUrl } from '@/lib/ai/githubContext';
+import {
+  canRunGithubActions,
+  detectGithubAction,
+  githubActionLabel,
+  githubActionsBlock,
+  runGithubAction,
+} from '@/lib/ai/githubActions';
 import { buildBrainContext } from '@/lib/ai/brain';
 import { captureMemories, syncMemories } from '@/lib/ai/memory';
 import { toolLabel, type ModelId, type ToolGroupId } from '@/lib/ai/capabilities';
@@ -118,7 +125,7 @@ export default function AIPage() {
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const { uploadFile, uploading, getFileType } = useFileUpload();
+  const { uploadFileOrThrow, uploading, getFileType } = useFileUpload();
 
   const busy = isStreaming;
 
@@ -315,14 +322,22 @@ export default function AIPage() {
         sonnerToast.error(`${file.name}: 20MB dan katta`);
         continue;
       }
-      const res = await uploadFile(file);
-      if (res) {
+      try {
+        const res = await uploadFileOrThrow(file);
         setAttachments((prev) => [
           ...prev,
-          { url: res.url, name: res.name, type: getFileType(res.type) },
+          {
+            url: res.url,
+            name: res.name,
+            type: getFileType(res.type, res.name),
+            size: res.size,
+          },
         ]);
-      } else {
-        sonnerToast.error(`${file.name} yuklanmadi`);
+      } catch (uploadError: any) {
+        // Sababni yashirmaymiz — "yuklanmadi" degan quruq matn foydasiz.
+        sonnerToast.error(`${file.name} yuklanmadi`, {
+          description: uploadError?.message || 'Noma\u2019lum xatolik',
+        });
       }
     }
   };
@@ -445,15 +460,93 @@ export default function AIPage() {
         }
       }
 
+      /* ---- GitHub AMALLARI ----
+       * "repo yarat", "issue och" kabi so'rovlar endi REAL bajariladi.
+       * Ilgari AI faqat gapirardi, chunki unda yozish yo'li yo'q edi.
+       */
+      const action = lastUser
+        ? detectGithubAction(
+            lastUser.content,
+            repoRefs[0] ? { owner: repoRefs[0].owner, repo: repoRefs[0].repo } : null,
+          )
+        : null;
+
+      if (action && history.length > 0) {
+        const last = history.length - 1;
+
+        if (!canRunGithubActions()) {
+          notice =
+            'GitHub ulanmagan \u2014 amalni bajara olmadim. Yon paneldagi GitHub bo\u2018limidan token bilan ulang.';
+          history[last] = {
+            ...history[last],
+            content: `${history[last].content}\n\n[GITHUB AMALI BAJARILMADI]\nSabab: GitHub ulanmagan. Foydalanuvchiga yon paneldagi GitHub bo\u2018limidan ulanishni ayt.`,
+          };
+          flush();
+        } else {
+          const toolId = crypto.randomUUID();
+          const label = githubActionLabel(action);
+          tools.push({
+            id: toolId,
+            name: 'github_action',
+            label,
+            status: 'running',
+            args: action as any,
+            startedAt: Date.now(),
+          });
+          setStatusLabel(`${label}\u2026`);
+          flush();
+
+          try {
+            const result = await runGithubAction(action);
+            const entry = tools.find((t) => t.id === toolId);
+            if (entry) {
+              entry.status = 'done';
+              entry.summary = result.summary;
+              entry.finishedAt = Date.now();
+            }
+            if (result.url && !sources.some((s) => s.url === result.url)) {
+              sources.push({ title: result.summary.slice(0, 60), url: result.url });
+            }
+            history[last] = {
+              ...history[last],
+              content: `${history[last].content}\n\n[GITHUB AMALI BAJARILDI]\n${
+                result.summary
+              }${
+                result.url ? `\nHavola: ${result.url}` : ''
+              }\nFoydalanuvchiga natijani havolasi bilan qisqa tasdiqla va keyingi qadamni taklif qil.`,
+            };
+          } catch (actionError: any) {
+            const entry = tools.find((t) => t.id === toolId);
+            if (entry) {
+              entry.status = 'error';
+              entry.summary = actionError?.message || 'Amal bajarilmadi.';
+              entry.finishedAt = Date.now();
+            }
+            history[last] = {
+              ...history[last],
+              content: `${history[last].content}\n\n[GITHUB AMALI BAJARILMADI]\nSabab: ${
+                actionError?.message || "noma'lum xatolik"
+              }\nFoydalanuvchiga sababni aniq ayt va yechimni bir jumlada taklif qil.`,
+            };
+          }
+
+          setStatusLabel('Javob tayyorlanmoqda\u2026');
+          flush();
+        }
+      }
+
       /* ---- "Miya": master prompt + uzoq muddatli xotira + skillar +
        * boshqa suhbatlar konteksti. Server buni system prompti ichiga qo'shadi,
        * shuning uchun AI ning imkoniyatlari deploy'siz kengayadi.
        */
-      const brainContext = buildBrainContext({
-        userText: lastUser?.content ?? '',
-        conversations,
-        currentConversationId,
-      });
+      const brainContext = [
+        buildBrainContext({
+          userText: lastUser?.content ?? '',
+          conversations,
+          currentConversationId,
+        }),
+        githubActionsBlock(),
+      ].join('\n\n');
 
       await streamAgent({
         messages: history,
