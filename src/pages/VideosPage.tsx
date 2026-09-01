@@ -424,40 +424,10 @@ function VideoCard({
           )}
         >
           <div className="flex items-end gap-3">
-            {/* Chap: muallif, tavsif, musiqa */}
-            <div className="relative min-w-0 flex-1" onPointerDown={stopBubble} onPointerUp={stopBubble}>
-              {/*
-                Matn ochilganda pastdagi elementlarni surmasligi uchun karta
-                yuqoriga — video ustiga chiqadi.
-              */}
-              {expanded && video.content && (
-                <div
-                  className="absolute bottom-full left-0 right-0 mb-2 rounded-xl bg-black/70 px-3 py-2.5 ring-1 ring-white/10 backdrop-blur-md"
-                  onClick={stopBubble}
-                  onTouchStart={stopBubble}
-                  onTouchMove={stopBubble}
-                  onTouchEnd={stopBubble}
-                >
-                  <div
-                    className="scrollbar-hide overflow-y-auto overscroll-contain whitespace-pre-wrap break-words pr-1 text-[13px] leading-relaxed text-white"
-                    style={{ maxHeight: '42vh', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
-                  >
-                    {video.content}
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setExpanded(false);
-                    }}
-                    className="mt-1.5 text-[12px] font-medium text-white/70 active:opacity-70"
-                  >
-                    {t('common.less', 'less')}
-                  </button>
-                </div>
-              )}
-
-              {/* Muallif */}
-              <div className="mb-2 flex items-center gap-2.5">
+            {/* Chap: muallif, tavsif, musiqa — Instagramdagi tartib */}
+            <div className="min-w-0 flex-1" onPointerDown={stopBubble} onPointerUp={stopBubble}>
+              {/* 1) Muallif */}
+              <div className="mb-1.5 flex items-center gap-2.5">
                 <StoryAvatar
                   userId={video.profile?.id || video.user_id}
                   username={video.profile?.username}
@@ -495,26 +465,58 @@ function VideoCard({
                 </Button>
               </div>
 
-              {/* Tavsif — bitta bosishda ochiladi */}
-              {video.content && !expanded && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setExpanded(true);
-                  }}
-                  className="mb-2 w-full text-left"
-                >
-                  <p className="line-clamp-2 whitespace-pre-wrap break-words text-[13px] leading-snug text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]">
-                    {video.content}
-                    {video.content.length > 80 && (
-                      <span className="ml-1 font-semibold text-white/80">… {t('common.more', 'more')}</span>
-                    )}
-                  </p>
-                </button>
+              {/*
+                2) Tavsif — aynan Instagramdagi kabi username OSTIDA va o'z
+                joyida ochiladi. Blok pastga bog'langani uchun matn ochilganda
+                yuqoriga o'sadi, tartib esa buzilmaydi:
+                username → matn → musiqa → timeline.
+              */}
+              {video.content && (
+                <div className="mb-2">
+                  {expanded ? (
+                    <div
+                      onClick={stopBubble}
+                      onTouchStart={stopBubble}
+                      onTouchMove={stopBubble}
+                      onTouchEnd={stopBubble}
+                    >
+                      <div
+                        className="scrollbar-hide overflow-y-auto overscroll-contain whitespace-pre-wrap break-words pr-1 text-[13px] leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)]"
+                        style={{ maxHeight: '34vh', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+                      >
+                        {video.content}
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpanded(false);
+                        }}
+                        className="mt-0.5 text-[12px] font-semibold text-white/70 active:opacity-70"
+                      >
+                        {t('common.less', 'less')}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpanded(true);
+                      }}
+                      className="w-full text-left"
+                    >
+                      <p className="line-clamp-2 whitespace-pre-wrap break-words text-[13px] leading-snug text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)]">
+                        {video.content}
+                        {video.content.length > 80 && (
+                          <span className="ml-1 font-semibold text-white/80">… {t('common.more', 'more')}</span>
+                        )}
+                      </p>
+                    </button>
+                  )}
+                </div>
               )}
 
-              {/* Musiqa */}
+              {/* 3) Musiqa */}
               <div className="flex items-center gap-2">
                 <Music2 className="h-3.5 w-3.5 text-white animate-spin" style={{ animationDuration: '3s' }} />
                 <span className="truncate text-[12px] text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]">
