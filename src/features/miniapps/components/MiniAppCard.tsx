@@ -29,7 +29,7 @@ function TypeIcon({ type }: { type: MiniApp['appType'] }) {
 }
 
 export function MiniAppCard({ app, categoryLabel, canManage, onOpen, onEdit }: MiniAppCardProps) {
-  const publisherName = app.publisher.name ?? app.author.displayName ?? app.author.username ?? 'Noma\u2019lum';
+  const publisherName = app.publisher.name ?? app.author.displayName ?? app.author.username ?? 'Noma’lum';
   const publisherHandle = app.publisher.handle ?? app.author.username;
   const isOfficial = app.publisher.verification === 'official';
   const isVerified = isOfficial || app.publisher.verification === 'domain_verified';
@@ -38,15 +38,10 @@ export function MiniAppCard({ app, categoryLabel, canManage, onOpen, onEdit }: M
     <div
       className={cn(
         'group relative flex flex-col gap-3 rounded-2xl border bg-card p-4 transition-shadow hover:shadow-md',
+        // Tanlangan ilova faqat nozik ramka bilan ajratiladi — matnli yorliq yo‘q.
         app.isPinned && 'border-primary/40 bg-primary/[0.03]',
       )}
     >
-      {app.isPinned && (
-        <span className="absolute right-3 top-3 flex items-center gap-1 text-[10px] font-medium text-primary">
-          <Pin className="h-3 w-3" /> Tanlangan
-        </span>
-      )}
-
       <div className="flex items-start gap-3">
         <Avatar className="h-12 w-12 rounded-xl">
           <AvatarImage src={app.iconUrl ?? undefined} alt={app.name} className="rounded-xl object-cover" />
