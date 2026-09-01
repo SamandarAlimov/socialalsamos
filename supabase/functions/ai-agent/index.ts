@@ -10,9 +10,14 @@
 //   data: {"type":"delta","text":"..."}
 //   data: {"type":"error","message":"..."}
 //   data: [DONE]
+//
+// AI so'rovlari ../_shared/geminiPool.ts orqali ketadi: bir nechta Gemini
+// kaliti navbat bilan ishlatiladi, limitga urilgani chetga qo'yiladi, hammasi
+// band bo'lsa Lovable gateway'iga qaytiladi.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { guard, preflight, corsHeaders, guardError } from "../_shared/guard.ts";
+import { aiFetch, hasGeminiKeys, poolStatus } from "../_shared/geminiPool.ts";
 import {
   executeTool,
   specsFor,
@@ -25,7 +30,6 @@ const FUNCTION_NAME = "ai-agent";
 const RATE_LIMIT = 120;
 const RATE_WINDOW_MINUTES = 60;
 const MAX_ROUNDS = 8;
-const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
 const MODEL_ROUTES: Record<string, string> = {
   auto: "google/gemini-3-flash-preview",
@@ -87,26 +91,25 @@ ${opts.memories}`;
 }
 
 async function classify(
-  apiKey: string,
+  lovableKey: string | undefined,
   lastUserText: string,
 ): Promise<{ task: string; language: string }> {
   const sys = `Router. Output JSON only: {"task":"fast|balanced|coding|reasoning|vision","language":"BCP-47 code of the user's message"}.
 coding = programming/debugging. reasoning = math, multi-step logic, deep analysis, planning, research. vision = about an image/media. fast = trivial lookups or one-liners. balanced = everything else.`;
   try {
-    const res = await fetch(GATEWAY, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const { response } = await aiFetch({
+      lovableKey,
+      body: {
         model: MODEL_ROUTES.fast,
         messages: [
           { role: "system", content: sys },
           { role: "user", content: lastUserText.slice(0, 2000) },
         ],
         response_format: { type: "json_object" },
-      }),
+      },
     });
-    if (!res.ok) throw new Error(String(res.status));
-    const json = await res.json();
+    if (!response.ok) throw new Error(String(response.status));
+    const json = await response.json();
     const parsed = JSON.parse(json.choices?.[0]?.message?.content ?? "{}");
     const task = typeof parsed.task === "string" && MODEL_ROUTES[parsed.task] ? parsed.task : "balanced";
     const language = typeof parsed.language === "string" && parsed.language ? parsed.language : "uz";
@@ -138,10 +141,15 @@ serve(async (req) => {
       return guardError(req, "INVALID_REQUEST", "messages massivi talab qilinadi.", 400);
     }
 
+    // Kalit manbalari: GEMINI_API_KEYS / GEMINI_API_KEY_1..10 (asosiy) yoki
+    // LOVABLE_API_KEY (zaxira). Ilgari LOVABLE_API_KEY majburiy edi — endi
+    // faqat Gemini kalitlari bilan ham to'liq ishlaydi.
     const lovableKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!lovableKey) {
+    if (!hasGeminiKeys() && !lovableKey) {
+      console.error("No AI credentials: set GEMINI_API_KEYS or LOVABLE_API_KEY");
       return guardError(req, "SERVER_ERROR", "AI xizmati sozlanmagan.", 500);
     }
+    const pool = poolStatus();
 
     const userId = gate.userId;
     const admin = gate.admin;
@@ -219,21 +227,26 @@ serve(async (req) => {
         };
 
         try {
-          send({ type: "meta", model, task: cls.task, language: cls.language, tools: [...enabled] });
+          send({
+            type: "meta",
+            model,
+            task: cls.task,
+            language: cls.language,
+            tools: [...enabled],
+            keyPool: `${pool.ready}/${pool.total}`,
+          });
 
           for (let round = 0; round < MAX_ROUNDS; round += 1) {
-            const res = await fetch(GATEWAY, {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${lovableKey}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
+            // Har raund navbatdagi kalit bilan ketadi — uzun agentik zanjirlarda
+            // yuk kalitlar orasida tarqaladi va limitga urilish kamayadi.
+            const { response: res, provider } = await aiFetch({
+              lovableKey,
+              body: {
                 model,
                 messages: conversation,
                 stream: true,
                 ...(toolSpecs.length ? { tools: toolSpecs, tool_choice: "auto" } : {}),
-              }),
+              },
             });
 
             if (!res.ok || !res.body) {
@@ -247,7 +260,7 @@ serve(async (req) => {
                       ? "AI kreditlari tugagan."
                       : `AI xizmatida xatolik (HTTP ${res.status}).`,
               });
-              console.error("gateway error", res.status, detail.slice(0, 500));
+              console.error(`provider error (${provider})`, res.status, detail.slice(0, 500));
               break;
             }
 
@@ -379,6 +392,7 @@ serve(async (req) => {
         Connection: "keep-alive",
         "X-AI-Model": model,
         "X-AI-Task": cls.task,
+        "X-AI-Key-Pool": `${pool.ready}/${pool.total}`,
       },
     });
   } catch (error) {
