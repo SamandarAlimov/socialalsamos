@@ -35,12 +35,14 @@ export function useFileUpload() {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const uploadFile = useCallback(
-    async (file: File): Promise<UploadResult | null> => {
-      if (!user) {
-        setError('Avval tizimga kiring');
-        return null;
-      }
+  /**
+   * Faylni yuklaydi va xatolik bo'lsa ANIQ sababni otadi.
+   * Chat kabi joylarda foydalanuvchiga "nega yuklanmadi" degan javob kerak —
+   * shuning uchun `null` qaytaruvchi variant o'rniga shuni ishlating.
+   */
+  const uploadFileOrThrow = useCallback(
+    async (file: File): Promise<UploadResult> => {
+      if (!user) throw new Error('Avval tizimga kiring');
 
       setUploading(true);
       setProgress(0);
@@ -57,17 +59,27 @@ export function useFileUpload() {
           kind: detectKind(file.type || uploaded.type, file.name),
         };
       } catch (err) {
-        // Aniq sababni ko'rsatamiz: "xatolik" degan umumiy matn foydasiz
         const message =
           err instanceof Error ? err.message : 'Faylni yuklashda kutilmagan xatolik';
         console.error('Upload error:', err);
         setError(message);
-        return null;
+        throw new Error(message);
       } finally {
         setUploading(false);
       }
     },
-    [user]
+    [user],
+  );
+
+  const uploadFile = useCallback(
+    async (file: File): Promise<UploadResult | null> => {
+      try {
+        return await uploadFileOrThrow(file);
+      } catch {
+        return null;
+      }
+    },
+    [uploadFileOrThrow],
   );
 
   const uploadMultiple = useCallback(
@@ -92,6 +104,7 @@ export function useFileUpload() {
 
   return {
     uploadFile,
+    uploadFileOrThrow,
     uploadMultiple,
     uploading,
     progress,

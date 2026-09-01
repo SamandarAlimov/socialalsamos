@@ -19,6 +19,7 @@ const EXT_BY_LANG: Record<string, string> = {
   jsx: 'jsx',
   python: 'py',
   py: 'py',
+  dart: 'dart',
   json: 'json',
   html: 'html',
   css: 'css',
@@ -27,69 +28,101 @@ const EXT_BY_LANG: Record<string, string> = {
   sh: 'sh',
   markdown: 'md',
   md: 'md',
+  csv: 'csv',
   yaml: 'yml',
   yml: 'yml',
 };
 
 export function extensionFor(a: AIArtifact): string {
-  if (a.kind === 'document') return 'md';
+  if (a.kind === 'document') return EXT_BY_LANG[(a.language || '').toLowerCase()] || 'md';
   return EXT_BY_LANG[(a.language || '').toLowerCase()] || 'txt';
 }
 
-const CODE_BLOCK = /```(\w+)?\n([\s\S]*?)```/g;
+const CODE_BLOCK = /```([\w+-]+)?\n([\s\S]*?)```/g;
 
-/** Anything substantial the assistant produced becomes a standalone artifact. */
+/** Kod bloki artefakt bo'lishi uchun minimal qator soni. */
+const MIN_CODE_LINES = 16;
+
+/** Hujjat sifatida ochiladigan bloklar (kod emas, lekin fayl bo'la oladi). */
+const DOC_LANGS = new Set(['markdown', 'md', 'csv', 'html']);
+const MIN_DOC_LINES = 12;
+
+const titleFromContent = (text: string, fallback: string): string => {
+  const heading = text.split('\n').find((line) => /^#{1,3}\s+\S/.test(line.trim()));
+  if (heading) return heading.replace(/^#+\s*/, '').slice(0, 60);
+  const first = text.split('\n').find((line) => line.trim().length > 0);
+  return (first || fallback).replace(/^#+\s*/, '').slice(0, 60);
+};
+
+/**
+ * Artefakt — bu ALOHIDA fayl sifatida ma'noga ega natija: kod fayli, yaratilgan
+ * rasm yoki hujjat bloki.
+ *
+ * MUHIM: oddiy chat javobi (uzun bo'lsa ham) artefakt EMAS. Ilgari 1200 belgidan
+ * uzun har qanday matn "hujjat" deb olinardi — shu sababli deyarli har bir javob
+ * artefaktlar panelida ko'rinib ketardi. Endi faqat aniq belgilangan natijalar
+ * artefakt bo'ladi.
+ */
 export function extractArtifacts(messages: AIMessage[]): AIArtifact[] {
   const out: AIArtifact[] = [];
 
   for (const msg of messages) {
     if (msg.role !== 'assistant' || msg.error) continue;
 
-    if (msg.imageUrl) {
+    // 1) Yaratilgan rasmlar — doim artefakt.
+    const single = (msg as { imageUrl?: string }).imageUrl;
+    const imageUrls = [
+      ...(single ? [single] : []),
+      ...((msg.images as string[] | undefined) ?? []),
+    ].filter((url, index, all) => url && all.indexOf(url) === index);
+
+    imageUrls.forEach((url, index) => {
       out.push({
-        id: `${msg.id}:image`,
+        id: `${msg.id}:image:${index}`,
         messageId: msg.id,
         kind: 'image',
-        title: 'Yaratilgan rasm',
-        content: msg.imageUrl,
+        title: imageUrls.length > 1 ? `Yaratilgan rasm ${index + 1}` : 'Yaratilgan rasm',
+        content: url,
         createdAt: msg.timestamp,
       });
-    }
+    });
 
+    // 2) Kod va hujjat bloklari — faqat yetarlicha katta bo'lsa.
     let match: RegExpExecArray | null;
     let index = 0;
     CODE_BLOCK.lastIndex = 0;
-    let plain = msg.content;
 
     while ((match = CODE_BLOCK.exec(msg.content)) !== null) {
-      const language = match[1] || 'text';
-      const code = match[2].trim();
-      plain = plain.replace(match[0], '');
-      // Only sizable blocks deserve their own panel entry.
-      if (code.split('\n').length < 12) continue;
+      const language = (match[1] || 'text').toLowerCase();
+      const body = match[2].trim();
+      const lines = body.split('\n').length;
+
+      if (DOC_LANGS.has(language)) {
+        if (lines < MIN_DOC_LINES) continue;
+        out.push({
+          id: `${msg.id}:doc:${index}`,
+          messageId: msg.id,
+          kind: 'document',
+          title: titleFromContent(body, 'Hujjat'),
+          language,
+          content: body,
+          createdAt: msg.timestamp,
+        });
+        index += 1;
+        continue;
+      }
+
+      if (lines < MIN_CODE_LINES) continue;
       out.push({
         id: `${msg.id}:code:${index}`,
         messageId: msg.id,
         kind: 'code',
-        title: `${language} kod (${code.split('\n').length} qator)`,
+        title: `${language} kod (${lines} qator)`,
         language,
-        content: code,
+        content: body,
         createdAt: msg.timestamp,
       });
       index += 1;
-    }
-
-    const prose = plain.trim();
-    if (prose.length > 1200) {
-      const firstLine = prose.split('\n').find((l) => l.trim().length > 0) || 'Hujjat';
-      out.push({
-        id: `${msg.id}:doc`,
-        messageId: msg.id,
-        kind: 'document',
-        title: firstLine.replace(/^#+\s*/, '').slice(0, 60),
-        content: prose,
-        createdAt: msg.timestamp,
-      });
     }
   }
 

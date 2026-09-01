@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   ArrowUp,
   Check,
@@ -110,6 +110,10 @@ export function AIComposer({
   const [dragging, setDragging] = useState(false);
   const [slashOpen, setSlashOpen] = useState(false);
   const [githubOpen, setGithubOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Har bir kompozer nusxasi uchun alohida id — <label for> ishonchli ishlashi uchun.
+  const fileInputId = useId();
 
   const voice = useVoiceInput();
   const voiceBaseRef = useRef('');
@@ -149,7 +153,9 @@ export function AIComposer({
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
+    // Mobilda balandlik ekranning uchdan biridan oshmasin.
+    const max = Math.min(220, Math.round(window.innerHeight * 0.35));
+    el.style.height = `${Math.min(el.scrollHeight, max)}px`;
   }, [value]);
 
   useEffect(() => {
@@ -202,7 +208,7 @@ export function AIComposer({
   };
 
   return (
-    <div className="px-3 pb-3 sm:px-4 sm:pb-4">
+    <div className="px-2 pb-2 sm:px-4 sm:pb-4">
       <AIGithubDialog
         open={githubOpen}
         onOpenChange={setGithubOpen}
@@ -211,6 +217,29 @@ export function AIComposer({
           const prefix = value.trim() ? `${value.trim()} ` : '';
           onChange(`${prefix}${githubRepoUrl(repo.fullName)} `);
           textareaRef.current?.focus();
+        }}
+      />
+
+      {/*
+        Fayl tanlash inputi menyudan TASHQARIDA turadi va `hidden` emas, `sr-only`.
+        Sabab: `hidden` input'ni iOS Safari va ba'zi Android brauzerlari dasturiy
+        `click()` bilan ocholmaydi, menyu yopilishi esa foydalanuvchi harakatini
+        (user gesture) uzib qo'yadi — shuning uchun mobil qurilmada fayl umuman
+        tanlanmayotgan edi. Endi menyu bandi oddiy <label> bo'lib, brauzer uni
+        o'zi ochadi.
+      */}
+      <input
+        ref={fileInputRef}
+        id={fileInputId}
+        type="file"
+        multiple
+        className="sr-only"
+        tabIndex={-1}
+        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt,.md,.xlsx,.xls,.pptx,.ppt,.csv,.json,.zip,.rar,.7z"
+        onChange={(e) => {
+          onPickFiles(e.target.files);
+          setMenuOpen(false);
+          e.currentTarget.value = '';
         }}
       />
 
@@ -246,7 +275,7 @@ export function AIComposer({
             onDropFiles?.(e.dataTransfer?.files ?? null);
           }}
           className={cn(
-            'rounded-3xl border bg-card/80 p-2 shadow-lg backdrop-blur-xl transition-colors',
+            'rounded-3xl border bg-card/80 p-1.5 shadow-lg backdrop-blur-xl transition-colors sm:p-2',
             dragging ? 'border-alsamos-orange bg-alsamos-orange/5' : 'border-border/60',
           )}
         >
@@ -281,7 +310,9 @@ export function AIComposer({
                   ) : (
                     <FileText className="h-3.5 w-3.5 text-muted-foreground" />
                   )}
-                  <span className="max-w-[140px] truncate text-[11px]">{file.name}</span>
+                  <span className="max-w-[120px] truncate text-[11px] sm:max-w-[160px]">
+                    {file.name}
+                  </span>
                   <button
                     type="button"
                     onClick={() => onRemoveAttachment(file.url)}
@@ -315,29 +346,17 @@ export function AIComposer({
             }}
             placeholder={PLACEHOLDERS[placeholderIndex]}
             rows={1}
-            className="min-h-[44px] resize-none border-0 bg-transparent px-2 text-sm shadow-none focus-visible:ring-0"
+            className="max-h-[35vh] min-h-[40px] resize-none border-0 bg-transparent px-2 py-2 text-[15px] shadow-none focus-visible:ring-0 sm:text-sm"
             aria-label="AI ga xabar"
           />
 
-          <div className="flex items-center gap-1.5 px-1 pt-1">
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              hidden
-              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt,.md,.xlsx,.xls,.pptx,.ppt,.csv,.json,.zip,.rar,.7z"
-              onChange={(e) => {
-                onPickFiles(e.target.files);
-                e.currentTarget.value = '';
-              }}
-            />
-
-            <DropdownMenu>
+          <div className="flex items-center gap-1 px-1 pt-0.5 sm:gap-1.5 sm:pt-1">
+            <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
               <DropdownMenuTrigger asChild>
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="h-8 w-8 shrink-0 rounded-full"
+                  className="h-9 w-9 shrink-0 rounded-full sm:h-8 sm:w-8"
                   disabled={uploading}
                   aria-label="Qo'shish"
                 >
@@ -349,9 +368,12 @@ export function AIComposer({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-60">
-                <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
-                  <Paperclip className="mr-2 h-4 w-4" />
-                  {'Fayl yoki rasm qo\u2019shish'}
+                {/* <label> — brauzerning o'z mexanizmi, mobil qurilmada ham ishonchli. */}
+                <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
+                  <label htmlFor={fileInputId} className="flex cursor-pointer items-center">
+                    <Paperclip className="mr-2 h-4 w-4" />
+                    {'Fayl yoki rasm qo\u2019shish'}
+                  </label>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={openGithub}>
                   <Github className="mr-2 h-4 w-4" />
@@ -381,15 +403,29 @@ export function AIComposer({
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <div className="flex-1" />
+            {/* Mobilda tez kirish uchun alohida biriktirish tugmasi. */}
+            <Button
+              asChild
+              size="icon"
+              variant="ghost"
+              className="h-9 w-9 shrink-0 rounded-full sm:hidden"
+            >
+              <label htmlFor={fileInputId} aria-label="Fayl biriktirish">
+                <Paperclip className="h-4 w-4" />
+              </label>
+            </Button>
 
-            <AIModelPicker value={model} onChange={onModelChange} activeModel={activeModel} />
+            <div className="min-w-0 flex-1" />
+
+            <div className="min-w-0 shrink">
+              <AIModelPicker value={model} onChange={onModelChange} activeModel={activeModel} />
+            </div>
 
             <Button
               size="icon"
               variant={voice.listening ? 'default' : 'ghost'}
               className={cn(
-                'h-8 w-8 shrink-0 rounded-full',
+                'h-9 w-9 shrink-0 rounded-full sm:h-8 sm:w-8',
                 voice.listening && 'bg-destructive text-white hover:bg-destructive/90',
               )}
               onClick={handleMic}
@@ -423,10 +459,17 @@ export function AIComposer({
           </div>
         </div>
 
-        <p className="mt-2 text-center text-[10px] text-muted-foreground">
-          {voice.listening
-            ? 'Tinglanmoqda\u2026 gapiring'
-            : 'Enter — yuborish, Shift+Enter — yangi qator. AI xato qilishi mumkin, muhim ma\u2019lumotni tekshiring.'}
+        <p className="mt-1.5 text-center text-[10px] text-muted-foreground">
+          {voice.listening ? (
+            'Tinglanmoqda\u2026 gapiring'
+          ) : (
+            <>
+              <span className="hidden sm:inline">
+                {'Enter — yuborish, Shift+Enter — yangi qator. '}
+              </span>
+              {'AI xato qilishi mumkin, muhim ma\u2019lumotni tekshiring.'}
+            </>
+          )}
         </p>
       </div>
     </div>
