@@ -675,7 +675,7 @@ export default function AIPage() {
                 {greetingName ? `Salom, ${greetingName}` : 'Alsamos AI'}
               </h2>
               <p className="mb-7 max-w-md text-center text-sm text-muted-foreground">
-                Nima kerakligini shunchaki yozing — kerakli vositani AI o\u2019zi tanlaydi.
+                {'Nima kerakligini shunchaki yozing \u2014 kerakli vositani AI o\u2019zi tanlaydi.'}
               </p>
 
               {forwardedPost && (
