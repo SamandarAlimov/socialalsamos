@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react';
-import { Loader2, ShieldCheck } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Bot, Copy, KeyRound, Loader2, RefreshCw, ShieldCheck } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -24,6 +23,17 @@ import { useToast } from '@/hooks/use-toast';
 import { uploadMedia } from '@/lib/mediaUpload';
 
 import { createMiniApp, deleteMiniApp, updateMiniApp } from '../api';
+import {
+  botApiCurlExample,
+  botApiEndpoint,
+  createBot,
+  linkBotToMiniApp,
+  listMyBots,
+  normalizeBotUsername,
+  revokeBotToken,
+  setBotWebhook,
+  type AlsamosBot,
+} from '../bots/api';
 import { normalizeMiniAppUrl } from '../openStrategy';
 import type { MiniApp, MiniAppCategory, MiniAppType } from '../types';
 import { MINI_APP_TYPE_LABELS } from '../types';
@@ -45,6 +55,8 @@ const URL_ERRORS: Record<string, string> = {
   no_host: 'Domen aniqlanmadi',
 };
 
+const NO_BOT = '__none';
+
 export function MiniAppFormDialog({
   open,
   onOpenChange,
@@ -65,6 +77,16 @@ export function MiniAppFormDialog({
   const [uploading, setUploading] = useState(false);
   const [urlError, setUrlError] = useState<string | null>(null);
 
+  // --- Bot API holati ---
+  const [bots, setBots] = useState<AlsamosBot[]>([]);
+  const [botsLoading, setBotsLoading] = useState(false);
+  const [botId, setBotId] = useState<string>(NO_BOT);
+  const [newBotName, setNewBotName] = useState('');
+  const [creatingBot, setCreatingBot] = useState(false);
+  const [issuedToken, setIssuedToken] = useState<string | null>(null);
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [savingWebhook, setSavingWebhook] = useState(false);
+
   useEffect(() => {
     if (!open) return;
     setName(app?.name ?? '');
@@ -75,7 +97,123 @@ export function MiniAppFormDialog({
     setAppType(app?.appType ?? 'link');
     setIconUrl(app?.iconUrl ?? null);
     setUrlError(null);
+    setBotId(NO_BOT);
+    setNewBotName('');
+    setIssuedToken(null);
+    setWebhookUrl('');
   }, [app, categories, open]);
+
+  const loadBots = useCallback(async () => {
+    setBotsLoading(true);
+    try {
+      const list = await listMyBots();
+      setBots(list);
+      if (app?.id) {
+        const linked = list.find((item) => item.miniAppId === app.id);
+        if (linked) {
+          setBotId(linked.id);
+          setWebhookUrl(linked.webhookUrl ?? '');
+        }
+      }
+    } catch (error) {
+      toast({
+        title: 'Botlar yuklanmadi',
+        description: error instanceof Error ? error.message : 'Xatolik',
+        variant: 'destructive',
+      });
+    } finally {
+      setBotsLoading(false);
+    }
+  }, [app?.id, toast]);
+
+  useEffect(() => {
+    if (!open || appType !== 'bot') return;
+    void loadBots();
+  }, [appType, loadBots, open]);
+
+  const copyToClipboard = async (value: string, title: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast({ title });
+    } catch {
+      toast({ title: 'Nusxalanmadi', variant: 'destructive' });
+    }
+  };
+
+  const handleCreateBot = async () => {
+    const username = normalizeBotUsername(newBotName || name);
+    if (!username) {
+      toast({
+        title: 'Bot nomi noto’g’ri',
+        description: 'Faqat lotin harflari, raqam va pastki chiziq. Nom “bot” bilan tugaydi.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setCreatingBot(true);
+    try {
+      const created = await createBot(username, name || username, shortDescription || null);
+      setIssuedToken(created.token);
+      setBotId(created.botId);
+      await loadBots();
+      toast({
+        title: 'Bot yaratildi: @' + created.username,
+        description: 'Tokenni hoziroq saqlab qo’ying — u boshqa ko’rsatilmaydi.',
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Xatolik';
+      toast({
+        title: 'Bot yaratilmadi',
+        description:
+          message === 'USERNAME_TAKEN'
+            ? 'Bu bot nomi band. Boshqa nom tanlang.'
+            : message === 'INVALID_USERNAME'
+              ? 'Bot nomi qoidaga mos emas.'
+              : message,
+        variant: 'destructive',
+      });
+    } finally {
+      setCreatingBot(false);
+    }
+  };
+
+  const handleRevokeToken = async () => {
+    if (botId === NO_BOT) return;
+    setCreatingBot(true);
+    try {
+      const token = await revokeBotToken(botId);
+      setIssuedToken(token);
+      toast({ title: 'Yangi token berildi', description: 'Eski token endi ishlamaydi.' });
+    } catch (error) {
+      toast({
+        title: 'Token almashtirilmadi',
+        description: error instanceof Error ? error.message : 'Xatolik',
+        variant: 'destructive',
+      });
+    } finally {
+      setCreatingBot(false);
+    }
+  };
+
+  const handleSaveWebhook = async () => {
+    if (botId === NO_BOT) return;
+    setSavingWebhook(true);
+    try {
+      await setBotWebhook(botId, webhookUrl.trim() || null);
+      toast({ title: webhookUrl.trim() ? 'Webhook saqlandi' : 'Webhook o’chirildi' });
+      await loadBots();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Xatolik';
+      toast({
+        title: 'Webhook saqlanmadi',
+        description: message === 'HTTPS_REQUIRED' ? 'Webhook manzili https bo’lishi kerak.' : message,
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingWebhook(false);
+    }
+  };
 
   const handleIcon = async (file: File | null) => {
     if (!file) return;
@@ -113,6 +251,15 @@ export function MiniAppFormDialog({
     }
     setUrlError(null);
 
+    if (appType === 'bot' && botId === NO_BOT) {
+      toast({
+        title: 'Bot tanlanmadi',
+        description: 'Bot turidagi ilova API bot bilan bog’lanishi kerak.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setSaving(true);
     try {
       const draft = {
@@ -125,11 +272,16 @@ export function MiniAppFormDialog({
         iconUrl,
       };
 
+      let appId = app?.id ?? null;
       if (app) {
         await updateMiniApp(app.id, draft);
       } else {
         if (!userId) throw new Error('Avval tizimga kiring');
-        await createMiniApp(userId, draft);
+        appId = await createMiniApp(userId, draft);
+      }
+
+      if (appType === 'bot' && botId !== NO_BOT && appId) {
+        await linkBotToMiniApp(botId, appId, normalized.url);
       }
 
       toast({
@@ -168,14 +320,13 @@ export function MiniAppFormDialog({
     }
   };
 
+  const endpoint = botApiEndpoint();
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{app ? 'Ilovani tahrirlash' : 'Mini app qo’shish'}</DialogTitle>
-          <DialogDescription>
-            Havola turi uchun API talab qilinmaydi — saytingiz manzilini kiritsangiz kifoya.
-          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -193,12 +344,137 @@ export function MiniAppFormDialog({
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
-              {appType === 'link' && 'Sayt yoki portfolio havolasi. Eng oson yo’l.'}
-              {appType === 'webapp' && 'Alsamos SDK bilan ishlaydigan to’liq web ilova.'}
-              {appType === 'bot' && 'Bot orqali ishlaydigan ilova (Telegram uslubida).'}
-            </p>
           </div>
+
+          {appType === 'bot' && (
+            <div className="space-y-3 rounded-lg border border-primary/30 bg-primary/[0.03] p-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Bot className="h-4 w-4" />
+                Bot API ulanishi
+              </div>
+
+              <div className="space-y-2">
+                <Label>Bot</Label>
+                <Select value={botId} onValueChange={setBotId} disabled={botsLoading}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={botsLoading ? 'Yuklanmoqda…' : 'Botni tanlang'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_BOT}>Tanlanmagan</SelectItem>
+                    {bots.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {'@' + item.username}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="new-bot-name">Yangi bot yaratish</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="new-bot-name"
+                    value={newBotName}
+                    maxLength={32}
+                    onChange={(event) => setNewBotName(event.target.value)}
+                    placeholder="masalan: islomuz_bot"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={creatingBot}
+                    onClick={() => void handleCreateBot()}
+                  >
+                    {creatingBot ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <KeyRound className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {issuedToken && (
+                <div className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2">
+                  <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                    Token faqat hozir ko’rsatiladi. Nusxalab, serveringizda saqlang.
+                  </p>
+                  <code className="block break-all rounded bg-background/70 p-2 text-xs">
+                    {issuedToken}
+                  </code>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void copyToClipboard(issuedToken, 'Token nusxalandi')}
+                    >
+                      <Copy className="mr-1 h-3 w-3" />
+                      Tokenni nusxalash
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        void copyToClipboard(botApiCurlExample(issuedToken), 'Namuna nusxalandi')
+                      }
+                    >
+                      <Copy className="mr-1 h-3 w-3" />
+                      curl namunasi
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {botId !== NO_BOT && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="bot-webhook">Webhook (https)</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="bot-webhook"
+                        value={webhookUrl}
+                        onChange={(event) => setWebhookUrl(event.target.value)}
+                        placeholder="https://server.example.com/alsamos/webhook"
+                        inputMode="url"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={savingWebhook}
+                        onClick={() => void handleSaveWebhook()}
+                      >
+                        {savingWebhook ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          'Saqlash'
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={creatingBot}
+                    onClick={() => void handleRevokeToken()}
+                  >
+                    <RefreshCw className="mr-1 h-3 w-3" />
+                    Tokenni almashtirish
+                  </Button>
+                </>
+              )}
+
+              {endpoint && (
+                <p className="break-all text-xs text-muted-foreground">
+                  API: <code>{endpoint + '/bot<TOKEN>/getMe'}</code>
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="mini-app-name">Nomi *</Label>
