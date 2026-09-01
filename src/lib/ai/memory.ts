@@ -6,6 +6,7 @@
 // shunda xotira boshqa qurilmalarda ham ishlaydi.
 
 import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/db';
 
 const KEY = 'alsamos.ai.memory';
 const MAX_ITEMS = 200;
@@ -69,7 +70,7 @@ export function removeMemory(id: string) {
   write(read().filter((m) => m.id !== id));
   void (async () => {
     try {
-      await supabase.from('ai_memories').delete().eq('id', id);
+      await db.from('ai_memories').delete().eq('id', id);
     } catch {
       /* jadval bo'lmasligi mumkin */
     }
@@ -85,7 +86,7 @@ async function persistRemote(item: MemoryItem) {
     const { data } = await supabase.auth.getUser();
     const userId = data.user?.id;
     if (!userId) return;
-    await supabase.from('ai_memories').insert({
+    await db.from('ai_memories').insert({
       id: item.id,
       user_id: userId,
       content: item.text,
@@ -103,7 +104,7 @@ export async function syncMemories(): Promise<MemoryItem[]> {
     const userId = auth.user?.id;
     if (!userId) return read();
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('ai_memories')
       .select('id, content, kind, created_at')
       .eq('user_id', userId)

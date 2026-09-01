@@ -14,6 +14,7 @@ import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { db } from '@/lib/db';
 
 export type ConnectorRow = {
   id: string;
@@ -51,7 +52,7 @@ export function AIConnectorsDialog({
   const load = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('ai_connectors')
       .select('id, name, kind, base_url, auth_type, description, enabled, last_error')
       .order('created_at', { ascending: false });
@@ -84,7 +85,7 @@ export function AIConnectorsDialog({
     }
 
     setSaving(true);
-    const { error } = await supabase.from('ai_connectors').insert({
+    const { error } = await db.from('ai_connectors').insert({
       user_id: userId,
       name: trimmedName,
       kind: 'mcp',
@@ -108,7 +109,7 @@ export function AIConnectorsDialog({
   };
 
   const toggle = async (row: ConnectorRow) => {
-    const { error } = await supabase
+    const { error } = await db
       .from('ai_connectors')
       .update({ enabled: !row.enabled })
       .eq('id', row.id);
@@ -121,7 +122,7 @@ export function AIConnectorsDialog({
   };
 
   const remove = async (row: ConnectorRow) => {
-    const { error } = await supabase.from('ai_connectors').delete().eq('id', row.id);
+    const { error } = await db.from('ai_connectors').delete().eq('id', row.id);
     if (error) {
       toast({ title: "O'chirilmadi", description: error.message, variant: 'destructive' });
       return;

@@ -25,6 +25,7 @@ import {
   requestLoginTicket,
 } from '@/lib/alsamosAuth';
 import {
+import { db } from '@/lib/db';
   clearSlot,
   getActiveSlot,
   occupiedSlots,
@@ -114,7 +115,7 @@ async function probeOwnIdentity(userId: string): Promise<{
     return ownIdentityProbe.promise;
   }
 
-  const promise = supabase
+  const promise = db
     .from('identity_accounts')
     .select('identity_id')
     .eq('user_id', userId)
@@ -171,13 +172,13 @@ export function useMultiAccount(enabled = true) {
       }
 
       const [{ data: rows, error: rowsError }, { data: identity }] = await Promise.all([
-        supabase
+        db
           .from('identity_accounts')
           .select('id, user_id, slot_no, is_primary, status')
           .eq('identity_id', own.identity_id)
           .eq('status', 'active')
           .order('slot_no', { ascending: true }),
-        supabase
+        db
           .from('auth_identities')
           .select('alsamos_email, max_accounts')
           .eq('id', own.identity_id)

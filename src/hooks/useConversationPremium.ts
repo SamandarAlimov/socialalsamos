@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { db } from '@/lib/db';
 
 /** Guruh/kanal ruxsatlari (Telegramdek) */
 export interface ConversationPermissions {
@@ -183,7 +184,7 @@ export function useConversationPremium(conversationId: string | null) {
   const fetchInviteLinks = useCallback(async () => {
     if (!conversationId) return;
     try {
-      const { data } = await supabase
+      const { data } = await db
         .from('conversation_invite_links')
         .select('*')
         .eq('conversation_id', conversationId)
@@ -197,7 +198,7 @@ export function useConversationPremium(conversationId: string | null) {
   const fetchJoinRequests = useCallback(async () => {
     if (!conversationId) return;
     try {
-      const { data } = await supabase
+      const { data } = await db
         .from('conversation_join_requests')
         .select('*')
         .eq('conversation_id', conversationId)
@@ -228,7 +229,7 @@ export function useConversationPremium(conversationId: string | null) {
   const fetchTopics = useCallback(async () => {
     if (!conversationId) return;
     try {
-      const { data } = await supabase
+      const { data } = await db
         .from('conversation_topics')
         .select('*')
         .eq('conversation_id', conversationId)
@@ -297,7 +298,7 @@ export function useConversationPremium(conversationId: string | null) {
     }) => {
       if (!conversationId || !user) return null;
       try {
-        const { data, error } = await supabase
+        const { data, error } = await db
           .from('conversation_invite_links')
           .insert({
             conversation_id: conversationId,
@@ -325,7 +326,7 @@ export function useConversationPremium(conversationId: string | null) {
 
   const revokeInviteLink = useCallback(async (linkId: string) => {
     try {
-      await supabase
+      await db
         .from('conversation_invite_links')
         .update({ is_revoked: true })
         .eq('id', linkId);
@@ -341,7 +342,7 @@ export function useConversationPremium(conversationId: string | null) {
 
   const deleteInviteLink = useCallback(async (linkId: string) => {
     try {
-      await supabase.from('conversation_invite_links').delete().eq('id', linkId);
+      await db.from('conversation_invite_links').delete().eq('id', linkId);
       setInviteLinks((prev) => prev.filter((l) => l.id !== linkId));
       return true;
     } catch (error) {
@@ -360,7 +361,7 @@ export function useConversationPremium(conversationId: string | null) {
           user_id: request.user_id,
           role: 'member',
         });
-        await supabase
+        await db
           .from('conversation_join_requests')
           .update({ status: 'approved' })
           .eq('id', request.id);
@@ -376,7 +377,7 @@ export function useConversationPremium(conversationId: string | null) {
 
   const declineJoinRequest = useCallback(async (request: JoinRequest) => {
     try {
-      await supabase
+      await db
         .from('conversation_join_requests')
         .update({ status: 'declined' })
         .eq('id', request.id);
@@ -401,7 +402,7 @@ export function useConversationPremium(conversationId: string | null) {
     ) => {
       if (!conversationId || !user) return false;
       try {
-        await supabase.from('conversation_bans').upsert(
+        await db.from('conversation_bans').upsert(
           {
             conversation_id: conversationId,
             user_id: targetUserId,
@@ -434,7 +435,7 @@ export function useConversationPremium(conversationId: string | null) {
     async (targetUserId: string) => {
       if (!conversationId) return false;
       try {
-        await supabase
+        await db
           .from('conversation_bans')
           .delete()
           .eq('conversation_id', conversationId)
@@ -453,7 +454,7 @@ export function useConversationPremium(conversationId: string | null) {
     async (slots = 1) => {
       if (!conversationId || !user) return false;
       try {
-        await supabase.from('conversation_boosts').upsert(
+        await db.from('conversation_boosts').upsert(
           {
             conversation_id: conversationId,
             user_id: user.id,
@@ -475,7 +476,7 @@ export function useConversationPremium(conversationId: string | null) {
   const removeBoost = useCallback(async () => {
     if (!conversationId || !user) return false;
     try {
-      await supabase
+      await db
         .from('conversation_boosts')
         .delete()
         .eq('conversation_id', conversationId)
@@ -493,7 +494,7 @@ export function useConversationPremium(conversationId: string | null) {
     async (title: string, iconEmoji?: string, color?: string) => {
       if (!conversationId || !user) return null;
       try {
-        const { data, error } = await supabase
+        const { data, error } = await db
           .from('conversation_topics')
           .insert({
             conversation_id: conversationId,
@@ -517,7 +518,7 @@ export function useConversationPremium(conversationId: string | null) {
 
   const updateTopic = useCallback(async (topicId: string, patch: Partial<ForumTopic>) => {
     try {
-      await supabase
+      await db
         .from('conversation_topics')
         .update(patch as Record<string, unknown>)
         .eq('id', topicId);
@@ -531,7 +532,7 @@ export function useConversationPremium(conversationId: string | null) {
 
   const deleteTopic = useCallback(async (topicId: string) => {
     try {
-      await supabase.from('conversation_topics').delete().eq('id', topicId);
+      await db.from('conversation_topics').delete().eq('id', topicId);
       setTopics((prev) => prev.filter((t) => t.id !== topicId));
       return true;
     } catch (error) {

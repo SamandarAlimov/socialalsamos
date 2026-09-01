@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { getShippingCost } from '@/lib/marketplace';
 import {
+import { db } from '@/lib/db';
   isNetworkError,
   networkErrorMessage,
   onNetworkRestored,
@@ -1194,7 +1195,7 @@ export function useProductActions() {
 
   /** Registers a product view (used by the detail sheet). */
   const registerView = async (productId: string) => {
-    await supabase.rpc('increment_product_views', { _product_id: productId });
+    await db.rpc('increment_product_views', { _product_id: productId });
   };
 
   const createSeller = async (businessName: string, businessType: string, description?: string) => {

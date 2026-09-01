@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/db';
 
 export type StickerKind = 'sticker' | 'gif';
 
@@ -73,7 +74,7 @@ export async function trackStickerUse(
   writeLocal(items);
 
   try {
-    const { error } = await supabase.rpc('touch_sticker_recent', {
+    const { error } = await db.rpc('touch_sticker_recent', {
       p_sticker_key: fileUrl,
       p_kind: kind === 'gif' ? 'gif' : 'image',
       p_preview_url: fileUrl,
@@ -83,7 +84,7 @@ export async function trackStickerUse(
     if (!error) return;
 
     // Legacy schema fallback.
-    await supabase.rpc('touch_sticker_usage', {
+    await db.rpc('touch_sticker_usage', {
       p_file_url: fileUrl,
       p_kind: kind,
       p_sticker_id: stickerId ?? null,
@@ -99,7 +100,7 @@ export async function fetchRecentStickers(
   limit = 24
 ): Promise<RecentSticker[]> {
   try {
-    const current = await supabase.rpc('top_sticker_recents', { p_limit: limit });
+    const current = await db.rpc('top_sticker_recents', { p_limit: limit });
     if (!current.error && Array.isArray(current.data)) {
       return (current.data as Array<Record<string, unknown>>)
         .map((row) => {
@@ -123,7 +124,7 @@ export async function fetchRecentStickers(
     }
 
     // Legacy schema compatibility.
-    let query = supabase
+    let query = db
       .from('sticker_usage')
       .select('file_url, kind, sticker_id, use_count, last_used_at')
       .order('use_count', { ascending: false })

@@ -27,6 +27,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { marketplaceUz } from '@/i18n/marketplace';
 import { toast } from 'sonner';
+import { db } from '@/lib/db';
 
 interface CheckoutSheetProps {
   open: boolean;
@@ -172,7 +173,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
   const cancelOrphanOrders = async (orderIds: string[], reason: string) => {
     await Promise.all(orderIds.map(async orderId => {
       try {
-        await supabase.rpc('marketplace_update_order_status', {
+        await db.rpc('marketplace_update_order_status', {
           _order_id: orderId,
           _status: 'cancelled',
           _reason: reason,

@@ -9,6 +9,7 @@
 // foydalanuvchining o'z qatoriga (ai_github_connections, RLS: auth.uid() = user_id) yoziladi.
 
 import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/db';
 
 const FUNCTIONS_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 
@@ -75,7 +76,7 @@ async function persistRemote(token: string, login: string | null) {
     const { data } = await supabase.auth.getUser();
     const userId = data.user?.id;
     if (!userId) return;
-    await supabase
+    await db
       .from('ai_github_connections')
       .upsert(
         { user_id: userId, token, login, updated_at: new Date().toISOString() },
@@ -91,7 +92,7 @@ async function forgetRemote() {
     const { data } = await supabase.auth.getUser();
     const userId = data.user?.id;
     if (!userId) return;
-    await supabase.from('ai_github_connections').delete().eq('user_id', userId);
+    await db.from('ai_github_connections').delete().eq('user_id', userId);
   } catch {
     /* e'tiborsiz */
   }

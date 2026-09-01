@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import {
+import { db } from '@/lib/db';
   RecentSticker,
   StickerKind,
   fetchRecentStickers,
@@ -43,7 +44,7 @@ export function useStickerPacks(kind: StickerKind = 'sticker') {
     setLoading(true);
     try {
       // Current canonical sticker schema (20260829000500+).
-      const current = await supabase
+      const current = await db
         .from('sticker_packs')
         .select(
           'id, slug, name, icon_url, default_kind, sticker_count, stickers(id, pack_id, full_url, preview_url, emoji, width, height, position, kind)'
@@ -86,7 +87,7 @@ export function useStickerPacks(kind: StickerKind = 'sticker') {
       }
 
       // Compatibility for installations still on the original pack schema.
-      const legacy = await supabase
+      const legacy = await db
         .from('sticker_packs')
         .select(
           'id, slug, title, cover_url, is_animated, sticker_count, stickers(id, pack_id, file_url, thumb_url, emoji, width, height, position)'

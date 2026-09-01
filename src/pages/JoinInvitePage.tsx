@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Users, Megaphone, Link2, ShieldAlert, Check } from 'lucide-react';
+import { db } from '@/lib/db';
 
 type JoinState = 'loading' | 'ready' | 'invalid' | 'joined' | 'requested';
 
@@ -44,7 +45,7 @@ export default function JoinInvitePage() {
       return;
     }
     try {
-      const { data: link } = await supabase
+      const { data: link } = await db
         .from('conversation_invite_links')
         .select('*')
         .eq('slug', slug)
@@ -133,7 +134,7 @@ export default function JoinInvitePage() {
       const needsApproval = invite.requiresApproval || invite.joinByRequest;
 
       if (needsApproval) {
-        const { error } = await supabase.from('conversation_join_requests').insert({
+        const { error } = await db.from('conversation_join_requests').insert({
           conversation_id: invite.conversationId,
           user_id: user.id,
           invite_link_id: invite.linkId,
@@ -151,7 +152,7 @@ export default function JoinInvitePage() {
       });
       if (error) throw error;
 
-      await supabase
+      await db
         .from('conversation_invite_links')
         .update({ used_count: invite.usedCount + 1 })
         .eq('id', invite.linkId);

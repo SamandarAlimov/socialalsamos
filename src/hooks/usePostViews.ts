@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { readStructuredPostSchemaCapability } from '@/lib/structuredPostSchema';
+import { db } from '@/lib/db';
 
 /**
  * Post ko'rishlarini yozish.
@@ -81,7 +82,7 @@ export function usePostViews() {
             ownsCapabilityProbe = true;
           }
 
-          const { error } = await supabase.rpc('increment_post_views', {
+          const { error } = await db.rpc('increment_post_views', {
             post_id_param: postId,
           });
 
