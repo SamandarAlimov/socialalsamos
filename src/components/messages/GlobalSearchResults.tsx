@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { UserName } from '@/components/UserName';
 import { Conversation } from '@/hooks/useMessages';
 import { cn } from '@/lib/utils';
 import {
@@ -18,6 +19,7 @@ interface FoundProfile {
   username: string | null;
   display_name: string | null;
   avatar_url: string | null;
+  is_verified: boolean | null;
 }
 
 interface FoundMessage {
@@ -106,6 +108,8 @@ function formatWhen(iso: string): string {
  *
  * Telegramdek uch bo'lim: Chatlar, Foydalanuvchilar va barcha suhbatlardagi
  * Xabarlar. Xabar tanlansa shu suhbat ochilib, o'sha xabarga o'tiladi.
+ *
+ * Tasdiq nishoni: har doim markazlashtirilgan `UserName` komponenti orqali.
  */
 export function GlobalSearchResults({
   query,
@@ -158,10 +162,10 @@ export function GlobalSearchResults({
       try {
         const pattern = `%${debounced}%`;
 
-        // 1) Foydalanuvchilar
+        // 1) Foydalanuvchilar (is_verified nishon uchun kerak)
         const profilesPromise = supabase
           .from('profiles')
-          .select('id, username, display_name, avatar_url')
+          .select('id, username, display_name, avatar_url, is_verified')
           .or(`username.ilike.${pattern},display_name.ilike.${pattern}`)
           .neq('id', user.id)
           .limit(USER_LIMIT);
@@ -243,6 +247,8 @@ export function GlobalSearchResults({
           </h4>
           {matchedConversations.map((conv) => {
             const title = conversationTitle(conv, user?.id);
+            const showBadge =
+              conv.type === 'private' && Boolean(conv.other_participant?.is_verified);
             return (
               <button
                 key={conv.id}
@@ -257,9 +263,13 @@ export function GlobalSearchResults({
                   </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
+                  <UserName
+                    isVerified={showBadge}
+                    badgeSize="xs"
+                    className="text-sm font-medium"
+                  >
                     <Highlighted text={title} term={debounced} />
-                  </p>
+                  </UserName>
                   <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
                     {conv.type === 'group' ? (
                       <>
@@ -307,9 +317,13 @@ export function GlobalSearchResults({
                   </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
+                  <UserName
+                    isVerified={profile.is_verified}
+                    badgeSize="xs"
+                    className="text-sm font-medium"
+                  >
                     <Highlighted text={name} term={debounced} />
-                  </p>
+                  </UserName>
                   {profile.username && (
                     <p className="truncate text-xs text-muted-foreground">
                       @{profile.username}
