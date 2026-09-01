@@ -22,6 +22,7 @@ import { RichText } from '@/components/RichText';
 import { PostExtras } from '@/components/PostExtras';
 import { PostMusicCard } from '@/components/PostMusicCard';
 import { PostCollaboratorByline } from '@/components/PostCollaboratorByline';
+import { PostAuthorAvatars } from '@/components/PostAuthorAvatars';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
@@ -29,7 +30,6 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { LiveStreamCard } from '@/components/live/LiveStreamCard';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { StoryViewer } from '@/components/stories/StoryViewer';
-import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { supabase } from '@/integrations/supabase/client';
 import { RepostButton } from '@/components/RepostButton';
 import { useActiveAds } from '@/hooks/useAds';
@@ -452,19 +452,19 @@ function PostCard({
     <article className="bg-card rounded-xl md:rounded-2xl border border-border overflow-hidden animate-fade-in">
       {/* Post Header */}
       <div className="flex items-center justify-between p-3 md:p-4">
-        <div className="flex items-center gap-2.5 md:gap-3">
-          <StoryAvatar
+        <div className="flex min-w-0 items-center gap-2.5 md:gap-3">
+          {/* Hammuallif bo'lsa ikkita profil rasmi qavatlanib chiqadi */}
+          <PostAuthorAvatars
+            postId={post.id}
             userId={post.user_id}
             username={post.profile?.username}
             displayName={post.profile?.display_name}
             avatarUrl={post.profile?.avatar_url}
             isVerified={!!post.profile?.is_verified}
-            size="md"
-            showRing
-            onClick={handleUserClick}
+            onOwnerClick={handleUserClick}
           />
-          <div>
-            <div className="flex items-center gap-1">
+          <div className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-center gap-1">
               <span 
                 className="font-semibold text-sm cursor-pointer hover:underline"
                 onClick={handleUserClick}
@@ -477,7 +477,6 @@ function PostCard({
               <PostCollaboratorByline
                 postId={post.id}
                 isOwner={isOwner}
-                className="truncate"
               />
             </div>
             <p className="text-[11px] md:text-xs text-muted-foreground">
