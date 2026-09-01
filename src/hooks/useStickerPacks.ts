@@ -1,7 +1,7 @@
+import { db } from '@/lib/db';
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import {
-import { db } from '@/lib/db';
   RecentSticker,
   StickerKind,
   fetchRecentStickers,

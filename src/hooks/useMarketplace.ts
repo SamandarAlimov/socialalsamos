@@ -1,3 +1,4 @@
+import { db } from '@/lib/db';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { db } from '@/lib/supabaseAny';
@@ -5,7 +6,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { getShippingCost } from '@/lib/marketplace';
 import {
-import { db } from '@/lib/db';
   isNetworkError,
   networkErrorMessage,
   onNetworkRestored,

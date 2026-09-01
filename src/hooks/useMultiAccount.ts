@@ -1,3 +1,4 @@
+import { db } from '@/lib/db';
 /**
  * Multi-account support for one Alsamos identity.
  *
@@ -25,7 +26,6 @@ import {
   requestLoginTicket,
 } from '@/lib/alsamosAuth';
 import {
-import { db } from '@/lib/db';
   clearSlot,
   getActiveSlot,
   occupiedSlots,
