@@ -381,12 +381,13 @@ export function AISidebar({
       </div>
 
       {/*
-        MUHIM: Radix ScrollArea o'z viewport'i ichida `display: table` qo'yadi.
-        Table esa konteyner emas, KONTENT kengligiga cho'ziladi — shu sababli uzun
-        suhbat nomlari `truncate` bo'lmay, sidebar chizig'idan oshib ketardi.
-        `[&>div>div]:!block` bilan uni oddiy blokka qaytaramiz.
+        MUHIM: Radix ScrollArea viewport ichida `display: table` qo'yadi va u kontent
+        kengligiga cho'ziladi — shu sababli uzun suhbat nomlari sidebardan oshib ketardi.
+        Faqat VIEWPORT ichidagi o'sha blokni maqsad qilamiz. Selektor kengroq bo'lsa
+        (masalan `[&>div]`), u skroll chizig'ini ham qamrab olib, uni butun panel bo'ylab
+        cho'zib yuboradi — shuning uchun data-atribut bilan aniq nishonlaymiz.
       */}
-      <ScrollArea className="min-h-0 w-full min-w-0 flex-1 px-2 [&>div>div]:!block [&>div>div]:!w-full [&>div]:!w-full">
+      <ScrollArea className="min-h-0 w-full min-w-0 flex-1 px-2 [&_[data-radix-scroll-area-viewport]>div]:!block [&_[data-radix-scroll-area-viewport]>div]:!w-full">
         <div className="w-full min-w-0 space-y-3 overflow-hidden pb-4">
           {loading ? (
             <div className="space-y-2 px-1">
