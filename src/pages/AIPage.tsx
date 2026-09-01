@@ -28,6 +28,7 @@ import { AIGithubDialog } from '@/components/ai/AIGithubDialog';
 import type { AIConversation, AIMessage, AISource, AIToolEvent } from '@/components/ai/types';
 import { extractArtifacts } from '@/lib/aiArtifacts';
 import { streamAgent } from '@/lib/ai/agentClient';
+import { buildRepoContext, detectRepoRefs, githubReady, githubRepoUrl } from '@/lib/ai/githubContext';
 import { toolLabel, type ModelId, type ToolGroupId } from '@/lib/ai/capabilities';
 
 const PIN_KEY = 'alsamos.ai.pinned';
@@ -368,6 +369,72 @@ export default function AIPage() {
           forwardedPost.mediaUrl ? `Media: ${forwardedPost.mediaUrl}` : ''
         }`;
         history[0] = { ...history[0], content: history[0].content + contextInfo };
+      }
+
+      /* ---- GitHub konteksti (brauzerda o'qiladi, deploy talab qilmaydi) ----
+       * Server tomonidagi `ai-agent` vositalari mavjud bo'lmasa ham, chat repo
+       * bo'yicha real javob bersin uchun repo tuzilishini va asosiy fayllarni
+       * shu yerda o'qib, oxirgi savolga qo'shib yuboramiz.
+       */
+      const lastUser = [...baseMessages].reverse().find((m) => m.role === 'user');
+      const repoRefs = lastUser ? detectRepoRefs(lastUser.content) : [];
+
+      if (repoRefs.length > 0 && history.length > 0) {
+        if (!githubReady()) {
+          notice =
+            "GitHub ulanmagan \u2014 repozitoriyni o\u2018qiy olmadim. Yon paneldagi GitHub bo\u2018limidan token bilan ulang.";
+          flush();
+        } else {
+          for (const ref of repoRefs.slice(0, 1)) {
+            const toolId = crypto.randomUUID();
+            tools.push({
+              id: toolId,
+              name: 'github_repo',
+              label: `GitHub: ${ref.fullName}`,
+              status: 'running',
+              args: { repo: ref.fullName },
+              startedAt: Date.now(),
+            });
+            setStatusLabel('GitHub repozitoriysi o\u2018qilmoqda\u2026');
+            flush();
+
+            try {
+              const repoContext = await buildRepoContext(ref);
+              const entry = tools.find((t) => t.id === toolId);
+              if (entry) {
+                entry.status = 'done';
+                entry.summary = repoContext.summary;
+                entry.data = {
+                  files: repoContext.fileCount,
+                  pages: repoContext.pageCount,
+                } as any;
+                entry.finishedAt = Date.now();
+              }
+              if (!sources.some((s) => s.url === ref.url)) {
+                sources.push({ title: ref.fullName, url: ref.url });
+              }
+              const last = history.length - 1;
+              history[last] = {
+                ...history[last],
+                content: `${history[last].content}\n\n${repoContext.context}`,
+              };
+              setStatusLabel('Javob tayyorlanmoqda\u2026');
+              flush();
+            } catch (repoError: any) {
+              const entry = tools.find((t) => t.id === toolId);
+              if (entry) {
+                entry.status = 'error';
+                entry.summary =
+                  repoError?.message || "Repozitoriyni o\u2018qib bo\u2018lmadi.";
+                entry.finishedAt = Date.now();
+              }
+              notice = `${ref.fullName}: ${
+                repoError?.message || "repozitoriyni o\u2018qib bo\u2018lmadi"
+              }`;
+              flush();
+            }
+          }
+        }
       }
 
       await streamAgent({
@@ -803,8 +870,9 @@ export default function AIPage() {
         open={githubOpen}
         onOpenChange={setGithubOpen}
         onPickRepo={(repo) => {
+          // To'liq havola qo'yamiz — chat shu havoladan repo'ni real o'qiydi.
           const prefix = input.trim() ? `${input.trim()} ` : '';
-          setInput(`${prefix}${repo.fullName} repozitoriysi bo'yicha: `);
+          setInput(`${prefix}${githubRepoUrl(repo.fullName)} `);
         }}
       />
     </div>
