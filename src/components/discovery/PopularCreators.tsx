@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, BadgeCheck, RefreshCw } from 'lucide-react';
+import { Users, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
+import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
@@ -221,9 +222,8 @@ export function PopularCreators({ refreshKey = 0 }: PopularCreatorsProps) {
                     <span className="truncate text-sm font-medium">
                       {creator.display_name || creator.username}
                     </span>
-                    {creator.is_verified && (
-                      <BadgeCheck className="h-4 w-4 shrink-0 text-primary" />
-                    )}
+                    {/* Umumiy komponent: to'ldirilgan ko'k Instagram nishoni */}
+                    {creator.is_verified && <VerifiedBadge size="sm" />}
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">
                     @{creator.username} - {formatCount(creator.followers_count)} follower
