@@ -2,13 +2,16 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   ArrowUp,
   Check,
+  FileArchive,
+  FileSpreadsheet,
   FileText,
+  Film,
   Github,
   Globe,
-  Image as ImageIcon,
   Loader2,
   Mic,
   MicOff,
+  Music,
   Paperclip,
   Plug,
   Plus,
@@ -56,8 +59,28 @@ const SLASH_COMMANDS: SlashCommand[] = [
 export type ComposerAttachment = {
   url: string;
   name: string;
+  /** image | video | audio | document */
   type: string;
+  /** Bayt hajmi — kartochkada ko'rsatiladi. */
+  size?: number;
 };
+
+/** 1.4 MB ko'rinishidagi qisqa hajm. */
+function formatSize(bytes?: number): string | null {
+  if (!bytes || bytes <= 0) return null;
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function attachmentIcon(type: string, name: string) {
+  if (type.startsWith('video')) return Film;
+  if (type.startsWith('audio')) return Music;
+  const ext = name.split('.').pop()?.toLowerCase() || '';
+  if (['xlsx', 'xls', 'csv'].includes(ext)) return FileSpreadsheet;
+  if (['zip', 'rar', '7z'].includes(ext)) return FileArchive;
+  return FileText;
+}
 
 interface AIComposerProps {
   value: string;
@@ -179,7 +202,8 @@ export function AIComposer({
     return SLASH_COMMANDS.filter((c) => c.cmd.startsWith(query));
   }, [slashOpen, value]);
 
-  const canSend = Boolean(value.trim()) && !busy && !uploading;
+  // Fayl biriktirilgan bo'lsa, matnsiz ham yuborish mumkin.
+  const canSend = Boolean(value.trim() || attachments.length > 0) && !busy && !uploading;
 
   const handleMic = () => {
     if (!voice.supported) {
@@ -298,31 +322,73 @@ export function AIComposer({
             </div>
           )}
 
-          {attachments.length > 0 && (
+          {/*
+            Biriktirmalar — Claude/ChatGPT uslubi:
+            rasm bo'lsa haqiqiy eskiz (thumbnail), boshqa fayl bo'lsa nom + hajm
+            bilan kartochka. O'chirish tugmasi burchakda.
+          */}
+          {(attachments.length > 0 || uploading) && (
             <div className="mb-2 flex flex-wrap gap-2 px-1">
-              {attachments.map((file) => (
-                <div
-                  key={file.url}
-                  className="group relative flex items-center gap-1.5 rounded-xl border border-border/60 bg-muted/50 px-2 py-1"
-                >
-                  {file.type.startsWith('image') ? (
-                    <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                  ) : (
-                    <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                  )}
-                  <span className="max-w-[120px] truncate text-[11px] sm:max-w-[160px]">
-                    {file.name}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => onRemoveAttachment(file.url)}
-                    className="rounded-full p-0.5 hover:bg-background"
-                    aria-label={`${file.name} ni olib tashlash`}
+              {attachments.map((file) => {
+                const isImage = file.type.startsWith('image');
+                const Icon = attachmentIcon(file.type, file.name);
+                const size = formatSize(file.size);
+
+                if (isImage) {
+                  return (
+                    <div
+                      key={file.url}
+                      className="group relative h-16 w-16 overflow-hidden rounded-xl border border-border/60 bg-muted/40"
+                    >
+                      <img
+                        src={file.url}
+                        alt={file.name}
+                        loading="lazy"
+                        className="h-full w-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => onRemoveAttachment(file.url)}
+                        className="absolute right-0.5 top-0.5 rounded-full bg-background/90 p-0.5 shadow-sm transition-opacity hover:bg-background"
+                        aria-label={`${file.name} ni olib tashlash`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={file.url}
+                    className="group relative flex h-16 max-w-[220px] items-center gap-2 rounded-xl border border-border/60 bg-muted/40 py-2 pl-2 pr-7"
                   >
-                    <X className="h-3 w-3" />
-                  </button>
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-alsamos-orange/10 text-alsamos-orange">
+                      <Icon className="h-5 w-5" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-[12px] font-medium">{file.name}</span>
+                      <span className="block text-[10px] uppercase text-muted-foreground">
+                        {[file.type, size].filter(Boolean).join(' \u00b7 ')}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onRemoveAttachment(file.url)}
+                      className="absolute right-1 top-1 rounded-full p-0.5 hover:bg-background"
+                      aria-label={`${file.name} ni olib tashlash`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              })}
+
+              {uploading && (
+                <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-dashed border-border/60 bg-muted/30">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 </div>
-              ))}
+              )}
             </div>
           )}
 
