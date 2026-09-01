@@ -131,8 +131,17 @@ export interface MiniAppDraft {
   iconUrl?: string | null;
   publisherId?: string | null;
   permissions?: MiniAppPermission[];
+  priceModel?: MiniAppPriceModel;
+  screenshots?: string[];
   privacyUrl?: string | null;
   supportUrl?: string | null;
+}
+
+/** `mini_app_handle_available` RPC natijasi. */
+export interface HandleAvailability {
+  available: boolean;
+  handle: string;
+  reason: 'INVALID_LENGTH' | 'INVALID_FORMAT' | 'TAKEN' | null;
 }
 
 export type MiniAppEventName =
@@ -166,6 +175,12 @@ export const MINI_APP_SORT_LABELS: Record<MiniAppSort, string> = {
   new: 'Yangi',
 };
 
+export const MINI_APP_PRICE_LABELS: Record<MiniAppPriceModel, string> = {
+  free: 'Bepul',
+  freemium: 'Bepul + pullik imkoniyat',
+  paid: 'Pullik',
+};
+
 export const MINI_APP_PERMISSION_LABELS: Record<MiniAppPermission, string> = {
   profile: 'Profil ma\u2019lumotlari',
   contacts: 'Kontaktlar',
@@ -176,4 +191,11 @@ export const MINI_APP_PERMISSION_LABELS: Record<MiniAppPermission, string> = {
   microphone: 'Mikrofon',
   clipboard: 'Vaqtinchalik xotira',
   storage: 'Fayl saqlash',
+};
+
+export const PUBLISHER_VERIFICATION_LABELS: Record<PublisherVerification, string> = {
+  unverified: 'Tasdiqlanmagan',
+  email_verified: 'Email tasdiqlangan',
+  domain_verified: 'Domen tasdiqlangan',
+  official: 'Rasmiy',
 };
