@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { GlobalCallProvider } from "@/contexts/GlobalCallContext";
 import { OnlinePresenceProvider } from "@/contexts/OnlinePresenceContext";
@@ -91,6 +91,17 @@ function AuthRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Post uchun doimiy havola: /post/:postId.
+ * Ilgari bunday marshrut yo'q edi va ulashilgan havola 404 sahifasiga tushardi.
+ * Lentadagi post oynasi `?post=` parametrini qo'llab-quvvatlaydi.
+ */
+function PostPermalink() {
+  const { postId } = useParams<{ postId: string }>();
+
+  return <Navigate to={postId ? '/home?post=' + encodeURIComponent(postId) : '/home'} replace />;
+}
+
 function AppRoutes() {
   return (
     <>
@@ -118,6 +129,7 @@ function AppRoutes() {
       {/* Protected App Routes */}
       <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
         <Route path="/home" element={<HomePage />} />
+        <Route path="/post/:postId" element={<PostPermalink />} />
         <Route path="/discover" element={<DiscoveryPage />} />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/videos" element={<VideosPage />} />

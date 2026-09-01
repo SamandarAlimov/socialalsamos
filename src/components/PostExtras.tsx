@@ -16,14 +16,14 @@ import type { LegacyPostLocation, PostMusic } from '@/lib/postMarkers';
 
 interface PostExtrasProps {
   postId: string;
-  /** `posts.has_poll` — keraksiz so‘rovlarni oldini oladi. */
+  /** `posts.has_poll` — keraksiz so\u2018rovlarni oldini oladi. */
   hasPoll?: boolean;
-  /** Post egasi bo‘lsa live joylashuvni to‘xtatish tugmasi chiqadi. */
+  /** Post egasi bo\u2018lsa live joylashuvni to\u2018xtatish tugmasi chiqadi. */
   isOwner?: boolean;
   /**
    * Eski sxemadagi fayllar (`posts.media_urls`).
-   * `post_media` bo‘sh bo‘lganda faqat shu ishlatiladi — shu tariqa eski
-   * postlar ham ko‘rinadi, yangi postlar esa ikki marta chizilmaydi.
+   * `post_media` bo\u2018sh bo\u2018lganda faqat shu ishlatiladi — shu tariqa eski
+   * postlar ham ko\u2018rinadi, yangi postlar esa ikki marta chizilmaydi.
    */
   legacyMediaUrls?: string[] | null;
   legacyMediaType?: string | null;
@@ -31,7 +31,7 @@ interface PostExtrasProps {
   legacyLocation?: LegacyPostLocation | null;
   /** Koordinatasiz eski joylashuv (masalan "Joriy joylashuv") — nom bilan karta chiziladi. */
   legacyLocationLabel?: string | null;
-  /** `[MUSIC]{...}` markeridan olingan musiqa — `post_music` bo‘lmasa ishlatiladi. */
+  /** `[MUSIC]{...}` markeridan olingan musiqa — `post_music` bo\u2018lmasa ishlatiladi. */
   legacyMusic?: PostMusic | null;
   className?: string;
 }
@@ -89,7 +89,7 @@ function AudioCard({ item }: { item: PostMediaItem }) {
   );
 }
 
-/** Koordinatasi yo‘q eski joylashuv uchun karta (xarita rasmi bo‘lmaydi). */
+/** Koordinatasi yo\u2018q eski joylashuv uchun karta (xarita rasmi bo\u2018lmaydi). */
 function PlaceLabelCard({ label }: { label: string }) {
   return (
     <Link
@@ -111,12 +111,12 @@ function PlaceLabelCard({ label }: { label: string }) {
 }
 
 /**
- * Lentadagi post ostiga qo‘shiladigan strukturali kontent bloki:
- * fayllar galereyasi (har qanday tur), stikerlar, musiqa, so‘rovnoma va joylashuv.
+ * Lentadagi post ostiga qo\u2018shiladigan strukturali kontent bloki:
+ * fayllar galereyasi (har qanday tur), stikerlar, musiqa, so\u2018rovnoma va joylashuv.
  *
  * Bu blok postning matnidan mustaqil — shuning uchun eski postlar ham
- * buzilmaydi: `post_media` bo‘sh bo‘lsa eski `media_urls` ishlatiladi,
- * `post_music` bo‘sh bo‘lsa content markeridagi musiqa ko‘rsatiladi.
+ * buzilmaydi: `post_media` bo\u2018sh bo\u2018lsa eski `media_urls` ishlatiladi,
+ * `post_music` bo\u2018sh bo\u2018lsa content markeridagi musiqa ko\u2018rsatiladi.
  */
 export function PostExtras({
   postId,
@@ -161,14 +161,17 @@ export function PostExtras({
   const labelOnlyLocation =
     !displayLocation && legacyLocationLabel ? legacyLocationLabel : null;
 
-  // Strukturali musiqa ustun; bo‘lmasa content markeridagi musiqa chiziladi.
+  // Strukturali musiqa ustun; bo\u2018lmasa content markeridagi musiqa chiziladi.
+  // MUHIM: ilgari `playback_url` bo\u2018lmasa karta umuman chizilmasdi. Signed URL
+  // olinmagan holatlarda ham trekning o\u2018z `audio_url` i bilan ijro qilinadi.
+  const structuredAudioUrl = music?.playback_url ?? music?.track?.audio_url ?? null;
   const structuredMusic: PostMusic | null =
-    music?.track && music.playback_url
+    music?.track && structuredAudioUrl
       ? {
           title: music.track.title,
           artist: music.track.artist,
           coverUrl: music.track.cover_url,
-          audioUrl: music.playback_url,
+          audioUrl: structuredAudioUrl,
           durationSeconds: music.track.duration_seconds,
         }
       : null;
@@ -177,7 +180,7 @@ export function PostExtras({
   const visuals = media.filter((item) => item.kind === 'image' || item.kind === 'video');
   const others = media.filter((item) => item.kind !== 'image' && item.kind !== 'video');
 
-  // Yangi sxemada fayl bo‘lmasa — eski massivga qaytamiz.
+  // Yangi sxemada fayl bo\u2018lmasa — eski massivga qaytamiz.
   const legacy = media.length === 0 ? (legacyMediaUrls ?? []) : [];
 
   const hasAnything =
@@ -234,7 +237,7 @@ export function PostExtras({
                 />
               )}
 
-              {/* Media ustidagi stikerlar — faqat ko‘rish rejimi */}
+              {/* Media ustidagi stikerlar — faqat ko\u2018rish rejimi */}
               <MediaStickerOverlay
                 editState={(item as PostMediaItem & WithEditState).edit_state}
                 idPrefix={item.id}
@@ -263,7 +266,7 @@ export function PostExtras({
         />
       )}
 
-      {/* So‘rovnoma */}
+      {/* So\u2018rovnoma */}
       {hasPoll && <PollCard postId={postId} />}
 
       {/* Joylashuv */}
@@ -274,7 +277,7 @@ export function PostExtras({
         />
       )}
 
-      {/* Koordinatasi yo‘q eski joylashuv */}
+      {/* Koordinatasi yo\u2018q eski joylashuv */}
       {labelOnlyLocation && <PlaceLabelCard label={labelOnlyLocation} />}
     </div>
   );
