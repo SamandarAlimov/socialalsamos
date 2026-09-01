@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { db } from '@/lib/db';
 import { supabase } from '@/integrations/supabase/client';
+import { isMissingStructuredPostSchemaError } from '@/lib/structuredPostSchema';
 
 export type CollaborationStatus = 'pending' | 'accepted' | 'declined';
 
@@ -22,6 +23,14 @@ export interface PostCollaborator {
   created_at: string;
   responded_at: string | null;
   profile: PostCollaboratorProfile | null;
+}
+
+/** Joriy foydalanuvchi id-si (fallback yozuvlar uchun kerak). */
+async function requireUserId(): Promise<string> {
+  const { data } = await supabase.auth.getUser();
+  const id = data.user?.id;
+  if (!id) throw new Error('Avval tizimga kiring');
+  return id;
 }
 
 export function usePostCollaborators(postId: string | null | undefined) {
@@ -100,11 +109,27 @@ export function usePostCollaborators(postId: string | null | undefined) {
   const invite = useCallback(
     async (userId: string) => {
       if (!postId) throw new Error('Post topilmadi');
+
       const { error } = await db.rpc('invite_post_collaborator', {
         p_post_id: postId,
         p_user_id: userId,
       });
-      if (error) throw error;
+
+      // Serverda RPC hali mavjud bo'lmasa jadvalga to'g'ridan-to'g'ri yozamiz.
+      if (error) {
+        if (!isMissingStructuredPostSchemaError(error)) throw error;
+
+        const invitedBy = await requireUserId();
+        const { error: insertError } = await db.from('post_collaborators').insert({
+          post_id: postId,
+          user_id: userId,
+          invited_by: invitedBy,
+          status: 'pending',
+          role: 'collaborator',
+        });
+        if (insertError) throw insertError;
+      }
+
       await load();
     },
     [load, postId],
@@ -116,7 +141,22 @@ export function usePostCollaborators(postId: string | null | undefined) {
         p_collaboration_id: collaborationId,
         p_accept: accept,
       });
-      if (error) throw error;
+
+      if (error) {
+        if (!isMissingStructuredPostSchemaError(error)) throw error;
+
+        const userId = await requireUserId();
+        const { error: updateError } = await db
+          .from('post_collaborators')
+          .update({
+            status: accept ? 'accepted' : 'declined',
+            responded_at: new Date().toISOString(),
+          })
+          .eq('id', collaborationId)
+          .eq('user_id', userId);
+        if (updateError) throw updateError;
+      }
+
       await load();
     },
     [load],
@@ -127,7 +167,17 @@ export function usePostCollaborators(postId: string | null | undefined) {
       const { error } = await db.rpc('remove_post_collaborator', {
         p_collaboration_id: collaborationId,
       });
-      if (error) throw error;
+
+      if (error) {
+        if (!isMissingStructuredPostSchemaError(error)) throw error;
+
+        const { error: deleteError } = await db
+          .from('post_collaborators')
+          .delete()
+          .eq('id', collaborationId);
+        if (deleteError) throw deleteError;
+      }
+
       await load();
     },
     [load],
@@ -138,7 +188,19 @@ export function usePostCollaborators(postId: string | null | undefined) {
       const { error } = await db.rpc('leave_post_collaboration', {
         p_collaboration_id: collaborationId,
       });
-      if (error) throw error;
+
+      if (error) {
+        if (!isMissingStructuredPostSchemaError(error)) throw error;
+
+        const userId = await requireUserId();
+        const { error: deleteError } = await db
+          .from('post_collaborators')
+          .delete()
+          .eq('id', collaborationId)
+          .eq('user_id', userId);
+        if (deleteError) throw deleteError;
+      }
+
       await load();
     },
     [load],

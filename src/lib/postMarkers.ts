@@ -3,9 +3,11 @@ import type { PostLocation } from '@/hooks/usePostLocation';
 /**
  * Post matni ichida maxsus markerlar saqlanadi, masalan:
  *   [MUSIC]{"title":"...","artist":"...","audio_url":"..."}
+ *   [LOCATION]{"latitude":41.31,"longitude":69.24}
  *
- * Ilgari bu marker foydalanuvchiga xom JSON ko'rinishida chiqib ketardi.
- * Bu modul markerni matndan ajratib, tuzilgan ma'lumot qaytaradi.
+ * Bundan tashqari juda eski postlarda joylashuv oddiy emoji qatori bo'lib
+ * yozilgan: "\uD83D\uDCCD Current location". Bu modul har uchala shaklni ham
+ * matndan ajratib, tuzilgan ma'lumot qaytaradi.
  */
 
 export interface PostMusic {
@@ -30,8 +32,19 @@ export interface LegacyPostLocation {
   } | null;
 }
 
+export interface LocationParseResult {
+  /** Koordinatasi bor joylashuv (karta + xarita bilan chiziladi). */
+  location: LegacyPostLocation | null;
+  /** Koordinatasiz eski joylashuv nomi (faqat nom bilan karta chiziladi). */
+  labelOnly: string | null;
+  cleanContent: string;
+}
+
 const MUSIC_TAG = '[MUSIC]';
 const LOCATION_TAG = '[LOCATION]';
+/** \uD83D\uDCCD emojisi (round pushpin). */
+const LOCATION_EMOJI = '\uD83D\uDCCD';
+const LEGACY_LOCATION_PREFIX = 'LOCATION:';
 
 /** JSON obyektining yopiluvchi qavsini topadi (satr ichidagi qavslarni hisobga olmaydi). */
 function findObjectEnd(text: string, start: number): number {
@@ -74,7 +87,7 @@ function num(value: unknown): number | null {
 
 function normalizeMusic(raw: Record<string, unknown>): PostMusic | null {
   const title =
-    str(raw.title) ?? str(raw.name) ?? str(raw.track) ?? str(raw.song);
+    str(raw.title) ?? str(raw.name) ?? str(raw.track) ?? str(raw.song) ?? str(raw.fileName) ?? str(raw.file_name);
   const audioUrl =
     str(raw.audio_url) ?? str(raw.audioUrl) ?? str(raw.url) ?? str(raw.src) ?? str(raw.preview_url);
 
@@ -86,7 +99,8 @@ function normalizeMusic(raw: Record<string, unknown>): PostMusic | null {
     coverUrl:
       str(raw.cover_url) ?? str(raw.coverUrl) ?? str(raw.cover) ?? str(raw.artwork) ?? str(raw.image) ?? null,
     audioUrl,
-    durationSeconds: num(raw.duration) ?? num(raw.duration_seconds) ?? null,
+    durationSeconds:
+      num(raw.duration) ?? num(raw.duration_seconds) ?? num(raw.durationSeconds) ?? null,
   };
 }
 
@@ -157,21 +171,107 @@ function normalizeLocation(raw: Record<string, unknown>): LegacyPostLocation | n
   };
 }
 
-export function parseLocationFromContent(content: string | null | undefined): {
-  location: LegacyPostLocation | null;
-  cleanContent: string;
-} {
-  if (!content) return { location: null, cleanContent: '' };
+/** "41.31, 69.24" ko'rinishidagi koordinatani ajratadi. */
+function parseCoordinatePair(text: string): { latitude: number; longitude: number } | null {
+  const match = text.match(/(-?\d{1,3}(?:[.,]\d+)?)\s*[,;|]\s*(-?\d{1,3}(?:[.,]\d+)?)/);
+  if (!match) return null;
+
+  const latitude = Number(match[1].replace(',', '.'));
+  const longitude = Number(match[2].replace(',', '.'));
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
+
+  return { latitude, longitude };
+}
+
+/** Ingliz tilidagi eski standart nomlarni tushunarli qilib beradi. */
+function normalizeLegacyLabel(label: string | null): string | null {
+  if (!label) return null;
+  const lower = label.toLowerCase();
+  if (lower === 'current location' || lower === 'my location' || lower === 'location') {
+    return 'Joriy joylashuv';
+  }
+  return label;
+}
+
+/**
+ * Eng eski postlarda joylashuv shunchaki emoji qatori edi:
+ *   "\uD83D\uDCCD Current location"  yoki  "\uD83D\uDCCD LOCATION:41.31,69.24"
+ * Bu funksiya shu qatorni matndan olib tashlab, tuzilgan holda qaytaradi.
+ */
+export function parseEmojiLocationFromContent(
+  content: string | null | undefined,
+): LocationParseResult {
+  if (!content) return { location: null, labelOnly: null, cleanContent: '' };
+  if (!content.includes(LOCATION_EMOJI)) {
+    return { location: null, labelOnly: null, cleanContent: content };
+  }
+
+  const lines = content.split('\n');
+  let raw: string | null = null;
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const index = lines[i].indexOf(LOCATION_EMOJI);
+    if (index === -1) continue;
+
+    raw = lines[i].slice(index + LOCATION_EMOJI.length).trim();
+    lines[i] = lines[i].slice(0, index).trimEnd();
+    break;
+  }
+
+  const cleanContent = lines
+    .filter((line, index) => line.trim().length > 0 || index === 0)
+    .join('\n')
+    .trim();
+
+  if (raw == null) return { location: null, labelOnly: null, cleanContent };
+
+  let text = raw;
+  if (text.toUpperCase().startsWith(LEGACY_LOCATION_PREFIX)) {
+    text = text.slice(LEGACY_LOCATION_PREFIX.length).trim();
+  }
+
+  const coords = parseCoordinatePair(text);
+  if (coords) {
+    const label = normalizeLegacyLabel(
+      text.replace(/(-?\d{1,3}(?:[.,]\d+)?)\s*[,;|]\s*(-?\d{1,3}(?:[.,]\d+)?)/, '').trim() || null,
+    );
+
+    return {
+      location: {
+        mode: 'place',
+        label,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracyM: null,
+        liveUntil: null,
+        place: null,
+      },
+      labelOnly: null,
+      cleanContent,
+    };
+  }
+
+  const labelOnly = normalizeLegacyLabel(text || null) ?? 'Joylashuv';
+  return { location: null, labelOnly, cleanContent };
+}
+
+export function parseLocationFromContent(
+  content: string | null | undefined,
+): LocationParseResult {
+  if (!content) return { location: null, labelOnly: null, cleanContent: '' };
 
   const tagIndex = content.indexOf(LOCATION_TAG);
-  if (tagIndex === -1) return { location: null, cleanContent: content };
+
+  // Yangi marker yo'q: eski emoji qatorini sinab ko'ramiz.
+  if (tagIndex === -1) return parseEmojiLocationFromContent(content);
 
   const jsonStart = content.indexOf('{', tagIndex + LOCATION_TAG.length);
   const jsonEnd = jsonStart === -1 ? -1 : findObjectEnd(content, jsonStart);
 
   if (jsonStart === -1 || jsonEnd === -1) {
     const cleaned = (content.slice(0, tagIndex) + content.slice(tagIndex + LOCATION_TAG.length)).trim();
-    return { location: null, cleanContent: cleaned };
+    return parseEmojiLocationFromContent(cleaned);
   }
 
   const cleaned = (content.slice(0, tagIndex) + content.slice(jsonEnd + 1)).trim();
@@ -179,16 +279,34 @@ export function parseLocationFromContent(content: string | null | undefined): {
   try {
     const parsed = JSON.parse(content.slice(jsonStart, jsonEnd + 1));
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const location = normalizeLocation(parsed as Record<string, unknown>);
+      if (location) {
+        const rest = parseEmojiLocationFromContent(cleaned);
+        return { location, labelOnly: null, cleanContent: rest.cleanContent };
+      }
+
+      // Koordinata yo'q, lekin nom bo'lishi mumkin.
+      const raw = parsed as Record<string, unknown>;
+      const rawPlace =
+        raw.place && typeof raw.place === 'object' && !Array.isArray(raw.place)
+          ? (raw.place as Record<string, unknown>)
+          : null;
+      const labelOnly = normalizeLegacyLabel(
+        str(raw.label) ?? str(raw.name) ?? (rawPlace ? str(rawPlace.name) : null),
+      );
+      const rest = parseEmojiLocationFromContent(cleaned);
+
       return {
-        location: normalizeLocation(parsed as Record<string, unknown>),
-        cleanContent: cleaned,
+        location: rest.location,
+        labelOnly: labelOnly ?? rest.labelOnly,
+        cleanContent: rest.cleanContent,
       };
     }
   } catch {
     // Buzuq legacy marker foydalanuvchiga ko'rinmasin.
   }
 
-  return { location: null, cleanContent: cleaned };
+  return parseEmojiLocationFromContent(cleaned);
 }
 
 export function legacyLocationToPostLocation(
