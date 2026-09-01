@@ -77,7 +77,9 @@ const VISIBILITIES: Array<{
  *    haqiqiy qatlam sifatida qo‘yiladi
  *
  * Layout ikki holatda ishlaydi:
- *  - media yo‘q: bir ustunli karta va katta media maydoni;
+ *  - media yo‘q: bir ustunli karta va katta media maydoni. Karta flex ustun
+ *    bo‘lgani uchun amallar paneli har qanday oyna balandligida ko‘rinib
+ *    turadi — ilgari u ekrandan pastga tushib ketardi;
  *  - media bor: xarita dizayn tilidagi media-first sheet (CreateSheetLayout).
  */
 export function PostComposer() {
@@ -638,7 +640,7 @@ export function PostComposer() {
 
   /** Muallif qatori va matn muharriri ikki layoutda ham bir xil. */
   const authorAndEditor = (
-    <div className="flex items-start gap-3 px-4 pb-2 pt-4 sm:px-5 sm:pt-5">
+    <div className="flex shrink-0 items-start gap-3 px-4 pb-2 pt-4 sm:px-5 sm:pt-5">
       <Avatar className="h-11 w-11 shrink-0">
         <AvatarImage src={profile?.avatar_url ?? ''} />
         <AvatarFallback className="font-semibold">
@@ -734,7 +736,10 @@ export function PostComposer() {
     <div
       className={cn(
         'relative w-full',
-        !sheetMode && 'mx-auto max-w-3xl px-0 pb-8 sm:px-4 sm:pt-4',
+        // Karta rejimida balandlik ota konteynerga moslanadi, aks holda
+        // amallar paneli ekran ostiga tushib ketadi (main lg:overflow-hidden).
+        !sheetMode &&
+          'mx-auto flex max-w-3xl flex-col px-0 pb-8 sm:px-4 sm:pt-4 lg:h-full lg:min-h-0 lg:pb-3',
       )}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
@@ -774,14 +779,18 @@ export function PostComposer() {
           {extras}
         </CreateSheetLayout>
       ) : (
-        <section className="overflow-hidden border-y border-border/60 bg-background sm:rounded-2xl sm:border">
+        <section className="flex min-h-0 flex-col overflow-hidden border-y border-border/60 bg-background sm:rounded-2xl sm:border lg:flex-1">
           {authorAndEditor}
           {extras}
 
-          {/* Bo‘sh holatda media maydoni: aks holda pastki yarim bo‘sh qoladi. */}
-          <CreateMediaDropzone onPick={() => fileInputRef.current?.click()} />
+          {/* Bo‘sh holatda media maydoni: qolgan bo‘sh joyni egallaydi. */}
+          <CreateMediaDropzone
+            onPick={() => fileInputRef.current?.click()}
+            className="lg:min-h-0 lg:flex-1"
+          />
 
           <PostComposerToolbar
+            className="shrink-0"
             tools={toolsInput}
             canSubmit={canSubmit}
             canSaveDraft={canSaveDraft}
