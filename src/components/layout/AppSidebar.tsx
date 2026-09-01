@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, ShieldCheck, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UserPlus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UserPlus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -128,13 +128,13 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
                 {profile?.avatar_url ? <Avatar className="h-5 w-5 flex-shrink-0"><AvatarImage src={profile.avatar_url} alt={profile.display_name || 'Profile'} /><AvatarFallback><User className="h-3 w-3" /></AvatarFallback></Avatar> : <User className="h-5 w-5 flex-shrink-0" />}
                 {!collapsed && <span className="font-medium text-sm">{t(item.labelKey)}</span>}
               </NavLink>
+              {/* Xavfsizlik bu yerda emas — u Sozlamalar ichida joylashgan. */}
               {!collapsed && <DropdownMenu>
                 <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                 <DropdownMenuContent align="end" side="top" className="w-56">
                   <DropdownMenuItem onClick={() => navigate('/settings')}><Settings className="h-4 w-4 mr-3" />{t('nav.settings')}</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate('/settings/security')}><ShieldCheck className="h-4 w-4 mr-3" />Xavfsizlik</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun className="h-4 w-4 mr-3" /> : <Moon className="h-4 w-4 mr-3" />}{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setShowSwitchAccount(true)}><UserPlus className="h-4 w-4 mr-3" />Switch Accounts</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun className="h-4 w-4 mr-3" /> : <Moon className="h-4 w-4 mr-3" />}{theme === 'dark' ? 'Yorug rejim' : 'Tungi rejim'}</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowSwitchAccount(true)}><UserPlus className="h-4 w-4 mr-3" />Hisobni almashtirish</DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive"><LogOut className="h-4 w-4 mr-3" />{t('nav.logout')}</DropdownMenuItem>
                 </DropdownMenuContent>
@@ -146,12 +146,11 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
         {collapsed && <DropdownMenu>
           <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="w-full h-10 rounded-xl"><MoreHorizontal className="h-5 w-5" /></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="center" side="right" className="w-56">
-            <DropdownMenuItem onClick={() => navigate('/settings')}><Settings className="h-4 w-4 mr-3" />Settings</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate('/settings/security')}><ShieldCheck className="h-4 w-4 mr-3" />Xavfsizlik</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun className="h-4 w-4 mr-3" /> : <Moon className="h-4 w-4 mr-3" />}{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setShowSwitchAccount(true)}><UserPlus className="h-4 w-4 mr-3" />Switch Accounts</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate('/settings')}><Settings className="h-4 w-4 mr-3" />{t('nav.settings')}</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun className="h-4 w-4 mr-3" /> : <Moon className="h-4 w-4 mr-3" />}{theme === 'dark' ? 'Yorug rejim' : 'Tungi rejim'}</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setShowSwitchAccount(true)}><UserPlus className="h-4 w-4 mr-3" />Hisobni almashtirish</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive"><LogOut className="h-4 w-4 mr-3" />Log Out</DropdownMenuItem>
+            <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive"><LogOut className="h-4 w-4 mr-3" />{t('nav.logout')}</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>}
       </div>
