@@ -37,7 +37,7 @@ import { useActiveAds } from '@/hooks/useAds';
 import { FeedAd } from '@/components/ads/FeedAd';
 import { PostViewsDialog } from '@/components/PostViewsDialog';
 import { usePostViews } from '@/hooks/usePostViews';
-import { parseLocationFromContent, parseMusicFromContent } from '@/lib/postMarkers';
+import { parseLocationFromContent, parseMusicFromContent, resolvePostMusic } from '@/lib/postMarkers';
 
 /**
  * Yangi sxemadagi qo'shimcha maydonlar. `posts` jadvalidan `*` bilan
@@ -418,6 +418,10 @@ function PostCard({
     so'rovnoma -> joylashuv -> musiqa. Shu tartib buzilmasa xom JSON yoki
     emoji qatori foydalanuvchiga hech qachon ko'rinmaydi, va aksincha —
     qo'yilgan musiqa/joylashuv haqiqiy karta bo'lib chiqadi.
+
+    Musiqa uchta manbadan izlanadi: `content` markeri, `formatted_content`
+    ichida qolgan marker va `media_urls` dagi audio fayl. Shu sababli lenta
+    bilan profil sahifasi endi bir xil natija ko'rsatadi.
   */
   const markers = useMemo(() => {
     const poll = parsePollFromContent(post.content || '');
@@ -428,10 +432,15 @@ function PostCard({
       pollData: poll.pollData,
       legacyLocation: location.location,
       legacyLocationLabel: location.labelOnly,
-      legacyMusic: music.music,
+      legacyMusic: resolvePostMusic({
+        contentMusic: music.music,
+        formattedContent: post.formatted_content,
+        mediaUrls: post.media_urls,
+        mediaType: post.media_type,
+      }),
       textContent: music.cleanContent,
     };
-  }, [post.content]);
+  }, [post.content, post.formatted_content, post.media_urls, post.media_type]);
 
   const handleUserClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -505,10 +514,10 @@ function PostCard({
       )}
 
       {/*
-        Content markeridagi ([MUSIC]{...}) musiqa profil sahifasidagi kabi
-        to'g'ridan-to'g'ri chiziladi. Ilgari u faqat PostExtras ichidan
-        o'tardi va strukturali jadval so'rovlariga bog'liq bo'lib qolardi —
-        shu sababli lentada karta ko'rinmay qolgan edi.
+        Musiqa profil sahifasidagi kabi to'g'ridan-to'g'ri chiziladi.
+        Ilgari u faqat PostExtras ichidan o'tardi va strukturali jadval
+        so'rovlariga bog'liq bo'lib qolardi — shu sababli lentada karta
+        ko'rinmay qolgan edi.
       */}
       {markers.legacyMusic && (
         <div className="px-3 md:px-4 pb-2 md:pb-3">
