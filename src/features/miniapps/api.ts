@@ -67,6 +67,7 @@ export function mapFeedRow(row: FeedRow): MiniApp {
     supportUrl: str('support_url'),
     deepLink: str('deep_link'),
     isPinned: row.is_pinned === true,
+    frameBlocked: row.frame_blocked === true,
     ownerId: str('owner_id'),
     publisher: {
       id: str('publisher_id'),
@@ -237,7 +238,9 @@ export async function createMiniApp(userId: string, draft: MiniAppDraft): Promis
       category: draft.category,
       app_type: draft.appType,
       display_mode: draft.displayMode ?? 'iframe',
+      price_model: draft.priceModel ?? 'free',
       permissions: draft.permissions ?? [],
+      screenshots: draft.screenshots ?? [],
       privacy_url: draft.privacyUrl ?? null,
       support_url: draft.supportUrl ?? null,
     })
@@ -251,14 +254,18 @@ export async function createMiniApp(userId: string, draft: MiniAppDraft): Promis
 export async function updateMiniApp(appId: string, draft: Partial<MiniAppDraft>): Promise<void> {
   const patch: Record<string, unknown> = {};
   if (draft.name !== undefined) patch.name = draft.name.trim();
+  if (draft.handle !== undefined) patch.handle = draft.handle?.trim() || null;
   if (draft.url !== undefined) patch.url = draft.url;
   if (draft.shortDescription !== undefined) patch.short_description = draft.shortDescription;
   if (draft.description !== undefined) patch.description = draft.description;
   if (draft.category !== undefined) patch.category = draft.category;
   if (draft.appType !== undefined) patch.app_type = draft.appType;
   if (draft.displayMode !== undefined) patch.display_mode = draft.displayMode;
+  if (draft.priceModel !== undefined) patch.price_model = draft.priceModel;
   if (draft.iconUrl !== undefined) patch.icon_url = draft.iconUrl;
   if (draft.permissions !== undefined) patch.permissions = draft.permissions;
+  if (draft.screenshots !== undefined) patch.screenshots = draft.screenshots;
+  if (draft.publisherId !== undefined) patch.publisher_id = draft.publisherId;
   if (draft.privacyUrl !== undefined) patch.privacy_url = draft.privacyUrl;
   if (draft.supportUrl !== undefined) patch.support_url = draft.supportUrl;
 
