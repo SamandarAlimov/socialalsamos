@@ -347,5 +347,65 @@ export const createGithubIssue = (owner: string, repo: string, title: string, bo
     },
   );
 
+export type GithubRepoMeta = {
+  fullName: string;
+  description: string | null;
+  defaultBranch: string;
+  language: string | null;
+  private: boolean;
+  updatedAt: string;
+};
+
+/** Repo haqida qisqa ma'lumot (chat konteksti uchun). */
+export const getGithubRepoMeta = async (owner: string, repo: string): Promise<GithubRepoMeta> => {
+  const token = requireLocalToken();
+  const info = await gh<{
+    full_name: string;
+    description: string | null;
+    default_branch: string;
+    language: string | null;
+    private: boolean;
+    updated_at: string;
+  }>(`/repos/${owner}/${repo}`, token);
+  return {
+    fullName: info.full_name,
+    description: info.description,
+    defaultBranch: info.default_branch,
+    language: info.language,
+    private: info.private,
+    updatedAt: info.updated_at,
+  };
+};
+
+/**
+ * Repodagi barcha fayl yo'llari (rekursiv).
+ * Chat AI uchun eng muhim funksiya: loyiha tuzilishini bir so'rovda beradi.
+ */
+export const listGithubTree = async (
+  owner: string,
+  repo: string,
+  ref?: string,
+): Promise<{ paths: string[]; truncated: boolean; branch: string }> => {
+  const token = requireLocalToken();
+  let branch = ref;
+  if (!branch) {
+    const info = await gh<{ default_branch: string }>(`/repos/${owner}/${repo}`, token);
+    branch = info.default_branch;
+  }
+  const tree = await gh<{
+    tree: Array<{ path: string; type: string }>;
+    truncated?: boolean;
+  }>(`/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`, token);
+
+  return {
+    paths: (tree.tree ?? []).filter((t) => t.type === 'blob').map((t) => t.path),
+    truncated: Boolean(tree.truncated),
+    branch,
+  };
+};
+
 /** UI uchun: hozir to'g'ridan-to'g'ri rejimdami? */
 export const isDirectGithubMode = () => Boolean(readLocalToken());
+
+/** GitHub ulanganmi (mahalliy token bor-yo'qligi bo'yicha tezkor tekshiruv). */
+export const hasGithubToken = () => Boolean(readLocalToken());
