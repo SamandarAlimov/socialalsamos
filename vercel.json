@@ -1,8 +1,8 @@
 {
-  "rewrites": [
-    {
-      "source": "/((?!api/.*).*)",
-      "destination": "/index.html"
-    }
-  ]
+	"rewrites": [
+		{ "source": "/mp/health", "destination": "/api/mini-app-proxy?health=1" },
+		{ "source": "/mp/:host/:path*", "destination": "/api/mini-app-proxy?__host=:host&__path=:path*" },
+		{ "source": "/mp/:host", "destination": "/api/mini-app-proxy?__host=:host" },
+		{ "source": "/((?!api/.*|mp/.*).*)", "destination": "/index.html" }
+	]
 }
