@@ -139,6 +139,9 @@ interface PostComposerToolbarProps {
 
 /**
  * Create asboblar paneli: chapda vector ikonkalar, o'ngda qoralama va joylash.
+ *
+ * Tugmalar 44px — bu barmoq uchun eng kichik ishonchli o'lcham; oldingi 36px
+ * variantda ikonkalar mayda va tegishi qiyin edi.
  */
 export function PostComposerToolbar({
   className,
@@ -171,11 +174,11 @@ export function PostComposerToolbar({
             onClick={action}
             disabled={disabled}
             className={cn(
-              'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30',
+              'flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30',
               active && 'bg-primary/10 text-primary',
             )}
           >
-            <Icon className="h-[18px] w-[18px]" />
+            <Icon className="h-[22px] w-[22px]" />
           </button>
         ))}
       </div>
@@ -184,14 +187,15 @@ export function PostComposerToolbar({
         type="button"
         onClick={onSaveDraft}
         disabled={!canSaveDraft}
+        aria-label="Qoralamani saqlash"
         className={cn(
-          'ml-1 flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-30',
+          'ml-1 flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full px-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-30',
           draftSaved
             ? 'bg-muted text-foreground'
             : 'text-muted-foreground hover:bg-muted hover:text-foreground',
         )}
       >
-        <Save className="h-4 w-4" />
+        <Save className="h-[18px] w-[18px]" />
         <span className="hidden sm:inline">Qoralama</span>
       </button>
 
@@ -199,16 +203,18 @@ export function PostComposerToolbar({
         type="button"
         onClick={onSubmit}
         disabled={!canSubmit}
-        className="ml-1 flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-4 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-45"
+        className="ml-1 flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-45"
       >
         {isBusy ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <Loader2 className="h-[18px] w-[18px] animate-spin" />
         ) : hasSchedule ? (
-          <CalendarClock className="h-4 w-4" />
+          <CalendarClock className="h-[18px] w-[18px]" />
         ) : (
-          <Send className="h-4 w-4" />
+          <Send className="h-[18px] w-[18px]" />
         )}
-        <span className="hidden sm:inline">{hasSchedule ? 'Rejalashtirish' : 'Joylash'}</span>
+        {/* Matn mobilda ham ko'rinadi: avval u yashirilib, tugma yolg'iz
+            strelkaga aylanib qolar edi. */}
+        <span>{hasSchedule ? 'Rejalashtirish' : 'Joylash'}</span>
       </button>
     </div>
   );
