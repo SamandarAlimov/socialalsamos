@@ -51,7 +51,7 @@ import {
 
 const URL_ERRORS: Record<string, string> = {
   empty: 'Manzil kiritilmagan',
-  malformed: 'Manzil formati noto\u2019g\u2019ri',
+  malformed: 'Manzil formati noto’g’ri',
   scheme_not_allowed: 'Faqat https manzillar qabul qilinadi',
   private_host: 'Ichki tarmoq manzillari qabul qilinmaydi',
   no_host: 'Domen aniqlanmadi',
@@ -59,7 +59,7 @@ const URL_ERRORS: Record<string, string> = {
 
 const FALLBACK_CATEGORIES: MiniAppCategory[] = [
   { id: 'religion', sortOrder: 10, icon: null, label: 'Diniy' },
-  { id: 'education', sortOrder: 20, icon: null, label: 'Ta\u2019lim' },
+  { id: 'education', sortOrder: 20, icon: null, label: 'Ta’lim' },
   { id: 'tools', sortOrder: 30, icon: null, label: 'Asboblar' },
   { id: 'other', sortOrder: 999, icon: null, label: 'Boshqa' },
 ];
@@ -103,8 +103,8 @@ function slugifyHandleInput(value: string): string {
 }
 
 /**
- * Mini app qo\u2019shish/tahrirlash \u2014 professional yuborish oqimi.
- * Chapda forma, o\u2019ngda jonli preview kartasi va tayyorlik ro\u2019yxati.
+ * Mini app qo'shish/tahrirlash — professional yuborish oqimi.
+ * Chapda forma, o'ngda jonli preview kartasi va tayyorlik ro'yxati.
  */
 export default function MiniAppSubmitPage() {
   const { appId } = useParams<{ appId: string }>();
@@ -165,7 +165,7 @@ export default function MiniAppSubmitPage() {
             id: String(row.id ?? ''),
             name: String(row.name ?? row.handle ?? 'Nashriyot'),
             handle: (row.handle as string | null) ?? null,
-            verification: (String(row.verification ?? 'unverified') as PublisherVerification),
+            verification: String(row.verification ?? 'unverified') as PublisherVerification,
           })),
         );
       })
@@ -262,6 +262,16 @@ export default function MiniAppSubmitPage() {
     );
   };
 
+  const uploadOne = async (file: File): Promise<string> => {
+    const result = (await uploadMedia(file, {
+      type: 'miniapp',
+      visibility: 'public',
+    })) as unknown as { url?: string; publicUrl?: string } | string;
+    const uploaded = typeof result === 'string' ? result : result?.url ?? result?.publicUrl ?? null;
+    if (!uploaded) throw new Error('Fayl yuklanmadi');
+    return uploaded;
+  };
+
   const handleIcon = async (file: File | null) => {
     if (!file) return;
     setUploading(true);
@@ -279,21 +289,11 @@ export default function MiniAppSubmitPage() {
     }
   };
 
-  const uploadOne = async (file: File): Promise<string> => {
-    const result = (await uploadMedia(file, {
-      type: 'miniapp',
-      visibility: 'public',
-    })) as unknown as { url?: string; publicUrl?: string } | string;
-    const uploaded = typeof result === 'string' ? result : result?.url ?? result?.publicUrl ?? null;
-    if (!uploaded) throw new Error('Fayl yuklanmadi');
-    return uploaded;
-  };
-
   const handleScreenshots = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const room = MAX_SCREENSHOTS - screenshots.length;
     if (room <= 0) {
-      toast({ title: 'Limit', description: 'Ko\u2019pi bilan 6 ta rasm.', variant: 'destructive' });
+      toast({ title: 'Limit', description: 'Ko’pi bilan 6 ta rasm.', variant: 'destructive' });
       return;
     }
 
@@ -385,7 +385,7 @@ export default function MiniAppSubmitPage() {
       const createdId = await createMiniApp(user.id, draft);
       toast({
         title: 'Yuborildi',
-        description: 'Ilova moderatsiyadan so\u2019ng ro\u2019yxatda ko\u2019rinadi.',
+        description: 'Ilova moderatsiyadan so’ng ro’yxatda ko’rinadi.',
       });
 
       if (appType !== 'link' && createdId) {
@@ -409,11 +409,11 @@ export default function MiniAppSubmitPage() {
     setSaving(true);
     try {
       await deleteMiniApp(appId);
-      toast({ title: 'O\u2019chirildi' });
+      toast({ title: 'O’chirildi' });
       navigate('/mini-apps');
     } catch (error) {
       toast({
-        title: 'O\u2019chirilmadi',
+        title: 'O’chirilmadi',
         description: error instanceof Error ? error.message : 'Xatolik',
         variant: 'destructive',
       });
@@ -424,7 +424,7 @@ export default function MiniAppSubmitPage() {
 
   const checklist = [
     { label: 'Nom kiritildi', done: name.trim().length > 0 },
-    { label: 'https manzil to\u2019g\u2019ri', done: normalizeMiniAppUrl(url).ok },
+    { label: 'https manzil to’g’ri', done: normalizeMiniAppUrl(url).ok },
     { label: 'Qisqa tavsif', done: shortDescription.trim().length > 0 },
     { label: 'Ikonka', done: Boolean(iconUrl) },
     { label: 'Kamida 1 rasm', done: screenshots.length > 0 },
@@ -459,12 +459,12 @@ export default function MiniAppSubmitPage() {
         </Button>
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">
-            {isEditing ? 'Ilovani tahrirlash' : 'Mini app qo\u2019shish'}
+            {isEditing ? 'Ilovani tahrirlash' : 'Mini app qo’shish'}
           </h1>
           <p className="text-sm text-muted-foreground">
             {isEditing
-              ? 'O\u2019zgarishlar saqlangach ilova qayta moderatsiyaga tushishi mumkin.'
-              : 'Bosqichlarni to\u2019ldiring \u2014 o\u2019ngda ilova qanday ko\u2019rinishini darhol ko\u2019rasiz.'}
+              ? 'O’zgarishlar saqlangach ilova qayta moderatsiyaga tushishi mumkin.'
+              : 'Bosqichlarni to’ldiring — o’ngda ilova qanday ko’rinishini darhol ko’rasiz.'}
           </p>
           {status && (
             <Badge variant="secondary" className="mt-2 font-normal">
@@ -476,7 +476,6 @@ export default function MiniAppSubmitPage() {
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="min-w-0">
-          {/* 1 \u2014 Ilova turi */}
           <section className="space-y-3">
             <SectionTitle index={1} title="Ilova turi" />
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -504,9 +503,8 @@ export default function MiniAppSubmitPage() {
             </div>
           </section>
 
-          {/* 2 \u2014 Asosiy ma'lumot */}
           <section className="mt-8 space-y-4">
-            <SectionTitle index={2} title="Asosiy ma\u2019lumot" />
+            <SectionTitle index={2} title={'Asosiy ma’lumot'} />
 
             <div className="space-y-2">
               <Label htmlFor="mini-app-name">Nomi *</Label>
@@ -558,10 +556,10 @@ export default function MiniAppSubmitPage() {
                   (handleState === 'idle' || handleState === 'checking') && 'text-muted-foreground',
                 )}
               >
-                {handleState === 'free' && 'Bo\u2019sh \u2014 band qilish mumkin'}
+                {handleState === 'free' && 'Bo’sh — band qilish mumkin'}
                 {handleState === 'taken' && 'Bu nom allaqachon band'}
                 {handleState === 'invalid' &&
-                  '3\u201332 belgi, harf bilan boshlanadi, faqat a\u2013z, 0\u20139 va _'}
+                  '3–32 belgi, harf bilan boshlanadi, faqat a–z, 0–9 va _'}
                 {(handleState === 'idle' || handleState === 'checking') &&
                   'Katalogdagi manzil: alsamos.com/mini-apps/@' + (handle || 'nom')}
               </p>
@@ -603,8 +601,8 @@ export default function MiniAppSubmitPage() {
                   )}
                 >
                   {probe.embeddable
-                    ? 'Sayt Alsamos ichida to\u2019g\u2019ridan-to\u2019g\u2019ri ochiladi.'
-                    : 'Sayt iframe\u2019ni bloklaydi \u2014 ilova ichki proksi orqali ochiladi. Tashqi brauzer kerak emas.'}
+                    ? 'Sayt Alsamos ichida to’g’ridan-to’g’ri ochiladi.'
+                    : 'Sayt iframe’ni bloklaydi — ilova ichki proksi orqali ochiladi. Tashqi brauzer kerak emas.'}
                 </div>
               )}
             </div>
@@ -621,7 +619,7 @@ export default function MiniAppSubmitPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="mini-app-description">To\u2019liq tavsif</Label>
+              <Label htmlFor="mini-app-description">{'To’liq tavsif'}</Label>
               <Textarea
                 id="mini-app-description"
                 value={description}
@@ -632,9 +630,8 @@ export default function MiniAppSubmitPage() {
             </div>
           </section>
 
-          {/* 3 \u2014 Ko'rinish */}
           <section className="mt-8 space-y-4">
-            <SectionTitle index={3} title="Ko\u2019rinish va galereya" />
+            <SectionTitle index={3} title={'Ko’rinish va galereya'} />
 
             <div className="space-y-2">
               <Label>Kategoriya</Label>
@@ -685,7 +682,7 @@ export default function MiniAppSubmitPage() {
                       />
                       <button
                         type="button"
-                        aria-label="O\u2019chirish"
+                        aria-label={'O’chirish'}
                         onClick={() =>
                           setScreenshots((current) => current.filter((item) => item !== shot))
                         }
@@ -711,9 +708,8 @@ export default function MiniAppSubmitPage() {
             </div>
           </section>
 
-          {/* 4 \u2014 Nashriyot */}
           <section className="mt-8 space-y-4">
-            <SectionTitle index={4} title="Kim nomidan e\u2019lon qilinadi" />
+            <SectionTitle index={4} title={'Kim nomidan e’lon qilinadi'} />
             <div className="flex flex-wrap gap-1.5">
               <Button
                 size="sm"
@@ -742,7 +738,7 @@ export default function MiniAppSubmitPage() {
                 Tasdiq darajasi: {PUBLISHER_VERIFICATION_LABELS[selectedPublisher.verification]}
                 {selectedPublisher.verification !== 'official' &&
                   selectedPublisher.verification !== 'domain_verified' &&
-                  ' \u2014 domenni tasdiqlang, shunda ilova \u201cRasmiy\u201d bo\u2019limiga tushadi.'}
+                  ' — domenni tasdiqlang, shunda ilova “Rasmiy” bo’limiga tushadi.'}
               </p>
             )}
             <Button
@@ -755,12 +751,11 @@ export default function MiniAppSubmitPage() {
             </Button>
           </section>
 
-          {/* 5 \u2014 Ruxsatlar va narx */}
           <section className="mt-8 space-y-4">
             <SectionTitle index={5} title="Ruxsatlar va narx modeli" />
 
             <div className="space-y-2">
-              <Label>Ilova so\u2019raydigan ruxsatlar</Label>
+              <Label>{'Ilova so’raydigan ruxsatlar'}</Label>
               <div className="flex flex-wrap gap-1.5">
                 {PERMISSIONS.map((item) => (
                   <Badge
@@ -774,7 +769,7 @@ export default function MiniAppSubmitPage() {
                 ))}
               </div>
               <p className="text-xs text-muted-foreground">
-                Faqat kerakli ruxsatlarni belgilang \u2014 moderatsiyada shu ro\u2019yxat tekshiriladi.
+                {'Faqat kerakli ruxsatlarni belgilang — moderatsiyada shu ro’yxat tekshiriladi.'}
               </p>
             </div>
 
@@ -819,7 +814,6 @@ export default function MiniAppSubmitPage() {
             </div>
           </section>
 
-          {/* 6 \u2014 API */}
           {appType !== 'link' && (
             <section className="mt-8 space-y-3">
               <SectionTitle index={6} title="API ulanishi" />
@@ -829,14 +823,12 @@ export default function MiniAppSubmitPage() {
 
           <div className="mt-8 flex items-start gap-2 rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-            Yangi yoki manzili o\u2019zgargan ilovalar moderatsiyaga tushadi. Kompaniya nomidan e\u2019lon
-            qilish uchun domen tasdiqlanishi talab qilinadi.
+            {'Yangi yoki manzili o’zgargan ilovalar moderatsiyaga tushadi. Kompaniya nomidan e’lon qilish uchun domen tasdiqlanishi talab qilinadi.'}
           </div>
         </div>
 
-        {/* O'ngdagi jonli preview */}
         <aside className="lg:sticky lg:top-4 lg:h-fit">
-          <p className="mb-2 text-xs font-medium text-muted-foreground">Jonli ko\u2019rinish</p>
+          <p className="mb-2 text-xs font-medium text-muted-foreground">{'Jonli ko’rinish'}</p>
 
           <div className="rounded-2xl border p-4">
             <div className="flex items-start gap-3">
@@ -855,13 +847,13 @@ export default function MiniAppSubmitPage() {
                 <p className="truncate font-semibold">{name.trim() || 'Ilova nomi'}</p>
                 <p className="truncate text-xs text-muted-foreground">
                   @{handle || 'nom'}
-                  {selectedPublisher ? ' \u00b7 ' + selectedPublisher.name : ''}
+                  {selectedPublisher ? ' · ' + selectedPublisher.name : ''}
                 </p>
               </div>
             </div>
 
             <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">
-              {shortDescription.trim() || 'Qisqa tavsif shu yerda ko\u2019rinadi.'}
+              {shortDescription.trim() || 'Qisqa tavsif shu yerda ko’rinadi.'}
             </p>
 
             <div className="mt-3 flex flex-wrap gap-1.5">
@@ -943,7 +935,7 @@ export default function MiniAppSubmitPage() {
             onClick={() => void handleDelete()}
           >
             <Trash2 className="mr-1 h-4 w-4" />
-            O\u2019chirish
+            {'O’chirish'}
           </Button>
         ) : (
           <span />
@@ -953,7 +945,10 @@ export default function MiniAppSubmitPage() {
           <Button variant="outline" disabled={saving} onClick={() => navigate('/mini-apps')}>
             Bekor qilish
           </Button>
-          <Button disabled={saving || uploading || uploadingShots} onClick={() => void handleSubmit()}>
+          <Button
+            disabled={saving || uploading || uploadingShots}
+            onClick={() => void handleSubmit()}
+          >
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {isEditing ? 'Saqlash' : 'Yuborish'}
           </Button>
