@@ -1,5 +1,17 @@
-import { useState } from 'react';
-import { FileText, Download, FileArchive, FileImage, FileVideo, FileAudio, FileCode, FileSpreadsheet, Play } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+  FileText,
+  Download,
+  FileArchive,
+  FileImage,
+  FileVideo,
+  FileAudio,
+  FileCode,
+  FileSpreadsheet,
+  ImageOff,
+  ExternalLink,
+  RotateCw,
+} from 'lucide-react';
 import { VideoMessagePlayer } from './messages/VideoMessagePlayer';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 import { AudioFilePlayer } from './messages/AudioFilePlayer';
@@ -15,6 +27,20 @@ interface MessageAttachmentProps {
   senderName?: string;
   size?: number;
 }
+
+/**
+ * Rasm ramkasining aniq kengligi (piksel).
+ *
+ * NEGA AYNAN PIKSEL, `w-full` EMAS: xabar bubble'i kengligini mazmuniga qarab
+ * o'lchaydi (shrink-to-fit). Ichidagi element `width: 100%` so'rasa aylanma
+ * bog'liqlik hosil bo'ladi - bubble rasmdan, rasm bubble'dan o'lcham kutadi.
+ * Rasm yuklanmagan yoki URL buzuq bo'lsa uning tabiiy kengligi 0 bo'ladi va
+ * butun karta ingichka chiziqqa yig'ilib qoladi. Aniq piksel kengligi bu
+ * regressiyani butunlay yopadi.
+ */
+const IMAGE_FRAME_WIDTH = 320;
+/** Yuklanmagan holatda joy band qilib turiladi - lenta sakramaydi */
+const IMAGE_SKELETON_HEIGHT = 180;
 
 const DOC_ICONS: Array<{ test: RegExp; icon: typeof FileText }> = [
   { test: /\.(zip|rar|7z|tar|gz)$/i, icon: FileArchive },
@@ -42,6 +68,15 @@ function formatBytes(bytes?: number): string | null {
     unitIndex += 1;
   }
   return `${value < 10 && unitIndex > 0 ? value.toFixed(1) : Math.round(value)} ${units[unitIndex]}`;
+}
+
+/** Xato kartasida ko'rsatiladigan host (diagnostika uchun) */
+function hostOf(url: string): string {
+  try {
+    return new URL(url, window.location.origin).hostname;
+  } catch {
+    return 'noma\u2018lum manba';
+  }
 }
 
 async function downloadFile(url: string, fileName: string) {
@@ -72,6 +107,15 @@ export function MessageAttachment({
 }: MessageAttachmentProps) {
   const [showFullscreen, setShowFullscreen] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  // URL o'zgarsa holat tozalanadi (masalan xabar tahrirlanganda)
+  useEffect(() => {
+    setImageLoaded(false);
+    setImageFailed(false);
+    setAttempt(0);
+  }, [url]);
 
   // Check if it's a GIF
   const isGif = url.includes('giphy.com') || url.includes('.gif') || url.includes('[media:gif:');
@@ -85,21 +129,125 @@ export function MessageAttachment({
       ? url.replace('[media:gif:', '').replace(']', '')
       : url;
 
+    // Keshdagi buzuq javobni chetlab o'tish uchun qayta urinishda parametr qo'shiladi
+    const srcUrl =
+      attempt > 0
+        ? `${actualUrl}${actualUrl.includes('?') ? '&' : '?'}retry=${attempt}`
+        : actualUrl;
+
+    const retry = () => {
+      setImageFailed(false);
+      setImageLoaded(false);
+      setAttempt((value) => value + 1);
+    };
+
+    /* Rasm yuklanmasa: ilgari hech qanday belgi yo'q edi - karta shunchaki
+       yig'ilib qolardi va sababi ko'rinmasdi. Endi aniq xato holati,
+       qayta urinish va "yangi oynada ochish" bor: ochilgan havola brauzerda
+       haqiqiy xatoni (403 / 404 / expired) ko'rsatadi. */
+    if (imageFailed) {
+      return (
+        <div
+          className={cn(
+            'flex flex-col items-start gap-2 rounded-2xl p-3',
+            isMine ? 'bg-primary-foreground/10' : 'bg-muted'
+          )}
+          style={{ width: IMAGE_FRAME_WIDTH, maxWidth: '100%' }}
+        >
+          <div className="flex items-center gap-2">
+            <ImageOff
+              className={cn('h-4 w-4 shrink-0', isMine ? 'text-primary-foreground/80' : 'text-muted-foreground')}
+            />
+            <div className="min-w-0">
+              <p
+                className={cn(
+                  'text-[13px] font-medium leading-tight',
+                  isMine ? 'text-primary-foreground' : 'text-foreground'
+                )}
+              >
+                Rasm yuklanmadi
+              </p>
+              <p
+                className={cn(
+                  'truncate text-[11px]',
+                  isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'
+                )}
+                title={actualUrl}
+              >
+                {hostOf(actualUrl)}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                retry();
+              }}
+              className={cn(
+                'flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors',
+                isMine
+                  ? 'bg-primary-foreground/15 text-primary-foreground hover:bg-primary-foreground/25'
+                  : 'bg-background text-foreground hover:bg-foreground/10'
+              )}
+            >
+              <RotateCw className="h-3 w-3" />
+              Qayta urinish
+            </button>
+            <a
+              href={actualUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(event) => event.stopPropagation()}
+              className={cn(
+                'flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors',
+                isMine
+                  ? 'bg-primary-foreground/15 text-primary-foreground hover:bg-primary-foreground/25'
+                  : 'bg-background text-foreground hover:bg-foreground/10'
+              )}
+            >
+              <ExternalLink className="h-3 w-3" />
+              Yangi oynada
+            </a>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <>
         <div
-          className={cn(
-            'group relative w-full max-w-[320px] cursor-pointer overflow-hidden rounded-2xl bg-muted/50',
-            !imageLoaded && 'min-h-[140px] animate-pulse'
-          )}
+          className="group relative cursor-pointer overflow-hidden rounded-2xl bg-muted/50"
+          /* Aniq kenglik: bubble qisqarsa ham karta chiziqqa aylanmaydi.
+             Yuklanmagan paytda balandlik ham band - lenta sakramaydi. */
+          style={{
+            width: IMAGE_FRAME_WIDTH,
+            maxWidth: '100%',
+            minHeight: imageLoaded ? undefined : IMAGE_SKELETON_HEIGHT,
+          }}
           onClick={() => setShowFullscreen(true)}
         >
+          {!imageLoaded && (
+            <span className="absolute inset-0 animate-pulse rounded-2xl bg-muted" aria-hidden="true" />
+          )}
+
           <img
-            src={actualUrl}
+            src={srcUrl}
             alt={name || 'Rasm'}
-            loading="lazy"
-            onLoad={() => setImageLoaded(true)}
-            className="block h-auto max-h-[420px] w-full object-cover transition-transform duration-200 group-hover:scale-[1.01]"
+            /* `lazy` EMAS: chat lentasi transform/contain qatlamlari ichida
+               bo'lgani uchun lazy kuzatuvchi ba'zan ishga tushmay, bo'sh
+               ramka qoldirardi. */
+            loading="eager"
+            decoding="async"
+            draggable={false}
+            onLoad={() => {
+              setImageLoaded(true);
+              setImageFailed(false);
+            }}
+            onError={() => setImageFailed(true)}
+            className="relative block h-auto max-h-[420px] w-full object-cover transition-transform duration-200 group-hover:scale-[1.01]"
           />
 
           {isGif && (
@@ -136,7 +284,12 @@ export function MessageAttachment({
     // Check if video was recorded from webcam (TelegramMediaRecorder uses 'video_' prefix)
     const isWebcamRecording = url.includes('/video_') || url.includes('video_');
     return (
-      <div className="w-full max-w-[320px] overflow-hidden rounded-2xl">
+      <div
+        className="overflow-hidden rounded-2xl"
+        /* Rasm bilan bir xil sabab: `w-full` shrink-to-fit bubble ichida
+           yig'ilib qolardi. */
+        style={{ width: IMAGE_FRAME_WIDTH, maxWidth: '100%' }}
+      >
         <VideoMessagePlayer
           url={url}
           isMine={isMine}
