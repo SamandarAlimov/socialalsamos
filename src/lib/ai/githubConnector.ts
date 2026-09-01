@@ -5,19 +5,43 @@ import { supabase } from '@/integrations/supabase/client';
 
 const FUNCTIONS_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 
+/** Funksiya serverga hali chiqarilmaganida tushunarli xabar beramiz. */
+export class GithubConnectorUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GithubConnectorUnavailableError';
+  }
+}
+
+const NOT_DEPLOYED_MESSAGE =
+  "GitHub konnektori serveri javob bermayapti. \"github-connector\" funksiyasi hali deploy qilinmagan bo'lishi mumkin: terminalda \"supabase functions deploy github-connector\" buyrug'ini bajaring.";
+
 async function call<T>(payload: Record<string, unknown>): Promise<T> {
   const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const session = data.session;
+  if (!session?.access_token) {
+    throw new Error('Avval Alsamos hisobingizga kiring.');
+  }
 
-  const res = await fetch(`${FUNCTIONS_BASE}/github-connector`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string,
-    },
-    body: JSON.stringify(payload),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${FUNCTIONS_BASE}/github-connector`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string,
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    // "Failed to fetch" — tarmoq darajasidagi xato: funksiya yo'q yoki CORS yopiq.
+    throw new GithubConnectorUnavailableError(NOT_DEPLOYED_MESSAGE);
+  }
+
+  if (res.status === 404 || res.status === 501 || res.status === 502 || res.status === 503) {
+    throw new GithubConnectorUnavailableError(NOT_DEPLOYED_MESSAGE);
+  }
 
   const json = await res.json().catch(() => null);
   if (!res.ok) {

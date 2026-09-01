@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Github, Loader2, LogOut, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Eye, EyeOff, Github, Loader2, LogOut, ShieldCheck } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,7 @@ import {
   disconnectGithub,
   githubStatus,
   listGithubRepos,
+  GithubConnectorUnavailableError,
   type GithubRepo,
 } from '@/lib/ai/githubConnector';
 
@@ -29,10 +30,12 @@ interface AIGithubDialogProps {
 export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialogProps) {
   const { toast } = useToast();
   const [token, setToken] = useState('');
+  const [showToken, setShowToken] = useState(false);
   const [login, setLogin] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(false);
   const [repos, setRepos] = useState<GithubRepo[]>([]);
+  const [serverError, setServerError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -40,6 +43,7 @@ export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialo
 
     (async () => {
       setLoading(true);
+      setServerError(null);
       try {
         const status = await githubStatus();
         if (cancelled) return;
@@ -53,6 +57,7 @@ export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialo
         if (!cancelled) {
           setConnected(false);
           setLogin(null);
+          if (err instanceof GithubConnectorUnavailableError) setServerError(err.message);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -68,6 +73,7 @@ export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialo
     const value = token.trim();
     if (!value) return;
     setLoading(true);
+    setServerError(null);
     try {
       const res = await connectGithub(value);
       setConnected(true);
@@ -77,11 +83,9 @@ export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialo
       setRepos(list);
       toast({ title: 'GitHub ulandi', description: res.login ? `@${res.login}` : undefined });
     } catch (err) {
-      toast({
-        title: 'Ulanmadi',
-        description: err instanceof Error ? err.message : 'Nomaʼlum xatolik',
-        variant: 'destructive',
-      });
+      const message = err instanceof Error ? err.message : 'Nomaʼlum xatolik';
+      if (err instanceof GithubConnectorUnavailableError) setServerError(message);
+      toast({ title: 'Ulanmadi', description: message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -119,6 +123,13 @@ export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialo
             brauzerga qaytarilmaydi.
           </DialogDescription>
         </DialogHeader>
+
+        {serverError && (
+          <div className="flex gap-2 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-[12px] text-destructive">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{serverError}</span>
+          </div>
+        )}
 
         {connected ? (
           <div className="space-y-3">
@@ -162,20 +173,40 @@ export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialo
             </div>
           </div>
         ) : (
+          // MUHIM: parol menejerlari bu maydonni "login formasi" deb o'ylamasligi uchun
+          // form emas, oddiy div; inputda ham autofill butunlay o'chirilgan.
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="gh-token">Access token</Label>
-              <Input
-                id="gh-token"
-                type="password"
-                autoComplete="off"
-                placeholder="github_pat_…"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleConnect();
-                }}
-              />
+              <Label htmlFor="alsamos-github-pat">Access token</Label>
+              <div className="relative">
+                <Input
+                  id="alsamos-github-pat"
+                  name="alsamos-github-pat"
+                  type={showToken ? 'text' : 'password'}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-1p-ignore="true"
+                  data-lpignore="true"
+                  data-form-type="other"
+                  placeholder="github_pat_…"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleConnect();
+                  }}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowToken((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground"
+                  aria-label={showToken ? 'Tokenni yashirish' : "Tokenni ko'rsatish"}
+                >
+                  {showToken ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                </button>
+              </div>
               <p className="text-[11px] text-muted-foreground">
                 GitHub → Settings → Developer settings → Personal access tokens → Fine-grained.
                 Ruxsatlar: Metadata (Read), Contents, Issues, Pull requests.
