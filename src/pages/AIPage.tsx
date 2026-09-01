@@ -24,6 +24,7 @@ import { AIComposer, type ComposerAttachment } from '@/components/ai/AIComposer'
 import { AIMessageBubble, AIThinkingBubble } from '@/components/ai/AIMessageBubble';
 import { AIArtifactPanel } from '@/components/ai/AIArtifactPanel';
 import { AIConnectorsDialog } from '@/components/ai/AIConnectorsDialog';
+import { AIGithubDialog } from '@/components/ai/AIGithubDialog';
 import type { AIConversation, AIMessage, AISource, AIToolEvent } from '@/components/ai/types';
 import { extractArtifacts } from '@/lib/aiArtifacts';
 import { streamAgent } from '@/lib/ai/agentClient';
@@ -99,6 +100,7 @@ export default function AIPage() {
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [connectorsOpen, setConnectorsOpen] = useState(false);
+  const [githubOpen, setGithubOpen] = useState(false);
 
   const [model, setModel] = useState<ModelId>(initialPrefs.model);
   const [toolGroups, setToolGroups] = useState<ToolGroupId[]>(initialPrefs.toolGroups);
@@ -554,6 +556,17 @@ export default function AIPage() {
   const artifacts = useMemo(() => extractArtifacts(messages), [messages]);
   const showArtifacts = artifactsOpen && artifacts.length > 0;
 
+  const openArtifacts = () => {
+    if (artifacts.length === 0) {
+      sonnerToast.info('Hali artefakt yo\u2019q', {
+        description: 'Kod yoki hujjat yaratilgach shu yerda ko\u2019rinadi.',
+      });
+      return;
+    }
+    setArtifactsOpen(true);
+    if (isMobile) setSidebarOpen(false);
+  };
+
   useEffect(() => {
     if (!user && messages.length > 0) {
       toast({
@@ -602,6 +615,10 @@ export default function AIPage() {
                 onRename={renameConversation}
                 onTogglePin={togglePin}
                 onClose={() => setSidebarOpen(false)}
+                onOpenArtifacts={openArtifacts}
+                onOpenConnectors={() => setConnectorsOpen(true)}
+                onOpenGithub={() => setGithubOpen(true)}
+                artifactCount={artifacts.length}
               />
             </motion.aside>
           </>
@@ -744,6 +761,7 @@ export default function AIPage() {
           toolGroups={toolGroups}
           onToolGroupsChange={setToolGroups}
           onOpenConnectors={() => setConnectorsOpen(true)}
+          onOpenGithub={() => setGithubOpen(true)}
         />
       </div>
 
@@ -772,6 +790,15 @@ export default function AIPage() {
         open={connectorsOpen}
         onOpenChange={setConnectorsOpen}
         userId={user?.id}
+      />
+
+      <AIGithubDialog
+        open={githubOpen}
+        onOpenChange={setGithubOpen}
+        onPickRepo={(repo) => {
+          const prefix = input.trim() ? `${input.trim()} ` : '';
+          setInput(`${prefix}${repo.fullName} repozitoriysi bo'yicha: `);
+        }}
       />
     </div>
   );
