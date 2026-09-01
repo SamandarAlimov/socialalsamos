@@ -26,6 +26,10 @@ export type StreamAgentOptions = {
 };
 
 const FUNCTIONS_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+const AGENT_SERVER_BASE = (
+  (import.meta.env.VITE_ALSAMOS_AGENT_SERVER_URL as string | undefined) ||
+  'https://ai.alsamos.com'
+).replace(/\/+$/, '');
 
 /** Agent funksiyasi mavjud emasligini bildiradi (deploy qilinmagan yoki o'chirilgan). */
 class AgentUnavailableError extends Error {}
@@ -157,14 +161,118 @@ async function streamFromAssistant(options: StreamAgentOptions): Promise<void> {
   });
 }
 
+/** Oracle server fallback: adapts https://ai.alsamos.com/api/alsamos/agent to UI events. */
+async function streamFromOracleAgent(options: StreamAgentOptions): Promise<void> {
+  const { messages, mode, model, toolGroups, conversationId, context, signal, onEvent } = options;
+
+  const res = await fetch(`${AGENT_SERVER_BASE}/api/alsamos/agent`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ messages, mode, model, toolGroups, conversationId, context }),
+    signal,
+  });
+
+  if ([401, 403, 404, 501, 502, 503, 504].includes(res.status)) {
+    throw new AgentUnavailableError(`oracle agent HTTP ${res.status}`);
+  }
+
+  if (!res.ok || !res.body) {
+    let message = `Alsamos agent serveriga ulanib bo'lmadi (HTTP ${res.status}).`;
+    try {
+      const json = await res.json();
+      if (json?.message) message = json.message;
+      else if (json?.error) message = json.error;
+    } catch {
+      // e'tiborsiz
+    }
+    throw new Error(message);
+  }
+
+  let streamedText = '';
+  const oracleToolIds = new Map<string, string>();
+  onEvent({ type: 'meta', model, task: mode, language: 'uz', tools: toolGroups });
+
+  await readSse(res.body, (raw) => {
+    let event: Record<string, any>;
+    try {
+      event = JSON.parse(raw);
+    } catch {
+      return;
+    }
+
+    switch (event.type) {
+      case 'meta':
+        onEvent({
+          type: 'meta',
+          model: String(event.model ?? model),
+          task: String(event.task ?? mode),
+          language: String(event.language ?? 'uz'),
+          tools: Array.isArray(event.tools) ? event.tools.map(String) : toolGroups,
+        });
+        break;
+      case 'token': {
+        const text = String(event.text ?? '');
+        if (text) {
+          streamedText += text;
+          onEvent({ type: 'delta', text });
+        }
+        break;
+      }
+      case 'tool': {
+        const name = String(event.name ?? 'tool');
+        if (event.phase === 'call') {
+          const id = crypto.randomUUID();
+          oracleToolIds.set(name, id);
+          onEvent({
+            type: 'tool_call',
+            id,
+            name,
+            args: (event.args ?? {}) as Record<string, unknown>,
+          });
+        } else if (event.phase === 'result') {
+          const id = oracleToolIds.get(name) ?? crypto.randomUUID();
+          oracleToolIds.delete(name);
+          onEvent({
+            type: 'tool_result',
+            id,
+            name,
+            ok: Boolean(event.ok),
+            summary: JSON.stringify(event.data ?? {}).slice(0, 600),
+            data: (event.data ?? null) as Record<string, unknown> | null,
+          });
+        }
+        break;
+      }
+      case 'stage':
+      case 'iteration':
+        if (event.label) onEvent({ type: 'notice', message: String(event.label) });
+        break;
+      case 'final': {
+        const output = String(event.output ?? '');
+        if (output && !streamedText) onEvent({ type: 'delta', text: output });
+        break;
+      }
+      case 'error':
+        throw new Error(String(event.message ?? 'Alsamos agent server xatosi.'));
+      default:
+        break;
+    }
+  });
+}
+
 /** Agentni ishga tushiradi va hodisalarni real vaqtda uzatadi. */
 export async function streamAgent(options: StreamAgentOptions): Promise<void> {
   try {
     await streamFromAgent(options);
   } catch (err) {
     if (!(err instanceof AgentUnavailableError)) throw err;
-    // Agent yo'q — oddiy chatga o'tamiz, foydalanuvchi hech narsa yo'qotmaydi.
-    await streamFromAssistant(options);
+    try {
+      await streamFromOracleAgent(options);
+    } catch (fallbackErr) {
+      if (!(fallbackErr instanceof AgentUnavailableError)) throw fallbackErr;
+      // Agent yo'q — oddiy chatga o'tamiz, foydalanuvchi hech narsa yo'qotmaydi.
+      await streamFromAssistant(options);
+    }
   }
 }
 
