@@ -1,5 +1,25 @@
 import { useMemo, useState } from 'react';
-import { Plus, Search, MessageSquare, Pin, PinOff, Trash2, Pencil, MoreHorizontal, PanelLeftClose, ChevronLeft, ChevronDown, ChevronRight, Sparkles, Settings, History } from 'lucide-react';
+import {
+  Plus,
+  Search,
+  MessageSquare,
+  Pin,
+  PinOff,
+  Trash2,
+  Pencil,
+  MoreHorizontal,
+  PanelLeftClose,
+  ChevronLeft,
+  ChevronDown,
+  ChevronRight,
+  Sparkles,
+  Settings,
+  History,
+  FolderOpen,
+  FileCode2,
+  Plug,
+  Github,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -26,6 +46,11 @@ interface Props {
   onRename: (id: string, title: string) => void;
   onTogglePin: (id: string) => void;
   onClose: () => void;
+  /** Menyu amallari — ixtiyoriy. */
+  onOpenArtifacts?: () => void;
+  onOpenConnectors?: () => void;
+  onOpenGithub?: () => void;
+  artifactCount?: number;
 }
 
 type Group = { key: string; label: string; items: AIConversation[] };
@@ -55,7 +80,7 @@ function groupByDate(items: AIConversation[]): Group[] {
   return [
     { key: 'today', label: 'Bugun', items: buckets.today },
     { key: 'yesterday', label: 'Kecha', items: buckets.yesterday },
-    { key: 'week', label: "Oxirgi 7 kun", items: buckets.week },
+    { key: 'week', label: 'Oxirgi 7 kun', items: buckets.week },
     { key: 'month', label: 'Oxirgi 30 kun', items: buckets.month },
     { key: 'older', label: 'Eskiroq', items: buckets.older },
   ].filter((g) => g.items.length > 0);
@@ -73,25 +98,37 @@ export function AISidebar({
   onRename,
   onTogglePin,
   onClose,
+  onOpenArtifacts,
+  onOpenConnectors,
+  onOpenGithub,
+  artifactCount = 0,
 }: Props) {
   const [query, setQuery] = useState('');
   const [recentsOpen, setRecentsOpen] = useState(true);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  // "Loyihalar" — faqat mahkamlangan suhbatlarni ko'rsatish rejimi.
+  const [projectsOnly, setProjectsOnly] = useState(false);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return conversations;
-    // Fuzzy-ish: match title OR any message content
-    return conversations.filter(
+    const base = projectsOnly ? conversations.filter((c) => c.pinned) : conversations;
+    if (!q) return base;
+    return base.filter(
       (c) =>
         c.title.toLowerCase().includes(q) ||
         c.messages.some((m) => m.content.toLowerCase().includes(q)),
     );
-  }, [conversations, query]);
+  }, [conversations, query, projectsOnly]);
 
   const pinned = filtered.filter((c) => c.pinned);
   const groups = groupByDate(filtered.filter((c) => !c.pinned));
+
+  const codeCount = useMemo(
+    () =>
+      conversations.filter((c) => c.messages.some((m) => m.content.includes('```'))).length,
+    [conversations],
+  );
 
   const snippetFor = (conv: AIConversation) => {
     const q = query.trim().toLowerCase();
@@ -101,6 +138,34 @@ export function AISidebar({
     const i = hit.content.toLowerCase().indexOf(q);
     return `…${hit.content.slice(Math.max(0, i - 24), i + 48).trim()}…`;
   };
+
+  const navItem = (
+    key: string,
+    icon: React.ReactNode,
+    label: string,
+    onClick: () => void,
+    opts?: { active?: boolean; badge?: number },
+  ) => (
+    <button
+      key={key}
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium transition-colors',
+        opts?.active ? 'bg-muted text-foreground' : 'text-foreground/80 hover:bg-muted/60',
+      )}
+    >
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center text-muted-foreground">
+        {icon}
+      </span>
+      <span className="flex-1 truncate">{label}</span>
+      {opts?.badge ? (
+        <span className="rounded-full bg-muted px-1.5 text-[10px] text-muted-foreground">
+          {opts.badge}
+        </span>
+      ) : null}
+    </button>
+  );
 
   const renderItem = (conv: AIConversation) => (
     <div
@@ -184,11 +249,11 @@ export function AISidebar({
           >
             {conv.pinned ? (
               <>
-                <PinOff className="h-3.5 w-3.5 mr-2" /> Mahkamlashni bekor qilish
+                <PinOff className="h-3.5 w-3.5 mr-2" /> Loyihalardan olish
               </>
             ) : (
               <>
-                <Pin className="h-3.5 w-3.5 mr-2" /> Mahkamlash
+                <Pin className="h-3.5 w-3.5 mr-2" /> Loyihalarga qo'shish
               </>
             )}
           </DropdownMenuItem>
@@ -229,11 +294,41 @@ export function AISidebar({
 
         <Button
           className="w-full gap-2 h-10 rounded-xl bg-gradient-to-r from-alsamos-orange to-alsamos-orange-dark text-white border-0 hover:opacity-90"
-          onClick={onNew}
+          onClick={() => {
+            setProjectsOnly(false);
+            onNew();
+          }}
         >
           <Plus className="h-4 w-4" />
           Yangi suhbat
         </Button>
+
+        {/* Menyu — kam va foydali */}
+        <nav className="space-y-0.5">
+          {navItem(
+            'projects',
+            <FolderOpen className="h-4 w-4" />,
+            'Loyihalar',
+            () => setProjectsOnly((v) => !v),
+            { active: projectsOnly, badge: conversations.filter((c) => c.pinned).length },
+          )}
+          {navItem(
+            'artifacts',
+            <FileCode2 className="h-4 w-4" />,
+            'Artefaktlar',
+            () => onOpenArtifacts?.(),
+            { badge: artifactCount },
+          )}
+          {navItem(
+            'connectors',
+            <Plug className="h-4 w-4" />,
+            'Konnektorlar',
+            () => onOpenConnectors?.(),
+          )}
+          {navItem('github', <Github className="h-4 w-4" />, 'GitHub', () => onOpenGithub?.(), {
+            badge: codeCount || undefined,
+          })}
+        </nav>
 
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -261,7 +356,11 @@ export function AISidebar({
             <div className="text-center py-12 text-muted-foreground">
               <History className="h-8 w-8 mx-auto mb-3 opacity-40" />
               <p className="text-xs">
-                {query ? 'Natija topilmadi' : "Hali suhbatlar yo'q — yangi suhbat boshlang"}
+                {projectsOnly
+                  ? "Loyiha yo'q — suhbatni mahkamlab loyihaga aylantiring"
+                  : query
+                    ? 'Natija topilmadi'
+                    : "Hali suhbatlar yo'q — yangi suhbat boshlang"}
               </p>
             </div>
           ) : (
@@ -269,32 +368,34 @@ export function AISidebar({
               {pinned.length > 0 && (
                 <div>
                   <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Mahkamlangan
+                    Loyihalar
                   </p>
                   <div className="space-y-0.5">{pinned.map(renderItem)}</div>
                 </div>
               )}
 
-              <div>
-                <button
-                  onClick={() => setRecentsOpen((v) => !v)}
-                  className="flex w-full items-center gap-1 px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground"
-                >
-                  {recentsOpen ? (
-                    <ChevronDown className="h-3 w-3" />
-                  ) : (
-                    <ChevronRight className="h-3 w-3" />
-                  )}
-                  So'nggilar
-                </button>
-                {recentsOpen &&
-                  groups.map((g) => (
-                    <div key={g.key} className="mb-2">
-                      <p className="px-2.5 py-1 text-[10px] text-muted-foreground/70">{g.label}</p>
-                      <div className="space-y-0.5">{g.items.map(renderItem)}</div>
-                    </div>
-                  ))}
-              </div>
+              {!projectsOnly && (
+                <div>
+                  <button
+                    onClick={() => setRecentsOpen((v) => !v)}
+                    className="flex w-full items-center gap-1 px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground"
+                  >
+                    {recentsOpen ? (
+                      <ChevronDown className="h-3 w-3" />
+                    ) : (
+                      <ChevronRight className="h-3 w-3" />
+                    )}
+                    So'nggilar
+                  </button>
+                  {recentsOpen &&
+                    groups.map((g) => (
+                      <div key={g.key} className="mb-2">
+                        <p className="px-2.5 py-1 text-[10px] text-muted-foreground/70">{g.label}</p>
+                        <div className="space-y-0.5">{g.items.map(renderItem)}</div>
+                      </div>
+                    ))}
+                </div>
+              )}
             </>
           )}
         </div>
