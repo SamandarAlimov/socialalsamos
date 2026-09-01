@@ -20,11 +20,13 @@ export const MINI_APP_IFRAME_SANDBOX = [
 ].join(' ');
 
 /**
- * O'zimiz boshqaradigan proksi domeni (masalan proxy.alsamos.com) uchun sandbox.
+ * Alohida proksi domeni (masalan proxy.alsamos.com) uchun sandbox.
  * Bu yerda `allow-same-origin` XAVFSIZ, chunki proksi origini alsamos.com dan
- * BOSHQA origin — iframe o'z origini bilan qoladi va host sahifaga tegolmaydi.
- * Aynan shu ruxsat React/Next.js saytlarga localStorage, cookie va IndexedDB
- * bilan ishlashga imkon beradi, ya'ni ular superapp ichida to'liq ishlaydi.
+ * BOSHQA origin — iframe host sahifaga tegolmaydi, lekin sayt localStorage,
+ * cookie va IndexedDB bilan to'liq ishlaydi.
+ *
+ * DIQQAT: bu sandbox faqat alohida domendagi proksi uchun. Bir xil origindagi
+ * `/api/mp/` proksisi uchun `allow-same-origin` BERILMAYDI.
  */
 export const MINI_APP_PROXY_IFRAME_SANDBOX = [MINI_APP_IFRAME_SANDBOX, 'allow-same-origin'].join(' ');
 
@@ -34,17 +36,17 @@ export const MINI_APP_IFRAME_ALLOW_BASE = 'clipboard-write; fullscreen';
 export const DIRECT_TIMEOUT_MS = 8000;
 export const PROXY_TIMEOUT_MS = 15000;
 
-/** Self-hosted proksidagi path prefiksi (workers/mini-app-proxy bilan bir xil). */
+/** Alohida proksi domenidagi path prefiksi (workers/mini-app-proxy bilan bir xil). */
 export const MINI_APP_PROXY_PATH_PREFIX = '/p/';
+
+/** Bir xil origindagi Vercel proksisi (api/mp/[...path].ts) prefiksi. */
+export const MINI_APP_SAME_ORIGIN_PROXY_PREFIX = '/api/mp/p/';
 
 const BLOCKED_SCHEMES = ['javascript:', 'data:', 'blob:', 'file:', 'ftp:', 'ws:', 'wss:'];
 
 /**
  * Iframe'ni to'liq bloklaydigan hostlar (X-Frame-Options / CSP frame-ancestors).
- * Bu ro'yxat faqat "ma'lum" holatlar uchun; asosiy manba — bazadagi
- * `mini_apps.frame_blocked` bayrog'i (mini-app-frame-check funksiyasi to'ldiradi).
- *
- * Diqqat: bu ro'yxat faqat TO'G'RIDAN-TO'G'RI iframe qadamini o'tkazib yuboradi.
+ * Bu ro'yxat faqat TO'G'RIDAN-TO'G'RI iframe qadamini o'tkazib yuboradi.
  * Proksi qadami baribir sinaladi — maqsad ilovani superapp ICHIDA ochish.
  */
 const FRAMING_BLOCKED_HOSTS = [
@@ -223,14 +225,14 @@ export interface OpenPlan {
   punycodeWarning: boolean;
   /** Sayt iframe'ni bloklashi aniq — to'g'ridan-to'g'ri qadam o'tkazib yuborildi. */
   framingBlocked: boolean;
-  /** O'z domenimizdagi proksi sozlanganmi (superapp ichida to'liq ochish imkoni). */
+  /** O'zimiz boshqaradigan proksi mavjudmi (superapp ichida ochish imkoni). */
   inAppProxy: boolean;
 }
 
 /**
- * `VITE_MINI_APP_PROXY_ORIGIN` — o'zimizning proksi domenimiz (workers/mini-app-proxy).
- * Sozlanmagan bo'lsa Supabase Edge Function'ga qaytamiz, lekin u platforma
- * sandbox sarlavhasi tufayli faqat statik sahifalarni ko'rsata oladi.
+ * `VITE_MINI_APP_PROXY_ORIGIN` — alohida proksi domeni (workers/mini-app-proxy).
+ * Sozlanmagan bo'lsa bir xil origindagi `/api/mp/p/` proksisidan foydalanamiz
+ * (api/mp/[...path].ts, Vercel), ya'ni qo'shimcha sozlamasiz ham ichida ochiladi.
  */
 function envProxyOrigin(): string | null {
   try {
@@ -242,18 +244,30 @@ function envProxyOrigin(): string | null {
   }
 }
 
-/** Supabase Edge Function proksisi (zaxira variant). */
+/** Brauzerdagi joriy origin (bir xil origindagi proksi uchun). */
+function sameOriginProxyOrigin(): string | null {
+  try {
+    if (typeof window === 'undefined') return null;
+    const origin = window.location?.origin;
+    return origin && /^https?:/i.test(origin) ? origin.replace(/\/+$/, '') : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Supabase Edge Function proksisi (eng oxirgi zaxira variant). */
 export function buildProxyUrl(apiBase: string, targetUrl: string, cacheBuster?: string | number): string {
   const base = apiBase.replace(/\/+$/, '');
   const suffix = cacheBuster === undefined ? '' : '&_ts=' + encodeURIComponent(String(cacheBuster));
   return base + '/functions/v1/mini-app-proxy?url=' + encodeURIComponent(targetUrl) + suffix;
 }
 
-/** O'z domenimizdagi proksi (path-prefix shakli — nisbiy havolalar buzilmaydi). */
+/** O'zimiz boshqaradigan proksi (path-prefix shakli — nisbiy havolalar buzilmaydi). */
 export function buildInAppProxyUrl(
   proxyOrigin: string,
   targetUrl: string,
   cacheBuster?: string | number,
+  pathPrefix: string = MINI_APP_PROXY_PATH_PREFIX,
 ): string {
   const origin = proxyOrigin.replace(/\/+$/, '');
   let target = targetUrl;
@@ -261,7 +275,7 @@ export function buildInAppProxyUrl(
     const separator = target.includes('?') ? '&' : '?';
     target = target + separator + '__mp=' + encodeURIComponent(String(cacheBuster));
   }
-  return origin + MINI_APP_PROXY_PATH_PREFIX + target;
+  return origin + pathPrefix + target;
 }
 
 export interface BuildOpenPlanInput {
@@ -273,8 +287,10 @@ export interface BuildOpenPlanInput {
   cacheBuster?: string | number;
   /** Bazadagi `mini_apps.frame_blocked` bayrog'i (server tekshiruvi natijasi). */
   frameBlocked?: boolean;
-  /** O'z proksi domenimiz; berilmasa VITE_MINI_APP_PROXY_ORIGIN o'qiladi. */
+  /** Alohida proksi domeni; berilmasa VITE_MINI_APP_PROXY_ORIGIN o'qiladi. */
   proxyOrigin?: string | null;
+  /** Bir xil origindagi proksini o'chirish uchun (test/SSR). */
+  sameOriginProxy?: boolean;
 }
 
 function emptyPlan(error: OpenPlan['error']): OpenPlan {
@@ -315,24 +331,38 @@ export function buildOpenPlan(input: BuildOpenPlanInput): OpenPlan {
   const embed = resolveEmbedUrl(target);
   const blocked = Boolean(input.frameBlocked) || isFramingBlocked(target);
 
-  const proxyOrigin = input.proxyOrigin === undefined ? envProxyOrigin() : input.proxyOrigin;
-  const hasInAppProxy = Boolean(proxyOrigin);
+  // 1) Alohida proksi domeni (eng yaxshi: allow-same-origin bilan to'liq ishlaydi)
+  const dedicatedOrigin = input.proxyOrigin === undefined ? envProxyOrigin() : input.proxyOrigin;
+  // 2) Bir xil origindagi /api/mp/ proksisi (qo'shimcha sozlamasiz ishlaydi)
+  const sameOrigin =
+    dedicatedOrigin || input.sameOriginProxy === false ? null : sameOriginProxyOrigin();
 
-  const proxyStep: OpenStep | null = hasInAppProxy
-    ? {
-        kind: 'proxy',
-        src: buildInAppProxyUrl(proxyOrigin as string, target, cacheBuster),
-        timeoutMs: PROXY_TIMEOUT_MS,
-        sandbox: MINI_APP_PROXY_IFRAME_SANDBOX,
-      }
-    : apiBase
-      ? {
-          kind: 'proxy',
-          src: buildProxyUrl(apiBase, target, cacheBuster),
-          timeoutMs: PROXY_TIMEOUT_MS,
-          sandbox: MINI_APP_IFRAME_SANDBOX,
-        }
-      : null;
+  let proxyStep: OpenStep | null = null;
+  if (dedicatedOrigin) {
+    proxyStep = {
+      kind: 'proxy',
+      src: buildInAppProxyUrl(dedicatedOrigin, target, cacheBuster, MINI_APP_PROXY_PATH_PREFIX),
+      timeoutMs: PROXY_TIMEOUT_MS,
+      sandbox: MINI_APP_PROXY_IFRAME_SANDBOX,
+    };
+  } else if (sameOrigin) {
+    proxyStep = {
+      kind: 'proxy',
+      src: buildInAppProxyUrl(sameOrigin, target, cacheBuster, MINI_APP_SAME_ORIGIN_PROXY_PREFIX),
+      timeoutMs: PROXY_TIMEOUT_MS,
+      // Bir xil origin: allow-same-origin BERILMAYDI (host sahifa xavfsizligi uchun).
+      sandbox: MINI_APP_IFRAME_SANDBOX,
+    };
+  } else if (apiBase) {
+    proxyStep = {
+      kind: 'proxy',
+      src: buildProxyUrl(apiBase, target, cacheBuster),
+      timeoutMs: PROXY_TIMEOUT_MS,
+      sandbox: MINI_APP_IFRAME_SANDBOX,
+    };
+  }
+
+  const hasInAppProxy = Boolean(dedicatedOrigin || sameOrigin);
 
   const embedStep: OpenStep | null = embed
     ? { kind: 'embed', src: embed, timeoutMs: DIRECT_TIMEOUT_MS, sandbox: MINI_APP_IFRAME_SANDBOX }
@@ -356,8 +386,8 @@ export function buildOpenPlan(input: BuildOpenPlanInput): OpenPlan {
     // Telegram bot havolasi faqat Telegram ilovasida ishlaydi.
     steps.push(externalStep);
   } else if (displayMode === 'external') {
-    // Baza `external` desa ham, o'z proksimiz bo'lsa avval ichkarida sinaymiz.
-    if (proxyStep && hasInAppProxy) steps.push(proxyStep);
+    // Baza `external` desa ham, proksimiz bo'lsa avval ichkarida sinaymiz.
+    if (proxyStep) steps.push(proxyStep);
     steps.push(externalStep);
   } else if (displayMode === 'proxy') {
     if (proxyStep) steps.push(proxyStep);
