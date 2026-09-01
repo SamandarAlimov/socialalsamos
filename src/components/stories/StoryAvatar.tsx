@@ -28,7 +28,9 @@ interface StoryGroup {
 }
 
 interface StoryAvatarProps {
-  userId: string;
+  userId?: string;
+  /** Tashqi manbadan kelgan "ko'rilmagan story" holati (ixtiyoriy). */
+  hasUnviewed?: boolean;
   username?: string | null;
   displayName?: string | null;
   avatarUrl?: string | null;
@@ -75,6 +77,7 @@ const badgeSizeForAvatar = {
 
 export function StoryAvatar({
   userId,
+  hasUnviewed,
   username,
   displayName,
   avatarUrl,
@@ -87,7 +90,7 @@ export function StoryAvatar({
 }: StoryAvatarProps) {
   const { user } = useAuth();
   const [hasStory, setHasStory] = useState(false);
-  const [hasUnviewedStory, setHasUnviewedStory] = useState(false);
+  const [hasUnviewedStory, setHasUnviewedStory] = useState(Boolean(hasUnviewed));
   const [storyGroup, setStoryGroup] = useState<StoryGroup | null>(null);
   const [showViewer, setShowViewer] = useState(false);
 
@@ -96,6 +99,7 @@ export function StoryAvatar({
   }, [userId, user?.id]);
 
   const checkForStories = async () => {
+    if (!userId) return;
     try {
       // Fetch stories for this user
       const { data: stories, error } = await supabase
