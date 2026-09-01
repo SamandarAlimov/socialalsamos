@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { StoryViewer } from './StoryViewer';
 import { cn } from '@/lib/utils';
 
@@ -32,6 +33,15 @@ interface StoryAvatarProps {
   displayName?: string | null;
   avatarUrl?: string | null;
   isVerified?: boolean;
+  /**
+   * Avatarning o'ng-pastida tasdiq nishonini ko'rsatish.
+   *
+   * Odatda nishon ism yonida (`UserName` komponenti orqali) chiqadi,
+   * shuning uchun bu yerda sukut bo'yicha o'chirilgan - aks holda bitta
+   * kartochkada ikkita nishon paydo bo'lardi. Ism ko'rinmaydigan joylarda
+   * (masalan faqat avatar chiqadigan ro'yxatlarda) `true` qiling.
+   */
+  showVerifiedBadge?: boolean;
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   showRing?: boolean;
   className?: string;
@@ -54,12 +64,22 @@ const ringPadding = {
   xl: 'p-[3px]',
 };
 
+/** Avatar o'lchamiga mos nishon o'lchami */
+const badgeSizeForAvatar = {
+  xs: 'xs',
+  sm: 'xs',
+  md: 'sm',
+  lg: 'sm',
+  xl: 'lg',
+} as const;
+
 export function StoryAvatar({
   userId,
   username,
   displayName,
   avatarUrl,
   isVerified = false,
+  showVerifiedBadge = false,
   size = 'md',
   showRing = true,
   className,
@@ -173,6 +193,13 @@ export function StoryAvatar({
             </AvatarFallback>
           </Avatar>
         </div>
+
+        {/* Yagona manba: VerifiedBadge (to'ldirilgan ko'k Instagram nishoni) */}
+        {isVerified && showVerifiedBadge && (
+          <span className="absolute -bottom-0.5 -right-0.5 rounded-full bg-background p-[1px] leading-none">
+            <VerifiedBadge size={badgeSizeForAvatar[size]} />
+          </span>
+        )}
       </button>
 
       {showViewer && storyGroup && (

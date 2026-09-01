@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, UserPlus, UserMinus, BadgeCheck, X } from 'lucide-react';
+import { Search, UserPlus, UserMinus, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useUserSearch, UserProfile } from '@/hooks/useUserSearch';
 import { OnlineIndicator } from '@/components/OnlineIndicator';
+import { UserName } from '@/components/UserName';
 import { useDebounce } from '@/hooks/useDebounce';
 import { toast } from 'sonner';
 
@@ -49,12 +50,13 @@ function UserCard({ user, onFollow, onUnfollow, onNavigate }: UserCardProps) {
         <OnlineIndicator userId={user.id} size="sm" />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1">
-          <span className="font-medium truncate">
-            {user.display_name || user.username}
-          </span>
-          {user.is_verified && <BadgeCheck className="h-4 w-4 text-primary" />}
-        </div>
+        {/* Markazlashtirilgan: ism + tasdiq nishoni */}
+        <UserName
+          displayName={user.display_name}
+          username={user.username}
+          isVerified={user.is_verified}
+          nameClassName="font-medium"
+        />
         {user.username && (
           <p className="text-sm text-muted-foreground">@{user.username}</p>
         )}
