@@ -5,6 +5,10 @@
 // brauzer "Failed to fetch" xatosini beradi. Shuning uchun bu klient avtomatik
 // ravishda allaqachon deploy qilingan `ai-assistant` funksiyasiga qaytadi
 // (fallback): chat doim ishlaydi, vositalar esa deploy'dan keyin qo'shiladi.
+//
+// `context` maydoni — "miya" kanali (src/lib/ai/brain.ts). Ikkala funksiya ham
+// uni o'z system prompti ichiga qo'shadi, shuning uchun AI ning imkoniyatlari,
+// xotirasi va skillari deploy talab qilmasdan kengaytiriladi.
 
 import { supabase } from '@/integrations/supabase/client';
 import type { AgentEvent, AIMode, ModelId, ToolGroupId } from './capabilities';
@@ -15,6 +19,8 @@ export type StreamAgentOptions = {
   model: ModelId;
   toolGroups: ToolGroupId[];
   conversationId?: string | null;
+  /** Qo'shimcha system konteksti: master prompt, xotira, skillar. */
+  context?: string;
   signal?: AbortSignal;
   onEvent: (event: AgentEvent) => void;
 };
@@ -64,14 +70,14 @@ async function readSse(
 
 /** To'liq agent (vositalar bilan) — `ai-agent` funksiyasi. */
 async function streamFromAgent(options: StreamAgentOptions): Promise<void> {
-  const { messages, mode, model, toolGroups, conversationId, signal, onEvent } = options;
+  const { messages, mode, model, toolGroups, conversationId, context, signal, onEvent } = options;
 
   let res: Response;
   try {
     res = await fetch(`${FUNCTIONS_BASE}/ai-agent`, {
       method: 'POST',
       headers: await authHeaders(),
-      body: JSON.stringify({ messages, mode, model, toolGroups, conversationId }),
+      body: JSON.stringify({ messages, mode, model, toolGroups, conversationId, context }),
       signal,
     });
   } catch (err) {
@@ -108,12 +114,13 @@ async function streamFromAgent(options: StreamAgentOptions): Promise<void> {
 
 /** Zaxira yo'l — allaqachon deploy qilingan `ai-assistant` (oddiy chat oqimi). */
 async function streamFromAssistant(options: StreamAgentOptions): Promise<void> {
-  const { messages, signal, onEvent } = options;
+  const { messages, context, signal, onEvent } = options;
 
   const res = await fetch(`${FUNCTIONS_BASE}/ai-assistant`, {
     method: 'POST',
     headers: await authHeaders(),
-    body: JSON.stringify({ messages }),
+    // `context` server system promptiga qo'shiladi — miya qatlami shu orqali ishlaydi.
+    body: JSON.stringify({ messages, context }),
     signal,
   });
 
