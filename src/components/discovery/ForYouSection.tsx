@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Heart, MessageCircle, Play, RefreshCw } from 'lucide-react';
+import { Sparkles, Heart, MessageCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PostViewModal } from '@/components/PostViewModal';
 import { PostThumbnailStickers } from '@/components/stickers/PostThumbnailStickers';
-import {
-  PostPreviewContent,
-  getPostPreviewText,
-} from '@/components/discovery/PostPreviewContent';
+import { PostCardVisual } from '@/components/discovery/PostCardVisual';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
@@ -208,65 +205,46 @@ export function ForYouSection({ refreshKey = 0 }: ForYouSectionProps) {
     <section>
       {header}
       <div className="grid grid-cols-3 gap-1 sm:gap-2">
-        {posts.map((post) => {
-          const cover = post.media_urls?.[0];
-          return (
-            <div key={post.id} className="group relative">
-              <button
-                type="button"
-                onClick={() => openPost(post)}
-                className="relative block aspect-square w-full overflow-hidden rounded-lg bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label="Postni ochish"
-              >
-                {cover ? (
-                  <img
-                    src={cover}
-                    alt={getPostPreviewText(post.content).slice(0, 60)}
-                    loading="lazy"
-                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  />
-                ) : (
-                  <PostPreviewContent
-                    content={post.content}
-                    className="p-3"
-                    clampClassName="line-clamp-4"
-                    textClassName="text-xs text-muted-foreground"
-                    compact
-                  />
-                )}
+        {posts.map((post) => (
+          <div key={post.id} className="group relative">
+            <button
+              type="button"
+              onClick={() => openPost(post)}
+              className="relative block aspect-square w-full overflow-hidden rounded-lg bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Postni ochish"
+            >
+              <PostCardVisual
+                content={post.content}
+                mediaUrls={post.media_urls}
+                mediaType={post.media_type}
+                variant="tile"
+              />
 
-                {post.media_type === 'video' && (
-                  <span className="absolute right-1.5 top-1.5 rounded-full bg-black/60 p-1 text-white">
-                    <Play className="h-3 w-3" />
-                  </span>
-                )}
-
-                <span className="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-gradient-to-t from-black/70 to-transparent px-2 py-1.5 text-[11px] text-white opacity-0 transition-opacity group-hover:opacity-100">
-                  <span className="flex items-center gap-1">
-                    <Heart className="h-3 w-3" />
-                    {formatCount(post.likes_count)}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <MessageCircle className="h-3 w-3" />
-                    {formatCount(post.comments_count)}
-                  </span>
+              <span className="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-gradient-to-t from-black/70 to-transparent px-2 py-1.5 text-[11px] text-white opacity-0 transition-opacity group-hover:opacity-100">
+                <span className="flex items-center gap-1">
+                  <Heart className="h-3 w-3" />
+                  {formatCount(post.likes_count)}
                 </span>
+                <span className="flex items-center gap-1">
+                  <MessageCircle className="h-3 w-3" />
+                  {formatCount(post.comments_count)}
+                </span>
+              </span>
 
-                <PostThumbnailStickers postId={post.id} />
-              </button>
+              <PostThumbnailStickers postId={post.id} />
+            </button>
 
-              <button
-                type="button"
-                onClick={() => handleLike(post)}
-                className="absolute left-1.5 top-1.5 rounded-full bg-black/50 p-1.5 text-white transition-transform active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-pressed={post.is_liked}
-                aria-label={post.is_liked ? 'Like olib tashlash' : 'Like bosish'}
-              >
-                <Heart className={cn('h-3.5 w-3.5', post.is_liked && 'fill-red-500 text-red-500')} />
-              </button>
-            </div>
-          );
-        })}
+            <button
+              type="button"
+              onClick={() => handleLike(post)}
+              className="absolute left-1.5 top-1.5 rounded-full bg-black/50 p-1.5 text-white transition-transform active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-pressed={post.is_liked}
+              aria-label={post.is_liked ? 'Like olib tashlash' : 'Like bosish'}
+            >
+              <Heart className={cn('h-3.5 w-3.5', post.is_liked && 'fill-red-500 text-red-500')} />
+            </button>
+          </div>
+        ))}
       </div>
 
       {selected && (

@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Flame, Heart, MessageCircle, Play, Eye } from 'lucide-react';
+import { Flame, Heart, MessageCircle, Eye } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { PostViewModal } from '@/components/PostViewModal';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
-import {
-  PostPreviewContent,
-  getPostPreviewText,
-} from '@/components/discovery/PostPreviewContent';
+import { PostCardVisual } from '@/components/discovery/PostCardVisual';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
@@ -198,84 +195,66 @@ export function TrendingPublicPosts({ refreshKey = 0 }: TrendingPublicPostsProps
     <section>
       {header}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
-        {posts.map((post) => {
-          const cover = post.media_urls?.[0];
-          return (
-            <article
-              key={post.id}
-              className="group overflow-hidden rounded-xl border bg-card transition-shadow hover:shadow-md"
+        {posts.map((post) => (
+          <article
+            key={post.id}
+            className="group overflow-hidden rounded-xl border bg-card transition-shadow hover:shadow-md"
+          >
+            <button
+              type="button"
+              onClick={() => openPost(post)}
+              className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Postni ochish"
             >
+              <div className="relative aspect-square w-full">
+                <PostCardVisual
+                  content={post.content}
+                  mediaUrls={post.media_urls}
+                  mediaType={post.media_type}
+                  variant="grid"
+                />
+              </div>
+            </button>
+
+            <div className="space-y-2 p-3">
               <button
                 type="button"
-                onClick={() => openPost(post)}
-                className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label="Postni ochish"
+                onClick={() => post.profile && navigate(`/user/${post.profile.username}`)}
+                className="flex items-center gap-2 focus-visible:outline-none"
               >
-                <div className="relative aspect-square w-full overflow-hidden bg-muted">
-                  {cover ? (
-                    <img
-                      src={cover}
-                      alt={getPostPreviewText(post.content).slice(0, 60)}
-                      loading="lazy"
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    />
-                  ) : (
-                    <PostPreviewContent
-                      content={post.content}
-                      className="p-4"
-                      clampClassName="line-clamp-6"
-                    />
-                  )}
-                  {post.media_type === 'video' && (
-                    <span className="absolute right-2 top-2 rounded-full bg-black/60 p-1.5 text-white">
-                      <Play className="h-3.5 w-3.5" />
-                    </span>
-                  )}
-                </div>
+                <StoryAvatar
+                  avatarUrl={post.profile?.avatar_url ?? null}
+                  username={post.profile?.username ?? ''}
+                  size="xs"
+                />
+                <span className="truncate text-xs font-medium">
+                  {post.profile?.display_name || post.profile?.username}
+                </span>
               </button>
 
-              <div className="space-y-2 p-3">
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <button
                   type="button"
-                  onClick={() => post.profile && navigate(`/user/${post.profile.username}`)}
-                  className="flex items-center gap-2 focus-visible:outline-none"
+                  onClick={() => handleLike(post)}
+                  className="flex items-center gap-1 transition-colors hover:text-foreground focus-visible:outline-none"
+                  aria-pressed={post.is_liked}
+                  aria-label={post.is_liked ? 'Like olib tashlash' : 'Like bosish'}
                 >
-                  <StoryAvatar
-                    avatarUrl={post.profile?.avatar_url ?? null}
-                    username={post.profile?.username ?? ''}
-                    size="xs"
-                  />
-                  <span className="truncate text-xs font-medium">
-                    {post.profile?.display_name || post.profile?.username}
-                  </span>
+                  <Heart className={cn('h-4 w-4', post.is_liked && 'fill-red-500 text-red-500')} />
+                  {formatCount(post.likes_count)}
                 </button>
-
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <button
-                    type="button"
-                    onClick={() => handleLike(post)}
-                    className="flex items-center gap-1 transition-colors hover:text-foreground focus-visible:outline-none"
-                    aria-pressed={post.is_liked}
-                    aria-label={post.is_liked ? 'Like olib tashlash' : 'Like bosish'}
-                  >
-                    <Heart
-                      className={cn('h-4 w-4', post.is_liked && 'fill-red-500 text-red-500')}
-                    />
-                    {formatCount(post.likes_count)}
-                  </button>
-                  <span className="flex items-center gap-1">
-                    <MessageCircle className="h-4 w-4" />
-                    {formatCount(post.comments_count)}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Eye className="h-4 w-4" />
-                    {formatCount(post.views_count)}
-                  </span>
-                </div>
+                <span className="flex items-center gap-1">
+                  <MessageCircle className="h-4 w-4" />
+                  {formatCount(post.comments_count)}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Eye className="h-4 w-4" />
+                  {formatCount(post.views_count)}
+                </span>
               </div>
-            </article>
-          );
-        })}
+            </div>
+          </article>
+        ))}
       </div>
 
       {selected && (
