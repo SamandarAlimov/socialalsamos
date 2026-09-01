@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { MentionCollaborator } from '@/components/create/MentionCollaborator';
 
 interface PostCollaboratorBylineProps {
@@ -26,11 +27,12 @@ interface PostCollaboratorBylineProps {
 
 /**
  * Post sarlavhasidagi hammuallif satri (Instagram uslubi):
- *   Samandar va @alsamos
+ *   Samandar (tasdiq) va Alsamos (tasdiq)
+ *   Samandar (tasdiq) va yana 3 kishi
  *
- * Hammuallif nomi asosiy matn rangida va qalin: ustiga bosilganda uning
- * profiliga otiladi. Royxat va boshqaruv esa "va N kishi" ustiga bosilganda
- * ochiladigan oynada: lentada alohida boshqaruv kartasi chizilmaydi.
+ * "va" so'zi ham username bilan bir xil yozuvda va bosiladigan: u ham,
+ * "va yana N kishi" ham to'liq ro'yxat oynasini ochadi. Hammuallif nomi
+ * bosilganda uning profiliga o'tiladi va tasdiq nishoni ko'rsatiladi.
  */
 export function PostCollaboratorByline({
   postId,
@@ -106,7 +108,7 @@ export function PostCollaboratorByline({
     );
   };
 
-  /** Hammuallif profiliga otish. */
+  /** Hammuallif profiliga o'tish. */
   const openProfile = (
     event: React.MouseEvent,
     profile: PostCollaboratorProfile | null,
@@ -114,7 +116,14 @@ export function PostCollaboratorByline({
   ) => {
     event.preventDefault();
     event.stopPropagation();
+    setOpen(false);
     navigate('/user/' + (profile?.username || userId));
+  };
+
+  const openList = (event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setOpen(true);
   };
 
   if (isLoading) return null;
@@ -128,41 +137,46 @@ export function PostCollaboratorByline({
   if (!hasLifecycle) return null;
 
   const first = accepted[0] ?? null;
+  const hasMany = accepted.length > 1;
 
   return (
     <>
       <span className={cn('inline min-w-0 text-sm', className)}>
         {first ? (
           <>
-            <span className="text-muted-foreground">{' va '}</span>
+            {/* "va" ham username bilan bir xil uslubda va bosiladigan */}
             <button
               type="button"
-              onClick={(event) => openProfile(event, first.profile, first.user_id)}
+              onClick={openList}
               className="font-semibold text-foreground transition hover:underline"
             >
-              {first.profile?.display_name || '@' + (first.profile?.username || 'user')}
-            </button>
-
-            {accepted.length > 1 && (
+              {' va'}
+            </button>{' '}
+            {hasMany ? (
               <button
                 type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setOpen(true);
-                }}
+                onClick={openList}
                 className="font-semibold text-foreground transition hover:underline"
               >
-                {' va yana ' + (accepted.length - 1) + ' kishi'}
+                {'yana ' + accepted.length + ' kishi'}
               </button>
+            ) : (
+              <span className="inline-flex min-w-0 items-center gap-1 align-bottom">
+                <button
+                  type="button"
+                  onClick={(event) => openProfile(event, first.profile, first.user_id)}
+                  className="truncate font-semibold text-foreground transition hover:underline"
+                >
+                  {first.profile?.display_name || '@' + (first.profile?.username || 'user')}
+                </button>
+                {first.profile?.is_verified && <VerifiedBadge size="xs" />}
+              </span>
             )}
           </>
         ) : selfCollaboration?.status === 'pending' ? (
           <button
             type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              setOpen(true);
-            }}
+            onClick={openList}
             className="font-medium text-primary transition hover:underline"
           >
             Hammualliflik taklifi
@@ -170,10 +184,7 @@ export function PostCollaboratorByline({
         ) : isOwner && pending.length > 0 ? (
           <button
             type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              setOpen(true);
-            }}
+            onClick={openList}
             className="text-muted-foreground transition hover:text-foreground"
           >
             {pending.length + ' taklif kutilmoqda'}
@@ -196,7 +207,7 @@ export function PostCollaboratorByline({
                 className="flex min-h-12 w-full items-center gap-3 border-b border-border/50 px-4 text-sm font-medium transition hover:bg-muted/50 disabled:opacity-40"
               >
                 <UserPlus className="h-4 w-4 text-primary" />
-                Hammuallif qoshish
+                Hammuallif qo'shish
                 <span className="ml-auto text-xs text-muted-foreground">
                   {active.length}/10
                 </span>
@@ -205,7 +216,7 @@ export function PostCollaboratorByline({
 
             {collaborators.length === 0 ? (
               <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-                Hammuallif yoq
+                Hammuallif yo'q
               </div>
             ) : (
               collaborators.map((item) => {
@@ -224,7 +235,7 @@ export function PostCollaboratorByline({
                       type="button"
                       onClick={(event) => openProfile(event, item.profile, item.user_id)}
                       className="shrink-0"
-                      aria-label={label + ' profiliga otish'}
+                      aria-label={label + ' profiliga o\u2018tish'}
                     >
                       <Avatar className="h-9 w-9">
                         <AvatarImage src={item.profile?.avatar_url || ''} />
@@ -239,8 +250,9 @@ export function PostCollaboratorByline({
                       onClick={(event) => openProfile(event, item.profile, item.user_id)}
                       className="min-w-0 flex-1 text-left"
                     >
-                      <p className="truncate text-sm font-semibold text-foreground">
-                        {label}
+                      <p className="flex min-w-0 items-center gap-1 text-sm font-semibold text-foreground">
+                        <span className="truncate">{label}</span>
+                        {item.profile?.is_verified && <VerifiedBadge size="xs" />}
                       </p>
                       <p className="truncate text-xs text-muted-foreground">
                         @{item.profile?.username || 'user'}

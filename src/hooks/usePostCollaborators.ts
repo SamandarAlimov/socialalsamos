@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { db } from '@/lib/db';
 import { supabase } from '@/integrations/supabase/client';
 import { isMissingStructuredPostSchemaError } from '@/lib/structuredPostSchema';
@@ -36,6 +36,13 @@ async function requireUserId(): Promise<string> {
 export function usePostCollaborators(postId: string | null | undefined) {
   const [collaborators, setCollaborators] = useState<PostCollaborator[]>([]);
   const [isLoading, setIsLoading] = useState(Boolean(postId));
+
+  /*
+    Bir postda hook ikki joyda ishlatiladi (avatar to'plami va hammuallif
+    satri). Realtime kanal nomi bir xil bo'lsa ikkinchi obuna birinchisini
+    buzadi, shuning uchun har bir nusxaga alohida nom beramiz.
+  */
+  const instanceIdRef = useRef(Math.random().toString(36).slice(2, 10));
 
   const load = useCallback(async () => {
     if (!postId) {
@@ -86,7 +93,7 @@ export function usePostCollaborators(postId: string | null | undefined) {
     if (!postId) return;
 
     const channel = supabase
-      .channel(`post-collaborators-${postId}`)
+      .channel(`post-collaborators-${postId}-${instanceIdRef.current}`)
       .on(
         'postgres_changes',
         {
