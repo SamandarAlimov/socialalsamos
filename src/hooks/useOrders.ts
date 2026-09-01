@@ -4,7 +4,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useCart, Product } from '@/hooks/useMarketplace';
 import db from '@/lib/supabaseAny';
-import { db } from '@/lib/db';
 
 export interface OrderItem {
   id: string;

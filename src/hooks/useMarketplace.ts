@@ -1,4 +1,3 @@
-import { db } from '@/lib/db';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { db } from '@/lib/supabaseAny';
