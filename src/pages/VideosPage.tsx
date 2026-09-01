@@ -679,6 +679,29 @@ function VideoCard({
   );
 }
 
+/**
+ * Orqaga qaytish tugmasi.
+ * Ilgari u faqat `isMobile && isDeepLink` bo'lganda chizilardi, shuning uchun
+ * Discover'dan desktopda /videos?v=<id> ga o'tilganda tugma umuman
+ * ko'rinmasdi. Endi bitta komponent barcha holatlarda (skeleton, empty, feed)
+ * ishlatiladi.
+ */
+function BackButton({ onClick, className }: { onClick: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Orqaga"
+      className={cn(
+        'flex h-9 w-9 items-center justify-center rounded-full bg-black/50 ring-1 ring-white/10 backdrop-blur-md transition-all hover:bg-black/70 active:scale-90',
+        className,
+      )}
+    >
+      <ArrowLeft className="h-5 w-5 text-white" />
+    </button>
+  );
+}
+
 function VideoSkeleton({ isMobile }: { isMobile: boolean }) {
   return (
     <div className="relative h-full w-full bg-black flex items-center justify-center">
@@ -747,6 +770,40 @@ export default function VideosPage() {
   const verticalDelta = useRef<number>(0);
   const [swipeProgress, setSwipeProgress] = useState(0);
 
+  /*
+    Deep-link: Discover, Search yoki tashqi havoladan aniq bir video ochilgan.
+    Bunday holatda foydalanuvchiga qaytish yo'li kerak - avval u faqat mobil
+    ko'rinishda chizilgani uchun desktopda "qamalib" qolardi.
+  */
+  const isDeepLink = Boolean(
+    searchParams.get('v') || searchParams.get('post') || searchParams.get('id')
+  );
+
+  const handleBack = useCallback(() => {
+    lightTap();
+    // Yangi tabda ochilgan havolada tarix bo'sh bo'ladi - Discover'ga qaytamiz.
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate('/discover');
+    }
+  }, [navigate, lightTap]);
+
+  // Esc ham orqaga qaytaradi (faqat deep-link rejimida, modal ochiq bo'lmasa).
+  useEffect(() => {
+    if (!isDeepLink) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (commentsOpen || shareDialogOpen || likesDialogOpen || watchVideoId) return;
+      if (document.fullscreenElement) return;
+      handleBack();
+    };
+
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isDeepLink, commentsOpen, shareDialogOpen, likesDialogOpen, watchVideoId, handleBack]);
+
   const openProfile = useCallback((video?: VideoPost | null) => {
     const username = video?.profile?.username;
     if (!username) return;
@@ -807,6 +864,18 @@ export default function VideosPage() {
       return;
     }
 
+    /*
+      Deep-link rejimida o'ngga surish orqaga qaytaradi (iOS uslubidagi
+      "swipe back"), chunki bu holatda pastdagi navbar ko'rinmasligi mumkin.
+    */
+    if (isDeepLink && deltaX > 70 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+      setSwipeProgress(0);
+      horizontalDelta.current = 0;
+      verticalDelta.current = 0;
+      handleBack();
+      return;
+    }
+
     const swipeThreshold = 0.3;
     const timeElapsed = Date.now() - touchStartTime.current;
     const isQuickSwipe = timeElapsed < 300;
@@ -835,7 +904,7 @@ export default function VideosPage() {
     setSwipeProgress(0);
     horizontalDelta.current = 0;
     verticalDelta.current = 0;
-  }, [swipeProgress, activeIndex, videos, mediumTap, openProfile]);
+  }, [swipeProgress, activeIndex, videos, mediumTap, openProfile, isDeepLink, handleBack]);
 
   const openComments = (videoId: string) => {
     setSelectedVideoId(videoId);
@@ -877,12 +946,26 @@ export default function VideosPage() {
     }
   }, [videos, watchVideoId, activeIndex]);
 
+  // Skeleton va empty holatlarida ham tugma kerak, aks holda yuklanish
+  // paytida sahifadan chiqib bo'lmaydi.
+  const floatingBack = isDeepLink ? (
+    <div
+      className={cn(
+        'absolute left-3 z-50',
+        isMobile ? 'top-[calc(env(safe-area-inset-top,0px)+12px)]' : 'top-4'
+      )}
+    >
+      <BackButton onClick={handleBack} />
+    </div>
+  ) : null;
+
   if (isLoading) {
     return (
       <div className={cn(
-        "bg-black flex items-center justify-center",
+        "relative bg-black flex items-center justify-center",
         isMobile ? "fixed inset-0 z-40" : "h-screen w-full"
       )}>
+        {floatingBack}
         <VideoSkeleton isMobile={isMobile} />
       </div>
     );
@@ -891,22 +974,18 @@ export default function VideosPage() {
   if (videos.length === 0) {
     return (
       <div className={cn(
-        "bg-black",
+        "relative bg-black",
         isMobile ? "fixed inset-0 z-40" : "h-screen w-full flex items-center justify-center"
       )}>
+        {floatingBack}
         <EmptyState />
       </div>
     );
   }
 
-  // Deep-link detection: show back button only when arriving directly at a specific post
-  const isDeepLink = Boolean(
-    searchParams.get('v') || searchParams.get('post') || searchParams.get('id')
-  );
-
   return (
     <div className={cn(
-      "bg-black",
+      "relative bg-black",
       isMobile ? "fixed inset-0 z-40" : "h-screen w-full flex items-center justify-center"
     )}>
       {/* Page-level header controls */}
@@ -916,19 +995,9 @@ export default function VideosPage() {
           isMobile ? "top-[calc(env(safe-area-inset-top,0px)+12px)]" : "top-4"
         )}
       >
-        {/* Back — only shown on deep-link entry */}
+        {/* Orqaga — deep-link bilan kelinganda mobil va desktopda bir xil chiqadi */}
         <div className="pointer-events-auto">
-          {isMobile && isDeepLink ? (
-            <button
-              onClick={() => navigate(-1)}
-              aria-label="Back"
-              className="h-9 w-9 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center active:scale-90 transition-all ring-1 ring-white/10"
-            >
-              <ArrowLeft className="h-5 w-5 text-white" />
-            </button>
-          ) : (
-            <div className="h-9 w-9" />
-          )}
+          {isDeepLink ? <BackButton onClick={handleBack} /> : <div className="h-9 w-9" />}
         </div>
 
         <div className="pointer-events-auto flex items-center gap-2">
