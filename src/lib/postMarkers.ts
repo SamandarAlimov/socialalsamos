@@ -46,6 +46,20 @@ const LOCATION_TAG = '[LOCATION]';
 const LOCATION_EMOJI = '\uD83D\uDCCD';
 const LEGACY_LOCATION_PREFIX = 'LOCATION:';
 
+/** Audio fayl kengaytmalari: postga biriktirilgan musiqa fayli shu bo'yicha aniqlanadi. */
+const AUDIO_EXTENSIONS = [
+  'mp3',
+  'm4a',
+  'aac',
+  'wav',
+  'ogg',
+  'oga',
+  'opus',
+  'flac',
+  'weba',
+  'amr',
+];
+
 /** JSON obyektining yopiluvchi qavsini topadi (satr ichidagi qavslarni hisobga olmaydi). */
 function findObjectEnd(text: string, start: number): number {
   let depth = 0;
@@ -85,6 +99,14 @@ function num(value: unknown): number | null {
   return null;
 }
 
+/**
+ * `[MUSIC]{...}` ochiluvchi qismi olinganda matnda `[/MUSIC]` yopiluvchi tegi
+ * qolib ketardi va foydalanuvchiga xom teg bo'lib ko'rinardi.
+ */
+function stripMusicCloseTag(text: string): string {
+  return text.replace(/\[\/MUSIC\]/gi, '').trim();
+}
+
 function normalizeMusic(raw: Record<string, unknown>): PostMusic | null {
   const title =
     str(raw.title) ?? str(raw.name) ?? str(raw.track) ?? str(raw.song) ?? str(raw.fileName) ?? str(raw.file_name);
@@ -115,18 +137,23 @@ export function parseMusicFromContent(content: string | null | undefined): {
   if (!content) return { music: null, cleanContent: '' };
 
   const tagIndex = content.indexOf(MUSIC_TAG);
-  if (tagIndex === -1) return { music: null, cleanContent: content };
+  if (tagIndex === -1) {
+    // Ochiluvchi teg yo'q, lekin yopiluvchi teg qolgan bo'lishi mumkin.
+    return { music: null, cleanContent: stripMusicCloseTag(content) };
+  }
 
   const jsonStart = content.indexOf('{', tagIndex + MUSIC_TAG.length);
   const jsonEnd = jsonStart === -1 ? -1 : findObjectEnd(content, jsonStart);
 
   // Marker bor, lekin JSON topilmadi yoki buzuq: markerni olib tashlaymiz.
   if (jsonStart === -1 || jsonEnd === -1) {
-    const cleaned = (content.slice(0, tagIndex) + content.slice(tagIndex + MUSIC_TAG.length)).trim();
+    const cleaned = stripMusicCloseTag(
+      content.slice(0, tagIndex) + content.slice(tagIndex + MUSIC_TAG.length),
+    );
     return { music: null, cleanContent: cleaned };
   }
 
-  const cleaned = (content.slice(0, tagIndex) + content.slice(jsonEnd + 1)).trim();
+  const cleaned = stripMusicCloseTag(content.slice(0, tagIndex) + content.slice(jsonEnd + 1));
 
   try {
     const parsed = JSON.parse(content.slice(jsonStart, jsonEnd + 1));
@@ -140,6 +167,96 @@ export function parseMusicFromContent(content: string | null | undefined): {
   return { music: null, cleanContent: cleaned };
 }
 
+/**
+ * Ba'zi postlarda musiqa markeri `content` da emas, `formatted_content`
+ * (rich text hujjati) ichida qolib ketgan. Hujjatni matnga aylantirib,
+ * shu markerni ham topamiz.
+ */
+export function parseMusicFromFormattedContent(
+  formattedContent: unknown,
+): PostMusic | null {
+  if (!formattedContent) return null;
+
+  let text: string;
+  try {
+    text = typeof formattedContent === 'string' ? formattedContent : JSON.stringify(formattedContent);
+  } catch {
+    return null;
+  }
+
+  if (!text || text.indexOf(MUSIC_TAG) === -1) return null;
+
+  // JSON ichida qo'shtirnoqlar escape qilingan bo'lishi mumkin.
+  const candidates = [text, text.replace(/\\"/g, '"')];
+
+  for (const candidate of candidates) {
+    const { music } = parseMusicFromContent(candidate);
+    if (music) return music;
+  }
+
+  return null;
+}
+
+/** URL'dagi fayl nomini (kengaytmasiz) o'qiydi. */
+function audioTitleFromUrl(url: string): string {
+  const withoutQuery = url.split('?')[0].split('#')[0];
+  const raw = withoutQuery.split('/').pop() || 'Audio';
+
+  let name = raw;
+  try {
+    name = decodeURIComponent(raw);
+  } catch {
+    // buzuq encoding: xom nom ishlatiladi
+  }
+
+  return name.replace(/\.[^.]+$/, '').trim() || 'Audio';
+}
+
+/**
+ * Eski postlarda musiqa alohida jadvalga emas, oddiy fayl sifatida
+ * `media_urls` ga tushgan. Bunday audio ham musiqa kartasi bo'lib chiqadi.
+ */
+export function musicFromMediaUrl(url: string | null | undefined): PostMusic | null {
+  if (!url) return null;
+
+  const withoutQuery = url.split('?')[0].split('#')[0];
+  const extension = withoutQuery.split('.').pop()?.toLowerCase() ?? '';
+  if (!AUDIO_EXTENSIONS.includes(extension)) return null;
+
+  return {
+    title: audioTitleFromUrl(url),
+    artist: null,
+    coverUrl: null,
+    audioUrl: url,
+    durationSeconds: null,
+  };
+}
+
+/**
+ * Postdagi musiqani mavjud barcha manbalardan topadi:
+ *   1) `content` ichidagi `[MUSIC]` markeri
+ *   2) `formatted_content` ichida qolgan marker
+ *   3) `media_urls` ichidagi audio fayl
+ * Strukturali `post_music` jadvali PostExtras ichida alohida o'qiladi.
+ */
+export function resolvePostMusic(input: {
+  contentMusic?: PostMusic | null;
+  formattedContent?: unknown;
+  mediaUrls?: string[] | null;
+  mediaType?: string | null;
+}): PostMusic | null {
+  if (input.contentMusic) return input.contentMusic;
+
+  const fromFormatted = parseMusicFromFormattedContent(input.formattedContent);
+  if (fromFormatted) return fromFormatted;
+
+  for (const url of input.mediaUrls ?? []) {
+    const fromUrl = musicFromMediaUrl(url);
+    if (fromUrl) return fromUrl;
+  }
+
+  return null;
+}
 
 function normalizeLocation(raw: Record<string, unknown>): LegacyPostLocation | null {
   const latitude = num(raw.latitude ?? raw.lat);
