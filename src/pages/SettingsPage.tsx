@@ -1,22 +1,57 @@
-import { useState, useEffect } from 'react';
-import { cn } from '@/lib/utils';
-
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from 'next-themes';
+import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserSettings } from '@/hooks/useUserSettings';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { supabase } from '@/integrations/supabase/client';
 import { uploadMedia } from '@/lib/mediaUpload';
-import { User, Bell, Shield, Palette, Globe, Smartphone, Key, Eye, Moon, Sun, LogOut, ChevronRight, Wifi, Trash2, Monitor, Laptop, CheckCircle2, XCircle, Loader2, Save, BadgeCheck, Wallet, Heart, MessageCircle, UserPlus, AtSign, Clock, BarChart3, HardDrive, Image as ImageIcon } from 'lucide-react';
+import {
+  AtSign,
+  BadgeCheck,
+  BarChart3,
+  Bell,
+  CheckCircle2,
+  ChevronRight,
+  Clock,
+  Eye,
+  HardDrive,
+  Heart,
+  Image as ImageIcon,
+  Info,
+  Laptop,
+  Loader2,
+  LogOut,
+  MessageCircle,
+  Monitor,
+  Moon,
+  Palette,
+  Save,
+  Shield,
+  Smartphone,
+  Sun,
+  Trash2,
+  User,
+  UserPlus,
+  Wallet,
+  Wifi,
+  XCircle,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -34,7 +69,10 @@ import { VerificationRequestDialog } from '@/components/profile/VerificationRequ
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { ChatWallpaperEditor } from '@/components/settings/ChatWallpaperEditor';
 import { MediaAutoDownloadEditor } from '@/components/settings/MediaAutoDownloadEditor';
+import { LocationPicker, type LocationCoords } from '@/components/settings/LocationPicker';
 import { PROFILE_PUBLIC_COLUMNS } from '@/lib/profileFields';
+
+const APP_VERSION = '1.0.0';
 
 interface Profile {
   display_name: string | null;
@@ -47,7 +85,170 @@ interface Profile {
   birth_date: string | null;
 }
 
-// Push Notification Settings Component
+type SectionItem = {
+  value: string;
+  label: string;
+  description: string;
+  icon: React.ElementType;
+  tint: string;
+  to?: string;
+};
+
+const COUNTRIES: Array<{ value: string; flag: string; label: string }> = [
+  { value: 'Uzbekistan', flag: '\uD83C\uDDFA\uD83C\uDDFF', label: "O'zbekiston" },
+  { value: 'Russia', flag: '\uD83C\uDDF7\uD83C\uDDFA', label: 'Rossiya' },
+  { value: 'Kazakhstan', flag: '\uD83C\uDDF0\uD83C\uDDFF', label: "Qozog'iston" },
+  { value: 'Kyrgyzstan', flag: '\uD83C\uDDF0\uD83C\uDDEC', label: "Qirg'iziston" },
+  { value: 'Tajikistan', flag: '\uD83C\uDDF9\uD83C\uDDEF', label: 'Tojikiston' },
+  { value: 'Turkmenistan', flag: '\uD83C\uDDF9\uD83C\uDDF2', label: 'Turkmaniston' },
+  { value: 'Turkey', flag: '\uD83C\uDDF9\uD83C\uDDF7', label: 'Turkiya' },
+  { value: 'United States', flag: '\uD83C\uDDFA\uD83C\uDDF8', label: 'AQSh' },
+  { value: 'United Kingdom', flag: '\uD83C\uDDEC\uD83C\uDDE7', label: 'Buyuk Britaniya' },
+  { value: 'Germany', flag: '\uD83C\uDDE9\uD83C\uDDEA', label: 'Germaniya' },
+  { value: 'France', flag: '\uD83C\uDDEB\uD83C\uDDF7', label: 'Fransiya' },
+  { value: 'Italy', flag: '\uD83C\uDDEE\uD83C\uDDF9', label: 'Italiya' },
+  { value: 'Spain', flag: '\uD83C\uDDEA\uD83C\uDDF8', label: 'Ispaniya' },
+  { value: 'South Korea', flag: '\uD83C\uDDF0\uD83C\uDDF7', label: 'Janubiy Koreya' },
+  { value: 'Japan', flag: '\uD83C\uDDEF\uD83C\uDDF5', label: 'Yaponiya' },
+  { value: 'China', flag: '\uD83C\uDDE8\uD83C\uDDF3', label: 'Xitoy' },
+  { value: 'India', flag: '\uD83C\uDDEE\uD83C\uDDF3', label: 'Hindiston' },
+  { value: 'UAE', flag: '\uD83C\uDDE6\uD83C\uDDEA', label: 'BAA' },
+  { value: 'Saudi Arabia', flag: '\uD83C\uDDF8\uD83C\uDDE6', label: 'Saudiya Arabistoni' },
+  { value: 'Other', flag: '\uD83C\uDF0D', label: 'Boshqa' },
+];
+
+const SECTION_GROUPS: Array<{ title: string; items: SectionItem[] }> = [
+  {
+    title: 'Hisob',
+    items: [
+      {
+        value: 'account',
+        label: 'Profil ma\u2019lumotlari',
+        description: 'Ism, username, bio, manzil va davlat',
+        icon: User,
+        tint: 'text-rose-500 bg-rose-500/10',
+      },
+      {
+        value: 'verification',
+        label: 'Tasdiqlash',
+        description: 'Rasmiy nishon uchun ariza yuborish',
+        icon: BadgeCheck,
+        tint: 'text-blue-500 bg-blue-500/10',
+      },
+      {
+        value: 'payment',
+        label: 'To\u2019lov va hamyon',
+        description: 'Balans va tranzaksiyalar tarixi',
+        icon: Wallet,
+        tint: 'text-green-600 bg-green-600/10',
+        to: '/payment',
+      },
+    ],
+  },
+  {
+    title: 'Maxfiylik va xavfsizlik',
+    items: [
+      {
+        value: 'privacy',
+        label: 'Maxfiylik',
+        description: 'Oxirgi faollik, qo\u2019ng\u2019iroqlar, guruhlar',
+        icon: Shield,
+        tint: 'text-amber-500 bg-amber-500/10',
+      },
+      {
+        value: 'devices',
+        label: 'Qurilmalar va seanslar',
+        description: 'Faol qurilmalarni ko\u2019rish va chiqarish',
+        icon: Smartphone,
+        tint: 'text-sky-500 bg-sky-500/10',
+      },
+    ],
+  },
+  {
+    title: 'Bildirishnomalar',
+    items: [
+      {
+        value: 'notifications',
+        label: 'Bildirishnomalar',
+        description: 'Push, ovoz va bildirishnoma turlari',
+        icon: Bell,
+        tint: 'text-violet-500 bg-violet-500/10',
+      },
+    ],
+  },
+  {
+    title: 'Ko\u2019rinish va til',
+    items: [
+      {
+        value: 'appearance',
+        label: 'Mavzu va til',
+        description: 'Yorug\u2019/tungi rejim va interfeys tili',
+        icon: Palette,
+        tint: 'text-fuchsia-500 bg-fuchsia-500/10',
+      },
+    ],
+  },
+  {
+    title: 'Chat',
+    items: [
+      {
+        value: 'chat-wallpaper',
+        label: 'Chat foni',
+        description: 'Fon rasmi yoki gradient tanlash',
+        icon: ImageIcon,
+        tint: 'text-emerald-500 bg-emerald-500/10',
+      },
+      {
+        value: 'data-storage',
+        label: "Ma'lumotlar va xotira",
+        description: 'Media avtomatik yuklash va trafik tejash',
+        icon: HardDrive,
+        tint: 'text-cyan-500 bg-cyan-500/10',
+      },
+    ],
+  },
+  {
+    title: 'Boshqa',
+    items: [
+      {
+        value: 'activity',
+        label: 'Faollik va statistika',
+        description: 'Platformada sarflagan vaqtingiz',
+        icon: BarChart3,
+        tint: 'text-orange-500 bg-orange-500/10',
+        to: '/activity',
+      },
+      {
+        value: 'about',
+        label: 'Ilova haqida',
+        description: 'Versiya, huquqiy hujjatlar va hisobni o\u2019chirish',
+        icon: Info,
+        tint: 'text-slate-500 bg-slate-500/10',
+      },
+    ],
+  },
+];
+
+function SectionCard({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-card rounded-xl border border-border overflow-hidden">
+      <div className="p-4 border-b border-border">
+        <h2 className="font-semibold">{title}</h2>
+        {description && <p className="text-xs text-muted-foreground mt-1">{description}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 function PushNotificationSettings() {
   const { permission, supported, requestPermission } = useNotificationPermission();
   const { toast } = useToast();
@@ -56,13 +257,13 @@ function PushNotificationSettings() {
     const granted = await requestPermission();
     if (granted) {
       toast({
-        title: 'Push Notifications Enabled',
-        description: 'You will now receive notifications when the app is in background.',
+        title: 'Push bildirishnomalar yoqildi',
+        description: 'Ilova fonda bo\u2019lganda ham xabar olasiz.',
       });
     } else {
       toast({
-        title: 'Permission Denied',
-        description: 'Please enable notifications in your browser settings.',
+        title: 'Ruxsat berilmadi',
+        description: 'Brauzer sozlamalaridan bildirishnomalarni yoqing.',
         variant: 'destructive',
       });
     }
@@ -76,8 +277,8 @@ function PushNotificationSettings() {
             <Bell className="h-5 w-5 text-muted-foreground" />
           </div>
           <div>
-            <p className="font-medium text-sm">Push Notifications</p>
-            <p className="text-xs text-muted-foreground">Not supported in this browser</p>
+            <p className="font-medium text-sm">Push bildirishnomalar</p>
+            <p className="text-xs text-muted-foreground">Bu brauzer qo\u2019llab-quvvatlamaydi</p>
           </div>
         </div>
       </div>
@@ -85,43 +286,40 @@ function PushNotificationSettings() {
   }
 
   return (
-    <div className="bg-card rounded-xl border border-border overflow-hidden">
-      <div className="p-4 border-b border-border">
-        <h2 className="font-semibold">Push Notifications</h2>
-      </div>
-      <div className="p-4 flex items-center justify-between">
+    <SectionCard title="Push bildirishnomalar">
+      <div className="p-4 flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
             <Bell className="h-5 w-5 text-muted-foreground" />
           </div>
           <div>
-            <p className="font-medium text-sm">Browser Notifications</p>
+            <p className="font-medium text-sm">Brauzer bildirishnomalari</p>
             <p className="text-xs text-muted-foreground">
               {permission === 'granted'
-                ? 'Enabled - You will receive alerts when app is in background'
+                ? 'Yoqilgan - ilova fonda bo\u2019lganda xabar olasiz'
                 : permission === 'denied'
-                ? 'Blocked - Enable in browser settings'
-                : 'Enable to get notified of likes, comments, and follows'}
+                  ? 'Bloklangan - brauzer sozlamalaridan yoqing'
+                  : 'Like, izoh va obunalar haqida xabar olish uchun yoqing'}
             </p>
           </div>
         </div>
         {permission === 'granted' ? (
           <div className="flex items-center gap-2 text-green-500">
             <CheckCircle2 className="h-5 w-5" />
-            <span className="text-sm font-medium">Enabled</span>
+            <span className="text-sm font-medium">Yoqilgan</span>
           </div>
         ) : permission === 'denied' ? (
           <div className="flex items-center gap-2 text-destructive">
             <XCircle className="h-5 w-5" />
-            <span className="text-sm font-medium">Blocked</span>
+            <span className="text-sm font-medium">Bloklangan</span>
           </div>
         ) : (
           <Button variant="outline" size="sm" onClick={handleEnablePush}>
-            Enable
+            Yoqish
           </Button>
         )}
       </div>
-    </div>
+    </SectionCard>
   );
 }
 
@@ -129,9 +327,10 @@ export default function SettingsPage() {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const { user, logout } = useAuth();
-  const { settings, sessions, isLoading, updateSettings, logoutSession, logoutAllOtherSessions, refetch } = useUserSettings();
+  const { settings, sessions, isLoading, updateSettings, logoutSession, logoutAllOtherSessions } =
+    useUserSettings();
   const { toast } = useToast();
-  
+
   const [profile, setProfile] = useState<Profile>({
     display_name: '',
     username: '',
@@ -142,6 +341,7 @@ export default function SettingsPage() {
     country: null,
     birth_date: null,
   });
+  const [locationCoords, setLocationCoords] = useState<LocationCoords | null>(null);
   const [saving, setSaving] = useState(false);
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -150,19 +350,19 @@ export default function SettingsPage() {
   const [deleteAccountDialogOpen, setDeleteAccountDialogOpen] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [section, setSection] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchProfile = async () => {
       if (!user) return;
-      
+
       const { data } = await supabase
         .from('profiles')
         .select(PROFILE_PUBLIC_COLUMNS)
         .eq('id', user.id)
         .single();
 
-      // Personal fields (birth date, country) are readable only by the owner
-      // or an admin through this secure function.
+      // Shaxsiy maydonlar (tug'ilgan sana, davlat) faqat egasi yoki admin uchun.
       const { data: privateRows } = await supabase.rpc('get_profile_private', {
         p_profile_id: user.id,
       });
@@ -206,13 +406,13 @@ export default function SettingsPage() {
       if (error) throw error;
 
       toast({
-        title: 'Profile Updated',
-        description: 'Your profile has been saved successfully.',
+        title: 'Profil yangilandi',
+        description: 'Ma\u2019lumotlaringiz muvaffaqiyatli saqlandi.',
       });
     } catch (error: any) {
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to update profile',
+        title: 'Xatolik',
+        description: error.message || 'Profilni yangilab bo\u2019lmadi',
         variant: 'destructive',
       });
     } finally {
@@ -228,18 +428,19 @@ export default function SettingsPage() {
     try {
       const uploaded = await uploadMedia(file, { type: 'avatar', visibility: 'public' });
       avatarUrl = uploaded.url;
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to upload avatar', variant: 'destructive' });
+    } catch {
+      toast({
+        title: 'Xatolik',
+        description: 'Avatarni yuklab bo\u2019lmadi',
+        variant: 'destructive',
+      });
       return;
     }
-    
-    await supabase
-      .from('profiles')
-      .update({ avatar_url: avatarUrl })
-      .eq('id', user.id);
 
-    setProfile(prev => ({ ...prev, avatar_url: avatarUrl }));
-    toast({ title: 'Success', description: 'Avatar updated' });
+    await supabase.from('profiles').update({ avatar_url: avatarUrl }).eq('id', user.id);
+
+    setProfile((prev) => ({ ...prev, avatar_url: avatarUrl }));
+    toast({ title: 'Tayyor', description: 'Avatar yangilandi' });
   };
 
   const handleLogoutSession = async () => {
@@ -265,11 +466,15 @@ export default function SettingsPage() {
     }
   };
 
-  const [section, setSection] = useState<string | null>(null);
+  const handleSelectSection = (item: SectionItem) => {
+    if (item.to) {
+      navigate(item.to);
+      return;
+    }
+    setSection(item.value);
+  };
 
   if (isLoading) {
-
-
     return (
       <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -277,28 +482,9 @@ export default function SettingsPage() {
     );
   }
 
-  const sectionGroups: { title: string; items: { value: string; label: string; icon: React.ElementType; tint: string }[] }[] = [
-    {
-      title: 'Hisob',
-      items: [
-        { value: 'account', label: 'Profilim', icon: User, tint: 'text-rose-500 bg-rose-500/10' },
-        { value: 'privacy', label: 'Maxfiylik', icon: Shield, tint: 'text-amber-500 bg-amber-500/10' },
-        { value: 'devices', label: 'Qurilmalar', icon: Smartphone, tint: 'text-sky-500 bg-sky-500/10' },
-        { value: 'notifications', label: 'Bildirishnomalar', icon: Bell, tint: 'text-violet-500 bg-violet-500/10' },
-      ],
-    },
-    {
-      title: 'Chat',
-      items: [
-        { value: 'chat-wallpaper', label: 'Chat foni', icon: ImageIcon, tint: 'text-emerald-500 bg-emerald-500/10' },
-        { value: 'data-storage', label: "Ma'lumotlar va xotira", icon: HardDrive, tint: 'text-cyan-500 bg-cyan-500/10' },
-      ],
-    },
-  ];
-
-  const activeLabel = sectionGroups
-    .flatMap((g) => g.items)
-    .find((i) => i.value === section)?.label;
+  const activeLabel = SECTION_GROUPS.flatMap((group) => group.items).find(
+    (item) => item.value === section,
+  )?.label;
 
   return (
     <div className="max-w-5xl mx-auto py-4 md:py-8 px-3 md:px-4 pb-24 md:pb-8">
@@ -309,20 +495,21 @@ export default function SettingsPage() {
             size="icon"
             className="md:hidden"
             onClick={() => setSection(null)}
+            aria-label="Orqaga"
           >
             <ChevronRight className="h-5 w-5 rotate-180" />
           </Button>
         )}
-        <h1 className="text-xl md:text-2xl font-bold">
-          {section ? activeLabel : 'Sozlamalar'}
-        </h1>
+        <h1 className="text-xl md:text-2xl font-bold">{section ? activeLabel : 'Sozlamalar'}</h1>
       </div>
 
-      <Tabs value={section ?? 'account'} className="md:grid md:grid-cols-[300px_1fr] md:gap-6 md:items-start">
-        {/* Master list */}
+      <Tabs
+        value={section ?? 'account'}
+        className="md:grid md:grid-cols-[300px_1fr] md:gap-6 md:items-start"
+      >
+        {/* Chap panel */}
         <div className={cn('space-y-6', section && 'hidden md:block')}>
-          <LanguageSwitcher />
-          {sectionGroups.map((group) => (
+          {SECTION_GROUPS.map((group) => (
             <div key={group.title}>
               <p className="px-1 pb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 {group.title}
@@ -334,18 +521,33 @@ export default function SettingsPage() {
                     <button
                       key={item.value}
                       type="button"
-                      onClick={() => setSection(item.value)}
+                      onClick={() => handleSelectSection(item)}
                       className={cn(
-                        'w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors',
+                        'w-full flex items-center gap-3 px-4 py-3 text-left transition-colors',
                         idx !== 0 && 'border-t border-border/60',
                         isActive ? 'bg-primary/10' : 'hover:bg-accent/50',
                       )}
                     >
-                      <span className={cn('h-9 w-9 rounded-xl flex items-center justify-center shrink-0', item.tint)}>
+                      <span
+                        className={cn(
+                          'h-9 w-9 rounded-xl flex items-center justify-center shrink-0',
+                          item.tint,
+                        )}
+                      >
                         <item.icon className="h-[18px] w-[18px]" />
                       </span>
-                      <span className={cn('flex-1 text-sm font-medium', isActive && 'text-primary')}>
-                        {item.label}
+                      <span className="flex-1 min-w-0">
+                        <span
+                          className={cn(
+                            'block text-sm font-medium truncate',
+                            isActive && 'text-primary',
+                          )}
+                        >
+                          {item.label}
+                        </span>
+                        <span className="block text-xs text-muted-foreground truncate">
+                          {item.description}
+                        </span>
                       </span>
                       <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                     </button>
@@ -354,830 +556,787 @@ export default function SettingsPage() {
               </div>
             </div>
           ))}
+
+          <Button variant="outline" className="w-full text-destructive" onClick={logout}>
+            <LogOut className="h-4 w-4 mr-2" />
+            Hisobdan chiqish
+          </Button>
         </div>
 
-        {/* Detail pane */}
+        {/* O'ng panel */}
         <div className={cn('mt-6 md:mt-0 min-w-0', !section && 'hidden md:block')}>
           {!section && (
             <div className="hidden md:flex flex-col items-center justify-center text-center rounded-2xl border border-border bg-card/40 py-24">
               <Palette className="h-10 w-10 text-muted-foreground mb-4" />
               <p className="font-semibold">Sozlamani tanlang</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Chap paneldan sozlamalar bo'limini tanlang
+                Chap paneldan sozlamalar bo\u2019limini tanlang
               </p>
             </div>
           )}
 
+          {/* Profil */}
+          <TabsContent value="account" className="space-y-6">
+            <div className="bg-card rounded-xl border border-border p-6">
+              <h2 className="text-lg font-semibold mb-6">Shaxsiy ma\u2019lumotlar</h2>
 
-        {/* Account Tab */}
-        <TabsContent value="account" className="space-y-6">
-          <div className="bg-card rounded-xl border border-border p-6">
-            <h2 className="text-lg font-semibold mb-6">Personal Information</h2>
-            
-            {/* Avatar */}
-            <div className="flex items-center gap-6 mb-6">
-              <label className="relative cursor-pointer group">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleAvatarUpload}
-                  className="hidden"
-                />
-                <Avatar className="h-20 w-20">
-                  <AvatarImage src={profile.avatar_url || ''} />
-                  <AvatarFallback className="text-xl">
-                    {profile.display_name?.[0] || user?.email?.[0]?.toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                  <span className="text-white text-xs">Change</span>
-                </div>
-              </label>
-              <div>
-                <p className="font-medium">{profile.display_name || 'No name set'}</p>
-                <p className="text-sm text-muted-foreground">@{profile.username || 'username'}</p>
-              </div>
-            </div>
-
-            <div className="grid gap-4">
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="display_name">Display Name</Label>
-                  <Input
-                    id="display_name"
-                    value={profile.display_name || ''}
-                    onChange={(e) => setProfile(prev => ({ ...prev, display_name: e.target.value }))}
-                    className="mt-1.5"
+              <div className="flex items-center gap-6 mb-6">
+                <label className="relative cursor-pointer group">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAvatarUpload}
+                    className="hidden"
                   />
-                </div>
+                  <Avatar className="h-20 w-20">
+                    <AvatarImage src={profile.avatar_url || ''} />
+                    <AvatarFallback className="text-xl">
+                      {profile.display_name?.[0] || user?.email?.[0]?.toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                    <span className="text-white text-xs">O\u2019zgartirish</span>
+                  </div>
+                </label>
                 <div>
-                  <Label htmlFor="username">Username</Label>
-                  <Input
-                    id="username"
-                    value={profile.username || ''}
-                    onChange={(e) => setProfile(prev => ({ ...prev, username: e.target.value }))}
-                    className="mt-1.5"
-                  />
+                  <p className="font-medium">{profile.display_name || 'Ism kiritilmagan'}</p>
+                  <p className="text-sm text-muted-foreground">@{profile.username || 'username'}</p>
                 </div>
               </div>
 
-              <div>
-                <Label htmlFor="bio">Bio</Label>
-                <Textarea
-                  id="bio"
-                  value={profile.bio || ''}
-                  onChange={(e) => setProfile(prev => ({ ...prev, bio: e.target.value }))}
-                  className="mt-1.5 resize-none"
-                  rows={3}
-                  placeholder="Tell us about yourself..."
-                />
-              </div>
+              <div className="grid gap-4">
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="display_name">Ko\u2019rsatiladigan ism</Label>
+                    <Input
+                      id="display_name"
+                      value={profile.display_name || ''}
+                      onChange={(e) =>
+                        setProfile((prev) => ({ ...prev, display_name: e.target.value }))
+                      }
+                      className="mt-1.5"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="username">Username</Label>
+                    <Input
+                      id="username"
+                      value={profile.username || ''}
+                      onChange={(e) => setProfile((prev) => ({ ...prev, username: e.target.value }))}
+                      className="mt-1.5"
+                    />
+                  </div>
+                </div>
 
-              <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="location">Location</Label>
-                  <Input
-                    id="location"
-                    value={profile.location || ''}
-                    onChange={(e) => setProfile(prev => ({ ...prev, location: e.target.value }))}
-                    className="mt-1.5"
-                    placeholder="City, Country"
+                  <Label htmlFor="bio">Bio</Label>
+                  <Textarea
+                    id="bio"
+                    value={profile.bio || ''}
+                    onChange={(e) => setProfile((prev) => ({ ...prev, bio: e.target.value }))}
+                    className="mt-1.5 resize-none"
+                    rows={3}
+                    placeholder="O\u2019zingiz haqingizda qisqacha..."
                   />
                 </div>
+
                 <div>
-                  <Label htmlFor="website">Website</Label>
+                  <Label htmlFor="website">Veb-sayt</Label>
                   <Input
                     id="website"
                     value={profile.website || ''}
-                    onChange={(e) => setProfile(prev => ({ ...prev, website: e.target.value }))}
+                    onChange={(e) => setProfile((prev) => ({ ...prev, website: e.target.value }))}
                     className="mt-1.5"
                     placeholder="https://..."
                   />
                 </div>
+
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="country">Davlat</Label>
+                    <Select
+                      value={profile.country || ''}
+                      onValueChange={(value) => setProfile((prev) => ({ ...prev, country: value }))}
+                    >
+                      <SelectTrigger id="country" className="mt-1.5">
+                        <SelectValue placeholder="Davlatingizni tanlang" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {COUNTRIES.map((country) => (
+                          <SelectItem key={country.value} value={country.value}>
+                            <span className="mr-2">{country.flag}</span>
+                            {country.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="birth_date">Tug\u2019ilgan sana</Label>
+                    <Input
+                      id="birth_date"
+                      type="date"
+                      value={profile.birth_date || ''}
+                      onChange={(e) =>
+                        setProfile((prev) => ({ ...prev, birth_date: e.target.value }))
+                      }
+                      className="mt-1.5"
+                      max={new Date().toISOString().split('T')[0]}
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="country">Davlat</Label>
-                  <Select 
-                    value={profile.country || ''} 
-                    onValueChange={(value) => setProfile(prev => ({ ...prev, country: value }))}
-                  >
-                    <SelectTrigger className="mt-1.5">
-                      <SelectValue placeholder="Davlatingizni tanlang" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Uzbekistan">{'\\u{1F1FA}\\u{1F1FF}'} O'zbekiston</SelectItem>
-                      <SelectItem value="Russia">{'\\u{1F1F7}\\u{1F1FA}'} Rossiya</SelectItem>
-                      <SelectItem value="Kazakhstan">{'\\u{1F1F0}\\u{1F1FF}'} Qozog'iston</SelectItem>
-                      <SelectItem value="Kyrgyzstan">{'\\u{1F1F0}\\u{1F1EC}'} Qirg'iziston</SelectItem>
-                      <SelectItem value="Tajikistan">{'\\u{1F1F9}\\u{1F1EF}'} Tojikiston</SelectItem>
-                      <SelectItem value="Turkmenistan">{'\\u{1F1F9}\\u{1F1F2}'} Turkmaniston</SelectItem>
-                      <SelectItem value="Turkey">{'\\u{1F1F9}\\u{1F1F7}'} Turkiya</SelectItem>
-                      <SelectItem value="United States">{'\\u{1F1FA}\\u{1F1F8}'} AQSh</SelectItem>
-                      <SelectItem value="United Kingdom">{'\\u{1F1EC}\\u{1F1E7}'} Buyuk Britaniya</SelectItem>
-                      <SelectItem value="Germany">{'\\u{1F1E9}\\u{1F1EA}'} Germaniya</SelectItem>
-                      <SelectItem value="France">{'\\u{1F1EB}\\u{1F1F7}'} Fransiya</SelectItem>
-                      <SelectItem value="Italy">{'\\u{1F1EE}\\u{1F1F9}'} Italiya</SelectItem>
-                      <SelectItem value="Spain">{'\\u{1F1EA}\\u{1F1F8}'} Ispaniya</SelectItem>
-                      <SelectItem value="South Korea">{'\\u{1F1F0}\\u{1F1F7}'} Janubiy Koreya</SelectItem>
-                      <SelectItem value="Japan">{'\\u{1F1EF}\\u{1F1F5}'} Yaponiya</SelectItem>
-                      <SelectItem value="China">{'\\u{1F1E8}\\u{1F1F3}'} Xitoy</SelectItem>
-                      <SelectItem value="India">{'\\u{1F1EE}\\u{1F1F3}'} Hindiston</SelectItem>
-                      <SelectItem value="UAE">{'\\u{1F1E6}\\u{1F1EA}'} BAA</SelectItem>
-                      <SelectItem value="Saudi Arabia">{'\\u{1F1F8}\\u{1F1E6}'} Saudiya Arabistoni</SelectItem>
-                      <SelectItem value="Other">{'\\u{1F30D}'} Boshqa</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="birth_date">Tug'ilgan sana</Label>
-                  <Input
-                    id="birth_date"
-                    type="date"
-                    value={profile.birth_date || ''}
-                    onChange={(e) => setProfile(prev => ({ ...prev, birth_date: e.target.value }))}
-                    className="mt-1.5"
-                    max={new Date().toISOString().split('T')[0]}
-                  />
-                </div>
-              </div>
+              <Button onClick={handleSaveProfile} disabled={saving} className="mt-6">
+                {saving ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                Saqlash
+              </Button>
             </div>
 
-            <Button onClick={handleSaveProfile} disabled={saving} className="mt-6">
-              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-              Save Changes
-            </Button>
-          </div>
-
-          {/* Payment */}
-          <div className="bg-card rounded-xl border border-border p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Wallet className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">Payment</h3>
-                  <p className="text-sm text-muted-foreground">Wallet balance and transaction history</p>
-                </div>
+            {/* Manzil - real xarita */}
+            <SectionCard
+              title="Manzil"
+              description="Manzilingizni xaritadan tanlang - u profilingizda ko\u2019rinadi"
+            >
+              <div className="p-4 md:p-6">
+                <LocationPicker
+                  value={profile.location || ''}
+                  coords={locationCoords}
+                  onChange={(label, coords) => {
+                    setProfile((prev) => ({ ...prev, location: label }));
+                    setLocationCoords(coords);
+                  }}
+                  onClear={() => {
+                    setProfile((prev) => ({ ...prev, location: '' }));
+                    setLocationCoords(null);
+                  }}
+                />
+                <Button onClick={handleSaveProfile} disabled={saving} className="mt-4">
+                  {saving ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
+                  Manzilni saqlash
+                </Button>
               </div>
-              <Button variant="outline" onClick={() => navigate('/payment')}>Open</Button>
-            </div>
-          </div>
+            </SectionCard>
+          </TabsContent>
 
-          {/* Verification Request */}
-          <div className="bg-card rounded-xl border border-border p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
+          {/* Tasdiqlash */}
+          <TabsContent value="verification" className="space-y-6">
+            <div className="bg-card rounded-xl border border-border p-6">
+              <div className="flex items-center gap-4 mb-4">
                 <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                   <BadgeCheck className="h-6 w-6 text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-semibold">Get Verified</h3>
-                  <p className="text-sm text-muted-foreground">Request a verified badge for your account</p>
-                </div>
-              </div>
-              <Button variant="outline" onClick={() => setVerificationDialogOpen(true)}>
-                Request
-              </Button>
-            </div>
-          </div>
-
-          {/* Activity / Your Time */}
-          <div className="bg-card rounded-xl border border-border p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <BarChart3 className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">Sizning faolligingiz</h3>
-                  <p className="text-sm text-muted-foreground">Platformada sarflagan vaqtingiz va statistikalar</p>
-                </div>
-              </div>
-              <Button variant="outline" onClick={() => navigate('/activity')}>
-                <Clock className="h-4 w-4 mr-2" />
-                Ko'rish
-              </Button>
-            </div>
-          </div>
-
-          {/* Chat foni (tez kirish) */}
-          <div className="bg-card rounded-xl border border-border p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <ImageIcon className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">Chat foni</h3>
-                  <p className="text-sm text-muted-foreground">Chat oynasi uchun fon rasmi yoki gradient tanlang</p>
-                </div>
-              </div>
-              <Button variant="outline" onClick={() => setSection('chat-wallpaper')}>
-                Tanlash
-              </Button>
-            </div>
-          </div>
-
-          {/* Ma'lumotlar va xotira (tez kirish) */}
-          <div className="bg-card rounded-xl border border-border p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <HardDrive className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">Ma'lumotlar va xotira</h3>
-                  <p className="text-sm text-muted-foreground">Media avtomatik yuklab olish va internet tejash</p>
-                </div>
-              </div>
-              <Button variant="outline" onClick={() => setSection('data-storage')}>
-                Sozlash
-              </Button>
-            </div>
-          </div>
-
-          {/* Theme Settings */}
-          <div className="bg-card rounded-xl border border-border overflow-hidden">
-            <div className="p-4 border-b border-border">
-              <h2 className="font-semibold">Appearance</h2>
-            </div>
-            <div className="p-4 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                  {theme === 'dark' ? (
-                    <Moon className="h-5 w-5 text-muted-foreground" />
-                  ) : theme === 'light' ? (
-                    <Sun className="h-5 w-5 text-muted-foreground" />
-                  ) : (
-                    <Monitor className="h-5 w-5 text-muted-foreground" />
-                  )}
-                </div>
-                <div>
-                  <p className="font-medium text-sm">Theme</p>
-                  <p className="text-xs text-muted-foreground">Choose your preferred appearance</p>
-                </div>
-              </div>
-              <Select value={theme} onValueChange={setTheme}>
-                <SelectTrigger className="w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="system">
-                    <div className="flex items-center gap-2">
-                      <Monitor className="h-4 w-4" />
-                      System
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="light">
-                    <div className="flex items-center gap-2">
-                      <Sun className="h-4 w-4" />
-                      Light
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="dark">
-                    <div className="flex items-center gap-2">
-                      <Moon className="h-4 w-4" />
-                      Dark
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Logout */}
-          <div className="pt-4">
-            <Button 
-              variant="destructive" 
-              className="w-full" 
-              onClick={logout}
-            >
-              <LogOut className="h-4 w-4 mr-2" />
-              Log Out
-            </Button>
-          </div>
-
-          {/* Delete Account */}
-          <div className="bg-card rounded-xl border border-destructive/30 p-6">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">
-                <Trash2 className="h-6 w-6 text-destructive" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-destructive">Delete Account</h3>
-                <p className="text-sm text-muted-foreground">Permanently delete your account and all data</p>
-              </div>
-            </div>
-            <p className="text-sm text-muted-foreground mb-4">
-              Once you delete your account, there is no going back. All your posts, messages, and personal data will be permanently removed.
-            </p>
-            <Button 
-              variant="destructive" 
-              onClick={() => setDeleteAccountDialogOpen(true)}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete My Account
-            </Button>
-          </div>
-
-          <VerificationRequestDialog 
-            open={verificationDialogOpen} 
-            onOpenChange={setVerificationDialogOpen} 
-          />
-
-          {/* Delete Account Confirmation Dialog */}
-          <AlertDialog open={deleteAccountDialogOpen} onOpenChange={setDeleteAccountDialogOpen}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle className="text-destructive">Delete Account</AlertDialogTitle>
-                <AlertDialogDescription className="space-y-4">
-                  <p>
-                    This action cannot be undone. This will permanently delete your account and remove all your data from our servers.
+                  <h3 className="font-semibold">Tasdiqlangan nishon</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Hisobingiz haqiqiyligini tasdiqlash uchun ariza yuboring
                   </p>
-                  <p>
-                    To confirm, please type <span className="font-semibold">DELETE</span> below:
-                  </p>
-                  <Input 
-                    value={deleteConfirmText}
-                    onChange={(e) => setDeleteConfirmText(e.target.value)}
-                    placeholder="Type DELETE to confirm"
-                    className="mt-2"
-                  />
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel onClick={() => setDeleteConfirmText('')}>Cancel</AlertDialogCancel>
-                <Button
-                  variant="destructive"
-                  disabled={deleteConfirmText !== 'DELETE' || deletingAccount}
-                  onClick={async () => {
-                    setDeletingAccount(true);
-                    try {
-                      // Delete user profile and related data (cascades will handle related tables)
-                      const { error: profileError } = await supabase
-                        .from('profiles')
-                        .delete()
-                        .eq('id', user?.id);
-                      
-                      if (profileError) throw profileError;
-
-                      // Sign out the user
-                      await supabase.auth.signOut();
-                      
-                      toast({
-                        title: 'Account Deleted',
-                        description: 'Your account has been permanently deleted.',
-                      });
-                      
-                      navigate('/');
-                    } catch (error: any) {
-                      toast({
-                        title: 'Error',
-                        description: error.message || 'Failed to delete account',
-                        variant: 'destructive',
-                      });
-                    } finally {
-                      setDeletingAccount(false);
-                      setDeleteAccountDialogOpen(false);
-                      setDeleteConfirmText('');
-                    }
-                  }}
-                >
-                  {deletingAccount ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4 mr-2" />
-                  )}
-                  Delete Account
-                </Button>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </TabsContent>
-
-        {/* Chat foni */}
-        <TabsContent value="chat-wallpaper" className="space-y-6">
-          <div className="bg-card rounded-xl border border-border p-4 md:p-6">
-            <div className="mb-4">
-              <h2 className="font-semibold">Chat foni</h2>
-              <p className="text-sm text-muted-foreground">
-                Tayyor fonlardan tanlang yoki o'z rasmingizni yuklang. Tanlov shu qurilmada saqlanadi va barcha chatlarga qo'llanadi.
-              </p>
+                </div>
+              </div>
+              <Button onClick={() => setVerificationDialogOpen(true)}>Ariza yuborish</Button>
             </div>
-            <ChatWallpaperEditor />
-          </div>
-        </TabsContent>
+          </TabsContent>
 
-        {/* Ma'lumotlar va xotira */}
-        <TabsContent value="data-storage" className="space-y-6">
-          <div className="bg-card rounded-xl border border-border p-4 md:p-6">
-            <MediaAutoDownloadEditor />
-          </div>
-        </TabsContent>
-
-        {/* Privacy Tab */}
-        <TabsContent value="privacy" className="space-y-6">
-          <div className="bg-card rounded-xl border border-border overflow-hidden">
-            <div className="p-4 border-b border-border">
-              <h2 className="font-semibold">Privacy Settings</h2>
-            </div>
-
-            <div className="divide-y divide-border">
-              {/* Last Seen Visibility */}
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                    <Eye className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">Last Seen</p>
-                    <p className="text-xs text-muted-foreground">Who can see when you were online</p>
-                  </div>
-                </div>
-                <Select
-                  value={settings?.last_seen_visibility || 'everyone'}
-                  onValueChange={(value: 'everyone' | 'contacts' | 'nobody') => updateSettings({ last_seen_visibility: value })}
-                >
-                  <SelectTrigger className="w-32">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="everyone">Everyone</SelectItem>
-                    <SelectItem value="contacts">Contacts</SelectItem>
-                    <SelectItem value="nobody">Nobody</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Read Receipts */}
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                    <CheckCircle2 className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">Read Receipts</p>
-                    <p className="text-xs text-muted-foreground">Let others know when you've read messages</p>
-                  </div>
-                </div>
-                <Switch
-                  checked={settings?.read_receipts_enabled ?? true}
-                  onCheckedChange={(checked) => updateSettings({ read_receipts_enabled: checked })}
-                />
-              </div>
-
-              {/* Call Permissions */}
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                    <Wifi className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">Who Can Call Me</p>
-                    <p className="text-xs text-muted-foreground">Control who can start calls with you</p>
-                  </div>
-                </div>
-                <Select
-                  value={settings?.call_permissions || 'everyone'}
-                  onValueChange={(value: 'everyone' | 'contacts' | 'nobody') => updateSettings({ call_permissions: value })}
-                >
-                  <SelectTrigger className="w-32">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="everyone">Everyone</SelectItem>
-                    <SelectItem value="contacts">Contacts</SelectItem>
-                    <SelectItem value="nobody">Nobody</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Group Invite Permissions */}
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                    <User className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">Group Invites</p>
-                    <p className="text-xs text-muted-foreground">Who can add you to groups</p>
-                  </div>
-                </div>
-                <Select
-                  value={settings?.group_invite_permissions || 'everyone'}
-                  onValueChange={(value: 'everyone' | 'contacts' | 'nobody') => updateSettings({ group_invite_permissions: value })}
-                >
-                  <SelectTrigger className="w-32">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="everyone">Everyone</SelectItem>
-                    <SelectItem value="contacts">Contacts</SelectItem>
-                    <SelectItem value="nobody">Nobody</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Two Factor */}
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                    <Shield className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">Two-Factor Authentication</p>
-                    <p className="text-xs text-muted-foreground">Add extra security to your account</p>
-                  </div>
-                </div>
-                <Switch
-                  checked={settings?.two_factor_enabled ?? false}
-                  onCheckedChange={(checked) => updateSettings({ two_factor_enabled: checked })}
-                />
-              </div>
-            </div>
-          </div>
-        </TabsContent>
-
-        {/* Devices Tab */}
-        <TabsContent value="devices" className="space-y-6">
-          <div className="bg-card rounded-xl border border-border overflow-hidden">
-            <div className="p-4 border-b border-border flex items-center justify-between">
-              <div>
-                <h2 className="font-semibold">Active Sessions</h2>
-                <p className="text-sm text-muted-foreground">{sessions.length} device{sessions.length !== 1 ? 's' : ''} logged in</p>
-              </div>
-              {sessions.length > 1 && (
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => setLogoutAllDialogOpen(true)}
-                >
-                  <XCircle className="h-4 w-4 mr-2" />
-                  Logout All Others
-                </Button>
-              )}
-            </div>
-
-            <ScrollArea className="max-h-[400px]">
+          {/* Maxfiylik */}
+          <TabsContent value="privacy" className="space-y-6">
+            <SectionCard title="Maxfiylik sozlamalari">
               <div className="divide-y divide-border">
-                {sessions.map((session) => {
-                  const DeviceIcon = getDeviceIcon(session.device_type);
-                  return (
-                    <div key={session.id} className="p-4 flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
-                          <DeviceIcon className="h-6 w-6 text-muted-foreground" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-sm">
-                              {session.device_name || session.browser_name || 'Unknown Device'}
-                            </p>
-                            {session.is_current && (
-                              <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full">
-                                Current
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            {session.os_name && `${session.os_name} \\u2022 `}
-                            {session.browser_name && `${session.browser_name} \\u2022 `}
-                            {session.ip_address || 'Unknown IP'}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Last active: {session.last_active_at 
-                              ? formatDistanceToNow(new Date(session.last_active_at), { addSuffix: true })
-                              : 'Unknown'}
-                          </p>
-                        </div>
-                      </div>
-                      {!session.is_current && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedSessionId(session.id);
-                            setLogoutDialogOpen(true);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      )}
+                <div className="p-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                      <Eye className="h-5 w-5 text-muted-foreground" />
                     </div>
-                  );
-                })}
+                    <div>
+                      <p className="font-medium text-sm">Oxirgi faollik</p>
+                      <p className="text-xs text-muted-foreground">
+                        Kim onlayn vaqtingizni ko\u2019ra oladi
+                      </p>
+                    </div>
+                  </div>
+                  <Select
+                    value={settings?.last_seen_visibility || 'everyone'}
+                    onValueChange={(value: 'everyone' | 'contacts' | 'nobody') =>
+                      updateSettings({ last_seen_visibility: value })
+                    }
+                  >
+                    <SelectTrigger className="w-36">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="everyone">Hamma</SelectItem>
+                      <SelectItem value="contacts">Kontaktlar</SelectItem>
+                      <SelectItem value="nobody">Hech kim</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="p-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                      <CheckCircle2 className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">O\u2019qilgani haqida xabar</p>
+                      <p className="text-xs text-muted-foreground">
+                        Xabarni o\u2019qiganingiz boshqalarga ko\u2019rinadi
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={settings?.read_receipts_enabled ?? true}
+                    onCheckedChange={(checked) => updateSettings({ read_receipts_enabled: checked })}
+                  />
+                </div>
+
+                <div className="p-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                      <Wifi className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">Qo\u2019ng\u2019iroqlar</p>
+                      <p className="text-xs text-muted-foreground">
+                        Kim sizga qo\u2019ng\u2019iroq qila oladi
+                      </p>
+                    </div>
+                  </div>
+                  <Select
+                    value={settings?.call_permissions || 'everyone'}
+                    onValueChange={(value: 'everyone' | 'contacts' | 'nobody') =>
+                      updateSettings({ call_permissions: value })
+                    }
+                  >
+                    <SelectTrigger className="w-36">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="everyone">Hamma</SelectItem>
+                      <SelectItem value="contacts">Kontaktlar</SelectItem>
+                      <SelectItem value="nobody">Hech kim</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="p-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                      <User className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">Guruhga qo\u2019shish</p>
+                      <p className="text-xs text-muted-foreground">
+                        Kim sizni guruhlarga qo\u2019sha oladi
+                      </p>
+                    </div>
+                  </div>
+                  <Select
+                    value={settings?.group_invite_permissions || 'everyone'}
+                    onValueChange={(value: 'everyone' | 'contacts' | 'nobody') =>
+                      updateSettings({ group_invite_permissions: value })
+                    }
+                  >
+                    <SelectTrigger className="w-36">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="everyone">Hamma</SelectItem>
+                      <SelectItem value="contacts">Kontaktlar</SelectItem>
+                      <SelectItem value="nobody">Hech kim</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="p-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                      <Shield className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">Ikki bosqichli himoya</p>
+                      <p className="text-xs text-muted-foreground">
+                        Hisobingiz uchun qo\u2019shimcha xavfsizlik
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={settings?.two_factor_enabled ?? false}
+                    onCheckedChange={(checked) => updateSettings({ two_factor_enabled: checked })}
+                  />
+                </div>
               </div>
-            </ScrollArea>
-          </div>
-        </TabsContent>
+            </SectionCard>
+          </TabsContent>
 
-        {/* Notifications Tab */}
-        <TabsContent value="notifications" className="space-y-6">
-          <PushNotificationSettings />
+          {/* Qurilmalar */}
+          <TabsContent value="devices" className="space-y-6">
+            <div className="bg-card rounded-xl border border-border overflow-hidden">
+              <div className="p-4 border-b border-border flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-semibold">Faol seanslar</h2>
+                  <p className="text-sm text-muted-foreground">
+                    {sessions.length} ta qurilma tizimga kirgan
+                  </p>
+                </div>
+                {sessions.length > 1 && (
+                  <Button variant="outline" size="sm" onClick={() => setLogoutAllDialogOpen(true)}>
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Barchasini chiqarish
+                  </Button>
+                )}
+              </div>
 
-          {/* Autoplay Settings */}
-          <div className="bg-card rounded-xl border border-border overflow-hidden">
-            <div className="p-4 border-b border-border">
-              <h2 className="font-semibold">Media Autoplay</h2>
-              <p className="text-xs text-muted-foreground mt-1">Control auto-playing media in messages</p>
+              <ScrollArea className="max-h-[420px]">
+                <div className="divide-y divide-border">
+                  {sessions.map((session) => {
+                    const DeviceIcon = getDeviceIcon(session.device_type);
+                    const meta = [session.os_name, session.browser_name, session.ip_address]
+                      .filter(Boolean)
+                      .join(' \u2022 ');
+                    return (
+                      <div key={session.id} className="p-4 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-4 min-w-0">
+                          <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center shrink-0">
+                            <DeviceIcon className="h-6 w-6 text-muted-foreground" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-sm truncate">
+                                {session.device_name || session.browser_name || 'Noma\u2019lum qurilma'}
+                              </p>
+                              {session.is_current && (
+                                <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full shrink-0">
+                                  Joriy
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {meta || 'Noma\u2019lum IP'}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Oxirgi faollik:{' '}
+                              {session.last_active_at
+                                ? formatDistanceToNow(new Date(session.last_active_at), {
+                                    addSuffix: true,
+                                  })
+                                : 'Noma\u2019lum'}
+                            </p>
+                          </div>
+                        </div>
+                        {!session.is_current && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedSessionId(session.id);
+                              setLogoutDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
             </div>
+          </TabsContent>
 
-            <div className="divide-y divide-border">
-              {/* Autoplay Voice Messages */}
-              <div className="p-4 flex items-center justify-between">
+          {/* Bildirishnomalar */}
+          <TabsContent value="notifications" className="space-y-6">
+            <PushNotificationSettings />
+
+            <SectionCard
+              title="Media avtomatik ijro"
+              description="Chatdagi media fayllar avtomatik ijro etilishini boshqaring"
+            >
+              <div className="divide-y divide-border">
+                <div className="p-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                      <Bell className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">Ovozli xabarlar</p>
+                      <p className="text-xs text-muted-foreground">Ko\u2019ringanda avtomatik ijro</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={settings?.autoplay_voice_messages ?? true}
+                    onCheckedChange={(checked) =>
+                      updateSettings({ autoplay_voice_messages: checked })
+                    }
+                  />
+                </div>
+
+                <div className="p-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                      <Bell className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">Video xabarlar</p>
+                      <p className="text-xs text-muted-foreground">Ko\u2019ringanda avtomatik ijro</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={settings?.autoplay_video_messages ?? true}
+                    onCheckedChange={(checked) =>
+                      updateSettings({ autoplay_video_messages: checked })
+                    }
+                  />
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              title="Bildirishnoma turlari"
+              description="Qaysi bildirishnomalarni olishni tanlang"
+            >
+              <div className="divide-y divide-border">
+                <div className="p-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                      <Heart className="h-5 w-5 text-foreground" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">Layklar</p>
+                      <p className="text-xs text-muted-foreground">Postingizga like bosilganda</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={settings?.notify_likes ?? true}
+                    onCheckedChange={(checked) => updateSettings({ notify_likes: checked })}
+                  />
+                </div>
+
+                <div className="p-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                      <MessageCircle className="h-5 w-5 text-foreground" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">Izohlar</p>
+                      <p className="text-xs text-muted-foreground">Postingizga izoh yozilganda</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={settings?.notify_comments ?? true}
+                    onCheckedChange={(checked) => updateSettings({ notify_comments: checked })}
+                  />
+                </div>
+
+                <div className="p-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                      <UserPlus className="h-5 w-5 text-foreground" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">Yangi obunachilar</p>
+                      <p className="text-xs text-muted-foreground">Kimdir sizga obuna bo\u2019lganda</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={settings?.notify_follows ?? true}
+                    onCheckedChange={(checked) => updateSettings({ notify_follows: checked })}
+                  />
+                </div>
+
+                <div className="p-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                      <AtSign className="h-5 w-5 text-foreground" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">Eslatishlar</p>
+                      <p className="text-xs text-muted-foreground">Kimdir sizni @mention qilganda</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={settings?.notify_mentions ?? true}
+                    onCheckedChange={(checked) => updateSettings({ notify_mentions: checked })}
+                  />
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Bildirishnoma afzalliklari">
+              <div className="divide-y divide-border">
+                <div className="p-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                      <Bell className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">Bildirishnoma ovozi</p>
+                      <p className="text-xs text-muted-foreground">Yangi xabarlarda ovoz chalinadi</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={settings?.notification_sounds ?? true}
+                    onCheckedChange={(checked) => updateSettings({ notification_sounds: checked })}
+                  />
+                </div>
+
+                <div className="p-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                      <Eye className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">Xabar matnini ko\u2019rsatish</p>
+                      <p className="text-xs text-muted-foreground">
+                        Bildirishnomada xabar mazmuni ko\u2019rinadi
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={settings?.notification_preview ?? true}
+                    onCheckedChange={(checked) => updateSettings({ notification_preview: checked })}
+                  />
+                </div>
+              </div>
+            </SectionCard>
+          </TabsContent>
+
+          {/* Mavzu va til */}
+          <TabsContent value="appearance" className="space-y-6">
+            <SectionCard title="Mavzu" description="Interfeys ko\u2019rinishini tanlang">
+              <div className="p-4 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
                   <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                    <Bell className="h-5 w-5 text-muted-foreground" />
+                    {theme === 'dark' ? (
+                      <Moon className="h-5 w-5 text-muted-foreground" />
+                    ) : theme === 'light' ? (
+                      <Sun className="h-5 w-5 text-muted-foreground" />
+                    ) : (
+                      <Monitor className="h-5 w-5 text-muted-foreground" />
+                    )}
                   </div>
                   <div>
-                    <p className="font-medium text-sm">Voice Messages</p>
-                    <p className="text-xs text-muted-foreground">Auto-play voice messages when visible</p>
+                    <p className="font-medium text-sm">Rang rejimi</p>
+                    <p className="text-xs text-muted-foreground">Tizim, yorug\u2019 yoki tungi</p>
                   </div>
                 </div>
-                <Switch
-                  checked={settings?.autoplay_voice_messages ?? true}
-                  onCheckedChange={(checked) => updateSettings({ autoplay_voice_messages: checked })}
-                />
+                <Select value={theme} onValueChange={setTheme}>
+                  <SelectTrigger className="w-36">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="system">
+                      <div className="flex items-center gap-2">
+                        <Monitor className="h-4 w-4" />
+                        Tizim
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="light">
+                      <div className="flex items-center gap-2">
+                        <Sun className="h-4 w-4" />
+                        Yorug\u2019
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="dark">
+                      <div className="flex items-center gap-2">
+                        <Moon className="h-4 w-4" />
+                        Tungi
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+            </SectionCard>
 
-              {/* Autoplay Video Messages */}
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                    <Bell className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">Video Messages</p>
-                    <p className="text-xs text-muted-foreground">Auto-play video messages when visible</p>
-                  </div>
-                </div>
-                <Switch
-                  checked={settings?.autoplay_video_messages ?? true}
-                  onCheckedChange={(checked) => updateSettings({ autoplay_video_messages: checked })}
-                />
-              </div>
+            <div>
+              <LanguageSwitcher />
             </div>
-          </div>
-          
-          <div className="bg-card rounded-xl border border-border overflow-hidden">
-            <div className="p-4 border-b border-border">
-              <h2 className="font-semibold">Notification Types</h2>
-              <p className="text-xs text-muted-foreground mt-1">Choose which notifications you want to receive</p>
+          </TabsContent>
+
+          {/* Chat foni */}
+          <TabsContent value="chat-wallpaper" className="space-y-6">
+            <SectionCard
+              title="Chat foni"
+              description="Tayyor fonlardan tanlang yoki o\u2019z rasmingizni yuklang. Tanlov shu qurilmada saqlanadi."
+            >
+              <div className="p-4 md:p-6">
+                <ChatWallpaperEditor />
+              </div>
+            </SectionCard>
+          </TabsContent>
+
+          {/* Ma'lumotlar va xotira */}
+          <TabsContent value="data-storage" className="space-y-6">
+            <div className="bg-card rounded-xl border border-border p-4 md:p-6">
+              <MediaAutoDownloadEditor />
             </div>
+          </TabsContent>
 
-            <div className="divide-y divide-border">
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                    <Heart className="h-5 w-5 text-foreground" />
-                  </div>
+          {/* Ilova haqida */}
+          <TabsContent value="about" className="space-y-6">
+            <SectionCard title="Ilova haqida">
+              <div className="divide-y divide-border">
+                <div className="p-4 flex items-center justify-between gap-4">
                   <div>
-                    <p className="font-medium text-sm">Likes</p>
-                    <p className="text-xs text-muted-foreground">When someone likes your posts</p>
+                    <p className="font-medium text-sm">Alsamos Social</p>
+                    <p className="text-xs text-muted-foreground">Versiya {APP_VERSION}</p>
                   </div>
+                  <Info className="h-5 w-5 text-muted-foreground" />
                 </div>
-                <Switch
-                  checked={settings?.notify_likes ?? true}
-                  onCheckedChange={(checked) => updateSettings({ notify_likes: checked })}
-                />
+                <div className="p-4 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-medium text-sm">Faollik va statistika</p>
+                    <p className="text-xs text-muted-foreground">
+                      Platformada sarflagan vaqtingiz
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => navigate('/activity')}>
+                    <Clock className="h-4 w-4 mr-2" />
+                    Ko\u2019rish
+                  </Button>
+                </div>
               </div>
+            </SectionCard>
 
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                    <MessageCircle className="h-5 w-5 text-foreground" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">Comments</p>
-                    <p className="text-xs text-muted-foreground">When someone comments on your posts</p>
-                  </div>
+            <div className="bg-card rounded-xl border border-destructive/30 p-6">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">
+                  <Trash2 className="h-6 w-6 text-destructive" />
                 </div>
-                <Switch
-                  checked={settings?.notify_comments ?? true}
-                  onCheckedChange={(checked) => updateSettings({ notify_comments: checked })}
-                />
-              </div>
-
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                    <UserPlus className="h-5 w-5 text-foreground" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">New Followers</p>
-                    <p className="text-xs text-muted-foreground">When someone starts following you</p>
-                  </div>
+                <div>
+                  <h3 className="font-semibold text-destructive">Hisobni o\u2019chirish</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Hisobingiz va barcha ma\u2019lumotlaringiz butunlay o\u2019chiriladi
+                  </p>
                 </div>
-                <Switch
-                  checked={settings?.notify_follows ?? true}
-                  onCheckedChange={(checked) => updateSettings({ notify_follows: checked })}
-                />
               </div>
-
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                    <AtSign className="h-5 w-5 text-foreground" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">Mentions</p>
-                    <p className="text-xs text-muted-foreground">When someone @mentions you</p>
-                  </div>
-                </div>
-                <Switch
-                  checked={settings?.notify_mentions ?? true}
-                  onCheckedChange={(checked) => updateSettings({ notify_mentions: checked })}
-                />
-              </div>
+              <p className="text-sm text-muted-foreground mb-4">
+                Hisobni o\u2019chirgandan so\u2019ng uni tiklab bo\u2019lmaydi. Barcha postlar,
+                xabarlar va shaxsiy ma\u2019lumotlar butunlay o\u2019chib ketadi.
+              </p>
+              <Button variant="destructive" onClick={() => setDeleteAccountDialogOpen(true)}>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Hisobimni o\u2019chirish
+              </Button>
             </div>
-          </div>
-          
-          <div className="bg-card rounded-xl border border-border overflow-hidden">
-            <div className="p-4 border-b border-border">
-              <h2 className="font-semibold">Notification Preferences</h2>
-            </div>
-
-            <div className="divide-y divide-border">
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                    <Bell className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">Notification Sounds</p>
-                    <p className="text-xs text-muted-foreground">Play sounds for new messages</p>
-                  </div>
-                </div>
-                <Switch
-                  checked={settings?.notification_sounds ?? true}
-                  onCheckedChange={(checked) => updateSettings({ notification_sounds: checked })}
-                />
-              </div>
-
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                    <Eye className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">Message Preview</p>
-                    <p className="text-xs text-muted-foreground">Show message content in notifications</p>
-                  </div>
-                </div>
-                <Switch
-                  checked={settings?.notification_preview ?? true}
-                  onCheckedChange={(checked) => updateSettings({ notification_preview: checked })}
-                />
-              </div>
-            </div>
-          </div>
-        </TabsContent>
+          </TabsContent>
         </div>
       </Tabs>
 
-
-
       {/* Footer */}
       <div className="text-center text-xs text-muted-foreground pt-8">
-        <p>Alsamos Social v1.0.0</p>
-        <p className="mt-1">{'\\u00A9'} 2024 Alsamos. All rights reserved.</p>
+        <p>Alsamos Social v{APP_VERSION}</p>
+        <p className="mt-1">
+          \u00A9 {new Date().getFullYear()} Alsamos. Barcha huquqlar himoyalangan.
+        </p>
       </div>
 
-      {/* Logout Session Dialog */}
-      <AlertDialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
+      <VerificationRequestDialog
+        open={verificationDialogOpen}
+        onOpenChange={setVerificationDialogOpen}
+      />
+
+      {/* Hisobni o'chirish dialogi */}
+      <AlertDialog open={deleteAccountDialogOpen} onOpenChange={setDeleteAccountDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Logout Device</AlertDialogTitle>
+            <AlertDialogTitle className="text-destructive">Hisobni o\u2019chirish</AlertDialogTitle>
             <AlertDialogDescription>
-              This will log out the selected device. The user will need to sign in again on that device.
+              Bu amalni ortga qaytarib bo\u2019lmaydi. Hisobingiz va barcha ma\u2019lumotlaringiz
+              serverlarimizdan butunlay o\u2019chiriladi.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-2">
+            <p className="text-sm">
+              Tasdiqlash uchun <span className="font-semibold">DELETE</span> deb yozing:
+            </p>
+            <Input
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder="DELETE"
+            />
+          </div>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleLogoutSession}>
-              Logout Device
-            </AlertDialogAction>
+            <AlertDialogCancel onClick={() => setDeleteConfirmText('')}>Bekor qilish</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              disabled={deleteConfirmText !== 'DELETE' || deletingAccount}
+              onClick={async () => {
+                setDeletingAccount(true);
+                try {
+                  const { error: profileError } = await supabase
+                    .from('profiles')
+                    .delete()
+                    .eq('id', user?.id);
+
+                  if (profileError) throw profileError;
+
+                  await supabase.auth.signOut();
+
+                  toast({
+                    title: 'Hisob o\u2019chirildi',
+                    description: 'Hisobingiz butunlay o\u2019chirildi.',
+                  });
+
+                  navigate('/');
+                } catch (error: any) {
+                  toast({
+                    title: 'Xatolik',
+                    description: error.message || 'Hisobni o\u2019chirib bo\u2019lmadi',
+                    variant: 'destructive',
+                  });
+                } finally {
+                  setDeletingAccount(false);
+                  setDeleteAccountDialogOpen(false);
+                  setDeleteConfirmText('');
+                }
+              }}
+            >
+              {deletingAccount ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              O\u2019chirish
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Logout All Others Dialog */}
-      <AlertDialog open={logoutAllDialogOpen} onOpenChange={setLogoutAllDialogOpen}>
+      {/* Seansdan chiqarish */}
+      <AlertDialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Logout All Other Devices</AlertDialogTitle>
+            <AlertDialogTitle>Qurilmani chiqarish</AlertDialogTitle>
             <AlertDialogDescription>
-              This will log out all devices except your current one. You will remain logged in on this device.
+              Tanlangan qurilma tizimdan chiqariladi va qayta kirish talab qilinadi.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleLogoutAllOthers}>
-              Logout All Others
-            </AlertDialogAction>
+            <AlertDialogCancel>Bekor qilish</AlertDialogCancel>
+            <AlertDialogAction onClick={handleLogoutSession}>Chiqarish</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Barcha boshqa qurilmalarni chiqarish */}
+      <AlertDialog open={logoutAllDialogOpen} onOpenChange={setLogoutAllDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Barcha boshqa qurilmalarni chiqarish</AlertDialogTitle>
+            <AlertDialogDescription>
+              Joriy qurilmadan tashqari barcha qurilmalar tizimdan chiqariladi.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Bekor qilish</AlertDialogCancel>
+            <AlertDialogAction onClick={handleLogoutAllOthers}>Chiqarish</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org';
-/** Toshkent — standart markaz */
+const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+/** Toshkent - standart markaz */
 const DEFAULT_CENTER: [number, number] = [41.311081, 69.240562];
 
 interface GeoResult {
@@ -41,12 +42,13 @@ const pinIcon = L.divIcon({
 });
 
 function formatAddress(data: Record<string, any>, lat: number, lng: number): string {
-  const a = (data?.address ?? {}) as Record<string, string>;
-  const city = a.city || a.town || a.village || a.municipality || a.county;
-  const parts = [city, a.state, a.country].filter(Boolean);
+  const address = (data?.address ?? {}) as Record<string, string>;
+  const city =
+    address.city || address.town || address.village || address.municipality || address.county;
+  const parts = [city, address.state, address.country].filter(Boolean);
   if (parts.length) return parts.join(', ');
   if (typeof data?.display_name === 'string') return data.display_name;
-  return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  return lat.toFixed(5) + ', ' + lng.toFixed(5);
 }
 
 export function LocationPicker({ value, coords, onChange, onClear }: LocationPickerProps) {
@@ -67,34 +69,37 @@ export function LocationPicker({ value, coords, onChange, onClear }: LocationPic
     setError(null);
     try {
       const res = await fetch(
-        `${NOMINATIM_BASE}/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=uz`,
+        NOMINATIM_BASE + '/reverse?format=jsonv2&lat=' + lat + '&lon=' + lng + '&accept-language=uz',
       );
       const data = await res.json();
       onChangeRef.current(formatAddress(data, lat, lng), { lat, lng });
     } catch {
-      onChangeRef.current(`${lat.toFixed(5)}, ${lng.toFixed(5)}`, { lat, lng });
+      onChangeRef.current(lat.toFixed(5) + ', ' + lng.toFixed(5), { lat, lng });
     } finally {
       setResolving(false);
     }
   }, []);
 
-  const moveMarker = useCallback((lat: number, lng: number, zoom?: number) => {
-    const map = mapRef.current;
-    if (!map) return;
+  const moveMarker = useCallback(
+    (lat: number, lng: number, zoom?: number) => {
+      const map = mapRef.current;
+      if (!map) return;
 
-    if (markerRef.current) {
-      markerRef.current.setLatLng([lat, lng]);
-    } else {
-      const marker = L.marker([lat, lng], { icon: pinIcon, draggable: true }).addTo(map);
-      marker.on('dragend', () => {
-        const point = marker.getLatLng();
-        void reverseGeocode(point.lat, point.lng);
-      });
-      markerRef.current = marker;
-    }
+      if (markerRef.current) {
+        markerRef.current.setLatLng([lat, lng]);
+      } else {
+        const marker = L.marker([lat, lng], { icon: pinIcon, draggable: true }).addTo(map);
+        marker.on('dragend', () => {
+          const point = marker.getLatLng();
+          void reverseGeocode(point.lat, point.lng);
+        });
+        markerRef.current = marker;
+      }
 
-    map.setView([lat, lng], zoom ?? Math.max(map.getZoom(), 12));
-  }, [reverseGeocode]);
+      map.setView([lat, lng], zoom ?? Math.max(map.getZoom(), 12));
+    },
+    [reverseGeocode],
+  );
 
   // Xaritani bir marta ishga tushirish
   useEffect(() => {
@@ -103,7 +108,7 @@ export function LocationPicker({ value, coords, onChange, onClear }: LocationPic
     const start: [number, number] = coords ? [coords.lat, coords.lng] : DEFAULT_CENTER;
     const map = L.map(containerRef.current, { zoomControl: true }).setView(start, coords ? 13 : 5);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    L.tileLayer(TILE_URL, {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap',
     }).addTo(map);
@@ -140,13 +145,17 @@ export function LocationPicker({ value, coords, onChange, onClear }: LocationPic
     setError(null);
     try {
       const res = await fetch(
-        `${NOMINATIM_BASE}/search?format=jsonv2&limit=5&accept-language=uz&q=${encodeURIComponent(term)}`,
+        NOMINATIM_BASE +
+          '/search?format=jsonv2&limit=5&accept-language=uz&q=' +
+          encodeURIComponent(term),
       );
       const data: GeoResult[] = await res.json();
       setResults(Array.isArray(data) ? data : []);
-      if (!data?.length) setError('Hech narsa topilmadi. Boshqacha yozib ko\u2019ring.');
+      if (!Array.isArray(data) || data.length === 0) {
+        setError('Hech narsa topilmadi. Boshqacha yozib ko\u2019ring.');
+      }
     } catch {
-      setError('Qidiruvda xatolik. Keyinroq urinib ko\u2019ring.');
+      setError('Qidiruvda xatolik yuz berdi. Keyinroq urinib ko\u2019ring.');
     } finally {
       setSearching(false);
     }
@@ -214,7 +223,7 @@ export function LocationPicker({ value, coords, onChange, onClear }: LocationPic
         <div className="rounded-xl border border-border bg-card overflow-hidden">
           {results.map((result) => (
             <button
-              key={`${result.lat}-${result.lon}`}
+              key={result.lat + '-' + result.lon}
               type="button"
               onClick={() => handleSelectResult(result)}
               className="w-full text-left px-4 py-2.5 text-sm hover:bg-accent/60 border-b border-border/60 last:border-0"
