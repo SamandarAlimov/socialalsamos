@@ -8,7 +8,7 @@ import {
   differenceInMinutes,
 } from 'date-fns';
 import { useTranslation } from 'react-i18next';
-import { formatRelative, formatDate } from '@/lib/i18n-format';
+import { formatDate } from '@/lib/i18n-format';
 import {
   Heart,
   MessageCircle,
@@ -46,6 +46,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { toast } from 'sonner';
 
 type NotificationFilter =
@@ -97,6 +98,7 @@ interface GroupedNotification {
     username: string | null;
     displayName: string | null;
     avatar: string | null;
+    isVerified: boolean;
   }>;
 }
 
@@ -109,30 +111,30 @@ interface TimeGroupedNotifications {
 }
 
 const NotificationIcon = ({ type }: { type: Notification['type'] }) => {
-  const iconClass = 'h-4 w-4 text-white';
+  const iconClass = 'h-3.5 w-3.5 text-white';
 
   switch (type) {
     case 'like':
       return (
-        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-red-500 to-pink-500 flex items-center justify-center ring-2 ring-background">
+        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center ring-2 ring-background shadow-sm">
           <Heart className={iconClass} fill="currentColor" />
         </div>
       );
     case 'comment':
       return (
-        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center ring-2 ring-background">
+        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center ring-2 ring-background shadow-sm">
           <MessageCircle className={iconClass} fill="currentColor" />
         </div>
       );
     case 'follow':
       return (
-        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center ring-2 ring-background">
+        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center ring-2 ring-background shadow-sm">
           <UserPlus className={iconClass} />
         </div>
       );
     case 'mention':
       return (
-        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-purple-500 to-violet-500 flex items-center justify-center ring-2 ring-background">
+        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center ring-2 ring-background shadow-sm">
           <AtSign className={iconClass} />
         </div>
       );
@@ -143,13 +145,13 @@ const NotificationIcon = ({ type }: { type: Notification['type'] }) => {
     case 'collaboration_removed':
     case 'collaboration_left':
       return (
-        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center ring-2 ring-background">
+        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center ring-2 ring-background shadow-sm">
           <Users className={iconClass} />
         </div>
       );
     default:
       return (
-        <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center ring-2 ring-background">
+        <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center ring-2 ring-background shadow-sm">
           <Bell className={iconClass} />
         </div>
       );
@@ -158,8 +160,8 @@ const NotificationIcon = ({ type }: { type: Notification['type'] }) => {
 
 /**
  * Post rasmi o'chirilgan yoki video bo'lsa ham sahifa buzilmasligi uchun
- * xavfsiz thumbnail. Ilgari <img alt="Post"> ishlatilgani uchun rasm
- * yuklanmasa ro'yxatda "Post" degan buzilgan matn ko'rinardi.
+ * xavfsiz thumbnail. Video uchun <video> elementi ishlatilmaydi — brauzer
+ * o'zining katta ko'k "play" tugmasini chizib, ro'yxatni buzib qo'yardi.
  */
 function PostThumbnail({
   url,
@@ -171,7 +173,20 @@ function PostThumbnail({
   const [failed, setFailed] = useState(false);
   const isVideo = VIDEO_PATTERN.test(url);
   const baseClass =
-    'relative flex-shrink-0 h-14 w-14 rounded-xl overflow-hidden bg-muted flex items-center justify-center transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+    'relative flex-shrink-0 h-14 w-14 rounded-xl overflow-hidden bg-muted ring-1 ring-border/60 flex items-center justify-center transition-transform hover:scale-[1.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+
+  if (isVideo) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(baseClass, 'bg-neutral-900')}
+        aria-label="Videoni ochish"
+      >
+        <Play className="h-4 w-4 text-white/90" fill="currentColor" />
+      </button>
+    );
+  }
 
   if (failed) {
     return (
@@ -183,38 +198,26 @@ function PostThumbnail({
 
   return (
     <button type="button" onClick={onClick} className={baseClass} aria-label="Postni ochish">
-      {isVideo ? (
-        <>
-          <video
-            src={url}
-            className="h-full w-full object-cover"
-            muted
-            playsInline
-            preload="metadata"
-            onError={() => setFailed(true)}
-          />
-          <span className="absolute inset-0 flex items-center justify-center bg-black/30">
-            <Play className="h-4 w-4 text-white" fill="currentColor" />
-          </span>
-        </>
-      ) : (
-        <img
-          src={url}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          className="h-full w-full object-cover"
-          onError={() => setFailed(true)}
-        />
-      )}
+      <img
+        src={url}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        className="h-full w-full object-cover"
+        onError={() => setFailed(true)}
+      />
     </button>
   );
 }
 
-// 30 daqiqalik oyna ichida bir xil tur va bir xil post bo'yicha guruhlash
+// 30 daqiqalik oyna ichida bir xil tur va bir xil post bo'yicha guruhlash.
+// Hammualliflik bildirishnomalari esa bir xil (tur + post + aktyor) bo'lsa
+// har doim birlashtiriladi — aks holda bitta qabul qilish ro'yxatda ikki
+// marta takrorlanib ko'rinardi.
 function consolidateNotifications(notifications: Notification[]): GroupedNotification[] {
   const groups: Map<string, GroupedNotification> = new Map();
   const CONSOLIDATION_WINDOW_MINUTES = 30;
+  const COLLABORATION_WINDOW_MINUTES = 60 * 24 * 30;
 
   const sorted = [...notifications].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
@@ -225,16 +228,20 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
     const postId = typeof data?.post_id === 'string' ? (data.post_id as string) : undefined;
     const actor = notification.actor;
     const post = notification.post;
+    const isCollaboration = COLLABORATION_TYPES.includes(notification.type);
 
     const postThumbnail = post?.media_urls?.find(
       (media) => typeof media === 'string' && media.length > 0,
     );
 
-    const baseGroupKey =
-      notification.type === 'follow'
+    const baseGroupKey = isCollaboration
+      ? `${notification.type}-${postId || 'no-post'}-${actor?.id || 'no-actor'}`
+      : notification.type === 'follow'
         ? `follow-${notification.type}`
         : `${notification.type}-${postId || 'no-post'}`;
+
     const canConsolidate =
+      isCollaboration ||
       notification.type === 'like' ||
       notification.type === 'comment' ||
       notification.type === 'follow' ||
@@ -248,14 +255,18 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
         new Date(existing.latestAt),
         new Date(notification.created_at),
       );
+      const windowMinutes = isCollaboration
+        ? COLLABORATION_WINDOW_MINUTES
+        : CONSOLIDATION_WINDOW_MINUTES;
 
-      if (timeDiff <= CONSOLIDATION_WINDOW_MINUTES) {
+      if (timeDiff <= windowMinutes) {
         if (actor && !existing.actors.find((a) => a.id === actor.id)) {
           existing.actors.push({
             id: actor.id,
             username: actor.username,
             displayName: actor.display_name,
             avatar: actor.avatar_url,
+            isVerified: !!actor.is_verified,
           });
         }
         existing.notifications.push(notification);
@@ -280,6 +291,7 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
               username: actor.username,
               displayName: actor.display_name,
               avatar: actor.avatar_url,
+              isVerified: !!actor.is_verified,
             },
           ]
         : [],
@@ -363,21 +375,34 @@ function GroupedNotificationItem({
       toast.success(accept ? 'Hammualliflik qabul qilindi' : 'Taklif rad etildi');
     } catch (error) {
       console.error('Collaboration javob xatosi:', error);
-      toast.error('Hammualliflik taklifiga javob berib bo‘lmadi');
+      const reason = error instanceof Error ? error.message : '';
+      toast.error(
+        reason
+          ? `Hammualliflik taklifiga javob berib bo‘lmadi: ${reason}`
+          : 'Hammualliflik taklifiga javob berib bo‘lmadi',
+      );
     } finally {
       setCollaborationBusy(null);
     }
   };
 
+  // Toza o'zbekcha nisbiy vaqt: "tahminan 8 soat oldin" kabi chalkash
+  // yozuvlar o'rniga qisqa va bir xil format.
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
     if (Number.isNaN(date.getTime())) return '';
 
-    const minutesAgo = differenceInMinutes(new Date(), date);
-    if (minutesAgo < 1) return 'hozirgina';
-    if (minutesAgo < 60) return `${minutesAgo} daqiqa oldin`;
-    if (isToday(date)) return formatDate(date, 'HH:mm', i18nInst.language);
-    return formatRelative(date, i18nInst.language);
+    const minutes = differenceInMinutes(new Date(), date);
+    if (minutes < 1) return 'hozirgina';
+    if (minutes < 60) return `${minutes} daqiqa oldin`;
+
+    const hours = Math.floor(minutes / 60);
+    if (isToday(date)) return `${hours} soat oldin`;
+    if (isYesterday(date)) return `kecha, ${formatDate(date, 'HH:mm', i18nInst.language)}`;
+
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days} kun oldin`;
+    return formatDate(date, 'd MMM', i18nInst.language);
   };
 
   const actorName = firstActor?.displayName || firstActor?.username || 'Foydalanuvchi';
@@ -418,6 +443,8 @@ function GroupedNotificationItem({
         : ` va yana ${otherActorsCount} kishi`
       : '';
 
+  const repeatCount = group.notifications.length;
+
   const ariaLabel = `${actorName}${othersText} ${actionText}, ${formatTime(group.latestAt)}`;
 
   return (
@@ -429,9 +456,9 @@ function GroupedNotificationItem({
       tabIndex={0}
       aria-label={ariaLabel}
       className={cn(
-        'group relative flex items-start gap-3 p-4 cursor-pointer transition-colors duration-150',
-        'hover:bg-accent/50 focus-visible:outline-none focus-visible:bg-accent/60',
-        hasUnread && 'bg-primary/5 dark:bg-primary/10',
+        'group relative flex items-start gap-3 px-4 py-3.5 cursor-pointer transition-colors duration-150',
+        'hover:bg-accent/40 focus-visible:outline-none focus-visible:bg-accent/60',
+        hasUnread && 'bg-primary/[0.04] dark:bg-primary/10',
       )}
       onClick={openTarget}
       onKeyDown={(event) => {
@@ -444,7 +471,7 @@ function GroupedNotificationItem({
       {hasUnread && (
         <span
           aria-hidden
-          className="absolute left-0 top-0 h-full w-0.5 bg-primary"
+          className="absolute left-0 top-0 h-full w-[3px] bg-primary"
         />
       )}
 
@@ -480,7 +507,7 @@ function GroupedNotificationItem({
             className="relative cursor-pointer"
             onClick={(event) => handleActorClick(event, firstActor)}
           >
-            <Avatar className="h-12 w-12">
+            <Avatar className="h-12 w-12 ring-1 ring-border/70">
               <AvatarImage src={firstActor?.avatar || undefined} className="object-cover" />
               <AvatarFallback className="bg-muted text-sm font-medium">
                 {(firstActor?.displayName || firstActor?.username || '?')
@@ -499,10 +526,11 @@ function GroupedNotificationItem({
       <div className="flex-1 min-w-0 pt-0.5">
         <p className="text-sm leading-snug">
           <span
-            className="font-semibold text-foreground hover:underline"
+            className="inline-flex max-w-full items-center gap-1 align-bottom font-semibold text-foreground hover:underline"
             onClick={(event) => handleActorClick(event, firstActor)}
           >
-            {actorName}
+            <span className="truncate">{actorName}</span>
+            {firstActor?.isVerified && <VerifiedBadge size="xs" />}
           </span>
           <span className="text-muted-foreground">
             {othersText} {actionText}
@@ -510,6 +538,11 @@ function GroupedNotificationItem({
         </p>
         <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
           <span>{formatTime(group.latestAt)}</span>
+          {repeatCount > 1 && group.actors.length <= 1 && (
+            <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium">
+              {repeatCount}x
+            </span>
+          )}
           {hasUnread && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
         </p>
 
@@ -647,7 +680,7 @@ function NotificationGroup({
   return (
     <section aria-label={title}>
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5">
+        <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.08em] px-4 py-2.5">
           {title}
         </h3>
       </div>
@@ -847,7 +880,7 @@ export default function NotificationsPage() {
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80 border-b">
         <div className="flex items-center justify-between px-4 py-4">
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold">Bildirishnomalar</h1>
+            <h1 className="text-xl font-bold tracking-tight">Bildirishnomalar</h1>
             {unreadCount > 0 && (
               <Badge variant="default" className="rounded-full px-2.5 py-0.5 text-xs">
                 {unreadCount > 99 ? '99+' : unreadCount}
@@ -902,7 +935,7 @@ export default function NotificationsPage() {
                   className={cn(
                     'px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors',
                     isActive
-                      ? 'bg-primary text-primary-foreground'
+                      ? 'bg-primary text-primary-foreground shadow-sm'
                       : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground',
                   )}
                 >
