@@ -1,16 +1,36 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Camera, CameraOff, Mic, MicOff, SwitchCamera, Users, Clock, Radio, MessageCircle, Loader2, Wifi, Monitor, MonitorOff } from 'lucide-react';
+import {
+  X,
+  Camera,
+  CameraOff,
+  Mic,
+  MicOff,
+  SwitchCamera,
+  Users,
+  Clock,
+  Radio,
+  MessageCircle,
+  Loader2,
+  Wifi,
+  Monitor,
+  MonitorOff,
+  ShieldAlert,
+  Video as VideoIcon,
+} from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { CreateListRow } from '@/components/create/CreateListRow';
 import { useLiveStreamComments, useLiveStreamReactions, useLiveStreamViewer } from '@/hooks/useLiveStream';
 import { useLiveStreamBroadcaster } from '@/hooks/useLiveStreamWebRTC';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
+
+const MAX_TITLE_LENGTH = 120;
 
 interface LiveStreamBroadcastProps {
   onClose: () => void;
@@ -28,9 +48,19 @@ interface LiveStream {
   ended_at: string | null;
 }
 
+/**
+ * Jonli efir.
+ *
+ * Ikki bosqich bor:
+ *  1. Sozlash — sahifa ichidagi panel. Kamera bu yerda avtomatik yonmaydi,
+ *     chunki tabni bosish hali "efirga chiqaman" degani emas. Instagram va
+ *     YouTube Studio ham avval sozlamani so'raydi.
+ *  2. Efir — butun ekranni egallagan qatlam. Bu bosqichda ekranni to'liq
+ *     egallash o'rinli.
+ */
 export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadcastProps) {
   const { user, profile } = useAuth();
-  
+
   const [title, setTitle] = useState(initialTitle || '');
   const [isLive, setIsLive] = useState(false);
   const [stream, setStream] = useState<LiveStream | null>(null);
@@ -39,49 +69,54 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [showComments, setShowComments] = useState(true);
-  const [isInitializing, setIsInitializing] = useState(true);
+  const [isInitializing, setIsInitializing] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
-  
+  /** Kamera oqimi tayyor — faqat foydalanuvchi so'ragandan keyin true bo'ladi. */
+  const [cameraReady, setCameraReady] = useState(false);
+  const [mediaError, setMediaError] = useState<string | null>(null);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const commentsRef = useRef<HTMLDivElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
 
   // WebRTC broadcaster hook
-  const { 
-    isConnected: isWebRTCConnected, 
-    viewerCount: webrtcViewerCount, 
-    connect: connectWebRTC, 
+  const {
+    isConnected: isWebRTCConnected,
+    viewerCount: webrtcViewerCount,
+    connect: connectWebRTC,
     disconnect: disconnectWebRTC,
-    error: webrtcError 
   } = useLiveStreamBroadcaster(stream?.id || null);
 
   const { comments } = useLiveStreamComments(stream?.id || null);
   const { reactions } = useLiveStreamReactions(stream?.id || null);
   const { viewerCount: dbViewerCount } = useLiveStreamViewer(stream?.id || null);
-  
+
   // Use WebRTC viewer count if connected, otherwise DB count
   const viewerCount = isWebRTCConnected ? webrtcViewerCount : dbViewerCount;
 
-  // Initialize camera on mount with mobile-compatible constraints
-  const initializeCamera = useCallback(async () => {
+  /**
+   * Kamerani ishga tushiradi. Mount paytida emas, faqat foydalanuvchi
+   * "Kamerani yoqish" tugmasini bosganda chaqiriladi.
+   */
+  const initializeCamera = useCallback(async (nextFacingMode?: 'user' | 'environment') => {
+    const targetFacing = nextFacingMode ?? facingMode;
+
     try {
       setIsInitializing(true);
-      
-      // Stop any existing stream
+      setMediaError(null);
+
       if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => track.stop());
+        localStreamRef.current.getTracks().forEach((track) => track.stop());
       }
 
-      // Mobile-compatible video constraints
-      // Avoid using 'ideal' constraints which can fail on some mobile devices
+      // Mobile-compatible video constraints. 'max' behaves better than 'ideal'
+      // on some Android devices, which reject the request outright.
       const constraints: MediaStreamConstraints = {
-        video: { 
-          facingMode: facingMode,
-          // Use 'max' instead of 'ideal' for better mobile compatibility
-          width: { max: 1280, min: 320 }, 
+        video: {
+          facingMode: targetFacing,
+          width: { max: 1280, min: 320 },
           height: { max: 720, min: 240 },
-          // Request reasonable frame rate
           frameRate: { max: 30, ideal: 24 },
         },
         audio: {
@@ -91,69 +126,71 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
         },
       };
 
-      console.log('[Broadcast] Requesting media with constraints:', JSON.stringify(constraints));
-      
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-      
-      // Log track info for debugging
-      mediaStream.getTracks().forEach(track => {
-        console.log(`[Broadcast] Got ${track.kind} track:`, track.label, 'enabled:', track.enabled, 'readyState:', track.readyState);
-        if (track.kind === 'video') {
-          const settings = track.getSettings();
-          console.log('[Broadcast] Video settings:', settings.width, 'x', settings.height, '@', settings.frameRate, 'fps');
-        }
-      });
 
       localStreamRef.current = mediaStream;
-      
-      // Connect to video element
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
       }
-      
+
+      setIsCameraOn(true);
+      setIsMuted(false);
+      setCameraReady(true);
       setIsInitializing(false);
-    } catch (error: any) {
-      console.error('Error initializing camera:', error);
-      
-      // Try fallback with minimal constraints for older mobile devices
+      return true;
+    } catch (error) {
+      // Eski qurilmalar uchun soddalashtirilgan cheklovlar bilan yana bir urinish.
       try {
-        console.log('[Broadcast] Trying fallback constraints');
         const fallbackStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: facingMode },
+          video: { facingMode: targetFacing },
           audio: true,
         });
-        
+
         localStreamRef.current = fallbackStream;
         if (videoRef.current) {
           videoRef.current.srcObject = fallbackStream;
         }
+
+        setIsCameraOn(true);
+        setIsMuted(false);
+        setCameraReady(true);
         setIsInitializing(false);
-      } catch (fallbackError: any) {
-        console.error('Fallback also failed:', fallbackError);
-        toast.error('Failed to access camera: ' + fallbackError.message);
+        return true;
+      } catch (fallbackError) {
+        const name = (fallbackError as { name?: string })?.name;
+
+        setMediaError(
+          name === 'NotAllowedError'
+            ? 'Brauzer kameraga ruxsat bermadi. Manzil satridagi qulf belgisidan ruxsatni yoqing.'
+            : name === 'NotFoundError'
+              ? 'Qurilmada kamera yoki mikrofon topilmadi.'
+              : 'Kamerani ishga tushirib bo‘lmadi. Boshqa ilova uni band qilmaganini tekshiring.',
+        );
+        setCameraReady(false);
         setIsInitializing(false);
+        return false;
       }
     }
   }, [facingMode]);
 
-  // Initialize on mount
+  /** Sahifadan chiqilganda kamera albatta o'chirilishi kerak. */
   useEffect(() => {
-    initializeCamera();
-    
     return () => {
-      // Cleanup on unmount
       if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => track.stop());
+        localStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
+      if (screenStreamRef.current) {
+        screenStreamRef.current.getTracks().forEach((track) => track.stop());
       }
     };
   }, []);
 
-  // Update video element when ref changes
+  // Bosqich almashganda video elementi yangidan ulanadi.
   useEffect(() => {
     if (videoRef.current && localStreamRef.current) {
       videoRef.current.srcObject = localStreamRef.current;
     }
-  }, [isLive]);
+  }, [isLive, cameraReady]);
 
   // Auto-scroll comments
   useEffect(() => {
@@ -166,23 +203,20 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (stream && isLive) {
-        // Stop media stream
         if (localStreamRef.current) {
-          localStreamRef.current.getTracks().forEach(track => track.stop());
+          localStreamRef.current.getTracks().forEach((track) => track.stop());
         }
-        
-        // Use sendBeacon for reliable cleanup
+
         const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/live_streams?id=eq.${stream.id}`;
         const headers = {
           'Content-Type': 'application/json',
-          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          'Prefer': 'return=minimal'
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          Prefer: 'return=minimal',
         };
-        
+        void headers;
+
         const body = JSON.stringify({ status: 'ended', ended_at: new Date().toISOString() });
-        
-        // Create a Blob for sendBeacon
         const blob = new Blob([body], { type: 'application/json' });
         navigator.sendBeacon && navigator.sendBeacon(url, blob);
       }
@@ -199,7 +233,7 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
     }
 
     if (!localStreamRef.current) {
-      toast.error('Kamera tayyor emas');
+      toast.error('Avval kamerani yoqing');
       return;
     }
 
@@ -216,12 +250,11 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
         .eq('user_id', user.id)
         .eq('status', 'live');
 
-      // Create live stream record
       const { data, error } = await supabase
         .from('live_streams')
         .insert({
           user_id: user.id,
-          title: title || 'Live Stream',
+          title: title.trim() || 'Live Stream',
           status: 'live',
         })
         .select()
@@ -233,9 +266,10 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
       setIsLive(true);
 
       toast.success('Jonli efir boshlandi');
-    } catch (error: any) {
+    } catch (error) {
+      const message = (error as { message?: string })?.message;
       console.error('Error starting broadcast:', error);
-      toast.error(error.message || 'Failed to start broadcast');
+      toast.error(message || 'Efirni boshlab bo‘lmadi');
     } finally {
       setIsStarting(false);
     }
@@ -244,23 +278,27 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
   // Connect WebRTC when stream is created
   useEffect(() => {
     if (stream && isLive && localStreamRef.current && !isWebRTCConnected) {
-      console.log('[Broadcast] Connecting WebRTC for stream:', stream.id);
       connectWebRTC(localStreamRef.current);
     }
   }, [stream, isLive, isWebRTCConnected, connectWebRTC]);
 
+  const stopLocalMedia = () => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
+    }
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach((track) => track.stop());
+      screenStreamRef.current = null;
+    }
+    setCameraReady(false);
+  };
+
   const handleEndLive = async () => {
     try {
-      // Disconnect WebRTC first
       disconnectWebRTC();
-      
-      // Stop media stream
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => track.stop());
-        localStreamRef.current = null;
-      }
+      stopLocalMedia();
 
-      // Update stream status
       if (stream) {
         await supabase
           .from('live_streams')
@@ -270,8 +308,7 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
           })
           .eq('id', stream.id);
       }
-      
-      // Also ensure all user's streams are ended
+
       if (user) {
         await supabase
           .from('live_streams')
@@ -292,245 +329,283 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
   };
 
   const handleClose = () => {
-    // Stop media stream
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => track.stop());
-      localStreamRef.current = null;
-    }
-    
-    // If live, end the broadcast
     if (isLive && stream) {
-      handleEndLive();
-    } else {
-      onClose();
+      void handleEndLive();
+      return;
     }
+
+    stopLocalMedia();
+    onClose();
   };
 
   const toggleMute = () => {
-    if (localStreamRef.current) {
-      localStreamRef.current.getAudioTracks().forEach(track => {
-        track.enabled = isMuted;
-      });
-      setIsMuted(!isMuted);
-    }
+    if (!localStreamRef.current) return;
+
+    localStreamRef.current.getAudioTracks().forEach((track) => {
+      track.enabled = isMuted;
+    });
+    setIsMuted(!isMuted);
   };
 
   const toggleCamera = () => {
-    if (localStreamRef.current) {
-      localStreamRef.current.getVideoTracks().forEach(track => {
-        track.enabled = !isCameraOn;
-      });
-      setIsCameraOn(!isCameraOn);
-    }
+    if (!localStreamRef.current) return;
+
+    localStreamRef.current.getVideoTracks().forEach((track) => {
+      track.enabled = !isCameraOn;
+    });
+    setIsCameraOn(!isCameraOn);
   };
 
   const switchCamera = async () => {
     const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
     setFacingMode(newFacingMode);
-    
-    // Reinitialize with new facing mode
-    try {
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => track.stop());
-      }
 
-      // Mobile-compatible constraints
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          facingMode: newFacingMode, 
-          width: { max: 1280, min: 320 }, 
-          height: { max: 720, min: 240 },
-          frameRate: { max: 30, ideal: 24 },
-        },
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-      
-      localStreamRef.current = newStream;
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = newStream;
-      }
-      
-      // Maintain mute state
-      if (isMuted) {
-        newStream.getAudioTracks().forEach(track => { track.enabled = false; });
-      }
-    } catch (error) {
-      console.error('Error switching camera:', error);
+    const ok = await initializeCamera(newFacingMode);
+    if (!ok) {
       toast.error('Kamerani almashtirib bo‘lmadi');
+      return;
+    }
+
+    if (isMuted && localStreamRef.current) {
+      localStreamRef.current.getAudioTracks().forEach((track) => {
+        track.enabled = false;
+      });
     }
   };
 
-  // Toggle screen sharing
   const toggleScreenShare = async () => {
     try {
       if (isScreenSharing) {
-        // Stop screen sharing, switch back to camera
         if (screenStreamRef.current) {
-          screenStreamRef.current.getTracks().forEach(track => track.stop());
+          screenStreamRef.current.getTracks().forEach((track) => track.stop());
           screenStreamRef.current = null;
         }
-        
-        // Re-enable camera
+
         const cameraStream = await navigator.mediaDevices.getUserMedia({
-          video: { 
-            facingMode, 
-            width: { ideal: 1280 }, 
-            height: { ideal: 720 } 
+          video: {
+            facingMode,
+            width: { max: 1280, min: 320 },
+            height: { max: 720, min: 240 },
           },
           audio: true,
         });
-        
+
         localStreamRef.current = cameraStream;
-        
+
         if (videoRef.current) {
           videoRef.current.srcObject = cameraStream;
         }
-        
-        // Re-apply mute state
+
         if (isMuted) {
-          cameraStream.getAudioTracks().forEach(track => { track.enabled = false; });
+          cameraStream.getAudioTracks().forEach((track) => {
+            track.enabled = false;
+          });
         }
-        
+
         setIsScreenSharing(false);
         toast.success('Kameraga qaytildi');
       } else {
-        // Start screen sharing
         const screenStream = await navigator.mediaDevices.getDisplayMedia({
-          video: { 
+          video: {
             width: { ideal: 1920 },
             height: { ideal: 1080 },
           },
           audio: true,
         });
-        
+
         screenStreamRef.current = screenStream;
-        
-        // Keep audio from camera
+
+        // Ovoz kameradan olinadi, tasvir esa ekrandan.
         const audioTracks = localStreamRef.current?.getAudioTracks() || [];
-        
-        // Create combined stream
+
         const combinedStream = new MediaStream([
           ...screenStream.getVideoTracks(),
           ...audioTracks,
         ]);
-        
+
         localStreamRef.current = combinedStream;
-        
+
         if (videoRef.current) {
           videoRef.current.srcObject = combinedStream;
         }
-        
-        // Handle when user stops sharing via browser UI
+
+        // Foydalanuvchi brauzer paneli orqali to'xtatsa ham holat yangilansin.
         screenStream.getVideoTracks()[0].onended = () => {
-          toggleScreenShare();
+          void toggleScreenShare();
         };
-        
+
         setIsScreenSharing(true);
+        setCameraReady(true);
         toast.success('Ekran ulashish boshlandi');
       }
-    } catch (error: any) {
-      console.error('Error toggling screen share:', error);
-      if (error.name !== 'NotAllowedError') {
+    } catch (error) {
+      const name = (error as { name?: string })?.name;
+      if (name !== 'NotAllowedError') {
         toast.error('Ekranni ulashib bo‘lmadi');
       }
     }
   };
 
-  // Pre-live screen content
-  const preLiveContent = (
-    <div className="fixed inset-0 z-[9999] flex h-[100dvh] flex-col bg-black">
-      <div className="flex items-center justify-between px-4 py-3 safe-area-top">
-        <button
-          onClick={handleClose}
-          className="flex h-10 w-10 items-center justify-center rounded-full text-white transition hover:bg-white/10"
-          aria-label="Yopish"
-        >
-          <X className="h-5 w-5" />
-        </button>
-        <span className="text-sm font-semibold text-white">Live</span>
-        <div className="w-10" />
-      </div>
+  const canGoLive = cameraReady && !isInitializing && !isStarting;
 
-      <div className="relative min-h-0 flex-1">
-        {isInitializing ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-black">
-            <Loader2 className="h-8 w-8 animate-spin text-white" />
-          </div>
-        ) : (
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className={cn(
-              'absolute inset-0 h-full w-full object-cover',
-              facingMode === 'user' && !isScreenSharing && 'mirror',
-            )}
-          />
-        )}
+  /**
+   * Sozlash bosqichi — sahifa ichida, chunki bu hali efir emas.
+   * Chapda ko'rinish, o'ngda sozlamalar.
+   */
+  const setupContent = (
+    <div className="mx-auto w-full max-w-5xl px-3 py-4 sm:px-5">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="relative aspect-video overflow-hidden rounded-2xl border border-border/60 bg-black">
+          {cameraReady ? (
+            <>
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className={cn(
+                  'absolute inset-0 h-full w-full object-cover',
+                  facingMode === 'user' && !isScreenSharing && 'mirror',
+                )}
+              />
 
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/85" />
+              {!isCameraOn && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/85 text-white/70">
+                  <CameraOff className="h-8 w-8" />
+                  <span className="text-sm">Kamera o‘chirilgan</span>
+                </div>
+              )}
 
-        <div className="absolute right-4 top-4 flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={switchCamera}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur transition hover:bg-black/55"
-            aria-label="Kamerani almashtirish"
-          >
-            <SwitchCamera className="h-5 w-5" />
-          </button>
-          <button
-            type="button"
-            onClick={toggleCamera}
-            className={cn(
-              'flex h-10 w-10 items-center justify-center rounded-full text-white backdrop-blur transition',
-              isCameraOn ? 'bg-black/35 hover:bg-black/55' : 'bg-destructive/85',
-            )}
-            aria-label={isCameraOn ? 'Kamerani o‘chirish' : 'Kamerani yoqish'}
-          >
-            {isCameraOn ? <Camera className="h-5 w-5" /> : <CameraOff className="h-5 w-5" />}
-          </button>
-          <button
-            type="button"
-            onClick={toggleMute}
-            className={cn(
-              'flex h-10 w-10 items-center justify-center rounded-full text-white backdrop-blur transition',
-              isMuted ? 'bg-destructive/85' : 'bg-black/35 hover:bg-black/55',
-            )}
-            aria-label={isMuted ? 'Mikrofonni yoqish' : 'Mikrofonni o‘chirish'}
-          >
-            {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-          </button>
-          <button
-            type="button"
-            onClick={() => void toggleScreenShare()}
-            className={cn(
-              'hidden h-10 w-10 items-center justify-center rounded-full text-white backdrop-blur transition md:flex',
-              isScreenSharing ? 'bg-primary/85' : 'bg-black/35 hover:bg-black/55',
-            )}
-            aria-label={isScreenSharing ? 'Ekran ulashishni to‘xtatish' : 'Ekranni ulashish'}
-          >
-            {isScreenSharing ? <MonitorOff className="h-5 w-5" /> : <Monitor className="h-5 w-5" />}
-          </button>
+              <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-3 bg-gradient-to-t from-black/70 to-transparent p-4">
+                <button
+                  type="button"
+                  onClick={toggleMute}
+                  aria-label={isMuted ? 'Mikrofonni yoqish' : 'Mikrofonni o‘chirish'}
+                  className={cn(
+                    'flex h-11 w-11 items-center justify-center rounded-full text-white backdrop-blur transition',
+                    isMuted ? 'bg-destructive/85' : 'bg-white/15 hover:bg-white/25',
+                  )}
+                >
+                  {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={toggleCamera}
+                  aria-label={isCameraOn ? 'Kamerani o‘chirish' : 'Kamerani yoqish'}
+                  className={cn(
+                    'flex h-11 w-11 items-center justify-center rounded-full text-white backdrop-blur transition',
+                    isCameraOn ? 'bg-white/15 hover:bg-white/25' : 'bg-destructive/85',
+                  )}
+                >
+                  {isCameraOn ? <Camera className="h-5 w-5" /> : <CameraOff className="h-5 w-5" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void switchCamera()}
+                  disabled={isScreenSharing || isInitializing}
+                  aria-label="Kamerani almashtirish"
+                  className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur transition hover:bg-white/25 disabled:opacity-40"
+                >
+                  <SwitchCamera className="h-5 w-5" />
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center">
+              {mediaError ? (
+                <>
+                  <ShieldAlert className="h-9 w-9 text-destructive" />
+                  <p className="max-w-sm text-sm text-white/80">{mediaError}</p>
+                  <Button
+                    variant="secondary"
+                    onClick={() => void initializeCamera()}
+                    disabled={isInitializing}
+                  >
+                    Qayta urinish
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <VideoIcon className="h-9 w-9 text-white/50" />
+                  <p className="max-w-sm text-sm text-white/70">
+                    Kamera hozircha o‘chiq. Ko‘rinishni tekshirish uchun uni yoqing —
+                    efir hali boshlanmaydi.
+                  </p>
+                  <Button onClick={() => void initializeCamera()} disabled={isInitializing}>
+                    {isInitializing ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Camera className="mr-2 h-4 w-4" />
+                    )}
+                    Kamerani yoqish
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-xl p-4 safe-area-bottom">
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value.slice(0, 120))}
-            placeholder="Jonli efir nomi"
-            className="mb-3 h-11 rounded-xl border-white/15 bg-black/35 text-white backdrop-blur placeholder:text-white/50"
-          />
+        <aside className="flex flex-col gap-4 rounded-2xl border border-border/60 bg-card p-4">
+          <div className="flex items-center gap-3">
+            <Avatar className="h-10 w-10">
+              <AvatarImage src={profile?.avatar_url || ''} />
+              <AvatarFallback>{profile?.display_name?.[0] || 'U'}</AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">
+                {profile?.display_name || profile?.username}
+              </p>
+              <p className="text-xs text-muted-foreground">Jonli efir sozlamalari</p>
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="live-title" className="mb-1.5 block text-sm font-medium">
+              Efir nomi
+            </label>
+            <Input
+              id="live-title"
+              value={title}
+              onChange={(event) => setTitle(event.target.value.slice(0, MAX_TITLE_LENGTH))}
+              placeholder="Nima haqida gaplashasiz?"
+              className="h-11"
+            />
+            <p className="mt-1 text-right text-xs text-muted-foreground">
+              {title.length}/{MAX_TITLE_LENGTH}
+            </p>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-border/60">
+            <CreateListRow
+              icon={isCameraOn ? Camera : CameraOff}
+              label="Kamera"
+              value={cameraReady ? (isCameraOn ? 'Yoniq' : 'O‘chiq') : 'Ulanmagan'}
+              active={cameraReady && isCameraOn}
+              disabled={!cameraReady}
+              onClick={toggleCamera}
+            />
+            <CreateListRow
+              icon={isMuted ? MicOff : Mic}
+              label="Mikrofon"
+              value={cameraReady ? (isMuted ? 'O‘chiq' : 'Yoniq') : 'Ulanmagan'}
+              active={cameraReady && !isMuted}
+              disabled={!cameraReady}
+              onClick={toggleMute}
+            />
+            <CreateListRow
+              icon={isScreenSharing ? MonitorOff : Monitor}
+              label="Ekranni ulashish"
+              value={isScreenSharing ? 'Yoniq' : 'O‘chiq'}
+              active={isScreenSharing}
+              onClick={() => void toggleScreenShare()}
+            />
+          </div>
 
           <Button
-            onClick={handleStartLive}
-            disabled={isStarting || isInitializing || !localStreamRef.current}
+            onClick={() => void handleStartLive()}
+            disabled={!canGoLive}
             className="h-12 w-full rounded-xl bg-destructive font-semibold text-white hover:bg-destructive/90"
           >
             {isStarting ? (
@@ -540,38 +615,43 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
             )}
             Jonli efirni boshlash
           </Button>
-        </div>
+
+          <p className="text-xs text-muted-foreground">
+            {cameraReady
+              ? 'Tugma bosilgach obunachilaringizga bildirishnoma boradi va efir darhol boshlanadi.'
+              : 'Efirni boshlash uchun avval kamerani yoqing.'}
+          </p>
+
+          <Button variant="ghost" onClick={handleClose} className="h-10">
+            Bekor qilish
+          </Button>
+        </aside>
       </div>
     </div>
   );
 
-  // Live broadcast screen content
+  // Efir bosqichi — butun ekran.
   const liveContent = (
     <div className="fixed inset-0 z-[9999] bg-black flex flex-col" style={{ height: '100dvh' }}>
-      {/* Video - mirrored for front camera */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
         className={cn(
-          "absolute inset-0 w-full h-full object-cover",
-          facingMode === 'user' && !isScreenSharing && "mirror"
+          'absolute inset-0 w-full h-full object-cover',
+          facingMode === 'user' && !isScreenSharing && 'mirror',
         )}
       />
 
-      {/* Gradient overlays */}
       <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/80 pointer-events-none" />
 
-      {/* Header */}
       <div className="relative z-10 p-4 safe-area-top">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Avatar className="h-10 w-10 border-2 border-destructive">
               <AvatarImage src={profile?.avatar_url || ''} />
-              <AvatarFallback>
-                {profile?.display_name?.[0] || 'U'}
-              </AvatarFallback>
+              <AvatarFallback>{profile?.display_name?.[0] || 'U'}</AvatarFallback>
             </Avatar>
             <div>
               <div className="flex items-center gap-2">
@@ -584,7 +664,7 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
                 {isWebRTCConnected && (
                   <span className="bg-success/20 text-success text-[10px] font-medium px-1.5 py-0.5 rounded flex items-center gap-1">
                     <Wifi className="h-3 w-3" />
-                    Connected
+                    Ulandi
                   </span>
                 )}
               </div>
@@ -602,43 +682,30 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
               </div>
             </div>
           </div>
-          
-          <Button
-            onClick={handleEndLive}
-            variant="destructive"
-            size="sm"
-          >
-            End
+
+          <Button onClick={() => void handleEndLive()} variant="destructive" size="sm">
+            Tugatish
           </Button>
         </div>
-        
-        {title && (
-          <p className="text-white text-sm mt-2 truncate">{title}</p>
-        )}
+
+        {title && <p className="text-white text-sm mt-2 truncate">{title}</p>}
       </div>
 
-      {/* Floating reactions */}
       <div className="absolute right-4 bottom-40 pointer-events-none">
         {reactions.map((reaction) => (
           <div
             key={reaction.id}
             className="absolute bottom-0 right-0 text-3xl animate-float-up"
-            style={{
-              right: `${Math.random() * 40}px`,
-            }}
+            style={{ right: `${Math.random() * 40}px` }}
           >
             {reaction.emoji}
           </div>
         ))}
       </div>
 
-      {/* Comments */}
       {showComments && (
         <div className="absolute left-0 right-20 bottom-24 h-48 pointer-events-none">
-          <div
-            ref={commentsRef}
-            className="h-full overflow-y-auto px-4 scrollbar-hide"
-          >
+          <div ref={commentsRef} className="h-full overflow-y-auto px-4 scrollbar-hide">
             <div className="flex flex-col justify-end min-h-full">
               {comments.map((comment) => (
                 <div key={comment.id} className="flex items-start gap-2 mb-2 animate-fade-in">
@@ -661,27 +728,24 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
         </div>
       )}
 
-      {/* Bottom controls */}
       <div className="absolute bottom-0 left-0 right-0 p-4 safe-area-bottom flex items-center justify-center gap-4">
         <button
           onClick={toggleMute}
+          aria-label={isMuted ? 'Mikrofonni yoqish' : 'Mikrofonni o‘chirish'}
           className={cn(
-            "h-12 w-12 rounded-full flex items-center justify-center",
-            isMuted ? "bg-destructive" : "bg-white/20"
+            'h-12 w-12 rounded-full flex items-center justify-center',
+            isMuted ? 'bg-destructive' : 'bg-white/20',
           )}
         >
-          {isMuted ? (
-            <MicOff className="h-6 w-6 text-white" />
-          ) : (
-            <Mic className="h-6 w-6 text-white" />
-          )}
+          {isMuted ? <MicOff className="h-6 w-6 text-white" /> : <Mic className="h-6 w-6 text-white" />}
         </button>
-        
+
         <button
           onClick={toggleCamera}
+          aria-label={isCameraOn ? 'Kamerani o‘chirish' : 'Kamerani yoqish'}
           className={cn(
-            "h-12 w-12 rounded-full flex items-center justify-center",
-            !isCameraOn ? "bg-destructive" : "bg-white/20"
+            'h-12 w-12 rounded-full flex items-center justify-center',
+            !isCameraOn ? 'bg-destructive' : 'bg-white/20',
           )}
         >
           {isCameraOn ? (
@@ -690,21 +754,22 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
             <CameraOff className="h-6 w-6 text-white" />
           )}
         </button>
-        
+
         <button
-          onClick={switchCamera}
+          onClick={() => void switchCamera()}
+          aria-label="Kamerani almashtirish"
           className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center"
           disabled={isScreenSharing}
         >
-          <SwitchCamera className={cn("h-6 w-6 text-white", isScreenSharing && "opacity-50")} />
+          <SwitchCamera className={cn('h-6 w-6 text-white', isScreenSharing && 'opacity-50')} />
         </button>
-        
-        {/* Screen share button */}
+
         <button
-          onClick={toggleScreenShare}
+          onClick={() => void toggleScreenShare()}
+          aria-label={isScreenSharing ? 'Ekran ulashishni to‘xtatish' : 'Ekranni ulashish'}
           className={cn(
-            "h-12 w-12 rounded-full flex items-center justify-center",
-            isScreenSharing ? "bg-primary" : "bg-white/20"
+            'h-12 w-12 rounded-full flex items-center justify-center',
+            isScreenSharing ? 'bg-primary' : 'bg-white/20',
           )}
         >
           {isScreenSharing ? (
@@ -713,19 +778,28 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
             <Monitor className="h-6 w-6 text-white" />
           )}
         </button>
-        
+
         <button
           onClick={() => setShowComments(!showComments)}
+          aria-label="Izohlarni ko‘rsatish"
           className={cn(
-            "h-12 w-12 rounded-full flex items-center justify-center",
-            showComments ? "bg-white/20" : "bg-white/10"
+            'h-12 w-12 rounded-full flex items-center justify-center',
+            showComments ? 'bg-white/20' : 'bg-white/10',
           )}
         >
           <MessageCircle className="h-6 w-6 text-white" />
         </button>
       </div>
 
-      {/* Animation styles */}
+      <button
+        type="button"
+        onClick={handleClose}
+        aria-label="Yopish"
+        className="absolute right-4 top-4 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white transition hover:bg-black/60"
+      >
+        <X className="h-5 w-5" />
+      </button>
+
       <style>{`
         @keyframes float-up {
           0% {
@@ -744,9 +818,6 @@ export function LiveStreamBroadcast({ onClose, initialTitle }: LiveStreamBroadca
     </div>
   );
 
-  // Use portal for true fullscreen overlay - renders outside normal DOM hierarchy
-  return createPortal(
-    isLive ? liveContent : preLiveContent,
-    document.body
-  );
+  // Faqat efir vaqtida to'liq ekran qatlami ishlatiladi.
+  return isLive ? createPortal(liveContent, document.body) : setupContent;
 }
