@@ -487,6 +487,55 @@
   -webkit-user-drag: none;
 }
 
+/* ===== Chat skrolli: silliq, sakramaydigan ===== */
+
+/* Chat lentasi (xabarlar oqimi va chatlar ro'yxati) skroll konteynerlari.
+   MUAMMO: skroll og'ir va "sakrab" ketardi. Uchta sabab bor edi:
+     1. konteyner kompozitor qatlamida emas edi - har bir wheel hodisasida
+        butun ro'yxat qayta chizilardi (glass/backdrop-blur bilan juda qimmat);
+     2. brauzerning scroll-anchoring media yuklanganda skroll pozitsiyasini
+        "tuzatib" turardi - shundan sakrash paydo bo'lardi;
+     3. lenta oxiriga yetganda skroll sahifa orqasidagi konteynerga o'tib ketardi.
+   Quyidagi qoidalar uchchalasini ham yopadi. */
+.chat-shell [class*="overflow-y-auto"],
+.chat-shell [class*="overflow-y-scroll"],
+.chat-shell [data-radix-scroll-area-viewport] {
+  /* Skroll faqat shu konteyner ichida qoladi */
+  overscroll-behavior: contain;
+  /* iOS/Safari inersiyali silliq skroll */
+  -webkit-overflow-scrolling: touch;
+  /* Programmatik scrollTo bilan urishmasligi uchun smooth EMAS */
+  scroll-behavior: auto;
+  /* Repaint konteyner tashqarisiga chiqmaydi */
+  contain: paint;
+  /* Doimiy kompozitor qatlami - skrollda repaint o'rniga siljish */
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* Rasm/video/iframe yuklanganda "langar" bo'lib qolmasin: aks holda brauzer
+   skrollni ular ortidan tortadi va lenta sakraydi. */
+.chat-shell img,
+.chat-shell video,
+.chat-shell iframe {
+  overflow-anchor: none;
+}
+
+/* Har bir xabar qatori mustaqil layout/paint birligi: bitta bubble o'zgarsa
+   butun lenta emas, faqat o'zi qayta hisoblanadi. */
+.chat-shell [data-message-row] {
+  contain: layout paint;
+}
+
+/* Skroll davom etayotganda og'ir blur effektlari qadamni yo'qotadi.
+   Harakatni kamaytirish yoqilgan qurilmalarda umuman soddalashtiramiz. */
+@media (prefers-reduced-motion: reduce) {
+  .chat-shell .glass,
+  .chat-shell .glass-strong {
+    backdrop-filter: none;
+  }
+}
+
 @keyframes fadeUp {
   from {
     opacity: 0;
