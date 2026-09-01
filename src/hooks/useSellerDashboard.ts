@@ -136,7 +136,7 @@ export function useSellerDashboard() {
     if (ordersData) {
       setOrders(ordersData.map(o => ({
         ...o,
-        buyer: o.buyer as Order['buyer'],
+        buyer: o.buyer as unknown as Order['buyer'],
         items: (o.items as OrderItem[]) || [],
       })));
     }

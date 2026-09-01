@@ -76,7 +76,7 @@ export function SwitchAccountDialog({ open, onOpenChange }: SwitchAccountDialogP
       return;
     }
 
-    toast({ title: 'Almashtirib bo’lmadi', description: result.error, variant: 'destructive' });
+    toast({ title: 'Almashtirib bo’lmadi', description: 'error' in result ? result.error : undefined, variant: 'destructive' });
   };
 
   const handleReauth = async (e: React.FormEvent) => {

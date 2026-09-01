@@ -80,7 +80,7 @@ export type UrlRejectReason =
   | 'no_host';
 
 export type NormalizedUrl =
-  | { ok: true; url: string; host: string; punycode: boolean }
+  | { ok: true; url: string; host: string; punycode: boolean; reason?: undefined }
   | { ok: false; reason: UrlRejectReason };
 
 export function isPrivateHost(hostname: string): boolean {

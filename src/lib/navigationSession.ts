@@ -90,7 +90,7 @@ export function readNavigationSession(): NavigationSession | null {
     return {
       version: 1,
       updatedAt: Number(parsed.updatedAt),
-      active: Boolean(parsed.active) && parsed.mode !== 'transit',
+      active: Boolean(parsed.active) && (parsed.mode as string) !== 'transit',
       following: parsed.following !== false,
       mode: parsed.mode as RouteMode,
       routeIndex: Math.max(

@@ -69,7 +69,7 @@ export function usePostCollaborators(postId: string | null | undefined) {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setCollaborators((data ?? []) as PostCollaborator[]);
+      setCollaborators((data ?? []) as unknown as PostCollaborator[]);
     } catch (error) {
       console.error('Hammualliflarni yuklash xatosi:', error);
       setCollaborators([]);

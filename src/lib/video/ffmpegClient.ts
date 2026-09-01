@@ -121,7 +121,7 @@ export async function muxAudioFrom(
   await ffmpeg.deleteFile?.(audioName);
   await ffmpeg.deleteFile?.(outputName);
 
-  return new Blob([bytes], { type: 'video/mp4' });
+  return new Blob([bytes as BlobPart], { type: 'video/mp4' });
 }
 
 /** Videodan qopqoq kadr oladi (thumbnail). */
@@ -140,5 +140,5 @@ export async function extractPoster(video: Blob, atSeconds = 0.1): Promise<Blob>
   await ffmpeg.deleteFile?.(inputName);
   await ffmpeg.deleteFile?.(outputName);
 
-  return new Blob([bytes], { type: 'image/jpeg' });
+  return new Blob([bytes as BlobPart], { type: 'image/jpeg' });
 }
