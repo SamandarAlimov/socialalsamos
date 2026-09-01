@@ -39,6 +39,22 @@ function statusLabel(status: PostCollaborator['status']) {
   return 'Rad etilgan';
 }
 
+/** Xatoning haqiqiy matnini chiqaradi — sabab yashirilmasin. */
+function errorText(error: unknown): string | null {
+  if (!error) return null;
+  if (typeof error === 'string') return error.trim() || null;
+
+  if (typeof error === 'object') {
+    const record = error as Record<string, unknown>;
+    for (const key of ['message', 'details', 'hint', 'error_description']) {
+      const value = record[key];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+  }
+
+  return null;
+}
+
 function CollaboratorAvatar({ profile }: { profile: PostCollaboratorProfile | null }) {
   const label = profile?.display_name || profile?.username || '?';
   return (
@@ -101,7 +117,12 @@ export function PostCollaboratorsCard({
       toast.success(success);
     } catch (error) {
       console.error('Hammualliflik amali xatosi:', error);
-      toast.error('Hammualliflik amalini bajarib bo‘lmadi');
+      const reason = errorText(error);
+      toast.error(
+        reason
+          ? 'Hammualliflik amali bajarilmadi: ' + reason
+          : 'Hammualliflik amalini bajarib bo\u2018lmadi',
+      );
     } finally {
       setBusyId(null);
     }

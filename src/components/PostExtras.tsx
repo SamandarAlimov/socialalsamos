@@ -1,4 +1,5 @@
-import { Download, FileArchive, FileText, Music2 } from 'lucide-react';
+import { Download, FileArchive, FileText, MapPin, Music2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { formatBytes, mediaKindLabel } from '@/lib/postComposer';
 import { formatDuration } from '@/lib/mediaMetadata';
@@ -11,7 +12,7 @@ import { PostMusicCard } from '@/components/PostMusicCard';
 import { PostMediaCarousel } from '@/components/PostMediaCarousel';
 import { MediaStickerOverlay } from '@/components/stickers/MediaStickerOverlay';
 import type { WithEditState } from '@/lib/stickerPlacements';
-import type { LegacyPostLocation } from '@/lib/postMarkers';
+import type { LegacyPostLocation, PostMusic } from '@/lib/postMarkers';
 
 interface PostExtrasProps {
   postId: string;
@@ -28,6 +29,10 @@ interface PostExtrasProps {
   legacyMediaType?: string | null;
   /** Production structured schema hali deploy bo'lmaganda content markeridan tiklanadi. */
   legacyLocation?: LegacyPostLocation | null;
+  /** Koordinatasiz eski joylashuv (masalan "Joriy joylashuv") — nom bilan karta chiziladi. */
+  legacyLocationLabel?: string | null;
+  /** `[MUSIC]{...}` markeridan olingan musiqa — `post_music` bo‘lmasa ishlatiladi. */
+  legacyMusic?: PostMusic | null;
   className?: string;
 }
 
@@ -84,12 +89,34 @@ function AudioCard({ item }: { item: PostMediaItem }) {
   );
 }
 
+/** Koordinatasi yo‘q eski joylashuv uchun karta (xarita rasmi bo‘lmaydi). */
+function PlaceLabelCard({ label }: { label: string }) {
+  return (
+    <Link
+      to={'/map?label=' + encodeURIComponent(label)}
+      onClick={(event) => event.stopPropagation()}
+      className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/30 px-3 py-2.5 transition hover:border-border"
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <MapPin className="h-4 w-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium">{label}</span>
+        <span className="block truncate text-xs text-muted-foreground">
+          Xaritada ochish
+        </span>
+      </span>
+    </Link>
+  );
+}
+
 /**
  * Lentadagi post ostiga qo‘shiladigan strukturali kontent bloki:
- * fayllar galereyasi (har qanday tur), stikerlar, so‘rovnoma va joylashuv.
+ * fayllar galereyasi (har qanday tur), stikerlar, musiqa, so‘rovnoma va joylashuv.
  *
  * Bu blok postning matnidan mustaqil — shuning uchun eski postlar ham
- * buzilmaydi: `post_media` bo‘sh bo‘lsa eski `media_urls` ishlatiladi.
+ * buzilmaydi: `post_media` bo‘sh bo‘lsa eski `media_urls` ishlatiladi,
+ * `post_music` bo‘sh bo‘lsa content markeridagi musiqa ko‘rsatiladi.
  */
 export function PostExtras({
   postId,
@@ -98,6 +125,8 @@ export function PostExtras({
   legacyMediaUrls,
   legacyMediaType,
   legacyLocation,
+  legacyLocationLabel,
+  legacyMusic,
   className,
 }: PostExtrasProps) {
   const { media } = usePostMedia(postId);
@@ -129,6 +158,21 @@ export function PostExtras({
     : null;
 
   const displayLocation = location ?? fallbackLocation;
+  const labelOnlyLocation =
+    !displayLocation && legacyLocationLabel ? legacyLocationLabel : null;
+
+  // Strukturali musiqa ustun; bo‘lmasa content markeridagi musiqa chiziladi.
+  const structuredMusic: PostMusic | null =
+    music?.track && music.playback_url
+      ? {
+          title: music.track.title,
+          artist: music.track.artist,
+          coverUrl: music.track.cover_url,
+          audioUrl: music.playback_url,
+          durationSeconds: music.track.duration_seconds,
+        }
+      : null;
+  const displayMusic = structuredMusic ?? legacyMusic ?? null;
 
   const visuals = media.filter((item) => item.kind === 'image' || item.kind === 'video');
   const others = media.filter((item) => item.kind !== 'image' && item.kind !== 'video');
@@ -140,7 +184,8 @@ export function PostExtras({
     media.length > 0 ||
     legacy.length > 0 ||
     Boolean(displayLocation) ||
-    Boolean(music) ||
+    Boolean(labelOnlyLocation) ||
+    Boolean(displayMusic) ||
     Boolean(hasPoll);
   if (!hasAnything) return null;
 
@@ -208,19 +253,13 @@ export function PostExtras({
         ),
       )}
 
-      {/* Strukturali post musiqasi */}
-      {music?.track && music.playback_url && (
+      {/* Post musiqasi: structured sxema yoki content markeri */}
+      {displayMusic && (
         <PostMusicCard
-          music={{
-            title: music.track.title,
-            artist: music.track.artist,
-            coverUrl: music.track.cover_url,
-            audioUrl: music.playback_url,
-            durationSeconds: music.track.duration_seconds,
-          }}
-          startSeconds={music.start_seconds}
-          endSeconds={music.end_seconds}
-          volume={music.volume}
+          music={displayMusic}
+          startSeconds={structuredMusic ? music?.start_seconds : 0}
+          endSeconds={structuredMusic ? music?.end_seconds : null}
+          volume={structuredMusic ? music?.volume : 1}
         />
       )}
 
@@ -234,6 +273,9 @@ export function PostExtras({
           isOwner={Boolean(location) && isOwner}
         />
       )}
+
+      {/* Koordinatasi yo‘q eski joylashuv */}
+      {labelOnlyLocation && <PlaceLabelCard label={labelOnlyLocation} />}
     </div>
   );
 }
