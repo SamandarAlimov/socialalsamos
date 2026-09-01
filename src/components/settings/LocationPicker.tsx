@@ -5,9 +5,11 @@ import { Loader2, LocateFixed, MapPin, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
-const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org';
-const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-/** Toshkent - standart markaz */
+const NOMINATIM_HOST = 'nominatim.openstreetmap.org';
+const NOMINATIM_BASE = 'https://' + NOMINATIM_HOST;
+const TILE_HOST = 'tile.openstreetmap.org';
+const TILE_URL = 'https://' + TILE_HOST + '/{z}/{x}/{y}.png';
+/** Toshkent — standart markaz */
 const DEFAULT_CENTER: [number, number] = [41.311081, 69.240562];
 
 interface GeoResult {
@@ -152,10 +154,10 @@ export function LocationPicker({ value, coords, onChange, onClear }: LocationPic
       const data: GeoResult[] = await res.json();
       setResults(Array.isArray(data) ? data : []);
       if (!Array.isArray(data) || data.length === 0) {
-        setError('Hech narsa topilmadi. Boshqacha yozib ko\u2019ring.');
+        setError('Hech narsa topilmadi. Boshqacha yozib ko’ring.');
       }
     } catch {
-      setError('Qidiruvda xatolik yuz berdi. Keyinroq urinib ko\u2019ring.');
+      setError('Qidiruvda xatolik yuz berdi. Keyinroq urinib ko’ring.');
     } finally {
       setSearching(false);
     }
@@ -172,7 +174,7 @@ export function LocationPicker({ value, coords, onChange, onClear }: LocationPic
 
   const handleUseMyLocation = () => {
     if (!navigator.geolocation) {
-      setError('Brauzeringiz joylashuvni aniqlashni qo\u2019llab-quvvatlamaydi.');
+      setError('Brauzeringiz joylashuvni aniqlashni qo’llab-quvvatlamaydi.');
       return;
     }
     setResolving(true);
@@ -244,7 +246,7 @@ export function LocationPicker({ value, coords, onChange, onClear }: LocationPic
         <div className="flex items-center gap-2 min-w-0">
           <MapPin className="h-4 w-4 text-primary shrink-0" />
           <p className="text-sm truncate">
-            {resolving ? 'Manzil aniqlanmoqda\u2026' : value || 'Manzil tanlanmagan'}
+            {resolving ? 'Manzil aniqlanmoqda…' : value || 'Manzil tanlanmagan'}
           </p>
         </div>
         {value && onClear && (

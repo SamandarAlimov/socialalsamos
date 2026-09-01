@@ -95,26 +95,26 @@ type SectionItem = {
 };
 
 const COUNTRIES: Array<{ value: string; flag: string; label: string }> = [
-  { value: 'Uzbekistan', flag: '\uD83C\uDDFA\uD83C\uDDFF', label: "O'zbekiston" },
-  { value: 'Russia', flag: '\uD83C\uDDF7\uD83C\uDDFA', label: 'Rossiya' },
-  { value: 'Kazakhstan', flag: '\uD83C\uDDF0\uD83C\uDDFF', label: "Qozog'iston" },
-  { value: 'Kyrgyzstan', flag: '\uD83C\uDDF0\uD83C\uDDEC', label: "Qirg'iziston" },
-  { value: 'Tajikistan', flag: '\uD83C\uDDF9\uD83C\uDDEF', label: 'Tojikiston' },
-  { value: 'Turkmenistan', flag: '\uD83C\uDDF9\uD83C\uDDF2', label: 'Turkmaniston' },
-  { value: 'Turkey', flag: '\uD83C\uDDF9\uD83C\uDDF7', label: 'Turkiya' },
-  { value: 'United States', flag: '\uD83C\uDDFA\uD83C\uDDF8', label: 'AQSh' },
-  { value: 'United Kingdom', flag: '\uD83C\uDDEC\uD83C\uDDE7', label: 'Buyuk Britaniya' },
-  { value: 'Germany', flag: '\uD83C\uDDE9\uD83C\uDDEA', label: 'Germaniya' },
-  { value: 'France', flag: '\uD83C\uDDEB\uD83C\uDDF7', label: 'Fransiya' },
-  { value: 'Italy', flag: '\uD83C\uDDEE\uD83C\uDDF9', label: 'Italiya' },
-  { value: 'Spain', flag: '\uD83C\uDDEA\uD83C\uDDF8', label: 'Ispaniya' },
-  { value: 'South Korea', flag: '\uD83C\uDDF0\uD83C\uDDF7', label: 'Janubiy Koreya' },
-  { value: 'Japan', flag: '\uD83C\uDDEF\uD83C\uDDF5', label: 'Yaponiya' },
-  { value: 'China', flag: '\uD83C\uDDE8\uD83C\uDDF3', label: 'Xitoy' },
-  { value: 'India', flag: '\uD83C\uDDEE\uD83C\uDDF3', label: 'Hindiston' },
-  { value: 'UAE', flag: '\uD83C\uDDE6\uD83C\uDDEA', label: 'BAA' },
-  { value: 'Saudi Arabia', flag: '\uD83C\uDDF8\uD83C\uDDE6', label: 'Saudiya Arabistoni' },
-  { value: 'Other', flag: '\uD83C\uDF0D', label: 'Boshqa' },
+  { value: 'Uzbekistan', flag: '🇺🇿', label: "O'zbekiston" },
+  { value: 'Russia', flag: '🇷🇺', label: 'Rossiya' },
+  { value: 'Kazakhstan', flag: '🇰🇿', label: "Qozog'iston" },
+  { value: 'Kyrgyzstan', flag: '🇰🇬', label: "Qirg'iziston" },
+  { value: 'Tajikistan', flag: '🇹🇯', label: 'Tojikiston' },
+  { value: 'Turkmenistan', flag: '🇹🇲', label: 'Turkmaniston' },
+  { value: 'Turkey', flag: '🇹🇷', label: 'Turkiya' },
+  { value: 'United States', flag: '🇺🇸', label: 'AQSh' },
+  { value: 'United Kingdom', flag: '🇬🇧', label: 'Buyuk Britaniya' },
+  { value: 'Germany', flag: '🇩🇪', label: 'Germaniya' },
+  { value: 'France', flag: '🇫🇷', label: 'Fransiya' },
+  { value: 'Italy', flag: '🇮🇹', label: 'Italiya' },
+  { value: 'Spain', flag: '🇪🇸', label: 'Ispaniya' },
+  { value: 'South Korea', flag: '🇰🇷', label: 'Janubiy Koreya' },
+  { value: 'Japan', flag: '🇯🇵', label: 'Yaponiya' },
+  { value: 'China', flag: '🇨🇳', label: 'Xitoy' },
+  { value: 'India', flag: '🇮🇳', label: 'Hindiston' },
+  { value: 'UAE', flag: '🇦🇪', label: 'BAA' },
+  { value: 'Saudi Arabia', flag: '🇸🇦', label: 'Saudiya Arabistoni' },
+  { value: 'Other', flag: '🌍', label: 'Boshqa' },
 ];
 
 const SECTION_GROUPS: Array<{ title: string; items: SectionItem[] }> = [
@@ -123,7 +123,7 @@ const SECTION_GROUPS: Array<{ title: string; items: SectionItem[] }> = [
     items: [
       {
         value: 'account',
-        label: 'Profil ma\u2019lumotlari',
+        label: 'Profil ma’lumotlari',
         description: 'Ism, username, bio, manzil va davlat',
         icon: User,
         tint: 'text-rose-500 bg-rose-500/10',
@@ -137,7 +137,7 @@ const SECTION_GROUPS: Array<{ title: string; items: SectionItem[] }> = [
       },
       {
         value: 'payment',
-        label: 'To\u2019lov va hamyon',
+        label: 'To’lov va hamyon',
         description: 'Balans va tranzaksiyalar tarixi',
         icon: Wallet,
         tint: 'text-green-600 bg-green-600/10',
@@ -151,14 +151,14 @@ const SECTION_GROUPS: Array<{ title: string; items: SectionItem[] }> = [
       {
         value: 'privacy',
         label: 'Maxfiylik',
-        description: 'Oxirgi faollik, qo\u2019ng\u2019iroqlar, guruhlar',
+        description: 'Oxirgi faollik, qo’ng’iroqlar, guruhlar',
         icon: Shield,
         tint: 'text-amber-500 bg-amber-500/10',
       },
       {
         value: 'devices',
         label: 'Qurilmalar va seanslar',
-        description: 'Faol qurilmalarni ko\u2019rish va chiqarish',
+        description: 'Faol qurilmalarni ko’rish va chiqarish',
         icon: Smartphone,
         tint: 'text-sky-500 bg-sky-500/10',
       },
@@ -177,12 +177,12 @@ const SECTION_GROUPS: Array<{ title: string; items: SectionItem[] }> = [
     ],
   },
   {
-    title: 'Ko\u2019rinish va til',
+    title: 'Ko’rinish va til',
     items: [
       {
         value: 'appearance',
         label: 'Mavzu va til',
-        description: 'Yorug\u2019/tungi rejim va interfeys tili',
+        description: 'Yorug’/tungi rejim va interfeys tili',
         icon: Palette,
         tint: 'text-fuchsia-500 bg-fuchsia-500/10',
       },
@@ -221,7 +221,7 @@ const SECTION_GROUPS: Array<{ title: string; items: SectionItem[] }> = [
       {
         value: 'about',
         label: 'Ilova haqida',
-        description: 'Versiya, huquqiy hujjatlar va hisobni o\u2019chirish',
+        description: 'Versiya, huquqiy hujjatlar va hisobni o’chirish',
         icon: Info,
         tint: 'text-slate-500 bg-slate-500/10',
       },
@@ -258,7 +258,7 @@ function PushNotificationSettings() {
     if (granted) {
       toast({
         title: 'Push bildirishnomalar yoqildi',
-        description: 'Ilova fonda bo\u2019lganda ham xabar olasiz.',
+        description: 'Ilova fonda bo’lganda ham xabar olasiz.',
       });
     } else {
       toast({
@@ -278,7 +278,7 @@ function PushNotificationSettings() {
           </div>
           <div>
             <p className="font-medium text-sm">Push bildirishnomalar</p>
-            <p className="text-xs text-muted-foreground">Bu brauzer qo\u2019llab-quvvatlamaydi</p>
+            <p className="text-xs text-muted-foreground">Bu brauzer qo’llab-quvvatlamaydi</p>
           </div>
         </div>
       </div>
@@ -296,9 +296,9 @@ function PushNotificationSettings() {
             <p className="font-medium text-sm">Brauzer bildirishnomalari</p>
             <p className="text-xs text-muted-foreground">
               {permission === 'granted'
-                ? 'Yoqilgan - ilova fonda bo\u2019lganda xabar olasiz'
+                ? 'Yoqilgan — ilova fonda bo’lganda xabar olasiz'
                 : permission === 'denied'
-                  ? 'Bloklangan - brauzer sozlamalaridan yoqing'
+                  ? 'Bloklangan — brauzer sozlamalaridan yoqing'
                   : 'Like, izoh va obunalar haqida xabar olish uchun yoqing'}
             </p>
           </div>
@@ -407,12 +407,12 @@ export default function SettingsPage() {
 
       toast({
         title: 'Profil yangilandi',
-        description: 'Ma\u2019lumotlaringiz muvaffaqiyatli saqlandi.',
+        description: 'Ma’lumotlaringiz muvaffaqiyatli saqlandi.',
       });
     } catch (error: any) {
       toast({
         title: 'Xatolik',
-        description: error.message || 'Profilni yangilab bo\u2019lmadi',
+        description: error.message || 'Profilni yangilab bo’lmadi',
         variant: 'destructive',
       });
     } finally {
@@ -431,7 +431,7 @@ export default function SettingsPage() {
     } catch {
       toast({
         title: 'Xatolik',
-        description: 'Avatarni yuklab bo\u2019lmadi',
+        description: 'Avatarni yuklab bo’lmadi',
         variant: 'destructive',
       });
       return;
@@ -570,7 +570,7 @@ export default function SettingsPage() {
               <Palette className="h-10 w-10 text-muted-foreground mb-4" />
               <p className="font-semibold">Sozlamani tanlang</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Chap paneldan sozlamalar bo\u2019limini tanlang
+                Chap paneldan sozlamalar bo’limini tanlang
               </p>
             </div>
           )}
@@ -578,7 +578,7 @@ export default function SettingsPage() {
           {/* Profil */}
           <TabsContent value="account" className="space-y-6">
             <div className="bg-card rounded-xl border border-border p-6">
-              <h2 className="text-lg font-semibold mb-6">Shaxsiy ma\u2019lumotlar</h2>
+              <h2 className="text-lg font-semibold mb-6">Shaxsiy ma’lumotlar</h2>
 
               <div className="flex items-center gap-6 mb-6">
                 <label className="relative cursor-pointer group">
@@ -595,7 +595,7 @@ export default function SettingsPage() {
                     </AvatarFallback>
                   </Avatar>
                   <div className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                    <span className="text-white text-xs">O\u2019zgartirish</span>
+                    <span className="text-white text-xs">O’zgartirish</span>
                   </div>
                 </label>
                 <div>
@@ -607,7 +607,7 @@ export default function SettingsPage() {
               <div className="grid gap-4">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="display_name">Ko\u2019rsatiladigan ism</Label>
+                    <Label htmlFor="display_name">Ko’rsatiladigan ism</Label>
                     <Input
                       id="display_name"
                       value={profile.display_name || ''}
@@ -636,7 +636,7 @@ export default function SettingsPage() {
                     onChange={(e) => setProfile((prev) => ({ ...prev, bio: e.target.value }))}
                     className="mt-1.5 resize-none"
                     rows={3}
-                    placeholder="O\u2019zingiz haqingizda qisqacha..."
+                    placeholder="O’zingiz haqingizda qisqacha..."
                   />
                 </div>
 
@@ -672,7 +672,7 @@ export default function SettingsPage() {
                     </Select>
                   </div>
                   <div>
-                    <Label htmlFor="birth_date">Tug\u2019ilgan sana</Label>
+                    <Label htmlFor="birth_date">Tug’ilgan sana</Label>
                     <Input
                       id="birth_date"
                       type="date"
@@ -697,10 +697,10 @@ export default function SettingsPage() {
               </Button>
             </div>
 
-            {/* Manzil - real xarita */}
+            {/* Manzil — real xarita */}
             <SectionCard
               title="Manzil"
-              description="Manzilingizni xaritadan tanlang - u profilingizda ko\u2019rinadi"
+              description="Manzilingizni xaritadan tanlang — u profilingizda ko’rinadi"
             >
               <div className="p-4 md:p-6">
                 <LocationPicker
@@ -757,7 +757,7 @@ export default function SettingsPage() {
                     <div>
                       <p className="font-medium text-sm">Oxirgi faollik</p>
                       <p className="text-xs text-muted-foreground">
-                        Kim onlayn vaqtingizni ko\u2019ra oladi
+                        Kim onlayn vaqtingizni ko’ra oladi
                       </p>
                     </div>
                   </div>
@@ -784,9 +784,9 @@ export default function SettingsPage() {
                       <CheckCircle2 className="h-5 w-5 text-muted-foreground" />
                     </div>
                     <div>
-                      <p className="font-medium text-sm">O\u2019qilgani haqida xabar</p>
+                      <p className="font-medium text-sm">O’qilgani haqida xabar</p>
                       <p className="text-xs text-muted-foreground">
-                        Xabarni o\u2019qiganingiz boshqalarga ko\u2019rinadi
+                        Xabarni o’qiganingiz boshqalarga ko’rinadi
                       </p>
                     </div>
                   </div>
@@ -802,9 +802,9 @@ export default function SettingsPage() {
                       <Wifi className="h-5 w-5 text-muted-foreground" />
                     </div>
                     <div>
-                      <p className="font-medium text-sm">Qo\u2019ng\u2019iroqlar</p>
+                      <p className="font-medium text-sm">Qo’ng’iroqlar</p>
                       <p className="text-xs text-muted-foreground">
-                        Kim sizga qo\u2019ng\u2019iroq qila oladi
+                        Kim sizga qo’ng’iroq qila oladi
                       </p>
                     </div>
                   </div>
@@ -831,9 +831,9 @@ export default function SettingsPage() {
                       <User className="h-5 w-5 text-muted-foreground" />
                     </div>
                     <div>
-                      <p className="font-medium text-sm">Guruhga qo\u2019shish</p>
+                      <p className="font-medium text-sm">Guruhga qo’shish</p>
                       <p className="text-xs text-muted-foreground">
-                        Kim sizni guruhlarga qo\u2019sha oladi
+                        Kim sizni guruhlarga qo’sha oladi
                       </p>
                     </div>
                   </div>
@@ -862,7 +862,7 @@ export default function SettingsPage() {
                     <div>
                       <p className="font-medium text-sm">Ikki bosqichli himoya</p>
                       <p className="text-xs text-muted-foreground">
-                        Hisobingiz uchun qo\u2019shimcha xavfsizlik
+                        Hisobingiz uchun qo’shimcha xavfsizlik
                       </p>
                     </div>
                   </div>
@@ -899,7 +899,7 @@ export default function SettingsPage() {
                     const DeviceIcon = getDeviceIcon(session.device_type);
                     const meta = [session.os_name, session.browser_name, session.ip_address]
                       .filter(Boolean)
-                      .join(' \u2022 ');
+                      .join(' • ');
                     return (
                       <div key={session.id} className="p-4 flex items-center justify-between gap-4">
                         <div className="flex items-center gap-4 min-w-0">
@@ -909,7 +909,7 @@ export default function SettingsPage() {
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
                               <p className="font-medium text-sm truncate">
-                                {session.device_name || session.browser_name || 'Noma\u2019lum qurilma'}
+                                {session.device_name || session.browser_name || 'Noma’lum qurilma'}
                               </p>
                               {session.is_current && (
                                 <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full shrink-0">
@@ -918,7 +918,7 @@ export default function SettingsPage() {
                               )}
                             </div>
                             <p className="text-xs text-muted-foreground truncate">
-                              {meta || 'Noma\u2019lum IP'}
+                              {meta || 'Noma’lum IP'}
                             </p>
                             <p className="text-xs text-muted-foreground">
                               Oxirgi faollik:{' '}
@@ -926,7 +926,7 @@ export default function SettingsPage() {
                                 ? formatDistanceToNow(new Date(session.last_active_at), {
                                     addSuffix: true,
                                   })
-                                : 'Noma\u2019lum'}
+                                : 'Noma’lum'}
                             </p>
                           </div>
                         </div>
@@ -966,7 +966,7 @@ export default function SettingsPage() {
                     </div>
                     <div>
                       <p className="font-medium text-sm">Ovozli xabarlar</p>
-                      <p className="text-xs text-muted-foreground">Ko\u2019ringanda avtomatik ijro</p>
+                      <p className="text-xs text-muted-foreground">Ko’ringanda avtomatik ijro</p>
                     </div>
                   </div>
                   <Switch
@@ -984,7 +984,7 @@ export default function SettingsPage() {
                     </div>
                     <div>
                       <p className="font-medium text-sm">Video xabarlar</p>
-                      <p className="text-xs text-muted-foreground">Ko\u2019ringanda avtomatik ijro</p>
+                      <p className="text-xs text-muted-foreground">Ko’ringanda avtomatik ijro</p>
                     </div>
                   </div>
                   <Switch
@@ -1041,7 +1041,7 @@ export default function SettingsPage() {
                     </div>
                     <div>
                       <p className="font-medium text-sm">Yangi obunachilar</p>
-                      <p className="text-xs text-muted-foreground">Kimdir sizga obuna bo\u2019lganda</p>
+                      <p className="text-xs text-muted-foreground">Kimdir sizga obuna bo’lganda</p>
                     </div>
                   </div>
                   <Switch
@@ -1092,9 +1092,9 @@ export default function SettingsPage() {
                       <Eye className="h-5 w-5 text-muted-foreground" />
                     </div>
                     <div>
-                      <p className="font-medium text-sm">Xabar matnini ko\u2019rsatish</p>
+                      <p className="font-medium text-sm">Xabar matnini ko’rsatish</p>
                       <p className="text-xs text-muted-foreground">
-                        Bildirishnomada xabar mazmuni ko\u2019rinadi
+                        Bildirishnomada xabar mazmuni ko’rinadi
                       </p>
                     </div>
                   </div>
@@ -1109,7 +1109,7 @@ export default function SettingsPage() {
 
           {/* Mavzu va til */}
           <TabsContent value="appearance" className="space-y-6">
-            <SectionCard title="Mavzu" description="Interfeys ko\u2019rinishini tanlang">
+            <SectionCard title="Mavzu" description="Interfeys ko’rinishini tanlang">
               <div className="p-4 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
                   <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
@@ -1123,7 +1123,7 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <p className="font-medium text-sm">Rang rejimi</p>
-                    <p className="text-xs text-muted-foreground">Tizim, yorug\u2019 yoki tungi</p>
+                    <p className="text-xs text-muted-foreground">Tizim, yorug’ yoki tungi</p>
                   </div>
                 </div>
                 <Select value={theme} onValueChange={setTheme}>
@@ -1140,7 +1140,7 @@ export default function SettingsPage() {
                     <SelectItem value="light">
                       <div className="flex items-center gap-2">
                         <Sun className="h-4 w-4" />
-                        Yorug\u2019
+                        Yorug’
                       </div>
                     </SelectItem>
                     <SelectItem value="dark">
@@ -1163,7 +1163,7 @@ export default function SettingsPage() {
           <TabsContent value="chat-wallpaper" className="space-y-6">
             <SectionCard
               title="Chat foni"
-              description="Tayyor fonlardan tanlang yoki o\u2019z rasmingizni yuklang. Tanlov shu qurilmada saqlanadi."
+              description="Tayyor fonlardan tanlang yoki o’z rasmingizni yuklang. Tanlov shu qurilmada saqlanadi."
             >
               <div className="p-4 md:p-6">
                 <ChatWallpaperEditor />
@@ -1198,7 +1198,7 @@ export default function SettingsPage() {
                   </div>
                   <Button variant="outline" size="sm" onClick={() => navigate('/activity')}>
                     <Clock className="h-4 w-4 mr-2" />
-                    Ko\u2019rish
+                    Ko’rish
                   </Button>
                 </div>
               </div>
@@ -1210,19 +1210,19 @@ export default function SettingsPage() {
                   <Trash2 className="h-6 w-6 text-destructive" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-destructive">Hisobni o\u2019chirish</h3>
+                  <h3 className="font-semibold text-destructive">Hisobni o’chirish</h3>
                   <p className="text-sm text-muted-foreground">
-                    Hisobingiz va barcha ma\u2019lumotlaringiz butunlay o\u2019chiriladi
+                    Hisobingiz va barcha ma’lumotlaringiz butunlay o’chiriladi
                   </p>
                 </div>
               </div>
               <p className="text-sm text-muted-foreground mb-4">
-                Hisobni o\u2019chirgandan so\u2019ng uni tiklab bo\u2019lmaydi. Barcha postlar,
-                xabarlar va shaxsiy ma\u2019lumotlar butunlay o\u2019chib ketadi.
+                Hisobni o’chirgandan so’ng uni tiklab bo’lmaydi. Barcha postlar, xabarlar va shaxsiy
+                ma’lumotlar butunlay o’chib ketadi.
               </p>
               <Button variant="destructive" onClick={() => setDeleteAccountDialogOpen(true)}>
                 <Trash2 className="h-4 w-4 mr-2" />
-                Hisobimni o\u2019chirish
+                Hisobimni o’chirish
               </Button>
             </div>
           </TabsContent>
@@ -1232,9 +1232,7 @@ export default function SettingsPage() {
       {/* Footer */}
       <div className="text-center text-xs text-muted-foreground pt-8">
         <p>Alsamos Social v{APP_VERSION}</p>
-        <p className="mt-1">
-          \u00A9 {new Date().getFullYear()} Alsamos. Barcha huquqlar himoyalangan.
-        </p>
+        <p className="mt-1">© {new Date().getFullYear()} Alsamos. Barcha huquqlar himoyalangan.</p>
       </div>
 
       <VerificationRequestDialog
@@ -1246,10 +1244,10 @@ export default function SettingsPage() {
       <AlertDialog open={deleteAccountDialogOpen} onOpenChange={setDeleteAccountDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-destructive">Hisobni o\u2019chirish</AlertDialogTitle>
+            <AlertDialogTitle className="text-destructive">Hisobni o’chirish</AlertDialogTitle>
             <AlertDialogDescription>
-              Bu amalni ortga qaytarib bo\u2019lmaydi. Hisobingiz va barcha ma\u2019lumotlaringiz
-              serverlarimizdan butunlay o\u2019chiriladi.
+              Bu amalni ortga qaytarib bo’lmaydi. Hisobingiz va barcha ma’lumotlaringiz
+              serverlarimizdan butunlay o’chiriladi.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-2">
@@ -1263,7 +1261,9 @@ export default function SettingsPage() {
             />
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setDeleteConfirmText('')}>Bekor qilish</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => setDeleteConfirmText('')}>
+              Bekor qilish
+            </AlertDialogCancel>
             <Button
               variant="destructive"
               disabled={deleteConfirmText !== 'DELETE' || deletingAccount}
@@ -1280,15 +1280,15 @@ export default function SettingsPage() {
                   await supabase.auth.signOut();
 
                   toast({
-                    title: 'Hisob o\u2019chirildi',
-                    description: 'Hisobingiz butunlay o\u2019chirildi.',
+                    title: 'Hisob o’chirildi',
+                    description: 'Hisobingiz butunlay o’chirildi.',
                   });
 
                   navigate('/');
                 } catch (error: any) {
                   toast({
                     title: 'Xatolik',
-                    description: error.message || 'Hisobni o\u2019chirib bo\u2019lmadi',
+                    description: error.message || 'Hisobni o’chirib bo’lmadi',
                     variant: 'destructive',
                   });
                 } finally {
@@ -1303,7 +1303,7 @@ export default function SettingsPage() {
               ) : (
                 <Trash2 className="h-4 w-4 mr-2" />
               )}
-              O\u2019chirish
+              O’chirish
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
