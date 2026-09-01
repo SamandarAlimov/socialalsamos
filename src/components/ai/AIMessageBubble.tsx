@@ -11,11 +11,64 @@ import {
   Maximize2,
   Info,
   Paperclip,
+  Github,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { AIMessage } from './types';
 import { AIToolTimeline } from './AIToolTimeline';
+
+/* ------------------------------------------------------------------ *
+ * GitHub havolalari — ko'k chip + GitHub ikonkasi
+ * ------------------------------------------------------------------ */
+
+const GH_SPLIT_RE = /(https?:\/\/(?:www\.)?github\.com\/[A-Za-z0-9_.\-/#?=&%]+)/g;
+const isGithubUrl = (value: string) => /^https?:\/\/(?:www\.)?github\.com\//i.test(value);
+
+const shortGithubLabel = (href: string) =>
+  href
+    .replace(/^https?:\/\/(?:www\.)?github\.com\//i, '')
+    .replace(/\/$/, '')
+    .replace(/\.git$/i, '');
+
+function GithubChip({
+  href,
+  children,
+  onUserBubble,
+}: {
+  href: string;
+  children?: React.ReactNode;
+  onUserBubble?: boolean;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer noopener"
+      title={href}
+      className={cn(
+        'mx-0.5 inline-flex max-w-full items-center gap-1 rounded-md border px-1.5 py-0.5 align-middle text-[0.95em] font-medium no-underline transition-colors',
+        onUserBubble
+          ? 'border-white/40 bg-white/15 text-white hover:bg-white/25'
+          : 'border-blue-500/30 bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 dark:text-blue-400',
+      )}
+    >
+      <Github className="h-3 w-3 shrink-0" />
+      <span className="truncate">{children ?? shortGithubLabel(href)}</span>
+    </a>
+  );
+}
+
+/** Oddiy matn ichidagi github.com havolalarini chiplarga aylantiradi. */
+function linkifyGithub(text: string, onUserBubble?: boolean): React.ReactNode[] {
+  return text.split(GH_SPLIT_RE).map((part, index) =>
+    isGithubUrl(part) ? (
+      <GithubChip key={`gh-${index}`} href={part} onUserBubble={onUserBubble} />
+    ) : (
+      <span key={`t-${index}`}>{part}</span>
+    ),
+  );
+}
 
 function CodeBlock({ className, children }: { className?: string; children: React.ReactNode }) {
   const [copied, setCopied] = useState(false);
@@ -88,7 +141,9 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
     return (
       <div className="mb-4 flex flex-col items-end gap-1.5">
         <div className="max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-primary-foreground shadow-sm">
-          <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed">
+            {linkifyGithub(message.content, true)}
+          </p>
         </div>
         {message.attachments && message.attachments.length > 0 && (
           <div className="flex max-w-[85%] flex-wrap justify-end gap-1.5">
@@ -154,6 +209,39 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
                 remarkPlugins={[remarkGfm]}
                 components={{
                   pre: ({ children }) => <>{children}</>,
+                  // GitHub havolalari ko'k chip + ikonka bilan ko'rsatiladi.
+                  a: ({ href, children, ...props }: any) => {
+                    if (typeof href === 'string' && isGithubUrl(href)) {
+                      const label = String(
+                        Array.isArray(children) ? children.join('') : (children ?? ''),
+                      );
+                      const useLabel = label && !isGithubUrl(label) ? label : undefined;
+                      return (
+                        <GithubChip href={href}>{useLabel}</GithubChip>
+                      );
+                    }
+                    return (
+                      <a href={href} target="_blank" rel="noreferrer noopener" {...props}>
+                        {children}
+                      </a>
+                    );
+                  },
+                  // Havolaga aylanmagan oddiy matndagi github.com manzillari ham chip bo'ladi.
+                  p: ({ children }: any) => (
+                    <p>
+                      {Array.isArray(children)
+                        ? children.map((child: any, index: number) =>
+                            typeof child === 'string' ? (
+                              <span key={index}>{linkifyGithub(child)}</span>
+                            ) : (
+                              child
+                            ),
+                          )
+                        : typeof children === 'string'
+                          ? linkifyGithub(children)
+                          : children}
+                    </p>
+                  ),
                   code: ({ className, children, ...props }: any) => {
                     const isBlock = /language-/.test(className || '') || String(children).includes('\n');
                     if (!isBlock) {
@@ -188,14 +276,18 @@ export function AIMessageBubble({ message, isStreaming, onRegenerate }: Props) {
                 {message.sources.slice(0, 8).map((source, index) => (
                   <li key={`${source.url}-${index}`} className="flex gap-1.5 text-xs">
                     <span className="font-mono text-[10px] text-muted-foreground">[{index + 1}]</span>
-                    <a
-                      href={source.url}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="line-clamp-1 text-alsamos-orange hover:underline"
-                    >
-                      {source.title || source.url}
-                    </a>
+                    {isGithubUrl(source.url) ? (
+                      <GithubChip href={source.url}>{source.title || undefined}</GithubChip>
+                    ) : (
+                      <a
+                        href={source.url}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="line-clamp-1 text-alsamos-orange hover:underline"
+                      >
+                        {source.title || source.url}
+                      </a>
+                    )}
                   </li>
                 ))}
               </ol>

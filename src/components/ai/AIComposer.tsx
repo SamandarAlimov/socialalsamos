@@ -30,6 +30,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
 import { AIModelPicker } from './AIModelPicker';
 import { AIGithubDialog } from './AIGithubDialog';
+import { detectRepoLinks, githubRepoUrl } from '@/lib/ai/githubContext';
 import type { AIMode, ModelId, ToolGroupId } from '@/lib/ai/capabilities';
 
 const PLACEHOLDERS = [
@@ -114,6 +115,9 @@ export function AIComposer({
   const voiceBaseRef = useRef('');
 
   const webEnabled = toolGroups ? toolGroups.includes('web') : true;
+
+  // Kompozerdagi matndan GitHub repolarini aniqlaymiz — ko'k chip bo'lib ko'rinadi.
+  const repoLinks = useMemo(() => detectRepoLinks(value), [value]);
 
   const toggleWeb = () => {
     if (!toolGroups || !onToolGroupsChange) return;
@@ -203,8 +207,9 @@ export function AIComposer({
         open={githubOpen}
         onOpenChange={setGithubOpen}
         onPickRepo={(repo) => {
+          // To'liq havola qo'shamiz: chat ham shu havoladan repo'ni o'qiydi.
           const prefix = value.trim() ? `${value.trim()} ` : '';
-          onChange(`${prefix}${repo.fullName} repozitoriysi bo'yicha: `);
+          onChange(`${prefix}${githubRepoUrl(repo.fullName)} `);
           textareaRef.current?.focus();
         }}
       />
@@ -245,6 +250,25 @@ export function AIComposer({
             dragging ? 'border-alsamos-orange bg-alsamos-orange/5' : 'border-border/60',
           )}
         >
+          {/* Aniqlangan GitHub repolari — ko'k chip + GitHub ikonkasi */}
+          {repoLinks.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2 px-1">
+              {repoLinks.map((repo) => (
+                <a
+                  key={repo.fullName}
+                  href={repo.url}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  title={repo.url}
+                  className="flex max-w-full items-center gap-1.5 rounded-xl border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-[11px] font-medium text-blue-600 transition-colors hover:bg-blue-500/20 dark:text-blue-400"
+                >
+                  <Github className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{repo.fullName}</span>
+                </a>
+              ))}
+            </div>
+          )}
+
           {attachments.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-2 px-1">
               {attachments.map((file) => (
