@@ -8,7 +8,7 @@ import { useUserSettings } from '@/hooks/useUserSettings';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { supabase } from '@/integrations/supabase/client';
 import { uploadMedia } from '@/lib/mediaUpload';
-import { User, Bell, Shield, Palette, Globe, Smartphone, Key, Eye, Moon, Sun, LogOut, ChevronRight, Wifi, Trash2, Monitor, Laptop, CheckCircle2, XCircle, Loader2, Save, BadgeCheck, Wallet, Heart, MessageCircle, UserPlus, AtSign, Clock, BarChart3, HardDrive, Image as ImageIcon } from 'lucide-react';
+import { User, Bell, Shield, ShieldCheck, Palette, Globe, Smartphone, Eye, Moon, Sun, LogOut, ChevronRight, Wifi, Trash2, Monitor, Laptop, CheckCircle2, XCircle, Loader2, Save, BadgeCheck, Wallet, Heart, MessageCircle, UserPlus, AtSign, BarChart3, HardDrive, Image as ImageIcon, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -34,6 +34,7 @@ import { VerificationRequestDialog } from '@/components/profile/VerificationRequ
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { ChatWallpaperEditor } from '@/components/settings/ChatWallpaperEditor';
 import { MediaAutoDownloadEditor } from '@/components/settings/MediaAutoDownloadEditor';
+import { LocationPicker } from '@/components/settings/LocationPicker';
 import { PROFILE_PUBLIC_COLUMNS } from '@/lib/profileFields';
 
 interface Profile {
@@ -47,6 +48,30 @@ interface Profile {
   birth_date: string | null;
 }
 
+/** Bayroqlar haqiqiy belgi sifatida yoziladi. Ilgari ekranlangan matn chiqib qolgan edi. */
+const COUNTRIES: Array<{ value: string; label: string }> = [
+  { value: 'Uzbekistan', label: '🇺🇿 O\u2018zbekiston' },
+  { value: 'Russia', label: '🇷🇺 Rossiya' },
+  { value: 'Kazakhstan', label: '🇰🇿 Qozog\u2018iston' },
+  { value: 'Kyrgyzstan', label: '🇰🇬 Qirg\u2018iziston' },
+  { value: 'Tajikistan', label: '🇹🇯 Tojikiston' },
+  { value: 'Turkmenistan', label: '🇹🇲 Turkmaniston' },
+  { value: 'Turkey', label: '🇹🇷 Turkiya' },
+  { value: 'United States', label: '🇺🇸 AQSh' },
+  { value: 'United Kingdom', label: '🇬🇧 Buyuk Britaniya' },
+  { value: 'Germany', label: '🇩🇪 Germaniya' },
+  { value: 'France', label: '🇫🇷 Fransiya' },
+  { value: 'Italy', label: '🇮🇹 Italiya' },
+  { value: 'Spain', label: '🇪🇸 Ispaniya' },
+  { value: 'South Korea', label: '🇰🇷 Janubiy Koreya' },
+  { value: 'Japan', label: '🇯🇵 Yaponiya' },
+  { value: 'China', label: '🇨🇳 Xitoy' },
+  { value: 'India', label: '🇮🇳 Hindiston' },
+  { value: 'UAE', label: '🇦🇪 BAA' },
+  { value: 'Saudi Arabia', label: '🇸🇦 Saudiya Arabistoni' },
+  { value: 'Other', label: '🌍 Boshqa' },
+];
+
 // Push Notification Settings Component
 function PushNotificationSettings() {
   const { permission, supported, requestPermission } = useNotificationPermission();
@@ -56,13 +81,13 @@ function PushNotificationSettings() {
     const granted = await requestPermission();
     if (granted) {
       toast({
-        title: 'Push Notifications Enabled',
-        description: 'You will now receive notifications when the app is in background.',
+        title: 'Push bildirishnomalar yoqildi',
+        description: 'Ilova fonda bo\u2018lganda ham xabar olasiz.',
       });
     } else {
       toast({
-        title: 'Permission Denied',
-        description: 'Please enable notifications in your browser settings.',
+        title: 'Ruxsat berilmadi',
+        description: 'Brauzer sozlamalarida bildirishnomalarni yoqing.',
         variant: 'destructive',
       });
     }
@@ -76,8 +101,8 @@ function PushNotificationSettings() {
             <Bell className="h-5 w-5 text-muted-foreground" />
           </div>
           <div>
-            <p className="font-medium text-sm">Push Notifications</p>
-            <p className="text-xs text-muted-foreground">Not supported in this browser</p>
+            <p className="font-medium text-sm">Push bildirishnomalar</p>
+            <p className="text-xs text-muted-foreground">Bu brauzerda qo\u2018llab-quvvatlanmaydi</p>
           </div>
         </div>
       </div>
@@ -87,42 +112,53 @@ function PushNotificationSettings() {
   return (
     <div className="bg-card rounded-xl border border-border overflow-hidden">
       <div className="p-4 border-b border-border">
-        <h2 className="font-semibold">Push Notifications</h2>
+        <h2 className="font-semibold">Push bildirishnomalar</h2>
       </div>
-      <div className="p-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+      <div className="p-4 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
             <Bell className="h-5 w-5 text-muted-foreground" />
           </div>
-          <div>
-            <p className="font-medium text-sm">Browser Notifications</p>
+          <div className="min-w-0">
+            <p className="font-medium text-sm">Brauzer bildirishnomalari</p>
             <p className="text-xs text-muted-foreground">
               {permission === 'granted'
-                ? 'Enabled - You will receive alerts when app is in background'
+                ? 'Yoqilgan \u2014 ilova fonda bo\u2018lganda ham xabar keladi'
                 : permission === 'denied'
-                ? 'Blocked - Enable in browser settings'
-                : 'Enable to get notified of likes, comments, and follows'}
+                ? 'Bloklangan \u2014 brauzer sozlamalaridan yoqing'
+                : 'Yoqtirish, izoh va obunalar haqida xabar olish uchun yoqing'}
             </p>
           </div>
         </div>
         {permission === 'granted' ? (
-          <div className="flex items-center gap-2 text-green-500">
+          <div className="flex items-center gap-2 text-green-500 shrink-0">
             <CheckCircle2 className="h-5 w-5" />
-            <span className="text-sm font-medium">Enabled</span>
+            <span className="text-sm font-medium">Yoqilgan</span>
           </div>
         ) : permission === 'denied' ? (
-          <div className="flex items-center gap-2 text-destructive">
+          <div className="flex items-center gap-2 text-destructive shrink-0">
             <XCircle className="h-5 w-5" />
-            <span className="text-sm font-medium">Blocked</span>
+            <span className="text-sm font-medium">Bloklangan</span>
           </div>
         ) : (
-          <Button variant="outline" size="sm" onClick={handleEnablePush}>
-            Enable
+          <Button variant="outline" size="sm" className="shrink-0" onClick={handleEnablePush}>
+            Yoqish
           </Button>
         )}
       </div>
     </div>
   );
+}
+
+interface SectionItem {
+  value: string;
+  label: string;
+  description?: string;
+  icon: React.ElementType;
+  tint: string;
+  /** Boshqa sahifaga o'tadigan menyular. */
+  to?: string;
+  danger?: boolean;
 }
 
 export default function SettingsPage() {
@@ -131,7 +167,7 @@ export default function SettingsPage() {
   const { user, logout } = useAuth();
   const { settings, sessions, isLoading, updateSettings, logoutSession, logoutAllOtherSessions, refetch } = useUserSettings();
   const { toast } = useToast();
-  
+
   const [profile, setProfile] = useState<Profile>({
     display_name: '',
     username: '',
@@ -154,7 +190,7 @@ export default function SettingsPage() {
   useEffect(() => {
     const fetchProfile = async () => {
       if (!user) return;
-      
+
       const { data } = await supabase
         .from('profiles')
         .select(PROFILE_PUBLIC_COLUMNS)
@@ -206,13 +242,13 @@ export default function SettingsPage() {
       if (error) throw error;
 
       toast({
-        title: 'Profile Updated',
-        description: 'Your profile has been saved successfully.',
+        title: 'Profil saqlandi',
+        description: 'O\u2018zgarishlar muvaffaqiyatli saqlandi.',
       });
     } catch (error: any) {
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to update profile',
+        title: 'Xatolik',
+        description: error.message || 'Profilni saqlab bo\u2018lmadi',
         variant: 'destructive',
       });
     } finally {
@@ -229,17 +265,17 @@ export default function SettingsPage() {
       const uploaded = await uploadMedia(file, { type: 'avatar', visibility: 'public' });
       avatarUrl = uploaded.url;
     } catch (error) {
-      toast({ title: 'Error', description: 'Failed to upload avatar', variant: 'destructive' });
+      toast({ title: 'Xatolik', description: 'Rasmni yuklab bo\u2018lmadi', variant: 'destructive' });
       return;
     }
-    
+
     await supabase
       .from('profiles')
       .update({ avatar_url: avatarUrl })
       .eq('id', user.id);
 
     setProfile(prev => ({ ...prev, avatar_url: avatarUrl }));
-    toast({ title: 'Success', description: 'Avatar updated' });
+    toast({ title: 'Bajarildi', description: 'Profil rasmi yangilandi' });
   };
 
   const handleLogoutSession = async () => {
@@ -268,8 +304,6 @@ export default function SettingsPage() {
   const [section, setSection] = useState<string | null>(null);
 
   if (isLoading) {
-
-
     return (
       <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -277,21 +311,42 @@ export default function SettingsPage() {
     );
   }
 
-  const sectionGroups: { title: string; items: { value: string; label: string; icon: React.ElementType; tint: string }[] }[] = [
+  /**
+   * Menyular mavzu bo'yicha guruhlangan: har bir bo'lim o'z sahifasida turadi.
+   * Til tanlash endi ro'yxatning tepasida emas, "Ilova" guruhidagi alohida
+   * bo'lim ichida.
+   */
+  const sectionGroups: { title: string; items: SectionItem[] }[] = [
     {
       title: 'Hisob',
       items: [
-        { value: 'account', label: 'Profilim', icon: User, tint: 'text-rose-500 bg-rose-500/10' },
-        { value: 'privacy', label: 'Maxfiylik', icon: Shield, tint: 'text-amber-500 bg-amber-500/10' },
-        { value: 'devices', label: 'Qurilmalar', icon: Smartphone, tint: 'text-sky-500 bg-sky-500/10' },
-        { value: 'notifications', label: 'Bildirishnomalar', icon: Bell, tint: 'text-violet-500 bg-violet-500/10' },
+        { value: 'account', label: 'Profilim', description: 'Ism, username, bio va joylashuv', icon: User, tint: 'text-rose-500 bg-rose-500/10' },
+        { value: 'privacy', label: 'Maxfiylik', description: 'Kim nima ko\u2018rishi va qo\u2018ng\u2018iroqlar', icon: Shield, tint: 'text-amber-500 bg-amber-500/10' },
+        { value: 'security', label: 'Xavfsizlik', description: 'Ikki qadamli tasdiqlash va sessiyalar', icon: ShieldCheck, tint: 'text-emerald-600 bg-emerald-600/10', to: '/settings/security' },
+        { value: 'devices', label: 'Qurilmalar', description: 'Faol kirishlar', icon: Smartphone, tint: 'text-sky-500 bg-sky-500/10' },
+      ],
+    },
+    {
+      title: 'Ilova',
+      items: [
+        { value: 'notifications', label: 'Bildirishnomalar', description: 'Push, ovoz va turlari', icon: Bell, tint: 'text-violet-500 bg-violet-500/10' },
+        { value: 'appearance', label: 'Ko\u2018rinish', description: 'Yorug\u2018, tungi yoki tizim rejimi', icon: Palette, tint: 'text-fuchsia-500 bg-fuchsia-500/10' },
+        { value: 'language', label: 'Til va hudud', description: 'Interfeys tili', icon: Globe, tint: 'text-teal-500 bg-teal-500/10' },
       ],
     },
     {
       title: 'Chat',
       items: [
-        { value: 'chat-wallpaper', label: 'Chat foni', icon: ImageIcon, tint: 'text-emerald-500 bg-emerald-500/10' },
-        { value: 'data-storage', label: "Ma'lumotlar va xotira", icon: HardDrive, tint: 'text-cyan-500 bg-cyan-500/10' },
+        { value: 'chat-wallpaper', label: 'Chat foni', description: 'Fon rasmi yoki gradient', icon: ImageIcon, tint: 'text-emerald-500 bg-emerald-500/10' },
+        { value: 'data-storage', label: 'Ma\u2018lumotlar va xotira', description: 'Avtomatik yuklab olish', icon: HardDrive, tint: 'text-cyan-500 bg-cyan-500/10' },
+      ],
+    },
+    {
+      title: 'Boshqa',
+      items: [
+        { value: 'payment', label: 'To\u2018lov', description: 'Hisob balansi va tranzaksiyalar', icon: Wallet, tint: 'text-lime-600 bg-lime-600/10', to: '/payment' },
+        { value: 'activity', label: 'Faolligim', description: 'Sarflangan vaqt va statistika', icon: BarChart3, tint: 'text-indigo-500 bg-indigo-500/10', to: '/activity' },
+        { value: 'danger', label: 'Hisobni boshqarish', description: 'Chiqish va hisobni o\u2018chirish', icon: AlertTriangle, tint: 'text-destructive bg-destructive/10', danger: true },
       ],
     },
   ];
@@ -313,18 +368,17 @@ export default function SettingsPage() {
             <ChevronRight className="h-5 w-5 rotate-180" />
           </Button>
         )}
-        <h1 className="text-xl md:text-2xl font-bold">
+        <h1 className="text-xl md:text-2xl font-bold tracking-tight">
           {section ? activeLabel : 'Sozlamalar'}
         </h1>
       </div>
 
-      <Tabs value={section ?? 'account'} className="md:grid md:grid-cols-[300px_1fr] md:gap-6 md:items-start">
+      <Tabs value={section ?? 'account'} className="md:grid md:grid-cols-[320px_1fr] md:gap-6 md:items-start">
         {/* Master list */}
         <div className={cn('space-y-6', section && 'hidden md:block')}>
-          <LanguageSwitcher />
           {sectionGroups.map((group) => (
             <div key={group.title}>
-              <p className="px-1 pb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <p className="px-1 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                 {group.title}
               </p>
               <div className="rounded-2xl border border-border bg-card overflow-hidden">
@@ -334,7 +388,7 @@ export default function SettingsPage() {
                     <button
                       key={item.value}
                       type="button"
-                      onClick={() => setSection(item.value)}
+                      onClick={() => (item.to ? navigate(item.to) : setSection(item.value))}
                       className={cn(
                         'w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors',
                         idx !== 0 && 'border-t border-border/60',
@@ -344,8 +398,21 @@ export default function SettingsPage() {
                       <span className={cn('h-9 w-9 rounded-xl flex items-center justify-center shrink-0', item.tint)}>
                         <item.icon className="h-[18px] w-[18px]" />
                       </span>
-                      <span className={cn('flex-1 text-sm font-medium', isActive && 'text-primary')}>
-                        {item.label}
+                      <span className="flex-1 min-w-0">
+                        <span
+                          className={cn(
+                            'block text-sm font-medium truncate',
+                            isActive && 'text-primary',
+                            item.danger && 'text-destructive',
+                          )}
+                        >
+                          {item.label}
+                        </span>
+                        {item.description && (
+                          <span className="block text-xs text-muted-foreground truncate">
+                            {item.description}
+                          </span>
+                        )}
                       </span>
                       <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                     </button>
@@ -363,17 +430,16 @@ export default function SettingsPage() {
               <Palette className="h-10 w-10 text-muted-foreground mb-4" />
               <p className="font-semibold">Sozlamani tanlang</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Chap paneldan sozlamalar bo'limini tanlang
+                Chap paneldan kerakli bo\u2018limni tanlang
               </p>
             </div>
           )}
 
-
-        {/* Account Tab */}
+        {/* Profilim */}
         <TabsContent value="account" className="space-y-6">
-          <div className="bg-card rounded-xl border border-border p-6">
-            <h2 className="text-lg font-semibold mb-6">Personal Information</h2>
-            
+          <div className="bg-card rounded-xl border border-border p-4 md:p-6">
+            <h2 className="text-lg font-semibold mb-6">Shaxsiy ma\u2018lumotlar</h2>
+
             {/* Avatar */}
             <div className="flex items-center gap-6 mb-6">
               <label className="relative cursor-pointer group">
@@ -390,19 +456,19 @@ export default function SettingsPage() {
                   </AvatarFallback>
                 </Avatar>
                 <div className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                  <span className="text-white text-xs">Change</span>
+                  <span className="text-white text-xs">O\u2018zgartirish</span>
                 </div>
               </label>
-              <div>
-                <p className="font-medium">{profile.display_name || 'No name set'}</p>
-                <p className="text-sm text-muted-foreground">@{profile.username || 'username'}</p>
+              <div className="min-w-0">
+                <p className="font-medium truncate">{profile.display_name || 'Ism kiritilmagan'}</p>
+                <p className="text-sm text-muted-foreground truncate">@{profile.username || 'username'}</p>
               </div>
             </div>
 
             <div className="grid gap-4">
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="display_name">Display Name</Label>
+                  <Label htmlFor="display_name">Ko\u2018rinadigan ism</Label>
                   <Input
                     id="display_name"
                     value={profile.display_name || ''}
@@ -411,7 +477,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="username">Username</Label>
+                  <Label htmlFor="username">Foydalanuvchi nomi</Label>
                   <Input
                     id="username"
                     value={profile.username || ''}
@@ -429,23 +495,25 @@ export default function SettingsPage() {
                   onChange={(e) => setProfile(prev => ({ ...prev, bio: e.target.value }))}
                   className="mt-1.5 resize-none"
                   rows={3}
-                  placeholder="Tell us about yourself..."
+                  placeholder="O\u2018zingiz haqida qisqacha..."
+                />
+              </div>
+
+              {/* Joylashuv: haqiqiy xarita bazasi bilan bog'langan */}
+              <div>
+                <Label>Joylashuv</Label>
+                <p className="mt-1 mb-2 text-xs text-muted-foreground">
+                  Manzilni qidirib tanlang yoki joriy joylashuvingizni aniqlang \u2014 tanlangan nuqta xaritada ko\u2018rinadi.
+                </p>
+                <LocationPicker
+                  value={profile.location || ''}
+                  onChange={(value) => setProfile(prev => ({ ...prev, location: value }))}
                 />
               </div>
 
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="location">Location</Label>
-                  <Input
-                    id="location"
-                    value={profile.location || ''}
-                    onChange={(e) => setProfile(prev => ({ ...prev, location: e.target.value }))}
-                    className="mt-1.5"
-                    placeholder="City, Country"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="website">Website</Label>
+                  <Label htmlFor="website">Veb-sayt</Label>
                   <Input
                     id="website"
                     value={profile.website || ''}
@@ -454,44 +522,8 @@ export default function SettingsPage() {
                     placeholder="https://..."
                   />
                 </div>
-              </div>
-
-              <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="country">Davlat</Label>
-                  <Select 
-                    value={profile.country || ''} 
-                    onValueChange={(value) => setProfile(prev => ({ ...prev, country: value }))}
-                  >
-                    <SelectTrigger className="mt-1.5">
-                      <SelectValue placeholder="Davlatingizni tanlang" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Uzbekistan">{'\\u{1F1FA}\\u{1F1FF}'} O'zbekiston</SelectItem>
-                      <SelectItem value="Russia">{'\\u{1F1F7}\\u{1F1FA}'} Rossiya</SelectItem>
-                      <SelectItem value="Kazakhstan">{'\\u{1F1F0}\\u{1F1FF}'} Qozog'iston</SelectItem>
-                      <SelectItem value="Kyrgyzstan">{'\\u{1F1F0}\\u{1F1EC}'} Qirg'iziston</SelectItem>
-                      <SelectItem value="Tajikistan">{'\\u{1F1F9}\\u{1F1EF}'} Tojikiston</SelectItem>
-                      <SelectItem value="Turkmenistan">{'\\u{1F1F9}\\u{1F1F2}'} Turkmaniston</SelectItem>
-                      <SelectItem value="Turkey">{'\\u{1F1F9}\\u{1F1F7}'} Turkiya</SelectItem>
-                      <SelectItem value="United States">{'\\u{1F1FA}\\u{1F1F8}'} AQSh</SelectItem>
-                      <SelectItem value="United Kingdom">{'\\u{1F1EC}\\u{1F1E7}'} Buyuk Britaniya</SelectItem>
-                      <SelectItem value="Germany">{'\\u{1F1E9}\\u{1F1EA}'} Germaniya</SelectItem>
-                      <SelectItem value="France">{'\\u{1F1EB}\\u{1F1F7}'} Fransiya</SelectItem>
-                      <SelectItem value="Italy">{'\\u{1F1EE}\\u{1F1F9}'} Italiya</SelectItem>
-                      <SelectItem value="Spain">{'\\u{1F1EA}\\u{1F1F8}'} Ispaniya</SelectItem>
-                      <SelectItem value="South Korea">{'\\u{1F1F0}\\u{1F1F7}'} Janubiy Koreya</SelectItem>
-                      <SelectItem value="Japan">{'\\u{1F1EF}\\u{1F1F5}'} Yaponiya</SelectItem>
-                      <SelectItem value="China">{'\\u{1F1E8}\\u{1F1F3}'} Xitoy</SelectItem>
-                      <SelectItem value="India">{'\\u{1F1EE}\\u{1F1F3}'} Hindiston</SelectItem>
-                      <SelectItem value="UAE">{'\\u{1F1E6}\\u{1F1EA}'} BAA</SelectItem>
-                      <SelectItem value="Saudi Arabia">{'\\u{1F1F8}\\u{1F1E6}'} Saudiya Arabistoni</SelectItem>
-                      <SelectItem value="Other">{'\\u{1F30D}'} Boshqa</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="birth_date">Tug'ilgan sana</Label>
+                  <Label htmlFor="birth_date">Tug\u2018ilgan sana</Label>
                   <Input
                     id="birth_date"
                     type="date"
@@ -502,111 +534,67 @@ export default function SettingsPage() {
                   />
                 </div>
               </div>
+
+              <div>
+                <Label htmlFor="country">Davlat</Label>
+                <Select
+                  value={profile.country || ''}
+                  onValueChange={(value) => setProfile(prev => ({ ...prev, country: value }))}
+                >
+                  <SelectTrigger className="mt-1.5">
+                    <SelectValue placeholder="Davlatingizni tanlang" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COUNTRIES.map((country) => (
+                      <SelectItem key={country.value} value={country.value}>
+                        {country.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <Button onClick={handleSaveProfile} disabled={saving} className="mt-6">
               {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-              Save Changes
+              Saqlash
             </Button>
           </div>
 
-          {/* Payment */}
-          <div className="bg-card rounded-xl border border-border p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Wallet className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">Payment</h3>
-                  <p className="text-sm text-muted-foreground">Wallet balance and transaction history</p>
-                </div>
-              </div>
-              <Button variant="outline" onClick={() => navigate('/payment')}>Open</Button>
-            </div>
-          </div>
-
           {/* Verification Request */}
-          <div className="bg-card rounded-xl border border-border p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+          <div className="bg-card rounded-xl border border-border p-4 md:p-6">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                   <BadgeCheck className="h-6 w-6 text-primary" />
                 </div>
-                <div>
-                  <h3 className="font-semibold">Get Verified</h3>
-                  <p className="text-sm text-muted-foreground">Request a verified badge for your account</p>
+                <div className="min-w-0">
+                  <h3 className="font-semibold">Tasdiqlangan nishon</h3>
+                  <p className="text-sm text-muted-foreground">Hisobingiz uchun ko\u2018k nishon so\u2018rang</p>
                 </div>
               </div>
-              <Button variant="outline" onClick={() => setVerificationDialogOpen(true)}>
-                Request
+              <Button variant="outline" className="shrink-0" onClick={() => setVerificationDialogOpen(true)}>
+                So\u2018rov
               </Button>
             </div>
           </div>
 
-          {/* Activity / Your Time */}
-          <div className="bg-card rounded-xl border border-border p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <BarChart3 className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">Sizning faolligingiz</h3>
-                  <p className="text-sm text-muted-foreground">Platformada sarflagan vaqtingiz va statistikalar</p>
-                </div>
-              </div>
-              <Button variant="outline" onClick={() => navigate('/activity')}>
-                <Clock className="h-4 w-4 mr-2" />
-                Ko'rish
-              </Button>
-            </div>
-          </div>
+          <VerificationRequestDialog
+            open={verificationDialogOpen}
+            onOpenChange={setVerificationDialogOpen}
+          />
+        </TabsContent>
 
-          {/* Chat foni (tez kirish) */}
-          <div className="bg-card rounded-xl border border-border p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <ImageIcon className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">Chat foni</h3>
-                  <p className="text-sm text-muted-foreground">Chat oynasi uchun fon rasmi yoki gradient tanlang</p>
-                </div>
-              </div>
-              <Button variant="outline" onClick={() => setSection('chat-wallpaper')}>
-                Tanlash
-              </Button>
-            </div>
-          </div>
-
-          {/* Ma'lumotlar va xotira (tez kirish) */}
-          <div className="bg-card rounded-xl border border-border p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <HardDrive className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">Ma'lumotlar va xotira</h3>
-                  <p className="text-sm text-muted-foreground">Media avtomatik yuklab olish va internet tejash</p>
-                </div>
-              </div>
-              <Button variant="outline" onClick={() => setSection('data-storage')}>
-                Sozlash
-              </Button>
-            </div>
-          </div>
-
-          {/* Theme Settings */}
+        {/* Ko'rinish */}
+        <TabsContent value="appearance" className="space-y-6">
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <div className="p-4 border-b border-border">
-              <h2 className="font-semibold">Appearance</h2>
+              <h2 className="font-semibold">Mavzu</h2>
+              <p className="text-xs text-muted-foreground mt-1">Ilova ko\u2018rinishini tanlang</p>
             </div>
-            <div className="p-4 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+            <div className="p-4 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
                   {theme === 'dark' ? (
                     <Moon className="h-5 w-5 text-muted-foreground" />
                   ) : theme === 'light' ? (
@@ -615,147 +603,46 @@ export default function SettingsPage() {
                     <Monitor className="h-5 w-5 text-muted-foreground" />
                   )}
                 </div>
-                <div>
-                  <p className="font-medium text-sm">Theme</p>
-                  <p className="text-xs text-muted-foreground">Choose your preferred appearance</p>
+                <div className="min-w-0">
+                  <p className="font-medium text-sm">Rejim</p>
+                  <p className="text-xs text-muted-foreground">Yorug\u2018, tungi yoki tizim bo\u2018yicha</p>
                 </div>
               </div>
               <Select value={theme} onValueChange={setTheme}>
-                <SelectTrigger className="w-32">
+                <SelectTrigger className="w-36 shrink-0">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="system">
                     <div className="flex items-center gap-2">
                       <Monitor className="h-4 w-4" />
-                      System
+                      Tizim
                     </div>
                   </SelectItem>
                   <SelectItem value="light">
                     <div className="flex items-center gap-2">
                       <Sun className="h-4 w-4" />
-                      Light
+                      Yorug\u2018
                     </div>
                   </SelectItem>
                   <SelectItem value="dark">
                     <div className="flex items-center gap-2">
                       <Moon className="h-4 w-4" />
-                      Dark
+                      Tungi
                     </div>
                   </SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
+        </TabsContent>
 
-          {/* Logout */}
-          <div className="pt-4">
-            <Button 
-              variant="destructive" 
-              className="w-full" 
-              onClick={logout}
-            >
-              <LogOut className="h-4 w-4 mr-2" />
-              Log Out
-            </Button>
+        {/* Til va hudud */}
+        <TabsContent value="language" className="space-y-6">
+          <LanguageSwitcher />
+          <div className="rounded-xl border border-border bg-card/40 p-4 text-xs text-muted-foreground">
+            Til tanlovi shu qurilmada saqlanadi va butun interfeysga darhol qo\u2018llanadi.
           </div>
-
-          {/* Delete Account */}
-          <div className="bg-card rounded-xl border border-destructive/30 p-6">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">
-                <Trash2 className="h-6 w-6 text-destructive" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-destructive">Delete Account</h3>
-                <p className="text-sm text-muted-foreground">Permanently delete your account and all data</p>
-              </div>
-            </div>
-            <p className="text-sm text-muted-foreground mb-4">
-              Once you delete your account, there is no going back. All your posts, messages, and personal data will be permanently removed.
-            </p>
-            <Button 
-              variant="destructive" 
-              onClick={() => setDeleteAccountDialogOpen(true)}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete My Account
-            </Button>
-          </div>
-
-          <VerificationRequestDialog 
-            open={verificationDialogOpen} 
-            onOpenChange={setVerificationDialogOpen} 
-          />
-
-          {/* Delete Account Confirmation Dialog */}
-          <AlertDialog open={deleteAccountDialogOpen} onOpenChange={setDeleteAccountDialogOpen}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle className="text-destructive">Delete Account</AlertDialogTitle>
-                <AlertDialogDescription className="space-y-4">
-                  <p>
-                    This action cannot be undone. This will permanently delete your account and remove all your data from our servers.
-                  </p>
-                  <p>
-                    To confirm, please type <span className="font-semibold">DELETE</span> below:
-                  </p>
-                  <Input 
-                    value={deleteConfirmText}
-                    onChange={(e) => setDeleteConfirmText(e.target.value)}
-                    placeholder="Type DELETE to confirm"
-                    className="mt-2"
-                  />
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel onClick={() => setDeleteConfirmText('')}>Cancel</AlertDialogCancel>
-                <Button
-                  variant="destructive"
-                  disabled={deleteConfirmText !== 'DELETE' || deletingAccount}
-                  onClick={async () => {
-                    setDeletingAccount(true);
-                    try {
-                      // Delete user profile and related data (cascades will handle related tables)
-                      const { error: profileError } = await supabase
-                        .from('profiles')
-                        .delete()
-                        .eq('id', user?.id);
-                      
-                      if (profileError) throw profileError;
-
-                      // Sign out the user
-                      await supabase.auth.signOut();
-                      
-                      toast({
-                        title: 'Account Deleted',
-                        description: 'Your account has been permanently deleted.',
-                      });
-                      
-                      navigate('/');
-                    } catch (error: any) {
-                      toast({
-                        title: 'Error',
-                        description: error.message || 'Failed to delete account',
-                        variant: 'destructive',
-                      });
-                    } finally {
-                      setDeletingAccount(false);
-                      setDeleteAccountDialogOpen(false);
-                      setDeleteConfirmText('');
-                    }
-                  }}
-                >
-                  {deletingAccount ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4 mr-2" />
-                  )}
-                  Delete Account
-                </Button>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
         </TabsContent>
 
         {/* Chat foni */}
@@ -764,7 +651,7 @@ export default function SettingsPage() {
             <div className="mb-4">
               <h2 className="font-semibold">Chat foni</h2>
               <p className="text-sm text-muted-foreground">
-                Tayyor fonlardan tanlang yoki o'z rasmingizni yuklang. Tanlov shu qurilmada saqlanadi va barcha chatlarga qo'llanadi.
+                Tayyor fonlardan tanlang yoki o\u2018z rasmingizni yuklang. Tanlov shu qurilmada saqlanadi va barcha chatlarga qo\u2018llanadi.
               </p>
             </div>
             <ChatWallpaperEditor />
@@ -778,49 +665,49 @@ export default function SettingsPage() {
           </div>
         </TabsContent>
 
-        {/* Privacy Tab */}
+        {/* Maxfiylik */}
         <TabsContent value="privacy" className="space-y-6">
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <div className="p-4 border-b border-border">
-              <h2 className="font-semibold">Privacy Settings</h2>
+              <h2 className="font-semibold">Maxfiylik sozlamalari</h2>
             </div>
 
             <div className="divide-y divide-border">
               {/* Last Seen Visibility */}
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+              <div className="p-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
                     <Eye className="h-5 w-5 text-muted-foreground" />
                   </div>
-                  <div>
-                    <p className="font-medium text-sm">Last Seen</p>
-                    <p className="text-xs text-muted-foreground">Who can see when you were online</p>
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm">Oxirgi ko\u2018rilgan vaqt</p>
+                    <p className="text-xs text-muted-foreground">Onlayn vaqtingizni kim ko\u2018radi</p>
                   </div>
                 </div>
                 <Select
                   value={settings?.last_seen_visibility || 'everyone'}
                   onValueChange={(value: 'everyone' | 'contacts' | 'nobody') => updateSettings({ last_seen_visibility: value })}
                 >
-                  <SelectTrigger className="w-32">
+                  <SelectTrigger className="w-32 shrink-0">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="everyone">Everyone</SelectItem>
-                    <SelectItem value="contacts">Contacts</SelectItem>
-                    <SelectItem value="nobody">Nobody</SelectItem>
+                    <SelectItem value="everyone">Hamma</SelectItem>
+                    <SelectItem value="contacts">Kontaktlar</SelectItem>
+                    <SelectItem value="nobody">Hech kim</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               {/* Read Receipts */}
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+              <div className="p-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
                     <CheckCircle2 className="h-5 w-5 text-muted-foreground" />
                   </div>
-                  <div>
-                    <p className="font-medium text-sm">Read Receipts</p>
-                    <p className="text-xs text-muted-foreground">Let others know when you've read messages</p>
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm">O\u2018qilgan belgisi</p>
+                    <p className="text-xs text-muted-foreground">Xabarni o\u2018qiganingiz ko\u2018rinadi</p>
                   </div>
                 </div>
                 <Switch
@@ -830,93 +717,97 @@ export default function SettingsPage() {
               </div>
 
               {/* Call Permissions */}
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+              <div className="p-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
                     <Wifi className="h-5 w-5 text-muted-foreground" />
                   </div>
-                  <div>
-                    <p className="font-medium text-sm">Who Can Call Me</p>
-                    <p className="text-xs text-muted-foreground">Control who can start calls with you</p>
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm">Menga kim qo\u2018ng\u2018iroq qila oladi</p>
+                    <p className="text-xs text-muted-foreground">Qo\u2018ng\u2018iroqlarni boshlash ruxsati</p>
                   </div>
                 </div>
                 <Select
                   value={settings?.call_permissions || 'everyone'}
                   onValueChange={(value: 'everyone' | 'contacts' | 'nobody') => updateSettings({ call_permissions: value })}
                 >
-                  <SelectTrigger className="w-32">
+                  <SelectTrigger className="w-32 shrink-0">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="everyone">Everyone</SelectItem>
-                    <SelectItem value="contacts">Contacts</SelectItem>
-                    <SelectItem value="nobody">Nobody</SelectItem>
+                    <SelectItem value="everyone">Hamma</SelectItem>
+                    <SelectItem value="contacts">Kontaktlar</SelectItem>
+                    <SelectItem value="nobody">Hech kim</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               {/* Group Invite Permissions */}
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+              <div className="p-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
                     <User className="h-5 w-5 text-muted-foreground" />
                   </div>
-                  <div>
-                    <p className="font-medium text-sm">Group Invites</p>
-                    <p className="text-xs text-muted-foreground">Who can add you to groups</p>
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm">Guruhga qo\u2018shish</p>
+                    <p className="text-xs text-muted-foreground">Sizni kim guruhga qo\u2018sha oladi</p>
                   </div>
                 </div>
                 <Select
                   value={settings?.group_invite_permissions || 'everyone'}
                   onValueChange={(value: 'everyone' | 'contacts' | 'nobody') => updateSettings({ group_invite_permissions: value })}
                 >
-                  <SelectTrigger className="w-32">
+                  <SelectTrigger className="w-32 shrink-0">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="everyone">Everyone</SelectItem>
-                    <SelectItem value="contacts">Contacts</SelectItem>
-                    <SelectItem value="nobody">Nobody</SelectItem>
+                    <SelectItem value="everyone">Hamma</SelectItem>
+                    <SelectItem value="contacts">Kontaktlar</SelectItem>
+                    <SelectItem value="nobody">Hech kim</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+          </div>
 
-              {/* Two Factor */}
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                    <Shield className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">Two-Factor Authentication</p>
-                    <p className="text-xs text-muted-foreground">Add extra security to your account</p>
-                  </div>
-                </div>
-                <Switch
-                  checked={settings?.two_factor_enabled ?? false}
-                  onCheckedChange={(checked) => updateSettings({ two_factor_enabled: checked })}
-                />
+          <div className="rounded-xl border border-border bg-card/40 p-4">
+            <div className="flex items-start gap-3">
+              <ShieldCheck className="h-5 w-5 shrink-0 text-primary" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Ikki qadamli tasdiqlash</p>
+                <p className="text-xs text-muted-foreground">
+                  Parol bilan birga qo\u2018shimcha kod so\u2018raladi. Zaxira kodlar va faol sessiyalar Xavfsizlik bo\u2018limida.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 rounded-full"
+                  onClick={() => navigate('/settings/security')}
+                >
+                  Xavfsizlik bo\u2018limi
+                </Button>
               </div>
             </div>
           </div>
         </TabsContent>
 
-        {/* Devices Tab */}
+        {/* Qurilmalar */}
         <TabsContent value="devices" className="space-y-6">
           <div className="bg-card rounded-xl border border-border overflow-hidden">
-            <div className="p-4 border-b border-border flex items-center justify-between">
-              <div>
-                <h2 className="font-semibold">Active Sessions</h2>
-                <p className="text-sm text-muted-foreground">{sessions.length} device{sessions.length !== 1 ? 's' : ''} logged in</p>
+            <div className="p-4 border-b border-border flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="font-semibold">Faol sessiyalar</h2>
+                <p className="text-sm text-muted-foreground">{sessions.length} qurilma tizimga kirgan</p>
               </div>
               {sessions.length > 1 && (
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
+                  className="shrink-0"
                   onClick={() => setLogoutAllDialogOpen(true)}
                 >
                   <XCircle className="h-4 w-4 mr-2" />
-                  Logout All Others
+                  Boshqalarni chiqarish
                 </Button>
               )}
             </div>
@@ -925,32 +816,32 @@ export default function SettingsPage() {
               <div className="divide-y divide-border">
                 {sessions.map((session) => {
                   const DeviceIcon = getDeviceIcon(session.device_type);
+                  const meta = [session.os_name, session.browser_name, session.ip_address || 'IP aniqlanmadi']
+                    .filter(Boolean)
+                    .join(' \u2022 ');
                   return (
-                    <div key={session.id} className="p-4 flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
+                    <div key={session.id} className="p-4 flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-4 min-w-0">
+                        <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center shrink-0">
                           <DeviceIcon className="h-6 w-6 text-muted-foreground" />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <div className="flex items-center gap-2">
-                            <p className="font-medium text-sm">
-                              {session.device_name || session.browser_name || 'Unknown Device'}
+                            <p className="font-medium text-sm truncate">
+                              {session.device_name || session.browser_name || 'Noma\u2018lum qurilma'}
                             </p>
                             {session.is_current && (
-                              <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full">
-                                Current
+                              <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full shrink-0">
+                                Hozirgi
                               </span>
                             )}
                           </div>
+                          <p className="text-xs text-muted-foreground truncate">{meta}</p>
                           <p className="text-xs text-muted-foreground">
-                            {session.os_name && `${session.os_name} \\u2022 `}
-                            {session.browser_name && `${session.browser_name} \\u2022 `}
-                            {session.ip_address || 'Unknown IP'}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Last active: {session.last_active_at 
+                            Oxirgi faollik:{' '}
+                            {session.last_active_at
                               ? formatDistanceToNow(new Date(session.last_active_at), { addSuffix: true })
-                              : 'Unknown'}
+                              : 'aniqlanmadi'}
                           </p>
                         </div>
                       </div>
@@ -958,6 +849,7 @@ export default function SettingsPage() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          className="shrink-0"
                           onClick={() => {
                             setSelectedSessionId(session.id);
                             setLogoutDialogOpen(true);
@@ -974,27 +866,26 @@ export default function SettingsPage() {
           </div>
         </TabsContent>
 
-        {/* Notifications Tab */}
+        {/* Bildirishnomalar */}
         <TabsContent value="notifications" className="space-y-6">
           <PushNotificationSettings />
 
           {/* Autoplay Settings */}
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <div className="p-4 border-b border-border">
-              <h2 className="font-semibold">Media Autoplay</h2>
-              <p className="text-xs text-muted-foreground mt-1">Control auto-playing media in messages</p>
+              <h2 className="font-semibold">Media avtomatik ijro</h2>
+              <p className="text-xs text-muted-foreground mt-1">Xabarlardagi media o\u2018zi ijro bo\u2018lishini boshqarish</p>
             </div>
 
             <div className="divide-y divide-border">
-              {/* Autoplay Voice Messages */}
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+              <div className="p-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
                     <Bell className="h-5 w-5 text-muted-foreground" />
                   </div>
-                  <div>
-                    <p className="font-medium text-sm">Voice Messages</p>
-                    <p className="text-xs text-muted-foreground">Auto-play voice messages when visible</p>
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm">Ovozli xabarlar</p>
+                    <p className="text-xs text-muted-foreground">Ko\u2018ringanda avtomatik ijro etiladi</p>
                   </div>
                 </div>
                 <Switch
@@ -1003,15 +894,14 @@ export default function SettingsPage() {
                 />
               </div>
 
-              {/* Autoplay Video Messages */}
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+              <div className="p-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
                     <Bell className="h-5 w-5 text-muted-foreground" />
                   </div>
-                  <div>
-                    <p className="font-medium text-sm">Video Messages</p>
-                    <p className="text-xs text-muted-foreground">Auto-play video messages when visible</p>
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm">Video xabarlar</p>
+                    <p className="text-xs text-muted-foreground">Ko\u2018ringanda avtomatik ijro etiladi</p>
                   </div>
                 </div>
                 <Switch
@@ -1021,22 +911,22 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
-          
+
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <div className="p-4 border-b border-border">
-              <h2 className="font-semibold">Notification Types</h2>
-              <p className="text-xs text-muted-foreground mt-1">Choose which notifications you want to receive</p>
+              <h2 className="font-semibold">Bildirishnoma turlari</h2>
+              <p className="text-xs text-muted-foreground mt-1">Qaysi xabarlarni olishni tanlang</p>
             </div>
 
             <div className="divide-y divide-border">
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+              <div className="p-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
                     <Heart className="h-5 w-5 text-foreground" />
                   </div>
-                  <div>
-                    <p className="font-medium text-sm">Likes</p>
-                    <p className="text-xs text-muted-foreground">When someone likes your posts</p>
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm">Yoqtirishlar</p>
+                    <p className="text-xs text-muted-foreground">Kimdir postingizni yoqtirganda</p>
                   </div>
                 </div>
                 <Switch
@@ -1045,14 +935,14 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+              <div className="p-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
                     <MessageCircle className="h-5 w-5 text-foreground" />
                   </div>
-                  <div>
-                    <p className="font-medium text-sm">Comments</p>
-                    <p className="text-xs text-muted-foreground">When someone comments on your posts</p>
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm">Izohlar</p>
+                    <p className="text-xs text-muted-foreground">Postingizga izoh qoldirilganda</p>
                   </div>
                 </div>
                 <Switch
@@ -1061,14 +951,14 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+              <div className="p-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
                     <UserPlus className="h-5 w-5 text-foreground" />
                   </div>
-                  <div>
-                    <p className="font-medium text-sm">New Followers</p>
-                    <p className="text-xs text-muted-foreground">When someone starts following you</p>
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm">Yangi obunachilar</p>
+                    <p className="text-xs text-muted-foreground">Kimdir sizga obuna bo\u2018lganda</p>
                   </div>
                 </div>
                 <Switch
@@ -1077,14 +967,14 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+              <div className="p-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
                     <AtSign className="h-5 w-5 text-foreground" />
                   </div>
-                  <div>
-                    <p className="font-medium text-sm">Mentions</p>
-                    <p className="text-xs text-muted-foreground">When someone @mentions you</p>
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm">Eslatishlar</p>
+                    <p className="text-xs text-muted-foreground">Kimdir sizni @eslatganda</p>
                   </div>
                 </div>
                 <Switch
@@ -1094,21 +984,21 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
-          
+
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <div className="p-4 border-b border-border">
-              <h2 className="font-semibold">Notification Preferences</h2>
+              <h2 className="font-semibold">Qo\u2018shimcha</h2>
             </div>
 
             <div className="divide-y divide-border">
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+              <div className="p-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
                     <Bell className="h-5 w-5 text-muted-foreground" />
                   </div>
-                  <div>
-                    <p className="font-medium text-sm">Notification Sounds</p>
-                    <p className="text-xs text-muted-foreground">Play sounds for new messages</p>
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm">Bildirishnoma ovozi</p>
+                    <p className="text-xs text-muted-foreground">Yangi xabarlarda ovoz chiqaradi</p>
                   </div>
                 </div>
                 <Switch
@@ -1117,14 +1007,14 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+              <div className="p-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
                     <Eye className="h-5 w-5 text-muted-foreground" />
                   </div>
-                  <div>
-                    <p className="font-medium text-sm">Message Preview</p>
-                    <p className="text-xs text-muted-foreground">Show message content in notifications</p>
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm">Xabar matni</p>
+                    <p className="text-xs text-muted-foreground">Bildirishnomada matn ko\u2018rsatiladi</p>
                   </div>
                 </div>
                 <Switch
@@ -1135,30 +1025,135 @@ export default function SettingsPage() {
             </div>
           </div>
         </TabsContent>
+
+        {/* Hisobni boshqarish */}
+        <TabsContent value="danger" className="space-y-6">
+          <div className="bg-card rounded-xl border border-border p-4 md:p-6">
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <h3 className="font-semibold">Hisobdan chiqish</h3>
+                <p className="text-sm text-muted-foreground">Faqat shu qurilmadan chiqadi</p>
+              </div>
+              <Button variant="outline" className="shrink-0" onClick={logout}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Chiqish
+              </Button>
+            </div>
+          </div>
+
+          <div className="bg-card rounded-xl border border-destructive/30 p-4 md:p-6">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center shrink-0">
+                <Trash2 className="h-6 w-6 text-destructive" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-semibold text-destructive">Hisobni o\u2018chirish</h3>
+                <p className="text-sm text-muted-foreground">Hisob va barcha ma\u2018lumotlar butunlay o\u2018chadi</p>
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Hisobni o\u2018chirgandan keyin ortga qaytarish imkoni yo\u2018q. Barcha postlar, xabarlar va shaxsiy ma\u2018lumotlar butunlay o\u2018chiriladi.
+            </p>
+            <Button
+              variant="destructive"
+              onClick={() => setDeleteAccountDialogOpen(true)}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Hisobimni o\u2018chirish
+            </Button>
+          </div>
+
+          {/* Delete Account Confirmation Dialog */}
+          <AlertDialog open={deleteAccountDialogOpen} onOpenChange={setDeleteAccountDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle className="text-destructive">Hisobni o\u2018chirish</AlertDialogTitle>
+                <AlertDialogDescription className="space-y-4">
+                  <span className="block">
+                    Bu amalni ortga qaytarish mumkin emas. Hisobingiz va barcha ma\u2018lumotlaringiz serverlardan butunlay o\u2018chiriladi.
+                  </span>
+                  <span className="block">
+                    Tasdiqlash uchun quyiga <span className="font-semibold">DELETE</span> deb yozing:
+                  </span>
+                  <Input
+                    value={deleteConfirmText}
+                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                    placeholder="DELETE"
+                    className="mt-2"
+                  />
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setDeleteConfirmText('')}>Bekor qilish</AlertDialogCancel>
+                <Button
+                  variant="destructive"
+                  disabled={deleteConfirmText !== 'DELETE' || deletingAccount}
+                  onClick={async () => {
+                    setDeletingAccount(true);
+                    try {
+                      // Delete user profile and related data (cascades will handle related tables)
+                      const { error: profileError } = await supabase
+                        .from('profiles')
+                        .delete()
+                        .eq('id', user?.id);
+
+                      if (profileError) throw profileError;
+
+                      // Sign out the user
+                      await supabase.auth.signOut();
+
+                      toast({
+                        title: 'Hisob o\u2018chirildi',
+                        description: 'Hisobingiz butunlay o\u2018chirildi.',
+                      });
+
+                      navigate('/');
+                    } catch (error: any) {
+                      toast({
+                        title: 'Xatolik',
+                        description: error.message || 'Hisobni o\u2018chirib bo\u2018lmadi',
+                        variant: 'destructive',
+                      });
+                    } finally {
+                      setDeletingAccount(false);
+                      setDeleteAccountDialogOpen(false);
+                      setDeleteConfirmText('');
+                    }
+                  }}
+                >
+                  {deletingAccount ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-2" />
+                  )}
+                  O\u2018chirish
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </TabsContent>
         </div>
       </Tabs>
 
-
-
-      {/* Footer */}
+      {/* Footer — belgilar haqiqiy simvol sifatida yoziladi */}
       <div className="text-center text-xs text-muted-foreground pt-8">
         <p>Alsamos Social v1.0.0</p>
-        <p className="mt-1">{'\\u00A9'} 2024 Alsamos. All rights reserved.</p>
+        <p className="mt-1">© 2026 Alsamos. Barcha huquqlar himoyalangan.</p>
       </div>
 
       {/* Logout Session Dialog */}
       <AlertDialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Logout Device</AlertDialogTitle>
+            <AlertDialogTitle>Qurilmani chiqarish</AlertDialogTitle>
             <AlertDialogDescription>
-              This will log out the selected device. The user will need to sign in again on that device.
+              Tanlangan qurilma tizimdan chiqariladi va u qurilmada qaytadan kirish talab qilinadi.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Bekor qilish</AlertDialogCancel>
             <AlertDialogAction onClick={handleLogoutSession}>
-              Logout Device
+              Chiqarish
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1168,15 +1163,15 @@ export default function SettingsPage() {
       <AlertDialog open={logoutAllDialogOpen} onOpenChange={setLogoutAllDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Logout All Other Devices</AlertDialogTitle>
+            <AlertDialogTitle>Boshqa barcha qurilmalarni chiqarish</AlertDialogTitle>
             <AlertDialogDescription>
-              This will log out all devices except your current one. You will remain logged in on this device.
+              Hozirgi qurilmadan tashqari barcha qurilmalar tizimdan chiqariladi. Siz shu qurilmada qolasiz.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Bekor qilish</AlertDialogCancel>
             <AlertDialogAction onClick={handleLogoutAllOthers}>
-              Logout All Others
+              Hammasini chiqarish
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
