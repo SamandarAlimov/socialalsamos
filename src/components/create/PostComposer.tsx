@@ -38,6 +38,7 @@ import {
 } from '@/components/create/PostComposerToolbar';
 import { CreateToolRail } from '@/components/create/CreateToolRail';
 import { CreateSheetLayout } from '@/components/create/CreateSheetLayout';
+import { CreateMediaDropzone } from '@/components/create/CreateMediaDropzone';
 import { PollComposer } from '@/components/create/PollComposer';
 import { LocationPicker } from '@/components/create/LocationPicker';
 import { MusicPicker } from '@/components/create/MusicPicker';
@@ -76,7 +77,7 @@ const VISIBILITIES: Array<{
  *    haqiqiy qatlam sifatida qo‘yiladi
  *
  * Layout ikki holatda ishlaydi:
- *  - media yo‘q: oddiy bir ustunli karta;
+ *  - media yo‘q: bir ustunli karta va katta media maydoni;
  *  - media bor: xarita dizayn tilidagi media-first sheet (CreateSheetLayout).
  */
 export function PostComposer() {
@@ -776,6 +777,9 @@ export function PostComposer() {
         <section className="overflow-hidden border-y border-border/60 bg-background sm:rounded-2xl sm:border">
           {authorAndEditor}
           {extras}
+
+          {/* Bo‘sh holatda media maydoni: aks holda pastki yarim bo‘sh qoladi. */}
+          <CreateMediaDropzone onPick={() => fileInputRef.current?.click()} />
 
           <PostComposerToolbar
             tools={toolsInput}
