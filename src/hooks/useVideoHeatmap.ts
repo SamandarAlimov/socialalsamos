@@ -8,6 +8,10 @@ import { useMemo } from 'react';
  * video har doim bir xil grafikni ko'rsatadi (random "sakrash" bo'lmaydi).
  * `post_view_segments` jadvali qo'shilganda faqat shu hook ichidagi manba
  * almashtiriladi — UI o'zgarmaydi.
+ *
+ * Diqqat: bu faylda `**` (exponentiation) operatori ishlatilmaydi — loyihaning
+ * esbuild targeti uni qo'llab-quvvatlamaydi va build yiqiladi. Kvadratga
+ * ko'tarish uchun oddiy ko'paytirish ishlatilgan.
  */
 
 function hashString(value: string): number {
@@ -29,6 +33,11 @@ function mulberry32(seed: number) {
   };
 }
 
+/** Gauss cho'qqisi: exp(-(offset)^2), `**` ishlatmasdan. */
+function gaussian(offset: number): number {
+  return Math.exp(-(offset * offset));
+}
+
 export function useVideoHeatmap(seed: string, samples = 56): number[] {
   return useMemo(() => {
     const rand = mulberry32(hashString(seed || 'alsamos-video'));
@@ -43,9 +52,9 @@ export function useVideoHeatmap(seed: string, samples = 56): number[] {
     const raw = Array.from({ length: samples }, (_, index) => {
       const x = index / (samples - 1 || 1);
       // Intro har doim ko'proq ko'riladi, oxiri esa kamayadi.
-      let value = 0.32 + 0.3 * Math.exp(-(x / 0.09) ** 2) - 0.12 * x;
+      let value = 0.32 + 0.3 * gaussian(x / 0.09) - 0.12 * x;
       centers.forEach(({ center, width, weight }) => {
-        value += weight * Math.exp(-(((x - center) / width) ** 2));
+        value += weight * gaussian((x - center) / width);
       });
       return Math.max(0.05, value + (rand() - 0.5) * 0.05);
     });
