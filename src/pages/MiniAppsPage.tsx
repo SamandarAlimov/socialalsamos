@@ -46,7 +46,7 @@ const APP_TYPES: MiniAppType[] = ['link', 'webapp', 'bot', 'native'];
 
 const FALLBACK_CATEGORIES: MiniAppCategory[] = [
   { id: 'religion', sortOrder: 10, icon: null, label: 'Diniy' },
-  { id: 'education', sortOrder: 20, icon: null, label: 'Ta\u2019lim' },
+  { id: 'education', sortOrder: 20, icon: null, label: 'Ta’lim' },
   { id: 'tools', sortOrder: 30, icon: null, label: 'Asboblar' },
   { id: 'other', sortOrder: 999, icon: null, label: 'Boshqa' },
 ];
@@ -125,9 +125,7 @@ export default function MiniAppsPage() {
   };
 
   const activeSummary = [
-    section !== DEFAULT_SECTION
-      ? visibleSections.find((item) => item.id === section)?.label
-      : null,
+    section !== DEFAULT_SECTION ? visibleSections.find((item) => item.id === section)?.label : null,
     category !== 'all' ? (categoryLabels.get(category) ?? category) : null,
     appType !== 'all' ? MINI_APP_TYPE_LABELS[appType] : null,
     sort !== DEFAULT_SORT ? MINI_APP_SORT_LABELS[sort] : null,
@@ -138,7 +136,7 @@ export default function MiniAppsPage() {
     if (!user) {
       toast({
         title: 'Tizimga kiring',
-        description: 'Mini app qo\u2019shish uchun avval hisobingizga kiring.',
+        description: 'Mini app qo’shish uchun avval hisobingizga kiring.',
         variant: 'destructive',
       });
       return;
@@ -158,7 +156,7 @@ export default function MiniAppsPage() {
         </div>
         <Button onClick={handleAdd} className="shrink-0 gap-1">
           <Plus className="h-4 w-4" />
-          Qo\u2019shish
+          Qo’shish
         </Button>
       </header>
 
@@ -213,7 +211,7 @@ export default function MiniAppsPage() {
 
             <div className="max-h-[70vh] space-y-4 overflow-y-auto p-4">
               <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">Bo\u2019lim</p>
+                <p className="text-xs font-medium text-muted-foreground">Bo’lim</p>
                 <div className="flex flex-wrap gap-1.5">
                   {visibleSections.map((item) => (
                     <Button
@@ -301,7 +299,7 @@ export default function MiniAppsPage() {
 
             <div className="border-t px-4 py-3">
               <Button className="w-full" size="sm" onClick={() => setFiltersOpen(false)}>
-                Ko\u2019rish
+                Ko’rish
               </Button>
             </div>
           </PopoverContent>
@@ -337,11 +335,11 @@ export default function MiniAppsPage() {
             <p className="font-medium">Ilova topilmadi</p>
             <p className="mt-1 text-sm text-muted-foreground">
               {query
-                ? 'Qidiruv shartlarini o\u2019zgartirib ko\u2019ring.'
-                : 'Bu bo\u2019limda hozircha moderatsiyadan o\u2019tgan ilova yo\u2019q.'}
+                ? 'Qidiruv shartlarini o’zgartirib ko’ring.'
+                : 'Bu bo’limda hozircha moderatsiyadan o’tgan ilova yo’q.'}
             </p>
             <Button className="mt-4" onClick={handleAdd}>
-              Birinchi ilovani qo\u2019shish
+              Birinchi ilovani qo’shish
             </Button>
           </div>
         ) : (
@@ -373,7 +371,7 @@ export default function MiniAppsPage() {
                   className={cn(feed.loadingMore && 'opacity-70')}
                 >
                   {feed.loadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Ko\u2019proq yuklash
+                  Ko’proq yuklash
                 </Button>
               </div>
             )}
