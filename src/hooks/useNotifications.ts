@@ -10,6 +10,8 @@ export interface NotificationActor {
   username: string | null;
   display_name: string | null;
   avatar_url: string | null;
+  /** Tasdiqlangan foydalanuvchi nishoni ro'yxatda ham ko'rinishi uchun. */
+  is_verified?: boolean | null;
 }
 
 export interface NotificationPost {
@@ -95,7 +97,7 @@ async function enrichNotifications(rows: RawNotificationRow[]): Promise<Notifica
     actorIds.size > 0
       ? supabase
           .from('profiles')
-          .select('id, username, display_name, avatar_url')
+          .select('id, username, display_name, avatar_url, is_verified')
           .in('id', Array.from(actorIds))
       : Promise.resolve({ data: [], error: null } as const),
     postIds.size > 0
