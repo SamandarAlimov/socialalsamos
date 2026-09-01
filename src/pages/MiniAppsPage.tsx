@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Plus, Search, ShieldCheck, X } from 'lucide-react';
+import { Loader2, Plus, Search, ShieldCheck, SlidersHorizontal, X } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -41,24 +42,30 @@ const SECTIONS: Array<{ id: MiniAppSection; label: string; authOnly?: boolean }>
 
 const SORTS: MiniAppSort[] = ['recommended', 'trending', 'popular', 'rating', 'new'];
 
+const APP_TYPES: MiniAppType[] = ['link', 'webapp', 'bot', 'native'];
+
 const FALLBACK_CATEGORIES: MiniAppCategory[] = [
   { id: 'religion', sortOrder: 10, icon: null, label: 'Diniy' },
-  { id: 'education', sortOrder: 20, icon: null, label: 'Ta’lim' },
+  { id: 'education', sortOrder: 20, icon: null, label: 'Ta\u2019lim' },
   { id: 'tools', sortOrder: 30, icon: null, label: 'Asboblar' },
   { id: 'other', sortOrder: 999, icon: null, label: 'Boshqa' },
 ];
+
+const DEFAULT_SECTION: MiniAppSection = 'all';
+const DEFAULT_SORT: MiniAppSort = 'recommended';
 
 export default function MiniAppsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
 
   const [categories, setCategories] = useState<MiniAppCategory[]>(FALLBACK_CATEGORIES);
-  const [section, setSection] = useState<MiniAppSection>('all');
+  const [section, setSection] = useState<MiniAppSection>(DEFAULT_SECTION);
   const [category, setCategory] = useState<string>('all');
   const [appType, setAppType] = useState<MiniAppType | 'all'>('all');
-  const [sort, setSort] = useState<MiniAppSort>('recommended');
+  const [sort, setSort] = useState<MiniAppSort>(DEFAULT_SORT);
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [query, setQuery] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [viewerApp, setViewerApp] = useState<MiniApp | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -101,11 +108,37 @@ export default function MiniAppsPage() {
 
   const visibleSections = SECTIONS.filter((item) => !item.authOnly || Boolean(user));
 
+  // Filter ikonkasidagi hisoblagich: nechta shart standartdan farq qiladi.
+  const activeFilterCount =
+    (section !== DEFAULT_SECTION ? 1 : 0) +
+    (category !== 'all' ? 1 : 0) +
+    (appType !== 'all' ? 1 : 0) +
+    (sort !== DEFAULT_SORT ? 1 : 0) +
+    (verifiedOnly ? 1 : 0);
+
+  const resetFilters = () => {
+    setSection(DEFAULT_SECTION);
+    setCategory('all');
+    setAppType('all');
+    setSort(DEFAULT_SORT);
+    setVerifiedOnly(false);
+  };
+
+  const activeSummary = [
+    section !== DEFAULT_SECTION
+      ? visibleSections.find((item) => item.id === section)?.label
+      : null,
+    category !== 'all' ? (categoryLabels.get(category) ?? category) : null,
+    appType !== 'all' ? MINI_APP_TYPE_LABELS[appType] : null,
+    sort !== DEFAULT_SORT ? MINI_APP_SORT_LABELS[sort] : null,
+    verifiedOnly ? 'Tasdiqlangan' : null,
+  ].filter(Boolean) as string[];
+
   const handleAdd = () => {
     if (!user) {
       toast({
         title: 'Tizimga kiring',
-        description: 'Mini app qo’shish uchun avval hisobingizga kiring.',
+        description: 'Mini app qo\u2019shish uchun avval hisobingizga kiring.',
         variant: 'destructive',
       });
       return;
@@ -125,107 +158,168 @@ export default function MiniAppsPage() {
         </div>
         <Button onClick={handleAdd} className="shrink-0 gap-1">
           <Plus className="h-4 w-4" />
-          Qo’shish
+          Qo\u2019shish
         </Button>
       </header>
 
-      <div className="space-y-3">
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Ilova yoki kompaniya nomi"
-              className="pl-9 pr-9"
-              aria-label="Qidirish"
-            />
-            {query && (
-              <button
-                type="button"
-                onClick={() => setQuery('')}
-                aria-label="Tozalash"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-
-          <Select value={sort} onValueChange={(value) => setSort(value as MiniAppSort)}>
-            <SelectTrigger className="sm:w-[190px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SORTS.map((item) => (
-                <SelectItem key={item} value={item}>
-                  {MINI_APP_SORT_LABELS[item]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={appType}
-            onValueChange={(value) => setAppType(value as MiniAppType | 'all')}
-          >
-            <SelectTrigger className="sm:w-[150px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Barcha turlar</SelectItem>
-              {(['link', 'webapp', 'bot', 'native'] as MiniAppType[]).map((item) => (
-                <SelectItem key={item} value={item}>
-                  {MINI_APP_TYPE_LABELS[item]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Ilova yoki kompaniya nomi"
+            className="pl-9 pr-9"
+            aria-label="Qidirish"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              aria-label="Tozalash"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {visibleSections.map((item) => (
+        <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
+          <PopoverTrigger asChild>
             <Button
-              key={item.id}
-              size="sm"
-              variant={section === item.id ? 'default' : 'outline'}
-              onClick={() => setSection(item.id)}
+              variant={activeFilterCount > 0 ? 'default' : 'outline'}
+              size="icon"
+              className="relative shrink-0"
+              aria-label="Filtrlar"
             >
-              {item.label}
+              <SlidersHorizontal className="h-4 w-4" />
+              {activeFilterCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground">
+                  {activeFilterCount}
+                </span>
+              )}
             </Button>
-          ))}
+          </PopoverTrigger>
 
-          <Button
-            size="sm"
-            variant={verifiedOnly ? 'default' : 'outline'}
-            onClick={() => setVerifiedOnly((value) => !value)}
-            className="gap-1"
-          >
-            <ShieldCheck className="h-3.5 w-3.5" />
-            Tasdiqlangan
-          </Button>
-        </div>
+          <PopoverContent align="end" className="w-[min(22rem,calc(100vw-2rem))] p-0">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <p className="text-sm font-medium">Filtrlar</p>
+              {activeFilterCount > 0 && (
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={resetFilters}>
+                  Tozalash
+                </Button>
+              )}
+            </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          <Badge
-            variant={category === 'all' ? 'default' : 'secondary'}
-            className="cursor-pointer whitespace-nowrap px-3 py-1"
-            onClick={() => setCategory('all')}
-          >
-            Barchasi
-          </Badge>
-          {categories.map((item) => (
-            <Badge
-              key={item.id}
-              variant={category === item.id ? 'default' : 'secondary'}
-              className="cursor-pointer whitespace-nowrap px-3 py-1"
-              onClick={() => setCategory(item.id)}
-            >
-              {item.label}
+            <div className="max-h-[70vh] space-y-4 overflow-y-auto p-4">
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Bo\u2019lim</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {visibleSections.map((item) => (
+                    <Button
+                      key={item.id}
+                      size="sm"
+                      variant={section === item.id ? 'default' : 'outline'}
+                      className="h-7 px-2.5 text-xs"
+                      onClick={() => setSection(item.id)}
+                    >
+                      {item.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Kategoriya</p>
+                <div className="flex flex-wrap gap-1.5">
+                  <Badge
+                    variant={category === 'all' ? 'default' : 'secondary'}
+                    className="cursor-pointer whitespace-nowrap px-2.5 py-1 font-normal"
+                    onClick={() => setCategory('all')}
+                  >
+                    Barchasi
+                  </Badge>
+                  {categories.map((item) => (
+                    <Badge
+                      key={item.id}
+                      variant={category === item.id ? 'default' : 'secondary'}
+                      className="cursor-pointer whitespace-nowrap px-2.5 py-1 font-normal"
+                      onClick={() => setCategory(item.id)}
+                    >
+                      {item.label}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Saralash</p>
+                <Select value={sort} onValueChange={(value) => setSort(value as MiniAppSort)}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SORTS.map((item) => (
+                      <SelectItem key={item} value={item}>
+                        {MINI_APP_SORT_LABELS[item]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Ilova turi</p>
+                <Select
+                  value={appType}
+                  onValueChange={(value) => setAppType(value as MiniAppType | 'all')}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Barcha turlar</SelectItem>
+                    {APP_TYPES.map((item) => (
+                      <SelectItem key={item} value={item}>
+                        {MINI_APP_TYPE_LABELS[item]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Button
+                variant={verifiedOnly ? 'default' : 'outline'}
+                size="sm"
+                className="w-full gap-1"
+                onClick={() => setVerifiedOnly((value) => !value)}
+              >
+                <ShieldCheck className="h-3.5 w-3.5" />
+                Faqat tasdiqlangan nashriyotlar
+              </Button>
+            </div>
+
+            <div className="border-t px-4 py-3">
+              <Button className="w-full" size="sm" onClick={() => setFiltersOpen(false)}>
+                Ko\u2019rish
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
+
+      {activeSummary.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {activeSummary.map((label) => (
+            <Badge key={label} variant="secondary" className="font-normal">
+              {label}
             </Badge>
           ))}
+          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={resetFilters}>
+            Tozalash
+          </Button>
         </div>
-      </div>
+      )}
 
       <div className="mt-5">
         {feed.loading ? (
@@ -243,19 +337,16 @@ export default function MiniAppsPage() {
             <p className="font-medium">Ilova topilmadi</p>
             <p className="mt-1 text-sm text-muted-foreground">
               {query
-                ? 'Qidiruv shartlarini o’zgartirib ko’ring.'
-                : 'Bu bo’limda hozircha moderatsiyadan o’tgan ilova yo’q.'}
+                ? 'Qidiruv shartlarini o\u2019zgartirib ko\u2019ring.'
+                : 'Bu bo\u2019limda hozircha moderatsiyadan o\u2019tgan ilova yo\u2019q.'}
             </p>
             <Button className="mt-4" onClick={handleAdd}>
-              Birinchi ilovani qo’shish
+              Birinchi ilovani qo\u2019shish
             </Button>
           </div>
         ) : (
           <>
-            <p className="mb-3 text-xs text-muted-foreground">
-              {feed.total} ilova
-              {section === 'all' && sort === 'recommended' && ' · tanlangan platformalar birinchi'}
-            </p>
+            <p className="mb-3 text-xs text-muted-foreground">{feed.total} ilova</p>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {feed.apps.map((app) => (
@@ -282,7 +373,7 @@ export default function MiniAppsPage() {
                   className={cn(feed.loadingMore && 'opacity-70')}
                 >
                   {feed.loadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Ko’proq yuklash
+                  Ko\u2019proq yuklash
                 </Button>
               </div>
             )}
