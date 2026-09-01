@@ -1,3 +1,3 @@
 
 ## Typecheck
-- [ ] Fix all preview typecheck build errors (pre-existing included)
+- [x] Fix all preview typecheck build errors (pre-existing included)
