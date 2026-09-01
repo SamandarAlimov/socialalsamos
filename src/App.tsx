@@ -47,6 +47,7 @@ import ActivityPage from "./pages/ActivityPage";
 import AdsPage from "./pages/AdsPage";
 import ChannelsPage from "./pages/ChannelsPage";
 import MiniAppsPage from "./pages/MiniAppsPage";
+import MiniAppSubmitPage from "./pages/MiniAppSubmitPage";
 import MiniAppsModerationPage from "./pages/MiniAppsModerationPage";
 import PublisherOnboardingPage from "./pages/PublisherOnboardingPage";
 import JoinInvitePage from "./pages/JoinInvitePage";
@@ -152,6 +153,8 @@ function AppRoutes() {
         {/* Mini Apps: aniq yo'llar katalogdan OLDIN turishi shart. */}
         <Route path="/mini-apps/moderation" element={<MiniAppsModerationPage />} />
         <Route path="/mini-apps/publisher" element={<PublisherOnboardingPage />} />
+        <Route path="/mini-apps/new" element={<MiniAppSubmitPage />} />
+        <Route path="/mini-apps/:appId/edit" element={<MiniAppSubmitPage />} />
         <Route path="/mini-apps" element={<MiniAppsPage />} />
       </Route>
 

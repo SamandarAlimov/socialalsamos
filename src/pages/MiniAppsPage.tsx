@@ -1,24 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Loader2, Plus, Search, ShieldCheck, SlidersHorizontal, X } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 import { fetchMiniAppCategories } from '@/features/miniapps/api';
 import { MiniAppCard } from '@/features/miniapps/components/MiniAppCard';
-import { MiniAppFormDialog } from '@/features/miniapps/components/MiniAppFormDialog';
 import { MiniAppViewer } from '@/features/miniapps/components/MiniAppViewer';
 import { useMiniAppFeed } from '@/features/miniapps/hooks/useMiniAppFeed';
 import {
@@ -57,6 +50,7 @@ const DEFAULT_SORT: MiniAppSort = 'recommended';
 export default function MiniAppsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const [categories, setCategories] = useState<MiniAppCategory[]>(FALLBACK_CATEGORIES);
   const [section, setSection] = useState<MiniAppSection>(DEFAULT_SECTION);
@@ -68,8 +62,6 @@ export default function MiniAppsPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [viewerApp, setViewerApp] = useState<MiniApp | null>(null);
-  const [formOpen, setFormOpen] = useState(false);
-  const [editingApp, setEditingApp] = useState<MiniApp | null>(null);
 
   const feed = useMiniAppFeed({
     section,
@@ -141,8 +133,7 @@ export default function MiniAppsPage() {
       });
       return;
     }
-    setEditingApp(null);
-    setFormOpen(true);
+    navigate('/mini-apps/new');
   };
 
   return (
@@ -252,38 +243,44 @@ export default function MiniAppsPage() {
 
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground">Saralash</p>
-                <Select value={sort} onValueChange={(value) => setSort(value as MiniAppSort)}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SORTS.map((item) => (
-                      <SelectItem key={item} value={item}>
-                        {MINI_APP_SORT_LABELS[item]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex flex-wrap gap-1.5">
+                  {SORTS.map((item) => (
+                    <Button
+                      key={item}
+                      size="sm"
+                      variant={sort === item ? 'default' : 'outline'}
+                      className="h-7 px-2.5 text-xs"
+                      onClick={() => setSort(item)}
+                    >
+                      {MINI_APP_SORT_LABELS[item]}
+                    </Button>
+                  ))}
+                </div>
               </div>
 
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground">Ilova turi</p>
-                <Select
-                  value={appType}
-                  onValueChange={(value) => setAppType(value as MiniAppType | 'all')}
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Barcha turlar</SelectItem>
-                    {APP_TYPES.map((item) => (
-                      <SelectItem key={item} value={item}>
-                        {MINI_APP_TYPE_LABELS[item]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex flex-wrap gap-1.5">
+                  <Button
+                    size="sm"
+                    variant={appType === 'all' ? 'default' : 'outline'}
+                    className="h-7 px-2.5 text-xs"
+                    onClick={() => setAppType('all')}
+                  >
+                    Barcha turlar
+                  </Button>
+                  {APP_TYPES.map((item) => (
+                    <Button
+                      key={item}
+                      size="sm"
+                      variant={appType === item ? 'default' : 'outline'}
+                      className="h-7 px-2.5 text-xs"
+                      onClick={() => setAppType(item)}
+                    >
+                      {MINI_APP_TYPE_LABELS[item]}
+                    </Button>
+                  ))}
+                </div>
               </div>
 
               <Button
@@ -354,10 +351,7 @@ export default function MiniAppsPage() {
                   categoryLabel={categoryLabels.get(app.category) ?? app.category}
                   canManage={Boolean(user && app.ownerId === user.id)}
                   onOpen={setViewerApp}
-                  onEdit={(target) => {
-                    setEditingApp(target);
-                    setFormOpen(true);
-                  }}
+                  onEdit={(target) => navigate('/mini-apps/' + target.id + '/edit')}
                 />
               ))}
             </div>
@@ -380,15 +374,6 @@ export default function MiniAppsPage() {
       </div>
 
       {viewerApp && <MiniAppViewer app={viewerApp} onClose={() => setViewerApp(null)} />}
-
-      <MiniAppFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        userId={user?.id ?? null}
-        categories={categories}
-        app={editingApp}
-        onSaved={feed.refresh}
-      />
     </div>
   );
 }
