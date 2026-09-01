@@ -26,7 +26,7 @@ export const MINI_APP_IFRAME_SANDBOX = [
  * cookie va IndexedDB bilan to'liq ishlaydi.
  *
  * DIQQAT: bu sandbox faqat alohida domendagi proksi uchun. Bir xil origindagi
- * `/api/mp/` proksisi uchun `allow-same-origin` BERILMAYDI.
+ * `/mp/` proksisi uchun `allow-same-origin` BERILMAYDI.
  */
 export const MINI_APP_PROXY_IFRAME_SANDBOX = [MINI_APP_IFRAME_SANDBOX, 'allow-same-origin'].join(' ');
 
@@ -39,8 +39,13 @@ export const PROXY_TIMEOUT_MS = 15000;
 /** Alohida proksi domenidagi path prefiksi (workers/mini-app-proxy bilan bir xil). */
 export const MINI_APP_PROXY_PATH_PREFIX = '/p/';
 
-/** Bir xil origindagi Vercel proksisi (api/mp/[...path].ts) prefiksi. */
-export const MINI_APP_SAME_ORIGIN_PROXY_PREFIX = '/api/mp/p/';
+/**
+ * Bir xil origindagi proksi prefiksi.
+ * URL shakli: `https://alsamos.com/mp/<host>/<path>?<query>`
+ * vercel.json rewrite ni `api/mini-app-proxy.ts` ga yo'naltiradi.
+ * Path ichida `:` va `//` YO'Q — aks holda Vercel routing 404 qaytaradi.
+ */
+export const MINI_APP_SAME_ORIGIN_PROXY_PREFIX = '/mp/';
 
 const BLOCKED_SCHEMES = ['javascript:', 'data:', 'blob:', 'file:', 'ftp:', 'ws:', 'wss:'];
 
@@ -231,8 +236,8 @@ export interface OpenPlan {
 
 /**
  * `VITE_MINI_APP_PROXY_ORIGIN` — alohida proksi domeni (workers/mini-app-proxy).
- * Sozlanmagan bo'lsa bir xil origindagi `/api/mp/p/` proksisidan foydalanamiz
- * (api/mp/[...path].ts, Vercel), ya'ni qo'shimcha sozlamasiz ham ichida ochiladi.
+ * Sozlanmagan bo'lsa bir xil origindagi `/mp/` proksisidan foydalanamiz
+ * (api/mini-app-proxy.ts, Vercel), ya'ni qo'shimcha sozlamasiz ham ichida ochiladi.
  */
 function envProxyOrigin(): string | null {
   try {
@@ -262,7 +267,10 @@ export function buildProxyUrl(apiBase: string, targetUrl: string, cacheBuster?: 
   return base + '/functions/v1/mini-app-proxy?url=' + encodeURIComponent(targetUrl) + suffix;
 }
 
-/** O'zimiz boshqaradigan proksi (path-prefix shakli — nisbiy havolalar buzilmaydi). */
+/**
+ * Alohida proksi domeni uchun URL: `https://proxy.alsamos.com/p/https://islom.uz/...`
+ * (Cloudflare Worker `//` va `:` belgilarini muammosiz qabul qiladi.)
+ */
 export function buildInAppProxyUrl(
   proxyOrigin: string,
   targetUrl: string,
@@ -276,6 +284,32 @@ export function buildInAppProxyUrl(
     target = target + separator + '__mp=' + encodeURIComponent(String(cacheBuster));
   }
   return origin + pathPrefix + target;
+}
+
+/**
+ * Bir xil origindagi proksi uchun URL: `https://alsamos.com/mp/islom.uz/sahifa?x=1`
+ * Sxema va `//` path'da saqlanmaydi — Vercel routing shundaginagina ishlaydi.
+ * Host path ichida bo'lgani uchun `<base href>` bilan nisbiy VA host-ichidagi
+ * resurslar ham proksi ustidan yuklanadi.
+ */
+export function buildSameOriginProxyUrl(
+  proxyOrigin: string,
+  targetUrl: string,
+  cacheBuster?: string | number,
+  pathPrefix: string = MINI_APP_SAME_ORIGIN_PROXY_PREFIX,
+): string {
+  const origin = proxyOrigin.replace(/\/+$/, '');
+  let parsed: URL;
+  try {
+    parsed = new URL(targetUrl);
+  } catch {
+    return targetUrl;
+  }
+  if (cacheBuster !== undefined) {
+    parsed.searchParams.set('__mp', String(cacheBuster));
+  }
+  const path = parsed.pathname && parsed.pathname !== '/' ? parsed.pathname : '/';
+  return origin + pathPrefix + parsed.host + path + parsed.search;
 }
 
 export interface BuildOpenPlanInput {
@@ -333,7 +367,7 @@ export function buildOpenPlan(input: BuildOpenPlanInput): OpenPlan {
 
   // 1) Alohida proksi domeni (eng yaxshi: allow-same-origin bilan to'liq ishlaydi)
   const dedicatedOrigin = input.proxyOrigin === undefined ? envProxyOrigin() : input.proxyOrigin;
-  // 2) Bir xil origindagi /api/mp/ proksisi (qo'shimcha sozlamasiz ishlaydi)
+  // 2) Bir xil origindagi /mp/ proksisi (qo'shimcha sozlamasiz ishlaydi)
   const sameOrigin =
     dedicatedOrigin || input.sameOriginProxy === false ? null : sameOriginProxyOrigin();
 
@@ -348,7 +382,7 @@ export function buildOpenPlan(input: BuildOpenPlanInput): OpenPlan {
   } else if (sameOrigin) {
     proxyStep = {
       kind: 'proxy',
-      src: buildInAppProxyUrl(sameOrigin, target, cacheBuster, MINI_APP_SAME_ORIGIN_PROXY_PREFIX),
+      src: buildSameOriginProxyUrl(sameOrigin, target, cacheBuster),
       timeoutMs: PROXY_TIMEOUT_MS,
       // Bir xil origin: allow-same-origin BERILMAYDI (host sahifa xavfsizligi uchun).
       sandbox: MINI_APP_IFRAME_SANDBOX,
