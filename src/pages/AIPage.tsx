@@ -29,6 +29,8 @@ import type { AIConversation, AIMessage, AISource, AIToolEvent } from '@/compone
 import { extractArtifacts } from '@/lib/aiArtifacts';
 import { streamAgent } from '@/lib/ai/agentClient';
 import { buildRepoContext, detectRepoRefs, githubReady, githubRepoUrl } from '@/lib/ai/githubContext';
+import { buildBrainContext } from '@/lib/ai/brain';
+import { captureMemories, syncMemories } from '@/lib/ai/memory';
 import { toolLabel, type ModelId, type ToolGroupId } from '@/lib/ai/capabilities';
 
 const PIN_KEY = 'alsamos.ai.pinned';
@@ -131,6 +133,12 @@ export default function AIPage() {
       /* ignore */
     }
   }, [model, toolGroups]);
+
+  // Uzoq muddatli xotirani serverdan sinxronlaymiz — boshqa qurilmada ham eslansin.
+  useEffect(() => {
+    if (!user) return;
+    void syncMemories();
+  }, [user]);
 
   /* ---------------- history ---------------- */
 
@@ -437,12 +445,23 @@ export default function AIPage() {
         }
       }
 
+      /* ---- "Miya": master prompt + uzoq muddatli xotira + skillar +
+       * boshqa suhbatlar konteksti. Server buni system prompti ichiga qo'shadi,
+       * shuning uchun AI ning imkoniyatlari deploy'siz kengayadi.
+       */
+      const brainContext = buildBrainContext({
+        userText: lastUser?.content ?? '',
+        conversations,
+        currentConversationId,
+      });
+
       await streamAgent({
         messages: history,
         mode: 'agent',
         model,
         toolGroups,
         conversationId: currentConversationId,
+        context: brainContext,
         signal: controller.signal,
         onEvent: (event) => {
           switch (event.type) {
@@ -557,6 +576,12 @@ export default function AIPage() {
     if (attachments.length > 0) {
       const attachmentText = attachments.map((a) => `[${a.type}] ${a.name}: ${a.url}`).join('\n');
       content = content ? `${content}\n\n${attachmentText}` : attachmentText;
+    }
+
+    // Eslab qolishga arziydigan ma'lumotni ajratamiz (boshqa suhbatlarda ishlatiladi).
+    const remembered = captureMemories(raw);
+    if (remembered.length > 0) {
+      sonnerToast.success('Eslab qoldim', { description: remembered[0].text.slice(0, 90) });
     }
 
     const userMsg: AIMessage = {
