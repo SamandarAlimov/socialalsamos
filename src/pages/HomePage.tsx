@@ -21,6 +21,7 @@ import { PollDisplay, parsePollFromContent } from '@/components/PollDisplay';
 import { RichText } from '@/components/RichText';
 import { PostExtras } from '@/components/PostExtras';
 import { PostCollaboratorByline } from '@/components/PostCollaboratorByline';
+import { PostCollaboratorsCard } from '@/components/PostCollaboratorsCard';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
@@ -35,7 +36,7 @@ import { useActiveAds } from '@/hooks/useAds';
 import { FeedAd } from '@/components/ads/FeedAd';
 import { PostViewsDialog } from '@/components/PostViewsDialog';
 import { usePostViews } from '@/hooks/usePostViews';
-import { parseLocationFromContent } from '@/lib/postMarkers';
+import { parseLocationFromContent, parseMusicFromContent } from '@/lib/postMarkers';
 
 /**
  * Yangi sxemadagi qo‘shimcha maydonlar. `posts` jadvalidan `*` bilan
@@ -410,9 +411,26 @@ function PostCard({
 
   // Yangi so‘rovnoma tizimi: `has_poll` bo‘lmasa `post_kind` ga qaraymiz.
   const hasStructuredPoll = Boolean(post.has_poll) || post.post_kind === 'poll';
-  const legacyLocation = parseLocationFromContent(
-    parsePollFromContent(post.content || '').cleanContent,
-  ).location;
+
+  /*
+    Matn ichidagi barcha markerlar bir joyda ajratiladi:
+    so‘rovnoma -> joylashuv -> musiqa. Shu tartib buzilmasa xom JSON yoki
+    emoji qatori foydalanuvchiga hech qachon ko‘rinmaydi, va aksincha —
+    qo‘yilgan musiqa/joylashuv haqiqiy karta bo‘lib chiqadi.
+  */
+  const markers = useMemo(() => {
+    const poll = parsePollFromContent(post.content || '');
+    const location = parseLocationFromContent(poll.cleanContent);
+    const music = parseMusicFromContent(location.cleanContent);
+
+    return {
+      pollData: poll.pollData,
+      legacyLocation: location.location,
+      legacyLocationLabel: location.labelOnly,
+      legacyMusic: music.music,
+      textContent: music.cleanContent,
+    };
+  }, [post.content]);
 
   const handleUserClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -475,33 +493,27 @@ function PostCard({
       </div>
 
       {/* Post matni — formatlash bilan (qalin, qiya, chizilgan, rangli, sarlavha) */}
-      {post.content && (() => {
-        const { pollData, cleanContent } = parsePollFromContent(post.content);
-        const { cleanContent: textContent } = parseLocationFromContent(cleanContent);
-        return (
-          <>
-            {textContent && (
-              <div className="px-3 md:px-4 pb-2 md:pb-3">
-                <RichText
-                  content={textContent}
-                  formattedContent={post.formatted_content}
-                  className="text-sm leading-relaxed"
-                />
-              </div>
-            )}
-            {/* Eski markerli so‘rovnomalar (migratsiyagacha) */}
-            {pollData && !hasStructuredPoll && (
-              <div className="px-3 md:px-4 pb-2 md:pb-3">
-                <PollDisplay postId={post.id} pollData={pollData} />
-              </div>
-            )}
-          </>
-        );
-      })()}
+      {markers.textContent && (
+        <div className="px-3 md:px-4 pb-2 md:pb-3">
+          <RichText
+            content={markers.textContent}
+            formattedContent={post.formatted_content}
+            className="text-sm leading-relaxed"
+          />
+        </div>
+      )}
+
+      {/* Eski markerli so‘rovnomalar (migratsiyagacha) */}
+      {markers.pollData && !hasStructuredPoll && (
+        <div className="px-3 md:px-4 pb-2 md:pb-3">
+          <PollDisplay postId={post.id} pollData={markers.pollData} />
+        </div>
+      )}
 
       {/*
-        Fayllar (har qanday tur), so‘rovnoma va joylashuv.
-        Yangi `post_media` bo‘sh bo‘lsa eski `media_urls` karuseli ko‘rsatiladi.
+        Fayllar (har qanday tur), musiqa, so‘rovnoma va joylashuv.
+        Yangi `post_media` bo‘sh bo‘lsa eski `media_urls` karuseli ko‘rsatiladi,
+        `post_music` bo‘sh bo‘lsa matn markeridagi musiqa chiziladi.
       */}
       <PostExtras
         postId={post.id}
@@ -509,8 +521,17 @@ function PostCard({
         isOwner={isOwner}
         legacyMediaUrls={post.media_urls}
         legacyMediaType={post.media_type}
-        legacyLocation={legacyLocation}
+        legacyLocation={markers.legacyLocation}
+        legacyLocationLabel={markers.legacyLocationLabel}
+        legacyMusic={markers.legacyMusic}
         className="px-3 pb-3 md:px-4"
+      />
+
+      {/* Hammualliflik: taklifni qabul qilish/rad etish va boshqarish */}
+      <PostCollaboratorsCard
+        postId={post.id}
+        isOwner={isOwner}
+        className="mx-3 mb-3 md:mx-4"
       />
 
       {/* Post Actions - Mobile optimized */}
