@@ -13,9 +13,9 @@ import {
 interface PostLocationCardProps {
   location: PostLocation;
   className?: string;
-  /** Kompakt ko\u2018rinish \u2014 faqat chip. */
+  /** Kompakt korinish: faqat chip. */
   compact?: boolean;
-  /** Post egasi bo\u2018lsa: live joylashuv avtomatik yangilanadi va to\u2018xtatish mumkin. */
+  /** Post egasi bolsa: live joylashuv avtomatik yangilanadi va toxtatish mumkin. */
   isOwner?: boolean;
   onStopped?: () => void;
 }
@@ -45,7 +45,7 @@ function staticMapUrl(latitude: number, longitude: number): string {
   return STATIC_MAP_BASE + '?' + params.toString();
 }
 
-/** Lentada post joylashuvini ko\u2018rsatish. */
+/** Lentada post joylashuvini korsatish. */
 export function PostLocationCard({
   location,
   className,
@@ -66,7 +66,7 @@ export function PostLocationCard({
     enabled: isOwner && live,
   });
 
-  // Qolgan vaqt sanog\u2018i
+  // Qolgan vaqt sanogi
   useEffect(() => {
     if (!location.live_until || location.mode !== 'live') return;
 
@@ -82,8 +82,8 @@ export function PostLocationCard({
 
   /*
     Foydalanuvchi "joriy joylashuv" ni yuborganda bazada faqat koordinata
-    bo'ladi. Umumiy "Joriy joylashuv" yozuvi o'rniga aynan qaysi manzil
-    ekanini ko'rsatamiz — shuning uchun koordinatadan manzil tiklanadi.
+    boladi. Umumiy "Joriy joylashuv" yozuvi orniga aynan qaysi manzil
+    ekanini korsatamiz: koordinatadan haqiqiy manzil tiklanadi.
   */
   const savedName = location.place?.name ?? location.label;
   const hasRealName = !isGenericLocationLabel(savedName);
@@ -200,7 +200,7 @@ export function PostLocationCard({
             onClick={handleStop}
             className="flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-destructive/50 px-2.5 text-xs font-medium text-destructive transition hover:bg-destructive/10"
           >
-            <Square className="h-3 w-3" /> To\u2018xtatish
+            <Square className="h-3 w-3" /> Toxtatish
           </button>
         )}
       </div>

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Check, Clock3, LogOut, Trash2, UserPlus, X } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -23,12 +24,21 @@ interface PostCollaboratorBylineProps {
   className?: string;
 }
 
+/**
+ * Post sarlavhasidagi hammuallif satri (Instagram uslubi):
+ *   Samandar va @alsamos
+ *
+ * Hammuallif nomi asosiy matn rangida va qalin: ustiga bosilganda uning
+ * profiliga otiladi. Royxat va boshqaruv esa "va N kishi" ustiga bosilganda
+ * ochiladigan oynada: lentada alohida boshqaruv kartasi chizilmaydi.
+ */
 export function PostCollaboratorByline({
   postId,
   isOwner = false,
   className,
 }: PostCollaboratorBylineProps) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const {
     collaborators,
     isLoading,
@@ -70,13 +80,6 @@ export function PostCollaboratorByline({
     [active],
   );
 
-  const summary = useMemo(() => {
-    if (accepted.length === 0) return null;
-    const first = '@' + (accepted[0].profile?.username || 'user');
-    if (accepted.length === 1) return 'and ' + first;
-    return 'and ' + first + ' and ' + (accepted.length - 1) + ' more';
-  }, [accepted]);
-
   const run = async (
     id: string,
     action: () => Promise<void>,
@@ -89,7 +92,7 @@ export function PostCollaboratorByline({
       toast.success(successMessage);
     } catch (error) {
       console.error('Hammualliflik amali xatosi:', error);
-      toast.error('Hammualliflik amalini bajarib bo‘lmadi');
+      toast.error('Hammualliflik amali bajarilmadi');
     } finally {
       setBusyId(null);
     }
@@ -103,6 +106,17 @@ export function PostCollaboratorByline({
     );
   };
 
+  /** Hammuallif profiliga otish. */
+  const openProfile = (
+    event: React.MouseEvent,
+    profile: PostCollaboratorProfile | null,
+    userId: string,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    navigate('/user/' + (profile?.username || userId));
+  };
+
   if (isLoading) return null;
 
   const hasLifecycle =
@@ -113,27 +127,59 @@ export function PostCollaboratorByline({
 
   if (!hasLifecycle) return null;
 
+  const first = accepted[0] ?? null;
+
   return (
     <>
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          setOpen(true);
-        }}
-        className={cn(
-          'inline min-w-0 text-left font-normal text-muted-foreground transition hover:text-foreground',
-          className,
-        )}
-      >
-        {summary ? (
-          summary
+      <span className={cn('inline min-w-0 text-sm', className)}>
+        {first ? (
+          <>
+            <span className="text-muted-foreground">{' va '}</span>
+            <button
+              type="button"
+              onClick={(event) => openProfile(event, first.profile, first.user_id)}
+              className="font-semibold text-foreground transition hover:underline"
+            >
+              {first.profile?.display_name || '@' + (first.profile?.username || 'user')}
+            </button>
+
+            {accepted.length > 1 && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setOpen(true);
+                }}
+                className="font-semibold text-foreground transition hover:underline"
+              >
+                {' va yana ' + (accepted.length - 1) + ' kishi'}
+              </button>
+            )}
+          </>
         ) : selfCollaboration?.status === 'pending' ? (
-          <span className="text-primary">Hammualliflik taklifi</span>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setOpen(true);
+            }}
+            className="font-medium text-primary transition hover:underline"
+          >
+            Hammualliflik taklifi
+          </button>
         ) : isOwner && pending.length > 0 ? (
-          <span>{pending.length} taklif kutilmoqda</span>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setOpen(true);
+            }}
+            className="text-muted-foreground transition hover:text-foreground"
+          >
+            {pending.length + ' taklif kutilmoqda'}
+          </button>
         ) : null}
-      </button>
+      </span>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="flex max-h-[86dvh] max-w-sm flex-col overflow-hidden p-0">
@@ -150,7 +196,7 @@ export function PostCollaboratorByline({
                 className="flex min-h-12 w-full items-center gap-3 border-b border-border/50 px-4 text-sm font-medium transition hover:bg-muted/50 disabled:opacity-40"
               >
                 <UserPlus className="h-4 w-4 text-primary" />
-                Hammuallif qo‘shish
+                Hammuallif qoshish
                 <span className="ml-auto text-xs text-muted-foreground">
                   {active.length}/10
                 </span>
@@ -159,7 +205,7 @@ export function PostCollaboratorByline({
 
             {collaborators.length === 0 ? (
               <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-                Hammuallif yo‘q
+                Hammuallif yoq
               </div>
             ) : (
               collaborators.map((item) => {
@@ -174,15 +220,28 @@ export function PostCollaboratorByline({
                     key={item.id}
                     className="flex items-center gap-3 border-b border-border/40 px-4 py-3 last:border-b-0"
                   >
-                    <Avatar className="h-9 w-9 shrink-0">
-                      <AvatarImage src={item.profile?.avatar_url || ''} />
-                      <AvatarFallback className="text-xs">
-                        {label.charAt(0).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
+                    <button
+                      type="button"
+                      onClick={(event) => openProfile(event, item.profile, item.user_id)}
+                      className="shrink-0"
+                      aria-label={label + ' profiliga otish'}
+                    >
+                      <Avatar className="h-9 w-9">
+                        <AvatarImage src={item.profile?.avatar_url || ''} />
+                        <AvatarFallback className="text-xs">
+                          {label.charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                    </button>
 
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{label}</p>
+                    <button
+                      type="button"
+                      onClick={(event) => openProfile(event, item.profile, item.user_id)}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {label}
+                      </p>
                       <p className="truncate text-xs text-muted-foreground">
                         @{item.profile?.username || 'user'}
                         {' · '}
@@ -192,7 +251,7 @@ export function PostCollaboratorByline({
                             ? 'Kutilmoqda'
                             : 'Rad etilgan'}
                       </p>
-                    </div>
+                    </button>
 
                     {isSelf && item.status === 'pending' && !isOwner ? (
                       <div className="flex items-center gap-1">

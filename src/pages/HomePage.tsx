@@ -22,7 +22,6 @@ import { RichText } from '@/components/RichText';
 import { PostExtras } from '@/components/PostExtras';
 import { PostMusicCard } from '@/components/PostMusicCard';
 import { PostCollaboratorByline } from '@/components/PostCollaboratorByline';
-import { PostCollaboratorsCard } from '@/components/PostCollaboratorsCard';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
@@ -40,8 +39,8 @@ import { usePostViews } from '@/hooks/usePostViews';
 import { parseLocationFromContent, parseMusicFromContent, resolvePostMusic } from '@/lib/postMarkers';
 
 /**
- * Yangi sxemadagi qo'shimcha maydonlar. `posts` jadvalidan `*` bilan
- * o'qilgani uchun ular mavjud, lekin generatsiya qilingan tiplarda hali yo'q.
+ * Yangi sxemadagi qoshimcha maydonlar. `posts` jadvalidan `*` bilan
+ * oqilgani uchun ular mavjud, lekin generatsiya qilingan tiplarda hali yoq.
  */
 type FeedPost = Post & {
   post_kind?: string | null;
@@ -410,18 +409,16 @@ function PostCard({
   const commentsCount = realtimeCounts.comments_count;
   const isLiked = realtimeCounts.is_liked ?? post.is_liked;
 
-  // Yangi so'rovnoma tizimi: `has_poll` bo'lmasa `post_kind` ga qaraymiz.
+  // Yangi sorovnoma tizimi: `has_poll` bolmasa `post_kind` ga qaraymiz.
   const hasStructuredPoll = Boolean(post.has_poll) || post.post_kind === 'poll';
 
   /*
     Matn ichidagi barcha markerlar bir joyda ajratiladi:
-    so'rovnoma -> joylashuv -> musiqa. Shu tartib buzilmasa xom JSON yoki
-    emoji qatori foydalanuvchiga hech qachon ko'rinmaydi, va aksincha —
-    qo'yilgan musiqa/joylashuv haqiqiy karta bo'lib chiqadi.
+    sorovnoma -> joylashuv -> musiqa. Shu tartib buzilmasa xom JSON yoki
+    emoji qatori foydalanuvchiga hech qachon korinmaydi.
 
     Musiqa uchta manbadan izlanadi: `content` markeri, `formatted_content`
-    ichida qolgan marker va `media_urls` dagi audio fayl. Shu sababli lenta
-    bilan profil sahifasi endi bir xil natija ko'rsatadi.
+    ichida qolgan marker va `media_urls` dagi audio fayl.
   */
   const markers = useMemo(() => {
     const poll = parsePollFromContent(post.content || '');
@@ -480,7 +477,7 @@ function PostCard({
               <PostCollaboratorByline
                 postId={post.id}
                 isOwner={isOwner}
-                className="truncate text-sm"
+                className="truncate"
               />
             </div>
             <p className="text-[11px] md:text-xs text-muted-foreground">
@@ -502,7 +499,7 @@ function PostCard({
         />
       </div>
 
-      {/* Post matni — formatlash bilan (qalin, qiya, chizilgan, rangli, sarlavha) */}
+      {/* Post matni: formatlash bilan (qalin, qiya, chizilgan, rangli, sarlavha) */}
       {markers.textContent && (
         <div className="px-3 md:px-4 pb-2 md:pb-3">
           <RichText
@@ -514,10 +511,9 @@ function PostCard({
       )}
 
       {/*
-        Musiqa profil sahifasidagi kabi to'g'ridan-to'g'ri chiziladi.
-        Ilgari u faqat PostExtras ichidan o'tardi va strukturali jadval
-        so'rovlariga bog'liq bo'lib qolardi — shu sababli lentada karta
-        ko'rinmay qolgan edi.
+        Musiqa profil sahifasidagi kabi togridan-togri chiziladi.
+        Ilgari u faqat PostExtras ichidan otardi va strukturali jadval
+        sorovlariga boglib qolardi.
       */}
       {markers.legacyMusic && (
         <div className="px-3 md:px-4 pb-2 md:pb-3">
@@ -525,7 +521,7 @@ function PostCard({
         </div>
       )}
 
-      {/* Eski markerli so'rovnomalar (migratsiyagacha) */}
+      {/* Eski markerli sorovnomalar (migratsiyagacha) */}
       {markers.pollData && !hasStructuredPoll && (
         <div className="px-3 md:px-4 pb-2 md:pb-3">
           <PollDisplay postId={post.id} pollData={markers.pollData} />
@@ -533,10 +529,9 @@ function PostCard({
       )}
 
       {/*
-        Fayllar (har qanday tur), musiqa, so'rovnoma va joylashuv.
-        Yangi `post_media` bo'sh bo'lsa eski `media_urls` karuseli ko'rsatiladi.
-        Musiqa markeri yuqorida chizilgani uchun bu yerga uzatilmaydi —
-        aks holda bitta post ikkita musiqa kartasini ko'rsatardi.
+        Fayllar (har qanday tur), sorovnoma va joylashuv.
+        Yangi `post_media` bosh bolsa eski `media_urls` karuseli korsatiladi.
+        Musiqa yuqorida chizilgani uchun bu yerga uzatilmaydi.
       */}
       <PostExtras
         postId={post.id}
@@ -547,13 +542,6 @@ function PostCard({
         legacyLocation={markers.legacyLocation}
         legacyLocationLabel={markers.legacyLocationLabel}
         className="px-3 pb-3 md:px-4"
-      />
-
-      {/* Hammualliflik: taklifni qabul qilish/rad etish va boshqarish */}
-      <PostCollaboratorsCard
-        postId={post.id}
-        isOwner={isOwner}
-        className="mx-3 mb-3 md:mx-4"
       />
 
       {/* Post Actions - Mobile optimized */}
