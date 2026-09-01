@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -3594,50 +3594,490 @@ export type Database = {
           },
         ]
       }
+      mini_app_categories: {
+        Row: {
+          icon: string | null
+          id: string
+          is_active: boolean
+          labels: Json
+          sort_order: number
+        }
+        Insert: {
+          icon?: string | null
+          id: string
+          is_active?: boolean
+          labels?: Json
+          sort_order?: number
+        }
+        Update: {
+          icon?: string | null
+          id?: string
+          is_active?: boolean
+          labels?: Json
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      mini_app_events: {
+        Row: {
+          app_id: string
+          created_at: string
+          duration_ms: number | null
+          error_code: string | null
+          event: string
+          id: number
+          platform: string
+          session_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          app_id: string
+          created_at?: string
+          duration_ms?: number | null
+          error_code?: string | null
+          event: string
+          id?: number
+          platform?: string
+          session_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          app_id?: string
+          created_at?: string
+          duration_ms?: number | null
+          error_code?: string | null
+          event?: string
+          id?: number
+          platform?: string
+          session_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mini_app_events_app_id_fkey"
+            columns: ["app_id"]
+            isOneToOne: false
+            referencedRelation: "mini_apps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mini_app_installs: {
+        Row: {
+          app_id: string
+          created_at: string
+          last_opened_at: string | null
+          open_count: number
+          pinned: boolean
+          user_id: string
+        }
+        Insert: {
+          app_id: string
+          created_at?: string
+          last_opened_at?: string | null
+          open_count?: number
+          pinned?: boolean
+          user_id: string
+        }
+        Update: {
+          app_id?: string
+          created_at?: string
+          last_opened_at?: string | null
+          open_count?: number
+          pinned?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mini_app_installs_app_id_fkey"
+            columns: ["app_id"]
+            isOneToOne: false
+            referencedRelation: "mini_apps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mini_app_payments: {
+        Row: {
+          amount: number
+          app_id: string
+          created_at: string
+          currency: string
+          description: string | null
+          external_id: string | null
+          id: string
+          payload: Json
+          provider: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          app_id: string
+          created_at?: string
+          currency?: string
+          description?: string | null
+          external_id?: string | null
+          id?: string
+          payload?: Json
+          provider?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          app_id?: string
+          created_at?: string
+          currency?: string
+          description?: string | null
+          external_id?: string | null
+          id?: string
+          payload?: Json
+          provider?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mini_app_payments_app_id_fkey"
+            columns: ["app_id"]
+            isOneToOne: false
+            referencedRelation: "mini_apps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mini_app_reports: {
+        Row: {
+          app_id: string
+          created_at: string
+          details: string | null
+          id: string
+          reason: string
+          reporter_id: string | null
+          status: string
+        }
+        Insert: {
+          app_id: string
+          created_at?: string
+          details?: string | null
+          id?: string
+          reason: string
+          reporter_id?: string | null
+          status?: string
+        }
+        Update: {
+          app_id?: string
+          created_at?: string
+          details?: string | null
+          id?: string
+          reason?: string
+          reporter_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mini_app_reports_app_id_fkey"
+            columns: ["app_id"]
+            isOneToOne: false
+            referencedRelation: "mini_apps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mini_app_reviews: {
+        Row: {
+          app_id: string
+          comment: string | null
+          created_at: string
+          rating: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          app_id: string
+          comment?: string | null
+          created_at?: string
+          rating: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          app_id?: string
+          comment?: string | null
+          created_at?: string
+          rating?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mini_app_reviews_app_id_fkey"
+            columns: ["app_id"]
+            isOneToOne: false
+            referencedRelation: "mini_apps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mini_app_sdk_sessions: {
+        Row: {
+          app_id: string
+          consumed_at: string | null
+          expires_at: string
+          id: string
+          issued_at: string
+          nonce: string
+          platform: string
+          user_id: string
+        }
+        Insert: {
+          app_id: string
+          consumed_at?: string | null
+          expires_at: string
+          id?: string
+          issued_at?: string
+          nonce: string
+          platform?: string
+          user_id: string
+        }
+        Update: {
+          app_id?: string
+          consumed_at?: string | null
+          expires_at?: string
+          id?: string
+          issued_at?: string
+          nonce?: string
+          platform?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mini_app_sdk_sessions_app_id_fkey"
+            columns: ["app_id"]
+            isOneToOne: false
+            referencedRelation: "mini_apps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mini_app_stats_cache: {
+        Row: {
+          app_id: string
+          avg_rating: number
+          errors_30d: number
+          installs: number
+          opens_30d: number
+          opens_7d: number
+          rating_count: number
+          refreshed_at: string
+          users_30d: number
+        }
+        Insert: {
+          app_id: string
+          avg_rating?: number
+          errors_30d?: number
+          installs?: number
+          opens_30d?: number
+          opens_7d?: number
+          rating_count?: number
+          refreshed_at?: string
+          users_30d?: number
+        }
+        Update: {
+          app_id?: string
+          avg_rating?: number
+          errors_30d?: number
+          installs?: number
+          opens_30d?: number
+          opens_7d?: number
+          rating_count?: number
+          refreshed_at?: string
+          users_30d?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mini_app_stats_cache_app_id_fkey"
+            columns: ["app_id"]
+            isOneToOne: true
+            referencedRelation: "mini_apps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mini_app_versions: {
+        Row: {
+          app_id: string
+          id: string
+          manifest: Json
+          review_notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          submitted_at: string
+          submitted_by: string | null
+          version: number
+        }
+        Insert: {
+          app_id: string
+          id?: string
+          manifest: Json
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_at?: string
+          submitted_by?: string | null
+          version: number
+        }
+        Update: {
+          app_id?: string
+          id?: string
+          manifest?: Json
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_at?: string
+          submitted_by?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mini_app_versions_app_id_fkey"
+            columns: ["app_id"]
+            isOneToOne: false
+            referencedRelation: "mini_apps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mini_apps: {
         Row: {
+          age_rating: number
+          app_type: string
+          bot_id: string | null
           category: string
+          countries: string[] | null
           created_at: string
+          deep_link: string | null
           description: string | null
+          display_mode: string
+          frame_blocked: boolean
+          frame_check_error: string | null
+          frame_checked_at: string | null
+          handle: string | null
           icon_url: string | null
           id: string
           is_approved: boolean
+          is_pinned: boolean
+          locales: string[]
           name: string
+          permissions: Json
+          pin_priority: number | null
+          price_model: string
+          privacy_url: string | null
+          published_at: string | null
+          publisher_id: string | null
           rating: number
+          rejected_reason: string | null
+          screenshots: Json
+          short_description: string | null
+          status: string
+          support_url: string | null
+          terms_url: string | null
           updated_at: string
           url: string
           user_id: string
           users_count: number
         }
         Insert: {
+          age_rating?: number
+          app_type?: string
+          bot_id?: string | null
           category?: string
+          countries?: string[] | null
           created_at?: string
+          deep_link?: string | null
           description?: string | null
+          display_mode?: string
+          frame_blocked?: boolean
+          frame_check_error?: string | null
+          frame_checked_at?: string | null
+          handle?: string | null
           icon_url?: string | null
           id?: string
           is_approved?: boolean
+          is_pinned?: boolean
+          locales?: string[]
           name: string
+          permissions?: Json
+          pin_priority?: number | null
+          price_model?: string
+          privacy_url?: string | null
+          published_at?: string | null
+          publisher_id?: string | null
           rating?: number
+          rejected_reason?: string | null
+          screenshots?: Json
+          short_description?: string | null
+          status?: string
+          support_url?: string | null
+          terms_url?: string | null
           updated_at?: string
           url: string
           user_id: string
           users_count?: number
         }
         Update: {
+          age_rating?: number
+          app_type?: string
+          bot_id?: string | null
           category?: string
+          countries?: string[] | null
           created_at?: string
+          deep_link?: string | null
           description?: string | null
+          display_mode?: string
+          frame_blocked?: boolean
+          frame_check_error?: string | null
+          frame_checked_at?: string | null
+          handle?: string | null
           icon_url?: string | null
           id?: string
           is_approved?: boolean
+          is_pinned?: boolean
+          locales?: string[]
           name?: string
+          permissions?: Json
+          pin_priority?: number | null
+          price_model?: string
+          privacy_url?: string | null
+          published_at?: string | null
+          publisher_id?: string | null
           rating?: number
+          rejected_reason?: string | null
+          screenshots?: Json
+          short_description?: string | null
+          status?: string
+          support_url?: string | null
+          terms_url?: string | null
           updated_at?: string
           url?: string
           user_id?: string
           users_count?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "mini_apps_publisher_id_fkey"
+            columns: ["publisher_id"]
+            isOneToOne: false
+            referencedRelation: "publishers"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "mini_apps_user_id_fkey"
             columns: ["user_id"]
@@ -4044,6 +4484,93 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      place_reviews: {
+        Row: {
+          comment: string | null
+          created_at: string
+          id: string
+          latitude: number
+          longitude: number
+          place_key: string
+          place_name: string | null
+          rating: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          id?: string
+          latitude: number
+          longitude: number
+          place_key: string
+          place_name?: string | null
+          rating: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          id?: string
+          latitude?: number
+          longitude?: number
+          place_key?: string
+          place_name?: string | null
+          rating?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      place_visits: {
+        Row: {
+          address: string | null
+          arrived_at: string
+          category: string | null
+          created_at: string
+          device_id: string | null
+          dwell_seconds: number
+          id: string
+          latitude: number
+          left_at: string | null
+          longitude: number
+          name: string | null
+          source: string
+          user_id: string
+        }
+        Insert: {
+          address?: string | null
+          arrived_at?: string
+          category?: string | null
+          created_at?: string
+          device_id?: string | null
+          dwell_seconds?: number
+          id?: string
+          latitude: number
+          left_at?: string | null
+          longitude: number
+          name?: string | null
+          source?: string
+          user_id: string
+        }
+        Update: {
+          address?: string | null
+          arrived_at?: string
+          category?: string | null
+          created_at?: string
+          device_id?: string | null
+          dwell_seconds?: number
+          id?: string
+          latitude?: number
+          left_at?: string | null
+          longitude?: number
+          name?: string | null
+          source?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       poll_votes: {
         Row: {
@@ -4909,8 +5436,10 @@ export type Database = {
           is_featured: boolean | null
           is_negotiable: boolean | null
           last_restocked_at: string | null
+          latitude: number | null
           likes_count: number | null
           location: string | null
+          longitude: number | null
           low_stock_threshold: number | null
           moderated_at: string | null
           moderated_by: string | null
@@ -4941,8 +5470,10 @@ export type Database = {
           is_featured?: boolean | null
           is_negotiable?: boolean | null
           last_restocked_at?: string | null
+          latitude?: number | null
           likes_count?: number | null
           location?: string | null
+          longitude?: number | null
           low_stock_threshold?: number | null
           moderated_at?: string | null
           moderated_by?: string | null
@@ -4973,8 +5504,10 @@ export type Database = {
           is_featured?: boolean | null
           is_negotiable?: boolean | null
           last_restocked_at?: string | null
+          latitude?: number | null
           likes_count?: number | null
           location?: string | null
+          longitude?: number | null
           low_stock_threshold?: number | null
           moderated_at?: string | null
           moderated_by?: string | null
@@ -5129,6 +5662,127 @@ export type Database = {
           updated_at?: string | null
           user_id?: string | null
           username?: string | null
+          website?: string | null
+        }
+        Relationships: []
+      }
+      publisher_domains: {
+        Row: {
+          check_error: string | null
+          created_at: string
+          domain: string
+          id: string
+          last_checked_at: string | null
+          publisher_id: string
+          verified_at: string | null
+          verify_token: string
+        }
+        Insert: {
+          check_error?: string | null
+          created_at?: string
+          domain: string
+          id?: string
+          last_checked_at?: string | null
+          publisher_id: string
+          verified_at?: string | null
+          verify_token?: string
+        }
+        Update: {
+          check_error?: string | null
+          created_at?: string
+          domain?: string
+          id?: string
+          last_checked_at?: string | null
+          publisher_id?: string
+          verified_at?: string | null
+          verify_token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publisher_domains_publisher_id_fkey"
+            columns: ["publisher_id"]
+            isOneToOne: false
+            referencedRelation: "publishers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      publisher_members: {
+        Row: {
+          created_at: string
+          publisher_id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          publisher_id: string
+          role?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          publisher_id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publisher_members_publisher_id_fkey"
+            columns: ["publisher_id"]
+            isOneToOne: false
+            referencedRelation: "publishers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      publishers: {
+        Row: {
+          country_code: string | null
+          created_at: string
+          display_name: string
+          handle: string
+          id: string
+          legal_name: string | null
+          logo_url: string | null
+          owner_id: string
+          support_email: string | null
+          tax_id: string | null
+          type: string
+          updated_at: string
+          verification: string
+          website: string | null
+        }
+        Insert: {
+          country_code?: string | null
+          created_at?: string
+          display_name: string
+          handle: string
+          id?: string
+          legal_name?: string | null
+          logo_url?: string | null
+          owner_id: string
+          support_email?: string | null
+          tax_id?: string | null
+          type?: string
+          updated_at?: string
+          verification?: string
+          website?: string | null
+        }
+        Update: {
+          country_code?: string | null
+          created_at?: string
+          display_name?: string
+          handle?: string
+          id?: string
+          legal_name?: string | null
+          logo_url?: string | null
+          owner_id?: string
+          support_email?: string | null
+          tax_id?: string | null
+          type?: string
+          updated_at?: string
+          verification?: string
           website?: string | null
         }
         Relationships: []
@@ -5537,7 +6191,11 @@ export type Database = {
       saved_places: {
         Row: {
           address: string | null
+          category: string | null
+          collection: string
           created_at: string
+          external_id: string | null
+          external_source: string | null
           icon: string | null
           id: string
           is_favorite: boolean | null
@@ -5545,6 +6203,7 @@ export type Database = {
           list_id: string | null
           longitude: number
           name: string
+          note: string | null
           notes: string | null
           updated_at: string
           user_id: string
@@ -5552,7 +6211,11 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          category?: string | null
+          collection?: string
           created_at?: string
+          external_id?: string | null
+          external_source?: string | null
           icon?: string | null
           id?: string
           is_favorite?: boolean | null
@@ -5560,6 +6223,7 @@ export type Database = {
           list_id?: string | null
           longitude: number
           name: string
+          note?: string | null
           notes?: string | null
           updated_at?: string
           user_id: string
@@ -5567,7 +6231,11 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          category?: string | null
+          collection?: string
           created_at?: string
+          external_id?: string | null
+          external_source?: string | null
           icon?: string | null
           id?: string
           is_favorite?: boolean | null
@@ -5575,6 +6243,7 @@ export type Database = {
           list_id?: string | null
           longitude?: number
           name?: string
+          note?: string | null
           notes?: string | null
           updated_at?: string
           user_id?: string
@@ -6309,6 +6978,63 @@ export type Database = {
           longitude?: number
           speed_kmh?: number | null
           vehicle_type?: string | null
+        }
+        Relationships: []
+      }
+      taxi_providers: {
+        Row: {
+          base_fare: number
+          city: string | null
+          created_at: string
+          currency: string
+          deep_link: string | null
+          id: string
+          is_active: boolean
+          logo_url: string | null
+          min_fare: number
+          name: string
+          per_km: number
+          per_min: number
+          phone: string | null
+          position: number
+          slug: string
+          web_link: string | null
+        }
+        Insert: {
+          base_fare?: number
+          city?: string | null
+          created_at?: string
+          currency?: string
+          deep_link?: string | null
+          id?: string
+          is_active?: boolean
+          logo_url?: string | null
+          min_fare?: number
+          name: string
+          per_km?: number
+          per_min?: number
+          phone?: string | null
+          position?: number
+          slug: string
+          web_link?: string | null
+        }
+        Update: {
+          base_fare?: number
+          city?: string | null
+          created_at?: string
+          currency?: string
+          deep_link?: string | null
+          id?: string
+          is_active?: boolean
+          logo_url?: string | null
+          min_fare?: number
+          name?: string
+          per_km?: number
+          per_min?: number
+          phone?: string | null
+          position?: number
+          slug?: string
+          web_link?: string | null
         }
         Relationships: []
       }
@@ -8009,6 +8735,150 @@ export type Database = {
             }
             Returns: string
           }
+      mini_app_can_manage: { Args: { p_app_id: string }; Returns: boolean }
+      mini_app_detail: { Args: { p_handle_or_id: string }; Returns: Json }
+      mini_app_handle_available: { Args: { p_handle: string }; Returns: Json }
+      mini_app_is_service_role: { Args: never; Returns: boolean }
+      mini_app_moderation_queue: {
+        Args: { p_limit?: number; p_offset?: number; p_status?: string }
+        Returns: {
+          app_id: string
+          app_type: string
+          icon_url: string
+          name: string
+          open_reports: number
+          publisher_handle: string
+          publisher_id: string
+          publisher_name: string
+          publisher_verification: string
+          slug: string
+          status: string
+          submitted_at: string
+          url: string
+        }[]
+      }
+      mini_app_payment_create: {
+        Args: {
+          p_amount: number
+          p_app_id: string
+          p_currency?: string
+          p_description?: string
+        }
+        Returns: string
+      }
+      mini_app_payment_set_status: {
+        Args: {
+          p_external_id?: string
+          p_payload?: Json
+          p_payment_id: string
+          p_provider?: string
+          p_status: string
+        }
+        Returns: undefined
+      }
+      mini_app_publisher_add_domain: {
+        Args: { p_domain: string; p_publisher_id: string }
+        Returns: {
+          domain_id: string
+          verification_token: string
+        }[]
+      }
+      mini_app_publisher_create: {
+        Args: { p_handle: string; p_name: string; p_type?: string }
+        Returns: string
+      }
+      mini_app_publisher_domain_result: {
+        Args: { p_domain_id: string; p_error?: string; p_verified: boolean }
+        Returns: undefined
+      }
+      mini_app_rate: {
+        Args: { p_app_id: string; p_comment?: string; p_rating: number }
+        Returns: undefined
+      }
+      mini_app_report: {
+        Args: { p_app_id: string; p_details?: string; p_reason: string }
+        Returns: undefined
+      }
+      mini_app_report_frame_block: {
+        Args: { p_app_id: string }
+        Returns: boolean
+      }
+      mini_app_set_frame_result: {
+        Args: { p_app_id: string; p_blocked: boolean; p_error?: string }
+        Returns: undefined
+      }
+      mini_app_set_install: {
+        Args: { p_app_id: string; p_installed: boolean; p_pinned?: boolean }
+        Returns: undefined
+      }
+      mini_app_set_status: {
+        Args: { p_app_id: string; p_reason?: string; p_status: string }
+        Returns: undefined
+      }
+      mini_app_sync_rating: { Args: { p_app_id: string }; Returns: undefined }
+      mini_app_track_event: {
+        Args: {
+          p_app_id: string
+          p_duration_ms?: number
+          p_error_code?: string
+          p_event: string
+          p_platform?: string
+          p_session_id?: string
+        }
+        Returns: undefined
+      }
+      mini_apps_feed: {
+        Args: {
+          p_app_type?: string
+          p_category?: string
+          p_limit?: number
+          p_locale?: string
+          p_offset?: number
+          p_price_model?: string
+          p_query?: string
+          p_section?: string
+          p_sort?: string
+          p_verified_only?: boolean
+        }
+        Returns: {
+          app_id: string
+          app_type: string
+          author_avatar_url: string
+          author_display_name: string
+          author_username: string
+          category: string
+          created_at: string
+          deep_link: string
+          description: string
+          display_mode: string
+          frame_blocked: boolean
+          handle: string
+          icon_url: string
+          is_installed: boolean
+          is_pinned: boolean
+          name: string
+          opens_30d: number
+          owner_id: string
+          permissions: Json
+          price_model: string
+          privacy_url: string
+          publisher_handle: string
+          publisher_id: string
+          publisher_name: string
+          publisher_type: string
+          publisher_verification: string
+          rating: number
+          rating_count: number
+          score: number
+          screenshots: Json
+          short_description: string
+          support_url: string
+          total_count: number
+          updated_at: string
+          url: string
+          users_count: number
+        }[]
+      }
       pause_unhealthy_app_releases: {
         Args: never
         Returns: {
@@ -8016,6 +8886,13 @@ export type Database = {
           crash_free_rate: number
           platform: string
           version: string
+        }[]
+      }
+      place_rating_summary: {
+        Args: { p_place_key: string }
+        Returns: {
+          avg_rating: number
+          total: number
         }[]
       }
       process_marketplace_order: {
@@ -8061,6 +8938,7 @@ export type Database = {
         Returns: undefined
       }
       refresh_hashtags_aggregated: { Args: never; Returns: undefined }
+      refresh_mini_app_stats: { Args: never; Returns: undefined }
       refresh_popular_searches: { Args: never; Returns: undefined }
       refresh_recommendation_global_rankings: { Args: never; Returns: number }
       refund_order: {
@@ -8170,6 +9048,19 @@ export type Database = {
         Returns: undefined
       }
       terminate_old_user_sessions: { Args: never; Returns: number }
+      track_place_visit: {
+        Args: {
+          p_address?: string
+          p_category?: string
+          p_device_id?: string
+          p_dwell_seconds?: number
+          p_latitude: number
+          p_longitude: number
+          p_name?: string
+          p_source?: string
+        }
+        Returns: string
+      }
       trending_public_posts: {
         Args: { p_limit?: number }
         Returns: {
