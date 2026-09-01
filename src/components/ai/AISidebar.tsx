@@ -19,6 +19,7 @@ import {
   FileCode2,
   Plug,
   Github,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -296,6 +297,7 @@ export function AISidebar({
           className="w-full gap-2 h-10 rounded-xl bg-gradient-to-r from-alsamos-orange to-alsamos-orange-dark text-white border-0 hover:opacity-90"
           onClick={() => {
             setProjectsOnly(false);
+            setQuery('');
             onNew();
           }}
         >
@@ -309,7 +311,10 @@ export function AISidebar({
             'projects',
             <FolderOpen className="h-4 w-4" />,
             'Loyihalar',
-            () => setProjectsOnly((v) => !v),
+            () => {
+              setQuery('');
+              setProjectsOnly((v) => !v);
+            },
             { active: projectsOnly, badge: conversations.filter((c) => c.pinned).length },
           )}
           {navItem(
@@ -330,14 +335,41 @@ export function AISidebar({
           })}
         </nav>
 
+        {/* MUHIM: brauzer parol menejeri bu maydonga email/parolni avto-to'ldirmasligi kerak,
+            aks holda suhbatlar ro'yxati o'z-o'zidan filtrlanib "Natija topilmadi" bo'lib qoladi. */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
+            type="text"
+            name="alsamos-ai-conversation-filter"
+            inputMode="search"
+            role="searchbox"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-1p-ignore="true"
+            data-lpignore="true"
+            data-form-type="other"
+            aria-label="Suhbatlarda qidirish"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setQuery('');
+            }}
             placeholder="Suhbatlarda qidirish..."
-            className="pl-9 h-9 text-xs rounded-xl bg-muted/50 border-border/50"
+            className={cn('pl-9 h-9 text-xs rounded-xl bg-muted/50 border-border/50', query && 'pr-8')}
           />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground"
+              aria-label="Qidiruvni tozalash"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -362,6 +394,16 @@ export function AISidebar({
                     ? 'Natija topilmadi'
                     : "Hali suhbatlar yo'q — yangi suhbat boshlang"}
               </p>
+              {query && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="mt-2 h-7 text-[11px]"
+                  onClick={() => setQuery('')}
+                >
+                  Qidiruvni tozalash
+                </Button>
+              )}
             </div>
           ) : (
             <>
