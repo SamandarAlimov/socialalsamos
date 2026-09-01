@@ -3,7 +3,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { db } from '@/lib/db';
 import {
   isMissingStructuredPostSchemaError,
-  readStructuredPostSchemaCapability,
   writeStructuredPostSchemaCapability,
 } from '@/lib/structuredPostSchema';
 
@@ -31,14 +30,21 @@ export function isLiveActive(location: Pick<PostLocation, 'mode' | 'live_until'>
   return new Date(location.live_until).getTime() > Date.now();
 }
 
-/** Post joylashuvini yuklaydi; live rejimda realtime kuzatadi. */
+/**
+ * Post joylashuvini yuklaydi; live rejimda realtime kuzatadi.
+ *
+ * MUHIM: ilgari bu yerda sessionStorage'dagi "schema capability" bayrog'i
+ * o'qishni butunlay to'sib qo'yardi. Bir marta xato bo'lgan sessiyada
+ * jadval bor bo'lsa ham joylashuv boshqa yuklanmasdi va foydalanuvchiga
+ * matndagi eski "Current location" yorlig'i ko'rinardi. Endi o'qish hech
+ * qachon to'silmaydi — bayroq faqat yozib boriladi.
+ */
 export function usePostLocation(postId: string | null, enabled = true) {
   const [location, setLocation] = useState<PostLocation | null>(null);
-  const schemaEnabled = enabled && readStructuredPostSchemaCapability() !== 'missing';
-  const [isLoading, setIsLoading] = useState(Boolean(postId) && schemaEnabled);
+  const [isLoading, setIsLoading] = useState(Boolean(postId) && enabled);
 
   const load = useCallback(async () => {
-    if (!postId || !schemaEnabled) {
+    if (!postId || !enabled) {
       setLocation(null);
       setIsLoading(false);
       return;
@@ -65,7 +71,7 @@ export function usePostLocation(postId: string | null, enabled = true) {
     } finally {
       setIsLoading(false);
     }
-  }, [postId, schemaEnabled]);
+  }, [postId, enabled]);
 
   useEffect(() => {
     load();

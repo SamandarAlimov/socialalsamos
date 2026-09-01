@@ -4,13 +4,18 @@ import { MapPin, Navigation, Radio, Square } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isLiveActive, type PostLocation } from '@/hooks/usePostLocation';
 import { useLiveLocationSharing } from '@/hooks/useLiveLocationSharing';
+import {
+  isGenericLocationLabel,
+  reverseGeocode,
+  type ResolvedAddress,
+} from '@/lib/reverseGeocode';
 
 interface PostLocationCardProps {
   location: PostLocation;
   className?: string;
-  /** Kompakt ko‘rinish — faqat chip. */
+  /** Kompakt ko\u2018rinish \u2014 faqat chip. */
   compact?: boolean;
-  /** Post egasi bo‘lsa: live joylashuv avtomatik yangilanadi va to‘xtatish mumkin. */
+  /** Post egasi bo\u2018lsa: live joylashuv avtomatik yangilanadi va to\u2018xtatish mumkin. */
   isOwner?: boolean;
   onStopped?: () => void;
 }
@@ -40,7 +45,7 @@ function staticMapUrl(latitude: number, longitude: number): string {
   return STATIC_MAP_BASE + '?' + params.toString();
 }
 
-/** Lentada post joylashuvini ko‘rsatish. */
+/** Lentada post joylashuvini ko\u2018rsatish. */
 export function PostLocationCard({
   location,
   className,
@@ -52,6 +57,7 @@ export function PostLocationCard({
   const [remaining, setRemaining] = useState(() =>
     location.live_until ? remainingLabel(location.live_until) : '',
   );
+  const [resolved, setResolved] = useState<ResolvedAddress | null>(null);
 
   const { endSharing } = useLiveLocationSharing({
     locationId: location.id,
@@ -60,7 +66,7 @@ export function PostLocationCard({
     enabled: isOwner && live,
   });
 
-  // Qolgan vaqt sanog‘i
+  // Qolgan vaqt sanog\u2018i
   useEffect(() => {
     if (!location.live_until || location.mode !== 'live') return;
 
@@ -74,8 +80,47 @@ export function PostLocationCard({
     return () => clearInterval(timer);
   }, [location.live_until, location.mode, location.latitude, location.longitude]);
 
-  const title = location.place?.name ?? location.label ?? 'Joylashuv';
-  const subtitle = location.place?.address ?? null;
+  /*
+    Foydalanuvchi "joriy joylashuv" ni yuborganda bazada faqat koordinata
+    bo'ladi. Umumiy "Joriy joylashuv" yozuvi o'rniga aynan qaysi manzil
+    ekanini ko'rsatamiz — shuning uchun koordinatadan manzil tiklanadi.
+  */
+  const savedName = location.place?.name ?? location.label;
+  const hasRealName = !isGenericLocationLabel(savedName);
+  const savedAddress = location.place?.address ?? null;
+  const needsLookup = !hasRealName || !savedAddress;
+
+  useEffect(() => {
+    if (!needsLookup) {
+      setResolved(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+
+    void reverseGeocode(location.latitude, location.longitude, controller.signal).then(
+      (address) => {
+        if (active) setResolved(address);
+      },
+    );
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [needsLookup, location.latitude, location.longitude]);
+
+  const coordinateLabel =
+    location.latitude.toFixed(4) + ', ' + location.longitude.toFixed(4);
+
+  const title = hasRealName
+    ? (savedName as string)
+    : (resolved?.short ?? coordinateLabel);
+
+  const detail = savedAddress ?? resolved?.full ?? coordinateLabel;
+  const subtitle = detail === title ? coordinateLabel : detail;
+
   const mapHref =
     '/map?lat=' +
     location.latitude +
@@ -145,9 +190,7 @@ export function PostLocationCard({
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{title}</p>
           <p className="truncate text-xs text-muted-foreground">
-            {live
-              ? remaining
-              : (subtitle ?? location.latitude.toFixed(4) + ', ' + location.longitude.toFixed(4))}
+            {live ? remaining : subtitle}
           </p>
         </div>
 
@@ -157,7 +200,7 @@ export function PostLocationCard({
             onClick={handleStop}
             className="flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-destructive/50 px-2.5 text-xs font-medium text-destructive transition hover:bg-destructive/10"
           >
-            <Square className="h-3 w-3" /> To‘xtatish
+            <Square className="h-3 w-3" /> To\u2018xtatish
           </button>
         )}
       </div>
