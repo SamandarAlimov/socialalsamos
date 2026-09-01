@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Heart, MessageCircle, Send, Bookmark, Music2, Volume2, VolumeX, Play, Pause, Repeat2, ArrowLeft, Maximize2, Minimize2, ListVideo } from 'lucide-react';
+import { Heart, MessageCircle, Send, Bookmark, Music2, Volume2, VolumeX, Play, Pause, Repeat2, ArrowLeft, Maximize2, Minimize2, ListVideo, Gauge } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
@@ -20,6 +20,9 @@ import { VideoWatchPanel } from '@/components/video/VideoWatchPanel';
 import { useVideoHeatmap } from '@/hooks/useVideoHeatmap';
 import { formatCompactNumber, formatMediaTime, resolveAspectKind } from '@/lib/videoFormat';
 
+/** Bosib turish 2x tezlikka o'tishi uchun kerakli vaqt (ms). */
+const HOLD_TO_SPEED_MS = 300;
+
 interface VideoCardProps {
   video: VideoPost;
   isActive: boolean;
@@ -28,7 +31,6 @@ interface VideoCardProps {
   onCommentClick: () => void;
   onShareClick: () => void;
   onLikesClick: () => void;
-  onWatchClick: () => void;
   onProfileClick: () => void;
   isMobile: boolean;
   globalMuted: boolean;
@@ -43,7 +45,6 @@ function VideoCard({
   onCommentClick,
   onShareClick,
   onLikesClick,
-  onWatchClick,
   onProfileClick,
   isMobile,
   globalMuted,
@@ -51,7 +52,8 @@ function VideoCard({
 }: VideoCardProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
-  const hideControlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdActive = useRef(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showPlayButton, setShowPlayButton] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -63,11 +65,11 @@ function VideoCard({
   const [buffered, setBuffered] = useState(0);
   const [volume, setVolume] = useState(1);
   const [speed, setSpeed] = useState(1);
-  const [showControls, setShowControls] = useState(false);
+  const [isHolding, setIsHolding] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [seekHint, setSeekHint] = useState<null | 'forward' | 'backward'>(null);
   const { t } = useTranslation();
-  const { lightTap, successFeedback } = useHapticFeedback();
+  const { lightTap, mediumTap, successFeedback } = useHapticFeedback();
   const { recordView } = usePostViews();
   const heatmap = useVideoHeatmap(video.id, 48);
 
@@ -96,6 +98,7 @@ function VideoCard({
       videoRef.current.pause();
       videoRef.current.currentTime = 0;
       setIsPlaying(false);
+      setExpanded(false);
     }
   }, [isActive]);
 
@@ -108,37 +111,67 @@ function VideoCard({
 
   // Keep playbackRate + volume applied
   useEffect(() => {
-    if (videoRef.current) videoRef.current.playbackRate = speed;
+    if (videoRef.current && !holdActive.current) videoRef.current.playbackRate = speed;
   }, [speed]);
   useEffect(() => {
     if (videoRef.current) videoRef.current.volume = volume;
   }, [volume]);
 
-  const revealControls = useCallback(() => {
-    setShowControls(true);
-    if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current);
-    hideControlsTimer.current = setTimeout(() => setShowControls(false), 2800);
-  }, []);
-
-  useEffect(() => () => {
-    if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current);
-  }, []);
-
-  const togglePlay = () => {
+  const togglePlay = useCallback(() => {
     lightTap();
-    if (!videoRef.current) return;
+    const el = videoRef.current;
+    if (!el) return;
 
-    if (isPlaying) {
-      videoRef.current.pause();
-      setIsPlaying(false);
-    } else {
-      videoRef.current.play();
+    if (el.paused) {
+      el.play().catch(() => undefined);
       setIsPlaying(true);
+    } else {
+      el.pause();
+      setIsPlaying(false);
     }
     setShowPlayButton(true);
-    revealControls();
     setTimeout(() => setShowPlayButton(false), 500);
-  };
+  }, [lightTap]);
+
+  /*
+    Instagram / YouTube kabi: ekranni bosib turilsa 2x tezlik, qo'yib
+    yuborilganda avvalgi tezlikka qaytadi. Bitta qisqa bosish esa play/pause.
+  */
+  const startHold = useCallback(() => {
+    if (holdTimer.current) clearTimeout(holdTimer.current);
+    holdTimer.current = setTimeout(() => {
+      const el = videoRef.current;
+      if (!el) return;
+      holdActive.current = true;
+      setIsHolding(true);
+      el.playbackRate = 2;
+      if (el.paused) {
+        el.play().catch(() => undefined);
+        setIsPlaying(true);
+      }
+      mediumTap();
+    }, HOLD_TO_SPEED_MS);
+  }, [mediumTap]);
+
+  const endHold = useCallback(() => {
+    if (holdTimer.current) {
+      clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    }
+    if (!holdActive.current) return false;
+    holdActive.current = false;
+    setIsHolding(false);
+    if (videoRef.current) videoRef.current.playbackRate = speed;
+    return true;
+  }, [speed]);
+
+  useEffect(() => {
+    if (!isActive) endHold();
+  }, [isActive, endHold]);
+
+  useEffect(() => () => {
+    if (holdTimer.current) clearTimeout(holdTimer.current);
+  }, []);
 
   const seekBy = useCallback((seconds: number) => {
     const el = videoRef.current;
@@ -146,8 +179,7 @@ function VideoCard({
     el.currentTime = Math.min(Math.max(0, el.currentTime + seconds), el.duration || 0);
     setSeekHint(seconds > 0 ? 'forward' : 'backward');
     setTimeout(() => setSeekHint(null), 450);
-    revealControls();
-  }, [revealControls]);
+  }, []);
 
   const handleSeek = useCallback((time: number) => {
     const el = videoRef.current;
@@ -210,13 +242,7 @@ function VideoCard({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isActive, seekBy, toggleFullscreen, onMuteToggle]);
-
-  const toggleMute = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    lightTap();
-    onMuteToggle();
-  };
+  }, [isActive, seekBy, togglePlay, toggleFullscreen, onMuteToggle]);
 
   const handleLike = () => {
     successFeedback();
@@ -243,13 +269,13 @@ function VideoCard({
     lightTap();
   };
 
+  const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
+
   return (
     <div className="relative h-full w-full bg-black flex items-center justify-center snap-start snap-always">
       {/* Video Container — size adapts to the source aspect ratio */}
       <div
         ref={frameRef}
-        onMouseMove={revealControls}
-        onMouseLeave={() => setShowControls(false)}
         className={cn(
           "relative bg-black",
           isMobile
@@ -296,7 +322,17 @@ function VideoCard({
           loop
           muted={globalMuted}
           playsInline
-          onClick={togglePlay}
+          onPointerDown={(e) => {
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
+            startHold();
+          }}
+          onPointerUp={() => {
+            // Uzoq bosish bo'lgan bo'lsa play/pause ishlamaydi.
+            if (!endHold()) togglePlay();
+          }}
+          onPointerCancel={() => endHold()}
+          onPointerLeave={() => endHold()}
+          onContextMenu={(e) => e.preventDefault()}
           onDoubleClick={(e) => {
             const rect = (e.currentTarget as HTMLVideoElement).getBoundingClientRect();
             seekBy(e.clientX - rect.left > rect.width / 2 ? 10 : -10);
@@ -318,11 +354,11 @@ function VideoCard({
           poster={video.media_urls?.[1]}
         />
 
-        {/* Play/Pause Overlay */}
+        {/* Play/Pause Overlay — faqat markazda */}
         <div
           className={cn(
             "absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-300",
-            showPlayButton ? "opacity-100" : "opacity-0"
+            showPlayButton || (!isPlaying && isActive) ? "opacity-100" : "opacity-0"
           )}
         >
           <div className="h-20 w-20 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
@@ -333,6 +369,16 @@ function VideoCard({
             )}
           </div>
         </div>
+
+        {/* Bosib turilganda 2x ko'rsatkichi */}
+        {isHolding && (
+          <div className="pointer-events-none absolute left-1/2 top-[18%] -translate-x-1/2">
+            <div className="flex items-center gap-1.5 rounded-full bg-black/65 px-3 py-1.5 backdrop-blur-sm">
+              <Gauge className="h-3.5 w-3.5 text-white" />
+              <span className="text-xs font-bold text-white">2x</span>
+            </div>
+          </div>
+        )}
 
         {/* Double-tap seek hint */}
         {seekHint && (
@@ -363,247 +409,38 @@ function VideoCard({
           />
         </div>
 
-        {/* Full player controls (YouTube-style) */}
+        {/*
+          PASTKI QATLAM — bitta ustun, shu sabab hech narsa ustma-ust tushmaydi:
+            1) info (muallif, matn, musiqa) + o'ngda harakatlar ustuni
+            2) ularning ostida timeline va minimal boshqaruv
+          Instagram kabi bottom navbar ustida turadi.
+        */}
         <div
           className={cn(
-            "absolute left-0 right-0 z-20 px-3 transition-opacity duration-200",
-            isMobile ? "bottom-[calc(env(safe-area-inset-bottom,0px)+82px)]" : "bottom-0 pb-2",
-            showControls || !isPlaying ? "opacity-100" : "opacity-0 pointer-events-none"
+            "absolute inset-x-0 z-20 flex flex-col gap-2 px-3",
+            isMobile
+              ? "bottom-[calc(env(safe-area-inset-bottom,0px)+70px)]"
+              : "bottom-0 pb-3"
           )}
-          onClick={(e) => e.stopPropagation()}
         >
-          {/* Timeline: kadr preview + "eng ko'p ko'rilgan" grafigi bilan */}
-          <VideoScrubBar
-            src={videoUrl}
-            duration={duration}
-            currentTime={currentTime}
-            bufferedSeconds={buffered}
-            heatmap={heatmap}
-            onSeek={handleSeek}
-            onScrubStateChange={(scrubbing) => {
-              if (scrubbing) setShowControls(true);
-              else revealControls();
-            }}
-            enablePreview={duration > 0}
-          />
-
-          {/* Control row */}
-          <div className="flex items-center gap-2 pt-1 text-white">
-            <button onClick={togglePlay} aria-label={isPlaying ? 'Pause' : 'Play'} className="p-1 active:scale-90 transition-transform">
-              {isPlaying ? <Pause className="h-4.5 w-4.5" /> : <Play className="h-4.5 w-4.5" />}
-            </button>
-            <button onClick={toggleMute} aria-label="Mute" className="p-1 active:scale-90 transition-transform">
-              {globalMuted ? <VolumeX className="h-4.5 w-4.5" /> : <Volume2 className="h-4.5 w-4.5" />}
-            </button>
-            {!isMobile && (
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={globalMuted ? 0 : volume}
-                onChange={(e) => {
-                  const v = Number(e.target.value);
-                  setVolume(v);
-                  if (v > 0 && globalMuted) onMuteToggle();
-                }}
-                aria-label="Volume"
-                className="w-20 accent-primary h-1 cursor-pointer"
-              />
-            )}
-            <span className="text-[11px] tabular-nums text-white/85 ml-0.5">
-              {formatMediaTime(currentTime)} / {formatMediaTime(duration)}
-            </span>
-            <div className="flex-1" />
-            <button
-              onClick={() => setSpeed((s) => (s >= 2 ? 0.5 : Number((s + 0.25).toFixed(2))))}
-              className="px-2 py-0.5 rounded-md bg-white/15 text-[11px] font-semibold tabular-nums active:scale-95 transition-transform"
-              aria-label="Playback speed"
-            >
-              {speed}x
-            </button>
-            <button onClick={toggleFullscreen} aria-label="Fullscreen" className="p-1 active:scale-90 transition-transform">
-              {isFullscreen ? <Minimize2 className="h-4.5 w-4.5" /> : <Maximize2 className="h-4.5 w-4.5" />}
-            </button>
-          </div>
-        </div>
-
-        {/* Right side actions - Instagram-style, compact so they don't block the video */}
-        <div className={cn(
-          "absolute right-1.5 flex flex-col items-center gap-3 z-10",
-          isMobile ? "bottom-28" : "bottom-20"
-        )}>
-          {/* Like (with views nested Instagram-style) */}
-          <div className="flex flex-col items-center gap-0.5">
-            <button
-              onClick={handleLike}
-              className="p-1.5 active:scale-90 transition-transform"
-              aria-label="Like"
-            >
-              <Heart
-                className={cn(
-                  "h-6 w-6 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]",
-                  video.is_liked ? "fill-red-500 text-red-500" : "text-white"
-                )}
-                strokeWidth={1.8}
-              />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onLikesClick();
-              }}
-              className="flex flex-col items-center -mt-1 active:opacity-70"
-            >
-              <span className="text-white text-[10px] font-semibold tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] leading-tight">
-                {formatCompactNumber(video.likes_count || 0)}
-              </span>
-            </button>
-          </div>
-
-          {/* Comments */}
-          <div className="flex flex-col items-center gap-0.5">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                lightTap();
-                onCommentClick();
-              }}
-              className="p-1.5 active:scale-90 transition-transform"
-              aria-label="Comments"
-            >
-              <MessageCircle
-                className="h-6 w-6 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] -scale-x-100"
-                strokeWidth={1.8}
-              />
-            </button>
-            <span className="text-white text-[10px] font-semibold tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] -mt-1">
-              {formatCompactNumber(video.comments_count || 0)}
-            </span>
-          </div>
-
-          {/* Share */}
-          <div className="flex flex-col items-center gap-0.5">
-            <button
-              onClick={handleShare}
-              className="p-1.5 active:scale-90 transition-transform"
-              aria-label="Share"
-            >
-              <Send
-                className="h-6 w-6 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
-                strokeWidth={1.8}
-              />
-            </button>
-            {(video.shares_count || 0) > 0 && (
-              <span className="text-white text-[10px] font-semibold tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] -mt-1">
-                {formatCompactNumber(video.shares_count || 0)}
-              </span>
-            )}
-          </div>
-
-          {/* Repost */}
-          <button
-            onClick={handleRepost}
-            className="p-1.5 active:scale-90 transition-transform"
-            aria-label="Repost"
-          >
-            <Repeat2
-              className="h-6 w-6 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
-              strokeWidth={1.8}
-            />
-          </button>
-
-          {/* Bookmark */}
-          <button
-            onClick={handleBookmark}
-            className="p-1.5 active:scale-90 transition-transform"
-            aria-label="Save"
-          >
-            <Bookmark
-              className={cn(
-                "h-6 w-6 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]",
-                video.is_bookmarked ? "fill-white text-white" : "text-white"
-              )}
-              strokeWidth={1.8}
-            />
-          </button>
-
-          {/* YouTube-style watch view: video tepada, pastda boshqa videolar */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              lightTap();
-              if (videoRef.current) videoRef.current.pause();
-              onWatchClick();
-            }}
-            className="p-1.5 active:scale-90 transition-transform"
-            aria-label="Boshqa videolarni ko'rish"
-          >
-            <ListVideo
-              className="h-6 w-6 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
-              strokeWidth={1.8}
-            />
-          </button>
-        </div>
-
-        {/* Bottom info - User info and description */}
-        <div className={cn(
-          "absolute left-4 right-14",
-          isMobile ? "bottom-24" : "bottom-6"
-        )}>
-          {/* User info with follow button */}
-          <div className="flex items-center gap-2.5 mb-2">
-            <StoryAvatar
-              userId={video.profile?.id || video.user_id}
-              username={video.profile?.username}
-              displayName={video.profile?.display_name}
-              avatarUrl={video.profile?.avatar_url}
-              isVerified={!!video.profile?.is_verified}
-              size="sm"
-              showRing
-            />
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onProfileClick();
-              }}
-              className="flex items-center gap-1.5 min-w-0"
-            >
-              <span className="text-white font-semibold text-sm drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] truncate">
-                @{video.profile?.username || 'user'}
-              </span>
-              {video.profile?.is_verified && <VerifiedBadge size="xs" />}
-            </button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleFollow}
-              className={cn(
-                "h-7 px-3 text-xs font-semibold rounded-md border ml-1 shrink-0",
-                isFollowing
-                  ? "bg-transparent text-white border-white/40 hover:bg-white/10"
-                  : "bg-transparent text-white border-white hover:bg-white/10"
-              )}
-            >
-              {isFollowing ? t('common.following', 'Following') : t('common.follow', 'Follow')}
-            </Button>
-          </div>
-
-          {/* Description - tap text to toggle; expanded becomes scrollable card */}
-          {video.content && (
-            <div className="mb-2">
-              {expanded ? (
+          <div className="flex items-end gap-3">
+            {/* Chap: muallif, tavsif, musiqa */}
+            <div className="relative min-w-0 flex-1" onPointerDown={stopBubble} onPointerUp={stopBubble}>
+              {/*
+                Matn ochilganda pastdagi elementlarni surmasligi uchun karta
+                yuqoriga — video ustiga chiqadi.
+              */}
+              {expanded && video.content && (
                 <div
-                  className="bg-black/55 backdrop-blur-md rounded-xl px-3 py-2.5 ring-1 ring-white/10"
-                  onClick={(e) => e.stopPropagation()}
-                  onTouchStart={(e) => e.stopPropagation()}
-                  onTouchMove={(e) => e.stopPropagation()}
-                  onTouchEnd={(e) => e.stopPropagation()}
+                  className="absolute bottom-full left-0 right-0 mb-2 rounded-xl bg-black/70 px-3 py-2.5 ring-1 ring-white/10 backdrop-blur-md"
+                  onClick={stopBubble}
+                  onTouchStart={stopBubble}
+                  onTouchMove={stopBubble}
+                  onTouchEnd={stopBubble}
                 >
                   <div
-                    className="text-white text-[13px] leading-relaxed whitespace-pre-wrap break-words overflow-y-auto overscroll-contain pr-1 scrollbar-hide"
-                    style={{ maxHeight: '40vh', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+                    className="scrollbar-hide overflow-y-auto overscroll-contain whitespace-pre-wrap break-words pr-1 text-[13px] leading-relaxed text-white"
+                    style={{ maxHeight: '42vh', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
                   >
                     {video.content}
                   </div>
@@ -612,37 +449,227 @@ function VideoCard({
                       e.stopPropagation();
                       setExpanded(false);
                     }}
-                    className="text-white/70 text-[12px] font-medium mt-1.5 active:opacity-70"
+                    className="mt-1.5 text-[12px] font-medium text-white/70 active:opacity-70"
                   >
                     {t('common.less', 'less')}
                   </button>
                 </div>
-              ) : (
+              )}
+
+              {/* Muallif */}
+              <div className="mb-2 flex items-center gap-2.5">
+                <StoryAvatar
+                  userId={video.profile?.id || video.user_id}
+                  username={video.profile?.username}
+                  displayName={video.profile?.display_name}
+                  avatarUrl={video.profile?.avatar_url}
+                  isVerified={!!video.profile?.is_verified}
+                  size="sm"
+                  showRing
+                />
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (video.content && video.content.length > 80) setExpanded(true);
+                    onProfileClick();
                   }}
-                  className="text-left w-full"
+                  className="flex min-w-0 items-center gap-1.5"
                 >
-                  <p className="text-white text-[13px] leading-snug drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] whitespace-pre-wrap break-words line-clamp-2">
+                  <span className="truncate text-sm font-semibold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]">
+                    @{video.profile?.username || 'user'}
+                  </span>
+                  {video.profile?.is_verified && <VerifiedBadge size="xs" />}
+                </button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleFollow}
+                  className={cn(
+                    "ml-1 h-7 shrink-0 rounded-md border px-3 text-xs font-semibold",
+                    isFollowing
+                      ? "border-white/40 bg-transparent text-white hover:bg-white/10"
+                      : "border-white bg-transparent text-white hover:bg-white/10"
+                  )}
+                >
+                  {isFollowing ? t('common.following', 'Following') : t('common.follow', 'Follow')}
+                </Button>
+              </div>
+
+              {/* Tavsif — bitta bosishda ochiladi */}
+              {video.content && !expanded && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setExpanded(true);
+                  }}
+                  className="mb-2 w-full text-left"
+                >
+                  <p className="line-clamp-2 whitespace-pre-wrap break-words text-[13px] leading-snug text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]">
                     {video.content}
                     {video.content.length > 80 && (
-                      <span className="text-white/80 font-semibold ml-1">… {t('common.more', 'more')}</span>
+                      <span className="ml-1 font-semibold text-white/80">… {t('common.more', 'more')}</span>
                     )}
                   </p>
                 </button>
               )}
-            </div>
-          )}
 
-          {/* Music/Sound */}
-          <div className="flex items-center gap-2">
-            <Music2 className="h-3.5 w-3.5 text-white animate-spin" style={{ animationDuration: '3s' }} />
-            <span className="text-white text-[12px] drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] truncate">
-              Original Sound · {video.profile?.display_name || video.profile?.username}
-            </span>
+              {/* Musiqa */}
+              <div className="flex items-center gap-2">
+                <Music2 className="h-3.5 w-3.5 text-white animate-spin" style={{ animationDuration: '3s' }} />
+                <span className="truncate text-[12px] text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]">
+                  Original Sound · {video.profile?.display_name || video.profile?.username}
+                </span>
+              </div>
+            </div>
+
+            {/* O'ng: harakatlar ustuni (Instagram uslubi) */}
+            <div
+              className="flex shrink-0 flex-col items-center gap-3 pb-0.5"
+              onPointerDown={stopBubble}
+              onPointerUp={stopBubble}
+            >
+              {/* Like (ko'rishlar bilan) */}
+              <div className="flex flex-col items-center gap-0.5">
+                <button
+                  onClick={handleLike}
+                  className="p-1.5 transition-transform active:scale-90"
+                  aria-label="Like"
+                >
+                  <Heart
+                    className={cn(
+                      "h-6 w-6 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]",
+                      video.is_liked ? "fill-red-500 text-red-500" : "text-white"
+                    )}
+                    strokeWidth={1.8}
+                  />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onLikesClick();
+                  }}
+                  className="-mt-1 flex flex-col items-center active:opacity-70"
+                >
+                  <span className="text-[10px] font-semibold leading-tight tabular-nums text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]">
+                    {formatCompactNumber(video.likes_count || 0)}
+                  </span>
+                </button>
+              </div>
+
+              {/* Comments */}
+              <div className="flex flex-col items-center gap-0.5">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    lightTap();
+                    onCommentClick();
+                  }}
+                  className="p-1.5 transition-transform active:scale-90"
+                  aria-label="Comments"
+                >
+                  <MessageCircle
+                    className="h-6 w-6 -scale-x-100 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
+                    strokeWidth={1.8}
+                  />
+                </button>
+                <span className="-mt-1 text-[10px] font-semibold tabular-nums text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]">
+                  {formatCompactNumber(video.comments_count || 0)}
+                </span>
+              </div>
+
+              {/* Share */}
+              <div className="flex flex-col items-center gap-0.5">
+                <button
+                  onClick={handleShare}
+                  className="p-1.5 transition-transform active:scale-90"
+                  aria-label="Share"
+                >
+                  <Send
+                    className="h-6 w-6 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
+                    strokeWidth={1.8}
+                  />
+                </button>
+                {(video.shares_count || 0) > 0 && (
+                  <span className="-mt-1 text-[10px] font-semibold tabular-nums text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]">
+                    {formatCompactNumber(video.shares_count || 0)}
+                  </span>
+                )}
+              </div>
+
+              {/* Repost */}
+              <button
+                onClick={handleRepost}
+                className="p-1.5 transition-transform active:scale-90"
+                aria-label="Repost"
+              >
+                <Repeat2
+                  className="h-6 w-6 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
+                  strokeWidth={1.8}
+                />
+              </button>
+
+              {/* Bookmark */}
+              <button
+                onClick={handleBookmark}
+                className="p-1.5 transition-transform active:scale-90"
+                aria-label="Save"
+              >
+                <Bookmark
+                  className={cn(
+                    "h-6 w-6 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]",
+                    video.is_bookmarked ? "fill-white text-white" : "text-white"
+                  )}
+                  strokeWidth={1.8}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* Timeline + minimal boshqaruv (play/pause va ovoz tepada) */}
+          <div onPointerDown={stopBubble} onPointerUp={stopBubble} onClick={stopBubble}>
+            <VideoScrubBar
+              src={videoUrl}
+              duration={duration}
+              currentTime={currentTime}
+              bufferedSeconds={buffered}
+              heatmap={heatmap}
+              onSeek={handleSeek}
+              enablePreview={duration > 0}
+            />
+
+            <div className="flex items-center gap-2 text-white">
+              <span className="text-[11px] tabular-nums text-white/85">
+                {formatMediaTime(currentTime)} / {formatMediaTime(duration)}
+              </span>
+              <div className="flex-1" />
+              {!isMobile && (
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={globalMuted ? 0 : volume}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setVolume(v);
+                    if (v > 0 && globalMuted) onMuteToggle();
+                  }}
+                  aria-label="Volume"
+                  className="h-1 w-20 cursor-pointer accent-primary"
+                />
+              )}
+              <button
+                onClick={() => setSpeed((s) => (s >= 2 ? 0.5 : Number((s + 0.25).toFixed(2))))}
+                className="rounded-md bg-white/15 px-2 py-0.5 text-[11px] font-semibold tabular-nums transition-transform active:scale-95"
+                aria-label="Playback speed"
+              >
+                {speed}x
+              </button>
+              <button onClick={toggleFullscreen} aria-label="Fullscreen" className="p-1 transition-transform active:scale-90">
+                {isFullscreen ? <Minimize2 className="h-4.5 w-4.5" /> : <Maximize2 className="h-4.5 w-4.5" />}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -949,7 +976,6 @@ export default function VideosPage() {
               onCommentClick={() => openComments(video.id)}
               onShareClick={() => openShareDialog(video.id)}
               onLikesClick={() => openLikesDialog(video.id)}
-              onWatchClick={() => setWatchVideoId(video.id)}
               onProfileClick={() => openProfile(video)}
               isMobile={isMobile}
               globalMuted={globalMuted}
