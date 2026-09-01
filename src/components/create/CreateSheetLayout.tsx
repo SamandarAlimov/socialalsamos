@@ -23,8 +23,10 @@ interface CreateSheetLayoutProps {
  * Mobil: butun ekran media, ustidan peek/half/full shisha sheet.
  * Desktop: chapda 376px shisha panel, o'ngda katta preview.
  *
- * Sheet mantiqi ui/snap-sheet dan olinadi, shuning uchun xarita va create
- * paneli bir xil sudralish fizikasi va bir xil sirt tokenlariga ega bo'ladi.
+ * Fon qasddan mavzu tokenlaridan olinadi. Ilgari konteyner bg-black edi va
+ * SnapSheet yuzasi yarim shaffof bo'lgani uchun light temada panel qorayib,
+ * ustidagi text-foreground matn o'qilmay qolardi. Qora fon faqat media
+ * sahnasida qoladi — rasm va videoga u ikkala temada ham to'g'ri keladi.
  */
 export function CreateSheetLayout({
   media,
@@ -38,12 +40,12 @@ export function CreateSheetLayout({
   return (
     <div
       className={cn(
-        'relative h-[calc(100dvh-4rem)] min-h-0 w-full overflow-hidden bg-black md:rounded-[24px]',
+        'relative h-[calc(100dvh-4rem)] min-h-0 w-full overflow-hidden bg-background md:rounded-[24px]',
         className,
       )}
     >
       {/* Media sahnasi: desktopda chapdagi panel joyini bo'shatib beradi. */}
-      <div className="absolute inset-0 flex min-h-0 items-center justify-center overflow-hidden md:left-[404px]">
+      <div className="absolute inset-0 flex min-h-0 items-center justify-center overflow-hidden bg-neutral-100 dark:bg-black md:left-[404px]">
         {media}
       </div>
 
@@ -58,6 +60,9 @@ export function CreateSheetLayout({
         onSnapChange={onSnapChange}
         minPeek={CREATE_MIN_PEEK}
         grabberLabel="Create paneli balandligini o'zgartirish"
+        // Desktopda panel media yonida turadi, shuning uchun u to'liq xira
+        // bo'lishi kerak — aks holda matn media foni ustiga tushadi.
+        className="md:bg-background"
       >
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
           {children}
