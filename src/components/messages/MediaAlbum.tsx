@@ -3,7 +3,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  ImageOff,
   Play,
+  RotateCw,
   X,
 } from 'lucide-react';
 import {
@@ -27,6 +29,85 @@ interface MediaAlbumProps {
 const MAX_PORTRAIT_HEIGHT = 420;
 /** Gorizontal (landshaft) media uchun maksimal balandlik */
 const MAX_LANDSCAPE_HEIGHT = 320;
+/** Nisbat hali aniqlanmaganida ishlatiladigan boshlang'ich nisbat (4:5) */
+const FALLBACK_RATIO = 0.8;
+/** Ramka hech qachon bundan tor bo'lmaydi - "ingichka chiziq" muammosining oldini oladi */
+const MIN_FRAME_WIDTH = 150;
+
+/**
+ * Rasm elementi: yuklanish va xatolikni o'zi boshqaradi.
+ *
+ * MUHIM: rasm yuklanmasa (URL eskirgan, tarmoq uzilgan, bucket yopiq) ilgari
+ * hech qanday belgi ko'rinmasdi - foydalanuvchi bo'sh ramka ko'rardi. Endi
+ * aniq xato holati va "qayta urinish" tugmasi chiqadi.
+ */
+function AlbumImage({
+  src,
+  alt,
+  onNatural,
+  className,
+  eager,
+}: {
+  src: string;
+  alt: string;
+  onNatural?: (width: number, height: number) => void;
+  className?: string;
+  eager?: boolean;
+}) {
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  // src o'zgarsa xato holati tozalanadi.
+  useEffect(() => {
+    setFailed(false);
+    setAttempt(0);
+  }, [src]);
+
+  if (failed) {
+    return (
+      <span className="flex h-full w-full flex-col items-center justify-center gap-1.5 bg-muted px-2 text-center text-muted-foreground">
+        <ImageOff className="h-5 w-5" />
+        <span className="text-[11px] leading-tight">Rasm yuklanmadi</span>
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={(event) => {
+            event.stopPropagation();
+            setFailed(false);
+            setAttempt((value) => value + 1);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.stopPropagation();
+              setFailed(false);
+              setAttempt((value) => value + 1);
+            }
+          }}
+          className="flex items-center gap-1 rounded-full bg-background/80 px-2 py-0.5 text-[11px] font-medium text-foreground"
+        >
+          <RotateCw className="h-3 w-3" />
+          Qayta urinish
+        </span>
+      </span>
+    );
+  }
+
+  return (
+    <img
+      // attempt o'zgarganda brauzer keshdagi buzuq javobni chetlab o'tadi.
+      src={attempt > 0 ? `${src}${src.includes('?') ? '&' : '?'}r=${attempt}` : src}
+      alt={alt}
+      loading={eager ? 'eager' : 'lazy'}
+      decoding="async"
+      draggable={false}
+      onLoad={(event) =>
+        onNatural?.(event.currentTarget.naturalWidth, event.currentTarget.naturalHeight)
+      }
+      onError={() => setFailed(true)}
+      className={className}
+    />
+  );
+}
 
 /**
  * Telegramdagi albom ko'rinishi: mozaik to'r, "+N" belgisi,
@@ -38,6 +119,11 @@ const MAX_LANDSCAPE_HEIGHT = 320;
  * Albomda BITTA media bo'lsa, mozaik katak ishlatilmaydi: ramka mediasining
  * haqiqiy nisbatiga moslashadi (9:16, 3:4, 4:5, 1:1, 16:9 ...), shuning uchun
  * vertikal video/rasm kesilmaydi va ichida scroll paydo bo'lmaydi.
+ *
+ * O'LCHAM QOIDASI (regressiyaning oldini oladi): ramkaga width: 100% BERILMAYDI.
+ * Bubble kengligi mazmunga qarab qisqaradigan (shrink-to-fit) konteyner bo'lgani
+ * uchun 100% qiymati aylanma bog'liqlik yaratadi va ramka ingichka chiziqqa
+ * yig'ilib qoladi. Shu sabab aniq piksel kengligi hisoblanadi.
  */
 export function MediaAlbum({ album, isMine, className }: MediaAlbumProps) {
   const { shouldAutoDownload } = useMediaAutoDownload();
@@ -99,13 +185,18 @@ export function MediaAlbum({ album, isMine, className }: MediaAlbumProps) {
     setNaturalRatio(snapAspectRatio(raw) || raw);
   };
 
-  const singleRatio = naturalRatio ?? 1;
+  const singleRatio = naturalRatio ?? FALLBACK_RATIO;
   const singleMaxHeight = singleRatio < 1 ? MAX_PORTRAIT_HEIGHT : MAX_LANDSCAPE_HEIGHT;
+  // Aniq piksel kengligi: bubble qisqarsa ham ramka yig'ilib qolmaydi.
+  const singleWidth = Math.max(
+    MIN_FRAME_WIDTH,
+    Math.round(singleMaxHeight * singleRatio)
+  );
   const singleFrameStyle: React.CSSProperties = {
     aspectRatio: String(singleRatio),
+    width: singleWidth,
+    maxWidth: '100%',
     maxHeight: singleMaxHeight,
-    maxWidth: Math.round(singleMaxHeight * singleRatio),
-    width: '100%',
   };
 
   const activeItem = viewerIndex === null ? null : album.items[viewerIndex];
@@ -131,16 +222,10 @@ export function MediaAlbum({ album, isMine, className }: MediaAlbumProps) {
             single.type === 'video' ? (
               <>
                 {single.thumb ? (
-                  <img
+                  <AlbumImage
                     src={single.thumb}
                     alt={single.name || 'Video'}
-                    loading="lazy"
-                    onLoad={(event) =>
-                      handleNatural(
-                        event.currentTarget.naturalWidth,
-                        event.currentTarget.naturalHeight
-                      )
-                    }
+                    onNatural={handleNatural}
                     className="h-full w-full object-cover"
                   />
                 ) : (
@@ -170,16 +255,13 @@ export function MediaAlbum({ album, isMine, className }: MediaAlbumProps) {
                 ) : null}
               </>
             ) : (
-              <img
+              <AlbumImage
                 src={single.url}
                 alt={single.name || 'Rasm'}
-                loading="lazy"
-                onLoad={(event) =>
-                  handleNatural(
-                    event.currentTarget.naturalWidth,
-                    event.currentTarget.naturalHeight
-                  )
-                }
+                onNatural={handleNatural}
+                /* Yolg'iz rasm darhol yuklanadi: lazy rejim chat ichida ba'zan
+                   ishga tushmay, bo'sh ramka qoldirardi. */
+                eager
                 className="h-full w-full object-cover"
               />
             )
@@ -196,7 +278,8 @@ export function MediaAlbum({ album, isMine, className }: MediaAlbumProps) {
           style={{
             gridTemplateColumns: `repeat(${layout.columns}, minmax(0, 1fr))`,
             gridAutoRows: layout.columns > 2 ? '80px' : '108px',
-            maxWidth: 360,
+            width: 360,
+            maxWidth: '100%',
           }}
         >
           {visibleItems.map((item, index) => {
@@ -227,10 +310,9 @@ export function MediaAlbum({ album, isMine, className }: MediaAlbumProps) {
                   item.type === 'video' ? (
                     <>
                       {item.thumb ? (
-                        <img
+                        <AlbumImage
                           src={item.thumb}
                           alt={item.name || 'Video'}
-                          loading="lazy"
                           className="h-full w-full object-cover"
                         />
                       ) : (
@@ -254,10 +336,9 @@ export function MediaAlbum({ album, isMine, className }: MediaAlbumProps) {
                       ) : null}
                     </>
                   ) : (
-                    <img
+                    <AlbumImage
                       src={item.url}
                       alt={item.name || 'Rasm'}
-                      loading="lazy"
                       className="h-full w-full object-cover"
                     />
                   )
