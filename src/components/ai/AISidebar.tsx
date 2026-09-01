@@ -152,16 +152,16 @@ export function AISidebar({
       type="button"
       onClick={onClick}
       className={cn(
-        'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium transition-colors',
+        'flex w-full min-w-0 items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium transition-colors',
         opts?.active ? 'bg-muted text-foreground' : 'text-foreground/80 hover:bg-muted/60',
       )}
     >
       <span className="flex h-5 w-5 shrink-0 items-center justify-center text-muted-foreground">
         {icon}
       </span>
-      <span className="flex-1 truncate">{label}</span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
       {opts?.badge ? (
-        <span className="rounded-full bg-muted px-1.5 text-[10px] text-muted-foreground">
+        <span className="shrink-0 rounded-full bg-muted px-1.5 text-[10px] text-muted-foreground">
           {opts.badge}
         </span>
       ) : null}
@@ -176,7 +176,7 @@ export function AISidebar({
       onClick={() => onSelect(conv)}
       onKeyDown={(e) => e.key === 'Enter' && onSelect(conv)}
       className={cn(
-        'group flex items-center gap-2.5 px-2.5 py-2 rounded-xl cursor-pointer transition-colors',
+        'group flex w-full min-w-0 max-w-full items-center gap-2.5 overflow-hidden rounded-xl px-2.5 py-2 cursor-pointer transition-colors',
         'hover:bg-muted/60',
         activeId === conv.id && 'bg-muted',
       )}
@@ -188,7 +188,7 @@ export function AISidebar({
           <MessageSquare className="h-3.5 w-3.5 text-primary" />
         )}
       </div>
-      <div className="flex-1 min-w-0">
+      <div className="min-w-0 flex-1 overflow-hidden">
         {renamingId === conv.id ? (
           <Input
             autoFocus
@@ -207,13 +207,17 @@ export function AISidebar({
               }
               if (e.key === 'Escape') setRenamingId(null);
             }}
-            className="h-7 text-xs"
+            className="h-7 w-full text-xs"
           />
         ) : (
           <>
-            <p className="text-[13px] font-medium truncate leading-tight">{conv.title}</p>
+            <p className="block w-full truncate text-[13px] font-medium leading-tight" title={conv.title}>
+              {conv.title}
+            </p>
             {snippetFor(conv) && (
-              <p className="text-[10px] text-muted-foreground truncate">{snippetFor(conv)}</p>
+              <p className="block w-full truncate text-[10px] text-muted-foreground">
+                {snippetFor(conv)}
+              </p>
             )}
           </>
         )}
@@ -273,19 +277,19 @@ export function AISidebar({
   );
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="p-3 space-y-3">
+    <div className="flex h-full w-full min-w-0 flex-col overflow-hidden">
+      <div className="w-full min-w-0 p-3 space-y-3">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-alsamos-orange to-alsamos-orange-dark flex items-center justify-center">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="h-8 w-8 shrink-0 rounded-xl bg-gradient-to-br from-alsamos-orange to-alsamos-orange-dark flex items-center justify-center">
               <Sparkles className="h-4 w-4 text-white" />
             </div>
-            <span className="font-display font-bold text-sm">Alsamos AI</span>
+            <span className="truncate font-display font-bold text-sm">Alsamos AI</span>
           </div>
           <Button
             size="icon"
             variant="ghost"
-            className="h-8 w-8 rounded-lg"
+            className="h-8 w-8 shrink-0 rounded-lg"
             onClick={onClose}
             aria-label="Yon panelni yopish"
           >
@@ -306,7 +310,7 @@ export function AISidebar({
         </Button>
 
         {/* Menyu — kam va foydali */}
-        <nav className="space-y-0.5">
+        <nav className="w-full min-w-0 space-y-0.5">
           {navItem(
             'projects',
             <FolderOpen className="h-4 w-4" />,
@@ -337,7 +341,7 @@ export function AISidebar({
 
         {/* MUHIM: brauzer parol menejeri bu maydonga email/parolni avto-to'ldirmasligi kerak,
             aks holda suhbatlar ro'yxati o'z-o'zidan filtrlanib "Natija topilmadi" bo'lib qoladi. */}
-        <div className="relative">
+        <div className="relative w-full min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             type="text"
@@ -358,7 +362,10 @@ export function AISidebar({
               if (e.key === 'Escape') setQuery('');
             }}
             placeholder="Suhbatlarda qidirish..."
-            className={cn('pl-9 h-9 text-xs rounded-xl bg-muted/50 border-border/50', query && 'pr-8')}
+            className={cn(
+              'w-full pl-9 h-9 text-xs rounded-xl bg-muted/50 border-border/50',
+              query && 'pr-8',
+            )}
           />
           {query && (
             <button
@@ -373,13 +380,19 @@ export function AISidebar({
         </div>
       </div>
 
-      <ScrollArea className="flex-1 px-2">
-        <div className="pb-4 space-y-3">
+      {/*
+        MUHIM: Radix ScrollArea o'z viewport'i ichida `display: table` qo'yadi.
+        Table esa konteyner emas, KONTENT kengligiga cho'ziladi — shu sababli uzun
+        suhbat nomlari `truncate` bo'lmay, sidebar chizig'idan oshib ketardi.
+        `[&>div>div]:!block` bilan uni oddiy blokka qaytaramiz.
+      */}
+      <ScrollArea className="min-h-0 w-full min-w-0 flex-1 px-2 [&>div>div]:!block [&>div>div]:!w-full [&>div]:!w-full">
+        <div className="w-full min-w-0 space-y-3 overflow-hidden pb-4">
           {loading ? (
             <div className="space-y-2 px-1">
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-2.5 px-1.5 py-2">
-                  <Skeleton className="h-7 w-7 rounded-lg" />
+                  <Skeleton className="h-7 w-7 shrink-0 rounded-lg" />
                   <Skeleton className="h-3.5 flex-1 rounded" />
                 </div>
               ))}
@@ -387,7 +400,7 @@ export function AISidebar({
           ) : filtered.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <History className="h-8 w-8 mx-auto mb-3 opacity-40" />
-              <p className="text-xs">
+              <p className="px-3 text-xs">
                 {projectsOnly
                   ? "Loyiha yo'q — suhbatni mahkamlab loyihaga aylantiring"
                   : query
@@ -408,32 +421,32 @@ export function AISidebar({
           ) : (
             <>
               {pinned.length > 0 && (
-                <div>
+                <div className="w-full min-w-0">
                   <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                     Loyihalar
                   </p>
-                  <div className="space-y-0.5">{pinned.map(renderItem)}</div>
+                  <div className="w-full min-w-0 space-y-0.5">{pinned.map(renderItem)}</div>
                 </div>
               )}
 
               {!projectsOnly && (
-                <div>
+                <div className="w-full min-w-0">
                   <button
                     onClick={() => setRecentsOpen((v) => !v)}
                     className="flex w-full items-center gap-1 px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground"
                   >
                     {recentsOpen ? (
-                      <ChevronDown className="h-3 w-3" />
+                      <ChevronDown className="h-3 w-3 shrink-0" />
                     ) : (
-                      <ChevronRight className="h-3 w-3" />
+                      <ChevronRight className="h-3 w-3 shrink-0" />
                     )}
                     So'nggilar
                   </button>
                   {recentsOpen &&
                     groups.map((g) => (
-                      <div key={g.key} className="mb-2">
+                      <div key={g.key} className="mb-2 w-full min-w-0">
                         <p className="px-2.5 py-1 text-[10px] text-muted-foreground/70">{g.label}</p>
-                        <div className="space-y-0.5">{g.items.map(renderItem)}</div>
+                        <div className="w-full min-w-0 space-y-0.5">{g.items.map(renderItem)}</div>
                       </div>
                     ))}
                 </div>
@@ -443,21 +456,21 @@ export function AISidebar({
         </div>
       </ScrollArea>
 
-      <div className="p-3 border-t border-border/30">
-        <div className="flex items-center gap-2.5 px-1">
-          <Avatar className="h-8 w-8">
+      <div className="w-full min-w-0 border-t border-border/30 p-3">
+        <div className="flex min-w-0 items-center gap-2.5 px-1">
+          <Avatar className="h-8 w-8 shrink-0">
             <AvatarImage src={profile?.avatar_url || ''} />
             <AvatarFallback className="text-xs">
               {(profile?.display_name || profile?.username || 'A').charAt(0).toUpperCase()}
             </AvatarFallback>
           </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium truncate">
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <p className="truncate text-xs font-medium">
               {profile?.display_name || profile?.username || 'Foydalanuvchi'}
             </p>
-            <p className="text-[10px] text-muted-foreground truncate">Alsamos AI</p>
+            <p className="truncate text-[10px] text-muted-foreground">Alsamos AI</p>
           </div>
-          <Button size="icon" variant="ghost" className="h-7 w-7 rounded-lg" aria-label="Sozlamalar" asChild>
+          <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0 rounded-lg" aria-label="Sozlamalar" asChild>
             <a href="/settings">
               <Settings className="h-3.5 w-3.5" />
             </a>
