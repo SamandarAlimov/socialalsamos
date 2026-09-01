@@ -14,6 +14,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { CommentsSection } from '@/components/CommentsSection';
+import { UserName } from '@/components/UserName';
 import { useRealtimeCounts } from '@/hooks/useRealtimeCounts';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -55,6 +56,11 @@ interface PostViewModalProps {
     username: string | null;
     avatar_url: string | null;
     display_name: string | null;
+    /**
+     * Tasdiqlangan foydalanuvchi nishoni uchun. Ixtiyoriy - berilmasa
+     * nishon chizilmaydi, shuning uchun eski chaqiruvlar buzilmaydi.
+     */
+    is_verified?: boolean | null;
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -80,8 +86,8 @@ export function PostViewModal({
   const counts = useRealtimeCounts(post.id);
 
   // Modal eski `media_urls` bilan ishlaydi, stikerlar esa yangi
-  // `post_media.edit_state` da saqlanadi — shuning uchun ikkisini
-  // bog‘lab, joriy kadrning tahrir holatini topamiz.
+  // `post_media.edit_state` da saqlanadi - shuning uchun ikkisini
+  // bog'lab, joriy kadrning tahrir holatini topamiz.
   const { media } = usePostMedia(open ? post.id : undefined);
 
   const mediaUrls = post.media_urls || [];
@@ -92,7 +98,7 @@ export function PostViewModal({
   const currentEditState = useMemo(() => {
     if (!currentUrl || media.length === 0) return null;
 
-    // Avval URL bo‘yicha aniq moslik — tartib o‘zgargan bo‘lsa ham to‘g‘ri.
+    // Avval URL bo'yicha aniq moslik - tartib o'zgargan bo'lsa ham to'g'ri.
     const byUrl = media.find((item) => item.storage_url === currentUrl);
     const fallback = media[currentMediaIndex];
     const match = byUrl ?? fallback;
@@ -117,7 +123,7 @@ export function PostViewModal({
     );
   }, [mediaUrls.length]);
 
-  // Klaviatura bilan boshqarish — premium galereya tajribasi
+  // Klaviatura bilan boshqarish - premium galereya tajribasi
   useEffect(() => {
     if (!open || !hasMultipleMedia) return;
 
@@ -146,7 +152,7 @@ export function PostViewModal({
         title: t('post.share.copied', { defaultValue: 'Havola nusxalandi' }),
       });
     } catch {
-      // foydalanuvchi bekor qildi — xabar kerak emas
+      // foydalanuvchi bekor qildi - xabar kerak emas
     }
   };
 
@@ -168,9 +174,9 @@ export function PostViewModal({
             {hasMedia && (
               <div className="group relative flex flex-1 items-center justify-center bg-gradient-to-b from-neutral-950 to-black min-h-[46vh] md:min-h-[560px]">
                 {/*
-                  Stiker qatlami media bilan bir xil o‘lchamda bo‘lishi shart.
-                  `object-contain` konteynerni to‘liq egallamaydi, shuning uchun
-                  media’ni o‘z o‘lchamiga moslashuvchi `relative` o‘ramga olamiz.
+                  Stiker qatlami media bilan bir xil o'lchamda bo'lishi shart.
+                  `object-contain` konteynerni to'liq egallamaydi, shuning uchun
+                  media'ni o'z o'lchamiga moslashuvchi `relative` o'ramga olamiz.
                 */}
                 <div className="relative inline-block max-h-[92vh]">
                   {post.media_type === 'video' ? (
@@ -269,14 +275,21 @@ export function PostViewModal({
                     <AvatarFallback>{profile.username?.[0]?.toUpperCase() || 'U'}</AvatarFallback>
                   </Avatar>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold leading-tight">
-                      {profile.display_name || profile.username}
+                    {/* Markazlashtirilgan: ism + tasdiq nishoni (UserName) */}
+                    <div className="flex min-w-0 items-center gap-1">
+                      <UserName
+                        displayName={profile.display_name}
+                        username={profile.username}
+                        isVerified={profile.is_verified}
+                        badgeSize="xs"
+                        className="text-sm font-semibold leading-tight"
+                      />
                       <PostCollaboratorByline
                         postId={post.id}
                         isOwner={isOwnProfile}
-                        className="ml-1 text-sm"
+                        className="text-sm"
                       />
-                    </p>
+                    </div>
                     <p className="truncate text-xs text-muted-foreground">
                       {profile.username ? `@${profile.username} \u00b7 ` : ''}
                       {format(new Date(post.created_at), 'd MMM yyyy, HH:mm')}
