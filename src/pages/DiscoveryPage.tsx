@@ -1,7 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Compass, Flame, RefreshCw, Search, Sparkles, Users, Video } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Compass, Flame, Search, Sparkles, Users, Video } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { CategoryFilterBar } from '@/components/discovery/CategoryFilterBar';
@@ -44,7 +43,6 @@ export default function DiscoveryPage() {
 
   // Har bir refresh bo'limlarga uzatiladi va ular ma'lumotni qaytadan yuklaydi.
   const [refreshKey, setRefreshKey] = useState(0);
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleTabChange = useCallback(
     (value: string) => {
@@ -62,12 +60,13 @@ export default function DiscoveryPage() {
     [searchParams, setSearchParams, triggerHaptic],
   );
 
+  // Alohida "Yangilash" tugmasi yo'q: mobil qurilmada tepadan pastga surish,
+  // desktopda esa brauzer refresh yetarli. Har bir bo'limning o'z kichik
+  // yangilash tugmasi saqlanib qoladi.
   const handleRefresh = useCallback(async () => {
-    setIsRefreshing(true);
     setRefreshKey((key) => key + 1);
     // Bo'limlar o'z ma'lumotini mustaqil yuklaydi; indikatorni qisqa ushlab turamiz.
     await new Promise((resolve) => setTimeout(resolve, 600));
-    setIsRefreshing(false);
   }, []);
 
   const openSearch = useCallback(() => {
@@ -105,23 +104,9 @@ export default function DiscoveryPage() {
 
   const content = (
     <div className="mx-auto w-full max-w-6xl px-4 pb-24 pt-4 md:pb-10">
-      <header className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Compass className="h-6 w-6 text-primary" />
-          <h1 className="text-xl font-bold md:text-2xl">Discover</h1>
-        </div>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleRefresh}
-          disabled={isRefreshing}
-          className="hidden md:inline-flex"
-          aria-label="Discover sahifasini yangilash"
-        >
-          <RefreshCw className={cn('mr-2 h-4 w-4', isRefreshing && 'animate-spin')} />
-          Yangilash
-        </Button>
+      <header className="mb-4 flex items-center gap-2">
+        <Compass className="h-6 w-6 text-primary" />
+        <h1 className="text-xl font-bold md:text-2xl">Discover</h1>
       </header>
 
       {/* Qidiruv: ilgari readOnly input bo'lgani uchun klaviatura bilan ishlamasdi. */}
