@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { guard, preflight, jsonResponse, corsHeaders, guardError } from "../_shared/guard.ts";
+import { aiFetch, hasGeminiKeys, poolStatus } from "../_shared/geminiPool.ts";
 
 const FUNCTION_NAME = "ai-assistant";
 // Bir foydalanuvchi uchun soatda ruxsat etilgan suhbat chaqiruvlari.
@@ -18,7 +19,7 @@ const MODEL_ROUTES: Record<string, string> = {
 };
 
 async function classifyRequest(
-  apiKey: string,
+  lovableKey: string | undefined,
   lastUserText: string,
   currentTopics: string[] | null,
 ): Promise<{
@@ -47,20 +48,20 @@ Current topics: ${JSON.stringify(currentTopics ?? [])}.
 Return ONLY the JSON object.`;
 
   try {
-    const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
+    // Router ham hovuz orqali ketadi: kalitlar bo'lsa Gemini, bo'lmasa Lovable.
+    const { response } = await aiFetch({
+      lovableKey,
+      body: {
         model: "google/gemini-3.1-flash-lite",
         messages: [
           { role: "system", content: sys },
           { role: "user", content: lastUserText.slice(0, 2000) },
         ],
         response_format: { type: "json_object" },
-      }),
+      },
     });
-    if (!r.ok) throw new Error(String(r.status));
-    const j = await r.json();
+    if (!response.ok) throw new Error(String(response.status));
+    const j = await response.json();
     const txt = j.choices?.[0]?.message?.content ?? "{}";
     const parsed = JSON.parse(txt);
     return {
@@ -105,9 +106,12 @@ serve(async (req) => {
     const userId = gate.userId;
     const admin = gate.admin;
 
+    // Kalit manbalari: GEMINI_API_KEYS / GEMINI_API_KEY_1..10 (asosiy),
+    // LOVABLE_API_KEY (zaxira). Kamida bittasi bo'lishi shart.
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      console.error("LOVABLE_API_KEY is not configured");
+    const pool = poolStatus();
+    if (!hasGeminiKeys() && !LOVABLE_API_KEY) {
+      console.error("No AI credentials: set GEMINI_API_KEYS or LOVABLE_API_KEY");
       return guardError(req, "SERVER_ERROR", "AI xizmati sozlanmagan.", 500);
     }
 
@@ -182,14 +186,15 @@ ${userContext}${recNote}
 
 Extra context: ${context || "none"}`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
+    // Ko'p kalitli hovuz: navbatdagi Gemini kaliti bilan yuboradi, limitga urilsa
+    // keyingisiga o'tadi, hammasi band bo'lsa Lovable gateway'iga qaytadi.
+    const { response, provider, keyIndex } = await aiFetch({
+      lovableKey: LOVABLE_API_KEY,
+      body: {
         model,
         messages: [{ role: "system", content: systemPrompt }, ...messages],
         stream: true,
-      }),
+      },
     });
 
     if (!response.ok) {
@@ -208,7 +213,7 @@ Extra context: ${context || "none"}`;
         );
       }
       const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
+      console.error(`AI provider error (${provider}):`, response.status, errorText);
       return guardError(req, "SERVER_ERROR", "AI xizmatida xatolik.", 500);
     }
 
@@ -220,6 +225,10 @@ Extra context: ${context || "none"}`;
         "X-AI-Model": model,
         "X-AI-Task": cls.task,
         "X-AI-Language": cls.language,
+        // Diagnostika: qaysi manba javob berdi va hovuzda nechta kalit bor.
+        "X-AI-Provider": provider,
+        "X-AI-Key-Index": String(keyIndex),
+        "X-AI-Key-Pool": `${pool.ready}/${pool.total}`,
       },
     });
   } catch (error) {
