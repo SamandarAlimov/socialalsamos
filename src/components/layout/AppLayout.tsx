@@ -39,16 +39,23 @@ export function AppLayout() {
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  const hideHeaderOnPages =
-    location.pathname === '/messages' ||
-    location.pathname === '/map' ||
-    location.pathname === '/videos' ||
-    location.pathname === '/create' ||
-    location.pathname.startsWith('/marketplace/product/');
-
   const isMapPage = location.pathname === '/map';
   const isCreatePage = location.pathname === '/create';
+  // AI sahifasi ham to'liq ekranli: o'zining header va composer'i bor,
+  // shuning uchun layout padding qo'shmaydi (aks holda tagida oq joy qoladi).
+  const isAiPage = location.pathname === '/ai';
+
+  const hideHeaderOnPages =
+    location.pathname === '/messages' ||
+    isMapPage ||
+    location.pathname === '/videos' ||
+    isCreatePage ||
+    isAiPage ||
+    location.pathname.startsWith('/marketplace/product/');
+
   const immersiveMobile = isCreatePage || isMapPage;
+  // Balandligi ekranga qat'iy teng bo'lishi kerak bo'lgan sahifalar.
+  const fullHeightPage = isCreatePage || isMapPage || isAiPage;
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-background"><div className="flex flex-col items-center gap-4"><Loader2 className="h-10 w-10 animate-spin text-primary" /><p className="text-muted-foreground">Loading...</p></div></div>;
@@ -60,9 +67,7 @@ export function AppLayout() {
     <div
       className={cn(
         'flex w-full bg-background',
-        isMapPage || isCreatePage
-          ? 'h-[100dvh] min-h-0 overflow-hidden'
-          : 'min-h-screen',
+        fullHeightPage ? 'h-[100dvh] min-h-0 overflow-hidden' : 'min-h-screen',
       )}
     >
       <AppSidebar collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
@@ -71,11 +76,13 @@ export function AppLayout() {
 
       <main className={cn(
         'flex-1 md:ml-0 md:pt-0 md:pb-0',
-        isMapPage || isCreatePage
+        fullHeightPage
           ? 'h-full min-h-0 overflow-hidden p-0'
           : 'alsamos-scrollbar overflow-auto',
         hideHeaderOnPages ? 'pt-0' : 'pt-14',
-        immersiveMobile ? 'pb-0' : 'pb-20'
+        immersiveMobile ? 'pb-0' : 'pb-20',
+        // AI sahifasida mobil pastki navbar joyi kerak, desktopda esa umuman kerak emas.
+        isAiPage && 'pb-16 md:pb-0'
       )}>
         <Outlet />
       </main>
