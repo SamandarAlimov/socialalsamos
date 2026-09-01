@@ -18,10 +18,23 @@ import { useTranslation } from 'react-i18next';
 import { VideoScrubBar } from '@/components/video/VideoScrubBar';
 import { VideoWatchPanel } from '@/components/video/VideoWatchPanel';
 import { useVideoHeatmap } from '@/hooks/useVideoHeatmap';
+import { useVideoWatchTracker } from '@/hooks/useVideoWatchTracker';
 import { formatCompactNumber, formatMediaTime, resolveAspectKind } from '@/lib/videoFormat';
 
 /** Bosib turish 2x tezlikka o'tishi uchun kerakli vaqt (ms). */
 const HOLD_TO_SPEED_MS = 300;
+
+/**
+ * Aktiv videodan qancha uzoqdagi kartalar DOM da qoladi.
+ *
+ * 1 = oldingi, joriy va keyingi video. Qolganlari o'rniga yengil poster
+ * placeholder turadi: scroll balandligi ham, snap ham o'zgarmaydi, lekin
+ * brauzer o'nlab <video> elementini bir vaqtda yuklamaydi.
+ */
+const RENDER_WINDOW = 1;
+
+/** Ro'yxat oxiriga shuncha video qolganda keyingi sahifa yuklanadi. */
+const LOAD_MORE_THRESHOLD = 3;
 
 interface VideoCardProps {
   video: VideoPost;
@@ -71,7 +84,10 @@ function VideoCard({
   const { t } = useTranslation();
   const { lightTap, mediumTap, successFeedback } = useHapticFeedback();
   const { recordView } = usePostViews();
-  const heatmap = useVideoHeatmap(video.id, 48);
+  const { trackProgress, markCompleted, markSeek, finishWatch } = useVideoWatchTracker();
+  // Heatmap faqat aktiv kartada so'raladi - aks holda har scrollda
+  // keraksiz so'rovlar ketadi.
+  const heatmap = useVideoHeatmap(video.id, 48, { enabled: isActive });
 
   // Record view when video becomes active
   useEffect(() => {
@@ -81,6 +97,7 @@ function VideoCard({
   }, [isActive, video.id, recordView]);
 
   const videoUrl = video.media_urls?.[0] || '';
+  const posterUrl = video.media_urls?.[1];
   const aspectKind = resolveAspectKind(aspect);
   const isLandscape = aspectKind === 'landscape';
   const isSquareish = aspectKind === 'square';
@@ -99,8 +116,15 @@ function VideoCard({
       videoRef.current.currentTime = 0;
       setIsPlaying(false);
       setExpanded(false);
+      // Ko'rish seansi tugadi - statistikani bazaga yuboramiz.
+      finishWatch(video.id);
     }
-  }, [isActive]);
+  }, [isActive, finishWatch, video.id]);
+
+  // Karta DOM dan chiqsa ham seans yo'qolmasin.
+  useEffect(() => () => {
+    finishWatch(video.id);
+  }, [finishWatch, video.id]);
 
   // Sync mute state with global
   useEffect(() => {
@@ -176,17 +200,19 @@ function VideoCard({
   const seekBy = useCallback((seconds: number) => {
     const el = videoRef.current;
     if (!el) return;
+    markSeek(video.id);
     el.currentTime = Math.min(Math.max(0, el.currentTime + seconds), el.duration || 0);
     setSeekHint(seconds > 0 ? 'forward' : 'backward');
     setTimeout(() => setSeekHint(null), 450);
-  }, []);
+  }, [markSeek, video.id]);
 
   const handleSeek = useCallback((time: number) => {
     const el = videoRef.current;
     if (!el) return;
+    markSeek(video.id);
     el.currentTime = time;
     setCurrentTime(time);
-  }, []);
+  }, [markSeek, video.id]);
 
   const toggleFullscreen = useCallback(() => {
     const node = frameRef.current;
@@ -292,25 +318,29 @@ function VideoCard({
       >
         {/*
           Instagram Reels uslubi: 16:9 yoki 1:1 video 9:16 ekranda qora
-          bo'shliq qoldirmasligi uchun orqa fonda blur qilingan nusxa turadi.
+          bo'shliq qoldirmasligi uchun orqa fonda blur fon turadi.
+
+          Diqqat: ilgari bu yerda AYNAN o'sha videoning ikkinchi nusxasi
+          <video> sifatida yuklanardi - ya'ni har bir reel ikki marta
+          yuklanib, trafik va batareya ikki barobar sarflanardi. Endi poster
+          rasm ishlatiladi (poster bo'lmasa - oddiy qorong'i fon).
         */}
-        {isMobile && aspect !== null && aspectKind !== 'portrait' && videoUrl && (
+        {isMobile && aspect !== null && aspectKind !== 'portrait' && (
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 overflow-hidden"
           >
-            <video
-              src={videoUrl}
-              muted
-              playsInline
-              className="h-full w-full scale-110 object-cover opacity-45 blur-2xl"
-              ref={(el) => {
-                if (!el) return;
-                if (isActive) el.play().catch(() => {});
-                else el.pause();
-              }}
-              loop
-            />
+            {posterUrl ? (
+              <img
+                src={posterUrl}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                className="h-full w-full scale-110 object-cover opacity-45 blur-2xl"
+              />
+            ) : (
+              <div className="h-full w-full bg-neutral-900" />
+            )}
           </div>
         )}
 
@@ -322,6 +352,7 @@ function VideoCard({
           loop
           muted={globalMuted}
           playsInline
+          preload={isActive ? 'auto' : 'metadata'}
           onPointerDown={(e) => {
             if (e.pointerType === 'mouse' && e.button !== 0) return;
             startHold();
@@ -348,10 +379,14 @@ function VideoCard({
             const el = e.currentTarget;
             setCurrentTime(el.currentTime);
             if (el.buffered.length) setBuffered(el.buffered.end(el.buffered.length - 1));
+            // "Eng ko'p ko'rilgan qism" va watch-time uchun statistika.
+            if (isActive) trackProgress(video.id, el.currentTime, el.duration);
           }}
+          onSeeking={() => markSeek(video.id)}
+          onEnded={() => markCompleted(video.id)}
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}
-          poster={video.media_urls?.[1]}
+          poster={posterUrl}
         />
 
         {/* Play/Pause Overlay — faqat markazda */}
@@ -680,6 +715,39 @@ function VideoCard({
 }
 
 /**
+ * Virtualizatsiya uchun yengil o'rinbosar.
+ *
+ * Aktiv videodan uzoqdagi kartalar o'rniga shu blok turadi: <video> element
+ * yaratilmaydi, faqat poster rasm ko'rsatiladi. Balandlik bir xil bo'lgani
+ * uchun scroll pozitsiyasi va snap buzilmaydi.
+ */
+function VideoPlaceholder({ video, isMobile }: { video: VideoPost; isMobile: boolean }) {
+  const posterUrl = video.media_urls?.[1];
+
+  return (
+    <div className="relative h-full w-full bg-black flex items-center justify-center snap-start snap-always">
+      <div
+        className={cn(
+          'relative overflow-hidden bg-neutral-950',
+          isMobile ? 'h-full w-full' : 'h-full w-full max-w-[400px] rounded-2xl',
+        )}
+      >
+        {posterUrl && (
+          <img
+            src={posterUrl}
+            alt=""
+            aria-hidden
+            loading="lazy"
+            decoding="async"
+            className="absolute inset-0 h-full w-full object-cover opacity-60"
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Orqaga qaytish tugmasi.
  * Ilgari u faqat `isMobile && isDeepLink` bo'lganda chizilardi, shuning uchun
  * Discover'dan desktopda /videos?v=<id> ga o'tilganda tugma umuman
@@ -749,7 +817,7 @@ export default function VideosPage() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const [searchParams] = useSearchParams();
-  const { videos, isLoading, likeVideo, toggleBookmark } = useVideoPosts();
+  const { videos, isLoading, hasMore, loadMore, likeVideo, toggleBookmark } = useVideoPosts();
   const [activeIndex, setActiveIndex] = useState(0);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
@@ -828,6 +896,17 @@ export default function VideosPage() {
       setActiveIndex(newIndex);
     }
   }, [activeIndex, videos.length, mediumTap]);
+
+  /*
+    Cheksiz scroll: ro'yxat oxiriga yaqinlashganda keyingi sahifa yuklanadi.
+    Ilgari bir yo'la 50 ta video kelardi va shu bilan tugardi.
+  */
+  useEffect(() => {
+    if (isLoading || !hasMore) return;
+    if (videos.length === 0) return;
+    if (activeIndex < videos.length - LOAD_MORE_THRESHOLD) return;
+    void loadMore();
+  }, [activeIndex, videos.length, hasMore, isLoading, loadMore]);
 
   // Swipe gesture handlers for mobile
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -1036,24 +1115,32 @@ export default function VideosPage() {
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        {videos.map((video, index) => (
-          <div key={video.id} className="h-full w-full flex items-center justify-center" style={{ scrollSnapAlign: 'start' }}>
+        {videos.map((video, index) => {
+          // Virtualizatsiya: faqat aktiv va uning qo'shnilari haqiqiy pleyer.
+          const isMounted = Math.abs(index - activeIndex) <= RENDER_WINDOW;
 
-            <VideoCard
-              video={video}
-              isActive={index === activeIndex && !watchVideoId}
-              onLike={() => likeVideo(video.id)}
-              onBookmark={() => toggleBookmark(video.id)}
-              onCommentClick={() => openComments(video.id)}
-              onShareClick={() => openShareDialog(video.id)}
-              onLikesClick={() => openLikesDialog(video.id)}
-              onProfileClick={() => openProfile(video)}
-              isMobile={isMobile}
-              globalMuted={globalMuted}
-              onMuteToggle={handleMuteToggle}
-            />
-          </div>
-        ))}
+          return (
+            <div key={video.id} className="h-full w-full flex items-center justify-center" style={{ scrollSnapAlign: 'start' }}>
+              {isMounted ? (
+                <VideoCard
+                  video={video}
+                  isActive={index === activeIndex && !watchVideoId}
+                  onLike={() => likeVideo(video.id)}
+                  onBookmark={() => toggleBookmark(video.id)}
+                  onCommentClick={() => openComments(video.id)}
+                  onShareClick={() => openShareDialog(video.id)}
+                  onLikesClick={() => openLikesDialog(video.id)}
+                  onProfileClick={() => openProfile(video)}
+                  isMobile={isMobile}
+                  globalMuted={globalMuted}
+                  onMuteToggle={handleMuteToggle}
+                />
+              ) : (
+                <VideoPlaceholder video={video} isMobile={isMobile} />
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* YouTube uslubidagi watch ekrani: tepada video, pastda boshqa videolar */}

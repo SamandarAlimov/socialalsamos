@@ -1,9 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import db from '@/lib/supabaseAny';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-  attachProfiles,
   createProfileEmbedGuard,
   runWithProfileEmbedFallback,
   type EmbedQueryResult,
@@ -31,6 +30,16 @@ export interface VideoPost {
   is_liked?: boolean;
   is_bookmarked?: boolean;
 }
+
+/**
+ * Bir sahifada nechta video yuklanadi.
+ *
+ * Ilgari `.limit(50)` edi va pagination yo'q edi: birinchi ochilishda 50 ta
+ * post metadatasi kelardi, sahifa esa 50 ta <video> element yaratardi.
+ * Endi kichik sahifalar bilan ishlaymiz va foydalanuvchi oxiriga
+ * yaqinlashganda keyingisi yuklanadi.
+ */
+const PAGE_SIZE = 12;
 
 // `posts_user_id_fkey` nomi bazada bo'lmasa PostgREST butun so'rovni rad etadi
 // va Videolar sahifasi bo'sh qoladi. Shuning uchun embedsiz variant ham bor.
@@ -75,31 +84,98 @@ function readDeepLinkVideoId(): string | null {
 export function useVideoPosts() {
   const [videos, setVideos] = useState<VideoPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const { user } = useAuth();
+
+  /** Keyset pagination kursori: oxirgi yuklangan videoning created_at qiymati. */
+  const cursorRef = useRef<string | null>(null);
+  const loadingMoreRef = useRef(false);
+
+  /** Like / bookmark holatini bir sahifa uchun to'ldiradi. */
+  const attachUserState = useCallback(
+    async (rows: VideoPost[]): Promise<VideoPost[]> => {
+      if (!user || rows.length === 0) return rows;
+
+      const postIds = rows.map((post) => post.id);
+
+      const { data: likesData } = await supabase
+        .from('post_likes')
+        .select('post_id')
+        .eq('user_id', user.id)
+        .in('post_id', postIds);
+
+      const likedPostIds = new Set(likesData?.map((l) => l.post_id) || []);
+
+      // Saqlanganlar (bookmark) holati: jadval mavjud bo'lmasa yoki ruxsat
+      // bo'lmasa sahifa ishlashda davom etadi, faqat holat bo'sh qoladi.
+      let bookmarkedPostIds = new Set<string>();
+      try {
+        const { data: bookmarksData, error: bookmarksError } = await db
+          .from('post_bookmarks')
+          .select('post_id')
+          .eq('user_id', user.id)
+          .in('post_id', postIds);
+
+        if (!bookmarksError) {
+          bookmarkedPostIds = new Set(
+            (bookmarksData ?? []).map((row: any) => row.post_id as string),
+          );
+        }
+      } catch (bookmarksError) {
+        console.warn('Bookmark holatini yuklab bolmadi:', bookmarksError);
+      }
+
+      return rows.map((post) => ({
+        ...post,
+        is_liked: likedPostIds.has(post.id),
+        is_bookmarked: bookmarkedPostIds.has(post.id),
+      }));
+    },
+    [user],
+  );
+
+  /** Bitta sahifani oladi. `before` - kursor (undan eskirog'i olinadi). */
+  const fetchPage = useCallback(async (before: string | null): Promise<VideoPost[]> => {
+    const { data: rows, error } = await runWithProfileEmbedFallback<PostRow>(
+      videoEmbedGuard,
+      (select) => {
+        const base = supabase
+          .from('posts')
+          .select(select)
+          .eq('media_type', 'video')
+          .eq('visibility', 'public');
+
+        const filtered = before ? base.lt('created_at', before) : base;
+
+        return filtered
+          .order('created_at', { ascending: false })
+          .limit(PAGE_SIZE) as unknown as PromiseLike<EmbedQueryResult<PostRow>>;
+      },
+      {
+        embedSelect: VIDEO_SELECT_WITH_PROFILE,
+        plainSelect: VIDEO_SELECT_PLAIN,
+      },
+    );
+
+    if (error) throw error;
+
+    return (rows ?? []) as unknown as VideoPost[];
+  }, []);
 
   const fetchVideos = useCallback(async () => {
     setIsLoading(true);
+    cursorRef.current = null;
 
     try {
-      const { data: rows, error } = await runWithProfileEmbedFallback<PostRow>(
-        videoEmbedGuard,
-        (select) =>
-          supabase
-            .from('posts')
-            .select(select)
-            .eq('media_type', 'video')
-            .eq('visibility', 'public')
-            .order('created_at', { ascending: false })
-            .limit(50) as unknown as PromiseLike<EmbedQueryResult<PostRow>>,
-        {
-          embedSelect: VIDEO_SELECT_WITH_PROFILE,
-          plainSelect: VIDEO_SELECT_PLAIN,
-        },
-      );
+      const page = await fetchPage(null);
 
-      if (error) throw error;
+      // Kursor deep-link aralashuvidan oldin, xom natijadan olinadi.
+      const last = page[page.length - 1];
+      cursorRef.current = last ? last.created_at : null;
+      setHasMore(page.length === PAGE_SIZE);
 
-      let data = (rows ?? []) as unknown as VideoPost[];
+      let data = page;
 
       // ── Deep-link: aynan so'ralgan video birinchi bo'lib ko'rsatiladi ──
       const deepLinkId = readDeepLinkVideoId();
@@ -109,7 +185,7 @@ export function useVideoPosts() {
         if (existing) {
           data = [existing, ...data.filter((video) => video.id !== deepLinkId)];
         } else {
-          // Oxirgi 50 talikka tushmagan (eski) video ham ochilishi kerak.
+          // Birinchi sahifaga tushmagan (eski) video ham ochilishi kerak.
           const { data: singleRows, error: singleError } =
             await runWithProfileEmbedFallback<PostRow>(
               videoEmbedGuard,
@@ -135,52 +211,46 @@ export function useVideoPosts() {
         }
       }
 
-      if (user && data.length > 0) {
-        const postIds = data.map(p => p.id);
-
-        const { data: likesData } = await supabase
-          .from('post_likes')
-          .select('post_id')
-          .eq('user_id', user.id)
-          .in('post_id', postIds);
-
-        const likedPostIds = new Set(likesData?.map(l => l.post_id) || []);
-
-        // Saqlanganlar (bookmark) holati: jadval mavjud bo'lmasa yoki ruxsat
-        // bo'lmasa sahifa ishlashda davom etadi, faqat holat bo'sh qoladi.
-        let bookmarkedPostIds = new Set<string>();
-        try {
-          const { data: bookmarksData, error: bookmarksError } = await db
-            .from('post_bookmarks')
-            .select('post_id')
-            .eq('user_id', user.id)
-            .in('post_id', postIds);
-
-          if (!bookmarksError) {
-            bookmarkedPostIds = new Set(
-              (bookmarksData ?? []).map((row: any) => row.post_id as string),
-            );
-          }
-        } catch (bookmarksError) {
-          console.warn('Bookmark holatini yuklab bolmadi:', bookmarksError);
-        }
-
-        const videosWithStatus = data.map(post => ({
-          ...post,
-          is_liked: likedPostIds.has(post.id),
-          is_bookmarked: bookmarkedPostIds.has(post.id),
-        }));
-
-        setVideos(videosWithStatus as VideoPost[]);
-      } else {
-        setVideos(data);
-      }
+      setVideos(await attachUserState(data));
     } catch (error) {
       console.error('Error fetching videos:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [fetchPage, attachUserState]);
+
+  /** Keyingi sahifa. Foydalanuvchi ro'yxat oxiriga yaqinlashganda chaqiriladi. */
+  const loadMore = useCallback(async () => {
+    if (loadingMoreRef.current || !hasMore) return;
+
+    const cursor = cursorRef.current;
+    if (!cursor) return;
+
+    loadingMoreRef.current = true;
+    setIsLoadingMore(true);
+
+    try {
+      const page = await fetchPage(cursor);
+
+      if (page.length < PAGE_SIZE) setHasMore(false);
+
+      if (page.length > 0) {
+        cursorRef.current = page[page.length - 1].created_at;
+        const decorated = await attachUserState(page);
+
+        setVideos((prev) => {
+          const seen = new Set(prev.map((video) => video.id));
+          const fresh = decorated.filter((video) => !seen.has(video.id));
+          return fresh.length > 0 ? [...prev, ...fresh] : prev;
+        });
+      }
+    } catch (error) {
+      console.error('Error loading more videos:', error);
+    } finally {
+      loadingMoreRef.current = false;
+      setIsLoadingMore(false);
+    }
+  }, [hasMore, fetchPage, attachUserState]);
 
   const likeVideo = useCallback(async (postId: string) => {
     if (!user) return;
@@ -254,6 +324,7 @@ export function useVideoPosts() {
   }, [user, videos]);
 
   const refresh = useCallback(() => {
+    setHasMore(true);
     fetchVideos();
   }, [fetchVideos]);
 
@@ -397,6 +468,9 @@ export function useVideoPosts() {
   return {
     videos,
     isLoading,
+    isLoadingMore,
+    hasMore,
+    loadMore,
     refresh,
     likeVideo,
     toggleBookmark,
