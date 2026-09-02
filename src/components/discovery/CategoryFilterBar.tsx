@@ -18,7 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import db from '@/lib/supabaseAny';
-import { cn } from '@/lib/utils';
+import { segmentChipClass } from '@/lib/segmentedControl';
 import { toast } from 'sonner';
 
 // Flutter: lib/features/discovery/presentation/widgets/category_filter_bar.dart
@@ -182,6 +182,9 @@ export function CategoryFilterBar({ onCategoriesChanged, refreshKey = 0 }: Categ
     );
   }
 
+  // Tanlov holati rang bilan emas, qatlam bilan ko'rsatiladi — yuqoridagi
+  // Discover tab bar (TabsTrigger) bilan bir xil qoida. Batafsil izoh:
+  // src/lib/segmentedControl.ts
   return (
     <div
       className="flex gap-2 overflow-x-auto pb-1 scrollbar-none"
@@ -192,13 +195,7 @@ export function CategoryFilterBar({ onCategoriesChanged, refreshKey = 0 }: Categ
         type="button"
         onClick={() => toggle('all')}
         aria-pressed={selected.length === 0}
-        className={cn(
-          'inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-          selected.length === 0
-            ? 'bg-primary text-primary-foreground'
-            : 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
-        )}
+        className={segmentChipClass(selected.length === 0)}
       >
         <Grid3x3 className="h-4 w-4" />
         Hammasi
@@ -213,13 +210,7 @@ export function CategoryFilterBar({ onCategoriesChanged, refreshKey = 0 }: Categ
             type="button"
             onClick={() => toggle(category.name)}
             aria-pressed={isActive}
-            className={cn(
-              'inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-              isActive
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
-            )}
+            className={segmentChipClass(isActive)}
           >
             <Icon className="h-4 w-4" />
             {category.name}

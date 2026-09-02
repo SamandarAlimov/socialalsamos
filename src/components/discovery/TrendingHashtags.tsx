@@ -93,10 +93,12 @@ export function TrendingHashtags({ refreshKey = 0 }: TrendingHashtagsProps) {
     fetchHashtags();
   }, [fetchHashtags, refreshKey]);
 
+  // Bo'lim sarlavha ikoni — sof dekorativ, hech qanday harakatni bildirmaydi,
+  // shuning uchun neytral. Orange faqat interaktiv nuqtalarda qoladi.
   const header = (
     <div className="flex items-center justify-between mb-4">
       <div className="flex items-center gap-2">
-        <Hash className="h-5 w-5 text-primary" />
+        <Hash className="h-5 w-5 text-muted-foreground" />
         <h2 className="font-semibold text-lg">Trending Hashtags</h2>
       </div>
       <Button
@@ -142,7 +144,9 @@ export function TrendingHashtags({ refreshKey = 0 }: TrendingHashtagsProps) {
             className={cn(
               'inline-flex items-center rounded-full bg-secondary text-secondary-foreground',
               'py-2 px-4 text-sm font-medium transition-colors',
-              'hover:bg-primary hover:text-primary-foreground',
+              // Ilgari hover'da butun chip orange bo'lib ketardi (hover:bg-primary).
+              // Hover — bu shunchaki ko'rsatkich holati, CTA emas.
+              'hover:bg-accent hover:text-foreground',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
             )}
             aria-label={`#${item.tag} bo'yicha qidirish`}
