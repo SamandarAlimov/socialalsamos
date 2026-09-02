@@ -20,8 +20,6 @@ interface PostLocationCardProps {
   onStopped?: () => void;
 }
 
-const STATIC_MAP_BASE = 'https://staticmap.openstreetmap.de/staticmap.php';
-
 function remainingLabel(liveUntil: string): string {
   const diff = new Date(liveUntil).getTime() - Date.now();
   if (diff <= 0) return 'Tugadi';
@@ -33,16 +31,28 @@ function remainingLabel(liveUntil: string): string {
   return hours + ' soat ' + (minutes % 60) + ' daq qoldi';
 }
 
-/** Kalitsiz statik xarita rasmi (OSM). */
-function staticMapUrl(latitude: number, longitude: number): string {
-  const point = latitude + ',' + longitude;
+/**
+ * OSM embed preview.
+ * staticmap.openstreetmap.de production'da ba'zan rasm qaytarmaydi;
+ * OSM export embed esa browserda to'g'ridan-to'g'ri xarita tile'larini chizadi.
+ */
+function osmEmbedUrl(latitude: number, longitude: number): string {
+  const latSpan = 0.0048;
+  const lonScale = Math.max(0.35, Math.cos((latitude * Math.PI) / 180));
+  const lonSpan = latSpan / lonScale;
+  const bbox = [
+    longitude - lonSpan,
+    latitude - latSpan,
+    longitude + lonSpan,
+    latitude + latSpan,
+  ].join(',');
+
   const params = new URLSearchParams({
-    center: point,
-    zoom: '15',
-    size: '600x220',
-    markers: point + ',red-pushpin',
+    bbox,
+    layer: 'mapnik',
+    marker: latitude + ',' + longitude,
   });
-  return STATIC_MAP_BASE + '?' + params.toString();
+  return 'https://www.openstreetmap.org/export/embed.html?' + params.toString();
 }
 
 /** Lentada post joylashuvini korsatish. */
@@ -122,12 +132,14 @@ export function PostLocationCard({
   const subtitle = detail === title ? coordinateLabel : detail;
 
   const mapHref =
-    '/map?lat=' +
+    '/map?destLat=' +
     location.latitude +
-    '&lng=' +
+    '&destLng=' +
     location.longitude +
-    '&label=' +
-    encodeURIComponent(title);
+    '&destName=' +
+    encodeURIComponent(title) +
+    '&destAddress=' +
+    encodeURIComponent(subtitle);
 
   const handleStop = async (event: React.MouseEvent) => {
     event.preventDefault();
@@ -166,18 +178,21 @@ export function PostLocationCard({
         className,
       )}
     >
-      <div className="relative h-32 w-full bg-muted">
-        <img
-          src={staticMapUrl(location.latitude, location.longitude)}
-          alt={title}
+      <div className="relative h-36 w-full overflow-hidden bg-muted">
+        <iframe
+          src={osmEmbedUrl(location.latitude, location.longitude)}
+          title={title + ' xarita preview'}
           loading="lazy"
-          className="h-full w-full object-cover"
-          onError={(event) => {
-            (event.currentTarget as HTMLImageElement).style.display = 'none';
-          }}
+          tabIndex={-1}
+          aria-hidden="true"
+          className="pointer-events-none h-full w-full border-0"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/10 via-transparent to-transparent"
         />
         {live && (
-          <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
+          <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold uppercase text-white shadow-sm">
             <Radio className="h-3 w-3 animate-pulse" /> Live
           </span>
         )}

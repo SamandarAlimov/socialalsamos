@@ -806,20 +806,34 @@ export default function MapPage() {
     );
   }, [me, focusMapOnPoint]);
 
-  // Boshqa sahifadan kelgan manzil: /map?destLat=..&destLng=..&destName=..
+  // Boshqa sahifadan kelgan manzil.
+  // Canonical format: /map?destLat=..&destLng=..&destName=..
+  // Legacy format (/map?lat=..&lng=..&label=..) ham qo'llab-quvvatlanadi.
   useEffect(() => {
-    const lat = Number(params.get('destLat'));
-    const lng = Number(params.get('destLng'));
+    const rawLat = params.get('destLat') ?? params.get('lat');
+    const rawLng = params.get('destLng') ?? params.get('lng');
+    const lat = Number(rawLat);
+    const lng = Number(rawLng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng) || (!lat && !lng)) return;
-    const place: MapPlace = {
+
+    const name =
+      params.get('destName') ??
+      params.get('label') ??
+      'Belgilangan joy';
+    const address =
+      params.get('destAddress') ??
+      params.get('address') ??
+      null;
+
+    const provisional: MapPlace = {
       id: 'param:' + lat + ',' + lng,
       source: 'param',
-      name: params.get('destName') || 'Belgilangan joy',
+      name,
       categoryId: null,
       categoryLabel: 'Joy',
       latitude: lat,
       longitude: lng,
-      address: null,
+      address,
       phone: null,
       website: null,
       openingHours: null,
@@ -830,12 +844,36 @@ export default function MapPage() {
       tags: {},
       score: 1,
     } as unknown as MapPlace;
-    setSelectedPlace(place);
+
+    setSelectedPlace(provisional);
     setCenter({ latitude: lat, longitude: lng });
     setPanel('place');
     setSnap('half');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
+    // Deep-link kartasi faqat query'dagi minimal ma'lumot bilan qolmasin:
+    // real OSM POI topilsa, tanlangan joyni boyitamiz, lekin postdagi nomni
+    // generic provider nomi bilan yomonlashtirmaymiz.
+    const controller = new AbortController();
+    void resolveMapClickPlace({ latitude: lat, longitude: lng }, 18, controller.signal)
+      .then((resolved) => {
+        if (!resolved || controller.signal.aborted) return;
+        setSelectedPlace({
+          ...resolved,
+          name:
+            resolved.name && !['Joy', 'Bino', 'Nomsiz joy'].includes(resolved.name)
+              ? resolved.name
+              : name,
+          address: resolved.address ?? address,
+        });
+      })
+      .catch((error) => {
+        if ((error as Error).name !== 'AbortError') {
+          console.warn('Deep-link joylashuvini boyitib bo‘lmadi:', error);
+        }
+      });
+
+    return () => controller.abort();
+  }, [params]);
 
   const handleMapClick = useCallback(
     async (
