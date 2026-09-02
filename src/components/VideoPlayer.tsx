@@ -135,7 +135,8 @@ export function VideoPlayer({
   const [duration, setDuration] = useState(0);
   const [bufferedSeconds, setBufferedSeconds] = useState(0);
   const [showControls, setShowControls] = useState(true);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isNativeFullscreen, setIsNativeFullscreen] = useState(false);
+  const [isPseudoFullscreen, setIsPseudoFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
@@ -209,7 +210,7 @@ export function VideoPlayer({
   useEffect(() => {
     const onFullscreenChange = () => {
       const active = document.fullscreenElement === containerRef.current;
-      setIsFullscreen(active);
+      setIsNativeFullscreen(active);
       if (active) {
         setShowControls(true);
         requestAnimationFrame(() => containerRef.current?.focus());
@@ -218,6 +219,15 @@ export function VideoPlayer({
     document.addEventListener('fullscreenchange', onFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
   }, []);
+
+  useEffect(() => {
+    if (!isPseudoFullscreen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [isPseudoFullscreen]);
 
   useEffect(() => {
     return () => {
@@ -296,12 +306,33 @@ export function VideoPlayer({
   const toggleFullscreen = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
+
+    if (isPseudoFullscreen) {
+      setIsPseudoFullscreen(false);
+      setShowControls(true);
+      return;
+    }
+
     if (document.fullscreenElement === container) {
       document.exitFullscreen().catch(() => {});
-    } else if (!document.fullscreenElement) {
-      container.requestFullscreen().catch(() => {});
+      return;
     }
-  }, []);
+
+    if (document.fullscreenElement) return;
+
+    if (typeof container.requestFullscreen === 'function') {
+      container.requestFullscreen().catch(() => {
+        // iPhone/iOS yoki cheklangan webview: custom controlsni saqlaydigan fallback.
+        setIsPseudoFullscreen(true);
+        setShowControls(true);
+        requestAnimationFrame(() => container.focus());
+      });
+    } else {
+      setIsPseudoFullscreen(true);
+      setShowControls(true);
+      requestAnimationFrame(() => container.focus());
+    }
+  }, [isPseudoFullscreen]);
 
   const togglePictureInPicture = useCallback(async () => {
     const video = videoRef.current;
@@ -429,6 +460,8 @@ export function VideoPlayer({
 
     if (pointerMovedRef.current) {
       pointerStartRef.current = null;
+      lastTapRef.current = null;
+      suppressClickRef.current = true;
       return;
     }
     pointerStartRef.current = null;
@@ -476,6 +509,7 @@ export function VideoPlayer({
       const focused = document.activeElement as HTMLElement | null;
       const isActive =
         document.fullscreenElement === container ||
+        isPseudoFullscreen ||
         focused === container ||
         Boolean(focused && container.contains(focused));
       if (!isActive) return;
@@ -487,7 +521,11 @@ export function VideoPlayer({
       const video = videoRef.current;
       if (!video) return;
 
-      if (event.key === ' ' || key === 'k') {
+      if (event.key === 'Escape' && isPseudoFullscreen) {
+        event.preventDefault();
+        setIsPseudoFullscreen(false);
+        setShowControls(true);
+      } else if (event.key === ' ' || key === 'k') {
         event.preventDefault();
         togglePlay();
       } else if (key === 'j') {
@@ -557,6 +595,7 @@ export function VideoPlayer({
     togglePictureInPicture,
     togglePlay,
     tracks.length,
+    isPseudoFullscreen,
   ]);
 
   const effectiveRatio = useMemo(() => {
@@ -565,6 +604,8 @@ export function VideoPlayer({
     if (aspectMode === 'square') return 1;
     return detectedRatio || 16 / 9;
   }, [aspectMode, detectedRatio]);
+
+  const isFullscreen = isNativeFullscreen || isPseudoFullscreen;
 
   const VolumeIcon = globalMuted || globalVolume === 0
     ? VolumeX
@@ -586,7 +627,8 @@ export function VideoPlayer({
       className={cn(
         'group/player relative w-full overflow-hidden bg-black text-white outline-none select-none',
         'focus-visible:ring-2 focus-visible:ring-white/70',
-        isFullscreen && 'h-screen w-screen max-h-none max-w-none rounded-none',
+        isNativeFullscreen && 'h-screen w-screen max-h-none max-w-none rounded-none',
+        isPseudoFullscreen && 'fixed inset-0 z-[9999] h-[100dvh] w-screen max-h-none max-w-none rounded-none',
         className,
       )}
       style={isFullscreen ? undefined : { aspectRatio: String(effectiveRatio) }}
