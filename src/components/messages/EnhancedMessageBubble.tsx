@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MessageAttachment } from '@/components/MessageAttachment';
+import { VideoMessagePlayer } from './VideoMessagePlayer';
 import { VoiceMessagePlayer } from '@/components/VoiceMessagePlayer';
 import { AnimatedEmoji } from '@/components/emoji/AnimatedEmoji';
 
@@ -323,6 +324,18 @@ export function EnhancedMessageBubble({
 
   const isVoiceMessage = message.media_type === 'audio' && message.media_url;
 
+  /**
+   * Recorder'dan chiqqan doiraviy videolar generic attachment emas.
+   * Yangi xabarlar canonical `video_note` bo'ladi; eski `video_123.webm`
+   * yozuvlar ham regressiyasiz video-note sifatida taniladi.
+   */
+  const isVideoNote = Boolean(
+    message.media_url &&
+      (message.media_type === 'video_note' ||
+        (message.media_type === 'video' &&
+          /(?:^|\/)video_\d+\.(?:webm|mp4|mov|m4v)(?:[?#]|$)/i.test(message.media_url)))
+  );
+
   /** Stiker va GIF - alohida media turlari, fonsiz ko'rinadi (Telegramdek) */
   const stickerKind: 'sticker' | 'gif' | null =
     message.media_url && (message.media_type === 'sticker' || message.media_type === 'gif')
@@ -440,7 +453,7 @@ export function EnhancedMessageBubble({
               <AlertCircle className="h-3 w-3 text-destructive" />
             )
           ) : message.status === 'read' || message.is_read ? (
-            <CheckCheck className="h-3.5 w-3.5 text-link" />
+            <CheckCheck className="h-3.5 w-3.5 text-bubble-own-accent" />
           ) : (
             // Telegram: serverga muvaffaqiyatli yuborilgan xabar bitta ptichka.
             // Legacy `delivered` qiymati ham shu ko'rinishga tushadi.
@@ -465,6 +478,32 @@ export function EnhancedMessageBubble({
               />
             ))}
           </div>
+          {renderStatusRow(true)}
+        </div>
+      );
+    }
+
+    // Telegram video-note: yashil/to'q bubble kartasiz, mustaqil doiraviy media.
+    // Shu bilan video xabar oddiy video attachmentdan vizual jihatdan ajraladi.
+    if (isVideoNote && message.media_url) {
+      return (
+        <div className={cn('flex max-w-[250px] flex-col gap-1', isMine ? 'items-end' : 'items-start')}>
+          {message.reply_to_id && message.reply_to && (
+            <div className="w-full max-w-[240px] rounded-xl border border-border/60 bg-card/90 p-1 shadow-sm backdrop-blur-sm">
+              <ReplyMessagePreview
+                reply={message.reply_to}
+                isMine={false}
+                onJump={isPreview ? undefined : onJumpToMessage}
+              />
+            </div>
+          )}
+          <VideoMessagePlayer
+            url={message.media_url}
+            isMine={isMine}
+            messageId={message.id}
+            autoPlay={false}
+            isWebcamRecording={message.media_url.includes('/video_') || message.media_url.includes('video_')}
+          />
           {renderStatusRow(true)}
         </div>
       );
