@@ -13,8 +13,8 @@ export const CHAT_ACCENTS: Array<{
   {
     id: 'green',
     label: 'Yashil',
-    description: 'Standart — sokin va professional',
-    swatchClass: 'bg-emerald-500',
+    description: 'Standart — chuqur va professional',
+    swatchClass: 'bg-emerald-700 dark:bg-emerald-600',
   },
   {
     id: 'blue',

@@ -3,7 +3,7 @@ import { Outlet, Navigate, useLocation } from 'react-router-dom';
 import { AppSidebar } from './AppSidebar';
 import { BottomNavbar } from './BottomNavbar';
 import { MobileHeader } from './MobileHeader';
-import { Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useActivityTracking } from '@/hooks/useActivityTracking';
 import { LocationPermissionDialog } from '@/components/LocationPermissionDialog';
@@ -71,6 +71,28 @@ export function AppLayout() {
       )}
     >
       <AppSidebar collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
+
+      {/*
+        Global collapse control sidebar ichida emas, layout overlay sifatida turadi.
+        Shu sabab AI/Map kabi z-index'i baland ichki panellar uning page tomondagi
+        50% qismini yopib qo'ya olmaydi. left qiymati dividerning o'zi, translate
+        esa tugmani aynan 50% sidebar / 50% page qilib markazlaydi.
+      */}
+      <button
+        type="button"
+        aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        onClick={() => setSidebarCollapsed((current) => !current)}
+        className={cn(
+          'fixed top-20 z-[5000] hidden h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-sidebar-border bg-background shadow-lg transition-[left,background-color,color,box-shadow] duration-300 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 md:flex',
+          sidebarCollapsed ? 'left-[72px]' : 'left-64',
+        )}
+      >
+        {sidebarCollapsed ? (
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        ) : (
+          <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+        )}
+      </button>
 
       {!hideHeaderOnPages && <MobileHeader />}
 

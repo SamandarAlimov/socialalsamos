@@ -81,10 +81,11 @@
     --link-hover: 217 91% 40%;
 
     /* Chat bubble ranglari brand rangidan butunlay mustaqil.
-       Default — sokin yashil tint; foydalanuvchi Sozlamalarda accent tanlaydi. */
-    --bubble-own-bg: 142 38% 91%;
-    --bubble-own-fg: 145 35% 12%;
-    --bubble-own-accent: 142 70% 32%;
+       Default — Telegram/ChatGPT ruhidagi chuqur professional green:
+       oq matn bilan WCAG AA kontrast saqlanadi va bubble "hira" ko'rinmaydi. */
+    --bubble-own-bg: 152 55% 32%;
+    --bubble-own-fg: 0 0% 100%;
+    --bubble-own-accent: 152 62% 24%;
     --bubble-other-bg: 0 0% 99%;
     --bubble-other-fg: 220 20% 10%;
 
@@ -149,10 +150,10 @@
     --link: 213 94% 68%;
     --link-hover: 213 94% 76%;
 
-    /* Chat bubble fonlari (qorong'i) */
-    --bubble-own-bg: 142 25% 18%;
-    --bubble-own-fg: 140 20% 95%;
-    --bubble-own-accent: 142 70% 50%;
+    /* Chat bubble fonlari (qorong'i): light bilan bir oilada, biroz chuqurroq. */
+    --bubble-own-bg: 152 46% 27%;
+    --bubble-own-fg: 0 0% 100%;
+    --bubble-own-accent: 152 65% 58%;
     --bubble-other-bg: 222 16% 13%;
     --bubble-other-fg: 210 40% 98%;
 

@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UserPlus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UserPlus } from 'lucide-react';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -58,19 +58,16 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
   const navigate = useNavigate();
   const { profile, logout } = useAuth();
   const { t } = useTranslation();
-  const [userToggled, setUserToggled] = useState(false);
   const [showSwitchAccount, setShowSwitchAccount] = useState(false);
 
-  // Auto-collapse on smaller desktop/tablet widths. User can still override it.
+  // Auto-collapse on smaller desktop/tablet widths.
   useEffect(() => {
     const COLLAPSE_BREAKPOINT = 1100;
-    const check = () => {
-      if (!userToggled) onCollapsedChange(window.innerWidth < COLLAPSE_BREAKPOINT);
-    };
+    const check = () => onCollapsedChange(window.innerWidth < COLLAPSE_BREAKPOINT);
     check();
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
-  }, [onCollapsedChange, userToggled]);
+  }, [onCollapsedChange]);
 
   const { theme, setTheme } = useTheme();
   const { playMessageSound } = useNotificationSound();
@@ -84,21 +81,6 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
       "hidden md:flex",
       collapsed ? "w-[72px]" : "w-64"
     )}>
-      <button
-        type="button"
-        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        onClick={() => {
-          setUserToggled(true);
-          onCollapsedChange(!collapsed);
-        }}
-        className="absolute left-full top-20 z-[70] flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-sidebar-border bg-background shadow-lg transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-      >
-        {collapsed ? (
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-        ) : (
-          <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-        )}
-      </button>
       <div className="h-16 shrink-0 flex items-center justify-between px-4 border-b border-sidebar-border">
         <AlsamosLogo size="sm" showText={!collapsed} />
         {!collapsed && <NotificationsDropdown />}
