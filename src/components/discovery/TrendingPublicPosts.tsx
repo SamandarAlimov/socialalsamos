@@ -378,14 +378,22 @@ export function TrendingPublicPosts({ refreshKey = 0 }: TrendingPublicPostsProps
                   </div>
                 </div>
               ) : (
-                <button
-                  type="button"
+                <div
+                  role="link"
+                  tabIndex={0}
                   onClick={() => openPost(post)}
-                  className="block w-full p-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      openPost(post);
+                    }
+                  }}
+                  className="block w-full cursor-pointer p-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   aria-label="Matnli postni ochish"
                 >
                   <div
                     onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
                     className="mb-5"
                   >
                     <DiscoveryAuthor
@@ -420,6 +428,7 @@ export function TrendingPublicPosts({ refreshKey = 0 }: TrendingPublicPostsProps
 
                   <div
                     onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
                     className="mt-5 border-t border-border/55 pt-3"
                   >
                     <DiscoveryPostMetrics
@@ -427,7 +436,7 @@ export function TrendingPublicPosts({ refreshKey = 0 }: TrendingPublicPostsProps
                       onLike={() => handleLike(post)}
                     />
                   </div>
-                </button>
+                </div>
               )}
             </article>
           );
