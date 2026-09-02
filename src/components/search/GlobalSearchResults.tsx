@@ -32,6 +32,7 @@ interface GlobalSearchResponse {
   tookMs: number;
   results: GlobalSearchResult[];
   engine?: string;
+  providers?: string[];
   summary?: string | null;
   searchSuggestionHtml?: string | null;
   searchQueries?: string[];
@@ -77,8 +78,9 @@ export function GlobalSearchResults({ query, locale = 'uz' }: { query: string; l
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const requestRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
 
-  const debouncedQuery = useDebounce(query.trim(), 400);
+  const debouncedQuery = useDebounce(query.trim(), 250);
 
   const runSearch = useCallback(async (nextPage: number, replace: boolean) => {
     if (!debouncedQuery) {
@@ -86,11 +88,17 @@ export function GlobalSearchResults({ query, locale = 'uz' }: { query: string; l
       return;
     }
     const ticket = ++requestRef.current;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     replace ? setLoading(true) : setLoadingMore(true);
     try {
       const response = await fetch('/api/global-search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        signal: controller.signal,
         body: JSON.stringify({
           query: debouncedQuery,
           category,
@@ -128,11 +136,13 @@ export function GlobalSearchResults({ query, locale = 'uz' }: { query: string; l
         setSearchSuggestionHtml(data.searchSuggestionHtml || null);
       }
       setItems((prev) => (replace ? data.results : [...prev, ...data.results]));
-    } catch {
+    } catch (requestError) {
+      if (controller.signal.aborted) return;
       if (ticket === requestRef.current) {
         setError({ code: 'NETWORK_ERROR', message: "Qidiruv xizmatiga ulanib bo'lmadi." });
       }
     } finally {
+      if (abortRef.current === controller) abortRef.current = null;
       if (ticket === requestRef.current) { setLoading(false); setLoadingMore(false); }
     }
   }, [debouncedQuery, category, locale]);
@@ -140,6 +150,10 @@ export function GlobalSearchResults({ query, locale = 'uz' }: { query: string; l
   useEffect(() => {
     setPage(1);
     runSearch(1, true);
+
+    return () => {
+      abortRef.current?.abort();
+    };
   }, [runSearch]);
 
   const grouped = useMemo(() => {
@@ -186,11 +200,13 @@ export function GlobalSearchResults({ query, locale = 'uz' }: { query: string; l
           {items.length} ta natija · {meta.tookMs} ms
           {meta.engine
             ? ` · ${
-                meta.engine.startsWith('instant-find-it:firecrawl-')
-                  ? 'jonli internet · Firecrawl'
-                  : meta.engine.startsWith('yacy-') || meta.engine === 'duckduckgo-html'
-                    ? 'internet fallback'
-                    : meta.engine
+                meta.engine.startsWith('federated:')
+                  ? 'jonli internet · bir nechta manba'
+                  : meta.engine.startsWith('instant-find-it:firecrawl-')
+                    ? 'jonli internet · Firecrawl'
+                    : meta.engine.startsWith('yacy-') || meta.engine === 'duckduckgo-html'
+                      ? 'internet fallback'
+                      : meta.engine
               }`
             : ''}
         </p>
