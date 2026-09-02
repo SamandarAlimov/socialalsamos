@@ -322,6 +322,7 @@ function VideoCard({
           WebkitUserSelect: 'none',
           userSelect: 'none',
         }}
+        onContextMenu={(event) => event.preventDefault()}
       >
         {/*
           Instagram Reels uslubi: 16:9 yoki 1:1 video 9:16 ekranda qora
@@ -1135,7 +1136,10 @@ export default function VideosPage() {
 
       <div
         ref={containerRef}
-        className="h-full w-full overflow-y-scroll snap-y snap-mandatory scrollbar-hide overscroll-contain"
+        className={cn(
+          "h-full w-full overflow-y-scroll snap-y snap-mandatory scrollbar-hide overscroll-contain transition-[padding] duration-300 ease-out",
+          !isMobile && commentsOpen && "pr-[min(430px,38vw)]",
+        )}
         style={{ scrollSnapType: 'y mandatory', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
