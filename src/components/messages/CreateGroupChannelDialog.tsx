@@ -356,14 +356,14 @@ export function CreateGroupChannelDialog({
                   return (
                     <div
                       key={userId}
-                      className="flex max-w-full items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-sm"
+                      className="flex max-w-full items-center gap-1 rounded-full bg-muted px-2 py-1 text-sm"
                     >
                       <span className="truncate">
                         {selectedUser?.display_name || selectedUser?.username || 'Foydalanuvchi'}
                       </span>
                       <button
                         onClick={() => handleUserSelect(userId)}
-                        className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full hover:bg-primary/20"
+                        className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full hover:bg-foreground/10"
                         aria-label="Olib tashlash"
                       >
                         <X className="h-3 w-3" />
@@ -377,7 +377,7 @@ export function CreateGroupChannelDialog({
             <ScrollArea className="h-[45vh] max-h-[300px]">
               {loading ? (
                 <div className="flex h-32 items-center justify-center">
-                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               ) : users.length === 0 ? (
                 <div className="py-8 text-center text-sm text-muted-foreground">
@@ -447,7 +447,7 @@ export function CreateGroupChannelDialog({
                     <Camera className="tg-transition h-7 w-7 text-muted-foreground group-hover:text-foreground" />
                   )}
                 </div>
-                <span className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                <span className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-background">
                   <Camera className="h-4 w-4" />
                 </span>
               </label>
@@ -485,7 +485,7 @@ export function CreateGroupChannelDialog({
               <div className="flex items-center justify-between gap-3 rounded-2xl bg-muted/50 p-3 sm:p-4">
                 <div className="flex min-w-0 items-center gap-3">
                   {isPublic ? (
-                    <Globe className="h-5 w-5 shrink-0 text-primary" />
+                    <Globe className="h-5 w-5 shrink-0 text-muted-foreground" />
                   ) : (
                     <Lock className="h-5 w-5 shrink-0 text-muted-foreground" />
                   )}
@@ -536,7 +536,7 @@ export function CreateGroupChannelDialog({
           <div className="space-y-4">
             <div className="rounded-2xl bg-muted/50 p-3 sm:p-4">
               <div className="mb-2 flex items-center gap-2">
-                <Shield className="h-4 w-4 text-primary" />
+                <Shield className="h-4 w-4 text-muted-foreground" />
                 <p className="text-sm font-medium">Admin huquqlari</p>
               </div>
               <p className="text-xs text-muted-foreground">
@@ -547,7 +547,7 @@ export function CreateGroupChannelDialog({
 
             <ScrollArea className="h-[40vh] max-h-[250px]">
               <div className="space-y-2 pr-2">
-                <div className="flex items-center justify-between rounded-xl border border-primary/20 bg-primary/10 p-3">
+                <div className="flex items-center justify-between rounded-xl border border-border bg-muted/40 p-3">
                   <div className="flex min-w-0 items-center gap-3">
                     <Avatar className="h-10 w-10">
                       <AvatarFallback>Siz</AvatarFallback>
@@ -557,7 +557,7 @@ export function CreateGroupChannelDialog({
                       <p className="text-xs text-muted-foreground">Egasi</p>
                     </div>
                   </div>
-                  <Crown className="h-5 w-5 shrink-0 text-primary" />
+                  <Crown className="h-5 w-5 shrink-0 text-muted-foreground" />
                 </div>
 
                 {selectedUsers.map((userId) => {
