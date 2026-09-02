@@ -39,7 +39,7 @@ interface ChatListItemProps {
  * O'RNIGA qo'llanishi kerak - aks holda tailwind-merge `bg-card`ni ustun deb
  * biladi va tanlangan chat umuman ajralib turmaydi (desktop/tabletdagi xato).
  */
-const SELECTED_ROW = 'bg-muted dark:bg-muted/80';
+const SELECTED_ROW = 'bg-muted-foreground/[0.10] dark:bg-muted/80';
 const DEFAULT_ROW = 'bg-card';
 const HOVER_ROW = 'hover:bg-muted/60 active:bg-muted/80';
 
