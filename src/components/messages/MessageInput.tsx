@@ -547,9 +547,9 @@ export function MessageInput({
 
       {/* Javob preview */}
       {replyTo && (
-        <div className="mb-2 flex items-center gap-2 rounded-xl border-l-2 border-primary bg-muted/50 px-3 py-2">
+        <div className="mb-2 flex items-center gap-2 rounded-xl border-l-2 border-muted-foreground/50 bg-muted/50 px-3 py-2">
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium text-primary">{replyTo.sender_name}</p>
+            <p className="text-xs font-medium text-foreground">{replyTo.sender_name}</p>
             <p className="truncate text-sm text-muted-foreground">{replyTo.content}</p>
           </div>
           <Button
@@ -566,8 +566,8 @@ export function MessageInput({
 
       {/* Uzun matn uchun maqola taklifi */}
       {suggestArticle && (
-        <div className="mb-2 flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
-          <BookOpen className="h-4 w-4 shrink-0 text-primary" />
+        <div className="mb-2 flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2 text-xs">
+          <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
           <p className="min-w-0 flex-1 text-muted-foreground">
             Matn ancha uzun. Uni maqola ko'rinishida chiroyli formatlab yuborishingiz mumkin.
           </p>
@@ -609,7 +609,7 @@ export function MessageInput({
       {pendingAlbum && pendingAlbum.length > 0 && (
         <div className="mb-2 rounded-2xl border border-border bg-muted/40 p-2">
           <div className="mb-2 flex items-center gap-2 px-1">
-            <Images className="h-4 w-4 shrink-0 text-primary" />
+            <Images className="h-4 w-4 shrink-0 text-muted-foreground" />
             <p className="min-w-0 flex-1 text-xs text-muted-foreground">
               {pendingAlbum.length} ta media bitta albom bo'lib yuboriladi
               {uploading ? ' \u00b7 yuklanmoqda...' : ''}
@@ -714,7 +714,7 @@ export function MessageInput({
                       : prev
                   )
                 }
-                className="mt-0.5 text-xs font-medium text-primary hover:underline"
+                className="mt-0.5 text-xs font-medium text-link hover:text-link-hover hover:underline"
               >
                 {pendingAttachment.type === 'document'
                   ? pendingAttachment.kind === 'image'
