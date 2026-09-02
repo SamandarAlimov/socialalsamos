@@ -202,7 +202,7 @@ export function ChatHeader({
         isGroupOrChannel && typingUsers.length > 1
           ? typingUsers.length + ' kishi yozmoqda...'
           : 'yozmoqda...';
-      return <span className="animate-pulse text-primary">{label}</span>;
+      return <span className="animate-pulse text-muted-foreground">{label}</span>;
     }
 
     if (isSelfChat) {
@@ -246,11 +246,11 @@ export function ChatHeader({
           <AvatarImage src={getAvatar() || ''} />
           <AvatarFallback
             className={cn(
-              'text-primary-foreground',
+              'text-foreground',
               isGroup && 'bg-blue-500',
               isChannel && 'bg-violet-500',
               isSelfChat && 'bg-muted text-foreground',
-              conversation.type === 'private' && !isSelfChat && 'bg-primary'
+              conversation.type === 'private' && !isSelfChat && 'bg-muted'
             )}
           >
             {isSelfChat ? (
@@ -397,7 +397,7 @@ export function ChatHeader({
                 <Clock className="mr-2 h-4 w-4" />
                 Rejalashtirilgan xabarlar
                 {scheduledCount && scheduledCount > 0 ? (
-                  <span className="ml-auto rounded-full bg-primary px-1.5 text-xs text-primary-foreground">
+                  <span className="ml-auto rounded-full bg-foreground px-1.5 text-xs text-background">
                     {scheduledCount}
                   </span>
                 ) : null}
