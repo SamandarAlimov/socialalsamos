@@ -20,12 +20,10 @@ import {
   Clock3,
   Eye,
   Heart,
-  Image as ImageIcon,
   Inbox,
   Loader2,
   MessageCircle,
   MoreHorizontal,
-  Play,
   RefreshCw,
   Reply,
   Settings,
@@ -53,6 +51,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
+import { PostMediaThumbnail } from '@/components/PostMediaThumbnail';
 import { toast } from 'sonner';
 import {
   notificationActionText,
@@ -99,8 +98,6 @@ const COLLABORATION_TYPES: Notification['type'][] = [
 
 const COMMENT_TYPES: Notification['type'][] = ['comment', 'reply', 'comment_like'];
 const MENTION_TYPES: Notification['type'][] = ['mention', 'comment_mention'];
-const VIDEO_PATTERN = /\.(mp4|webm|mov|m4v|ogv)(\?|#|$)/i;
-
 interface GroupedNotification {
   id: string;
   type: Notification['type'];
@@ -108,6 +105,7 @@ interface GroupedNotification {
   latestAt: string;
   postId?: string;
   postThumbnail?: string;
+  postMediaType?: string | null;
   actors: Array<{
     id: string;
     username: string | null;
@@ -181,43 +179,21 @@ function NotificationIcon({ type }: { type: Notification['type'] }) {
 
 function PostThumbnail({
   url,
+  mediaType,
   onClick,
 }: {
   url: string;
+  mediaType?: string | null;
   onClick: (event: React.MouseEvent) => void;
 }) {
-  const [failed, setFailed] = useState(false);
-  const isVideo = VIDEO_PATTERN.test(url);
-  const base =
-    'relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-muted ring-1 ring-border/60 transition hover:ring-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
-
-  if (isVideo) {
-    return (
-      <button type="button" onClick={onClick} className={cn(base, 'bg-neutral-900')} aria-label="Videoni ochish">
-        <Play className="h-4 w-4 text-white" fill="currentColor" />
-      </button>
-    );
-  }
-
-  if (failed) {
-    return (
-      <button type="button" onClick={onClick} className={base} aria-label="Postni ochish">
-        <ImageIcon className="h-5 w-5 text-muted-foreground" />
-      </button>
-    );
-  }
-
   return (
-    <button type="button" onClick={onClick} className={base} aria-label="Postni ochish">
-      <img
-        src={url}
-        alt=""
-        loading="lazy"
-        decoding="async"
-        className="h-full w-full object-cover"
-        onError={() => setFailed(true)}
-      />
-    </button>
+    <PostMediaThumbnail
+      url={url}
+      mediaType={mediaType}
+      onClick={() => onClick({ stopPropagation() {} } as React.MouseEvent)}
+      className="h-16 w-16 rounded-2xl"
+      ariaLabel="Postni ochish"
+    />
   );
 }
 
@@ -234,6 +210,7 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
     const postThumbnail = notification.post?.media_urls?.find(
       (media) => typeof media === 'string' && media.length > 0,
     );
+    const postMediaType = notification.post?.media_type ?? null;
     const isCollaboration = COLLABORATION_TYPES.includes(notification.type);
 
     // Context-rich eventlar (comment/mention/reply) alohida qoladi.
@@ -269,7 +246,10 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
           });
         }
         existing.notifications.push(notification);
-        if (!existing.postThumbnail && postThumbnail) existing.postThumbnail = postThumbnail;
+        if (!existing.postThumbnail && postThumbnail) {
+          existing.postThumbnail = postThumbnail;
+          existing.postMediaType = postMediaType;
+        }
         return;
       }
     }
@@ -281,6 +261,7 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
       latestAt: notification.created_at,
       postId,
       postThumbnail,
+      postMediaType,
       actors: actor
         ? [{
             id: actor.id,
@@ -564,7 +545,11 @@ function GroupedNotificationItem({
 
       <div className="flex items-start gap-1">
         {group.postThumbnail ? (
-          <PostThumbnail url={group.postThumbnail} onClick={handlePostClick} />
+          <PostThumbnail
+            url={group.postThumbnail}
+            mediaType={group.postMediaType}
+            onClick={handlePostClick}
+          />
         ) : target && group.type !== 'follow' ? (
           <Button
             variant="ghost"
