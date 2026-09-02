@@ -756,10 +756,13 @@ export default function NotificationsPage() {
     const viewport = scrollRootRef.current?.querySelector<HTMLElement>(
       '[data-radix-scroll-area-viewport]',
     );
+    const mainScroller = scrollRootRef.current?.closest('main') as HTMLElement | null;
     sessionStorage.setItem(
       'alsamos.notifications.returnState',
       JSON.stringify({
         scrollTop: viewport?.scrollTop ?? 0,
+        mainScrollTop: mainScroller?.scrollTop ?? 0,
+        windowScrollY: window.scrollY,
         filter,
       }),
     );
@@ -774,7 +777,12 @@ export default function NotificationsPage() {
       if (!raw) return;
       sessionStorage.removeItem('alsamos.notifications.returnState');
 
-      const saved = JSON.parse(raw) as { scrollTop?: number; filter?: NotificationFilter };
+      const saved = JSON.parse(raw) as {
+        scrollTop?: number;
+        mainScrollTop?: number;
+        windowScrollY?: number;
+        filter?: NotificationFilter;
+      };
       if (saved.filter && FILTERS.some((item) => item.id === saved.filter) && saved.filter !== filter) {
         setFilter(saved.filter);
       }
@@ -786,6 +794,13 @@ export default function NotificationsPage() {
           );
           if (viewport && typeof saved.scrollTop === 'number') {
             viewport.scrollTop = saved.scrollTop;
+          }
+          const mainScroller = scrollRootRef.current?.closest('main') as HTMLElement | null;
+          if (mainScroller && typeof saved.mainScrollTop === 'number') {
+            mainScroller.scrollTop = saved.mainScrollTop;
+          }
+          if (typeof saved.windowScrollY === 'number' && saved.windowScrollY > 0) {
+            window.scrollTo({ top: saved.windowScrollY, behavior: 'auto' });
           }
         });
       });
