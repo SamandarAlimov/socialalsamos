@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react';
 import { MapPin } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -11,6 +12,7 @@ import { PostMusicCard } from '@/components/PostMusicCard';
 import { PostAudioPlayer } from '@/components/PostAudioPlayer';
 import { PostDocumentCard } from '@/components/PostDocumentViewer';
 import { fileNameFromUrl } from '@/lib/documentPreview';
+import { resolveStorageUrl } from '@/lib/mediaUpload';
 import { PostMediaCarousel } from '@/components/PostMediaCarousel';
 import { MediaStickerOverlay } from '@/components/stickers/MediaStickerOverlay';
 import type { WithEditState } from '@/lib/stickerPlacements';
@@ -97,6 +99,37 @@ export function PostExtras({
   const { media } = usePostMedia(postId);
   const { location } = usePostLocation(postId);
   const { music } = usePostMusic(postId);
+  const [resolvedLegacyMedia, setResolvedLegacyMedia] = useState<string[]>(
+    legacyMediaUrls ?? [],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const source = (legacyMediaUrls ?? []).filter(Boolean);
+
+    if (source.length === 0) {
+      setResolvedLegacyMedia([]);
+      return;
+    }
+
+    void Promise.all(
+      source.map(async (url) => {
+        try {
+          return await resolveStorageUrl(url);
+        } catch (error) {
+          console.warn('Legacy post media URL resolve failed:', error);
+          return url;
+        }
+      }),
+    ).then((resolved) => {
+      if (!cancelled) setResolvedLegacyMedia(resolved);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [legacyMediaUrls]);
+
 
   const fallbackLocation: PostLocation | null = legacyLocation
     ? {
@@ -145,8 +178,33 @@ export function PostExtras({
   const visuals = media.filter((item) => item.kind === 'image' || item.kind === 'video');
   const others = media.filter((item) => item.kind !== 'image' && item.kind !== 'video');
 
-  // Yangi sxemada fayl bo\u2018lmasa — eski massivga qaytamiz.
-  const legacy = media.length === 0 ? (legacyMediaUrls ?? []) : [];
+  // Yangi sxemada fayl bo'lmasa — eski massivga qaytamiz.
+  // storage:// reference browserga berilishidan oldin real URL'ga resolve qilinadi.
+  const legacy = media.length === 0 ? resolvedLegacyMedia : [];
+
+  const legacyItems = useMemo(
+    () =>
+      legacy.map((url, index) => {
+        let kind = detectMediaKind({ name: fileNameFromUrl(url), type: '' });
+
+        if (kind === 'other' && (index === 0 || legacy.length === 1)) {
+          if (
+            legacyMediaType === 'video' ||
+            legacyMediaType === 'reel' ||
+            legacyMediaType === 'short'
+          ) {
+            kind = 'video';
+          } else if (legacyMediaType === 'image') {
+            kind = 'image';
+          } else if (legacyMediaType === 'audio') {
+            kind = 'audio';
+          }
+        }
+
+        return { url, kind };
+      }),
+    [legacy, legacyMediaType],
+  );
 
   const hasAnything =
     media.length > 0 ||
@@ -159,42 +217,46 @@ export function PostExtras({
 
   return (
     <div className={cn('space-y-3', className)}>
-      {/* Eski posts.media_urls ham extension bo'yicha ajratiladi:
-          document/archive endi image carouselga noto'g'ri tushmaydi. */}
-      {legacy.filter((url) => {
-        const kind = detectMediaKind({ name: fileNameFromUrl(url), type: '' });
-        return kind !== 'document' && kind !== 'archive' && kind !== 'other' && kind !== 'audio';
-      }).length > 0 && (
+      {/* Legacy posts.media_urls ham unified media renderer orqali. */}
+      {legacyItems.filter((item) => item.kind === 'image' || item.kind === 'video').length > 0 && (
         <PostMediaCarousel
-          mediaUrls={legacy.filter((url) => {
-            const kind = detectMediaKind({ name: fileNameFromUrl(url), type: '' });
-            return kind !== 'document' && kind !== 'archive' && kind !== 'other' && kind !== 'audio';
-          })}
-          mediaType={legacyMediaType || 'image'}
+          mediaUrls={legacyItems
+            .filter((item) => item.kind === 'image' || item.kind === 'video')
+            .map((item) => item.url)}
+          mediaType={
+            legacyItems.some((item) => item.kind === 'video')
+              ? 'mixed'
+              : legacyMediaType || 'image'
+          }
+          mediaKinds={legacyItems
+            .filter((item) => item.kind === 'image' || item.kind === 'video')
+            .map((item) => item.kind as 'image' | 'video')}
         />
       )}
 
-      {legacy
-        .filter((url) => detectMediaKind({ name: fileNameFromUrl(url), type: '' }) === 'audio')
-        .map((url) => (
+      {legacyItems
+        .filter((item) => item.kind === 'audio')
+        .map((item) => (
           <PostAudioPlayer
-            key={url}
-            src={url}
-            title={fileNameFromUrl(url, 'Audio')}
+            key={item.url}
+            src={item.url}
+            title={fileNameFromUrl(item.url, 'Audio')}
             subtitle="Audio"
           />
         ))}
 
-      {legacy
-        .filter((url) => {
-          const kind = detectMediaKind({ name: fileNameFromUrl(url), type: '' });
-          return kind === 'document' || kind === 'archive' || kind === 'other';
-        })
-        .map((url) => (
+      {legacyItems
+        .filter(
+          (item) =>
+            item.kind === 'document' ||
+            item.kind === 'archive' ||
+            item.kind === 'other',
+        )
+        .map((item) => (
           <PostDocumentCard
-            key={url}
-            url={url}
-            fileName={fileNameFromUrl(url)}
+            key={item.url}
+            url={item.url}
+            fileName={fileNameFromUrl(item.url)}
           />
         ))}
 
