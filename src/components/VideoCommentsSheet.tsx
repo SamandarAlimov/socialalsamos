@@ -28,7 +28,7 @@ export function VideoCommentsSheet({
 }: VideoCommentsSheetProps) {
   return (
     <Drawer open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DrawerContent className="max-h-[88dvh] overflow-hidden">
+      <DrawerContent className="flex max-h-[88dvh] flex-col overflow-hidden">
         <DrawerHeader className="shrink-0 border-b border-border pb-3">
           <div className="flex items-center justify-between gap-3">
             <DrawerTitle>
