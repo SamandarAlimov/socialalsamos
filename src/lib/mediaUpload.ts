@@ -15,6 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 /** Storage bucketlari. Eski public obyektlar `media`da qoladi. */
 export const MEDIA_BUCKET = 'media';
 export const PRIVATE_MEDIA_BUCKET = 'media-private';
+const PUBLIC_BUCKETS = new Set([MEDIA_BUCKET, 'chat-media']);
 
 export type MediaVisibility = 'public' | 'friends' | 'private';
 
@@ -34,6 +35,12 @@ export function parseStorageReference(value?: string | null): { bucket: string; 
   return { bucket: raw.slice(0, slash), key: raw.slice(slash + 1) };
 }
 
+function bucketForChatMediaType(mediaType?: string | null): string {
+  if (mediaType === 'voice' || mediaType === 'audio') return 'chat-audio';
+  if (mediaType === 'video' || mediaType === 'video_note') return 'chat-video';
+  return 'message-attachments';
+}
+
 /** Public URL yoki private signed URL ni ko‘rish vaqtida hosil qiladi. */
 export async function resolveStorageUrl(
   value: string,
@@ -44,7 +51,7 @@ export async function resolveStorageUrl(
   const parsed = bucket && key ? { bucket, key } : parseStorageReference(value);
   if (!parsed) return value;
 
-  if (parsed.bucket === MEDIA_BUCKET) {
+  if (PUBLIC_BUCKETS.has(parsed.bucket)) {
     return supabase.storage.from(parsed.bucket).getPublicUrl(parsed.key).data.publicUrl;
   }
 
@@ -57,6 +64,54 @@ export async function resolveStorageUrl(
   }
 
   return data.signedUrl;
+}
+
+export interface ChatMediaSource {
+  media_url?: string | null;
+  media_type?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+function stringMeta(metadata: Record<string, unknown> | null | undefined, key: string): string | null {
+  const value = metadata?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+/**
+ * Flutter stores stable Storage paths in message metadata and may leave an
+ * expired signed URL in `media_url`. Resolve those paths again for web display.
+ */
+export async function resolveChatMessageMediaUrl<T extends ChatMediaSource>(message: T): Promise<T> {
+  if (!message.media_url && !message.metadata) return message;
+
+  const mediaPath =
+    stringMeta(message.metadata, 'media_path') ?? stringMeta(message.metadata, 'storage_path');
+  const mediaBucket = stringMeta(message.metadata, 'media_bucket');
+  const mediaUrl = message.media_url ?? '';
+
+  try {
+    if (mediaPath) {
+      const bucket = mediaBucket || bucketForChatMediaType(message.media_type);
+      return {
+        ...message,
+        media_url: await resolveStorageUrl(`storage://${bucket}/${mediaPath}`, bucket, mediaPath),
+      };
+    }
+
+    if (parseStorageReference(mediaUrl)) {
+      return { ...message, media_url: await resolveStorageUrl(mediaUrl) };
+    }
+  } catch (error) {
+    console.warn('Chat media URL resolve failed:', error);
+  }
+
+  return message;
+}
+
+export async function resolveChatMessageMediaUrls<T extends ChatMediaSource>(
+  messages: T[]
+): Promise<T[]> {
+  return Promise.all(messages.map((message) => resolveChatMessageMediaUrl(message)));
 }
 
 const EXTERNAL_API = String(import.meta.env.VITE_MEDIA_API_URL ?? '').replace(/\/+$/, '');

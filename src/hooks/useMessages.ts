@@ -5,6 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { unreadMessagesEmitter } from './useUnreadMessages';
 import { loadMessageDrafts, messageDraftsEmitter } from '@/lib/messageDrafts';
+import { resolveChatMessageMediaUrl, resolveChatMessageMediaUrls } from '@/lib/mediaUpload';
 import {
   appendRealtimeMessage,
   BASE_MESSAGE_SELECT,
@@ -728,7 +729,9 @@ export function useMessages(conversationId: string | null) {
         deletedForMeIds = new Set((deletions || []).map((d) => d.message_id));
       }
 
-      const filteredMessages = rows.filter((m) => !deletedForMeIds.has(m.id));
+      const filteredMessages = await resolveChatMessageMediaUrls(
+        rows.filter((m) => !deletedForMeIds.has(m.id))
+      );
 
       const messagesWithStatus = filteredMessages.map((m) => ({
         ...m,
@@ -801,9 +804,11 @@ export function useMessages(conversationId: string | null) {
         deletedForMeIds = new Set((deletions || []).map((d) => d.message_id));
       }
 
-      const older = rows
-        .filter((m) => !deletedForMeIds.has(m.id))
-        .map((m) => ({ ...m, status: 'sent' as const })) as Message[];
+      const visibleRows = await resolveChatMessageMediaUrls(
+        rows.filter((m) => !deletedForMeIds.has(m.id))
+      );
+
+      const older = visibleRows.map((m) => ({ ...m, status: 'sent' as const })) as Message[];
 
       for (const m of older) processedMessageIds.current.add(m.id);
       oldestLoadedRef.current = older[0]?.created_at ?? before;
@@ -906,7 +911,7 @@ export function useMessages(conversationId: string | null) {
             .in('id', replyIds);
           return { data: (replies || []) as any[], error: replyError };
         });
-        const persisted = hydratedData ?? data;
+        const persisted = await resolveChatMessageMediaUrl(hydratedData ?? data);
 
         processedMessageIds.current.add(persisted.id);
 
@@ -1030,7 +1035,7 @@ export function useMessages(conversationId: string | null) {
             .in('id', replyIds);
           return { data: (replies || []) as any[], error: replyError };
         });
-        const persisted = hydratedData ?? data;
+        const persisted = await resolveChatMessageMediaUrl(hydratedData ?? data);
 
         processedMessageIds.current.add(persisted.id);
         setMessages((prev) =>
@@ -1241,7 +1246,7 @@ export function useMessages(conversationId: string | null) {
                 .in('id', replyIds);
               return { data: (replies || []) as any[], error: replyError };
             });
-            const incoming = hydratedData ?? data;
+            const incoming = await resolveChatMessageMediaUrl(hydratedData ?? data);
 
             setMessages((prev) =>
               appendRealtimeMessage(prev, {
