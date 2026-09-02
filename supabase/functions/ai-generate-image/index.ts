@@ -1,5 +1,13 @@
+// Alsamos AI — alohida rasm yaratish endpointi.
+//
+// MUHIM: barcha AI chaqiruvlari ../_shared/geminiMedia.ts (u esa
+// ../_shared/geminiPool.ts kalitlar hovuzi) orqali ketadi. To'g'ridan-to'g'ri
+// gateway chaqiruvi qilinmaydi — avval shu sabab 401/402 xatolar chiqardi.
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { guard, preflight, jsonResponse, guardError } from "../_shared/guard.ts";
+import { hasGeminiKeys } from "../_shared/geminiPool.ts";
+import { generateImageBytes, uploadGeneratedImage } from "../_shared/geminiMedia.ts";
 
 const FUNCTION_NAME = "ai-generate-image";
 // Rasm yaratish qimmat: kuniga foydalanuvchi bo'yicha cheklaymiz.
@@ -64,66 +72,33 @@ serve(async (req) => {
     }
     const editImage = imageCheck.value;
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      console.error("LOVABLE_API_KEY is not configured");
+    // Asosiy yo'l — Gemini kalitlari hovuzi. Lovable faqat zaxira, majburiy emas.
+    const lovableKey = Deno.env.get("LOVABLE_API_KEY") ?? undefined;
+    if (!hasGeminiKeys() && !lovableKey) {
+      console.error("No AI credentials: set GEMINI_API_KEYS or LOVABLE_API_KEY");
       return guardError(req, "SERVER_ERROR", "AI xizmati sozlanmagan.", 500);
     }
 
-    const messages: Array<Record<string, unknown>> = [
-      {
-        role: "user",
-        content: editImage
-          ? [
-              { type: "text", text: prompt },
-              { type: "image_url", image_url: { url: editImage } },
-            ]
-          : prompt,
-      },
-    ];
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image",
-        messages,
-        modalities: ["image", "text"],
-      }),
-    });
-
-    if (!response.ok) {
-      if (response.status === 429) {
-        return jsonResponse(
-          req,
-          { error: "So'rovlar limiti oshdi. Birozdan so'ng qayta urinib ko'ring.", code: "TOO_MANY_ATTEMPTS" },
-          429,
-        );
-      }
-      if (response.status === 402) {
-        return jsonResponse(
-          req,
-          { error: "AI kreditlari tugagan. Billing bo'limida kredit qo'shing.", code: "SERVER_ERROR" },
-          402,
-        );
-      }
-      const errorText = await response.text();
-      console.error("Image generation error:", response.status, errorText);
-      return guardError(req, "SERVER_ERROR", "Rasm yaratishda xatolik.", 500);
+    let image;
+    try {
+      image = await generateImageBytes({ prompt, imageUrl: editImage, lovableKey });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("Image generation failed:", message);
+      return jsonResponse(req, { error: message.slice(0, 400), code: "SERVER_ERROR" }, 502);
     }
 
-    const data = await response.json();
-    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url ?? null;
-    const textContent = data.choices?.[0]?.message?.content ?? null;
-
-    if (!imageUrl) {
-      return guardError(req, "SERVER_ERROR", "Rasm qaytmadi. Boshqa matn bilan urinib ko'ring.", 502);
+    // Imkon bo'lsa storage'ga yuklaymiz — data URL juda og'ir bo'ladi.
+    let imageUrl = `data:${image.mimeType};base64,${image.base64}`;
+    if (gate.userId) {
+      try {
+        imageUrl = await uploadGeneratedImage(gate.admin, gate.userId, image);
+      } catch (uploadError) {
+        console.warn("generated image upload failed", uploadError);
+      }
     }
 
-    return jsonResponse(req, { imageUrl, text: textContent }, 200);
+    return jsonResponse(req, { imageUrl, text: null, model: image.model }, 200);
   } catch (error) {
     console.error("Image generation error:", error);
     return guardError(req, "SERVER_ERROR", "Kutilmagan xatolik yuz berdi.", 500);
