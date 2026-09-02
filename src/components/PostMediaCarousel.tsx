@@ -59,7 +59,10 @@ export function PostMediaCarousel({
   };
 
   const isVideo = (url: string) => {
-    return isVideoType || url.match(/\.(mp4|webm|mov)$/i);
+    return (
+      isVideoType ||
+      /\.(mp4|webm|mov|m4v|ogv|mkv|avi|3gp|hevc)(?:[?#].*)?$/i.test(url)
+    );
   };
 
   if (mediaUrls.length === 0) return null;
