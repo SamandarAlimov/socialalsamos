@@ -45,6 +45,7 @@ interface VideoCardProps {
   onShareClick: () => void;
   onLikesClick: () => void;
   onProfileClick: () => void;
+  onWatchClick: () => void;
   isMobile: boolean;
   globalMuted: boolean;
   onMuteToggle: () => void;
@@ -59,6 +60,7 @@ function VideoCard({
   onShareClick,
   onLikesClick,
   onProfileClick,
+  onWatchClick,
   isMobile,
   globalMuted,
   onMuteToggle,
@@ -298,23 +300,28 @@ function VideoCard({
   const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
 
   return (
-    <div className="relative h-full w-full bg-black flex items-center justify-center snap-start snap-always">
+    <div className="relative flex h-full w-full select-none items-center justify-center bg-black snap-start snap-always">
       {/* Video Container — size adapts to the source aspect ratio */}
       <div
         ref={frameRef}
         className={cn(
-          "relative bg-black",
+          "relative select-none overflow-hidden bg-black",
           isMobile
             ? "h-full w-full"
             : cn(
-                "overflow-hidden rounded-2xl shadow-2xl",
+                "shadow-2xl ring-1 ring-white/10",
                 isLandscape
-                  ? "w-full max-w-[min(1100px,92vw)] max-h-[82vh] aspect-video"
+                  ? "aspect-video w-[min(1120px,calc(100vw-80px))] max-h-[calc(100dvh-32px)] rounded-2xl"
                   : isSquareish
-                    ? "h-auto w-full max-w-[min(620px,92vw)] max-h-[82vh] aspect-square"
-                    : "h-full w-full max-w-[400px] aspect-[9/16]"
+                    ? "aspect-square h-[min(82dvh,720px)] max-w-[min(720px,70vw)] rounded-2xl"
+                    : "aspect-[9/16] h-[calc(100dvh-28px)] max-h-[920px] w-auto max-w-[min(460px,42vw)] rounded-[22px]"
               )
         )}
+        style={{
+          WebkitUserSelect: 'none',
+          userSelect: 'none',
+          WebkitTouchCallout: 'none',
+        }}
       >
         {/*
           Instagram Reels uslubi: 16:9 yoki 1:1 video 9:16 ekranda qora
@@ -325,6 +332,47 @@ function VideoCard({
           yuklanib, trafik va batareya ikki barobar sarflanardi. Endi poster
           rasm ishlatiladi (poster bo'lmasa - oddiy qorong'i fon).
         */}
+        <div
+          className={cn(
+            "absolute right-3 z-[35] flex items-center gap-2",
+            isMobile
+              ? "top-[max(12px,env(safe-area-inset-top))]"
+              : "top-3"
+          )}
+          onPointerDown={stopBubble}
+          onPointerUp={stopBubble}
+        >
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              lightTap();
+              onWatchClick();
+            }}
+            aria-label="Watch view"
+            title="Watch view"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-black/48 text-white shadow-lg ring-1 ring-white/12 backdrop-blur-md transition hover:bg-black/65 active:scale-90"
+          >
+            <ListVideo className="h-[18px] w-[18px]" strokeWidth={2} />
+          </button>
+
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onMuteToggle();
+            }}
+            aria-label={globalMuted ? 'Unmute' : 'Mute'}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-black/48 text-white shadow-lg ring-1 ring-white/12 backdrop-blur-md transition hover:bg-black/65 active:scale-90"
+          >
+            {globalMuted ? (
+              <VolumeX className="h-[18px] w-[18px]" strokeWidth={2} />
+            ) : (
+              <Volume2 className="h-[18px] w-[18px]" strokeWidth={2} />
+            )}
+          </button>
+        </div>
+
         {isMobile && aspect !== null && aspectKind !== 'portrait' && (
           <div
             aria-hidden
@@ -348,7 +396,10 @@ function VideoCard({
         <video
           ref={videoRef}
           src={videoUrl}
-          className="absolute inset-0 h-full w-full object-contain"
+          className="absolute inset-0 h-full w-full select-none object-contain"
+          draggable={false}
+          controls={false}
+          disablePictureInPicture
           loop
           muted={globalMuted}
           playsInline
@@ -357,6 +408,8 @@ function VideoCard({
             if (e.pointerType === 'mouse' && e.button !== 0) return;
             startHold();
           }}
+          onDragStart={(e) => e.preventDefault()}
+          onSelect={(e) => e.preventDefault()}
           onPointerUp={() => {
             // Uzoq bosish bo'lgan bo'lsa play/pause ishlamaydi.
             if (!endHold()) togglePlay();
@@ -407,7 +460,7 @@ function VideoCard({
 
         {/* Bosib turilganda 2x ko'rsatkichi */}
         {isHolding && (
-          <div className="pointer-events-none absolute left-1/2 top-[18%] -translate-x-1/2">
+          <div className="pointer-events-none absolute left-1/2 top-[18%] z-30 -translate-x-1/2 select-none">
             <div className="flex items-center gap-1.5 rounded-full bg-black/65 px-3 py-1.5 backdrop-blur-sm">
               <Gauge className="h-3.5 w-3.5 text-white" />
               <span className="text-xs font-bold text-white">2x</span>
@@ -675,7 +728,7 @@ function VideoCard({
               enablePreview={duration > 0}
             />
 
-            <div className="flex items-center gap-2 text-white">
+            <div className="flex select-none items-center gap-2 text-white">
               <span className="text-[11px] tabular-nums text-white/85">
                 {formatMediaTime(currentTime)} / {formatMediaTime(duration)}
               </span>
@@ -693,17 +746,17 @@ function VideoCard({
                     if (v > 0 && globalMuted) onMuteToggle();
                   }}
                   aria-label="Volume"
-                  className="h-1 w-20 cursor-pointer accent-primary"
+                  className="h-1 w-16 cursor-pointer accent-white xl:w-20"
                 />
               )}
               <button
                 onClick={() => setSpeed((s) => (s >= 2 ? 0.5 : Number((s + 0.25).toFixed(2))))}
-                className="rounded-md bg-white/15 px-2 py-0.5 text-[11px] font-semibold tabular-nums transition-transform active:scale-95"
+                className="rounded-full bg-black/40 px-2.5 py-1 text-[11px] font-semibold tabular-nums ring-1 ring-white/15 backdrop-blur transition hover:bg-black/55 active:scale-95"
                 aria-label="Playback speed"
               >
                 {speed}x
               </button>
-              <button onClick={toggleFullscreen} aria-label="Fullscreen" className="p-1 transition-transform active:scale-90">
+              <button onClick={toggleFullscreen} aria-label="Fullscreen" className="flex h-7 w-7 items-center justify-center rounded-full bg-black/35 ring-1 ring-white/10 backdrop-blur transition hover:bg-black/55 active:scale-90">
                 {isFullscreen ? <Minimize2 className="h-4.5 w-4.5" /> : <Maximize2 className="h-4.5 w-4.5" />}
               </button>
             </div>
@@ -1067,45 +1120,18 @@ export default function VideosPage() {
       "relative bg-black",
       isMobile ? "fixed inset-0 z-40" : "h-screen w-full flex items-center justify-center"
     )}>
-      {/* Page-level header controls */}
-      <div
-        className={cn(
-          "absolute left-0 right-0 z-50 flex items-center justify-between px-3 pointer-events-none",
-          isMobile ? "top-[calc(env(safe-area-inset-top,0px)+12px)]" : "top-4"
-        )}
-      >
-        {/* Orqaga — deep-link bilan kelinganda mobil va desktopda bir xil chiqadi */}
-        <div className="pointer-events-auto">
-          {isDeepLink ? <BackButton onClick={handleBack} /> : <div className="h-9 w-9" />}
+      {isDeepLink && (
+        <div
+          className={cn(
+            'absolute left-3 z-50',
+            isMobile
+              ? 'top-[calc(env(safe-area-inset-top,0px)+12px)]'
+              : 'top-4'
+          )}
+        >
+          <BackButton onClick={handleBack} />
         </div>
-
-        <div className="pointer-events-auto flex items-center gap-2">
-          {/* Watch view — YouTube uslubidagi ro'yxatli ko'rinish */}
-          <button
-            onClick={() => {
-              lightTap();
-              setWatchVideoId(videos[activeIndex]?.id ?? null);
-            }}
-            aria-label="Watch view"
-            className="h-9 w-9 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center active:scale-90 transition-all ring-1 ring-white/10"
-          >
-            <ListVideo className="h-4.5 w-4.5 text-white" strokeWidth={2} />
-          </button>
-
-          {/* Global Mute */}
-          <button
-            onClick={handleMuteToggle}
-            aria-label={globalMuted ? 'Unmute' : 'Mute'}
-            className="h-9 w-9 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center active:scale-90 transition-all ring-1 ring-white/10"
-          >
-            {globalMuted ? (
-              <VolumeX className="h-4.5 w-4.5 text-white" strokeWidth={2} />
-            ) : (
-              <Volume2 className="h-4.5 w-4.5 text-white" strokeWidth={2} />
-            )}
-          </button>
-        </div>
-      </div>
+      )}
 
       <div
         ref={containerRef}
@@ -1131,6 +1157,7 @@ export default function VideosPage() {
                   onShareClick={() => openShareDialog(video.id)}
                   onLikesClick={() => openLikesDialog(video.id)}
                   onProfileClick={() => openProfile(video)}
+                  onWatchClick={() => setWatchVideoId(video.id)}
                   isMobile={isMobile}
                   globalMuted={globalMuted}
                   onMuteToggle={handleMuteToggle}
