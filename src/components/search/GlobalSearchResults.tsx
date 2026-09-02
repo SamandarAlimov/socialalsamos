@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Globe, BookOpen, Newspaper, ImageIcon, PlayCircle, LayoutGrid, ExternalLink, AlertCircle, Loader2, Clock, DatabaseZap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -68,6 +69,7 @@ function formatDate(iso: string | null) {
 }
 
 export function GlobalSearchResults({ query, locale = 'uz' }: { query: string; locale?: 'uz' | 'ru' | 'en' }) {
+  const navigate = useNavigate();
   const [category, setCategory] = useState<GlobalCategory>('all');
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<GlobalSearchResult[]>([]);
@@ -169,6 +171,13 @@ export function GlobalSearchResults({ query, locale = 'uz' }: { query: string; l
     runSearch(next, false);
   };
 
+  const openInApp = useCallback(
+    (url: string) => {
+      navigate('/web?url=' + encodeURIComponent(url));
+    },
+    [navigate],
+  );
+
   return (
     <div className="space-y-4">
       {/* Sub-tabs */}
@@ -258,18 +267,18 @@ export function GlobalSearchResults({ query, locale = 'uz' }: { query: string; l
                         : type === 'image' ? 'Rasmlar' : 'Videolar'}
                     </h3>
                     {type === 'image'
-                      ? <ImageGrid items={grouped[type]} />
+                      ? <ImageGrid items={grouped[type]} onOpen={openInApp} />
                       : type === 'video'
-                        ? <VideoGrid items={grouped[type]} />
-                        : <div className="space-y-4">{grouped[type].map((r) => <SerpRow key={r.id} item={r} />)}</div>}
+                        ? <VideoGrid items={grouped[type]} onOpen={openInApp} />
+                        : <div className="space-y-4">{grouped[type].map((r) => <SerpRow key={r.id} item={r} onOpen={openInApp} />)}</div>}
                   </section>
                 ) : null,
               )}
             </div>
           ) : category === 'images' ? (
-            <ImageGrid items={items} />
+            <ImageGrid items={items} onOpen={openInApp} />
           ) : category === 'videos' ? (
-            <VideoGrid items={items} />
+            <VideoGrid items={items} onOpen={openInApp} />
           ) : (
             <div className="space-y-5">{items.map((r) => <SerpRow key={r.id} item={r} />)}</div>
           )}
@@ -289,111 +298,195 @@ export function GlobalSearchResults({ query, locale = 'uz' }: { query: string; l
 }
 
 // ── SERP row (web / wikipedia / news) ──────────────────────────────────────
-function SerpRow({ item }: { item: GlobalSearchResult }) {
+function SerpRow({
+  item,
+  onOpen,
+}: {
+  item: GlobalSearchResult;
+  onOpen: (url: string) => void;
+}) {
   const date = formatDate(item.publishedAt);
+
   return (
-    <a
-      href={item.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group flex gap-3 rounded-2xl p-3 -mx-1 hover:bg-muted/40 transition-colors"
+    <div
+      role="link"
+      tabIndex={0}
+      onClick={() => onOpen(item.url)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') onOpen(item.url);
+      }}
+      className="group -mx-1 flex cursor-pointer gap-3 rounded-2xl p-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      aria-label={item.title}
     >
       {item.thumbnailUrl && (
         <img
           src={item.thumbnailUrl}
-          alt={item.title}
+          alt=""
           loading="lazy"
-          className="h-16 w-16 shrink-0 rounded-xl object-cover bg-muted"
+          className="h-16 w-16 shrink-0 rounded-xl bg-muted object-cover"
         />
       )}
       <div className="min-w-0 flex-1">
-        <p className="text-[11px] text-muted-foreground truncate flex items-center gap-1">
-          {item.displayUrl}
-          <ExternalLink className="h-3 w-3 shrink-0 opacity-0 group-hover:opacity-60 transition-opacity" />
-        </p>
-        <h4 className="text-[15px] font-medium text-primary leading-snug line-clamp-2 group-hover:underline">
-          {item.title}
-        </h4>
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="flex items-center gap-1 truncate text-[11px] text-muted-foreground">
+              {item.displayUrl}
+            </p>
+            <h4 className="line-clamp-2 text-[15px] font-medium leading-snug text-link group-hover:underline">
+              {item.title}
+            </h4>
+          </div>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              window.open(item.url, '_blank', 'noopener,noreferrer');
+            }}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            aria-label="Yangi tabda ochish"
+            title="Yangi tabda ochish"
+          >
+            <ExternalLink className="h-4 w-4" />
+          </button>
+        </div>
+
         {item.snippet && (
-          <p className="text-[13px] text-muted-foreground leading-relaxed line-clamp-2 mt-0.5">{item.snippet}</p>
+          <p className="mt-0.5 line-clamp-2 text-[13px] leading-relaxed text-muted-foreground">
+            {item.snippet}
+          </p>
         )}
+
         {(date || item.author) && (
-          <p className="text-[11px] text-muted-foreground/80 mt-1 flex items-center gap-1.5">
-            {date && <><Clock className="h-3 w-3" />{date}</>}
+          <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground/80">
+            {date && (
+              <>
+                <Clock className="h-3 w-3" />
+                {date}
+              </>
+            )}
             {item.author && <span className="truncate">· {item.author}</span>}
           </p>
         )}
       </div>
-    </a>
+    </div>
   );
 }
 
 // ── Image grid ─────────────────────────────────────────────────────────────
-function ImageGrid({ items }: { items: GlobalSearchResult[] }) {
+function ImageGrid({
+  items,
+  onOpen,
+}: {
+  items: GlobalSearchResult[];
+  onOpen: (url: string) => void;
+}) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
       {items.map((r) => (
-        <a
+        <div
           key={r.id}
-          href={r.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="group rounded-2xl overflow-hidden bg-muted/40 border border-border/30"
+          role="link"
+          tabIndex={0}
+          onClick={() => onOpen(r.url)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') onOpen(r.url);
+          }}
+          className="group relative cursor-pointer overflow-hidden rounded-2xl border border-border/30 bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={r.title || r.displayUrl}
         >
           <div className="aspect-square overflow-hidden bg-muted">
             <img
               src={r.thumbnailUrl || r.url}
               alt={r.title}
               loading="lazy"
-              className="h-full w-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
             />
           </div>
-          <p className="text-[11px] text-muted-foreground truncate px-2.5 py-2">{r.title || r.displayUrl}</p>
-        </a>
+          <p className="truncate px-2.5 py-2 pr-9 text-[11px] text-muted-foreground">
+            {r.title || r.displayUrl}
+          </p>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              window.open(r.url, '_blank', 'noopener,noreferrer');
+            }}
+            className="absolute bottom-1.5 right-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-background/90 text-muted-foreground shadow-sm backdrop-blur transition hover:text-foreground"
+            aria-label="Yangi tabda ochish"
+            title="Yangi tabda ochish"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+          </button>
+        </div>
       ))}
     </div>
   );
 }
 
 // ── Video grid ─────────────────────────────────────────────────────────────
-function VideoGrid({ items }: { items: GlobalSearchResult[] }) {
+function VideoGrid({
+  items,
+  onOpen,
+}: {
+  items: GlobalSearchResult[];
+  onOpen: (url: string) => void;
+}) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {items.map((r) => {
         const duration = formatDuration(r.durationSeconds);
         return (
-          <a
+          <div
             key={r.id}
-            href={r.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="group rounded-2xl overflow-hidden bg-card/60 border border-border/30 backdrop-blur-sm"
+            role="link"
+            tabIndex={0}
+            onClick={() => onOpen(r.url)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') onOpen(r.url);
+            }}
+            className="group cursor-pointer overflow-hidden rounded-2xl border border-border/30 bg-card/60 backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={r.title}
           >
-            <div className="relative aspect-video bg-muted overflow-hidden">
+            <div className="relative aspect-video overflow-hidden bg-muted">
               {r.thumbnailUrl && (
                 <img
                   src={r.thumbnailUrl}
                   alt={r.title}
                   loading="lazy"
-                  className="h-full w-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
                 />
               )}
-              <div className="absolute inset-0 flex items-center justify-center bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="absolute inset-0 flex items-center justify-center bg-black/10 opacity-0 transition-opacity group-hover:opacity-100">
                 <PlayCircle className="h-10 w-10 text-white drop-shadow" />
               </div>
               {duration && (
-                <span className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded-md bg-black/75 text-white text-[10px] font-medium">
+                <span className="absolute bottom-2 right-2 rounded-md bg-black/75 px-1.5 py-0.5 text-[10px] font-medium text-white">
                   {duration}
                 </span>
               )}
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  window.open(r.url, '_blank', 'noopener,noreferrer');
+                }}
+                className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg bg-black/55 text-white backdrop-blur transition hover:bg-black/70"
+                aria-label="Yangi tabda ochish"
+                title="Yangi tabda ochish"
+              >
+                <ExternalLink className="h-4 w-4" />
+              </button>
             </div>
             <div className="p-3">
-              <h4 className="text-sm font-medium text-foreground line-clamp-2 leading-snug">{r.title}</h4>
-              <p className="text-[11px] text-muted-foreground mt-1 truncate">
-                {r.author || r.source}{formatDate(r.publishedAt) ? ` · ${formatDate(r.publishedAt)}` : ''}
+              <h4 className="line-clamp-2 text-sm font-medium leading-snug text-link">
+                {r.title}
+              </h4>
+              <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                {r.author || r.source}
+                {formatDate(r.publishedAt) ? ` · ${formatDate(r.publishedAt)}` : ''}
               </p>
             </div>
-          </a>
+          </div>
         );
       })}
     </div>
