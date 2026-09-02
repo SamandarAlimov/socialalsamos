@@ -60,6 +60,17 @@ export default {
           "orange-light": "hsl(var(--alsamos-orange-light))",
           "orange-dark": "hsl(var(--alsamos-orange-dark))",
         },
+        // Xabar bubble'lari uchun alohida semantik tokenlar.
+        // Sabab: joriy foydalanuvchi bubble foni ilgari to'liq to'yingan orange
+        // (bg-primary) edi - stiker, emoji, link preview va media thumbnail'ning
+        // o'z ichki kontrasti buzilardi. Endi brend hue (24) saqlanadi, lekin
+        // kuchli desaturatsiya qilinadi; orange faqat status checkmark'da qoladi.
+        bubble: {
+          own: "hsl(var(--bubble-own-bg))",
+          "own-foreground": "hsl(var(--bubble-own-fg))",
+          other: "hsl(var(--bubble-other-bg))",
+          "other-foreground": "hsl(var(--bubble-other-fg))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
