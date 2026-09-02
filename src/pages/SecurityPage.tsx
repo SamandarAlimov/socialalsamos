@@ -21,7 +21,7 @@ export default function SecurityPage() {
           </Link>
         </Button>
         <div className="flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5 text-primary" />
+          <ShieldCheck className="h-5 w-5 text-muted-foreground" />
           <h1 className="text-xl md:text-2xl font-bold">Xavfsizlik</h1>
         </div>
       </div>

@@ -133,7 +133,7 @@ export default function StoryArchivePage() {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex items-center gap-2">
-          <Archive className="h-6 w-6 text-primary" />
+          <Archive className="h-6 w-6 text-muted-foreground" />
           <h1 className="text-2xl font-bold">Story Archive</h1>
         </div>
       </div>
@@ -146,7 +146,7 @@ export default function StoryArchivePage() {
       {/* Stories Grid */}
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       ) : archivedStories.length === 0 ? (
         <Card>

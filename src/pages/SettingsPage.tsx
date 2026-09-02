@@ -306,7 +306,7 @@ export default function SettingsPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -565,8 +565,8 @@ export default function SettingsPage() {
           <div className="bg-card rounded-xl border border-border p-4 md:p-6">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-4 min-w-0">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                  <BadgeCheck className="h-6 w-6 text-primary" />
+                <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center shrink-0">
+                  <BadgeCheck className="h-6 w-6 text-muted-foreground" />
                 </div>
                 <div className="min-w-0">
                   <h3 className="font-semibold">Tasdiqlangan nishon</h3>
@@ -772,7 +772,7 @@ export default function SettingsPage() {
 
           <div className="rounded-xl border border-border bg-card/40 p-4">
             <div className="flex items-start gap-3">
-              <ShieldCheck className="h-5 w-5 shrink-0 text-primary" />
+              <ShieldCheck className="h-5 w-5 shrink-0 text-muted-foreground" />
               <div className="min-w-0">
                 <p className="text-sm font-medium">Ikki qadamli tasdiqlash</p>
                 <p className="text-xs text-muted-foreground">

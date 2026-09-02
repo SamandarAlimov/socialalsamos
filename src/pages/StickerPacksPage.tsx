@@ -233,7 +233,7 @@ export default function StickerPacksPage() {
       <header className="space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
               {isOwnPack ? <UserRound className="h-5 w-5" /> : <Sparkles className="h-5 w-5" />}
             </span>
             <div className="min-w-0">

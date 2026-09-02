@@ -23,7 +23,7 @@ export default function DataStoragePage() {
           </Link>
         </Button>
         <div className="flex min-w-0 items-center gap-2">
-          <HardDrive className="h-5 w-5 shrink-0 text-primary" />
+          <HardDrive className="h-5 w-5 shrink-0 text-muted-foreground" />
           <h1 className="truncate text-base font-semibold">Ma'lumotlar va xotira</h1>
         </div>
       </header>

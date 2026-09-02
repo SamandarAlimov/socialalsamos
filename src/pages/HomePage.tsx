@@ -299,7 +299,7 @@ export default function HomePage() {
             <div className="flex gap-3">
               <Avatar className="h-10 w-10">
                 <AvatarImage src={profile?.avatar_url || ''} />
-                <AvatarFallback className="bg-primary text-primary-foreground">
+                <AvatarFallback className="bg-muted text-muted-foreground">
                   {profile?.display_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
                 </AvatarFallback>
               </Avatar>
@@ -342,7 +342,7 @@ export default function HomePage() {
         <div ref={loadMoreRef} className="py-4">
           {isLoading && (
             <div className="flex items-center justify-center">
-              <Loader2 className="h-6 w-6 md:h-8 md:w-8 animate-spin text-primary" />
+              <Loader2 className="h-6 w-6 md:h-8 md:w-8 animate-spin text-muted-foreground" />
             </div>
           )}
           {!hasMore && posts.length > 0 && (
