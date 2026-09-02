@@ -12,6 +12,7 @@ import {
   ExternalLink,
   RotateCw,
 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { VideoMessagePlayer } from './messages/VideoMessagePlayer';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 import { AudioFilePlayer } from './messages/AudioFilePlayer';
@@ -75,8 +76,54 @@ function hostOf(url: string): string {
   try {
     return new URL(url, window.location.origin).hostname;
   } catch {
-    return 'noma\u2018lum manba';
+    return 'noma‘lum manba';
   }
+}
+
+/**
+ * Eski chat xabarlarida saqlangan Supabase public-object URL'ni aniqlaydi.
+ *
+ * 2026-08-20 dan chat-media/message-attachments bucketlari private qilindi.
+ * Eski xabarlar esa `/object/public/...` URL'larini saqlab qolgan. Bunday URL
+ * brauzerda 403/404 qaytarishi mumkin, lekin authenticated participant uchun
+ * shu obyektga vaqtinchalik signed URL olish mumkin.
+ */
+function parseLegacySupabaseStorageUrl(value: string): { bucket: string; key: string } | null {
+  try {
+    const pathname = new URL(value, window.location.origin).pathname;
+    const marker = '/storage/v1/object/public/';
+    const index = pathname.indexOf(marker);
+    if (index < 0) return null;
+
+    const raw = pathname.slice(index + marker.length);
+    const slash = raw.indexOf('/');
+    if (slash <= 0 || slash === raw.length - 1) return null;
+
+    return {
+      bucket: decodeURIComponent(raw.slice(0, slash)),
+      key: decodeURIComponent(raw.slice(slash + 1)),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function resolveLegacyChatMediaUrl(value: string): Promise<string | null> {
+  const parsed = parseLegacySupabaseStorageUrl(value);
+  if (!parsed) return null;
+
+  // Only legacy/private chat buckets are resolved here. Public `media` URLs
+  // should remain direct public URLs.
+  if (!['chat-media', 'message-attachments', 'media-private'].includes(parsed.bucket)) {
+    return null;
+  }
+
+  const { data, error } = await supabase.storage
+    .from(parsed.bucket)
+    .createSignedUrl(parsed.key, 3600);
+
+  if (error || !data?.signedUrl) return null;
+  return data.signedUrl;
 }
 
 async function downloadFile(url: string, fileName: string) {
@@ -109,12 +156,14 @@ export function MessageAttachment({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [resolvedImageUrl, setResolvedImageUrl] = useState<string | null>(null);
 
   // URL o'zgarsa holat tozalanadi (masalan xabar tahrirlanganda)
   useEffect(() => {
     setImageLoaded(false);
     setImageFailed(false);
     setAttempt(0);
+    setResolvedImageUrl(null);
   }, [url]);
 
   // Check if it's a GIF
@@ -128,17 +177,36 @@ export function MessageAttachment({
     const actualUrl = url.startsWith('[media:gif:')
       ? url.replace('[media:gif:', '').replace(']', '')
       : url;
+    const effectiveUrl = resolvedImageUrl ?? actualUrl;
 
     // Keshdagi buzuq javobni chetlab o'tish uchun qayta urinishda parametr qo'shiladi
     const srcUrl =
       attempt > 0
-        ? `${actualUrl}${actualUrl.includes('?') ? '&' : '?'}retry=${attempt}`
-        : actualUrl;
+        ? `${effectiveUrl}${effectiveUrl.includes('?') ? '&' : '?'}retry=${attempt}`
+        : effectiveUrl;
 
     const retry = () => {
       setImageFailed(false);
       setImageLoaded(false);
       setAttempt((value) => value + 1);
+    };
+
+    const handleImageError = async () => {
+      // First failure on a legacy private Supabase URL: exchange the old
+      // public URL for a participant-authorized signed URL. This repairs old
+      // messages without making private chat storage public again.
+      if (!resolvedImageUrl) {
+        const signedUrl = await resolveLegacyChatMediaUrl(actualUrl);
+        if (signedUrl) {
+          setResolvedImageUrl(signedUrl);
+          setImageFailed(false);
+          setImageLoaded(false);
+          setAttempt((value) => value + 1);
+          return;
+        }
+      }
+
+      setImageFailed(true);
     };
 
     /* Rasm yuklanmasa: ilgari hech qanday belgi yo'q edi - karta shunchaki
@@ -172,9 +240,9 @@ export function MessageAttachment({
                   'truncate text-[11px]',
                   isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'
                 )}
-                title={actualUrl}
+                title={effectiveUrl}
               >
-                {hostOf(actualUrl)}
+                {hostOf(effectiveUrl)}
               </p>
             </div>
           </div>
@@ -197,7 +265,7 @@ export function MessageAttachment({
               Qayta urinish
             </button>
             <a
-              href={actualUrl}
+              href={effectiveUrl}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(event) => event.stopPropagation()}
@@ -246,7 +314,7 @@ export function MessageAttachment({
               setImageLoaded(true);
               setImageFailed(false);
             }}
-            onError={() => setImageFailed(true)}
+            onError={handleImageError}
             className="relative block h-auto max-h-[420px] w-full object-cover transition-transform duration-200 group-hover:scale-[1.01]"
           />
 
@@ -262,7 +330,7 @@ export function MessageAttachment({
             aria-label="Yuklab olish"
             onClick={(e) => {
               e.stopPropagation();
-              downloadFile(actualUrl, name || actualUrl.split('/').pop() || 'image');
+              downloadFile(effectiveUrl, name || effectiveUrl.split('/').pop() || 'image');
             }}
             className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/45 text-white opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100"
           >
@@ -272,7 +340,7 @@ export function MessageAttachment({
 
         <TelegramImageViewer
           open={showFullscreen}
-          url={actualUrl}
+          url={effectiveUrl}
           name={name}
           onClose={() => setShowFullscreen(false)}
         />
@@ -351,7 +419,7 @@ export function MessageAttachment({
             isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'
           )}
         >
-          {[prettySize, fileExtension].filter(Boolean).join(' \u00b7 ')}
+          {[prettySize, fileExtension].filter(Boolean).join(' · ')}
         </p>
       </div>
 
