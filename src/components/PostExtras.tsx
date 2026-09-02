@@ -12,7 +12,6 @@ import { PostAudioPlayer } from '@/components/PostAudioPlayer';
 import { PostDocumentCard } from '@/components/PostDocumentViewer';
 import { fileNameFromUrl } from '@/lib/documentPreview';
 import { PostMediaCarousel } from '@/components/PostMediaCarousel';
-import { VideoPlayer } from '@/components/VideoPlayer';
 import { MediaStickerOverlay } from '@/components/stickers/MediaStickerOverlay';
 import type { WithEditState } from '@/lib/stickerPlacements';
 import type { LegacyPostLocation, PostMusic } from '@/lib/postMarkers';
@@ -199,49 +198,24 @@ export function PostExtras({
           />
         ))}
 
-      {/* Rasm va videolar — gorizontal galereya (scroll mobil qurilmada ishlaydi) */}
+      {/* Structured rasm/video ham legacy media bilan bir xil premium frame.
+          Bitta asosiy media ko'rinadi; ko'p media swipe/arrows/dots bilan almashadi. */}
       {visuals.length > 0 && (
-        <div
-          className={cn(
-            visuals.length === 1
-              ? 'overflow-hidden rounded-2xl border border-border/60'
-              : 'flex snap-x snap-mandatory gap-2 overflow-x-auto overscroll-x-contain pb-1 [-webkit-overflow-scrolling:touch]',
-          )}
-        >
-          {visuals.map((item) => (
-            <div
-              key={item.id}
-              className={cn(
-                'relative',
-                visuals.length === 1
-                  ? 'w-full'
-                  : 'w-64 shrink-0 snap-start overflow-hidden rounded-2xl border border-border/60',
-              )}
-            >
-              {item.kind === 'image' ? (
-                <img
-                  src={item.storage_url}
-                  alt={item.alt_text ?? item.file_name ?? 'Rasm'}
-                  loading="lazy"
-                  className="h-full max-h-[520px] w-full object-cover"
-                />
-              ) : (
-                <VideoPlayer
-                  src={item.storage_url}
-                  poster={item.thumbnail_url ?? undefined}
-                  aspectMode="auto"
-                  autoPlay={false}
-                  className="max-h-[520px] w-full rounded-none"
-                />
-              )}
-
-              {/* Media ustidagi stikerlar — faqat ko\u2018rish rejimi */}
+        <div className="overflow-hidden rounded-2xl border border-border/60">
+          <PostMediaCarousel
+            mediaUrls={visuals.map((item) => item.storage_url)}
+            mediaType={visuals.some((item) => item.kind === 'video') ? 'mixed' : 'image'}
+            mediaKinds={visuals.map((item) => item.kind as 'image' | 'video')}
+            posters={visuals.map((item) => item.thumbnail_url)}
+            altTexts={visuals.map((item) => item.alt_text ?? item.file_name)}
+            overlays={visuals.map((item) => (
               <MediaStickerOverlay
+                key={item.id}
                 editState={(item as PostMediaItem & WithEditState).edit_state}
                 idPrefix={item.id}
               />
-            </div>
-          ))}
+            ))}
+          />
         </div>
       )}
 
