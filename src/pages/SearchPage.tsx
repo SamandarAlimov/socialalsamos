@@ -12,6 +12,8 @@ import { OnlineIndicator } from '@/components/OnlineIndicator';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { PostViewModal } from '@/components/PostViewModal';
+import { PostMediaThumbnail } from '@/components/PostMediaThumbnail';
+import { getStructuredPostMediaPreviewMap } from '@/lib/postMediaPreview';
 import { getPostPreviewText } from '@/components/discovery/PostPreviewContent';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
@@ -40,6 +42,7 @@ interface SearchPost {
   content: string | null;
   media_urls: string[] | null;
   media_type: string | null;
+  preview_poster?: string | null;
   likes_count: number | null;
   comments_count: number | null;
   views_count: number;
@@ -353,10 +356,35 @@ export default function SearchPage() {
       };
 
       setUsers(read<SearchUser>(0));
-      setPosts(read<SearchPost>(1));
+      const postRows = read<SearchPost>(1);
+      setPosts(postRows);
       setChannels(read<SearchChannel>(2));
       setProducts(read<SearchProduct>(3));
       setGroups(read<SearchGroup>(4));
+
+      const missingPreviewIds = postRows
+        .filter((post) => !post.media_urls?.some(Boolean))
+        .map((post) => post.id);
+
+      if (missingPreviewIds.length > 0) {
+        const previewMap = await getStructuredPostMediaPreviewMap(missingPreviewIds);
+        if (requestId !== platformSearchRequestRef.current) return;
+
+        if (previewMap.size > 0) {
+          setPosts(
+            postRows.map((post) => {
+              const preview = previewMap.get(post.id);
+              if (!preview || post.media_urls?.some(Boolean)) return post;
+              return {
+                ...post,
+                media_urls: [preview.url],
+                media_type: preview.mediaType,
+                preview_poster: preview.poster,
+              };
+            }),
+          );
+        }
+      }
     } finally {
       if (requestId === platformSearchRequestRef.current) setIsLoading(false);
     }
@@ -1320,7 +1348,6 @@ function PremiumUserCard({ user, onClick }: { user: SearchUser; onClick: () => v
 function PremiumPostCard({ post, onClick }: { post: SearchPost; onClick: () => void }) {
   const { triggerHaptic } = useHapticFeedback();
   const hasMedia = post.media_urls && post.media_urls.length > 0;
-  const isVideo = post.media_type === 'video';
   // Post matnida [MUSIC]/[LOCATION] markerlari bo'lishi mumkin: xom JSON
   // qidiruv natijasida ko'rinmasligi kerak.
   const previewText = getPostPreviewText(post.content, '');
@@ -1364,14 +1391,12 @@ function PremiumPostCard({ post, onClick }: { post: SearchPost; onClick: () => v
         </div>
         {/* Media thumbnail */}
         {hasMedia && (
-          <div className="relative w-20 h-20 rounded-xl overflow-hidden shrink-0 bg-muted">
-            <img src={post.media_urls![0]} className="w-full h-full object-cover" alt="" />
-            {isVideo && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                <Play className="h-5 w-5 fill-white text-white" />
-              </div>
-            )}
-          </div>
+          <PostMediaThumbnail
+            url={post.media_urls![0]}
+            mediaType={post.media_type}
+            poster={post.preview_poster}
+            className="h-20 w-20 rounded-xl"
+          />
         )}
       </div>
     </motion.div>
