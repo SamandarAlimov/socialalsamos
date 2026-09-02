@@ -835,7 +835,7 @@ export default function SettingsPage() {
                               {session.device_name || session.browser_name || 'Noma\u2018lum qurilma'}
                             </p>
                             {session.is_current && (
-                              <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full shrink-0">
+                              <span className="px-2 py-0.5 bg-muted text-foreground text-xs rounded-full shrink-0">
                                 Hozirgi
                               </span>
                             )}
