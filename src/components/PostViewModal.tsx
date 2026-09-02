@@ -39,6 +39,7 @@ import { MediaStickerOverlay } from '@/components/stickers/MediaStickerOverlay';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { PostCollaboratorByline } from '@/components/PostCollaboratorByline';
 import type { WithEditState } from '@/lib/stickerPlacements';
+import { resolveStorageUrl } from '@/lib/mediaUpload';
 
 interface PostViewModalProps {
   post: {
@@ -91,26 +92,82 @@ export function PostViewModal({
 
   const counts = useRealtimeCounts(post.id);
 
-  // Modal eski `media_urls` bilan ishlaydi, stikerlar esa yangi
-  // `post_media.edit_state` da saqlanadi - shuning uchun ikkisini
-  // bog'lab, joriy kadrning tahrir holatini topamiz.
+  // Modal Search/Notifications/Home bilan bir xil media source ishlatadi.
+  // Structured post_media ustun, legacy media_urls esa fallback.
   const { media } = usePostMedia(open ? post.id : undefined);
+  const [resolvedLegacyMedia, setResolvedLegacyMedia] = useState<string[]>(
+    post.media_urls ?? [],
+  );
 
-  const mediaUrls = post.media_urls || [];
-  const hasMedia = mediaUrls.length > 0;
-  const hasMultipleMedia = mediaUrls.length > 1;
-  const currentUrl = mediaUrls[currentMediaIndex];
+  useEffect(() => {
+    let cancelled = false;
+    const source = (post.media_urls ?? []).filter(Boolean);
 
-  const currentEditState = useMemo(() => {
-    if (!currentUrl || media.length === 0) return null;
+    if (source.length === 0) {
+      setResolvedLegacyMedia([]);
+      return;
+    }
 
-    // Avval URL bo'yicha aniq moslik - tartib o'zgargan bo'lsa ham to'g'ri.
-    const byUrl = media.find((item) => item.storage_url === currentUrl);
-    const fallback = media[currentMediaIndex];
-    const match = byUrl ?? fallback;
+    void Promise.all(
+      source.map(async (url) => {
+        try {
+          return await resolveStorageUrl(url);
+        } catch (error) {
+          console.warn('Post modal legacy media URL resolve failed:', error);
+          return url;
+        }
+      }),
+    ).then((resolved) => {
+      if (!cancelled) setResolvedLegacyMedia(resolved);
+    });
 
-    return (match as (typeof media)[number] & WithEditState | undefined)?.edit_state ?? null;
-  }, [currentUrl, media, currentMediaIndex]);
+    return () => {
+      cancelled = true;
+    };
+  }, [post.id, post.media_urls]);
+
+  const structuredVisuals = useMemo(
+    () => media.filter((item) => item.kind === 'image' || item.kind === 'video'),
+    [media],
+  );
+
+  const mediaEntries = useMemo(() => {
+    if (structuredVisuals.length > 0) {
+      return structuredVisuals.map((item) => ({
+        url: item.storage_url,
+        kind: item.kind as 'image' | 'video',
+        poster: item.thumbnail_url ?? null,
+        editState: (item as typeof item & WithEditState).edit_state ?? null,
+      }));
+    }
+
+    return resolvedLegacyMedia.map((url) => {
+      const isVideo =
+        post.media_type === 'video' ||
+        post.media_type === 'reel' ||
+        post.media_type === 'short' ||
+        /\.(mp4|webm|mov|m4v|ogv|mkv|avi|3gp|hevc)(?:[?#].*)?$/i.test(url);
+
+      return {
+        url,
+        kind: isVideo ? ('video' as const) : ('image' as const),
+        poster: null,
+        editState: null,
+      };
+    });
+  }, [post.media_type, resolvedLegacyMedia, structuredVisuals]);
+
+  const mediaUrls = useMemo(
+    () => mediaEntries.map((item) => item.url),
+    [mediaEntries],
+  );
+  const hasMedia = mediaEntries.length > 0;
+  const hasMultipleMedia = mediaEntries.length > 1;
+  const currentEntry = mediaEntries[currentMediaIndex];
+  const currentUrl = currentEntry?.url;
+  const currentKind = currentEntry?.kind;
+  const currentPoster = currentEntry?.poster ?? undefined;
+  const currentEditState = currentEntry?.editState ?? null;
 
   useEffect(() => {
     if (open) {
@@ -185,10 +242,11 @@ export function PostViewModal({
                   media'ni o'z o'lchamiga moslashuvchi `relative` o'ramga olamiz.
                 */}
                 <div className="relative inline-block max-h-[92vh]">
-                  {post.media_type === 'video' ? (
+                  {currentKind === 'video' ? (
                     <VideoPlayer
                       key={currentUrl}
                       src={currentUrl}
+                      poster={currentPoster}
                       autoPlay
                       aspectMode="auto"
                       className="max-h-[92vh] max-w-full"
