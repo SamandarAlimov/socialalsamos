@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { RichTextComposer } from '@/components/create/RichTextComposer';
+import { PostCollaboratorsCard } from '@/components/PostCollaboratorsCard';
 import type { PostVisibility } from '@/hooks/usePosts';
 import {
   normalizeAlsamosRichTextDocument,
@@ -214,6 +215,11 @@ export function EditPostDialog({
                     {content.length}/{MAX_POST_TEXT_LENGTH}
                   </p>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Hammualliflar</Label>
+                <PostCollaboratorsCard postId={postId} isOwner />
               </div>
 
               <div className="space-y-2">
