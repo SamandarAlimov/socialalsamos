@@ -43,7 +43,7 @@ import {
  * o'sha videoga almashadi.
  */
 
-const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
+const PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
 /** Bosib turish 2x tezlikka o'tishi uchun kerakli vaqt (ms). */
 const HOLD_TO_SPEED_MS = 300;
@@ -58,6 +58,7 @@ export interface VideoWatchPanelProps {
   onShare: (video: VideoPost) => void;
   onComments: (video: VideoPost) => void;
   onOpenProfile: (video: VideoPost) => void;
+  keyboardEnabled?: boolean;
 }
 
 export function VideoWatchPanel({
@@ -70,6 +71,7 @@ export function VideoWatchPanel({
   onShare,
   onComments,
   onOpenProfile,
+  keyboardEnabled = true,
 }: VideoWatchPanelProps) {
   const video = useMemo(
     () => videos.find((item) => item.id === activeVideoId),
@@ -77,6 +79,10 @@ export function VideoWatchPanel({
   );
   const upNext = useMemo(
     () => videos.filter((item) => item.id !== activeVideoId),
+    [videos, activeVideoId],
+  );
+  const activeVideoIndex = useMemo(
+    () => videos.findIndex((item) => item.id === activeVideoId),
     [videos, activeVideoId],
   );
 
@@ -90,6 +96,7 @@ export function VideoWatchPanel({
 
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [buffered, setBuffered] = useState(0);
@@ -207,42 +214,44 @@ export function VideoWatchPanel({
     [revealControls],
   );
 
-  // Klaviatura yorliqlari (desktop)
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target && ['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
-      switch (event.key.toLowerCase()) {
-        case ' ':
-        case 'k':
-          event.preventDefault();
-          togglePlay();
-          break;
-        case 'arrowright':
-          seekBy(5);
-          break;
-        case 'arrowleft':
-          seekBy(-5);
-          break;
-        case 'j':
-          seekBy(-10);
-          break;
-        case 'l':
-          seekBy(10);
-          break;
-        case 'm':
-          setIsMuted((prev) => !prev);
-          break;
-        case 'escape':
-          if (!document.fullscreenElement) onClose();
-          break;
-        default:
-          break;
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [onClose, seekBy, togglePlay]);
+  const seekToFraction = useCallback((fraction: number) => {
+    const el = videoRef.current;
+    if (!el || !Number.isFinite(el.duration) || el.duration <= 0) return;
+    const next = el.duration * Math.min(1, Math.max(0, fraction));
+    el.currentTime = next;
+    setCurrentTime(next);
+    revealControls();
+  }, [revealControls]);
+
+  const adjustVolume = useCallback((delta: number) => {
+    const el = videoRef.current;
+    const current = el?.volume ?? volume;
+    const next = Math.min(1, Math.max(0, Number((current + delta).toFixed(2))));
+    setVolume(next);
+    if (el) el.volume = next;
+    if (next > 0) setIsMuted(false);
+    if (next === 0) setIsMuted(true);
+    revealControls();
+  }, [revealControls, volume]);
+
+  const adjustPlaybackSpeed = useCallback((direction: -1 | 1) => {
+    setSpeed((current) => {
+      const currentIndex = PLAYBACK_RATES.reduce((best, rate, index) => (
+        Math.abs(rate - current) < Math.abs(PLAYBACK_RATES[best] - current) ? index : best
+      ), 0);
+      const nextIndex = Math.min(PLAYBACK_RATES.length - 1, Math.max(0, currentIndex + direction));
+      const next = PLAYBACK_RATES[nextIndex];
+      if (videoRef.current && !holdActiveRef.current) videoRef.current.playbackRate = next;
+      return next;
+    });
+    revealControls();
+  }, [revealControls]);
+
+  const selectAdjacentVideo = useCallback((direction: -1 | 1) => {
+    if (activeVideoIndex < 0) return;
+    const next = videos[activeVideoIndex + direction];
+    if (next) onSelectVideo(next.id);
+  }, [activeVideoIndex, onSelectVideo, videos]);
 
   const handleSeek = useCallback((time: number) => {
     const el = videoRef.current;
@@ -288,6 +297,122 @@ export function VideoWatchPanel({
     revealControls();
   }, [lightTap, revealControls, speed]);
 
+  // YouTube uslubidagi professional klaviatura boshqaruvi.
+  useEffect(() => {
+    if (!keyboardEnabled) return;
+
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      const isInteractive = target?.closest(
+        'input, textarea, select, button, a, [contenteditable="true"], [role="textbox"], [role="slider"]',
+      );
+      if (isInteractive || event.metaKey || event.ctrlKey || event.altKey) return;
+
+      const key = event.key.toLowerCase();
+
+      if (event.shiftKey && key === 'n') {
+        event.preventDefault();
+        selectAdjacentVideo(1);
+        return;
+      }
+      if (event.shiftKey && key === 'p') {
+        event.preventDefault();
+        selectAdjacentVideo(-1);
+        return;
+      }
+
+      if (event.repeat && [' ', 'k', 'm', 'f', 'i', 'escape'].includes(key)) return;
+
+      switch (key) {
+        case ' ':
+        case 'k':
+          event.preventDefault();
+          togglePlay();
+          break;
+        case 'arrowright':
+          event.preventDefault();
+          seekBy(5);
+          break;
+        case 'arrowleft':
+          event.preventDefault();
+          seekBy(-5);
+          break;
+        case 'arrowup':
+          event.preventDefault();
+          adjustVolume(0.05);
+          break;
+        case 'arrowdown':
+          event.preventDefault();
+          adjustVolume(-0.05);
+          break;
+        case 'j':
+          event.preventDefault();
+          seekBy(-10);
+          break;
+        case 'l':
+          event.preventDefault();
+          seekBy(10);
+          break;
+        case 'm':
+          event.preventDefault();
+          setIsMuted((prev) => !prev);
+          revealControls();
+          break;
+        case 'f':
+          event.preventDefault();
+          void toggleFullscreen();
+          break;
+        case 'i':
+          event.preventDefault();
+          void togglePip();
+          break;
+        case 'home':
+          event.preventDefault();
+          seekToFraction(0);
+          break;
+        case 'end':
+          event.preventDefault();
+          seekToFraction(1);
+          break;
+        case '>':
+          event.preventDefault();
+          adjustPlaybackSpeed(1);
+          break;
+        case '<':
+          event.preventDefault();
+          adjustPlaybackSpeed(-1);
+          break;
+        case 'escape':
+          if (!document.fullscreenElement) {
+            event.preventDefault();
+            onClose();
+          }
+          break;
+        default:
+          if (!event.shiftKey && /^[0-9]$/.test(event.key)) {
+            event.preventDefault();
+            seekToFraction(Number(event.key) / 10);
+          }
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [
+    adjustPlaybackSpeed,
+    adjustVolume,
+    keyboardEnabled,
+    onClose,
+    revealControls,
+    seekBy,
+    seekToFraction,
+    selectAdjacentVideo,
+    toggleFullscreen,
+    togglePip,
+    togglePlay,
+  ]);
+
   if (!video) return null;
 
   const title = deriveVideoTitle(video.content, video.profile?.username);
@@ -329,6 +454,7 @@ export function VideoWatchPanel({
               ? 'h-full'
               : 'aspect-video lg:mx-auto lg:aspect-auto lg:h-[min(62vh,640px)] lg:max-w-[1180px]',
           )}
+          aria-keyshortcuts="Space K J L M F I ArrowLeft ArrowRight ArrowUp ArrowDown Home End Shift+N Shift+P"
           onPointerMove={revealControls}
           onPointerDown={(event) => {
             if (event.pointerType === 'mouse' && event.button !== 0) return;
@@ -375,6 +501,7 @@ export function VideoWatchPanel({
               setDuration(el.duration || 0);
               if (el.videoWidth && el.videoHeight) setRatio(el.videoWidth / el.videoHeight);
               el.playbackRate = speed;
+              el.volume = volume;
             }}
             onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
             onProgress={(event) => {
@@ -383,10 +510,7 @@ export function VideoWatchPanel({
             }}
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
-            onEnded={() => {
-              const next = upNext[0];
-              if (next) onSelectVideo(next.id);
-            }}
+            onEnded={() => selectAdjacentVideo(1)}
           />
 
           {/* Ikki marta bosib oldinga/orqaga */}
@@ -530,7 +654,8 @@ export function VideoWatchPanel({
                   size="icon"
                   className="h-9 w-9 rounded-full text-white hover:bg-white/15"
                   onClick={() => setIsMuted((prev) => !prev)}
-                  aria-label={isMuted ? 'Ovozni yoqish' : 'Ovoz yoq (M)'}
+                  aria-label={isMuted ? 'Ovozni yoqish (M)' : 'Ovozni o‘chirish (M)'}
+                title={isMuted ? 'Ovozni yoqish (M)' : 'Ovozni o‘chirish (M)'}
                 >
                   {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
                 </Button>
