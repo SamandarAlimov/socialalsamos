@@ -152,7 +152,7 @@ export function PostCardVisual({
       <div
         className={cn(
           wrapper,
-          'flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent',
+          'flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-muted/80 via-background to-muted/45',
           compact ? 'p-2' : 'p-4',
         )}
       >
