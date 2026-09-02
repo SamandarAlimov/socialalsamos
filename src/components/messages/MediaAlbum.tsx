@@ -364,7 +364,7 @@ export function MediaAlbum({ album, isMine, className }: MediaAlbumProps) {
         <div
           className={cn(
             'mt-1.5 text-[15px] leading-snug',
-            isMine ? 'text-primary-foreground' : 'text-foreground'
+            isMine ? 'text-bubble-own-foreground' : 'text-foreground'
           )}
         >
           <FormattedText text={album.caption} emojiSize={20} />
