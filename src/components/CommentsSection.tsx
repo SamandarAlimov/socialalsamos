@@ -54,11 +54,21 @@ function commentDisplayName(comment: Comment): string {
 
 function CommentAttachmentPreview({
   media,
+  onClear,
 }: {
   media: NonNullable<SelectedMedia>;
+  onClear: () => void;
 }) {
   return (
-    <div className="mt-2 overflow-hidden rounded-xl border border-border/60 bg-muted/20 p-1.5">
+    <div className="relative mt-2 inline-block overflow-hidden rounded-xl border border-border/60 bg-muted/20 p-1.5">
+      <button
+        type="button"
+        onClick={onClear}
+        className="absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-black/65 text-white shadow-sm backdrop-blur transition hover:bg-black/80"
+        aria-label="Biriktirilgan mediani olib tashlash"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
       {media.type === 'video' ? (
         <video
           src={media.url}
@@ -307,7 +317,12 @@ export function CommentsSection({
         </Button>
       </div>
 
-      {replyMedia && <CommentAttachmentPreview media={replyMedia} />}
+      {replyMedia && (
+        <CommentAttachmentPreview
+          media={replyMedia}
+          onClear={() => setReplyMedia(null)}
+        />
+      )}
     </div>
   );
 
@@ -547,7 +562,10 @@ export function CommentsSection({
 
           {selectedMedia && (
             <div className="ml-10">
-              <CommentAttachmentPreview media={selectedMedia} />
+              <CommentAttachmentPreview
+                media={selectedMedia}
+                onClear={() => setSelectedMedia(null)}
+              />
             </div>
           )}
         </form>
