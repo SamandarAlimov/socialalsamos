@@ -42,8 +42,8 @@ jobs:
             if curl --fail --silent --show-error --max-time 45 "$ALSAMOS_URL" -o "$TMP_ALSAMOS"; then
               cat "$TMP_ALSAMOS"
               echo
-              if python -c 'import json,sys; d=json.load(open(sys.argv[1],encoding="utf-8")); r=d.get("results") or []; e=str(d.get("engine") or ""); err=d.get("error"); print("Alsamos engine:",e,"results:",len(r),"error:",err); raise SystemExit(0 if e.startswith("instant-find-it:firecrawl-") and len(r)>0 and not err else 1)' "$TMP_ALSAMOS"; then
-                echo "Alsamos Firecrawl Global Search production smoke test passed."
+              if python -c 'import json,sys; d=json.load(open(sys.argv[1],encoding="utf-8")); r=d.get("results") or []; e=str(d.get("engine") or ""); p=d.get("providers") or []; err=d.get("error"); print("Alsamos engine:",e,"providers:",p,"results:",len(r),"error:",err); raise SystemExit(0 if e.startswith("federated:") and len(r)>0 and not err else 1)' "$TMP_ALSAMOS"; then
+                echo "Alsamos federated realtime Global Search production smoke test passed."
                 exit 0
               fi
             fi
