@@ -220,10 +220,12 @@ export function PostViewModal({
                 )}
 
                 {post.is_pinned && (
-                  <span className={cn(
-                    'absolute top-3 flex items-center gap-1 rounded-full bg-black/60',
-                    onBack ? 'left-14' : 'left-3',
-                  )} px-2.5 py-1 text-xs font-medium text-white backdrop-blur">
+                  <span
+                    className={cn(
+                      'absolute top-3 flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white backdrop-blur',
+                      onBack ? 'left-14' : 'left-3',
+                    )}
+                  >
                     <Pin className="h-3 w-3" />
                     {t('post.pinned', { defaultValue: 'Mahkamlangan' })}
                   </span>
@@ -289,7 +291,7 @@ export function PostViewModal({
             >
               <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
                 <div className="flex min-w-0 items-center gap-2.5">
-                  {onBack && (
+                  {onBack && !hasMedia && (
                     <button
                       type="button"
                       onClick={onBack}
