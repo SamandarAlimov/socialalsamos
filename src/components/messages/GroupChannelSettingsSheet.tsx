@@ -234,7 +234,7 @@ export function GroupChannelSettingsSheet({
               className={cn(
                 'tg-transition flex flex-shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium',
                 tab === id
-                  ? 'bg-primary text-muted-foreground-foreground'
+                  ? 'bg-foreground text-background'
                   : 'text-muted-foreground hover:bg-accent'
               )}
             >
@@ -371,7 +371,7 @@ export function GroupChannelSettingsSheet({
                         className={cn(
                           'tg-transition rounded-full px-3 py-1 text-xs',
                           settings.slow_mode_seconds === value
-                            ? 'bg-primary text-muted-foreground-foreground'
+                            ? 'bg-foreground text-background'
                             : 'bg-muted text-muted-foreground hover:bg-accent'
                         )}
                       >
@@ -400,7 +400,7 @@ export function GroupChannelSettingsSheet({
                         className={cn(
                           'tg-transition rounded-full px-3 py-1 text-xs',
                           settings.auto_delete_seconds === value
-                            ? 'bg-primary text-muted-foreground-foreground'
+                            ? 'bg-foreground text-background'
                             : 'bg-muted text-muted-foreground hover:bg-accent'
                         )}
                       >
@@ -429,7 +429,7 @@ export function GroupChannelSettingsSheet({
                         className={cn(
                           'tg-transition rounded-full px-3 py-1 text-xs',
                           settings.reactions_mode === option.id
-                            ? 'bg-primary text-muted-foreground-foreground'
+                            ? 'bg-foreground text-background'
                             : 'bg-muted text-muted-foreground hover:bg-accent'
                         )}
                       >
