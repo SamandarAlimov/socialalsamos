@@ -46,7 +46,7 @@ const NAV_ITEM_INACTIVE = "text-sidebar-foreground/70 hover:bg-sidebar-accent/60
 
 
 /** Badge rangi butun platforma bo'ylab bitta: aktiv holatga qarab o'zgarmaydi. */
-const NAV_BADGE = "bg-destructive text-destructive-foreground";
+const NAV_BADGE = "bg-primary text-primary-foreground";
 
 interface AppSidebarProps {
   collapsed: boolean;
