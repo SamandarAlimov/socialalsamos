@@ -48,6 +48,64 @@ const commentEmbedGuard = createProfileEmbedGuard();
 
 type CommentRow = Record<string, unknown>;
 
+function buildCommentTree(
+  data: Comment[],
+  likedIds: Set<string>,
+): Comment[] {
+  const commentsMap = new Map<string, Comment>();
+  const rootComments: Comment[] = [];
+
+  data.forEach((comment) => {
+    commentsMap.set(comment.id, {
+      ...comment,
+      is_liked: likedIds.has(comment.id),
+      replies: [],
+    });
+  });
+
+  data.forEach((comment) => {
+    const item = commentsMap.get(comment.id);
+    if (!item) return;
+
+    if (comment.parent_id) {
+      const parent = commentsMap.get(comment.parent_id);
+      if (parent) {
+        parent.replies?.push(item);
+        return;
+      }
+    }
+
+    rootComments.push(item);
+  });
+
+  const sortRecursive = (items: Comment[]) => {
+    items.sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    );
+    items.forEach((item) => {
+      if (item.replies?.length) sortRecursive(item.replies);
+    });
+  };
+
+  sortRecursive(rootComments);
+  return rootComments;
+}
+
+function findCommentRecursive(
+  items: Comment[],
+  commentId: string,
+): Comment | null {
+  for (const item of items) {
+    if (item.id === commentId) return item;
+    if (item.replies?.length) {
+      const nested = findCommentRecursive(item.replies, commentId);
+      if (nested) return nested;
+    }
+  }
+  return null;
+}
+
 export function useComments(postId: string | null) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -77,46 +135,22 @@ export function useComments(postId: string | null) {
       if (error) throw error;
 
       const data = (rows ?? []) as unknown as Comment[];
+      let likedIds = new Set<string>();
 
-      // Check likes if user is logged in
       if (user && data.length > 0) {
-        const commentIds = data.map(c => c.id);
+        const commentIds = data.map((comment) => comment.id);
         const { data: likes } = await supabase
           .from('comment_likes')
           .select('comment_id')
           .eq('user_id', user.id)
           .in('comment_id', commentIds);
 
-        const likedIds = new Set(likes?.map(l => l.comment_id) || []);
-
-        // Organize into tree structure
-        const commentsMap = new Map<string, Comment>();
-        const rootComments: Comment[] = [];
-
-        data.forEach(comment => {
-          commentsMap.set(comment.id, {
-            ...comment,
-            is_liked: likedIds.has(comment.id),
-            replies: []
-          });
-        });
-
-        data.forEach(comment => {
-          const commentWithReplies = commentsMap.get(comment.id)!;
-          if (comment.parent_id) {
-            const parent = commentsMap.get(comment.parent_id);
-            if (parent) {
-              parent.replies?.push(commentWithReplies);
-            }
-          } else {
-            rootComments.push(commentWithReplies);
-          }
-        });
-
-        setComments(rootComments);
-      } else {
-        setComments(data);
+        likedIds = new Set(likes?.map((like) => like.comment_id) || []);
       }
+
+      // Tree har doim quriladi — login bo'lmagan foydalanuvchi ham nested
+      // reply'larni to'g'ri ko'rishi kerak.
+      setComments(buildCommentTree(data, likedIds));
     } catch (error) {
       console.error('Error fetching comments:', error);
       toast.error("Izohlarni yuklab bo'lmadi");
@@ -189,8 +223,7 @@ export function useComments(postId: string | null) {
   const likeComment = useCallback(async (commentId: string) => {
     if (!user) return;
 
-    const comment = comments.find(c => c.id === commentId) || 
-                   comments.flatMap(c => c.replies || []).find(c => c.id === commentId);
+    const comment = findCommentRecursive(comments, commentId);
     if (!comment) return;
 
     try {
