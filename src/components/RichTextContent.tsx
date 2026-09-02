@@ -159,7 +159,7 @@ export function RichTextContent({ content, className, emojiSize = 19 }: RichText
                     <Link
                       key={index}
                       to={`/user/${part.value}`}
-                      className="cursor-pointer font-semibold text-alsamos-orange-light transition-colors hover:text-alsamos-orange-dark hover:underline"
+                      className="cursor-pointer font-semibold text-link transition-colors hover:text-link-hover hover:underline"
                       onClick={(e) => e.stopPropagation()}
                     >
                       @{part.value}
@@ -170,7 +170,7 @@ export function RichTextContent({ content, className, emojiSize = 19 }: RichText
                     <Link
                       key={index}
                       to={`/search?q=%23${part.value}`}
-                      className="font-medium text-blue-400 transition-colors hover:text-blue-300 hover:underline"
+                      className="font-medium text-link transition-colors hover:text-link-hover hover:underline"
                       onClick={(e) => e.stopPropagation()}
                     >
                       #{part.value}
@@ -183,7 +183,7 @@ export function RichTextContent({ content, className, emojiSize = 19 }: RichText
                       href={part.value}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="break-all text-sky-400 underline underline-offset-2 transition-colors hover:text-sky-300"
+                      className="break-all text-link underline underline-offset-2 transition-colors hover:text-link-hover"
                       onClick={(e) => e.stopPropagation()}
                     >
                       {formatLinkDisplay(part.value)}
@@ -204,7 +204,7 @@ export function RichTextContent({ content, className, emojiSize = 19 }: RichText
           key={`music-${index}`}
           className="mt-2 flex items-center gap-3 rounded-xl border border-border/50 bg-muted/40 px-3 py-2"
         >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
             <Music2 className="h-4 w-4" />
           </span>
           <div className="min-w-0 flex-1">
@@ -231,7 +231,7 @@ export function RichTextContent({ content, className, emojiSize = 19 }: RichText
           key={`loc-${index}`}
           className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-muted/60 px-2.5 py-1 text-xs text-muted-foreground"
         >
-          <MapPin className="h-3.5 w-3.5 shrink-0 text-primary" />
+          <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <span className="truncate">{place}</span>
         </div>
       ))}
