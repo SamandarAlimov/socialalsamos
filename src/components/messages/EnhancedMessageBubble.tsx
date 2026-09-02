@@ -412,7 +412,7 @@ export function EnhancedMessageBubble({
         transparent
           ? 'text-muted-foreground'
           : isMine
-            ? 'text-primary-foreground/70'
+            ? 'text-bubble-own-foreground/60'
             : 'text-muted-foreground'
       )}
     >
@@ -440,7 +440,7 @@ export function EnhancedMessageBubble({
               <AlertCircle className="h-3 w-3 text-destructive" />
             )
           ) : message.status === 'read' || message.is_read ? (
-            <CheckCheck className="h-3.5 w-3.5 text-[#0095F6]" />
+            <CheckCheck className="h-3.5 w-3.5 text-link" />
           ) : (
             // Telegram: serverga muvaffaqiyatli yuborilgan xabar bitta ptichka.
             // Legacy `delivered` qiymati ham shu ko'rinishga tushadi.
@@ -491,7 +491,7 @@ export function EnhancedMessageBubble({
           className={cn(
             'relative z-[1] min-w-0 max-w-full overflow-hidden rounded-2xl px-3.5 py-2',
             isMine
-              ? 'rounded-br-[6px] bg-primary text-primary-foreground'
+              ? 'rounded-br-[6px] border border-border/60 bg-bubble-own text-bubble-own-foreground'
               : 'rounded-bl-[6px] border border-border bg-card text-card-foreground',
             !showTail && (isMine ? 'rounded-br-2xl' : 'rounded-bl-2xl'),
             message.status === 'failed' && 'border-destructive bg-destructive/20'
@@ -519,8 +519,8 @@ export function EnhancedMessageBubble({
                 className={cn(
                   'mb-1.5 rounded-lg border-l-[3px] px-2 py-1.5 text-[11px]',
                   isMine
-                    ? 'border-primary-foreground/70 bg-primary-foreground/10 text-primary-foreground/75'
-                    : 'border-primary bg-muted/70 text-muted-foreground'
+                    ? 'border-bubble-own-accent/70 bg-foreground/5 text-bubble-own-foreground/75'
+                    : 'border-muted-foreground/50 bg-muted/70 text-muted-foreground'
                 )}
               >
                 Javob berilgan xabar
@@ -535,12 +535,12 @@ export function EnhancedMessageBubble({
               <Link
                 to={senderProfilePath}
                 onClick={(e) => e.stopPropagation()}
-                className="mb-1 block truncate text-xs font-semibold text-primary hover:underline"
+                className="mb-1 block truncate text-xs font-semibold text-link hover:text-link-hover hover:underline"
               >
                 {senderLabel}
               </Link>
             ) : (
-              <p className="mb-1 truncate text-xs font-semibold text-primary">{senderLabel}</p>
+              <p className="mb-1 truncate text-xs font-semibold text-foreground">{senderLabel}</p>
             ))}
 
           {message.is_deleted ? (
@@ -624,7 +624,7 @@ export function EnhancedMessageBubble({
         ref={bubbleRef}
         className={cn(
           'chat-no-select animate-tg-message-in relative',
-          isSelected && 'rounded-lg bg-primary/10'
+          isSelected && 'rounded-lg bg-muted'
         )}
         onClick={() => {
           if (isSelectionMode && onSelect) {
@@ -643,7 +643,7 @@ export function EnhancedMessageBubble({
         {isSelectionMode && (
           <div className="absolute left-2 top-1/2 z-10 -translate-y-1/2">
             {isSelected ? (
-              <CheckSquare className="h-5 w-5 text-primary" />
+              <CheckSquare className="h-5 w-5 text-foreground" />
             ) : (
               <Square className="h-5 w-5 text-muted-foreground" />
             )}
@@ -674,8 +674,8 @@ export function EnhancedMessageBubble({
         className={cn(
           'chat-no-select tg-swipe animate-tg-message-in group relative -mx-2 flex rounded-lg px-2 py-0.5',
           isMine ? 'justify-end' : 'justify-start',
-          isSelectionMode && 'cursor-pointer hover:bg-primary/5',
-          isSelected && 'bg-primary/10'
+          isSelectionMode && 'cursor-pointer hover:bg-muted/60',
+          isSelected && 'bg-muted'
         )}
         onTouchStart={(e) => {
           if (!isSelectionMode) handleTouchStart(e);
@@ -703,11 +703,11 @@ export function EnhancedMessageBubble({
               className={cn(
                 'tg-transition flex h-6 w-6 items-center justify-center rounded-full border-2',
                 isSelected
-                  ? 'scale-100 border-primary bg-primary'
+                  ? 'scale-100 border-foreground bg-foreground'
                   : 'scale-90 border-muted-foreground/40 bg-background'
               )}
             >
-              {isSelected && <Check className="h-4 w-4 text-primary-foreground" strokeWidth={3} />}
+              {isSelected && <Check className="h-4 w-4 text-background" strokeWidth={3} />}
             </div>
           </div>
         )}
@@ -715,8 +715,8 @@ export function EnhancedMessageBubble({
         {/* Qadalgan belgisi */}
         {isPinned && (
           <div className={cn('absolute -top-1 z-10', isMine ? 'right-0' : 'left-8')}>
-            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/90 shadow-sm">
-              <Pin className="h-3 w-3 text-primary-foreground" />
+            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-muted shadow-sm">
+              <Pin className="h-3 w-3 text-foreground" />
             </div>
           </div>
         )}
@@ -762,7 +762,7 @@ export function EnhancedMessageBubble({
               >
                 <Avatar className="tg-transition h-8 w-8 hover:scale-105">
                   <AvatarImage src={message.sender?.avatar_url || ''} />
-                  <AvatarFallback className="bg-primary text-xs text-primary-foreground">
+                  <AvatarFallback className="bg-muted text-xs text-foreground">
                     {message.sender?.display_name?.[0] || message.sender?.username?.[0] || 'U'}
                   </AvatarFallback>
                 </Avatar>
@@ -770,7 +770,7 @@ export function EnhancedMessageBubble({
             ) : (
               <Avatar className="h-8 w-8 flex-shrink-0">
                 <AvatarImage src={message.sender?.avatar_url || ''} />
-                <AvatarFallback className="bg-primary text-xs text-primary-foreground">
+                <AvatarFallback className="bg-muted text-xs text-foreground">
                   {message.sender?.display_name?.[0] || message.sender?.username?.[0] || 'U'}
                 </AvatarFallback>
               </Avatar>
