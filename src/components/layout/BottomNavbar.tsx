@@ -112,14 +112,14 @@ export function BottomNavbar() {
                   className={cn(
                     'group relative flex min-w-[58px] flex-1 select-none flex-col items-center justify-center gap-0.5 rounded-2xl',
                     'transition-transform duration-150 active:scale-[0.92]',
-                    isActive ? 'text-primary' : 'text-muted-foreground'
+                    isActive ? 'text-foreground' : 'text-muted-foreground'
                   )}
                 >
                   {/* Aktiv fon kapsulasi (silliq ko'chadi) */}
                   {isActive && !isCreate && (
                     <motion.span
-                      layoutId="bottomNavActiveBg"
-                      className="absolute inset-x-1 inset-y-1.5 -z-10 rounded-2xl bg-primary/10"
+                      layoutId="bottomNavActiveIndicator"
+                      className="absolute top-1 h-0.5 w-5 rounded-full bg-primary"
                       transition={{ type: 'spring', stiffness: 480, damping: 34 }}
                     />
                   )}
@@ -143,7 +143,7 @@ export function BottomNavbar() {
                           <Avatar
                             className={cn(
                               'h-[24px] w-[24px] transition-all duration-200',
-                              isActive && 'ring-2 ring-primary ring-offset-1 ring-offset-background'
+                              isActive && 'ring-2 ring-foreground/20 ring-offset-1 ring-offset-background'
                             )}
                           >
                             <AvatarImage src={profile.avatar_url} />

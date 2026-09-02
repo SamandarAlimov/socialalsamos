@@ -156,7 +156,7 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
             <div key={item.path} className="flex items-center gap-1">
               <NavLink to={item.path} className={cn("relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group flex-1", isActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE)}>
                 {isActive && <span aria-hidden="true" className={NAV_ACTIVE_INDICATOR} />}
-                {profile?.avatar_url ? <Avatar className={cn("h-5 w-5 flex-shrink-0", isActive && "ring-2 ring-primary ring-offset-1 ring-offset-sidebar")}><AvatarImage src={profile.avatar_url} alt={profile.display_name || 'Profile'} /><AvatarFallback><User className="h-3 w-3" /></AvatarFallback></Avatar> : <User className="h-5 w-5 flex-shrink-0" />}
+                {profile?.avatar_url ? <Avatar className={cn("h-5 w-5 flex-shrink-0", isActive && "ring-2 ring-foreground/20 ring-offset-1 ring-offset-sidebar")}><AvatarImage src={profile.avatar_url} alt={profile.display_name || 'Profile'} /><AvatarFallback><User className="h-3 w-3" /></AvatarFallback></Avatar> : <User className="h-5 w-5 flex-shrink-0" />}
                 {!collapsed && <span className="text-sm">{t(item.labelKey)}</span>}
               </NavLink>
               {/* Xavfsizlik bu yerda emas — u Sozlamalar ichida joylashgan. */}

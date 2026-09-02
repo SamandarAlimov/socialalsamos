@@ -146,7 +146,7 @@ export function PopularCreators({ refreshKey = 0 }: PopularCreatorsProps) {
   const header = (
     <div className="mb-4 flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <Users className="h-5 w-5 text-primary" />
+        <Users className="h-5 w-5 text-muted-foreground" />
         <h2 className="text-lg font-semibold">Mashhur ijodkorlar</h2>
       </div>
       <Button

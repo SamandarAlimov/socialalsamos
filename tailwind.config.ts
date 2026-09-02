@@ -23,6 +23,24 @@ export default {
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        // Platform semantic roles: structure/content stay neutral; brand is signal.
+        surface: {
+          base: "hsl(var(--surface-base))",
+          elevated: "hsl(var(--surface-elevated))",
+        },
+        nav: {
+          DEFAULT: "hsl(var(--nav-bg))",
+          "icon-default": "hsl(var(--nav-icon-default))",
+          "icon-active": "hsl(var(--nav-icon-active))",
+        },
+        content: {
+          primary: "hsl(var(--text-primary))",
+          secondary: "hsl(var(--text-secondary))",
+        },
+        "border-neutral": "hsl(var(--border-neutral))",
+        brand: {
+          DEFAULT: "hsl(var(--accent-brand))",
+        },
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",

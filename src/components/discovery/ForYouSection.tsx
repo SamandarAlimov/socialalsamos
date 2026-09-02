@@ -140,7 +140,7 @@ export function ForYouSection({ refreshKey = 0 }: ForYouSectionProps) {
   const header = (
     <div className="mb-4 flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <Sparkles className="h-5 w-5 text-primary" />
+        <Sparkles className="h-5 w-5 text-muted-foreground" />
         <h2 className="text-lg font-semibold">Siz uchun</h2>
       </div>
       <Button

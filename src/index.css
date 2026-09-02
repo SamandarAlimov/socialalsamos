@@ -68,6 +68,20 @@
 
     --radius: 0.75rem;
 
+    /* Platform semantic color roles.
+       These aliases resolve through the theme tokens above, so light/dark mode
+       stays in one source of truth. Prefer these role names for structure and
+       content; reserve brand color for actions and signal states. */
+    --surface-base: var(--background);
+    --surface-elevated: var(--card);
+    --nav-bg: var(--sidebar-background);
+    --nav-icon-default: var(--muted-foreground);
+    --nav-icon-active: var(--foreground);
+    --text-primary: var(--foreground);
+    --text-secondary: var(--muted-foreground);
+    --border-neutral: var(--border);
+    --accent-brand: var(--primary);
+
     /* Chat bubble fonlari.
        Joriy foydalanuvchi bubble'i ilgari bg-primary (to'liq to'yingan orange)
        edi: stiker, emoji, link preview va media thumbnail'ning o'z ichki
