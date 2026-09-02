@@ -116,7 +116,11 @@ async function resolveLegacyChatMediaUrl(value: string): Promise<string | null> 
 
 async function downloadFile(url: string, fileName: string) {
   try {
-    const response = await fetch(url);
+    // Legacy/private chat fayllarini ham signed URL orqali yuklaymiz.
+    // Public `media` URL'lari esa o'z holicha qoladi.
+    const resolvedUrl = (await resolveLegacyChatMediaUrl(url)) ?? url;
+    const response = await fetch(resolvedUrl);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const blob = await response.blob();
     const objectUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -127,7 +131,8 @@ async function downloadFile(url: string, fileName: string) {
     link.remove();
     URL.revokeObjectURL(objectUrl);
   } catch {
-    window.open(url, '_blank', 'noopener,noreferrer');
+    const resolvedUrl = (await resolveLegacyChatMediaUrl(url)) ?? url;
+    window.open(resolvedUrl, '_blank', 'noopener,noreferrer');
   }
 }
 
@@ -144,12 +149,31 @@ export function MessageAttachment({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const [resolvedImageUrl, setResolvedImageUrl] = useState<string | null>(null);
+  const [resolvedMediaUrl, setResolvedMediaUrl] = useState<string | null>(null);
 
   // URL o'zgarsa holat tozalanadi (masalan xabar tahrirlanganda)
   useEffect(() => {
     setImageLoaded(false);
     setImageFailed(false);
     setResolvedImageUrl(null);
+    setResolvedMediaUrl(null);
+  }, [url]);
+
+  // Legacy private chat media'ni oldindan signed URL'ga aylantiramiz.
+  // Shu bilan rasm, video, audio va hujjat bir xil storage yo'lidan foydalanadi.
+  useEffect(() => {
+    const actualUrl = url.startsWith('[media:gif:')
+      ? url.replace('[media:gif:', '').replace(']', '')
+      : url;
+    let cancelled = false;
+
+    void resolveLegacyChatMediaUrl(actualUrl).then((signedUrl) => {
+      if (!cancelled && signedUrl) setResolvedMediaUrl(signedUrl);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [url]);
 
   // Check if it's a GIF
@@ -163,14 +187,13 @@ export function MessageAttachment({
     const actualUrl = url.startsWith('[media:gif:')
       ? url.replace('[media:gif:', '').replace(']', '')
       : url;
-    const effectiveUrl = resolvedImageUrl ?? actualUrl;
+    const effectiveUrl = resolvedMediaUrl ?? resolvedImageUrl ?? actualUrl;
 
     const handleImageError = async () => {
       // Birinchi xatolik eski private Supabase URL'ida bo'lsa: uni qatnashchi
       // uchun imzolangan (signed) URL'ga almashtiramiz. Shu bilan eski
       // xabarlar tiklanadi va private storage yana ommaviy qilinmaydi.
-      // src o'zgargani uchun brauzer rasmni o'zi qaytadan yuklaydi.
-      if (!resolvedImageUrl) {
+      if (!resolvedImageUrl && !resolvedMediaUrl) {
         const signedUrl = await resolveLegacyChatMediaUrl(actualUrl);
         if (signedUrl) {
           setResolvedImageUrl(signedUrl);
@@ -211,8 +234,6 @@ export function MessageAttachment({
       <>
         <div
           className="group relative cursor-pointer overflow-hidden rounded-2xl bg-muted/50"
-          /* Aniq kenglik: bubble qisqarsa ham karta chiziqqa aylanmaydi.
-             Yuklanmagan paytda balandlik ham band - lenta sakramaydi. */
           style={{
             width: IMAGE_FRAME_WIDTH,
             maxWidth: '100%',
@@ -227,9 +248,6 @@ export function MessageAttachment({
           <img
             src={effectiveUrl}
             alt={name || 'Rasm'}
-            /* `lazy` EMAS: chat lentasi transform/contain qatlamlari ichida
-               bo'lgani uchun lazy kuzatuvchi ba'zan ishga tushmay, bo'sh
-               ramka qoldirardi. */
             loading="eager"
             decoding="async"
             draggable={false}
@@ -247,13 +265,12 @@ export function MessageAttachment({
             </span>
           )}
 
-          {/* Telegram-style download affordance on hover */}
           <button
             type="button"
             aria-label="Yuklab olish"
             onClick={(e) => {
               e.stopPropagation();
-              downloadFile(effectiveUrl, name || effectiveUrl.split('/').pop() || 'image');
+              void downloadFile(effectiveUrl, name || effectiveUrl.split('/').pop() || 'image');
             }}
             className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/45 text-white opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100"
           >
@@ -272,17 +289,14 @@ export function MessageAttachment({
   }
 
   if (type === 'video') {
-    // Check if video was recorded from webcam (TelegramMediaRecorder uses 'video_' prefix)
     const isWebcamRecording = url.includes('/video_') || url.includes('video_');
     return (
       <div
         className="overflow-hidden rounded-2xl"
-        /* Rasm bilan bir xil sabab: `w-full` shrink-to-fit bubble ichida
-           yig'ilib qolardi. */
         style={{ width: IMAGE_FRAME_WIDTH, maxWidth: '100%' }}
       >
         <VideoMessagePlayer
-          url={url}
+          url={resolvedMediaUrl ?? url}
           isMine={isMine}
           autoPlay={autoPlay}
           isWebcamRecording={isWebcamRecording}
@@ -292,11 +306,10 @@ export function MessageAttachment({
   }
 
   if (type === 'audio') {
-    // Use AudioFilePlayer for music files, VoiceMessagePlayer for voice messages
     if (isMusicFile) {
-      return <AudioFilePlayer url={url} name={name} isMine={isMine} senderName={senderName} />;
+      return <AudioFilePlayer url={resolvedMediaUrl ?? url} name={name} isMine={isMine} senderName={senderName} />;
     }
-    return <VoiceMessagePlayer url={url} isMine={isMine} autoPlay={autoPlay} />;
+    return <VoiceMessagePlayer url={resolvedMediaUrl ?? url} isMine={isMine} autoPlay={autoPlay} />;
   }
 
   // Document type - Telegram-style file row
@@ -304,6 +317,7 @@ export function MessageAttachment({
   const fileExtension = fileName.split('.').pop()?.toUpperCase() || 'FILE';
   const DocIcon = docIconFor(fileName);
   const prettySize = formatBytes(size);
+  const effectiveDocumentUrl = resolvedMediaUrl ?? url;
 
   return (
     <div
@@ -313,7 +327,7 @@ export function MessageAttachment({
       )}
     >
       <a
-        href={url}
+        href={effectiveDocumentUrl}
         target="_blank"
         rel="noopener noreferrer"
         onClick={(e) => e.stopPropagation()}
@@ -351,7 +365,7 @@ export function MessageAttachment({
         aria-label="Yuklab olish"
         onClick={(e) => {
           e.stopPropagation();
-          downloadFile(url, fileName);
+          void downloadFile(effectiveDocumentUrl, fileName);
         }}
         className={cn(
           'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors',
