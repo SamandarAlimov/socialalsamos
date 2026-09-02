@@ -66,6 +66,7 @@ interface PostViewModalProps {
   onOpenChange: (open: boolean) => void;
   onLike: () => void;
   isOwnProfile?: boolean;
+  focusCommentId?: string | null;
 }
 
 export function PostViewModal({
@@ -75,6 +76,7 @@ export function PostViewModal({
   onOpenChange,
   onLike,
   isOwnProfile = false,
+  focusCommentId = null,
 }: PostViewModalProps) {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -332,7 +334,7 @@ export function PostViewModal({
                 )}
 
                 <div className="px-4 py-3">
-                  <CommentsSection postId={post.id} />
+                  <CommentsSection postId={post.id} focusCommentId={focusCommentId} />
                 </div>
               </div>
 

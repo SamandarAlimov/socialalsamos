@@ -1,39 +1,45 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  differenceInMinutes,
+  isThisMonth,
+  isThisWeek,
   isToday,
   isYesterday,
-  isThisWeek,
-  isThisMonth,
-  differenceInMinutes,
 } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 import { formatDate } from '@/lib/i18n-format';
 import {
-  Heart,
-  MessageCircle,
-  UserPlus,
+  AlertCircle,
   AtSign,
-  Check,
-  X,
   Bell,
   BellOff,
-  Settings,
-  Trash2,
-  MoreHorizontal,
+  Check,
+  CheckCheck,
   ChevronRight,
-  Users,
+  Clock3,
+  Eye,
+  Heart,
   Image as ImageIcon,
-  Play,
+  Inbox,
   Loader2,
-  AlertCircle,
+  MessageCircle,
+  MoreHorizontal,
+  Play,
   RefreshCw,
+  Reply,
+  Settings,
+  Sparkles,
+  Trash2,
+  UserPlus,
+  Users,
+  X,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useNotifications, Notification } from '@/hooks/useNotifications';
+import { useNotifications, type Notification } from '@/hooks/useNotifications';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -48,31 +54,38 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { toast } from 'sonner';
+import {
+  notificationActionText,
+  notificationContextLabel,
+  notificationNeedsExplicitRead,
+  notificationPreviewText,
+  notificationTarget,
+} from '@/lib/notificationSemantics';
 
 type NotificationFilter =
   | 'all'
-  | 'likes'
-  | 'comments'
-  | 'follows'
   | 'mentions'
-  | 'collaborations';
+  | 'comments'
+  | 'collaborations'
+  | 'likes'
+  | 'follows';
 
-const FILTER_LABELS: Record<NotificationFilter, string> = {
-  all: 'Hammasi',
-  likes: 'Yoqtirishlar',
-  comments: 'Izohlar',
-  follows: 'Obunalar',
-  mentions: 'Eslatishlar',
-  collaborations: 'Hammualliflik',
-};
+const FILTERS: Array<{ id: NotificationFilter; label: string }> = [
+  { id: 'all', label: 'Hammasi' },
+  { id: 'mentions', label: 'Eslatishlar' },
+  { id: 'comments', label: 'Izohlar' },
+  { id: 'collaborations', label: 'Hammualliflik' },
+  { id: 'likes', label: 'Yoqtirishlar' },
+  { id: 'follows', label: 'Obunalar' },
+];
 
 const FILTER_EMPTY_TEXT: Record<NotificationFilter, string> = {
-  all: 'Kimdir postingizni yoqtirsa, izoh qoldirsa yoki sizga obuna bo‘lsa — shu yerda ko‘rinadi.',
-  likes: 'Hozircha yoqtirishlar yo‘q.',
-  comments: 'Hozircha izohlar yo‘q.',
+  all: 'Yangi faollik, eslatish, izoh va hammualliflik voqealari shu yerda paydo bo‘ladi.',
+  mentions: 'Hozircha sizni post yoki izohlarda hech kim belgilamagan.',
+  comments: 'Hozircha yangi izoh yoki javob yo‘q.',
+  collaborations: 'Hozircha hammualliflik bo‘yicha yangi voqea yo‘q.',
+  likes: 'Hozircha yangi yoqtirishlar yo‘q.',
   follows: 'Hozircha yangi obunachilar yo‘q.',
-  mentions: 'Hozircha sizni hech kim eslatib o‘tmagan.',
-  collaborations: 'Hozircha hammualliflik takliflari yo‘q.',
 };
 
 const COLLABORATION_TYPES: Notification['type'][] = [
@@ -84,6 +97,8 @@ const COLLABORATION_TYPES: Notification['type'][] = [
   'collaboration_left',
 ];
 
+const COMMENT_TYPES: Notification['type'][] = ['comment', 'reply', 'comment_like'];
+const MENTION_TYPES: Notification['type'][] = ['mention', 'comment_mention'];
 const VIDEO_PATTERN = /\.(mp4|webm|mov|m4v|ogv)(\?|#|$)/i;
 
 interface GroupedNotification {
@@ -110,59 +125,60 @@ interface TimeGroupedNotifications {
   older: GroupedNotification[];
 }
 
-const NotificationIcon = ({ type }: { type: Notification['type'] }) => {
-  const iconClass = 'h-3.5 w-3.5 text-white';
+function NotificationIcon({ type }: { type: Notification['type'] }) {
+  const common = 'flex h-7 w-7 items-center justify-center rounded-full ring-2 ring-background shadow-sm';
+  const icon = 'h-3.5 w-3.5 text-white';
 
-  switch (type) {
-    case 'like':
-      return (
-        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center ring-2 ring-background shadow-sm">
-          <Heart className={iconClass} fill="currentColor" />
-        </div>
-      );
-    case 'comment':
-      return (
-        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center ring-2 ring-background shadow-sm">
-          <MessageCircle className={iconClass} fill="currentColor" />
-        </div>
-      );
-    case 'follow':
-      return (
-        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center ring-2 ring-background shadow-sm">
-          <UserPlus className={iconClass} />
-        </div>
-      );
-    case 'mention':
-      return (
-        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center ring-2 ring-background shadow-sm">
-          <AtSign className={iconClass} />
-        </div>
-      );
-    case 'collaboration_invite':
-    case 'collaboration_accepted':
-    case 'collaboration_declined':
-    case 'collaboration_revoked':
-    case 'collaboration_removed':
-    case 'collaboration_left':
-      return (
-        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center ring-2 ring-background shadow-sm">
-          <Users className={iconClass} />
-        </div>
-      );
-    default:
-      return (
-        <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center ring-2 ring-background shadow-sm text-foreground">
-          <Bell className={iconClass} />
-        </div>
-      );
+  if (type === 'like' || type === 'comment_like') {
+    return (
+      <span className={cn(common, 'bg-rose-500')}>
+        <Heart className={icon} fill="currentColor" />
+      </span>
+    );
   }
-};
+  if (type === 'comment') {
+    return (
+      <span className={cn(common, 'bg-sky-500')}>
+        <MessageCircle className={icon} fill="currentColor" />
+      </span>
+    );
+  }
+  if (type === 'reply') {
+    return (
+      <span className={cn(common, 'bg-cyan-600')}>
+        <Reply className={icon} />
+      </span>
+    );
+  }
+  if (type === 'follow') {
+    return (
+      <span className={cn(common, 'bg-emerald-600')}>
+        <UserPlus className={icon} />
+      </span>
+    );
+  }
+  if (type === 'mention' || type === 'comment_mention') {
+    return (
+      <span className={cn(common, 'bg-violet-600')}>
+        <AtSign className={icon} />
+      </span>
+    );
+  }
+  if (COLLABORATION_TYPES.includes(type)) {
+    return (
+      <span className={cn(common, 'bg-indigo-600')}>
+        <Users className={icon} />
+      </span>
+    );
+  }
 
-/**
- * Post rasmi o'chirilgan yoki video bo'lsa ham sahifa buzilmasligi uchun
- * xavfsiz thumbnail. Video uchun <video> elementi ishlatilmaydi — brauzer
- * o'zining katta ko'k "play" tugmasini chizib, ro'yxatni buzib qo'yardi.
- */
+  return (
+    <span className={cn(common, 'bg-foreground')}>
+      <Bell className={icon} />
+    </span>
+  );
+}
+
 function PostThumbnail({
   url,
   onClick,
@@ -172,32 +188,27 @@ function PostThumbnail({
 }) {
   const [failed, setFailed] = useState(false);
   const isVideo = VIDEO_PATTERN.test(url);
-  const baseClass =
-    'relative flex-shrink-0 h-14 w-14 rounded-xl overflow-hidden bg-muted ring-1 ring-border/60 flex items-center justify-center transition-transform hover:scale-[1.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+  const base =
+    'relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-muted ring-1 ring-border/60 transition hover:ring-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
   if (isVideo) {
     return (
-      <button
-        type="button"
-        onClick={onClick}
-        className={cn(baseClass, 'bg-neutral-900')}
-        aria-label="Videoni ochish"
-      >
-        <Play className="h-4 w-4 text-white/90" fill="currentColor" />
+      <button type="button" onClick={onClick} className={cn(base, 'bg-neutral-900')} aria-label="Videoni ochish">
+        <Play className="h-4 w-4 text-white" fill="currentColor" />
       </button>
     );
   }
 
   if (failed) {
     return (
-      <button type="button" onClick={onClick} className={baseClass} aria-label="Postni ochish">
+      <button type="button" onClick={onClick} className={base} aria-label="Postni ochish">
         <ImageIcon className="h-5 w-5 text-muted-foreground" />
       </button>
     );
   }
 
   return (
-    <button type="button" onClick={onClick} className={baseClass} aria-label="Postni ochish">
+    <button type="button" onClick={onClick} className={base} aria-label="Postni ochish">
       <img
         src={url}
         alt=""
@@ -210,74 +221,60 @@ function PostThumbnail({
   );
 }
 
-// 30 daqiqalik oyna ichida bir xil tur va bir xil post bo'yicha guruhlash.
-// Hammualliflik bildirishnomalari esa bir xil (tur + post + aktyor) bo'lsa
-// har doim birlashtiriladi — aks holda bitta qabul qilish ro'yxatda ikki
-// marta takrorlanib ko'rinardi.
 function consolidateNotifications(notifications: Notification[]): GroupedNotification[] {
-  const groups: Map<string, GroupedNotification> = new Map();
-  const CONSOLIDATION_WINDOW_MINUTES = 30;
-  const COLLABORATION_WINDOW_MINUTES = 60 * 24 * 30;
-
+  const groups = new Map<string, GroupedNotification>();
   const sorted = [...notifications].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
   );
 
   sorted.forEach((notification) => {
     const data = notification.data as Record<string, unknown>;
-    const postId = typeof data?.post_id === 'string' ? (data.post_id as string) : undefined;
+    const postId = typeof data?.post_id === 'string' ? data.post_id : undefined;
     const actor = notification.actor;
-    const post = notification.post;
-    const isCollaboration = COLLABORATION_TYPES.includes(notification.type);
-
-    const postThumbnail = post?.media_urls?.find(
+    const postThumbnail = notification.post?.media_urls?.find(
       (media) => typeof media === 'string' && media.length > 0,
     );
+    const isCollaboration = COLLABORATION_TYPES.includes(notification.type);
 
-    const baseGroupKey = isCollaboration
-      ? `${notification.type}-${postId || 'no-post'}-${actor?.id || 'no-actor'}`
-      : notification.type === 'follow'
-        ? `follow-${notification.type}`
-        : `${notification.type}-${postId || 'no-post'}`;
-
+    // Context-rich eventlar (comment/mention/reply) alohida qoladi.
+    // Like/follow va duplicate collaboration eventlarigina birlashtiriladi.
     const canConsolidate =
-      isCollaboration ||
       notification.type === 'like' ||
-      notification.type === 'comment' ||
       notification.type === 'follow' ||
-      notification.type === 'mention';
-    const groupKey = canConsolidate ? baseGroupKey : `${baseGroupKey}-${notification.id}`;
+      notification.type === 'comment_like' ||
+      isCollaboration;
 
-    const existing = groups.get(groupKey);
+    const baseKey = isCollaboration
+      ? notification.type + '-' + (postId || 'no-post') + '-' + (actor?.id || 'no-actor')
+      : notification.type + '-' + (postId || 'global');
+
+    const key = canConsolidate ? baseKey : baseKey + '-' + notification.id;
+    const existing = groups.get(key);
 
     if (existing) {
-      const timeDiff = differenceInMinutes(
+      const minutes = differenceInMinutes(
         new Date(existing.latestAt),
         new Date(notification.created_at),
       );
-      const windowMinutes = isCollaboration
-        ? COLLABORATION_WINDOW_MINUTES
-        : CONSOLIDATION_WINDOW_MINUTES;
+      const maxWindow = isCollaboration ? 60 * 24 * 30 : 30;
 
-      if (timeDiff <= windowMinutes) {
-        if (actor && !existing.actors.find((a) => a.id === actor.id)) {
+      if (minutes <= maxWindow) {
+        if (actor && !existing.actors.some((item) => item.id === actor.id)) {
           existing.actors.push({
             id: actor.id,
             username: actor.username,
             displayName: actor.display_name,
             avatar: actor.avatar_url,
-            isVerified: !!actor.is_verified,
+            isVerified: Boolean(actor.is_verified),
           });
         }
         existing.notifications.push(notification);
-        if (!existing.postThumbnail && postThumbnail) {
-          existing.postThumbnail = postThumbnail;
-        }
+        if (!existing.postThumbnail && postThumbnail) existing.postThumbnail = postThumbnail;
         return;
       }
     }
 
-    groups.set(groupKey, {
+    groups.set(key, {
       id: notification.id,
       type: notification.type,
       notifications: [notification],
@@ -285,15 +282,13 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
       postId,
       postThumbnail,
       actors: actor
-        ? [
-            {
-              id: actor.id,
-              username: actor.username,
-              displayName: actor.display_name,
-              avatar: actor.avatar_url,
-              isVerified: !!actor.is_verified,
-            },
-          ]
+        ? [{
+            id: actor.id,
+            username: actor.username,
+            displayName: actor.display_name,
+            avatar: actor.avatar_url,
+            isVerified: Boolean(actor.is_verified),
+          }]
         : [],
     });
   });
@@ -311,56 +306,104 @@ function GroupedNotificationItem({
   index,
 }: {
   group: GroupedNotification;
-  onMarkAsRead: (id: string) => void;
+  onMarkAsRead: (id: string) => void | Promise<void>;
   onDelete: (id: string) => Promise<void> | void;
   onRespondCollaboration: (collaborationId: string, accept: boolean) => Promise<void>;
   index: number;
 }) {
   const navigate = useNavigate();
-  const hasUnread = group.notifications.some((n) => !n.is_read);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const viewTimerRef = useRef<number | null>(null);
+  const firstNotification = group.notifications[0];
+  const hasUnread = group.notifications.some((item) => !item.is_read);
+  const explicitRead = group.notifications.some(notificationNeedsExplicitRead);
   const firstActor = group.actors[0];
   const otherActorsCount = Math.max(0, group.actors.length - 1);
+  const collaborationId =
+    typeof firstNotification?.data?.collaboration_id === 'string'
+      ? firstNotification.data.collaboration_id
+      : undefined;
   const [collaborationBusy, setCollaborationBusy] = useState<'accept' | 'decline' | null>(null);
-  const collaborationId = group.notifications[0]?.data?.collaboration_id as string | undefined;
-  const { i18n: i18nInst } = useTranslation();
+  const { i18n } = useTranslation();
 
-  const markGroupRead = () => {
-    group.notifications.forEach((n) => {
-      if (!n.is_read) onMarkAsRead(n.id);
+  const markGroupRead = useCallback(() => {
+    group.notifications.forEach((notification) => {
+      if (!notification.is_read) void onMarkAsRead(notification.id);
     });
+  }, [group.notifications, onMarkAsRead]);
+
+  // Passive notification: viewport'da 1.2s davomida 72% ko'rinsa read.
+  // Mention/comment/invite kabi actionable eventlar faqat click/action bilan read.
+  useEffect(() => {
+    if (!hasUnread || explicitRead || !cardRef.current) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.72) {
+          if (viewTimerRef.current == null) {
+            viewTimerRef.current = window.setTimeout(markGroupRead, 1200);
+          }
+        } else if (viewTimerRef.current != null) {
+          window.clearTimeout(viewTimerRef.current);
+          viewTimerRef.current = null;
+        }
+      },
+      { threshold: [0.72] },
+    );
+
+    observer.observe(cardRef.current);
+    return () => {
+      observer.disconnect();
+      if (viewTimerRef.current != null) window.clearTimeout(viewTimerRef.current);
+    };
+  }, [explicitRead, hasUnread, markGroupRead]);
+
+  const formatTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return '';
+
+    const minutes = differenceInMinutes(new Date(), date);
+    if (minutes < 1) return 'hozir';
+    if (minutes < 60) return minutes + ' daq';
+    const hours = Math.floor(minutes / 60);
+    if (isToday(date)) return hours + ' soat';
+    if (isYesterday(date)) return 'kecha ' + formatDate(date, 'HH:mm', i18n.language);
+    const days = Math.floor(hours / 24);
+    if (days < 7) return days + ' kun';
+    return formatDate(date, 'd MMM', i18n.language);
   };
+
+  const target = notificationTarget(firstNotification);
+  const preview = notificationPreviewText(firstNotification);
+  const contextLabel = notificationContextLabel(firstNotification);
+  const actorName = firstActor?.displayName || firstActor?.username || 'Foydalanuvchi';
+  const othersText =
+    otherActorsCount > 0 ? ' va yana ' + otherActorsCount + (otherActorsCount === 1 ? ' kishi' : ' kishi') : '';
 
   const openTarget = () => {
     markGroupRead();
-
-    if (group.postId && group.type !== 'follow') {
-      navigate(`/home?post=${group.postId}`);
-    } else if (group.type === 'follow' && firstActor) {
-      navigate(`/user/${firstActor.username || firstActor.id}`);
-    }
+    if (target) navigate(target);
   };
 
-  const handleActorClick = (event: React.MouseEvent, actor: typeof firstActor) => {
+  const handleActorClick = (event: React.MouseEvent) => {
     event.stopPropagation();
-    if (!actor) return;
+    if (!firstActor) return;
     markGroupRead();
-    navigate(`/user/${actor.username || actor.id}`);
+    navigate('/user/' + (firstActor.username || firstActor.id));
   };
 
   const handlePostClick = (event: React.MouseEvent) => {
     event.stopPropagation();
-    if (!group.postId) return;
     markGroupRead();
-    navigate(`/home?post=${group.postId}`);
+    if (target) navigate(target);
   };
 
   const handleDelete = async (event: React.MouseEvent) => {
     event.stopPropagation();
     try {
-      await Promise.all(group.notifications.map((n) => onDelete(n.id)));
+      await Promise.all(group.notifications.map((notification) => onDelete(notification.id)));
       toast.success('Bildirishnoma o‘chirildi');
-    } catch (error) {
-      console.error('Bildirishnomani o‘chirish xatosi:', error);
+    } catch {
       toast.error('Bildirishnomani o‘chirib bo‘lmadi');
     }
   };
@@ -368,98 +411,27 @@ function GroupedNotificationItem({
   const handleCollaborationResponse = async (event: React.MouseEvent, accept: boolean) => {
     event.stopPropagation();
     if (!collaborationId || collaborationBusy) return;
-
     setCollaborationBusy(accept ? 'accept' : 'decline');
     try {
       await onRespondCollaboration(collaborationId, accept);
+      markGroupRead();
       toast.success(accept ? 'Hammualliflik qabul qilindi' : 'Taklif rad etildi');
     } catch (error) {
-      console.error('Collaboration javob xatosi:', error);
       const reason = error instanceof Error ? error.message : '';
-      toast.error(
-        reason
-          ? `Hammualliflik taklifiga javob berib bo‘lmadi: ${reason}`
-          : 'Hammualliflik taklifiga javob berib bo‘lmadi',
-      );
+      toast.error(reason || 'Taklifga javob berib bo‘lmadi');
     } finally {
       setCollaborationBusy(null);
     }
   };
 
-  // Toza o'zbekcha nisbiy vaqt: "tahminan 8 soat oldin" kabi chalkash
-  // yozuvlar o'rniga qisqa va bir xil format.
-  const formatTime = (dateStr: string) => {
-    const date = new Date(dateStr);
-    if (Number.isNaN(date.getTime())) return '';
-
-    const minutes = differenceInMinutes(new Date(), date);
-    if (minutes < 1) return 'hozirgina';
-    if (minutes < 60) return `${minutes} daqiqa oldin`;
-
-    const hours = Math.floor(minutes / 60);
-    if (isToday(date)) return `${hours} soat oldin`;
-    if (isYesterday(date)) return `kecha, ${formatDate(date, 'HH:mm', i18nInst.language)}`;
-
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days} kun oldin`;
-    return formatDate(date, 'd MMM', i18nInst.language);
-  };
-
-  const actorName = firstActor?.displayName || firstActor?.username || 'Foydalanuvchi';
-
-  const actionText = (() => {
-    switch (group.type) {
-      case 'like':
-        return 'postingizni yoqtirdi';
-      case 'comment':
-        return 'postingizga izoh qoldirdi';
-      case 'follow':
-        return 'sizga obuna bo‘ldi';
-      case 'mention':
-        return 'sizni eslatib o‘tdi';
-      case 'message':
-        return 'sizga xabar yubordi';
-      case 'collaboration_invite':
-        return 'sizni hammualliflikka taklif qildi';
-      case 'collaboration_accepted':
-        return 'hammualliflik taklifingizni qabul qildi';
-      case 'collaboration_declined':
-        return 'hammualliflik taklifingizni rad etdi';
-      case 'collaboration_revoked':
-        return 'hammualliflik taklifini bekor qildi';
-      case 'collaboration_removed':
-        return 'sizni hammualliflikdan olib tashladi';
-      case 'collaboration_left':
-        return 'post hammuallifligidan chiqdi';
-      default:
-        return '';
-    }
-  })();
-
-  const othersText =
-    otherActorsCount > 0
-      ? otherActorsCount === 1
-        ? ' va yana 1 kishi'
-        : ` va yana ${otherActorsCount} kishi`
-      : '';
-
-  const repeatCount = group.notifications.length;
-
-  const ariaLabel = `${actorName}${othersText} ${actionText}, ${formatTime(group.latestAt)}`;
-
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      ref={cardRef}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2, delay: Math.min(index, 8) * 0.03 }}
+      transition={{ duration: 0.18, delay: Math.min(index, 7) * 0.025 }}
       role="button"
       tabIndex={0}
-      aria-label={ariaLabel}
-      className={cn(
-        'group relative flex items-start gap-3 px-4 py-3.5 cursor-pointer transition-colors duration-150',
-        'hover:bg-accent/40 focus-visible:outline-none focus-visible:bg-accent/60',
-        hasUnread && 'bg-muted/50',
-      )}
       onClick={openTarget}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -467,84 +439,78 @@ function GroupedNotificationItem({
           openTarget();
         }
       }}
-    >
-      {hasUnread && (
-        <span
-          aria-hidden
-          className="absolute left-0 top-0 h-full w-[3px] bg-foreground/50"
-        />
+      className={cn(
+        'group relative grid cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] gap-3 rounded-[20px] border px-3.5 py-3.5 outline-none transition-all duration-200 md:px-4',
+        hasUnread
+          ? 'border-border bg-card shadow-sm hover:border-foreground/15 hover:shadow-md'
+          : 'border-transparent bg-card/45 hover:border-border/70 hover:bg-card',
+        'focus-visible:ring-2 focus-visible:ring-ring/60',
       )}
-
-      {/* Avatarlar */}
-      <div className="relative flex-shrink-0">
-        {group.actors.length > 1 ? (
-          <div className="relative h-12 w-16">
-            {group.actors.slice(0, 3).map((actor, i) => (
-              <Avatar
-                key={actor.id}
-                className={cn(
-                  'h-10 w-10 absolute border-2 border-background cursor-pointer transition-transform hover:z-10 hover:scale-105',
-                  i === 0 && 'left-0 top-0 z-[3]',
-                  i === 1 && 'left-4 top-1 z-[2]',
-                  i === 2 && 'left-8 top-0 z-[1]',
-                )}
-                onClick={(event) => handleActorClick(event, actor)}
-              >
-                <AvatarImage src={actor.avatar || undefined} className="object-cover" />
-                <AvatarFallback className="bg-muted text-sm font-medium">
-                  {(actor.displayName || actor.username || '?').charAt(0).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-            ))}
-            {group.actors.length > 3 && (
-              <div className="absolute left-12 top-1 h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-semibold border-2 border-background z-[4]">
-                +{group.actors.length - 3}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div
-            className="relative cursor-pointer"
-            onClick={(event) => handleActorClick(event, firstActor)}
-          >
-            <Avatar className="h-12 w-12 ring-1 ring-border/70">
-              <AvatarImage src={firstActor?.avatar || undefined} className="object-cover" />
-              <AvatarFallback className="bg-muted text-sm font-medium">
-                {(firstActor?.displayName || firstActor?.username || '?')
-                  .charAt(0)
-                  .toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            <div className="absolute -bottom-1 -right-1">
-              <NotificationIcon type={group.type} />
-            </div>
-          </div>
-        )}
+    >
+      <div className="relative shrink-0">
+        <Avatar className="h-12 w-12 ring-1 ring-border/70">
+          <AvatarImage src={firstActor?.avatar || undefined} className="object-cover" />
+          <AvatarFallback className="bg-muted text-sm font-semibold">
+            {(actorName || '?').charAt(0).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+        <span className="absolute -bottom-1 -right-1">
+          <NotificationIcon type={group.type} />
+        </span>
       </div>
 
-      {/* Matn */}
-      <div className="flex-1 min-w-0 pt-0.5">
-        <p className="text-sm leading-snug">
-          <span
-            className="inline-flex max-w-full items-center gap-1 align-bottom font-semibold text-foreground hover:underline"
-            onClick={(event) => handleActorClick(event, firstActor)}
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+          <button
+            type="button"
+            className="inline-flex min-w-0 items-center gap-1 font-semibold text-foreground hover:underline"
+            onClick={handleActorClick}
           >
-            <span className="truncate">{actorName}</span>
+            <span className="max-w-[220px] truncate text-sm">{actorName}</span>
             {firstActor?.isVerified && <VerifiedBadge size="xs" />}
+          </button>
+          <span className="text-sm leading-snug text-muted-foreground">
+            {othersText} {notificationActionText(firstNotification)}
           </span>
-          <span className="text-muted-foreground">
-            {othersText} {actionText}
-          </span>
-        </p>
-        <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
+        </div>
+
+        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
           <span>{formatTime(group.latestAt)}</span>
-          {repeatCount > 1 && group.actors.length <= 1 && (
-            <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium">
-              {repeatCount}x
+          {contextLabel && (
+            <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground/75">
+              {contextLabel}
             </span>
           )}
-          {hasUnread && <span className="h-1.5 w-1.5 rounded-full bg-foreground" />}
-        </p>
+          {group.notifications.length > 1 && (
+            <span className="rounded-full bg-muted px-2 py-0.5 font-medium">
+              {group.notifications.length} ta
+            </span>
+          )}
+          {hasUnread && (
+            <span className="inline-flex items-center gap-1 font-semibold text-foreground">
+              <span className="h-1.5 w-1.5 rounded-full bg-foreground" />
+              Yangi
+            </span>
+          )}
+        </div>
+
+        {preview && (
+          <div
+            className={cn(
+              'mt-2.5 flex max-w-2xl items-start gap-2 rounded-xl border px-3 py-2 text-xs leading-relaxed',
+              hasUnread ? 'border-border bg-muted/45' : 'border-border/60 bg-muted/25',
+            )}
+          >
+            {group.type === 'mention' || group.type === 'comment_mention' ? (
+              <AtSign className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-600" />
+            ) : group.type === 'reply' ? (
+              <Reply className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-600" />
+            ) : (
+              <MessageCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            )}
+            <span className="line-clamp-2 text-foreground/80">“{preview}”</span>
+          </div>
+        )}
 
         {group.type === 'collaboration_invite' && collaborationId && (
           <div className="mt-3 flex flex-wrap gap-2">
@@ -560,7 +526,7 @@ function GroupedNotificationItem({
               ) : (
                 <Check className="mr-1.5 h-3.5 w-3.5" />
               )}
-              {collaborationBusy === 'accept' ? 'Qabul qilinmoqda...' : 'Qabul qilish'}
+              Qabul qilish
             </Button>
             <Button
               type="button"
@@ -575,87 +541,66 @@ function GroupedNotificationItem({
               ) : (
                 <X className="mr-1.5 h-3.5 w-3.5" />
               )}
-              {collaborationBusy === 'decline' ? 'Rad etilmoqda...' : 'Rad etish'}
+              Rad etish
             </Button>
-            {group.postId && (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="h-8 rounded-full px-3"
-                onClick={handlePostClick}
-              >
-                Postni ko‘rish
+            {target && (
+              <Button type="button" size="sm" variant="ghost" className="h-8 rounded-full px-3" onClick={handlePostClick}>
+                Preview
               </Button>
             )}
           </div>
         )}
       </div>
 
-      {/* Post rasmi */}
-      {group.postThumbnail && (
-        <PostThumbnail url={group.postThumbnail} onClick={handlePostClick} />
-      )}
-
-      {!group.postThumbnail &&
-        group.postId &&
-        (group.type === 'like' || group.type === 'comment' || group.type === 'mention') && (
+      <div className="flex items-start gap-1">
+        {group.postThumbnail ? (
+          <PostThumbnail url={group.postThumbnail} onClick={handlePostClick} />
+        ) : target && group.type !== 'follow' ? (
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Postni ochish"
-            className="flex-shrink-0 h-10 w-10 rounded-full"
+            className="mt-1 h-9 w-9 rounded-full"
             onClick={handlePostClick}
+            aria-label="Ochish"
           >
-            <ChevronRight className="h-5 w-5 text-muted-foreground" />
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
           </Button>
-        )}
+        ) : null}
 
-      {group.type === 'follow' && firstActor && (
-        <Button
-          variant="secondary"
-          size="sm"
-          className="flex-shrink-0 rounded-full px-4"
-          onClick={(event) => handleActorClick(event, firstActor)}
-        >
-          Profil
-        </Button>
-      )}
-
-      {/* Qo'shimcha amallar */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Boshqa amallar"
-            className="flex-shrink-0 h-8 w-8 opacity-60 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 transition-opacity"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          {hasUnread && (
-            <DropdownMenuItem
-              onClick={(event) => {
-                event.stopPropagation();
-                markGroupRead();
-              }}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-full opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+              onClick={(event) => event.stopPropagation()}
+              aria-label="Boshqa amallar"
             >
-              <Check className="h-4 w-4 mr-2" />
-              O‘qilgan deb belgilash
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            {hasUnread && (
+              <DropdownMenuItem
+                onClick={(event) => {
+                  event.stopPropagation();
+                  markGroupRead();
+                }}
+              >
+                <CheckCheck className="mr-2 h-4 w-4" />
+                O‘qilgan deb belgilash
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem
+              onClick={(event) => void handleDelete(event)}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              O‘chirish
             </DropdownMenuItem>
-          )}
-          <DropdownMenuItem
-            onClick={(event) => void handleDelete(event)}
-            className="text-destructive focus:text-destructive"
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            O‘chirish
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </motion.div>
   );
 }
@@ -670,29 +615,30 @@ function NotificationGroup({
 }: {
   title: string;
   groups: GroupedNotification[];
-  onMarkAsRead: (id: string) => void;
+  onMarkAsRead: (id: string) => void | Promise<void>;
   onDelete: (id: string) => Promise<void> | void;
   onRespondCollaboration: (collaborationId: string, accept: boolean) => Promise<void>;
   startIndex: number;
 }) {
-  if (groups.length === 0) return null;
+  if (!groups.length) return null;
 
   return (
-    <section aria-label={title}>
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-        <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.08em] px-4 py-2.5">
+    <section aria-label={title} className="mb-5">
+      <div className="mb-2 flex items-center justify-between px-1">
+        <h2 className="text-[11px] font-bold uppercase tracking-[0.09em] text-muted-foreground">
           {title}
-        </h3>
+        </h2>
+        <span className="text-[11px] tabular-nums text-muted-foreground">{groups.length}</span>
       </div>
-      <div className="divide-y divide-border/50">
-        {groups.map((group, i) => (
+      <div className="space-y-2">
+        {groups.map((group, index) => (
           <GroupedNotificationItem
             key={group.id}
             group={group}
             onMarkAsRead={onMarkAsRead}
             onDelete={onDelete}
             onRespondCollaboration={onRespondCollaboration}
-            index={startIndex + i}
+            index={startIndex + index}
           />
         ))}
       </div>
@@ -702,13 +648,16 @@ function NotificationGroup({
 
 function NotificationSkeleton() {
   return (
-    <div className="flex items-start gap-3 p-4">
-      <Skeleton className="h-12 w-12 rounded-full" />
-      <div className="flex-1 space-y-2">
-        <Skeleton className="h-4 w-3/4" />
-        <Skeleton className="h-3 w-1/4" />
+    <div className="rounded-[20px] border border-border/60 bg-card p-4">
+      <div className="flex gap-3">
+        <Skeleton className="h-12 w-12 rounded-full" />
+        <div className="flex-1 space-y-2 pt-1">
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-3 w-1/3" />
+          <Skeleton className="h-10 w-2/3 rounded-xl" />
+        </div>
+        <Skeleton className="h-14 w-14 rounded-2xl" />
       </div>
-      <Skeleton className="h-14 w-14 rounded-xl" />
     </div>
   );
 }
@@ -718,54 +667,39 @@ function PushNotificationBanner() {
   const navigate = useNavigate();
   const [dismissed, setDismissed] = useState(false);
 
-  if (!supported || permission === 'granted' || permission === 'denied' || dismissed) {
-    return null;
-  }
+  if (!supported || permission === 'granted' || permission === 'denied' || dismissed) return null;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: -8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="mx-4 mt-4 p-4 rounded-2xl border border-border bg-card/60"
-    >
+    <div className="mb-4 rounded-2xl border border-border bg-card p-4 shadow-sm">
       <div className="flex items-start gap-3">
-        <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted">
           <Bell className="h-5 w-5 text-muted-foreground" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h4 className="font-semibold text-sm">Push bildirishnomalarni yoqing</h4>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Kimdir postingizni yoqtirsa, izoh qoldirsa yoki obuna bo‘lsa — darhol xabar beramiz.
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-semibold">Muhim faollikni o‘tkazib yubormang</h3>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Eslatish, izoh, hammualliflik va obuna voqealarini brauzer yopiq bo‘lsa ham oling.
           </p>
-          <div className="flex flex-wrap gap-2 mt-3">
-            <Button size="sm" className="rounded-full px-4" onClick={requestPermission}>
-              Yoqish
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button size="sm" className="h-8 rounded-full px-4" onClick={requestPermission}>
+              Push’ni yoqish
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="rounded-full px-4"
-              onClick={() => navigate('/settings')}
-            >
+            <Button size="sm" variant="ghost" className="h-8 rounded-full px-3" onClick={() => navigate('/settings?tab=notifications')}>
               Sozlamalar
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="rounded-full px-4 text-muted-foreground"
-              onClick={() => setDismissed(true)}
-            >
+            <Button size="sm" variant="ghost" className="h-8 rounded-full px-3 text-muted-foreground" onClick={() => setDismissed(true)}>
               Keyinroq
             </Button>
           </div>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
 export default function NotificationsPage() {
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
   const {
     notifications,
     unreadCount,
@@ -780,45 +714,47 @@ export default function NotificationsPage() {
     respondToCollaboration,
     refetch,
   } = useNotifications();
+
   const [filter, setFilter] = useState<NotificationFilter>('all');
   const [markingAll, setMarkingAll] = useState(false);
-  const navigate = useNavigate();
-
-  const handleRefresh = useCallback(async () => {
-    await refetch();
-  }, [refetch]);
-
-  const handleMarkAllAsRead = useCallback(async () => {
-    if (markingAll) return;
-    setMarkingAll(true);
-    try {
-      await markAllAsRead();
-      toast.success('Hammasi o‘qilgan deb belgilandi');
-    } catch (err) {
-      console.error('Hammasini o‘qilgan deb belgilash xatosi:', err);
-      toast.error('Bildirishnomalarni belgilab bo‘lmadi');
-    } finally {
-      setMarkingAll(false);
-    }
-  }, [markAllAsRead, markingAll]);
 
   const filteredNotifications = useMemo(() => {
     if (filter === 'all') return notifications;
+    if (filter === 'mentions') return notifications.filter((item) => MENTION_TYPES.includes(item.type));
+    if (filter === 'comments') return notifications.filter((item) => COMMENT_TYPES.includes(item.type));
+    if (filter === 'collaborations') return notifications.filter((item) => COLLABORATION_TYPES.includes(item.type));
+    if (filter === 'likes') return notifications.filter((item) => item.type === 'like');
+    if (filter === 'follows') return notifications.filter((item) => item.type === 'follow');
+    return notifications;
+  }, [filter, notifications]);
 
-    const typeMap: Record<NotificationFilter, Notification['type'][]> = {
-      all: [],
-      likes: ['like'],
-      comments: ['comment'],
-      follows: ['follow'],
-      mentions: ['mention'],
-      collaborations: COLLABORATION_TYPES,
-    };
+  const filterCounts = useMemo(
+    () => ({
+      all: notifications.length,
+      mentions: notifications.filter((item) => MENTION_TYPES.includes(item.type)).length,
+      comments: notifications.filter((item) => COMMENT_TYPES.includes(item.type)).length,
+      collaborations: notifications.filter((item) => COLLABORATION_TYPES.includes(item.type)).length,
+      likes: notifications.filter((item) => item.type === 'like').length,
+      follows: notifications.filter((item) => item.type === 'follow').length,
+    }),
+    [notifications],
+  );
 
-    return notifications.filter((n) => typeMap[filter].includes(n.type));
-  }, [notifications, filter]);
+  const actionableUnread = useMemo(
+    () => notifications.filter((item) => !item.is_read && notificationNeedsExplicitRead(item)).length,
+    [notifications],
+  );
+  const mentionUnread = useMemo(
+    () => notifications.filter((item) => !item.is_read && MENTION_TYPES.includes(item.type)).length,
+    [notifications],
+  );
+  const collaborationInvites = useMemo(
+    () => notifications.filter((item) => !item.is_read && item.type === 'collaboration_invite').length,
+    [notifications],
+  );
 
   const groupedNotifications = useMemo((): TimeGroupedNotifications => {
-    const timeGroups: Record<string, Notification[]> = {
+    const buckets: Record<keyof TimeGroupedNotifications, Notification[]> = {
       today: [],
       yesterday: [],
       thisWeek: [],
@@ -828,262 +764,256 @@ export default function NotificationsPage() {
 
     filteredNotifications.forEach((notification) => {
       const date = new Date(notification.created_at);
-      if (Number.isNaN(date.getTime())) {
-        timeGroups.older.push(notification);
-        return;
-      }
-
-      if (isToday(date)) {
-        timeGroups.today.push(notification);
-      } else if (isYesterday(date)) {
-        timeGroups.yesterday.push(notification);
-      } else if (isThisWeek(date, { weekStartsOn: 1 })) {
-        timeGroups.thisWeek.push(notification);
-      } else if (isThisMonth(date)) {
-        timeGroups.thisMonth.push(notification);
-      } else {
-        timeGroups.older.push(notification);
-      }
+      if (Number.isNaN(date.getTime())) return buckets.older.push(notification);
+      if (isToday(date)) buckets.today.push(notification);
+      else if (isYesterday(date)) buckets.yesterday.push(notification);
+      else if (isThisWeek(date, { weekStartsOn: 1 })) buckets.thisWeek.push(notification);
+      else if (isThisMonth(date)) buckets.thisMonth.push(notification);
+      else buckets.older.push(notification);
     });
 
     return {
-      today: consolidateNotifications(timeGroups.today),
-      yesterday: consolidateNotifications(timeGroups.yesterday),
-      thisWeek: consolidateNotifications(timeGroups.thisWeek),
-      thisMonth: consolidateNotifications(timeGroups.thisMonth),
-      older: consolidateNotifications(timeGroups.older),
+      today: consolidateNotifications(buckets.today),
+      yesterday: consolidateNotifications(buckets.yesterday),
+      thisWeek: consolidateNotifications(buckets.thisWeek),
+      thisMonth: consolidateNotifications(buckets.thisMonth),
+      older: consolidateNotifications(buckets.older),
     };
   }, [filteredNotifications]);
 
-  const filterCounts = useMemo(
-    () => ({
-      all: notifications.length,
-      likes: notifications.filter((n) => n.type === 'like').length,
-      comments: notifications.filter((n) => n.type === 'comment').length,
-      follows: notifications.filter((n) => n.type === 'follow').length,
-      mentions: notifications.filter((n) => n.type === 'mention').length,
-      collaborations: notifications.filter((n) => COLLABORATION_TYPES.includes(n.type)).length,
-    }),
-    [notifications],
-  );
+  const handleMarkAll = useCallback(async () => {
+    if (markingAll) return;
+    setMarkingAll(true);
+    try {
+      await markAllAsRead();
+      toast.success('Barcha bildirishnomalar o‘qildi');
+    } catch {
+      toast.error('Bildirishnomalarni belgilab bo‘lmadi');
+    } finally {
+      setMarkingAll(false);
+    }
+  }, [markAllAsRead, markingAll]);
 
-  let currentIndex = 0;
-  const getStartIndex = (groups: GroupedNotification[]) => {
-    const start = currentIndex;
-    currentIndex += groups.length;
+  let itemIndex = 0;
+  const takeIndex = (groups: GroupedNotification[]) => {
+    const start = itemIndex;
+    itemIndex += groups.length;
     return start;
   };
 
-  const pageContent = (
-    <div className="flex flex-col h-full bg-background pb-20 md:pb-4">
-      {/* Sarlavha */}
-      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80 border-b">
-        <div className="flex items-center justify-between px-4 py-4">
-          <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold tracking-tight">Bildirishnomalar</h1>
-            {unreadCount > 0 && (
-              <Badge variant="default" className="rounded-full px-2.5 py-0.5 text-xs">
-                {unreadCount > 99 ? '99+' : unreadCount}
-              </Badge>
-            )}
-          </div>
-          <div className="flex items-center gap-1">
-            {unreadCount > 0 && (
+  const content = (
+    <div className="flex h-full min-h-0 flex-col bg-muted/10">
+      <header className="sticky top-0 z-20 border-b border-border/70 bg-background/92 backdrop-blur-xl">
+        <div className="mx-auto w-full max-w-6xl px-4 pb-3 pt-4 md:px-6 md:pt-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-xl font-bold tracking-tight md:text-2xl">Bildirishnomalar</h1>
+                {unreadCount > 0 && (
+                  <Badge className="rounded-full px-2.5 py-0.5 text-xs">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </Badge>
+                )}
+              </div>
+              <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
+                Sizga tegishli faollik, eslatish va hammualliflik voqealari.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-1">
+              {unreadCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full"
+                  disabled={markingAll}
+                  onClick={() => void handleMarkAll()}
+                >
+                  {markingAll ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCheck className="mr-1.5 h-4 w-4" />}
+                  <span className="hidden sm:inline">Hammasini o‘qish</span>
+                </Button>
+              )}
               <Button
                 variant="ghost"
-                size="sm"
-                disabled={markingAll}
-                onClick={() => void handleMarkAllAsRead()}
-                className="rounded-full text-foreground hover:bg-muted hover:text-foreground"
+                size="icon"
+                className="rounded-full"
+                onClick={() => navigate('/settings?tab=notifications')}
+                aria-label="Bildirishnoma sozlamalari"
               >
-                {markingAll ? (
-                  <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                ) : (
-                  <Check className="h-4 w-4 mr-1.5" />
-                )}
-                <span className="hidden sm:inline">Hammasini o‘qildi</span>
-                <span className="sm:hidden">O‘qildi</span>
+                <Settings className="h-5 w-5" />
               </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Bildirishnoma sozlamalari"
-              className="rounded-full"
-              onClick={() => navigate('/settings')}
-            >
-              <Settings className="h-5 w-5" />
-            </Button>
+            </div>
           </div>
-        </div>
 
-        {/* Filtrlar */}
-        <div className="px-4 pb-3">
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-            {(
-              ['all', 'likes', 'comments', 'follows', 'mentions', 'collaborations'] as NotificationFilter[]
-            ).map((f) => {
-              const isActive = filter === f;
-              const count = filterCounts[f];
-
+          <div className="mt-4 flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            {FILTERS.map(({ id, label }) => {
+              const active = filter === id;
+              const count = filterCounts[id];
               return (
                 <button
-                  key={f}
+                  key={id}
                   type="button"
-                  aria-pressed={isActive}
-                  onClick={() => setFilter(f)}
+                  aria-pressed={active}
+                  onClick={() => setFilter(id)}
                   className={cn(
-                    'px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors',
-                    isActive
-                      ? 'bg-background text-foreground shadow-sm ring-1 ring-border'
-                      : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                    'shrink-0 rounded-full px-3.5 py-2 text-sm font-medium transition',
+                    active
+                      ? 'bg-foreground text-background shadow-sm'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground',
                   )}
                 >
-                  {FILTER_LABELS[f]}
-                  {count > 0 && (
-                    <span className={cn('ml-1.5 text-xs', isActive ? 'opacity-80' : 'opacity-60')}>
-                      {count}
-                    </span>
-                  )}
+                  {label}
+                  {count > 0 && <span className="ml-1.5 text-xs opacity-70">{count}</span>}
                 </button>
               );
             })}
           </div>
         </div>
-      </div>
+      </header>
 
-      <PushNotificationBanner />
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="mx-auto grid w-full max-w-6xl gap-5 px-4 py-5 md:px-6 xl:grid-cols-[minmax(0,1fr)_280px]">
+          <main className="min-w-0">
+            <PushNotificationBanner />
 
-      {/* Ro'yxat */}
-      <ScrollArea className="flex-1">
-        {loading ? (
-          <div className="divide-y divide-border/50">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <NotificationSkeleton key={i} />
-            ))}
-          </div>
-        ) : error && notifications.length === 0 ? (
-          <div className="p-8 text-center">
-            <div className="h-16 w-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
-              <AlertCircle className="h-8 w-8 text-destructive" />
-            </div>
-            <h3 className="font-semibold text-base">{error}</h3>
-            <p className="text-muted-foreground text-sm mt-2 max-w-xs mx-auto">
-              Internet aloqangizni tekshirib, qaytadan urinib ko‘ring.
-            </p>
-            <Button className="mt-4 rounded-full" onClick={() => void refetch()}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Qayta urinish
-            </Button>
-          </div>
-        ) : filteredNotifications.length === 0 ? (
-          <div className="p-8 text-center">
-            <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-              <BellOff className="h-10 w-10 text-muted-foreground/50" />
-            </div>
-            <h3 className="font-semibold text-lg">Bildirishnomalar yo‘q</h3>
-            <p className="text-muted-foreground text-sm mt-2 max-w-xs mx-auto">
-              {FILTER_EMPTY_TEXT[filter]}
-            </p>
-            {filter !== 'all' && (
-              <Button
-                variant="ghost"
-                className="mt-4 rounded-full"
-                onClick={() => setFilter('all')}
-              >
-                Hammasini ko‘rsatish
-              </Button>
-            )}
-          </div>
-        ) : (
-          <div className="pb-24">
-            {error && (
-              <div className="mx-4 mt-3 flex items-center gap-2 rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-                <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                <span className="flex-1">{error}</span>
-                <button
-                  type="button"
-                  className="font-semibold underline"
-                  onClick={() => void refetch()}
-                >
-                  Yangilash
-                </button>
+            {loading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 6 }).map((_, index) => <NotificationSkeleton key={index} />)}
               </div>
-            )}
-
-            <NotificationGroup
-              title="Bugun"
-              groups={groupedNotifications.today}
-              onMarkAsRead={markAsRead}
-              onDelete={deleteNotification}
-              onRespondCollaboration={respondToCollaboration}
-              startIndex={getStartIndex(groupedNotifications.today)}
-            />
-            <NotificationGroup
-              title="Kecha"
-              groups={groupedNotifications.yesterday}
-              onMarkAsRead={markAsRead}
-              onDelete={deleteNotification}
-              onRespondCollaboration={respondToCollaboration}
-              startIndex={getStartIndex(groupedNotifications.yesterday)}
-            />
-            <NotificationGroup
-              title="Shu hafta"
-              groups={groupedNotifications.thisWeek}
-              onMarkAsRead={markAsRead}
-              onDelete={deleteNotification}
-              onRespondCollaboration={respondToCollaboration}
-              startIndex={getStartIndex(groupedNotifications.thisWeek)}
-            />
-            <NotificationGroup
-              title="Shu oy"
-              groups={groupedNotifications.thisMonth}
-              onMarkAsRead={markAsRead}
-              onDelete={deleteNotification}
-              onRespondCollaboration={respondToCollaboration}
-              startIndex={getStartIndex(groupedNotifications.thisMonth)}
-            />
-            <NotificationGroup
-              title="Avvalroq"
-              groups={groupedNotifications.older}
-              onMarkAsRead={markAsRead}
-              onDelete={deleteNotification}
-              onRespondCollaboration={respondToCollaboration}
-              startIndex={getStartIndex(groupedNotifications.older)}
-            />
-
-            {hasMore && (
-              <div className="flex justify-center py-6">
-                <Button
-                  variant="outline"
-                  className="rounded-full px-6"
-                  disabled={isLoadingMore}
-                  onClick={() => void loadMore()}
-                >
-                  {isLoadingMore ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Yuklanmoqda...
-                    </>
-                  ) : (
-                    'Ko‘proq yuklash'
-                  )}
+            ) : error && notifications.length === 0 ? (
+              <div className="rounded-3xl border border-border bg-card p-10 text-center shadow-sm">
+                <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/10">
+                  <AlertCircle className="h-6 w-6 text-destructive" />
+                </span>
+                <h2 className="mt-4 font-semibold">{error}</h2>
+                <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
+                  Internet aloqasini tekshirib, yana urinib ko‘ring.
+                </p>
+                <Button className="mt-4 rounded-full" onClick={() => void refetch()}>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Qayta urinish
                 </Button>
               </div>
+            ) : filteredNotifications.length === 0 ? (
+              <div className="rounded-3xl border border-border bg-card p-10 text-center shadow-sm">
+                <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
+                  <Inbox className="h-7 w-7 text-muted-foreground" />
+                </span>
+                <h2 className="mt-4 text-lg font-semibold">Bu bo‘lim hozircha toza</h2>
+                <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
+                  {FILTER_EMPTY_TEXT[filter]}
+                </p>
+                {filter !== 'all' && (
+                  <Button variant="ghost" className="mt-4 rounded-full" onClick={() => setFilter('all')}>
+                    Barcha faollik
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <>
+                {error && (
+                  <div className="mb-4 flex items-center gap-2 rounded-2xl border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <span className="flex-1">{error}</span>
+                    <button className="font-semibold underline" onClick={() => void refetch()}>Yangilash</button>
+                  </div>
+                )}
+
+                <NotificationGroup title="Bugun" groups={groupedNotifications.today} onMarkAsRead={markAsRead} onDelete={deleteNotification} onRespondCollaboration={respondToCollaboration} startIndex={takeIndex(groupedNotifications.today)} />
+                <NotificationGroup title="Kecha" groups={groupedNotifications.yesterday} onMarkAsRead={markAsRead} onDelete={deleteNotification} onRespondCollaboration={respondToCollaboration} startIndex={takeIndex(groupedNotifications.yesterday)} />
+                <NotificationGroup title="Shu hafta" groups={groupedNotifications.thisWeek} onMarkAsRead={markAsRead} onDelete={deleteNotification} onRespondCollaboration={respondToCollaboration} startIndex={takeIndex(groupedNotifications.thisWeek)} />
+                <NotificationGroup title="Shu oy" groups={groupedNotifications.thisMonth} onMarkAsRead={markAsRead} onDelete={deleteNotification} onRespondCollaboration={respondToCollaboration} startIndex={takeIndex(groupedNotifications.thisMonth)} />
+                <NotificationGroup title="Avvalroq" groups={groupedNotifications.older} onMarkAsRead={markAsRead} onDelete={deleteNotification} onRespondCollaboration={respondToCollaboration} startIndex={takeIndex(groupedNotifications.older)} />
+
+                {hasMore && (
+                  <div className="flex justify-center pb-8 pt-2">
+                    <Button variant="outline" className="rounded-full px-6" disabled={isLoadingMore} onClick={() => void loadMore()}>
+                      {isLoadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      {isLoadingMore ? 'Yuklanmoqda...' : 'Ko‘proq yuklash'}
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
-          </div>
-        )}
+          </main>
+
+          <aside className="hidden xl:block">
+            <div className="sticky top-5 space-y-3">
+              <section className="rounded-3xl border border-border bg-card p-4 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-muted-foreground" />
+                  <h2 className="text-sm font-semibold">Faollik markazi</h2>
+                </div>
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  <div className="rounded-2xl bg-muted/55 p-3 text-center">
+                    <p className="text-lg font-bold tabular-nums">{unreadCount}</p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">Yangi</p>
+                  </div>
+                  <div className="rounded-2xl bg-muted/55 p-3 text-center">
+                    <p className="text-lg font-bold tabular-nums">{mentionUnread}</p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">Mention</p>
+                  </div>
+                  <div className="rounded-2xl bg-muted/55 p-3 text-center">
+                    <p className="text-lg font-bold tabular-nums">{collaborationInvites}</p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">Taklif</p>
+                  </div>
+                </div>
+                {actionableUnread > 0 && (
+                  <div className="mt-3 flex items-start gap-2 rounded-xl border border-border bg-background px-3 py-2.5">
+                    <Bell className="mt-0.5 h-4 w-4 text-foreground" />
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      <strong className="text-foreground">{actionableUnread} ta</strong> bildirishnoma sizning harakatingizni kutmoqda.
+                    </p>
+                  </div>
+                )}
+              </section>
+
+              <section className="rounded-3xl border border-border bg-card p-4 shadow-sm">
+                <h2 className="text-sm font-semibold">Qachon o‘qiladi?</h2>
+                <div className="mt-3 space-y-3">
+                  <div className="flex gap-3">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-muted">
+                      <Eye className="h-4 w-4 text-muted-foreground" />
+                    </span>
+                    <div>
+                      <p className="text-xs font-semibold">Ko‘rilganda avtomatik</p>
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                        Like, follow va status eventlari 1.2 soniya ko‘rinsa o‘qiladi.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-muted">
+                      <Clock3 className="h-4 w-4 text-muted-foreground" />
+                    </span>
+                    <div>
+                      <p className="text-xs font-semibold">Ochilmaguncha yangi</p>
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                        Mention, comment, reply va collab taklifi bosilmaguncha unread qoladi.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <Button
+                variant="outline"
+                className="h-10 w-full rounded-2xl"
+                onClick={() => navigate('/settings?tab=notifications')}
+              >
+                <Settings className="mr-2 h-4 w-4" />
+                Bildirishnoma sozlamalari
+              </Button>
+            </div>
+          </aside>
+        </div>
       </ScrollArea>
     </div>
   );
 
   if (isMobile) {
-    return (
-      <PullToRefresh onRefresh={handleRefresh} className="h-full">
-        {pageContent}
-      </PullToRefresh>
-    );
+    return <PullToRefresh onRefresh={refetch} className="h-full">{content}</PullToRefresh>;
   }
 
-  return pageContent;
+  return content;
 }

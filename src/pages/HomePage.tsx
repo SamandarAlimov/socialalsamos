@@ -97,7 +97,7 @@ export default function HomePage() {
     const postId = searchParams.get('post');
     if (postId) {
       async function fetchPost() {
-        const { data } = await supabase
+        let { data, error } = await supabase
           .from('posts')
           .select(`
             id, content, formatted_content, media_urls, media_type, likes_count, comments_count, is_pinned, created_at, user_id,
@@ -106,7 +106,25 @@ export default function HomePage() {
           .eq('id', postId)
           .single();
 
-        if (data) {
+        if (
+          error &&
+          (error.code === '42703' ||
+            error.code === 'PGRST204' ||
+            String(error.message ?? '').toLowerCase().includes('formatted_content'))
+        ) {
+          const fallback = await supabase
+            .from('posts')
+            .select(`
+              id, content, media_urls, media_type, likes_count, comments_count, is_pinned, created_at, user_id,
+              profile:profiles!posts_user_id_fkey (id, username, display_name, avatar_url, is_verified)
+            `)
+            .eq('id', postId)
+            .single();
+          data = fallback.data ? { ...fallback.data, formatted_content: null } : null;
+          error = fallback.error;
+        }
+
+        if (data && !error) {
           setSelectedPostForModal(data as unknown as Post);
         }
       }
@@ -205,6 +223,7 @@ export default function HomePage() {
           open={!!selectedPostForModal}
           onOpenChange={(open) => !open && closePostModal()}
           onLike={() => likePost(selectedPostForModal.id)}
+          focusCommentId={searchParams.get('comment')}
         />
       )}
 

@@ -19,12 +19,23 @@ export interface NotificationPost {
   media_urls: string[] | null;
 }
 
+export interface NotificationComment {
+  id: string;
+  post_id: string;
+  user_id: string;
+  parent_id: string | null;
+  content: string;
+}
+
 export type NotificationType =
   | 'message'
   | 'like'
   | 'comment'
   | 'follow'
   | 'mention'
+  | 'comment_mention'
+  | 'reply'
+  | 'comment_like'
   | 'collaboration_invite'
   | 'collaboration_accepted'
   | 'collaboration_declined'
@@ -43,6 +54,7 @@ export interface Notification {
   created_at: string;
   actor?: NotificationActor;
   post?: NotificationPost;
+  comment?: NotificationComment;
 }
 
 type RawNotificationRow = {
@@ -61,6 +73,7 @@ function resolveActorId(data: Record<string, unknown> | null | undefined): strin
   const candidate =
     data.liker_id ||
     data.commenter_id ||
+    data.replier_id ||
     data.follower_id ||
     data.mentioner_id ||
     data.actor_id ||
@@ -83,17 +96,23 @@ function resolvePostId(data: Record<string, unknown> | null | undefined): string
 async function enrichNotifications(rows: RawNotificationRow[]): Promise<Notification[]> {
   const actorIds = new Set<string>();
   const postIds = new Set<string>();
+  const commentIds = new Set<string>();
 
   const normalized = rows.map((row) => {
     const data = (row.data ?? {}) as Record<string, unknown>;
     const actorId = resolveActorId(data);
     const postId = resolvePostId(data);
+    const commentId =
+      typeof data.comment_id === 'string' && data.comment_id.length > 0
+        ? data.comment_id
+        : undefined;
     if (actorId) actorIds.add(actorId);
     if (postId) postIds.add(postId);
-    return { row, data, actorId, postId };
+    if (commentId) commentIds.add(commentId);
+    return { row, data, actorId, postId, commentId };
   });
 
-  const [profilesResult, postsResult] = await Promise.all([
+  const [profilesResult, postsResult, commentsResult] = await Promise.all([
     actorIds.size > 0
       ? supabase
           .from('profiles')
@@ -103,6 +122,12 @@ async function enrichNotifications(rows: RawNotificationRow[]): Promise<Notifica
     postIds.size > 0
       ? supabase.from('posts').select('id, media_urls').in('id', Array.from(postIds))
       : Promise.resolve({ data: [], error: null } as const),
+    commentIds.size > 0
+      ? supabase
+          .from('comments')
+          .select('id, post_id, user_id, parent_id, content')
+          .in('id', Array.from(commentIds))
+      : Promise.resolve({ data: [], error: null } as const),
   ]);
 
   if (profilesResult.error) {
@@ -111,6 +136,9 @@ async function enrichNotifications(rows: RawNotificationRow[]): Promise<Notifica
   if (postsResult.error) {
     console.warn('Bildirishnoma postlarini yuklab bo‘lmadi:', postsResult.error);
   }
+  if (commentsResult.error) {
+    console.warn('Bildirishnoma izohlarini yuklab bo‘lmadi:', commentsResult.error);
+  }
 
   const profileMap = new Map<string, NotificationActor>(
     ((profilesResult.data as NotificationActor[] | null) || []).map((p) => [p.id, p]),
@@ -118,13 +146,20 @@ async function enrichNotifications(rows: RawNotificationRow[]): Promise<Notifica
   const postMap = new Map<string, NotificationPost>(
     ((postsResult.data as NotificationPost[] | null) || []).map((p) => [p.id, p]),
   );
+  const commentMap = new Map<string, NotificationComment>(
+    ((commentsResult.data as NotificationComment[] | null) || []).map((comment) => [
+      comment.id,
+      comment,
+    ]),
+  );
 
-  return normalized.map(({ row, data, actorId, postId }) => ({
+  return normalized.map(({ row, data, actorId, postId, commentId }) => ({
     ...row,
     data,
     type: row.type as NotificationType,
     actor: actorId ? profileMap.get(actorId) : undefined,
     post: postId ? postMap.get(postId) : undefined,
+    comment: commentId ? commentMap.get(commentId) : undefined,
   }));
 }
 

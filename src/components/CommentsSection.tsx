@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useComments, Comment } from '@/hooks/useComments';
 import { useAutocompleteInput } from '@/hooks/useAutocompleteInput';
@@ -24,15 +24,17 @@ import { CommentMediaUpload } from '@/components/CommentMediaUpload';
 
 interface CommentsSectionProps {
   postId: string;
+  focusCommentId?: string | null;
 }
 
-export function CommentsSection({ postId }: CommentsSectionProps) {
+export function CommentsSection({ postId, focusCommentId = null }: CommentsSectionProps) {
   const { user } = useAuth();
   const { comments, isLoading, addComment, likeComment, deleteComment } = useComments(postId);
   const [newComment, setNewComment] = useState('');
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyContent, setReplyContent] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null);
   const [selectedMedia, setSelectedMedia] = useState<{ url: string; type: 'image' | 'video' | 'gif' } | null>(null);
   const commentInputRef = useRef<HTMLInputElement>(null);
   const replyInputRef = useRef<HTMLInputElement>(null);
@@ -55,6 +57,22 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
   const handleGifSelect = (gifUrl: string) => {
     setSelectedMedia({ url: gifUrl, type: 'gif' });
   };
+
+  useEffect(() => {
+    if (!focusCommentId || isLoading || comments.length === 0) return;
+
+    const timer = window.setTimeout(() => {
+      const selector = '[data-comment-id="' + CSS.escape(focusCommentId) + '"]';
+      const element = document.querySelector<HTMLElement>(selector);
+      if (!element) return;
+
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedCommentId(focusCommentId);
+      window.setTimeout(() => setHighlightedCommentId(null), 2600);
+    }, 160);
+
+    return () => window.clearTimeout(timer);
+  }, [comments, focusCommentId, isLoading]);
 
   const handleAutocompleteSelect = (value: string) => {
     const newValue = insertAutocomplete(newComment, value, commentInputRef);
@@ -92,7 +110,14 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
   };
 
   const CommentItem = ({ comment, depth = 0 }: { comment: Comment; depth?: number }) => (
-    <div className={cn("group", depth > 0 && "ml-10 border-l-2 border-border pl-4")}>
+    <div
+      data-comment-id={comment.id}
+      className={cn(
+        'group rounded-xl transition-[background-color,box-shadow] duration-500',
+        depth > 0 && 'ml-10 border-l-2 border-border pl-4',
+        highlightedCommentId === comment.id && 'bg-muted/80 shadow-[0_0_0_1px_hsl(var(--border))]',
+      )}
+    >
       <div className="flex gap-3 py-3">
         <Avatar className="h-8 w-8 flex-shrink-0 ring-2 ring-border">
           <AvatarImage src={comment.profile?.avatar_url || ''} />
