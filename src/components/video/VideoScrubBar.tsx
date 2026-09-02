@@ -202,7 +202,40 @@ export function VideoScrubBar({
         aria-valuemax={Math.max(0, Math.round(duration))}
         aria-valuenow={Math.round(currentTime)}
         tabIndex={0}
+        aria-valuetext={formatMediaTime(currentTime)}
         className="group relative flex h-5 cursor-pointer touch-none items-center"
+        onKeyDown={(event) => {
+          if (duration <= 0) return;
+          let next: number | null = null;
+          switch (event.key) {
+            case 'ArrowLeft':
+            case 'ArrowDown':
+              next = Math.max(0, currentTime - 5);
+              break;
+            case 'ArrowRight':
+            case 'ArrowUp':
+              next = Math.min(duration, currentTime + 5);
+              break;
+            case 'Home':
+              next = 0;
+              break;
+            case 'End':
+              next = duration;
+              break;
+            case 'PageDown':
+              next = Math.max(0, currentTime - duration * 0.1);
+              break;
+            case 'PageUp':
+              next = Math.min(duration, currentTime + duration * 0.1);
+              break;
+            default:
+              break;
+          }
+          if (next !== null) {
+            event.preventDefault();
+            onSeek(next);
+          }
+        }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={endScrub}
