@@ -15,7 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 /** Storage bucketlari. Eski public obyektlar `media`da qoladi. */
 export const MEDIA_BUCKET = 'media';
 export const PRIVATE_MEDIA_BUCKET = 'media-private';
-const PUBLIC_BUCKETS = new Set([MEDIA_BUCKET, 'chat-media']);
+const PUBLIC_BUCKETS = new Set([MEDIA_BUCKET]);
 
 export type MediaVisibility = 'public' | 'friends' | 'private';
 

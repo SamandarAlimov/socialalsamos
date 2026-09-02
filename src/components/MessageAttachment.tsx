@@ -79,9 +79,13 @@ function formatBytes(bytes?: number): string | null {
 function parseLegacySupabaseStorageUrl(value: string): { bucket: string; key: string } | null {
   try {
     const pathname = new URL(value, window.location.origin).pathname;
-    const marker = '/storage/v1/object/public/';
+    const marker = [
+      '/storage/v1/object/public/',
+      '/storage/v1/object/sign/',
+      '/storage/v1/object/authenticated/',
+    ].find((item) => pathname.includes(item));
+    if (!marker) return null;
     const index = pathname.indexOf(marker);
-    if (index < 0) return null;
 
     const raw = pathname.slice(index + marker.length);
     const slash = raw.indexOf('/');
@@ -168,7 +172,11 @@ export function MessageAttachment({
     let cancelled = false;
 
     void resolveLegacyChatMediaUrl(actualUrl).then((signedUrl) => {
-      if (!cancelled && signedUrl) setResolvedMediaUrl(signedUrl);
+      if (!cancelled && signedUrl) {
+        setResolvedMediaUrl(signedUrl);
+        setImageFailed(false);
+        setImageLoaded(false);
+      }
     });
 
     return () => {
