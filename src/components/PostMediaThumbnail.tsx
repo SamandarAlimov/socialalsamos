@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { Image as ImageIcon, Loader2, Play } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -59,7 +59,7 @@ interface PostMediaThumbnailProps {
   url: string;
   mediaType?: string | null;
   poster?: string | null;
-  onClick?: () => void;
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   className?: string;
   mediaClassName?: string;
   ariaLabel?: string;
@@ -92,7 +92,15 @@ export function PostMediaThumbnail({
 
   return (
     <Wrapper
-      {...(onClick ? { type: 'button' as const, onClick } : {})}
+      {...(onClick
+        ? {
+            type: 'button' as const,
+            onClick: (event: MouseEvent<HTMLButtonElement>) => {
+              event.stopPropagation();
+              onClick(event);
+            },
+          }
+        : {})}
       className={cn(
         'relative flex shrink-0 items-center justify-center overflow-hidden bg-muted ring-1 ring-border/60',
         onClick &&
