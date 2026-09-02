@@ -65,7 +65,7 @@ export function detectMediaKind(file: Pick<File, 'name' | 'type'>): MediaKind {
   return 'other';
 }
 
-/** Preview ko'rsatish mumkinmi (rasm/video/audio uchun ha). */
+/** Create composer inline preview'i (documentlar feed'da PostDocumentViewer orqali preview qilinadi). */
 export function isPreviewable(kind: MediaKind): boolean {
   return kind === 'image' || kind === 'video' || kind === 'audio';
 }

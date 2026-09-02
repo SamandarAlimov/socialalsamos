@@ -1,7 +1,7 @@
-import { Download, FileArchive, FileText, MapPin } from 'lucide-react';
+import { MapPin } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { formatBytes, mediaKindLabel } from '@/lib/postComposer';
+import { detectMediaKind } from '@/lib/postComposer';
 import { usePostMedia, type PostMediaItem } from '@/hooks/usePostMedia';
 import { usePostLocation, type PostLocation } from '@/hooks/usePostLocation';
 import { usePostMusic } from '@/hooks/usePostMusic';
@@ -9,6 +9,8 @@ import { PollCard } from '@/components/PollCard';
 import { PostLocationCard } from '@/components/PostLocationCard';
 import { PostMusicCard } from '@/components/PostMusicCard';
 import { PostAudioPlayer } from '@/components/PostAudioPlayer';
+import { PostDocumentCard } from '@/components/PostDocumentViewer';
+import { fileNameFromUrl } from '@/lib/documentPreview';
 import { PostMediaCarousel } from '@/components/PostMediaCarousel';
 import { MediaStickerOverlay } from '@/components/stickers/MediaStickerOverlay';
 import type { WithEditState } from '@/lib/stickerPlacements';
@@ -34,34 +36,6 @@ interface PostExtrasProps {
   /** `[MUSIC]{...}` markeridan olingan musiqa — `post_music` bo\u2018lmasa ishlatiladi. */
   legacyMusic?: PostMusic | null;
   className?: string;
-}
-
-function DocumentCard({ item }: { item: PostMediaItem }) {
-  const Icon = item.kind === 'archive' ? FileArchive : FileText;
-
-  return (
-    <a
-      href={item.storage_url}
-      target="_blank"
-      rel="noreferrer"
-      onClick={(event) => event.stopPropagation()}
-      className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/30 p-3 transition hover:border-border"
-    >
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-        <Icon className="h-5 w-5" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">
-          {item.file_name ?? mediaKindLabel(item.kind)}
-        </span>
-        <span className="block text-xs text-muted-foreground">
-          {mediaKindLabel(item.kind)}
-          {item.file_size ? ' · ' + formatBytes(item.file_size) : ''}
-        </span>
-      </span>
-      <Download className="h-4 w-4 shrink-0 text-muted-foreground" />
-    </a>
-  );
 }
 
 function AudioCard({ item }: { item: PostMediaItem }) {
@@ -185,10 +159,44 @@ export function PostExtras({
 
   return (
     <div className={cn('space-y-3', className)}>
-      {/* Eski postlar uchun mavjud karusel */}
-      {legacy.length > 0 && (
-        <PostMediaCarousel mediaUrls={legacy} mediaType={legacyMediaType || 'image'} />
+      {/* Eski posts.media_urls ham extension bo'yicha ajratiladi:
+          document/archive endi image carouselga noto'g'ri tushmaydi. */}
+      {legacy.filter((url) => {
+        const kind = detectMediaKind({ name: fileNameFromUrl(url), type: '' });
+        return kind !== 'document' && kind !== 'archive' && kind !== 'other' && kind !== 'audio';
+      }).length > 0 && (
+        <PostMediaCarousel
+          mediaUrls={legacy.filter((url) => {
+            const kind = detectMediaKind({ name: fileNameFromUrl(url), type: '' });
+            return kind !== 'document' && kind !== 'archive' && kind !== 'other' && kind !== 'audio';
+          })}
+          mediaType={legacyMediaType || 'image'}
+        />
       )}
+
+      {legacy
+        .filter((url) => detectMediaKind({ name: fileNameFromUrl(url), type: '' }) === 'audio')
+        .map((url) => (
+          <PostAudioPlayer
+            key={url}
+            src={url}
+            title={fileNameFromUrl(url, 'Audio')}
+            subtitle="Audio"
+          />
+        ))}
+
+      {legacy
+        .filter((url) => {
+          const kind = detectMediaKind({ name: fileNameFromUrl(url), type: '' });
+          return kind === 'document' || kind === 'archive' || kind === 'other';
+        })
+        .map((url) => (
+          <PostDocumentCard
+            key={url}
+            url={url}
+            fileName={fileNameFromUrl(url)}
+          />
+        ))}
 
       {/* Rasm va videolar — gorizontal galereya (scroll mobil qurilmada ishlaydi) */}
       {visuals.length > 0 && (
@@ -243,7 +251,12 @@ export function PostExtras({
         item.kind === 'audio' ? (
           <AudioCard key={item.id} item={item} />
         ) : (
-          <DocumentCard key={item.id} item={item} />
+          <PostDocumentCard
+            key={item.id}
+            url={item.storage_url}
+            fileName={item.file_name}
+            fileSize={item.file_size}
+          />
         ),
       )}
 
