@@ -30,13 +30,9 @@
     --popover: 0 0% 100%;
     --popover-foreground: 220 20% 10%;
 
-    /* Brend orange. FAQAT quyidagi 5 toifada ishlatiladi:
-       (1) CTA tugmalar (Send, Create, Subscribe)
-       (2) notification/unread badge
-       (3) aktiv holat aksenti - nozik tint yoki indikator, to'liq fon EMAS
-       (4) link / interaktiv matn
-       (5) brend touchpoint (logo, splash, onboarding)
-       Boshqa har qanday joyda orange ko'rinsa - bu xato. */
+    /* Brend orange platform navigatsiyasi yoki link rangi EMAS.
+       U faqat haqiqiy CTA, ayrim signal/badge va brand touchpointlarda ishlatiladi.
+       Linklar alohida universal ko'k --link tokenidan foydalanadi. */
     --primary: 24 95% 53%;
     --primary-foreground: 0 0% 100%;
 
@@ -64,7 +60,7 @@
 
     --border: 220 13% 91%;
     --input: 220 13% 91%;
-    --ring: 24 95% 53%;
+    --ring: 220 10% 46%;
 
     --radius: 0.75rem;
 
@@ -81,16 +77,14 @@
     --text-secondary: var(--muted-foreground);
     --border-neutral: var(--border);
     --accent-brand: var(--primary);
+    --link: 217 91% 48%;
+    --link-hover: 217 91% 40%;
 
-    /* Chat bubble fonlari.
-       Joriy foydalanuvchi bubble'i ilgari bg-primary (to'liq to'yingan orange)
-       edi: stiker, emoji, link preview va media thumbnail'ning o'z ichki
-       kontrasti buzilardi va har bir uchinchi tomon kontenti alohida
-       muvaffaqiyatsizlikka olib kelardi. Yechim - brend hue'ini (24) saqlab,
-       uni kuchli desaturatsiya qilish. Orange esa faqat checkmark/status
-       aksentida qoladi. */
-    --bubble-own-bg: 24 45% 95%;
-    --bubble-own-fg: 220 20% 10%;
+    /* Chat bubble ranglari brand rangidan butunlay mustaqil.
+       Default — sokin yashil tint; foydalanuvchi Sozlamalarda accent tanlaydi. */
+    --bubble-own-bg: 142 38% 91%;
+    --bubble-own-fg: 145 35% 12%;
+    --bubble-own-accent: 142 70% 32%;
     --bubble-other-bg: 0 0% 99%;
     --bubble-other-fg: 220 20% 10%;
 
@@ -113,7 +107,7 @@
     --sidebar-accent: 220 14% 96%;
     --sidebar-accent-foreground: 220 20% 20%;
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 24 95% 53%;
+    --sidebar-ring: 220 10% 46%;
   }
 
   .dark {
@@ -150,11 +144,15 @@
 
     --border: 222 14% 17%;
     --input: 222 14% 17%;
-    --ring: 24 95% 53%;
+    --ring: 215 16% 65%;
+
+    --link: 213 94% 68%;
+    --link-hover: 213 94% 76%;
 
     /* Chat bubble fonlari (qorong'i) */
-    --bubble-own-bg: 24 22% 20%;
-    --bubble-own-fg: 210 40% 98%;
+    --bubble-own-bg: 142 25% 18%;
+    --bubble-own-fg: 140 20% 95%;
+    --bubble-own-accent: 142 70% 50%;
     --bubble-other-bg: 222 16% 13%;
     --bubble-other-fg: 210 40% 98%;
 
@@ -177,8 +175,59 @@
     --sidebar-accent: 222 14% 14%;
     --sidebar-accent-foreground: 210 40% 98%;
     --sidebar-border: 222 14% 17%;
-    --sidebar-ring: 24 95% 53%;
+    --sidebar-ring: 215 16% 65%;
   }
+
+  /* User-selectable chat accent presets. These affect only the current-user
+     message bubble; they never redefine brand, link or navigation colors. */
+  :root[data-chat-accent='blue'] {
+    --bubble-own-bg: 211 55% 92%;
+    --bubble-own-fg: 216 38% 15%;
+    --bubble-own-accent: 211 90% 45%;
+  }
+
+  :root[data-chat-accent='violet'] {
+    --bubble-own-bg: 260 45% 93%;
+    --bubble-own-fg: 260 32% 16%;
+    --bubble-own-accent: 258 72% 54%;
+  }
+
+  :root[data-chat-accent='rose'] {
+    --bubble-own-bg: 345 46% 93%;
+    --bubble-own-fg: 345 30% 16%;
+    --bubble-own-accent: 345 72% 48%;
+  }
+
+  :root[data-chat-accent='graphite'] {
+    --bubble-own-bg: 220 12% 92%;
+    --bubble-own-fg: 220 18% 13%;
+    --bubble-own-accent: 220 10% 40%;
+  }
+
+  .dark[data-chat-accent='blue'] {
+    --bubble-own-bg: 211 35% 20%;
+    --bubble-own-fg: 210 35% 96%;
+    --bubble-own-accent: 211 90% 62%;
+  }
+
+  .dark[data-chat-accent='violet'] {
+    --bubble-own-bg: 260 28% 21%;
+    --bubble-own-fg: 255 30% 96%;
+    --bubble-own-accent: 258 80% 70%;
+  }
+
+  .dark[data-chat-accent='rose'] {
+    --bubble-own-bg: 345 28% 20%;
+    --bubble-own-fg: 345 28% 96%;
+    --bubble-own-accent: 345 78% 68%;
+  }
+
+  .dark[data-chat-accent='graphite'] {
+    --bubble-own-bg: 220 10% 18%;
+    --bubble-own-fg: 210 25% 96%;
+    --bubble-own-accent: 215 14% 66%;
+  }
+
 }
 
 @layer base {
