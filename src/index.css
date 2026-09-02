@@ -30,6 +30,13 @@
     --popover: 0 0% 100%;
     --popover-foreground: 220 20% 10%;
 
+    /* Brend orange. FAQAT quyidagi 5 toifada ishlatiladi:
+       (1) CTA tugmalar (Send, Create, Subscribe)
+       (2) notification/unread badge
+       (3) aktiv holat aksenti - nozik tint yoki indikator, to'liq fon EMAS
+       (4) link / interaktiv matn
+       (5) brend touchpoint (logo, splash, onboarding)
+       Boshqa har qanday joyda orange ko'rinsa - bu xato. */
     --primary: 24 95% 53%;
     --primary-foreground: 0 0% 100%;
 
@@ -39,8 +46,15 @@
     --muted: 220 14% 96%;
     --muted-foreground: 220 10% 46%;
 
-    --accent: 24 95% 53%;
-    --accent-foreground: 0 0% 100%;
+    /* DIQQAT: --accent brend rangi EMAS. shadcn/ui arxitekturasida bu neytral
+       hover/highlight sirti va u src/components/ui/ dagi o'nlab komponentda
+       hover:bg-accent / focus:bg-accent orqali ishlatiladi (dropdown menyu,
+       select, command palette, calendar, tabs, sidebar hover). Ilgari u orange
+       (24 95% 53%) edi - shu sabab sahifa kodida hech narsa yozilmagan holda
+       ham butun ilova bo'ylab to'yingan orange fonlar paydo bo'lardi.
+       Brend rangi uchun --primary ni ishlating. */
+    --accent: 220 14% 96%;
+    --accent-foreground: 220 20% 20%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
@@ -53,6 +67,18 @@
     --ring: 24 95% 53%;
 
     --radius: 0.75rem;
+
+    /* Chat bubble fonlari.
+       Joriy foydalanuvchi bubble'i ilgari bg-primary (to'liq to'yingan orange)
+       edi: stiker, emoji, link preview va media thumbnail'ning o'z ichki
+       kontrasti buzilardi va har bir uchinchi tomon kontenti alohida
+       muvaffaqiyatsizlikka olib kelardi. Yechim - brend hue'ini (24) saqlab,
+       uni kuchli desaturatsiya qilish. Orange esa faqat checkmark/status
+       aksentida qoladi. */
+    --bubble-own-bg: 24 45% 95%;
+    --bubble-own-fg: 220 20% 10%;
+    --bubble-other-bg: 0 0% 99%;
+    --bubble-other-fg: 220 20% 10%;
 
     /* Gradients */
     --gradient-primary: linear-gradient(135deg, hsl(28, 100%, 60%) 0%, hsl(20, 90%, 45%) 100%);
@@ -77,26 +103,30 @@
   }
 
   .dark {
-    --background: 222 47% 6%;
+    /* Neytral shkala: ilgari 222 47% ishlatilgan edi, bu ko'kka kuchli moyil
+       navy rang berardi. Neytral asos talabiga mos kelishi uchun to'yinganlik
+       14-16% ga tushirildi - hue saqlanadi, lekin sirtlar neytral ko'rinadi. */
+    --background: 222 16% 7%;
     --foreground: 210 40% 98%;
 
-    --card: 222 47% 8%;
+    --card: 222 16% 10%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 222 47% 8%;
+    --popover: 222 16% 10%;
     --popover-foreground: 210 40% 98%;
 
     --primary: 24 95% 53%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 222 47% 12%;
+    --secondary: 222 14% 14%;
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 222 47% 12%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 222 14% 14%;
+    --muted-foreground: 215 16% 65%;
 
-    --accent: 24 95% 53%;
-    --accent-foreground: 0 0% 100%;
+    /* Yorug' rejimdagi bilan bir xil sabab: neytral hover sirti, brend rangi emas. */
+    --accent: 222 16% 16%;
+    --accent-foreground: 210 40% 98%;
 
     --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 100%;
@@ -104,13 +134,19 @@
     --success: 142 76% 42%;
     --success-foreground: 0 0% 100%;
 
-    --border: 222 47% 14%;
-    --input: 222 47% 14%;
+    --border: 222 14% 17%;
+    --input: 222 14% 17%;
     --ring: 24 95% 53%;
+
+    /* Chat bubble fonlari (qorong'i) */
+    --bubble-own-bg: 24 22% 20%;
+    --bubble-own-fg: 210 40% 98%;
+    --bubble-other-bg: 222 16% 13%;
+    --bubble-other-fg: 210 40% 98%;
 
     /* Dark gradients */
     --gradient-primary: linear-gradient(135deg, hsl(28, 100%, 55%) 0%, hsl(20, 90%, 40%) 100%);
-    --gradient-subtle: linear-gradient(180deg, hsl(222, 47%, 10%) 0%, hsl(222, 47%, 6%) 100%);
+    --gradient-subtle: linear-gradient(180deg, hsl(222, 16%, 11%) 0%, hsl(222, 16%, 7%) 100%);
     --gradient-glow: radial-gradient(circle at 50% 50%, hsl(24, 95%, 53%, 0.1) 0%, transparent 70%);
 
     /* Dark shadows */
@@ -120,13 +156,13 @@
     --shadow-glow: 0 0 60px hsl(24, 95%, 53%, 0.15);
 
     /* Sidebar dark */
-    --sidebar-background: 222 47% 8%;
+    --sidebar-background: 222 16% 9%;
     --sidebar-foreground: 210 40% 98%;
     --sidebar-primary: 24 95% 53%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 47% 12%;
+    --sidebar-accent: 222 14% 14%;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 222 47% 14%;
+    --sidebar-border: 222 14% 17%;
     --sidebar-ring: 24 95% 53%;
   }
 }
@@ -156,7 +192,8 @@
     @apply backdrop-blur-2xl bg-card/90 border border-border/60;
   }
 
-  /* Alsamos Glow Effects */
+  /* Alsamos Glow Effects - brend touchpoint (splash, onboarding, logo) uchun.
+     Oddiy sahifa kartochkalari yoki ro'yxat elementlariga qo'llanmasin. */
   .glow-primary {
     box-shadow: var(--shadow-glow);
   }
@@ -165,13 +202,13 @@
     text-shadow: 0 0 20px hsl(var(--primary) / 0.5);
   }
 
-  /* Gradient Text */
+  /* Gradient Text - faqat brend touchpoint */
   .gradient-text {
     @apply bg-clip-text text-transparent;
     background-image: var(--gradient-primary);
   }
 
-  /* Premium Button Styles */
+  /* Premium Button Styles - CTA toifasi, orange to'g'ri joyda */
   .btn-premium {
     @apply relative overflow-hidden transition-all duration-300;
     background: var(--gradient-primary);
@@ -187,10 +224,13 @@
     @apply opacity-100;
   }
 
-  /* Alsamos native scrollbar: subtle by default, brand-forward on hover. */
+  /* Alsamos native scrollbar: neytral va sezdirmaydigan.
+     Ilgari thumb --primary (orange) edi - skrollbar dekorativ element bo'lib,
+     brend rangining 5 ta ruxsat etilgan toifasiga kirmaydi. Shu sabab neytral
+     --muted-foreground ga o'tkazildi. */
   .alsamos-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: hsl(var(--primary) / 0.42) transparent;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
     scrollbar-gutter: stable;
   }
 
@@ -207,12 +247,12 @@
     min-height: 42px;
     border: 1px solid transparent;
     border-radius: 999px;
-    background: hsl(var(--primary) / 0.34);
+    background: hsl(var(--muted-foreground) / 0.28);
     background-clip: padding-box;
   }
 
   .alsamos-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--primary) / 0.78);
+    background: hsl(var(--muted-foreground) / 0.5);
     background-clip: padding-box;
   }
 
@@ -247,10 +287,10 @@
   }
 
 
-  /* Map floating panel: slim Alsamos-branded scrollbar instead of browser default. */
+  /* Map floating panel: slim neytral scrollbar instead of browser default. */
   .map-panel-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: hsl(var(--primary) / 0.5) transparent;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.32) transparent;
     scrollbar-gutter: stable;
   }
 
@@ -267,12 +307,12 @@
     min-height: 44px;
     border: 2px solid transparent;
     border-radius: 999px;
-    background: hsl(var(--primary) / 0.46);
+    background: hsl(var(--muted-foreground) / 0.3);
     background-clip: padding-box;
   }
 
   .map-panel-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--primary) / 0.88);
+    background: hsl(var(--muted-foreground) / 0.55);
     background-clip: padding-box;
   }
 

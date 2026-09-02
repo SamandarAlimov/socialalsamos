@@ -179,12 +179,26 @@ export function MessageBubble({ message, isMine, formatTime, isGroup = false, on
             </DropdownMenu>
           </div>
           
+          {/*
+            Bubble foni.
+
+            Ilgari o'z xabarim `bg-primary text-primary-foreground` edi - to'liq
+            to'yingan orange. Muammo: bubble ichidagi kontent (stiker, emoji,
+            link preview, media thumbnail) o'zining ichki kontrastini yo'qotardi,
+            chunki ularning har biri neytral fon uchun mo'ljallangan. Bundan
+            tashqari orange "bosiladigan CTA" signalini bildirishi kerak, xabar
+            fonini emas.
+
+            Endi --bubble-own-bg tokeni: brend hue (24) saqlanadi, lekin kuchli
+            desaturatsiya qilingan. Orange faqat pastdagi status checkmark
+            aksentida qoladi.
+          */}
           <div
             className={cn(
-              "rounded-2xl px-4 py-2.5 animate-scale-in",
+              "rounded-2xl px-4 py-2.5 animate-scale-in border",
               isMine 
-                ? "bg-primary text-primary-foreground rounded-br-md" 
-                : "bg-card text-card-foreground rounded-bl-md border border-border"
+                ? "bg-bubble-own text-bubble-own-foreground rounded-br-md border-border/50" 
+                : "bg-bubble-other text-bubble-other-foreground rounded-bl-md border-border"
             )}
           >
             {message.is_deleted ? (
@@ -210,19 +224,19 @@ export function MessageBubble({ message, isMine, formatTime, isGroup = false, on
                 )}
               </>
             )}
-            <div className={cn(
-              "flex items-center justify-end gap-1 mt-1",
-              isMine ? "text-primary-foreground/70" : "text-muted-foreground"
-            )}>
+            {/* Vaqt va status qatori: fon endi neytral, shuning uchun ikkala
+                tomonda ham bir xil --muted-foreground ishlatiladi. */}
+            <div className="flex items-center justify-end gap-1 mt-1 text-muted-foreground">
               <span className="text-xs">{formatTime(message.created_at)}</span>
               {message.is_edited && <span className="text-xs">(edited)</span>}
               {isMine && (
                 message.status === 'sending' ? (
                   <Clock className="h-3.5 w-3.5 animate-pulse" />
                 ) : message.status === 'failed' ? (
-                  <AlertCircle className="h-3.5 w-3.5 text-red-400" />
+                  <AlertCircle className="h-3.5 w-3.5 text-destructive" />
                 ) : message.status === 'read' || message.is_read ? (
-                  <CheckCheck className="h-3.5 w-3.5 text-blue-400" />
+                  /* Orange'ning ruxsat etilgan joyi: status aksenti. */
+                  <CheckCheck className="h-3.5 w-3.5 text-primary" />
                 ) : message.status === 'delivered' ? (
                   <CheckCheck className="h-3.5 w-3.5" />
                 ) : (
@@ -251,7 +265,7 @@ export function MessageBubble({ message, isMine, formatTime, isGroup = false, on
                 className={cn(
                   "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs transition-colors",
                   reaction.hasReacted
-                    ? "bg-primary/20 text-primary border border-primary/30"
+                    ? "bg-primary/15 text-primary border border-primary/30"
                     : "bg-muted hover:bg-accent border border-transparent"
                 )}
               >

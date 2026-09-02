@@ -39,6 +39,25 @@ const navItems: NavItem[] = [
 
 const bottomItems: NavItem[] = [{ icon: User, labelKey: 'nav.profile', path: '/profile' }];
 
+/**
+ * Aktiv nav elementining ko'rinishi.
+ *
+ * Ilgari `bg-primary text-primary-foreground shadow-md` edi - ya'ni katta,
+ * to'liq to'yingan orange blok. Bu ikki muammo tug'dirardi: (1) sidebar
+ * qobig'i kontentdan ko'zga oldin tashlanardi, (2) orange "bosiladigan CTA"
+ * ma'nosini yo'qotardi, chunki u navigatsiya fonida ham ishlatilardi.
+ *
+ * Endi Telegram/WhatsApp naqshi: nozik tint fon + brend rangli ikon/matn.
+ * BottomNavbar allaqachon aynan shu naqshdan foydalanadi (`bg-primary/10` +
+ * `text-primary`), shuning uchun ikki navigatsiya endi izchil.
+ */
+const NAV_ITEM_BASE = "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative";
+const NAV_ITEM_ACTIVE = "bg-primary/10 text-primary font-medium";
+const NAV_ITEM_INACTIVE = "text-sidebar-foreground hover:bg-sidebar-accent";
+
+/** Badge rangi butun platforma bo'ylab bitta: aktiv holatga qarab o'zgarmaydi. */
+const NAV_BADGE = "bg-destructive text-destructive-foreground";
+
 interface AppSidebarProps {
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
@@ -101,18 +120,21 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
           const badgeCount = getBadgeCount(item.badgeKey);
           return (
             <NavLink key={item.path} to={item.path!} className={cn(
-              "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative",
-              isActive ? "bg-primary text-primary-foreground shadow-md" : "text-sidebar-foreground hover:bg-sidebar-accent"
+              NAV_ITEM_BASE,
+              isActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE
             )}>
               <div className="relative">
-                <item.icon className={cn("h-5 w-5 flex-shrink-0 transition-transform duration-200", !isActive && "group-hover:scale-110")} />
+                <item.icon
+                  className={cn("h-5 w-5 flex-shrink-0 transition-transform duration-200", !isActive && "group-hover:scale-110")}
+                  strokeWidth={isActive ? 2.4 : 1.9}
+                />
                 <AnimatePresence>
-                  {collapsed && badgeCount > 0 && <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className="absolute -top-2 -right-2 h-4 min-w-4 px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center shadow-md">{badgeCount > 9 ? '9+' : badgeCount}</motion.span>}
+                  {collapsed && badgeCount > 0 && <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className={cn("absolute -top-2 -right-2 h-4 min-w-4 px-1 rounded-full text-[10px] font-bold flex items-center justify-center shadow-md", NAV_BADGE)}>{badgeCount > 9 ? '9+' : badgeCount}</motion.span>}
                 </AnimatePresence>
               </div>
               {!collapsed && <span className="font-medium text-sm">{t(item.labelKey)}</span>}
               <AnimatePresence>
-                {!collapsed && badgeCount > 0 && <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className={cn("ml-auto flex items-center justify-center min-w-[20px] h-5 text-xs font-semibold rounded-full px-1.5 shadow-sm", isActive ? "bg-primary-foreground text-primary" : "bg-destructive text-destructive-foreground")}>{badgeCount > 99 ? '99+' : badgeCount}</motion.span>}
+                {!collapsed && badgeCount > 0 && <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className={cn("ml-auto flex items-center justify-center min-w-[20px] h-5 text-xs font-semibold rounded-full px-1.5 shadow-sm", NAV_BADGE)}>{badgeCount > 99 ? '99+' : badgeCount}</motion.span>}
               </AnimatePresence>
             </NavLink>
           );
@@ -124,8 +146,8 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
           const isActive = location.pathname === item.path;
           return (
             <div key={item.path} className="flex items-center gap-1">
-              <NavLink to={item.path} className={cn("flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group flex-1", isActive ? "bg-primary text-primary-foreground shadow-md" : "text-sidebar-foreground hover:bg-sidebar-accent")}>
-                {profile?.avatar_url ? <Avatar className="h-5 w-5 flex-shrink-0"><AvatarImage src={profile.avatar_url} alt={profile.display_name || 'Profile'} /><AvatarFallback><User className="h-3 w-3" /></AvatarFallback></Avatar> : <User className="h-5 w-5 flex-shrink-0" />}
+              <NavLink to={item.path} className={cn("flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group flex-1", isActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE)}>
+                {profile?.avatar_url ? <Avatar className={cn("h-5 w-5 flex-shrink-0", isActive && "ring-2 ring-primary ring-offset-1 ring-offset-sidebar")}><AvatarImage src={profile.avatar_url} alt={profile.display_name || 'Profile'} /><AvatarFallback><User className="h-3 w-3" /></AvatarFallback></Avatar> : <User className="h-5 w-5 flex-shrink-0" />}
                 {!collapsed && <span className="font-medium text-sm">{t(item.labelKey)}</span>}
               </NavLink>
               {/* Xavfsizlik bu yerda emas — u Sozlamalar ichida joylashgan. */}
