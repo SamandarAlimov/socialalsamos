@@ -35,6 +35,7 @@ import { CommentMediaUpload } from '@/components/CommentMediaUpload';
 interface CommentsSectionProps {
   postId: string;
   focusCommentId?: string | null;
+  layout?: 'default' | 'panel';
 }
 
 type SelectedMedia = {
@@ -97,6 +98,7 @@ function CommentAttachmentPreview({
 export function CommentsSection({
   postId,
   focusCommentId = null,
+  layout = 'default',
 }: CommentsSectionProps) {
   const { user } = useAuth();
   const { comments, isLoading, addComment, likeComment, deleteComment } =
@@ -486,12 +488,23 @@ export function CommentsSection({
     );
   };
 
+  const isPanel = layout === 'panel';
+
   return (
-    <div className="border-t border-border">
+    <div
+      className={cn(
+        'border-t border-border',
+        isPanel && 'flex h-full min-h-0 flex-col border-t-0',
+      )}
+    >
       {user && (
         <form
           onSubmit={handleSubmit}
-          className="border-b border-border bg-muted/20 p-3 md:p-4"
+          className={cn(
+            'border-b border-border bg-muted/20 p-3 md:p-4',
+            isPanel &&
+              'order-2 shrink-0 border-b-0 border-t border-border/60 bg-background/95 backdrop-blur',
+          )}
         >
           <div className="flex items-end gap-2">
             <Avatar className="h-8 w-8 shrink-0">
@@ -600,7 +613,14 @@ export function CommentsSection({
         </form>
       )}
 
-      <div className="max-h-[min(48vh,560px)] overflow-y-auto px-3 md:px-4">
+      <div
+        className={cn(
+          'overflow-y-auto px-3 md:px-4',
+          isPanel
+            ? 'order-1 min-h-0 flex-1 overscroll-contain'
+            : 'max-h-[min(48vh,560px)]',
+        )}
+      >
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
