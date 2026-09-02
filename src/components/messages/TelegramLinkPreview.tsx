@@ -309,7 +309,7 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
       onClick={(e) => e.stopPropagation()}
       className={cn(
         'block overflow-hidden rounded-xl pl-2.5',
-        isMine ? 'bg-primary-foreground/10' : 'bg-muted/70',
+        isMine ? 'bg-bubble-own-foreground/10' : 'bg-muted/70',
         className
       )}
       style={{
@@ -333,7 +333,7 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
           <p
             className={cn(
               'truncate text-[12px] font-semibold',
-              isMine ? 'text-primary-foreground/90' : 'text-primary'
+              isMine ? 'text-bubble-own-foreground/90' : 'text-link'
             )}
           >
             {meta.siteName}
@@ -344,7 +344,7 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
             <p
               className={cn(
                 'line-clamp-2 break-words text-[13px] font-semibold leading-snug',
-                isMine ? 'text-primary-foreground' : 'text-foreground'
+                isMine ? 'text-bubble-own-foreground' : 'text-foreground'
               )}
             >
               {meta.title}
@@ -355,7 +355,7 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
             <p
               className={cn(
                 'line-clamp-2 break-words text-[12px] leading-snug',
-                isMine ? 'text-primary-foreground/75' : 'text-muted-foreground'
+                isMine ? 'text-bubble-own-foreground/70' : 'text-muted-foreground'
               )}
             >
               {meta.description}
@@ -376,7 +376,7 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
                   className={cn(
                     'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors',
                     isMine
-                      ? 'bg-primary-foreground/15 text-primary-foreground hover:bg-primary-foreground/25'
+                      ? 'bg-bubble-own-foreground/10 text-bubble-own-foreground hover:bg-bubble-own-foreground/15'
                       : 'bg-background/80 text-foreground hover:bg-background'
                   )}
                 >
@@ -397,7 +397,7 @@ export function TelegramLinkPreview({ url, isMine, className }: TelegramLinkPrev
                 className={cn(
                   'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors',
                   isMine
-                    ? 'bg-primary-foreground/15 text-primary-foreground hover:bg-primary-foreground/25'
+                    ? 'bg-bubble-own-foreground/10 text-bubble-own-foreground hover:bg-bubble-own-foreground/15'
                     : 'bg-background/80 text-foreground hover:bg-background'
                 )}
               >
