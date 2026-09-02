@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, ZoomIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -25,6 +25,7 @@ export function PostMediaCarousel({
 }: PostMediaCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [ratios, setRatios] = useState<Record<number, number>>({});
+  const swipeStartRef = useRef<{ x: number; y: number; at: number } | null>(null);
 
   // Pinch-to-zoom hook (for images)
   const {
@@ -77,6 +78,56 @@ export function PostMediaCarousel({
 
   const naturalRatio = ratios[currentIndex] ?? (isReel ? 9 / 16 : undefined);
 
+  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    if (!isCurrentVideo) zoomHandlers.onTouchStart(event);
+
+    if (!isZoomed && event.touches.length === 1) {
+      swipeStartRef.current = {
+        x: event.touches[0].clientX,
+        y: event.touches[0].clientY,
+        at: Date.now(),
+      };
+    } else {
+      swipeStartRef.current = null;
+    }
+  };
+
+  const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    if (!isCurrentVideo) zoomHandlers.onTouchMove(event);
+  };
+
+  const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+
+    const start = swipeStartRef.current;
+    const changed = event.changedTouches[0];
+    const canSwipe =
+      !isZoomed &&
+      Boolean(start) &&
+      Boolean(changed) &&
+      mediaUrls.length > 1;
+
+    if (canSwipe && start && changed) {
+      const dx = changed.clientX - start.x;
+      const dy = changed.clientY - start.y;
+      const elapsed = Date.now() - start.at;
+      const horizontalIntent = Math.abs(dx) > Math.abs(dy) * 1.25;
+
+      if (horizontalIntent && Math.abs(dx) >= 44 && elapsed < 900) {
+        if (dx < 0 && currentIndex < mediaUrls.length - 1) {
+          setCurrentIndex((index) => index + 1);
+        } else if (dx > 0 && currentIndex > 0) {
+          setCurrentIndex((index) => index - 1);
+        }
+      }
+    }
+
+    swipeStartRef.current = null;
+    if (!isCurrentVideo) zoomHandlers.onTouchEnd(event);
+  };
+
   return (
     <div className="relative group w-full">
       {/* Main Media Display */}
@@ -84,10 +135,13 @@ export function PostMediaCarousel({
         containerRef={zoomContainerRef}
         variant={isReel ? 'reel' : 'feed'}
         naturalRatio={naturalRatio}
-        className={cn(!isCurrentVideo && 'touch-none')}
-        onTouchStart={!isCurrentVideo ? zoomHandlers.onTouchStart : undefined}
-        onTouchMove={!isCurrentVideo ? zoomHandlers.onTouchMove : undefined}
-        onTouchEnd={!isCurrentVideo ? zoomHandlers.onTouchEnd : undefined}
+        className={cn(
+          !isCurrentVideo && (isZoomed ? 'touch-none' : 'touch-pan-y'),
+          isCurrentVideo && 'touch-pan-y',
+        )}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
         onDoubleClick={!isCurrentVideo ? zoomHandlers.onDoubleClick : undefined}
         onWheel={!isCurrentVideo ? zoomHandlers.onWheel : undefined}
       >
@@ -146,7 +200,7 @@ export function PostMediaCarousel({
               <Button
                 variant="secondary"
                 size="icon"
-                className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 backdrop-blur-sm border-0 hover:bg-black/70 shadow-lg z-10"
+                className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity bg-black/50 backdrop-blur-sm border-0 hover:bg-black/70 shadow-lg z-10"
                 onClick={goToPrevious}
               >
                 <ChevronLeft className="h-5 w-5 text-white" />
@@ -156,7 +210,7 @@ export function PostMediaCarousel({
               <Button
                 variant="secondary"
                 size="icon"
-                className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 backdrop-blur-sm border-0 hover:bg-black/70 shadow-lg z-10"
+                className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity bg-black/50 backdrop-blur-sm border-0 hover:bg-black/70 shadow-lg z-10"
                 onClick={goToNext}
               >
                 <ChevronRight className="h-5 w-5 text-white" />
