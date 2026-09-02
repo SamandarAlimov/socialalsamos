@@ -111,7 +111,7 @@ export function ChatFolderChatPicker({
                     className={cn(
                       'flex h-6 w-6 items-center justify-center rounded-full border tg-transition',
                       isIncluded
-                        ? 'border-primary bg-primary text-primary-foreground'
+                        ? 'border-foreground bg-foreground text-background'
                         : 'border-border text-transparent'
                     )}
                   >
