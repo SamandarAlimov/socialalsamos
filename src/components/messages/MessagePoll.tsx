@@ -106,7 +106,7 @@ export function MessagePoll({ messageId, poll, isMine }: MessagePollProps) {
         <BarChart3 className="mt-0.5 h-4 w-4 shrink-0 opacity-80" />
         <div className="min-w-0">
           <p className="text-[14px] font-semibold leading-snug">{poll.question}</p>
-          <p className={cn('text-[10px]', isMine ? 'text-primary-foreground/65' : 'text-muted-foreground')}>
+          <p className={cn('text-[10px]', isMine ? 'text-bubble-own-foreground/65' : 'text-muted-foreground')}>
             {poll.multiple ? 'Bir nechta javob tanlash mumkin' : "Bitta javobni tanlang"}
           </p>
         </div>
@@ -128,16 +128,16 @@ export function MessagePoll({ messageId, poll, isMine }: MessagePollProps) {
               className={cn(
                 'relative block w-full overflow-hidden rounded-xl border px-3 py-2 text-left tg-transition',
                 isMine
-                  ? 'border-primary-foreground/25 hover:bg-primary-foreground/10'
+                  ? 'border-bubble-own-foreground/20 hover:bg-bubble-own-foreground/10'
                   : 'border-border hover:bg-muted/60',
-                selected && (isMine ? 'border-primary-foreground/70' : 'border-primary')
+                selected && (isMine ? 'border-bubble-own-accent/70' : 'border-foreground/40')
               )}
             >
               {showResult && (
                 <span
                   className={cn(
                     'pointer-events-none absolute inset-y-0 left-0 opacity-15 transition-[width] duration-300',
-                    isMine ? 'bg-primary-foreground' : 'bg-primary'
+                    isMine ? 'bg-bubble-own-accent' : 'bg-foreground'
                   )}
                   style={{ width: `${percentage}%` }}
                 />
@@ -148,10 +148,10 @@ export function MessagePoll({ messageId, poll, isMine }: MessagePollProps) {
                     'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border',
                     selected
                       ? isMine
-                        ? 'border-primary-foreground bg-primary-foreground text-primary'
-                        : 'border-primary bg-primary text-primary-foreground'
+                        ? 'border-bubble-own-accent bg-bubble-own-accent text-background'
+                        : 'border-foreground bg-foreground text-background'
                       : isMine
-                        ? 'border-primary-foreground/50'
+                        ? 'border-bubble-own-foreground/40'
                         : 'border-muted-foreground/50'
                   )}
                 >
@@ -167,7 +167,7 @@ export function MessagePoll({ messageId, poll, isMine }: MessagePollProps) {
         })}
       </div>
 
-      <div className={cn('text-[10px]', isMine ? 'text-primary-foreground/60' : 'text-muted-foreground')}>
+      <div className={cn('text-[10px]', isMine ? 'text-bubble-own-foreground/60' : 'text-muted-foreground')}>
         {totalVotes} ovoz
         {poll.anonymous ? ' · anonim' : ''}
       </div>
