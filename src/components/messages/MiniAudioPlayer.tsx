@@ -108,7 +108,7 @@ export function MiniAudioPlayer() {
         transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
         className="flex-shrink-0 z-20 overflow-hidden"
       >
-        <div className="bg-gradient-to-r from-muted/60 via-muted/30 to-muted/60 backdrop-blur-sm border-b border-primary/15">
+        <div className="bg-gradient-to-r from-muted/60 via-muted/30 to-muted/60 backdrop-blur-sm border-b border-border">
           {/* Progress bar at top - interactive */}
           <div 
             ref={progressBarRef}
