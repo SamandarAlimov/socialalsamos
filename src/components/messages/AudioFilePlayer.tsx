@@ -138,7 +138,7 @@ export function AudioFilePlayer({ url, name, isMine, senderName }: AudioFilePlay
     <div
       className={cn(
         'flex min-w-[260px] max-w-[340px] items-center gap-3 rounded-2xl p-2.5',
-        isMine ? 'bg-primary-foreground/10' : 'bg-muted/50 border border-border/50'
+        isMine ? 'bg-bubble-own-foreground/10' : 'bg-muted/50 border border-border/50'
       )}
     >
       {/* Play / Pause (Telegramdek yumaloq tugma) */}
@@ -150,7 +150,7 @@ export function AudioFilePlayer({ url, name, isMine, senderName }: AudioFilePlay
         className={cn(
           'relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition-colors',
           isMine
-            ? 'bg-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/30'
+            ? 'bg-bubble-own-foreground/10 text-bubble-own-foreground hover:bg-bubble-own-foreground/15'
             : 'bg-muted text-foreground hover:bg-muted/70',
           isLoading && 'opacity-50'
         )}
@@ -169,7 +169,7 @@ export function AudioFilePlayer({ url, name, isMine, senderName }: AudioFilePlay
         <p
           className={cn(
             'truncate text-[14px] font-semibold leading-tight',
-            isMine ? 'text-primary-foreground' : 'text-foreground'
+            isMine ? 'text-bubble-own-foreground' : 'text-foreground'
           )}
         >
           {title}
@@ -177,7 +177,7 @@ export function AudioFilePlayer({ url, name, isMine, senderName }: AudioFilePlay
         <p
           className={cn(
             'flex items-center gap-1 truncate text-[11px]',
-            isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'
+            isMine ? 'text-bubble-own-foreground/65' : 'text-muted-foreground'
           )}
         >
           <Music2 className="h-3 w-3 shrink-0" />
@@ -204,10 +204,10 @@ export function AudioFilePlayer({ url, name, isMine, senderName }: AudioFilePlay
                   'w-[3px] rounded-full transition-colors duration-100',
                   isFilled
                     ? isMine
-                      ? 'bg-primary-foreground'
+                      ? 'bg-bubble-own-accent'
                       : 'bg-foreground/80'
                     : isMine
-                      ? 'bg-primary-foreground/30'
+                      ? 'bg-bubble-own-foreground/20'
                       : 'bg-muted-foreground/30'
                 )}
                 style={{ height: `${height}%`, minHeight: '4px' }}
@@ -220,7 +220,7 @@ export function AudioFilePlayer({ url, name, isMine, senderName }: AudioFilePlay
           <span
             className={cn(
               'text-[10px] font-medium tabular-nums',
-              isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'
+              isMine ? 'text-bubble-own-foreground/65' : 'text-muted-foreground'
             )}
           >
             {formatTime(displayCurrentTime)}
@@ -228,7 +228,7 @@ export function AudioFilePlayer({ url, name, isMine, senderName }: AudioFilePlay
           <span
             className={cn(
               'text-[10px] font-medium tabular-nums',
-              isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'
+              isMine ? 'text-bubble-own-foreground/65' : 'text-muted-foreground'
             )}
           >
             {formatTime(displayDuration)}
@@ -245,7 +245,7 @@ export function AudioFilePlayer({ url, name, isMine, senderName }: AudioFilePlay
         className={cn(
           'flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors',
           isMine
-            ? 'text-primary-foreground/70 hover:bg-primary-foreground/20 hover:text-primary-foreground'
+            ? 'text-bubble-own-foreground/65 hover:bg-bubble-own-foreground/10 hover:text-bubble-own-foreground'
             : 'text-muted-foreground hover:bg-muted hover:text-foreground'
         )}
         onClick={(e) => e.stopPropagation()}

@@ -376,7 +376,7 @@ export default function UserProfilePage() {
                   href={toExternalUrl(profile.website)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-primary hover:underline"
+                  className="text-link hover:text-link-hover hover:underline"
                 >
                   {stripProtocol(profile.website)}
                 </a>
@@ -459,7 +459,7 @@ export default function UserProfilePage() {
               className={cn(
                 "flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors",
                 activeTab === tab.id
-                  ? 'text-primary border-b-2 border-primary'
+                  ? 'text-foreground border-b-2 border-foreground'
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >

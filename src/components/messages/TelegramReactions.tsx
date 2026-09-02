@@ -57,7 +57,7 @@ export function TelegramReactions({
               'inline-flex items-center gap-1 h-[26px] pl-1 pr-2 rounded-full',
               'text-xs font-medium transition-colors active:scale-95',
               reaction.hasReacted
-                ? 'bg-primary text-primary-foreground'
+                ? 'bg-foreground text-background'
                 : 'bg-muted text-foreground hover:bg-muted/70'
             )}
           >

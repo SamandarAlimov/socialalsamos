@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ChatWallpaperEditor } from '@/components/settings/ChatWallpaperEditor';
+import { ChatAccentEditor } from '@/components/settings/ChatAccentEditor';
 
 /** Sozlamalar > Chat foni sahifasi */
 export default function ChatWallpaperPage() {
@@ -14,15 +15,21 @@ export default function ChatWallpaperPage() {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="text-base font-semibold text-foreground">Chat foni</h1>
+          <h1 className="text-base font-semibold text-foreground">Chat ko'rinishi</h1>
           <p className="text-xs text-muted-foreground">
-            Fonni tanlang yoki o'z rasmingizni yuklang
+            Xabar rangini va chat fonini moslang
           </p>
         </div>
       </div>
 
-      <div className="px-4 pt-4">
-        <ChatWallpaperEditor />
+      <div className="space-y-4 px-4 pt-4">
+        <div className="rounded-xl border border-border bg-card p-4">
+          <ChatAccentEditor />
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4">
+          <h2 className="mb-3 text-sm font-semibold">Chat foni</h2>
+          <ChatWallpaperEditor />
+        </div>
       </div>
     </div>
   );

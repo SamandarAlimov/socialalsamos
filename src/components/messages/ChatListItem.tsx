@@ -608,13 +608,10 @@ export function ChatListItem({
             !isSelected && HOVER_ROW
           )}
         >
-          {isSelected && (
-            <span className="absolute inset-y-1 left-0 w-[3px] rounded-r-full bg-primary" />
-          )}
           <div className="relative">
             <Avatar className={cn('h-11 w-11 ring-2 transition-all', isSelected ? 'ring-muted-foreground/30' : 'ring-transparent')}>
               <AvatarImage src={getAvatar() || ''} />
-              <AvatarFallback className="bg-primary text-primary-foreground font-medium text-sm">
+              <AvatarFallback className="bg-muted text-foreground font-medium text-sm">
                 {isSelfChat ? <Bookmark className="h-4 w-4" /> : conversation.type === 'group' ? <Users className="h-4 w-4" /> : conversation.type === 'channel' ? <Megaphone className="h-4 w-4" /> : getName()[0]?.toUpperCase()}
               </AvatarFallback>
             </Avatar>
@@ -622,7 +619,7 @@ export function ChatListItem({
               <span className="absolute bottom-0 right-0 h-3 w-3 bg-green-500 rounded-full border-2 border-card" />
             )}
             {isUnread && (
-              <Badge className={cn(
+              <Badge variant="secondary" className={cn(
                 'absolute -top-1 -right-1 h-5 min-w-[20px] rounded-full px-1 text-[10px] flex items-center justify-center',
                 isMuted && 'bg-muted-foreground/70 text-background hover:bg-muted-foreground/70'
               )}>
@@ -630,7 +627,7 @@ export function ChatListItem({
               </Badge>
             )}
             {hasMention && (
-              <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
+              <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-foreground text-background">
                 <AtSign className="h-2.5 w-2.5" />
               </span>
             )}
@@ -707,22 +704,11 @@ export function ChatListItem({
           )}
           style={{ transform: 'translateX(' + swipeX + 'px)' }}
         >
-          {/* Tanlangan chat - Telegram Desktopdek chap tomonda ingichka aksent */}
-          {isSelected && (
-            <span className="absolute inset-y-0 left-0 hidden w-[3px] rounded-r-full bg-primary md:block" />
-          )}
-
           <div className="relative flex-shrink-0">
             <Avatar className="h-14 w-14 md:h-12 md:w-12">
               <AvatarImage src={getAvatar() || ''} />
               <AvatarFallback
-                className={cn(
-                  'text-primary-foreground font-medium text-lg md:text-base',
-                  conversation.type === 'group' && 'bg-primary',
-                  conversation.type === 'channel' && 'bg-primary',
-                  isSelfChat && 'bg-primary',
-                  conversation.type === 'private' && !isSelfChat && 'bg-primary'
-                )}
+                className="bg-muted font-medium text-foreground text-lg md:text-base"
               >
                 {isSelfChat ? (
                   <Bookmark className="h-6 w-6 md:h-5 md:w-5" />
@@ -812,7 +798,7 @@ export function ChatListItem({
                 {/* @ mention - Telegramda o'qilmagan hisobdan alohida ko'rsatiladi */}
                 {hasMention && (
                   <span
-                    className="flex h-6 w-6 md:h-5 md:w-5 items-center justify-center rounded-full bg-primary text-primary-foreground"
+                    className="flex h-6 w-6 md:h-5 md:w-5 items-center justify-center rounded-full bg-foreground text-background"
                     title="Sizni eslab o'tgan"
                   >
                     <AtSign className="h-3.5 w-3.5 md:h-3 md:w-3" />
@@ -833,10 +819,10 @@ export function ChatListItem({
                       }}
                     >
                       <Badge
-                        variant="default"
+                        variant="secondary"
                         className={cn(
-                          'h-6 min-w-[24px] md:h-5 md:min-w-[20px] rounded-full px-2 md:px-1.5 text-sm md:text-xs',
-                          isPulsing && 'shadow-lg shadow-primary/40',
+                          'h-6 min-w-[24px] md:h-5 md:min-w-[20px] rounded-full bg-foreground px-2 text-sm text-background hover:bg-foreground md:px-1.5 md:text-xs',
+                          isPulsing && 'ring-2 ring-foreground/15',
                           isMuted && 'bg-muted-foreground/70 text-background hover:bg-muted-foreground/70 shadow-none'
                         )}
                       >

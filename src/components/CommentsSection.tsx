@@ -226,7 +226,7 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
           <div className="flex gap-2 items-end">
             <Avatar className="h-8 w-8 flex-shrink-0">
               <AvatarImage src="" />
-              <AvatarFallback className="text-xs bg-primary/10 text-primary">
+              <AvatarFallback className="text-xs bg-muted text-muted-foreground">
                 {user.email?.[0]?.toUpperCase() || 'U'}
               </AvatarFallback>
             </Avatar>
@@ -328,7 +328,7 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
       <div className="px-3 md:px-4 max-h-80 overflow-y-auto">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : comments.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">

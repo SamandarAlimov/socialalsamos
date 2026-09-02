@@ -299,7 +299,7 @@ export default function HomePage() {
             <div className="flex gap-3">
               <Avatar className="h-10 w-10">
                 <AvatarImage src={profile?.avatar_url || ''} />
-                <AvatarFallback className="bg-primary text-primary-foreground">
+                <AvatarFallback className="bg-muted text-muted-foreground">
                   {profile?.display_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
                 </AvatarFallback>
               </Avatar>
@@ -342,7 +342,7 @@ export default function HomePage() {
         <div ref={loadMoreRef} className="py-4">
           {isLoading && (
             <div className="flex items-center justify-center">
-              <Loader2 className="h-6 w-6 md:h-8 md:w-8 animate-spin text-primary" />
+              <Loader2 className="h-6 w-6 md:h-8 md:w-8 animate-spin text-muted-foreground" />
             </div>
           )}
           {!hasMore && posts.length > 0 && (
@@ -570,7 +570,7 @@ function PostCard({
             onClick={() => setShowComments(!showComments)}
             className={cn(
               "flex items-center gap-1.5 md:gap-2 transition-colors touch-feedback",
-              showComments ? 'text-primary' : 'text-muted-foreground hover:text-primary'
+              showComments ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
             )}
           >
             <MessageCircle className={cn("h-5 w-5 md:h-5 md:w-5", showComments && 'fill-current')} />
@@ -578,7 +578,7 @@ function PostCard({
           </button>
           <button 
             onClick={() => setShowShareDialog(true)}
-            className="flex items-center gap-1.5 md:gap-2 text-muted-foreground hover:text-primary transition-colors touch-feedback"
+            className="flex items-center gap-1.5 md:gap-2 text-muted-foreground hover:text-foreground transition-colors touch-feedback"
           >
             <Share2 className="h-5 w-5 md:h-5 md:w-5" />
             <span className="text-xs md:text-sm font-medium">{post.shares_count}</span>
@@ -601,7 +601,7 @@ function PostCard({
             onClick={() => setIsBookmarked(!isBookmarked)}
             className={cn(
               "transition-colors touch-feedback",
-              isBookmarked ? 'text-primary' : 'text-muted-foreground hover:text-primary'
+              isBookmarked ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
             )}
           >
             <Bookmark className={cn("h-5 w-5 md:h-5 md:w-5", isBookmarked && 'fill-current')} />

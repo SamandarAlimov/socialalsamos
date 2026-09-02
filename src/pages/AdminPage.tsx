@@ -239,7 +239,7 @@ export default function AdminPage() {
   if (adminLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -258,8 +258,8 @@ export default function AdminPage() {
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
       <div className="flex items-center gap-3 mb-8">
-        <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-          <Shield className="h-6 w-6 text-primary" />
+        <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
+          <Shield className="h-6 w-6 text-muted-foreground" />
         </div>
         <div>
           <h1 className="text-2xl font-bold">Admin Panel</h1>
@@ -357,7 +357,7 @@ export default function AdminPage() {
                             href={request.bio_link}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-sm text-primary mt-2 hover:underline"
+                            className="flex items-center gap-1 text-sm text-link mt-2 hover:text-link-hover hover:underline"
                           >
                             <ExternalLink className="h-3 w-3" />
                             Bio Link

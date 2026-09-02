@@ -60,7 +60,7 @@ function ModerationCard({ item, isActive, isBusy, onApprove, onReject, onFocus }
       onClick={onFocus}
       className={cn(
         'rounded-2xl border bg-card p-4 transition-shadow',
-        isActive ? 'border-primary shadow-lg' : 'border-border',
+        isActive ? 'border-foreground/20 shadow-md' : 'border-border',
       )}
     >
       <div className="flex gap-4">

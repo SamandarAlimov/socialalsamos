@@ -282,7 +282,7 @@ export function TelegramAttachSheet({
                       </div>
                     )}
 
-                    <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                    <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-background">
                       <Check className="h-3 w-3" />
                     </span>
                     <button
@@ -326,7 +326,7 @@ export function TelegramAttachSheet({
           {tab === 'article' && (
             <div className="space-y-3 py-2">
               <div className="flex items-start gap-3 rounded-2xl bg-muted/50 p-3">
-                <BookOpen className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                <BookOpen className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
                 <div className="min-w-0">
                   <p className="text-sm font-medium">Maqola yozish</p>
                   <p className="text-xs text-muted-foreground">
@@ -350,7 +350,7 @@ export function TelegramAttachSheet({
           {tab === 'location' && (
             <div className="space-y-3 py-2">
               <div className="flex items-start gap-3 rounded-2xl bg-muted/50 p-3">
-                <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
                 <div className="min-w-0">
                   <p className="text-sm font-medium">Joylashuvni ulashish</p>
                   <p className="text-xs text-muted-foreground">
@@ -378,7 +378,7 @@ export function TelegramAttachSheet({
           {tab === 'poll' && (
             <div className="space-y-3 py-2">
               <div className="flex items-start gap-3 rounded-2xl bg-muted/50 p-3">
-                <BarChart3 className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                <BarChart3 className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
                 <div className="min-w-0">
                   <p className="text-sm font-medium">So'rovnoma yaratish</p>
                   <p className="text-xs text-muted-foreground">
@@ -448,7 +448,7 @@ export function TelegramAttachSheet({
                   onClick={() => setPollMultiple((value) => !value)}
                   className={cn(
                     'rounded-xl border px-3 py-2 text-left text-xs tg-transition',
-                    pollMultiple ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background'
+                    pollMultiple ? 'border-foreground/20 bg-muted text-foreground' : 'border-border bg-background'
                   )}
                 >
                   <span className="block font-medium">Ko'p tanlov</span>
@@ -459,7 +459,7 @@ export function TelegramAttachSheet({
                   onClick={() => setPollAnonymous((value) => !value)}
                   className={cn(
                     'rounded-xl border px-3 py-2 text-left text-xs tg-transition',
-                    pollAnonymous ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background'
+                    pollAnonymous ? 'border-foreground/20 bg-muted text-foreground' : 'border-border bg-background'
                   )}
                 >
                   <span className="block font-medium">Anonim</span>
@@ -499,7 +499,7 @@ export function TelegramAttachSheet({
           {tab === 'file' && (
             <div className="space-y-3 py-2">
               <div className="flex items-start gap-3 rounded-2xl bg-muted/50 p-3">
-                <FileIcon className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                <FileIcon className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
                 <div className="min-w-0">
                   <p className="text-sm font-medium">Fayl yuborish</p>
                   <p className="text-xs text-muted-foreground">
@@ -530,14 +530,14 @@ export function TelegramAttachSheet({
                 className={cn(
                   'flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-1 py-1.5 tg-transition',
                   active
-                    ? 'text-primary'
+                    ? 'text-muted-foreground'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                 )}
               >
                 <span
                   className={cn(
                     'flex h-9 w-9 items-center justify-center rounded-xl tg-transition',
-                    active ? 'bg-primary/10' : 'bg-muted'
+                    active ? 'bg-foreground/10' : 'bg-muted'
                   )}
                 >
                   <Icon className="h-5 w-5" />

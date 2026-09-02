@@ -177,7 +177,7 @@ export function PostCollaboratorByline({
           <button
             type="button"
             onClick={openList}
-            className="font-medium text-primary transition hover:underline"
+            className="font-medium text-link transition hover:text-link-hover hover:underline"
           >
             Hammualliflik taklifi
           </button>
@@ -206,7 +206,7 @@ export function PostCollaboratorByline({
                 onClick={() => setPickerOpen(true)}
                 className="flex min-h-12 w-full items-center gap-3 border-b border-border/50 px-4 text-sm font-medium transition hover:bg-muted/50 disabled:opacity-40"
               >
-                <UserPlus className="h-4 w-4 text-primary" />
+                <UserPlus className="h-4 w-4 text-muted-foreground" />
                 Hammuallif qo'shish
                 <span className="ml-auto text-xs text-muted-foreground">
                   {active.length}/10

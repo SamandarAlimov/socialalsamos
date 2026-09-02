@@ -57,7 +57,7 @@ export function MessageContent({ content, isMine, className }: MessageContentPro
       <div
         className={cn(
           'min-w-0 max-w-full space-y-2 text-[15px] leading-[1.35]',
-          isMine ? '[&_blockquote]:border-primary-foreground/60' : ''
+          isMine ? '[&_blockquote]:border-bubble-own-accent/60' : ''
         )}
         style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
       >

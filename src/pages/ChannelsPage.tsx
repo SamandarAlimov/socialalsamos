@@ -55,7 +55,7 @@ export default function ChannelsPage() {
         <div className="max-w-3xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <Megaphone className="h-6 w-6 text-primary" />
+              <Megaphone className="h-6 w-6 text-muted-foreground" />
               <h1 className="text-xl font-bold">Kanallar</h1>
             </div>
             <Button size="sm" onClick={() => setShowCreateDialog(true)} className="gap-1.5">
@@ -99,7 +99,7 @@ export default function ChannelsPage() {
       <div className="max-w-3xl mx-auto px-4 py-2">
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-muted-foreground" />
           </div>
         ) : filteredChannels.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">

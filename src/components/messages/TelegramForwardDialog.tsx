@@ -187,21 +187,21 @@ export function TelegramForwardDialog({ messages: forwardMessages, open, onOpenC
         className={cn(
           "w-full flex items-center gap-3 p-3 rounded-lg transition-all",
           "hover:bg-accent/50 active:bg-accent",
-          isSelected && "bg-primary/10"
+          isSelected && "bg-muted"
         )}
       >
         <div className="relative">
           <Avatar className="h-12 w-12">
             <AvatarImage src={getConversationAvatar(conv) || ''} />
-            <AvatarFallback className="bg-primary text-primary-foreground">
+            <AvatarFallback className="bg-muted text-foreground">
               {conv.type === 'group' ? <Users className="h-5 w-5" /> : 
                conv.type === 'channel' ? <Megaphone className="h-5 w-5" /> :
                getConversationName(conv)[0]?.toUpperCase()}
             </AvatarFallback>
           </Avatar>
           {isSelected && (
-            <div className="absolute -bottom-0.5 -right-0.5 h-5 w-5 rounded-full bg-primary flex items-center justify-center">
-              <Check className="h-3 w-3 text-primary-foreground" />
+            <div className="absolute -bottom-0.5 -right-0.5 h-5 w-5 rounded-full bg-foreground flex items-center justify-center">
+              <Check className="h-3 w-3 text-background" />
             </div>
           )}
         </div>
@@ -237,8 +237,8 @@ export function TelegramForwardDialog({ messages: forwardMessages, open, onOpenC
 
         {/* Selected count bar */}
         {selectedIds.length > 0 && (
-          <div className="px-4 py-2 bg-primary/5 border-b border-border flex-shrink-0">
-            <p className="text-sm text-primary font-medium">
+          <div className="px-4 py-2 bg-muted/40 border-b border-border flex-shrink-0">
+            <p className="text-sm text-foreground font-medium">
               {selectedIds.length} chat{selectedIds.length > 1 ? 's' : ''} selected
             </p>
           </div>

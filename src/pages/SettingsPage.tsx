@@ -33,6 +33,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { VerificationRequestDialog } from '@/components/profile/VerificationRequestDialog';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { ChatWallpaperEditor } from '@/components/settings/ChatWallpaperEditor';
+import { ChatAccentEditor } from '@/components/settings/ChatAccentEditor';
 import { MediaAutoDownloadEditor } from '@/components/settings/MediaAutoDownloadEditor';
 import { LocationPicker } from '@/components/settings/LocationPicker';
 import { PROFILE_PUBLIC_COLUMNS } from '@/lib/profileFields';
@@ -306,7 +307,7 @@ export default function SettingsPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -337,7 +338,7 @@ export default function SettingsPage() {
     {
       title: 'Chat',
       items: [
-        { value: 'chat-wallpaper', label: 'Chat foni', description: 'Fon rasmi yoki gradient', icon: ImageIcon, tint: 'text-emerald-500 bg-emerald-500/10' },
+        { value: 'chat-wallpaper', label: 'Chat ko\u2018rinishi', description: 'Xabar rangi va fon', icon: ImageIcon, tint: 'text-emerald-500 bg-emerald-500/10' },
         { value: 'data-storage', label: 'Ma\u2018lumotlar va xotira', description: 'Avtomatik yuklab olish', icon: HardDrive, tint: 'text-cyan-500 bg-cyan-500/10' },
       ],
     },
@@ -392,7 +393,7 @@ export default function SettingsPage() {
                       className={cn(
                         'w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors',
                         idx !== 0 && 'border-t border-border/60',
-                        isActive ? 'bg-primary/10' : 'hover:bg-accent/50',
+                        isActive ? 'bg-accent/70' : 'hover:bg-accent/50',
                       )}
                     >
                       <span className={cn('h-9 w-9 rounded-xl flex items-center justify-center shrink-0', item.tint)}>
@@ -402,7 +403,7 @@ export default function SettingsPage() {
                         <span
                           className={cn(
                             'block text-sm font-medium truncate',
-                            isActive && 'text-primary',
+                            isActive && 'font-semibold text-foreground',
                             item.danger && 'text-destructive',
                           )}
                         >
@@ -565,8 +566,8 @@ export default function SettingsPage() {
           <div className="bg-card rounded-xl border border-border p-4 md:p-6">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-4 min-w-0">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                  <BadgeCheck className="h-6 w-6 text-primary" />
+                <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center shrink-0">
+                  <BadgeCheck className="h-6 w-6 text-muted-foreground" />
                 </div>
                 <div className="min-w-0">
                   <h3 className="font-semibold">Tasdiqlangan nishon</h3>
@@ -645,9 +646,12 @@ export default function SettingsPage() {
           </div>
         </TabsContent>
 
-        {/* Chat foni */}
-        <TabsContent value="chat-wallpaper" className="space-y-6">
-          <div className="bg-card rounded-xl border border-border p-4 md:p-6">
+        {/* Chat ko'rinishi */}
+        <TabsContent value="chat-wallpaper" className="space-y-4">
+          <div className="rounded-xl border border-border bg-card p-4 md:p-6">
+            <ChatAccentEditor />
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 md:p-6">
             <div className="mb-4">
               <h2 className="font-semibold">Chat foni</h2>
               <p className="text-sm text-muted-foreground">
@@ -772,7 +776,7 @@ export default function SettingsPage() {
 
           <div className="rounded-xl border border-border bg-card/40 p-4">
             <div className="flex items-start gap-3">
-              <ShieldCheck className="h-5 w-5 shrink-0 text-primary" />
+              <ShieldCheck className="h-5 w-5 shrink-0 text-muted-foreground" />
               <div className="min-w-0">
                 <p className="text-sm font-medium">Ikki qadamli tasdiqlash</p>
                 <p className="text-xs text-muted-foreground">
@@ -831,7 +835,7 @@ export default function SettingsPage() {
                               {session.device_name || session.browser_name || 'Noma\u2018lum qurilma'}
                             </p>
                             {session.is_current && (
-                              <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full shrink-0">
+                              <span className="px-2 py-0.5 bg-muted text-foreground text-xs rounded-full shrink-0">
                                 Hozirgi
                               </span>
                             )}

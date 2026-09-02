@@ -82,6 +82,12 @@ jobs:
         run: npm run typecheck:api
 
       - name: Map regression tests
+        env:
+          # Unit tests import the browser Supabase client through transit modules.
+          # These are non-secret placeholders so import-time env validation passes;
+          # map tests do not make Supabase network requests.
+          VITE_SUPABASE_URL: https://test.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: map-quality-test-key
         run: npm run test:map
 
       - name: Production build

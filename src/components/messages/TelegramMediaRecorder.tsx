@@ -583,7 +583,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
   if (state === 'sending') {
     return (
       <div className="flex items-center gap-2 rounded-full bg-muted px-3 py-1.5">
-        <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
         <span className="text-xs text-muted-foreground">
           {mode === 'video' ? 'Video xabar' : 'Ovozli xabar'} jo{'\u2019'}natilmoqda...
         </span>
@@ -621,7 +621,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
           </div>
 
           <svg
-            className="pointer-events-none absolute inset-0 h-full w-full -rotate-90 text-primary"
+            className="pointer-events-none absolute inset-0 h-full w-full -rotate-90 text-foreground"
             viewBox="0 0 100 100"
             aria-hidden="true"
           >
@@ -723,7 +723,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
           </div>
 
           <svg
-            className="pointer-events-none absolute inset-0 h-full w-full -rotate-90 text-primary"
+            className="pointer-events-none absolute inset-0 h-full w-full -rotate-90 text-foreground"
             viewBox="0 0 100 100"
             aria-hidden="true"
           >
@@ -846,7 +846,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
             {Array.from({ length: 20 }).map((_, i) => (
               <motion.div
                 key={i}
-                className="w-1 rounded-full bg-primary"
+                className="w-1 rounded-full bg-foreground"
                 animate={
                   isPlaying
                     ? { height: [4, 12 + ((i * 7) % 11), 4] }
@@ -867,7 +867,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         <Button
           variant="default"
           size="icon"
-          className="h-10 w-10 rounded-full bg-primary"
+          className="h-10 w-10 rounded-full bg-foreground"
           onClick={handleSendFromPreview}
           aria-label="Jo'natish"
         >
@@ -908,7 +908,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
             {audioLevels.map((level, i) => (
               <motion.div
                 key={i}
-                className="w-[3px] rounded-full bg-primary"
+                className="w-[3px] rounded-full bg-foreground"
                 animate={{ height: level + '%' }}
                 transition={{ duration: 0.05, ease: 'linear' }}
               />
@@ -935,7 +935,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
           <Button
             variant="default"
             size="icon"
-            className="h-10 w-10 rounded-full bg-primary"
+            className="h-10 w-10 rounded-full bg-foreground"
             onClick={finishAndSend}
             aria-label="Jo'natish"
           >
@@ -945,7 +945,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
           <Button
             variant="default"
             size="icon"
-            className="h-10 w-10 rounded-full bg-primary"
+            className="h-10 w-10 rounded-full bg-foreground"
             onClick={stopToPreview}
             aria-label="To'xtatish"
           >
@@ -976,7 +976,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         className={cn(
           'relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-muted-foreground transition-colors',
           'hover:bg-muted hover:text-foreground active:scale-95',
-          isHolding && 'bg-primary/15 text-primary'
+          isHolding && 'bg-muted text-foreground'
         )}
       >
         <AnimatePresence initial={false} mode="wait">
@@ -997,7 +997,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
             initial={{ scale: 0.6, opacity: 0.45 }}
             animate={{ scale: 1.6, opacity: 0 }}
             transition={{ duration: 0.6, repeat: Infinity }}
-            className="pointer-events-none absolute inset-0 rounded-full bg-primary/30"
+            className="pointer-events-none absolute inset-0 rounded-full bg-foreground/10"
           />
         )}
       </button>

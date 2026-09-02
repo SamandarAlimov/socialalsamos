@@ -145,13 +145,13 @@ const NotificationIcon = ({ type }: { type: Notification['type'] }) => {
     case 'collaboration_removed':
     case 'collaboration_left':
       return (
-        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center ring-2 ring-background shadow-sm">
+        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center ring-2 ring-background shadow-sm">
           <Users className={iconClass} />
         </div>
       );
     default:
       return (
-        <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center ring-2 ring-background shadow-sm">
+        <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center ring-2 ring-background shadow-sm text-foreground">
           <Bell className={iconClass} />
         </div>
       );
@@ -458,7 +458,7 @@ function GroupedNotificationItem({
       className={cn(
         'group relative flex items-start gap-3 px-4 py-3.5 cursor-pointer transition-colors duration-150',
         'hover:bg-accent/40 focus-visible:outline-none focus-visible:bg-accent/60',
-        hasUnread && 'bg-primary/[0.04] dark:bg-primary/10',
+        hasUnread && 'bg-muted/50',
       )}
       onClick={openTarget}
       onKeyDown={(event) => {
@@ -471,7 +471,7 @@ function GroupedNotificationItem({
       {hasUnread && (
         <span
           aria-hidden
-          className="absolute left-0 top-0 h-full w-[3px] bg-primary"
+          className="absolute left-0 top-0 h-full w-[3px] bg-foreground/50"
         />
       )}
 
@@ -543,7 +543,7 @@ function GroupedNotificationItem({
               {repeatCount}x
             </span>
           )}
-          {hasUnread && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
+          {hasUnread && <span className="h-1.5 w-1.5 rounded-full bg-foreground" />}
         </p>
 
         {group.type === 'collaboration_invite' && collaborationId && (
@@ -726,11 +726,11 @@ function PushNotificationBanner() {
     <motion.div
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="mx-4 mt-4 p-4 rounded-2xl border border-primary/20 bg-primary/5"
+      className="mx-4 mt-4 p-4 rounded-2xl border border-border bg-card/60"
     >
       <div className="flex items-start gap-3">
-        <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-          <Bell className="h-5 w-5 text-primary-foreground" />
+        <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+          <Bell className="h-5 w-5 text-muted-foreground" />
         </div>
         <div className="flex-1 min-w-0">
           <h4 className="font-semibold text-sm">Push bildirishnomalarni yoqing</h4>
@@ -894,7 +894,7 @@ export default function NotificationsPage() {
                 size="sm"
                 disabled={markingAll}
                 onClick={() => void handleMarkAllAsRead()}
-                className="text-primary hover:text-primary hover:bg-primary/10 rounded-full"
+                className="rounded-full text-foreground hover:bg-muted hover:text-foreground"
               >
                 {markingAll ? (
                   <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
@@ -935,7 +935,7 @@ export default function NotificationsPage() {
                   className={cn(
                     'px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors',
                     isActive
-                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      ? 'bg-background text-foreground shadow-sm ring-1 ring-border'
                       : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground',
                   )}
                 >

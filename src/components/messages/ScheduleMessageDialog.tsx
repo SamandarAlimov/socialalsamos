@@ -166,7 +166,7 @@ export function ScheduleMessageDialog({
             {selectedDate && (
               <p className={cn(
                 "text-sm text-center",
-                isValidTime ? "text-primary" : "text-destructive"
+                isValidTime ? "text-success" : "text-destructive"
               )}>
                 {isValidTime 
                   ? `Will be sent on ${format(selectedDate, 'PPP')} at ${format(selectedDate, 'p')}`

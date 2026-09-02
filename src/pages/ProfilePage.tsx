@@ -178,7 +178,7 @@ export default function ProfilePage() {
   const pageContent = (
     <div className="max-w-4xl mx-auto py-4 md:py-8 px-3 md:px-4 pb-24 md:pb-8">
       {/* Cover Photo */}
-      <div className="relative h-36 sm:h-48 md:h-64 rounded-xl md:rounded-2xl bg-gradient-to-r from-primary/20 to-primary/40 mb-12 md:mb-16 overflow-hidden group">
+      <div className="relative h-36 sm:h-48 md:h-64 rounded-xl md:rounded-2xl bg-gradient-to-r from-muted to-muted/60 mb-12 md:mb-16 overflow-hidden group">
         {profile.cover_url ? (
           <img
             src={profile.cover_url}
@@ -186,7 +186,7 @@ export default function ProfilePage() {
             className="w-full h-full object-cover"
           />
         ) : (
-          <div className="absolute inset-0 bg-gradient-to-r from-alsamos-orange-light to-alsamos-orange-dark" />
+          <div className="absolute inset-0 bg-gradient-to-br from-muted via-card to-muted/80" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-background/50 to-transparent" />
 
@@ -340,7 +340,7 @@ export default function ProfilePage() {
                   href={toExternalUrl(profile.website)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-primary hover:underline"
+                  className="text-link hover:text-link-hover hover:underline"
                 >
                   {stripProtocol(profile.website)}
                 </a>
@@ -396,7 +396,7 @@ export default function ProfilePage() {
               aria-label={tab.label}
               className={`flex-1 sm:flex-none flex items-center justify-center sm:justify-start gap-1.5 md:gap-2 px-3 md:px-6 py-2.5 md:py-3 text-xs md:text-sm font-medium transition-colors ${
                 activeTab === tab.id
-                  ? 'text-primary border-b-2 border-primary'
+                  ? 'text-foreground border-b-2 border-foreground'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >

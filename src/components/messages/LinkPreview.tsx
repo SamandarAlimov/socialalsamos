@@ -91,7 +91,7 @@ export function LinkPreview({ url, className }: LinkPreviewProps) {
       <button
         onClick={() => setShowEmbed(true)}
         className={cn(
-          "block w-full text-left rounded-xl overflow-hidden bg-card border border-border hover:border-primary/50 transition-all group",
+          "block w-full text-left rounded-xl overflow-hidden bg-card border border-border hover:border-foreground/20 transition-all group",
           className
         )}
       >
@@ -152,7 +152,7 @@ export function LinkPreview({ url, className }: LinkPreviewProps) {
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
-        "flex items-center gap-3 p-3 rounded-xl bg-card border border-border hover:border-primary/50 transition-colors",
+        "flex items-center gap-3 p-3 rounded-xl bg-card border border-border hover:border-foreground/20 transition-colors",
         className
       )}
     >

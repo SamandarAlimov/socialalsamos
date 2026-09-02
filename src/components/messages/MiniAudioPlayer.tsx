@@ -108,11 +108,11 @@ export function MiniAudioPlayer() {
         transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
         className="flex-shrink-0 z-20 overflow-hidden"
       >
-        <div className="bg-gradient-to-r from-primary/8 via-primary/5 to-primary/8 backdrop-blur-sm border-b border-primary/15">
+        <div className="bg-gradient-to-r from-muted/60 via-muted/30 to-muted/60 backdrop-blur-sm border-b border-border">
           {/* Progress bar at top - interactive */}
           <div 
             ref={progressBarRef}
-            className="h-1 bg-primary/10 cursor-pointer relative group"
+            className="h-1 bg-muted cursor-pointer relative group"
             onClick={handleProgressClick}
             onMouseDown={handleDragStart}
             onTouchStart={handleDragStart}
@@ -134,11 +134,11 @@ export function MiniAudioPlayer() {
             />
             
             {/* Hover expand effect */}
-            <div className="absolute inset-0 bg-primary/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="absolute inset-0 bg-foreground/10 opacity-0 group-hover:opacity-100 transition-opacity" />
             
             {/* Drag handle */}
             <motion.div
-              className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-foreground rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
               style={{ left: `calc(${displayProgress}% - 6px)` }}
               animate={{ scale: isDragging ? 1.3 : 1 }}
             />
@@ -163,9 +163,9 @@ export function MiniAudioPlayer() {
                     className="w-full h-full object-cover"
                   />
                 ) : isVideoTrack ? (
-                  <Video className="w-5 h-5 text-primary" />
+                  <Video className="w-5 h-5 text-foreground" />
                 ) : (
-                  <Music2 className="w-5 h-5 text-primary" />
+                  <Music2 className="w-5 h-5 text-foreground" />
                 )}
               </motion.div>
               
@@ -175,7 +175,7 @@ export function MiniAudioPlayer() {
                   {[0, 1, 2].map((i) => (
                     <motion.div
                       key={i}
-                      className="w-[3px] bg-primary rounded-full"
+                      className="w-[3px] bg-foreground rounded-full"
                       animate={{
                         height: ['4px', '10px', '4px'],
                       }}
@@ -220,7 +220,7 @@ export function MiniAudioPlayer() {
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "h-8 w-8 rounded-full hover:bg-primary/10 hidden sm:flex",
+                  "h-8 w-8 rounded-full hover:bg-muted hidden sm:flex",
                   !hasPrevious && "opacity-40 cursor-not-allowed"
                 )}
                 onClick={playPrevious}
@@ -235,18 +235,18 @@ export function MiniAudioPlayer() {
                 size="icon"
                 className={cn(
                   "h-10 w-10 rounded-full",
-                  "bg-primary/10 hover:bg-primary/20",
+                  "bg-muted hover:bg-foreground/10",
                   "transition-all duration-200"
                 )}
                 onClick={togglePlayback}
                 disabled={isBuffering}
               >
                 {isBuffering ? (
-                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 ) : isPlaying ? (
-                  <Pause className="h-5 w-5 fill-primary text-primary" />
+                  <Pause className="h-5 w-5 fill-foreground text-foreground" />
                 ) : (
-                  <Play className="h-5 w-5 fill-primary text-primary ml-0.5" />
+                  <Play className="h-5 w-5 fill-foreground text-foreground ml-0.5" />
                 )}
               </Button>
 
@@ -255,7 +255,7 @@ export function MiniAudioPlayer() {
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "h-8 w-8 rounded-full hover:bg-primary/10 hidden sm:flex",
+                  "h-8 w-8 rounded-full hover:bg-muted hidden sm:flex",
                   !hasNext && "opacity-40 cursor-not-allowed"
                 )}
                 onClick={playNext}
@@ -270,7 +270,7 @@ export function MiniAudioPlayer() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 rounded-full hover:bg-primary/10 text-xs font-bold"
+                    className="h-8 w-8 rounded-full hover:bg-muted text-xs font-bold"
                   >
                     {playbackSpeed}x
                   </Button>
@@ -282,7 +282,7 @@ export function MiniAudioPlayer() {
                       onClick={() => setPlaybackSpeed(speed)}
                       className={cn(
                         "justify-center font-medium",
-                        speed === playbackSpeed && "bg-primary/10 text-primary"
+                        speed === playbackSpeed && "bg-muted text-foreground"
                       )}
                     >
                       {speed}x

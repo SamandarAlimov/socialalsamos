@@ -60,7 +60,7 @@ export function ScheduledMessagesSheet({
         <ScrollArea className="h-[calc(100vh-100px)] mt-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
+              <div className="animate-spin h-6 w-6 border-2 border-muted-foreground border-t-transparent rounded-full" />
             </div>
           ) : scheduledMessages.length === 0 ? (
             <div className="text-center py-12">
@@ -89,8 +89,8 @@ export function ScheduledMessagesSheet({
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
-                              <Clock className="h-3.5 w-3.5 text-primary" />
-                              <span className="text-sm font-medium text-primary">
+                              <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span className="text-sm font-medium text-muted-foreground">
                                 {format(new Date(msg.scheduled_for), 'p')}
                               </span>
                               {msg.media_type && (

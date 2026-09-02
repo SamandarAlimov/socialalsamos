@@ -147,7 +147,7 @@ export default function MiniAppsModerationPage() {
                       href={item.url}
                       target="_blank"
                       rel="noopener noreferrer nofollow"
-                      className="break-all text-xs text-primary underline"
+                      className="break-all text-xs text-link underline hover:text-link-hover"
                     >
                       {item.url}
                     </a>

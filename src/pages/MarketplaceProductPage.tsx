@@ -157,7 +157,7 @@ export default function MarketplaceProductPage() {
     return (
       <div className="flex min-h-[55vh] items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-muted-foreground">
-          <Loader2 className="h-7 w-7 animate-spin text-primary" />
+          <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
           <span className="text-sm">Mahsulot yuklanmoqda...</span>
         </div>
       </div>

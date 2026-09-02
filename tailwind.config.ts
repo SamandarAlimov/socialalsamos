@@ -23,6 +23,28 @@ export default {
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        // Platform semantic roles: structure/content stay neutral; brand is signal.
+        surface: {
+          base: "hsl(var(--surface-base))",
+          elevated: "hsl(var(--surface-elevated))",
+        },
+        nav: {
+          DEFAULT: "hsl(var(--nav-bg))",
+          "icon-default": "hsl(var(--nav-icon-default))",
+          "icon-active": "hsl(var(--nav-icon-active))",
+        },
+        content: {
+          primary: "hsl(var(--text-primary))",
+          secondary: "hsl(var(--text-secondary))",
+        },
+        "border-neutral": "hsl(var(--border-neutral))",
+        brand: {
+          DEFAULT: "hsl(var(--accent-brand))",
+        },
+        link: {
+          DEFAULT: "hsl(var(--link))",
+          hover: "hsl(var(--link-hover))",
+        },
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -60,14 +82,12 @@ export default {
           "orange-light": "hsl(var(--alsamos-orange-light))",
           "orange-dark": "hsl(var(--alsamos-orange-dark))",
         },
-        // Xabar bubble'lari uchun alohida semantik tokenlar.
-        // Sabab: joriy foydalanuvchi bubble foni ilgari to'liq to'yingan orange
-        // (bg-primary) edi - stiker, emoji, link preview va media thumbnail'ning
-        // o'z ichki kontrasti buzilardi. Endi brend hue (24) saqlanadi, lekin
-        // kuchli desaturatsiya qilinadi; orange faqat status checkmark'da qoladi.
+        // Xabar bubble'lari brand rangidan mustaqil semantik tokenlar.
+        // Default green tint; foydalanuvchi Sozlamalarda chat accent tanlaydi.
         bubble: {
           own: "hsl(var(--bubble-own-bg))",
           "own-foreground": "hsl(var(--bubble-own-fg))",
+          "own-accent": "hsl(var(--bubble-own-accent))",
           other: "hsl(var(--bubble-other-bg))",
           "other-foreground": "hsl(var(--bubble-other-fg))",
         },

@@ -1923,8 +1923,8 @@ export default function MessagesPage() {
       )}
 
       {pendingSharedLocation && (
-        <div className="flex flex-shrink-0 items-center gap-2 border-b border-border bg-primary/5 px-3 py-2">
-          <MapPin className="h-4 w-4 shrink-0 text-primary" />
+        <div className="flex flex-shrink-0 items-center gap-2 border-b border-border bg-muted/40 px-3 py-2">
+          <MapPin className="h-4 w-4 shrink-0 text-muted-foreground" />
           <div className="min-w-0 flex-1">
             <p className="truncate text-xs font-semibold">Lokatsiyani yuborish</p>
             <p className="truncate text-[11px] text-muted-foreground">
@@ -1961,7 +1961,7 @@ export default function MessagesPage() {
           />
         ) : conversationsLoading && filteredConversations.length === 0 ? (
           <div className="flex h-32 items-center justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
+            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-muted-foreground" />
           </div>
         ) : filteredConversations.length === 0 ? (
           <div className="flex h-48 flex-col items-center justify-center px-6 text-center text-muted-foreground">
@@ -2160,7 +2160,7 @@ export default function MessagesPage() {
             >
               {messagesLoading ? (
                 <div className="flex h-full items-center justify-center">
-                  <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
+                  <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-muted-foreground" />
                 </div>
               ) : messages.length === 0 ? (
                 <div className="flex h-full flex-col items-center justify-center px-6 text-center text-muted-foreground">
@@ -2172,7 +2172,7 @@ export default function MessagesPage() {
                 <>
                   {messagesLoadingMore && (
                     <div className="flex justify-center py-2">
-                      <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-primary" />
+                      <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-muted-foreground" />
                     </div>
                   )}
                   <div
@@ -2211,7 +2211,7 @@ export default function MessagesPage() {
                                   className={cn(
                                     'min-w-0 py-1',
                                     highlightedMessageId === message.id &&
-                                      'animate-pulse rounded-lg bg-primary/10'
+                                      'animate-pulse rounded-lg bg-muted'
                                   )}
                                 >
                                   <EnhancedMessageBubble
@@ -2260,7 +2260,7 @@ export default function MessagesPage() {
                 <div className="min-w-0 max-w-full space-y-4 p-2 sm:p-4">
                   {messagesLoadingMore && (
                     <div className="flex justify-center py-1">
-                      <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-primary" />
+                      <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-muted-foreground" />
                     </div>
                   )}
                   {messageGroups.map((group) => (
@@ -2285,7 +2285,7 @@ export default function MessagesPage() {
                               className={cn(
                                 'min-w-0',
                                 highlightedMessageId === message.id &&
-                                  'animate-pulse rounded-lg bg-primary/10'
+                                  'animate-pulse rounded-lg bg-muted'
                               )}
                             >
                               <EnhancedMessageBubble
@@ -2343,7 +2343,7 @@ export default function MessagesPage() {
               >
                 <ArrowDown className="h-5 w-5" />
                 {unreadIncomingCount > 0 && (
-                  <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground">
+                  <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-foreground px-1.5 text-[11px] font-semibold text-background">
                     {unreadIncomingCount > 99 ? '99+' : unreadIncomingCount}
                   </span>
                 )}
@@ -2506,12 +2506,12 @@ export default function MessagesPage() {
             className={cn(
               'group/handle relative z-20 w-px bg-border',
               "after:absolute after:inset-y-0 after:left-1/2 after:w-3 after:-translate-x-1/2 after:content-['']",
-              'hover:bg-primary/30 data-[resize-handle-active]:bg-primary',
+              'hover:bg-muted-foreground/20 data-[resize-handle-active]:bg-muted-foreground/30',
               'transition-colors'
             )}
           >
             {isResizing && (
-              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-primary/60" />
+              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-muted-foreground/30" />
             )}
             {isResizing && resizeHint && (
               <div className="pointer-events-none absolute left-1/2 top-4 z-30 -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-xs font-medium text-popover-foreground shadow-md">

@@ -11,6 +11,7 @@ import { VideoPlayerProvider } from "@/contexts/VideoPlayerContext";
 import { ThemeProvider } from "next-themes";
 import { PushNotificationProvider } from "@/components/PushNotificationProvider";
 import { ChatWallpaperProvider } from "@/components/chat/ChatWallpaperProvider";
+import { ChatAccentProvider } from "@/components/chat/ChatAccentProvider";
 
 // Pages
 import AuthPage from "./pages/AuthPage";
@@ -62,7 +63,7 @@ const queryClient = new QueryClient();
 function FullscreenSpinner() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-muted-foreground" />
     </div>
   );
 }
@@ -189,6 +190,7 @@ function AppWithGlobalCall() {
         <PushNotificationProvider>
           <OnlinePresenceProvider>
             <GlobalCallProvider>
+              <ChatAccentProvider />
               {/* Tanlangan chat fonini chat oynasiga qo'llaydi */}
               <ChatWallpaperProvider />
               <AppRoutes />

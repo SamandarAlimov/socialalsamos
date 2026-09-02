@@ -51,7 +51,7 @@ export function PostCollaborators({
           <span key={collab.id}>
             <Link 
               to={`/user/${collab.collaborator?.username}`}
-              className="font-medium text-foreground hover:text-primary transition-colors"
+              className="font-medium text-foreground hover:text-link transition-colors"
             >
               {collab.collaborator?.display_name || collab.collaborator?.username}
             </Link>
@@ -70,7 +70,7 @@ export function PostCollaborators({
       <div className="flex items-center -space-x-2">
         {/* Post author */}
         <Link to={`/user/${postAuthor.username}`}>
-          <Avatar className="h-8 w-8 border-2 border-background ring-2 ring-primary">
+          <Avatar className="h-8 w-8 border-2 border-background ring-2 ring-border">
             <AvatarImage src={postAuthor.avatar_url || ''} />
             <AvatarFallback>
               {postAuthor.display_name?.[0] || postAuthor.username?.[0]}
@@ -101,7 +101,7 @@ export function PostCollaborators({
         <div className="flex items-center gap-1 flex-wrap">
           <Link 
             to={`/user/${postAuthor.username}`}
-            className="font-semibold hover:text-primary transition-colors"
+            className="font-semibold hover:text-link transition-colors"
           >
             {postAuthor.display_name || postAuthor.username}
           </Link>
@@ -113,7 +113,7 @@ export function PostCollaborators({
             <span key={collab.id} className="flex items-center gap-1">
               <Link 
                 to={`/user/${collab.collaborator?.username}`}
-                className="font-semibold hover:text-primary transition-colors"
+                className="font-semibold hover:text-link transition-colors"
               >
                 {collab.collaborator?.display_name || collab.collaborator?.username}
               </Link>

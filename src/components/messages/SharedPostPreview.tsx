@@ -58,7 +58,7 @@ export function SharedPostPreview({ postId, isMine }: SharedPostPreviewProps) {
   }, [postId]);
 
   const surface = isMine
-    ? 'bg-primary-foreground/10 border-primary-foreground/20'
+    ? 'bg-bubble-own-foreground/10 border-bubble-own-foreground/20'
     : 'bg-muted/50 border-border';
 
   if (isLoading) {
@@ -75,7 +75,7 @@ export function SharedPostPreview({ postId, isMine }: SharedPostPreviewProps) {
         className={cn(
           'rounded-2xl border p-3 text-center text-sm',
           surface,
-          isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'
+          isMine ? 'text-bubble-own-foreground/65' : 'text-muted-foreground'
         )}
       >
         Post mavjud emas
@@ -106,7 +106,7 @@ export function SharedPostPreview({ postId, isMine }: SharedPostPreviewProps) {
       className={cn(
         'cursor-pointer overflow-hidden rounded-2xl border transition-colors',
         surface,
-        isMine ? 'hover:bg-primary-foreground/15' : 'hover:bg-muted/70'
+        isMine ? 'hover:bg-bubble-own-foreground/10' : 'hover:bg-muted/70'
       )}
     >
       {/* Media ko'rinishi */}
@@ -148,7 +148,7 @@ export function SharedPostPreview({ postId, isMine }: SharedPostPreviewProps) {
           <span
             className={cn(
               'truncate text-sm font-medium',
-              isMine ? 'text-primary-foreground' : 'text-foreground'
+              isMine ? 'text-bubble-own-foreground' : 'text-foreground'
             )}
           >
             {post.profile?.display_name || post.profile?.username || "Noma'lum"}
@@ -159,7 +159,7 @@ export function SharedPostPreview({ postId, isMine }: SharedPostPreviewProps) {
           <div
             className={cn(
               'line-clamp-2 break-words text-sm',
-              isMine ? 'text-primary-foreground/80' : 'text-muted-foreground'
+              isMine ? 'text-bubble-own-foreground/75' : 'text-muted-foreground'
             )}
             style={{ overflowWrap: 'anywhere' }}
           >
@@ -170,7 +170,7 @@ export function SharedPostPreview({ postId, isMine }: SharedPostPreviewProps) {
         <div
           className={cn(
             'flex items-center gap-4 text-xs',
-            isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'
+            isMine ? 'text-bubble-own-foreground/65' : 'text-muted-foreground'
           )}
         >
           <span className="flex items-center gap-1">

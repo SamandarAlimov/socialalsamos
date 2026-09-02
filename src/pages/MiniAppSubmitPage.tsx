@@ -491,8 +491,8 @@ export default function MiniAppSubmitPage() {
                     className={cn(
                       'flex items-center gap-2 rounded-xl border p-3 text-left text-sm transition',
                       active
-                        ? 'border-primary bg-primary/5 font-medium text-foreground'
-                        : 'hover:border-primary/40 hover:bg-muted/40',
+                        ? 'border-foreground/20 bg-muted font-medium text-foreground'
+                        : 'hover:border-foreground/20 hover:bg-muted/40',
                     )}
                   >
                     <Icon className="h-4 w-4 shrink-0" />
@@ -961,7 +961,7 @@ export default function MiniAppSubmitPage() {
 function SectionTitle({ index, title }: { index: number; title: string }) {
   return (
     <div className="flex items-baseline gap-2">
-      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground">
         {index}
       </span>
       <h2 className="text-base font-medium">{title}</h2>

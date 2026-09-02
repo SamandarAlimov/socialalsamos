@@ -39,31 +39,14 @@ const navItems: NavItem[] = [
 
 const bottomItems: NavItem[] = [{ icon: User, labelKey: 'nav.profile', path: '/profile' }];
 
-/**
- * Aktiv nav elementining ko'rinishi.
- *
- * Tarix (ikki bosqichli tuzatish):
- *   1-bosqich: `bg-primary text-primary-foreground shadow-md` — katta, to'liq
- *      to'yingan orange blok. Sidebar qobig'i kontentdan ko'zga oldin
- *      tashlanardi va orange "bosiladigan CTA" ma'nosini yo'qotardi.
- *   2-bosqich: `bg-primary/10 text-primary` — yaxshiroq, lekin baribir
- *      "katta rangli blok" naqshi edi.
- *
- * Hozirgi yechim: tanlov holati RANG bilan emas, SHAKL va POZITSIYA bilan
- * ko'rsatiladi — chap tomonda ingichka brend chiziq + neytral qatlam +
- * ikon/matn qalinlashuvi. Bu Discover tab bar (segmented control) bilan
- * bir xil mantiq: fon rangi tanlovni bildirmaydi, qatlam va forma bildiradi.
- * Orange faqat 3px chiziqda qoladi — ya'ni nozik aksent, fon emas.
- */
+/** Aktiv nav rangsiz: neytral qatlam + font/icon weight. */
 const NAV_ITEM_BASE = "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative";
 const NAV_ITEM_ACTIVE = "bg-sidebar-accent text-sidebar-foreground font-semibold";
 const NAV_ITEM_INACTIVE = "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground";
 
-/** Aktiv elementning yagona rangli qismi: chapdagi ingichka brend chizig'i. */
-const NAV_ACTIVE_INDICATOR = "absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary";
 
 /** Badge rangi butun platforma bo'ylab bitta: aktiv holatga qarab o'zgarmaydi. */
-const NAV_BADGE = "bg-destructive text-destructive-foreground";
+const NAV_BADGE = "bg-primary text-primary-foreground";
 
 interface AppSidebarProps {
   collapsed: boolean;
@@ -108,7 +91,7 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
           setUserToggled(true);
           onCollapsedChange(!collapsed);
         }}
-        className="absolute left-full top-20 z-[70] flex h-8 w-8 items-center justify-center rounded-full border border-sidebar-border bg-background shadow-lg transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+        className="absolute left-full top-20 z-[70] flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-sidebar-border bg-background shadow-lg transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
       >
         {collapsed ? (
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -130,7 +113,6 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
               NAV_ITEM_BASE,
               isActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE
             )}>
-              {isActive && <span aria-hidden="true" className={NAV_ACTIVE_INDICATOR} />}
               <div className="relative">
                 <item.icon
                   className={cn("h-5 w-5 flex-shrink-0 transition-transform duration-200", !isActive && "group-hover:scale-110")}
@@ -155,8 +137,7 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
           return (
             <div key={item.path} className="flex items-center gap-1">
               <NavLink to={item.path} className={cn("relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group flex-1", isActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE)}>
-                {isActive && <span aria-hidden="true" className={NAV_ACTIVE_INDICATOR} />}
-                {profile?.avatar_url ? <Avatar className={cn("h-5 w-5 flex-shrink-0", isActive && "ring-2 ring-primary ring-offset-1 ring-offset-sidebar")}><AvatarImage src={profile.avatar_url} alt={profile.display_name || 'Profile'} /><AvatarFallback><User className="h-3 w-3" /></AvatarFallback></Avatar> : <User className="h-5 w-5 flex-shrink-0" />}
+                  {profile?.avatar_url ? <Avatar className={cn("h-5 w-5 flex-shrink-0", isActive && "ring-2 ring-foreground/20 ring-offset-1 ring-offset-sidebar")}><AvatarImage src={profile.avatar_url} alt={profile.display_name || 'Profile'} /><AvatarFallback><User className="h-3 w-3" /></AvatarFallback></Avatar> : <User className="h-5 w-5 flex-shrink-0" />}
                 {!collapsed && <span className="text-sm">{t(item.labelKey)}</span>}
               </NavLink>
               {/* Xavfsizlik bu yerda emas — u Sozlamalar ichida joylashgan. */}

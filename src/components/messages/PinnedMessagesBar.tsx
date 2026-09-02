@@ -62,17 +62,17 @@ export function PinnedMessagesBar({
                 className={cn(
                   'w-[2px] flex-1 rounded-full',
                   i === safeIndex % Math.min(pinnedMessages.length, 4)
-                    ? 'bg-primary'
+                    ? 'bg-foreground'
                     : 'bg-border'
                 )}
               />
             ))}
           </div>
 
-          <Pin className="h-4 w-4 shrink-0 text-primary" />
+          <Pin className="h-4 w-4 shrink-0 text-foreground" />
 
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-medium text-primary">
+            <p className="truncate text-xs font-medium text-foreground">
               Qadalgan xabar
               {pinnedMessages.length > 1 ? ` #${safeIndex + 1}` : ''}
             </p>
@@ -130,7 +130,7 @@ export function PinnedMessagesBar({
         <div className="p-2">
           <div className="mb-2 flex items-center justify-between px-2">
             <div className="flex items-center gap-2">
-              <Pin className="h-4 w-4 text-primary" />
+              <Pin className="h-4 w-4 text-foreground" />
               <span className="text-sm font-medium">
                 Qadalgan xabarlar ({pinnedMessages.length})
               </span>
@@ -157,9 +157,9 @@ export function PinnedMessagesBar({
                     setIsExpanded(false);
                   }}
                 >
-                  <span className="h-8 w-[2px] shrink-0 rounded-full bg-primary/60" />
+                  <span className="h-8 w-[2px] shrink-0 rounded-full bg-muted-foreground/50" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-medium text-primary">
+                    <p className="truncate text-xs font-medium text-foreground">
                       {pinned.message?.sender?.display_name || "Noma'lum"}
                     </p>
                     <p className="truncate text-sm text-muted-foreground">
