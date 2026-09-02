@@ -91,7 +91,7 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
           setUserToggled(true);
           onCollapsedChange(!collapsed);
         }}
-        className="absolute left-full top-20 z-[70] flex h-8 w-8 items-center justify-center rounded-full border border-sidebar-border bg-background shadow-lg transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+        className="absolute left-full top-20 z-[70] flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-sidebar-border bg-background shadow-lg transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
       >
         {collapsed ? (
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
