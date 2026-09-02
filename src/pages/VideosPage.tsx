@@ -169,6 +169,7 @@ function VideoCard({
       const el = videoRef.current;
       if (!el) return;
       holdActive.current = true;
+      window.getSelection?.()?.removeAllRanges();
       setIsHolding(true);
       el.playbackRate = 2;
       if (el.paused) {
@@ -305,7 +306,7 @@ function VideoCard({
       <div
         ref={frameRef}
         className={cn(
-          "relative select-none overflow-hidden bg-black",
+          "relative select-none overflow-hidden bg-black [-webkit-touch-callout:none]",
           isMobile
             ? "h-full w-full"
             : cn(
@@ -320,7 +321,6 @@ function VideoCard({
         style={{
           WebkitUserSelect: 'none',
           userSelect: 'none',
-          WebkitTouchCallout: 'none',
         }}
       >
         {/*
