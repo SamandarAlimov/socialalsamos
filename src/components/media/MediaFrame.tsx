@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
  *   - Always centers media on a solid black backdrop (letterbox / pillarbox).
  *
  * Variants:
- *   - "feed"    → 4:5 ≤ ratio ≤ 1.91:1   (Instagram feed rules, default)
+ *   - "feed"    → 4:5 ≤ ratio ≤ 1.91:1 + viewport-height budget
  *   - "reel"    → 9:16 fixed                (Reels / Shorts viewport)
  *   - "preview" → 16:9 fixed                (small shared previews, chat cards)
  *   - "free"    → no clamp, exact natural ratio
@@ -75,12 +75,15 @@ export function MediaFrame({
   containerRef,
 }: MediaFrameProps) {
   const ratio = resolveFrameRatio(variant, naturalRatio);
+  const isFeed = variant === 'feed';
 
   return (
     <div
       ref={containerRef}
       className={cn(
         'relative w-full overflow-hidden bg-black flex items-center justify-center',
+        isFeed &&
+          'max-h-[min(72dvh,720px)] sm:max-h-[min(74dvh,720px)] xl:max-h-[min(76dvh,740px)]',
         rounded && 'rounded-2xl',
         className,
       )}
