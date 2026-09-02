@@ -48,7 +48,7 @@ export function HashtagAutocomplete({
       const contentRows = (data ?? []) as Array<{ content: string | null }>;
       contentRows.forEach((post) => {
         if (post.content) {
-          const matches = post.content.match(hashtagRegex) || [];
+          const matches: string[] = post.content.match(hashtagRegex) ?? [];
           matches.forEach(match => {
             const tag = match.slice(1).toLowerCase();
             hashtagCounts[tag] = (hashtagCounts[tag] || 0) + 1;
