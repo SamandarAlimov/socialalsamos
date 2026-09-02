@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/db';
+import { getStructuredPostMediaPreviewMap } from '@/lib/postMediaPreview';
 
 export const NOTIFICATION_PAGE_SIZE = 30;
 
@@ -18,6 +19,7 @@ export interface NotificationPost {
   id: string;
   media_urls: string[] | null;
   media_type: string | null;
+  preview_poster?: string | null;
 }
 
 export interface NotificationComment {
@@ -147,6 +149,25 @@ async function enrichNotifications(rows: RawNotificationRow[]): Promise<Notifica
   const postMap = new Map<string, NotificationPost>(
     ((postsResult.data as NotificationPost[] | null) || []).map((p) => [p.id, p]),
   );
+
+  const postsMissingPreview = Array.from(postMap.values())
+    .filter((post) => !post.media_urls?.some(Boolean))
+    .map((post) => post.id);
+
+  if (postsMissingPreview.length > 0) {
+    const previewMap = await getStructuredPostMediaPreviewMap(postsMissingPreview);
+    previewMap.forEach((preview, postId) => {
+      const post = postMap.get(postId);
+      if (!post || post.media_urls?.some(Boolean)) return;
+      postMap.set(postId, {
+        ...post,
+        media_urls: [preview.url],
+        media_type: preview.mediaType,
+        preview_poster: preview.poster,
+      });
+    });
+  }
+
   const commentMap = new Map<string, NotificationComment>(
     ((commentsResult.data as NotificationComment[] | null) || []).map((comment) => [
       comment.id,
