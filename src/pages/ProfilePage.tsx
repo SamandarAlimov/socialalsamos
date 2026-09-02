@@ -340,7 +340,7 @@ export default function ProfilePage() {
                   href={toExternalUrl(profile.website)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-primary hover:underline"
+                  className="text-link hover:text-link-hover hover:underline"
                 >
                   {stripProtocol(profile.website)}
                 </a>
@@ -396,7 +396,7 @@ export default function ProfilePage() {
               aria-label={tab.label}
               className={`flex-1 sm:flex-none flex items-center justify-center sm:justify-start gap-1.5 md:gap-2 px-3 md:px-6 py-2.5 md:py-3 text-xs md:text-sm font-medium transition-colors ${
                 activeTab === tab.id
-                  ? 'text-primary border-b-2 border-primary'
+                  ? 'text-foreground border-b-2 border-foreground'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
