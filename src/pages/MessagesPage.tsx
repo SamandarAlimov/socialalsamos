@@ -414,13 +414,14 @@ export default function MessagesPage() {
   const scrollToBottom = useCallback((smooth = false) => {
     const el = messagesScrollRef.current;
     if (!el) return;
-    const doScroll = () => {
-      el.scrollTop = el.scrollHeight;
-    };
+
+    // Bitta frame + bitta scroll. Oldingi uch martalik scrollTop yozuvi wheel/touch
+    // scroll bilan urishib, chatni "sakratib" yuborardi.
     requestAnimationFrame(() => {
-      doScroll();
-      requestAnimationFrame(doScroll);
-      setTimeout(doScroll, 120);
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior: smooth ? 'smooth' : 'auto',
+      });
     });
   }, []);
 
@@ -1656,15 +1657,44 @@ export default function MessagesPage() {
     return items;
   }, [messageGroups, user?.id]);
 
-  const VIRTUALIZE_THRESHOLD = 80;
+  // Birinchi server sahifasi 60 ta xabar. Threshold 80 bo'lganda foydalanuvchi
+  // yuqoriga scroll qilib ikkinchi sahifani olishi bilan DOM birdan virtual rejimga
+  // o'tardi — aynan shu katta sakrashning asosiy sababi edi. 40 bilan to'liq
+  // tarixli chat birinchi renderdanoq bir xil rendererda qoladi.
+  const VIRTUALIZE_THRESHOLD = 40;
   const useVirtualization = flatItems.length > VIRTUALIZE_THRESHOLD;
 
   const rowVirtualizer = useVirtualizer({
     count: flatItems.length,
-    getScrollElement: () => messagesScrollRef.current,
-    estimateSize: (index) => (flatItems[index]?.kind === 'date' ? 44 : 72),
-    overscan: 8,
-    measureElement: (el) => el?.getBoundingClientRect().height ?? 72,
+    getScrollElement: () => (useVirtualization ? messagesScrollRef.current : null),
+    estimateSize: (index) => {
+      const item = flatItems[index];
+      if (!item || item.kind === 'date') return 44;
+
+      const message = item.message;
+      const mediaType = message.media_type;
+      if (mediaType === 'video_note') return 272;
+      if (
+        mediaType === 'video' &&
+        message.media_url &&
+        /(?:^|\/)video_\d+\.(?:webm|mp4|mov|m4v)(?:[?#]|$)/i.test(message.media_url)
+      ) {
+        return 272;
+      }
+      if (mediaType === 'video') return 272;
+      if (mediaType === 'image' || mediaType === 'photo') return 230;
+      if (mediaType === 'sticker' || mediaType === 'gif') return 250;
+      if (mediaType === 'audio' || mediaType === 'voice') return 88;
+      if (mediaType === 'file' || mediaType === 'document') return 84;
+
+      const textLength = message.content?.length ?? 0;
+      if (textLength > 700) return 230;
+      if (textLength > 300) return 160;
+      if (textLength > 120) return 112;
+      return 76;
+    },
+    overscan: 12,
+    measureElement: (el) => el?.getBoundingClientRect().height ?? 76,
     getItemKey: (index) => flatItems[index]?.key ?? index,
   });
 
@@ -2151,7 +2181,7 @@ export default function MessagesPage() {
             <div
               ref={messagesScrollRef}
               onScroll={handleMessagesScroll}
-              className="scrollbar-custom absolute inset-0 overflow-y-auto overflow-x-hidden overscroll-contain bg-muted/20"
+              className="scrollbar-custom absolute inset-0 overflow-y-auto overflow-x-hidden overscroll-contain bg-muted/20 [overflow-anchor:none]"
               style={isSelectionMode ? { touchAction: 'pan-y' } : undefined}
               onPointerDown={handleMessagesPointerDown}
               onPointerMove={handleMessagesPointerMove}
