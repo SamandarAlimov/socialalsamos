@@ -247,6 +247,7 @@ export function CommentsSection({
                 onMediaSelect={(url, type) => setReplyMedia({ url, type })}
                 onMediaClear={() => setReplyMedia(null)}
                 selectedMedia={replyMedia}
+                showSelectedPreview={false}
               />
               <GifPicker
                 onSelect={(url) => setReplyMedia({ url, type: 'gif' })}
@@ -484,6 +485,7 @@ export function CommentsSection({
                     }
                     onMediaClear={() => setSelectedMedia(null)}
                     selectedMedia={selectedMedia}
+                    showSelectedPreview={false}
                   />
                   <GifPicker
                     onSelect={(url) =>
