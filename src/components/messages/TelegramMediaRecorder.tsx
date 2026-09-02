@@ -26,7 +26,7 @@ import {
 } from '@/lib/videoNoteLayout';
 
 interface TelegramMediaRecorderProps {
-  onSend: (url: string, duration: number, type: 'audio' | 'video') => void | Promise<unknown>;
+  onSend: (url: string, duration: number, type: 'audio' | 'video' | 'video_note') => void | Promise<unknown>;
   onCancel?: () => void;
 }
 
@@ -196,7 +196,7 @@ export function TelegramMediaRecorder({ onSend, onCancel }: TelegramMediaRecorde
         const sent = await onSend(
           uploaded.storageUrl || uploaded.url,
           Math.max(1, seconds),
-          recordMode === 'video' ? 'video' : 'audio'
+          recordMode === 'video' ? 'video_note' : 'audio'
         );
         if (sent === null) {
           throw new Error('Xabar serverga yozilmadi');
