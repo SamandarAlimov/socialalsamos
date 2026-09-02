@@ -33,14 +33,13 @@ const DEAD_COOLDOWN_MS = 15 * 60_000;
 const MODEL_MAP: Record<string, string> = {
   // Flash oilasi — 2.5 endi yangi kalitlar uchun yopiq, 3.6 ga yo'naltiramiz.
   'google/gemini-3-flash-preview': 'gemini-3.6-flash',
+  'google/gemini-3.1-flash-lite': 'gemini-flash-lite-latest',
+  'google/gemini-2.5-flash-lite': 'gemini-flash-lite-latest',
   'google/gemini-3.5-flash': 'gemini-3.6-flash',
   'google/gemini-3.6-flash': 'gemini-3.6-flash',
   'google/gemini-3.7-flash': 'gemini-flash-latest',
   'google/gemini-2.5-flash': 'gemini-3.6-flash',
   'google/gemini-2.0-flash': 'gemini-3.6-flash',
-  // Lite oilasi
-  'google/gemini-3.1-flash-lite': 'gemini-flash-lite-latest',
-  'google/gemini-2.5-flash-lite': 'gemini-flash-lite-latest',
   // Pro oilasi
   'google/gemini-3.1-pro-preview': 'gemini-pro-latest',
   'google/gemini-2.5-pro': 'gemini-pro-latest',
@@ -53,7 +52,6 @@ export function toGoogleModel(model: string): string {
   if (MODEL_MAP[model]) return MODEL_MAP[model];
   if (!model.startsWith('google/')) return model;
   const bare = model.slice('google/'.length);
-  // Eskirgan 2.x nomlari 404 beradi — ularni zamonaviy modelga o'tkazamiz.
   if (/^gemini-[0-2]\./.test(bare)) return FALLBACK_GOOGLE_MODEL;
   return bare;
 }
