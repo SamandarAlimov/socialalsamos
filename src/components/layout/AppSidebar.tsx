@@ -44,7 +44,6 @@ const NAV_ITEM_BASE = "flex items-center gap-3 px-3 py-2.5 rounded-xl transition
 const NAV_ITEM_ACTIVE = "bg-sidebar-accent text-sidebar-foreground font-semibold";
 const NAV_ITEM_INACTIVE = "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground";
 
-/** Aktiv elementning yagona rangli qismi: chapdagi ingichka brend chizig'i. */
 
 /** Badge rangi butun platforma bo'ylab bitta: aktiv holatga qarab o'zgarmaydi. */
 const NAV_BADGE = "bg-destructive text-destructive-foreground";
