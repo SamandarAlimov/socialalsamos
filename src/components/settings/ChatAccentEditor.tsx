@@ -5,11 +5,14 @@ import {
   CHAT_ACCENTS,
   ChatAccent,
   getStoredChatAccent,
+  getStoredCustomChatColor,
   setStoredChatAccent,
+  setStoredCustomChatColor,
 } from '@/lib/chatAccent';
 
 export function ChatAccentEditor() {
   const [accent, setAccent] = useState<ChatAccent>(() => getStoredChatAccent());
+  const [customColor, setCustomColor] = useState(() => getStoredCustomChatColor());
 
   useEffect(() => {
     const sync = (event: Event) => {
@@ -57,6 +60,44 @@ export function ChatAccentEditor() {
             </button>
           );
         })}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-background p-3">
+        <div>
+          <p className="text-sm font-medium text-foreground">Maxsus rang</p>
+          <p className="text-xs text-muted-foreground">
+            Istalgan rangni tanlang — tizim undan xavfsiz light/dark tint yaratadi.
+          </p>
+        </div>
+        <label className="flex items-center gap-2">
+          <input
+            type="color"
+            value={customColor}
+            onChange={(event) => {
+              const next = event.target.value;
+              setCustomColor(next);
+              setAccent('custom');
+              setStoredCustomChatColor(next);
+            }}
+            className="h-9 w-12 cursor-pointer rounded-md border border-border bg-transparent p-1"
+            aria-label="Maxsus chat rangini tanlash"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setAccent('custom');
+              setStoredCustomChatColor(customColor);
+            }}
+            className={cn(
+              'rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
+              accent === 'custom'
+                ? 'border-foreground/25 bg-muted text-foreground'
+                : 'border-border bg-background text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+            )}
+          >
+            Qo'llash
+          </button>
+        </label>
       </div>
 
       <div className="rounded-2xl border border-border bg-muted/30 p-3">
