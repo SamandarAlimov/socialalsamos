@@ -866,10 +866,10 @@ export default function AIPage() {
               </p>
 
               {forwardedPost && (
-                <div className="mb-6 w-full max-w-2xl overflow-hidden rounded-2xl border border-alsamos-orange/30 bg-card/60">
-                  <div className="flex items-center gap-2 border-b border-alsamos-orange/20 bg-alsamos-orange/10 px-4 py-2.5">
-                    <Sparkles className="h-4 w-4 text-alsamos-orange" />
-                    <span className="text-xs font-semibold text-alsamos-orange">Post yuborildi</span>
+                <div className="mb-6 w-full max-w-2xl overflow-hidden rounded-2xl border border-success/20 bg-card/60">
+                  <div className="flex items-center gap-2 border-b border-success/15 bg-success/5 px-4 py-2.5">
+                    <Sparkles className="h-4 w-4 text-success" />
+                    <span className="text-xs font-semibold text-success">Post yuborildi</span>
                     <button
                       onClick={() => setForwardedPost(null)}
                       className="ml-auto text-muted-foreground hover:text-foreground"
