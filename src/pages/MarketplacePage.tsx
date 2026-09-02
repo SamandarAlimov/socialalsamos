@@ -261,7 +261,7 @@ export default function MarketplacePage() {
                     <motion.span
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
-                      className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-bold shadow-lg shadow-primary/30 tabular-nums"
+                      className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] flex items-center justify-center font-bold shadow-sm tabular-nums"
                     >
                       {itemCount > 99 ? '99+' : itemCount}
                     </motion.span>
@@ -279,7 +279,7 @@ export default function MarketplacePage() {
                 <div className="absolute left-3.5 top-1/2 -translate-y-1/2 z-10">
                   <Search className={cn(
                     'h-4 w-4 transition-colors',
-                    searchFocused ? 'text-primary' : 'text-muted-foreground',
+                    searchFocused ? 'text-foreground' : 'text-muted-foreground',
                   )} />
                 </div>
                 <Input
@@ -291,7 +291,7 @@ export default function MarketplacePage() {
                   aria-label={marketplaceUz.page.searchLabel}
                   className={cn(
                     'pl-10 pr-9 h-11 rounded-xl border-border/50 bg-muted/40 backdrop-blur-sm',
-                    'focus:bg-background focus:border-primary/30 focus:ring-2 focus:ring-primary/10',
+                    'focus:bg-background focus:border-border focus:ring-1 focus:ring-ring/40',
                     'placeholder:text-muted-foreground/60 transition-all duration-300',
                   )}
                 />
@@ -310,14 +310,14 @@ export default function MarketplacePage() {
                 size="icon"
                 className={cn(
                   'h-11 w-11 rounded-xl border-border/50 bg-muted/40 hover:bg-muted shrink-0 relative',
-                  priceFilterActive && 'border-primary/50 text-primary',
+                  priceFilterActive && 'border-foreground/25 bg-background text-foreground',
                 )}
                 onClick={() => setShowFilters(true)}
                 aria-label={marketplaceUz.page.filters}
               >
                 <SlidersHorizontal className="h-4 w-4" />
                 {priceFilterActive && (
-                  <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-primary" />
+                  <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-foreground" />
                 )}
               </Button>
             </div>
@@ -343,7 +343,7 @@ export default function MarketplacePage() {
                     <Icon className="h-4 w-4" />
                     <span>{tab.label}</span>
                     {tab.id === 'saved' && savedProducts.length > 0 && (
-                      <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">
+                      <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-bold">
                         {savedProducts.length}
                       </span>
                     )}
@@ -369,14 +369,14 @@ export default function MarketplacePage() {
               className="space-y-5 p-4"
             >
               {nearCenter && (
-                <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
-                  <MapPin className="h-4 w-4 shrink-0 text-primary" />
+                <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm">
+                  <MapPin className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <span className="min-w-0 flex-1">
                     Xaritadagi nuqtadan {nearRadiusKm} km ichidagi e'lonlar
                   </span>
                   <button
                     type="button"
-                    className="text-xs font-semibold text-primary hover:underline"
+                    className="text-xs font-semibold text-link hover:text-link-hover hover:underline"
                     onClick={() => {
                       const next = new URLSearchParams(searchParams);
                       next.delete('lat');
@@ -527,7 +527,7 @@ export default function MarketplacePage() {
                   <span className="font-semibold text-foreground tabular-nums">{sortedProducts.length}</span> {marketplaceUz.page.products}
                   {hiddenByPriceFilter > 0 && (
                     <button
-                      className="ml-2 text-xs text-primary font-medium hover:underline"
+                      className="ml-2 text-xs font-medium text-link hover:text-link-hover hover:underline"
                       onClick={resetFilters}
                     >
                       ({hiddenByPriceFilter} ta filtr bilan yashirilgan — tozalash)
@@ -867,7 +867,7 @@ export default function MarketplacePage() {
                 </label>
                 {priceFilterActive && (
                   <button
-                    className="text-xs text-primary font-semibold"
+                    className="text-xs font-semibold text-link hover:text-link-hover"
                     onClick={() => setPriceRange(null)}
                   >
                     Tozalash
