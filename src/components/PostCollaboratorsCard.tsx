@@ -154,7 +154,7 @@ export function PostCollaboratorsCard({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
             <Users className="h-5 w-5" />
           </span>
 
@@ -275,7 +275,7 @@ export function PostCollaboratorsCard({
             <DialogContent className="flex max-h-[90dvh] max-w-md flex-col overflow-hidden p-0">
               <DialogHeader className="shrink-0 border-b border-border/60 px-5 pb-4 pt-5">
                 <DialogTitle className="flex items-center gap-2">
-                  <Users className="h-5 w-5 text-primary" />
+                  <Users className="h-5 w-5 text-muted-foreground" />
                   Hammualliflar
                 </DialogTitle>
               </DialogHeader>
