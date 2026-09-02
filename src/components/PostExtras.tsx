@@ -1,7 +1,7 @@
 import { MapPin } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { detectMediaKind } from '@/lib/postComposer';
+import { detectMediaKind, formatBytes } from '@/lib/postComposer';
 import { usePostMedia, type PostMediaItem } from '@/hooks/usePostMedia';
 import { usePostLocation, type PostLocation } from '@/hooks/usePostLocation';
 import { usePostMusic } from '@/hooks/usePostMusic';
