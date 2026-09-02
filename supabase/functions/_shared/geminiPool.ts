@@ -31,19 +31,31 @@ const DEAD_COOLDOWN_MS = 15 * 60_000;
  * Nomlar mos kelmasa, Google 404 qaytaradi — shuning uchun aniq xarita kerak.
  */
 const MODEL_MAP: Record<string, string> = {
-  'google/gemini-3-flash-preview': 'gemini-2.5-flash',
-  'google/gemini-3.1-flash-lite': 'gemini-2.5-flash-lite',
-  'google/gemini-3.5-flash': 'gemini-2.5-flash',
-  'google/gemini-2.5-pro': 'gemini-2.5-pro',
-  'google/gemini-2.5-flash': 'gemini-2.5-flash',
-  'google/gemini-2.0-flash': 'gemini-2.0-flash',
+  // Flash oilasi — 2.5 endi yangi kalitlar uchun yopiq, 3.6 ga yo'naltiramiz.
+  'google/gemini-3-flash-preview': 'gemini-3.6-flash',
+  'google/gemini-3.1-flash-lite': 'gemini-flash-lite-latest',
+  'google/gemini-2.5-flash-lite': 'gemini-flash-lite-latest',
+  'google/gemini-3.5-flash': 'gemini-3.6-flash',
+  'google/gemini-3.6-flash': 'gemini-3.6-flash',
+  'google/gemini-3.7-flash': 'gemini-flash-latest',
+  'google/gemini-2.5-flash': 'gemini-3.6-flash',
+  'google/gemini-2.0-flash': 'gemini-3.6-flash',
+  // Pro oilasi
+  'google/gemini-3.1-pro-preview': 'gemini-pro-latest',
+  'google/gemini-2.5-pro': 'gemini-pro-latest',
 };
+
+/** Google'da mavjud bo'lmagan nomlar uchun xavfsiz zaxira. */
+const FALLBACK_GOOGLE_MODEL = 'gemini-3.6-flash';
 
 export function toGoogleModel(model: string): string {
   if (MODEL_MAP[model]) return MODEL_MAP[model];
-  // "google/" prefiksini olib tashlaymiz, qolganini o'z holicha yuboramiz.
-  return model.startsWith('google/') ? model.slice('google/'.length) : model;
+  if (!model.startsWith('google/')) return model;
+  const bare = model.slice('google/'.length);
+  if (/^gemini-[0-2]\./.test(bare)) return FALLBACK_GOOGLE_MODEL;
+  return bare;
 }
+
 
 /* ------------------------------ kalitlar ro'yxati -------------------------- */
 
