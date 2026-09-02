@@ -316,9 +316,9 @@ export default function AuthPage() {
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-background">
       {/* Animated Background */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-primary/10 via-transparent to-transparent rounded-full blur-3xl animate-float" />
-        <div className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-gradient-to-tl from-primary/10 via-transparent to-transparent rounded-full blur-3xl animate-float" style={{ animationDelay: '-3s' }} />
-        <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl animate-pulse-soft" />
+        <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-muted/60 via-transparent to-transparent rounded-full blur-3xl animate-float" />
+        <div className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-gradient-to-tl from-muted/60 via-transparent to-transparent rounded-full blur-3xl animate-float" style={{ animationDelay: '-3s' }} />
+        <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-muted/40 rounded-full blur-3xl animate-pulse-soft" />
       </div>
 
       <div className="relative z-10 w-full max-w-md mx-4 my-8">
@@ -335,8 +335,8 @@ export default function AuthPage() {
             /* ---------------- Second factor ---------------- */
             <div className="space-y-4">
               <div className="flex flex-col items-center text-center">
-                <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
-                  <ShieldCheck className="h-6 w-6 text-primary" />
+                <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-muted">
+                  <ShieldCheck className="h-6 w-6 text-muted-foreground" />
                 </span>
                 <h2 className="text-lg font-semibold">Ikki qadamli tasdiqlash</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -390,7 +390,7 @@ export default function AuthPage() {
 
               <button
                 type="button"
-                className="w-full text-center text-sm text-primary hover:underline"
+                className="w-full text-center text-sm text-link hover:text-link-hover hover:underline"
                 onClick={() => {
                   setUseRecoveryCode((prev) => !prev);
                   setMfaCode('');
@@ -631,11 +631,11 @@ export default function AuthPage() {
                       />
                       <span>
                         Men{' '}
-                        <Link className="text-primary hover:underline" to={LEGAL_ROUTES.terms}>
+                        <Link className="text-link hover:text-link-hover hover:underline" to={LEGAL_ROUTES.terms}>
                           Foydalanish shartlari
                         </Link>{' '}
                         va{' '}
-                        <Link className="text-primary hover:underline" to={LEGAL_ROUTES.privacy}>
+                        <Link className="text-link hover:text-link-hover hover:underline" to={LEGAL_ROUTES.privacy}>
                           Maxfiylik siyosati
                         </Link>
                         ni o’qidim va qabul qilaman.
@@ -668,7 +668,7 @@ export default function AuthPage() {
 
               {mode === 'login' && (
                 <div className="mt-4 text-center">
-                  <Link to="/forgot-password" className="text-sm text-primary hover:underline">
+                  <Link to="/forgot-password" className="text-sm text-link hover:text-link-hover hover:underline">
                     Parolni unutdingizmi?
                   </Link>
                 </div>
@@ -679,15 +679,15 @@ export default function AuthPage() {
           {/* Footer Links */}
           <div className="mt-6 pt-6 border-t border-border">
             <div className="flex justify-center gap-4 text-xs text-muted-foreground">
-              <Link to={LEGAL_ROUTES.privacy} className="hover:text-foreground transition-colors">
+              <Link to={LEGAL_ROUTES.privacy} className="text-link transition-colors hover:text-link-hover">
                 Privacy
               </Link>
               <span>•</span>
-              <Link to={LEGAL_ROUTES.terms} className="hover:text-foreground transition-colors">
+              <Link to={LEGAL_ROUTES.terms} className="text-link transition-colors hover:text-link-hover">
                 Terms
               </Link>
               <span>•</span>
-              <Link to={LEGAL_ROUTES.help} className="hover:text-foreground transition-colors">
+              <Link to={LEGAL_ROUTES.help} className="text-link transition-colors hover:text-link-hover">
                 Help Center
               </Link>
             </div>
