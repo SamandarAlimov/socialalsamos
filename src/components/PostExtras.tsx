@@ -47,7 +47,7 @@ function DocumentCard({ item }: { item: PostMediaItem }) {
       onClick={(event) => event.stopPropagation()}
       className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/30 p-3 transition hover:border-border"
     >
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
         <Icon className="h-5 w-5" />
       </span>
       <span className="min-w-0 flex-1">
@@ -71,7 +71,7 @@ function AudioCard({ item }: { item: PostMediaItem }) {
       onClick={(event) => event.stopPropagation()}
     >
       <div className="flex items-center gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
           <Music2 className="h-5 w-5" />
         </span>
         <div className="min-w-0 flex-1">
@@ -97,7 +97,7 @@ function PlaceLabelCard({ label }: { label: string }) {
       onClick={(event) => event.stopPropagation()}
       className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/30 px-3 py-2.5 transition hover:border-border"
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
         <MapPin className="h-4 w-4" />
       </span>
       <span className="min-w-0 flex-1">
