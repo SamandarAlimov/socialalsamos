@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import {
   applyChatAccent,
   CHAT_ACCENT_STORAGE_KEY,
+  CHAT_ACCENT_CUSTOM_COLOR_KEY,
   getStoredChatAccent,
   normalizeChatAccent,
 } from '@/lib/chatAccent';
@@ -15,8 +16,13 @@ export function ChatAccentProvider() {
     applyChatAccent(getStoredChatAccent());
 
     const syncFromStorage = (event: StorageEvent) => {
-      if (event.key !== CHAT_ACCENT_STORAGE_KEY) return;
-      applyChatAccent(normalizeChatAccent(event.newValue));
+      if (event.key === CHAT_ACCENT_STORAGE_KEY) {
+        applyChatAccent(normalizeChatAccent(event.newValue));
+        return;
+      }
+      if (event.key === CHAT_ACCENT_CUSTOM_COLOR_KEY && getStoredChatAccent() === 'custom') {
+        applyChatAccent('custom');
+      }
     };
 
     window.addEventListener('storage', syncFromStorage);
