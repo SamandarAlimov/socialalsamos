@@ -573,12 +573,12 @@ export default function SearchPage() {
               <div className={cn(
                 "absolute inset-0 rounded-2xl transition-all duration-500 pointer-events-none",
                 isFocused 
-                  ? "bg-primary/5 ring-2 ring-primary/20 shadow-[0_0_30px_hsl(var(--primary)/0.1)]" 
+                  ? "bg-background ring-1 ring-border shadow-sm" 
                   : "bg-muted/40"
               )} />
               <Search className={cn(
                 "absolute left-3.5 top-1/2 -translate-y-1/2 h-4.5 w-4.5 transition-colors duration-300 z-10",
-                isFocused ? "text-primary" : "text-muted-foreground"
+                isFocused ? "text-foreground" : "text-muted-foreground"
               )} />
               <input
                 ref={inputRef}
@@ -617,7 +617,7 @@ export default function SearchPage() {
                   onClick={toggleListening}
                   className={cn(
                     "h-7 w-7 rounded-full flex items-center justify-center transition-colors",
-                    isListening ? "bg-primary text-primary-foreground" : "bg-muted/60 hover:bg-muted",
+                    isListening ? "bg-foreground text-background" : "bg-muted/60 hover:bg-muted",
                     !voiceSupported && "opacity-40 cursor-not-allowed",
                   )}
                   aria-label={isListening ? "Ovozli qidiruvni to'xtatish" : "Ovozli qidiruv"}
@@ -1110,7 +1110,7 @@ function ResultSection({ title, count, icon: Icon, onSeeAll, children }: {
         </div>
         <button
           onClick={onSeeAll}
-          className="text-xs font-semibold text-primary flex items-center gap-0.5 hover:opacity-80 transition-opacity"
+          className="text-xs font-semibold text-link flex items-center gap-0.5 transition-colors hover:text-link-hover"
         >
           Hammasi <ChevronRight className="h-3.5 w-3.5" />
         </button>
@@ -1368,7 +1368,7 @@ function PremiumPostCard({ post, onClick }: { post: SearchPost; onClick: () => v
             <img src={post.media_urls![0]} className="w-full h-full object-cover" alt="" />
             {isVideo && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                <Play className="h-5 w-5 text-primary-foreground fill-primary-foreground" />
+                <Play className="h-5 w-5 fill-white text-white" />
               </div>
             )}
           </div>
