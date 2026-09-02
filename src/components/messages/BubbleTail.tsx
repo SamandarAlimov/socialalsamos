@@ -15,7 +15,7 @@ interface BubbleTailProps {
  * - o'zim yozgan xabar - o'ng pastda,
  * - suhbatdosh xabari - chap pastda.
  *
- * Rangi karta foni bilan bir xil: o'zim uchun `--primary`, kelgan xabar uchun
+ * Rangi karta foni bilan bir xil: o'zim uchun `--bubble-own-bg`, kelgan xabar uchun
  * `--card` + `--border` chizig'i, shuning uchun mavzu (light/dark) o'zgarsa
  * dumcha ham avtomatik moslashadi.
  */
@@ -44,7 +44,7 @@ export function BubbleTail({ isMine, failed, className }: BubbleTailProps) {
             failed
               ? 'hsl(var(--destructive) / 0.2)'
               : isMine
-                ? 'hsl(var(--primary))'
+                ? 'hsl(var(--bubble-own-bg))'
                 : 'hsl(var(--card))'
           }
           stroke={
