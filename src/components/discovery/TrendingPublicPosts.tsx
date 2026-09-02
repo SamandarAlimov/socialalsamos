@@ -210,7 +210,14 @@ export function TrendingPublicPosts({ refreshKey = 0 }: TrendingPublicPostsProps
   const openPost = useCallback(
     (post: TrendingPost) => {
       triggerHaptic('light');
-      if (post.media_type === 'video') {
+      const preview = getPostPreview(post.content);
+      const kind = resolvePostVisualKind(
+        post.media_type,
+        post.media_urls?.[0] ?? null,
+        Boolean(preview.music),
+      );
+
+      if (kind === 'video') {
         navigate(`/videos?v=${post.id}`);
         return;
       }
