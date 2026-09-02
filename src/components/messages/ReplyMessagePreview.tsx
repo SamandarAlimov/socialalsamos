@@ -52,21 +52,21 @@ export function ReplyMessagePreview({ reply, isMine, onJump }: ReplyMessagePrevi
       className={cn(
         'mb-1.5 flex w-full min-w-0 items-stretch overflow-hidden rounded-lg text-left transition-opacity',
         onJump && 'hover:opacity-90 active:opacity-75',
-        isMine ? 'bg-primary-foreground/10' : 'bg-muted/70'
+        isMine ? 'bg-bubble-own-foreground/10' : 'bg-muted/70'
       )}
       aria-label="Javob berilgan xabarga o'tish"
     >
       <span
         className={cn(
           'w-[3px] shrink-0 rounded-full',
-          isMine ? 'bg-primary-foreground/75' : 'bg-primary'
+          isMine ? 'bg-bubble-own-accent/75' : 'bg-muted-foreground'
         )}
       />
       <span className="min-w-0 flex-1 px-2 py-1.5">
         <span
           className={cn(
             'block truncate text-[11px] font-semibold',
-            isMine ? 'text-primary-foreground' : 'text-primary'
+            isMine ? 'text-bubble-own-foreground' : 'text-foreground'
           )}
         >
           {senderName}
@@ -74,7 +74,7 @@ export function ReplyMessagePreview({ reply, isMine, onJump }: ReplyMessagePrevi
         <span
           className={cn(
             'mt-0.5 flex min-w-0 items-center gap-1 text-[11px]',
-            isMine ? 'text-primary-foreground/75' : 'text-muted-foreground'
+            isMine ? 'text-bubble-own-foreground/70' : 'text-muted-foreground'
           )}
         >
           {media && <Icon className="h-3 w-3 shrink-0" />}
