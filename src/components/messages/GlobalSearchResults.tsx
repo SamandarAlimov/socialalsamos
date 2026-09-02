@@ -71,7 +71,7 @@ function Highlighted({ text, term }: { text: string; term: string }) {
   return (
     <>
       {text.slice(0, index)}
-      <mark className="rounded bg-primary/20 px-0.5 text-foreground">
+      <mark className="rounded bg-muted px-0.5 text-foreground">
         {text.slice(index, index + term.length)}
       </mark>
       {text.slice(index + term.length)}
