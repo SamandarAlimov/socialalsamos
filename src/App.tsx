@@ -190,6 +190,7 @@ function AppWithGlobalCall() {
         <PushNotificationProvider>
           <OnlinePresenceProvider>
             <GlobalCallProvider>
+              <ChatAccentProvider />
               {/* Tanlangan chat fonini chat oynasiga qo'llaydi */}
               <ChatWallpaperProvider />
               <AppRoutes />
