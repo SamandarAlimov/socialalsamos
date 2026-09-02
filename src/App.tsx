@@ -37,6 +37,7 @@ import MapPage from "./pages/MapPage";
 import VideosPage from "./pages/VideosPage";
 import DiscoveryPage from "./pages/DiscoveryPage";
 import SearchPage from "./pages/SearchPage";
+import WebViewerPage from "./pages/WebViewerPage";
 import MarketplacePage from "./pages/MarketplacePage";
 import MarketplaceProductPage from "./pages/MarketplaceProductPage";
 import AdminPage from "./pages/AdminPage";
@@ -133,6 +134,7 @@ function AppRoutes() {
         <Route path="/post/:postId" element={<PostPermalink />} />
         <Route path="/discover" element={<DiscoveryPage />} />
         <Route path="/search" element={<SearchPage />} />
+        <Route path="/web" element={<WebViewerPage />} />
         <Route path="/videos" element={<VideosPage />} />
         <Route path="/messages" element={<MessagesPage />} />
         <Route path="/join/:slug" element={<JoinInvitePage />} />
