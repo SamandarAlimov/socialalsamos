@@ -280,7 +280,7 @@ export function GlobalSearchResults({ query, locale = 'uz' }: { query: string; l
           ) : category === 'videos' ? (
             <VideoGrid items={items} onOpen={openInApp} />
           ) : (
-            <div className="space-y-5">{items.map((r) => <SerpRow key={r.id} item={r} />)}</div>
+            <div className="space-y-5">{items.map((r) => <SerpRow key={r.id} item={r} onOpen={openInApp} />)}</div>
           )}
 
           {category !== 'all' && (
