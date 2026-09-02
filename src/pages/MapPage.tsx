@@ -857,12 +857,15 @@ export default function MapPage() {
     void resolveMapClickPlace({ latitude: lat, longitude: lng }, 18, controller.signal)
       .then((resolved) => {
         if (!resolved || controller.signal.aborted) return;
+        const deepLinkHasSpecificName =
+          Boolean(name) &&
+          !['Belgilangan joy', 'Joriy joylashuv', 'Joylashuv', 'Current location'].includes(name);
+
         setSelectedPlace({
           ...resolved,
-          name:
-            resolved.name && !['Joy', 'Bino', 'Nomsiz joy'].includes(resolved.name)
-              ? resolved.name
-              : name,
+          // Postdagi tanlangan joy nomi authoritative: deep-link bosilganda
+          // aynan o'sha joy ochilishi kerak. OSM faqat metadata boyitadi.
+          name: deepLinkHasSpecificName ? name : resolved.name || name,
           address: resolved.address ?? address,
         });
       })
