@@ -2,7 +2,6 @@ import { useState, useRef } from 'react';
 import { Image, Video, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 import { uploadMedia } from '@/lib/mediaUpload';
 
 interface CommentMediaUploadProps {
