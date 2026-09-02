@@ -18,6 +18,11 @@ import { cn } from '@/lib/utils';
 // lib/features/discover/presentation/discover_page.dart bilan 1:1 mos:
 // bir xil tab tartibi (For You / Trending / Creators / Videos) va bir xil
 // bo'lim tartibi. Bittasini o'zgartirsangiz, ikkinchisini ham yangilang.
+//
+// DIZAYN ESLATMASI: bu sahifadagi tab bar (TabsList/TabsTrigger) butun
+// platforma uchun segment/chip naqshining ANDOZASI hisoblanadi — neytral
+// track + oq/qora aktiv qatlam, rangsiz. Yangi filtr/segment ro'yxati
+// qursangiz src/lib/segmentedControl.ts dan foydalaning.
 
 const DISCOVER_TABS = [
   { value: 'foryou', label: 'For You', icon: Sparkles },
@@ -104,8 +109,9 @@ export default function DiscoveryPage() {
 
   const content = (
     <div className="mx-auto w-full max-w-6xl px-4 pb-24 pt-4 md:pb-10">
+      {/* Sahifa sarlavha ikoni dekorativ — neytral rangda. */}
       <header className="mb-4 flex items-center gap-2">
-        <Compass className="h-6 w-6 text-primary" />
+        <Compass className="h-6 w-6 text-muted-foreground" />
         <h1 className="text-xl font-bold md:text-2xl">Discover</h1>
       </header>
 

@@ -72,10 +72,11 @@ export function TrendingVideos({ refreshKey = 0 }: TrendingVideosProps) {
     fetchVideos();
   }, [fetchVideos, refreshKey]);
 
+  // Sarlavha ikoni dekorativ — bosiladigan harakatni bildirmaydi, neytral.
   const header = (
     <div className="mb-4 flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <Video className="h-5 w-5 text-primary" />
+        <Video className="h-5 w-5 text-muted-foreground" />
         <h2 className="text-lg font-semibold">Trend videolar</h2>
       </div>
       <div className="flex items-center gap-1">

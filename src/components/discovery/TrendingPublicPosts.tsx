@@ -150,10 +150,11 @@ export function TrendingPublicPosts({ refreshKey = 0 }: TrendingPublicPostsProps
     [navigate, triggerHaptic],
   );
 
+  // Sarlavha ikoni dekorativ — bosiladigan harakatni bildirmaydi, neytral.
   const header = (
     <div className="mb-4 flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <Flame className="h-5 w-5 text-primary" />
+        <Flame className="h-5 w-5 text-muted-foreground" />
         <h2 className="text-lg font-semibold">Trend postlar</h2>
       </div>
       <Button variant="ghost" size="sm" onClick={() => navigate('/discover?tab=trending')}>

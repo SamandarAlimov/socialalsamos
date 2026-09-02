@@ -42,18 +42,25 @@ const bottomItems: NavItem[] = [{ icon: User, labelKey: 'nav.profile', path: '/p
 /**
  * Aktiv nav elementining ko'rinishi.
  *
- * Ilgari `bg-primary text-primary-foreground shadow-md` edi - ya'ni katta,
- * to'liq to'yingan orange blok. Bu ikki muammo tug'dirardi: (1) sidebar
- * qobig'i kontentdan ko'zga oldin tashlanardi, (2) orange "bosiladigan CTA"
- * ma'nosini yo'qotardi, chunki u navigatsiya fonida ham ishlatilardi.
+ * Tarix (ikki bosqichli tuzatish):
+ *   1-bosqich: `bg-primary text-primary-foreground shadow-md` — katta, to'liq
+ *      to'yingan orange blok. Sidebar qobig'i kontentdan ko'zga oldin
+ *      tashlanardi va orange "bosiladigan CTA" ma'nosini yo'qotardi.
+ *   2-bosqich: `bg-primary/10 text-primary` — yaxshiroq, lekin baribir
+ *      "katta rangli blok" naqshi edi.
  *
- * Endi Telegram/WhatsApp naqshi: nozik tint fon + brend rangli ikon/matn.
- * BottomNavbar allaqachon aynan shu naqshdan foydalanadi (`bg-primary/10` +
- * `text-primary`), shuning uchun ikki navigatsiya endi izchil.
+ * Hozirgi yechim: tanlov holati RANG bilan emas, SHAKL va POZITSIYA bilan
+ * ko'rsatiladi — chap tomonda ingichka brend chiziq + neytral qatlam +
+ * ikon/matn qalinlashuvi. Bu Discover tab bar (segmented control) bilan
+ * bir xil mantiq: fon rangi tanlovni bildirmaydi, qatlam va forma bildiradi.
+ * Orange faqat 3px chiziqda qoladi — ya'ni nozik aksent, fon emas.
  */
 const NAV_ITEM_BASE = "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative";
-const NAV_ITEM_ACTIVE = "bg-primary/10 text-primary font-medium";
-const NAV_ITEM_INACTIVE = "text-sidebar-foreground hover:bg-sidebar-accent";
+const NAV_ITEM_ACTIVE = "bg-sidebar-accent text-sidebar-foreground font-semibold";
+const NAV_ITEM_INACTIVE = "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground";
+
+/** Aktiv elementning yagona rangli qismi: chapdagi ingichka brend chizig'i. */
+const NAV_ACTIVE_INDICATOR = "absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary";
 
 /** Badge rangi butun platforma bo'ylab bitta: aktiv holatga qarab o'zgarmaydi. */
 const NAV_BADGE = "bg-destructive text-destructive-foreground";
@@ -123,6 +130,7 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
               NAV_ITEM_BASE,
               isActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE
             )}>
+              {isActive && <span aria-hidden="true" className={NAV_ACTIVE_INDICATOR} />}
               <div className="relative">
                 <item.icon
                   className={cn("h-5 w-5 flex-shrink-0 transition-transform duration-200", !isActive && "group-hover:scale-110")}
@@ -132,7 +140,7 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
                   {collapsed && badgeCount > 0 && <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className={cn("absolute -top-2 -right-2 h-4 min-w-4 px-1 rounded-full text-[10px] font-bold flex items-center justify-center shadow-md", NAV_BADGE)}>{badgeCount > 9 ? '9+' : badgeCount}</motion.span>}
                 </AnimatePresence>
               </div>
-              {!collapsed && <span className="font-medium text-sm">{t(item.labelKey)}</span>}
+              {!collapsed && <span className="text-sm">{t(item.labelKey)}</span>}
               <AnimatePresence>
                 {!collapsed && badgeCount > 0 && <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className={cn("ml-auto flex items-center justify-center min-w-[20px] h-5 text-xs font-semibold rounded-full px-1.5 shadow-sm", NAV_BADGE)}>{badgeCount > 99 ? '99+' : badgeCount}</motion.span>}
               </AnimatePresence>
@@ -146,9 +154,10 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
           const isActive = location.pathname === item.path;
           return (
             <div key={item.path} className="flex items-center gap-1">
-              <NavLink to={item.path} className={cn("flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group flex-1", isActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE)}>
+              <NavLink to={item.path} className={cn("relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group flex-1", isActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE)}>
+                {isActive && <span aria-hidden="true" className={NAV_ACTIVE_INDICATOR} />}
                 {profile?.avatar_url ? <Avatar className={cn("h-5 w-5 flex-shrink-0", isActive && "ring-2 ring-primary ring-offset-1 ring-offset-sidebar")}><AvatarImage src={profile.avatar_url} alt={profile.display_name || 'Profile'} /><AvatarFallback><User className="h-3 w-3" /></AvatarFallback></Avatar> : <User className="h-5 w-5 flex-shrink-0" />}
-                {!collapsed && <span className="font-medium text-sm">{t(item.labelKey)}</span>}
+                {!collapsed && <span className="text-sm">{t(item.labelKey)}</span>}
               </NavLink>
               {/* Xavfsizlik bu yerda emas — u Sozlamalar ichida joylashgan. */}
               {!collapsed && <DropdownMenu>
