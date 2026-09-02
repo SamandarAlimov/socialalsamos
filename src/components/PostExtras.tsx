@@ -1,14 +1,14 @@
-import { Download, FileArchive, FileText, MapPin, Music2 } from 'lucide-react';
+import { Download, FileArchive, FileText, MapPin } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { formatBytes, mediaKindLabel } from '@/lib/postComposer';
-import { formatDuration } from '@/lib/mediaMetadata';
 import { usePostMedia, type PostMediaItem } from '@/hooks/usePostMedia';
 import { usePostLocation, type PostLocation } from '@/hooks/usePostLocation';
 import { usePostMusic } from '@/hooks/usePostMusic';
 import { PollCard } from '@/components/PollCard';
 import { PostLocationCard } from '@/components/PostLocationCard';
 import { PostMusicCard } from '@/components/PostMusicCard';
+import { PostAudioPlayer } from '@/components/PostAudioPlayer';
 import { PostMediaCarousel } from '@/components/PostMediaCarousel';
 import { MediaStickerOverlay } from '@/components/stickers/MediaStickerOverlay';
 import type { WithEditState } from '@/lib/stickerPlacements';
@@ -65,27 +65,18 @@ function DocumentCard({ item }: { item: PostMediaItem }) {
 }
 
 function AudioCard({ item }: { item: PostMediaItem }) {
+  const details = [
+    item.duration_seconds ? Math.floor(item.duration_seconds / 60) + ':' + String(Math.round(item.duration_seconds % 60)).padStart(2, '0') : 'Audio',
+    item.file_size ? formatBytes(item.file_size) : null,
+  ].filter(Boolean).join(' · ');
+
   return (
-    <div
-      className="rounded-2xl border border-border/60 bg-muted/30 p-3"
-      onClick={(event) => event.stopPropagation()}
-    >
-      <div className="flex items-center gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-          <Music2 className="h-5 w-5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">
-            {item.file_name ?? 'Audio'}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {item.duration_seconds ? formatDuration(item.duration_seconds) : 'Audio'}
-            {item.file_size ? ' · ' + formatBytes(item.file_size) : ''}
-          </p>
-        </div>
-      </div>
-      <audio src={item.storage_url} controls preload="metadata" className="mt-2 w-full" />
-    </div>
+    <PostAudioPlayer
+      src={item.storage_url}
+      title={item.file_name ?? 'Audio'}
+      subtitle={details}
+      durationSeconds={item.duration_seconds}
+    />
   );
 }
 

@@ -24,6 +24,7 @@ import {
   type PlaceCategoryId,
 } from '@/lib/mapPlaces';
 import type { PostLocationInput } from '@/lib/postMeta';
+import { reverseGeocode, type ResolvedAddress } from '@/lib/reverseGeocode';
 
 interface LocationPickerProps {
   open: boolean;
@@ -130,6 +131,9 @@ export function LocationPicker({
   const [isLoadingNearby, setIsLoadingNearby] = useState(false);
 
   const [selectedPlace, setSelectedPlace] = useState<MapPlace | null>(null);
+  const [currentPlace, setCurrentPlace] = useState<MapPlace | null>(null);
+  const [currentAddress, setCurrentAddress] = useState<ResolvedAddress | null>(null);
+  const [isResolvingCurrent, setIsResolvingCurrent] = useState(false);
   const [pin, setPin] = useState<{ latitude: number; longitude: number } | null>(null);
   const [pinLabel, setPinLabel] = useState<string | null>(null);
   const [isResolvingPin, setIsResolvingPin] = useState(false);
@@ -138,6 +142,7 @@ export function LocationPicker({
   const searchAbort = useRef<AbortController | null>(null);
   const nearbyAbort = useRef<AbortController | null>(null);
   const resolveAbort = useRef<AbortController | null>(null);
+  const currentResolveAbort = useRef<AbortController | null>(null);
 
   const center = selectedPlace ?? pin ?? myCoords ?? initialCenter ?? DEFAULT_CENTER;
 
@@ -174,6 +179,35 @@ export function LocationPicker({
   useEffect(() => {
     if (open && !myCoords) locateMe();
   }, [locateMe, myCoords, open]);
+
+  useEffect(() => {
+    if (!open || mode !== 'place' || !myCoords) {
+      setCurrentPlace(null);
+      setCurrentAddress(null);
+      setIsResolvingCurrent(false);
+      return;
+    }
+
+    currentResolveAbort.current?.abort();
+    const controller = new AbortController();
+    currentResolveAbort.current = controller;
+    setIsResolvingCurrent(true);
+
+    void Promise.all([
+      resolveMapClickPlace(myCoords, 18, controller.signal).catch((error) => {
+        if ((error as Error).name === 'AbortError') return null;
+        return null;
+      }),
+      reverseGeocode(myCoords.latitude, myCoords.longitude, controller.signal),
+    ]).then(([place, address]) => {
+      if (controller.signal.aborted) return;
+      setCurrentPlace(place);
+      setCurrentAddress(address);
+      setIsResolvingCurrent(false);
+    });
+
+    return () => controller.abort();
+  }, [mode, myCoords, open]);
 
   useEffect(() => {
     if (!open || mode !== 'place') return;
@@ -284,6 +318,7 @@ export function LocationPicker({
       searchAbort.current?.abort();
       nearbyAbort.current?.abort();
       resolveAbort.current?.abort();
+      currentResolveAbort.current?.abort();
     },
     [],
   );
@@ -328,6 +363,57 @@ export function LocationPicker({
     },
     [onClose, onSelect],
   );
+
+  const handleSelectCurrentLocation = useCallback(() => {
+    if (!myCoords) {
+      locateMe();
+      return;
+    }
+
+    const name =
+      currentPlace?.name ??
+      currentAddress?.short ??
+      'Joriy joylashuv';
+    const address =
+      currentPlace?.address ??
+      currentAddress?.full ??
+      null;
+
+    onSelect({
+      mode: 'place',
+      latitude: myCoords.latitude,
+      longitude: myCoords.longitude,
+      label: name,
+      accuracyM: accuracy,
+      place:
+        currentPlace
+          ? {
+              name: currentPlace.name,
+              address: currentPlace.address ?? currentAddress?.full ?? null,
+              category: currentPlace.categoryLabel ?? currentPlace.categoryId ?? null,
+              externalSource: currentPlace.source,
+              externalId: currentPlace.canonicalId ?? currentPlace.id,
+            }
+          : currentAddress
+            ? {
+                name: currentAddress.short,
+                address: currentAddress.full,
+                category: 'Joylashuv',
+                externalSource: null,
+                externalId: null,
+              }
+            : null,
+    });
+    onClose();
+  }, [
+    accuracy,
+    currentAddress,
+    currentPlace,
+    locateMe,
+    myCoords,
+    onClose,
+    onSelect,
+  ]);
 
   const handleConfirmMapSelection = useCallback(() => {
     if (mode === 'place' && selectedPlace) {
@@ -419,7 +505,7 @@ export function LocationPicker({
             className={cn(
               'flex items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-xs font-medium transition',
               mode === id
-                ? 'border-primary bg-primary/10 text-primary'
+                ? 'border-foreground/25 bg-muted text-foreground'
                 : 'border-border/60 text-muted-foreground hover:bg-muted',
             )}
           >
@@ -524,7 +610,7 @@ export function LocationPicker({
                   className={cn(
                     'shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium',
                     selectedCategory === null
-                      ? 'border-primary bg-primary/10 text-primary'
+                      ? 'border-foreground/25 bg-muted text-foreground'
                       : 'border-border/60 text-muted-foreground',
                   )}
                 >
@@ -538,7 +624,7 @@ export function LocationPicker({
                     className={cn(
                       'shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium',
                       selectedCategory === category.id
-                        ? 'border-primary bg-primary/10 text-primary'
+                        ? 'border-foreground/25 bg-muted text-foreground'
                         : 'border-border/60 text-muted-foreground',
                     )}
                   >
@@ -548,6 +634,42 @@ export function LocationPicker({
               </div>
             )}
           </div>
+
+          {query.trim().length < 2 && (
+            <div className="px-4 pt-3">
+              <button
+                type="button"
+                onClick={handleSelectCurrentLocation}
+                disabled={isLocating || isResolvingCurrent}
+                className="flex w-full items-center gap-3 rounded-2xl border border-border/70 bg-card px-3 py-3 text-left shadow-sm transition hover:bg-muted/40 disabled:cursor-wait disabled:opacity-70"
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">
+                  {isLocating || isResolvingCurrent ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  ) : (
+                    <LocateFixed className="h-4 w-4" />
+                  )}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-foreground">
+                    {currentPlace?.name ??
+                      currentAddress?.short ??
+                      (myCoords ? 'Joy aniqlanmoqda…' : 'Joriy joylashuv')}
+                  </span>
+                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                    {currentPlace?.address ??
+                      currentAddress?.full ??
+                      (myCoords
+                        ? myCoords.latitude.toFixed(5) + ', ' + myCoords.longitude.toFixed(5)
+                        : 'Qurilmaning hozirgi joyini aniqlash')}
+                  </span>
+                </span>
+                <span className="shrink-0 text-xs font-semibold text-link">
+                  Tanlash
+                </span>
+              </button>
+            </div>
+          )}
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 [-webkit-overflow-scrolling:touch]">
             {(isLoadingNearby || isSearching) && list.length === 0 ? (
@@ -571,7 +693,7 @@ export function LocationPicker({
                       onClick={() => handleSelectPlace(place)}
                       className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left transition hover:bg-muted"
                     >
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
                         <MapPin className="h-4 w-4" />
                       </span>
                       <span className="min-w-0 flex-1">
@@ -603,7 +725,7 @@ export function LocationPicker({
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
           <div className="rounded-2xl border border-border/60 p-4">
             <div className="flex items-start gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
                 <Radio className="h-5 w-5" />
               </span>
               <div className="min-w-0 flex-1">
@@ -632,7 +754,7 @@ export function LocationPicker({
                   className={cn(
                     'rounded-xl border px-2 py-2 text-xs font-medium transition',
                     liveMinutes === duration.minutes
-                      ? 'border-primary bg-primary/10 text-primary'
+                      ? 'border-foreground/25 bg-muted text-foreground'
                       : 'border-border/60 text-muted-foreground',
                   )}
                 >

@@ -449,9 +449,9 @@ function PostCard({
   };
 
   return (
-    <article className="bg-card rounded-xl md:rounded-2xl border border-border overflow-hidden animate-fade-in">
+    <article className="overflow-hidden rounded-2xl border border-border/70 bg-card/95 shadow-sm transition-[box-shadow,border-color] duration-200 hover:border-border hover:shadow-md md:rounded-3xl animate-fade-in">
       {/* Post Header */}
-      <div className="flex items-center justify-between p-3 md:p-4">
+      <div className="flex items-center justify-between p-4 md:p-5">
         <div className="flex min-w-0 items-center gap-2.5 md:gap-3">
           {/* Hammuallif bo'lsa ikkita profil rasmi qavatlanib chiqadi */}
           <PostAuthorAvatars
@@ -500,7 +500,7 @@ function PostCard({
 
       {/* Post matni: formatlash bilan (qalin, qiya, chizilgan, rangli, sarlavha) */}
       {markers.textContent && (
-        <div className="px-3 md:px-4 pb-2 md:pb-3">
+        <div className="px-4 pb-3 md:px-5 md:pb-4">
           <RichText
             content={markers.textContent}
             formattedContent={post.formatted_content}
@@ -515,14 +515,14 @@ function PostCard({
         sorovlariga boglib qolardi.
       */}
       {markers.legacyMusic && (
-        <div className="px-3 md:px-4 pb-2 md:pb-3">
+        <div className="px-4 pb-3 md:px-5 md:pb-4">
           <PostMusicCard music={markers.legacyMusic} />
         </div>
       )}
 
       {/* Eski markerli sorovnomalar (migratsiyagacha) */}
       {markers.pollData && !hasStructuredPoll && (
-        <div className="px-3 md:px-4 pb-2 md:pb-3">
+        <div className="px-4 pb-3 md:px-5 md:pb-4">
           <PollDisplay postId={post.id} pollData={markers.pollData} />
         </div>
       )}
@@ -540,11 +540,11 @@ function PostCard({
         legacyMediaType={post.media_type}
         legacyLocation={markers.legacyLocation}
         legacyLocationLabel={markers.legacyLocationLabel}
-        className="px-3 pb-3 md:px-4"
+        className="px-4 pb-4 md:px-5"
       />
 
       {/* Post Actions - Mobile optimized */}
-      <div className="flex items-center justify-between p-3 md:p-4 border-t border-border">
+      <div className="flex items-center justify-between border-t border-border/70 p-4 md:px-5">
         <div className="flex items-center gap-3 md:gap-4">
           <div className="flex items-center gap-1.5 md:gap-2">
             <button 

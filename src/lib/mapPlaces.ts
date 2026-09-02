@@ -979,14 +979,26 @@ export async function resolveMapClickPlace(
   });
 
   try {
-    const place = await Promise.any(
-      [reverseTask, overpassTask].map(async (task) => {
-        const result = await task;
-        if (!result) throw new Error('empty');
-        return result;
-      }),
-    );
-    return remember(place);
+    // Oldingi Promise.any tezroq javob bergan oddiy ko'cha nomini qaytarib,
+    // bir necha millisekund keyin kelgan aniq POI (masjid, kafe, do'kon...)
+    // natijasini yo'qotardi. Ikkala provider natijasini kutib, semantik
+    // score bo'yicha eng yaxshi joyni tanlaymiz.
+    const settled = await Promise.allSettled([reverseTask, overpassTask]);
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+    const candidates = settled
+      .filter(
+        (item): item is PromiseFulfilledResult<MapPlace | null> =>
+          item.status === 'fulfilled',
+      )
+      .map((item) => item.value)
+      .filter((place): place is MapPlace => place !== null)
+      .sort(
+        (a, b) =>
+          clickCandidateScore(b, point) - clickCandidateScore(a, point),
+      );
+
+    return remember(candidates[0] ?? null);
   } catch (error) {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     return remember(null);

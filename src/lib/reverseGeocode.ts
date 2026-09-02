@@ -58,21 +58,28 @@ function buildAddress(payload: Record<string, unknown>): ResolvedAddress | null 
   const displayName =
     typeof payload.display_name === 'string' ? payload.display_name.trim() : '';
 
-  const street = pick(address, ['road', 'pedestrian', 'footway', 'neighbourhood']);
+  const poiName =
+    (typeof payload.name === 'string' && payload.name.trim() ? payload.name.trim() : null) ??
+    pick(address, ['amenity', 'shop', 'tourism', 'leisure', 'office', 'building', 'house_name']);
+  const street = pick(address, ['road', 'pedestrian', 'footway']);
   const houseNumber = pick(address, ['house_number']);
-  const area = pick(address, ['suburb', 'city_district', 'village', 'town', 'county']);
+  const streetLine = street ? street + (houseNumber ? ' ' + houseNumber : '') : null;
+  const area = pick(address, ['neighbourhood', 'suburb', 'city_district', 'village', 'town', 'county']);
   const city = pick(address, ['city', 'town', 'state', 'region']);
   const country = pick(address, ['country']);
 
+  // POI mavjud bo'lsa sarlavha ko'cha emas, aynan joy nomi bo'lishi kerak:
+  // masalan "Hoji Nuriddin jome masjidi".
   const short =
-    (street ? street + (houseNumber ? ' ' + houseNumber : '') : null) ??
+    poiName ??
+    streetLine ??
     area ??
     city ??
     (displayName ? displayName.split(',')[0].trim() : null);
 
   if (!short) return null;
 
-  const fullParts = [street ? street + (houseNumber ? ' ' + houseNumber : '') : null, area, city, country]
+  const fullParts = [streetLine, area, city, country]
     .filter((part): part is string => Boolean(part))
     .filter((part, index, all) => all.indexOf(part) === index);
 
