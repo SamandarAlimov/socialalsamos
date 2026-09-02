@@ -33,6 +33,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { VerificationRequestDialog } from '@/components/profile/VerificationRequestDialog';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { ChatWallpaperEditor } from '@/components/settings/ChatWallpaperEditor';
+import { ChatAccentEditor } from '@/components/settings/ChatAccentEditor';
 import { MediaAutoDownloadEditor } from '@/components/settings/MediaAutoDownloadEditor';
 import { LocationPicker } from '@/components/settings/LocationPicker';
 import { PROFILE_PUBLIC_COLUMNS } from '@/lib/profileFields';
@@ -337,7 +338,7 @@ export default function SettingsPage() {
     {
       title: 'Chat',
       items: [
-        { value: 'chat-wallpaper', label: 'Chat foni', description: 'Fon rasmi yoki gradient', icon: ImageIcon, tint: 'text-emerald-500 bg-emerald-500/10' },
+        { value: 'chat-wallpaper', label: 'Chat ko\u2018rinishi', description: 'Xabar rangi va fon', icon: ImageIcon, tint: 'text-emerald-500 bg-emerald-500/10' },
         { value: 'data-storage', label: 'Ma\u2018lumotlar va xotira', description: 'Avtomatik yuklab olish', icon: HardDrive, tint: 'text-cyan-500 bg-cyan-500/10' },
       ],
     },
@@ -645,9 +646,12 @@ export default function SettingsPage() {
           </div>
         </TabsContent>
 
-        {/* Chat foni */}
-        <TabsContent value="chat-wallpaper" className="space-y-6">
-          <div className="bg-card rounded-xl border border-border p-4 md:p-6">
+        {/* Chat ko'rinishi */}
+        <TabsContent value="chat-wallpaper" className="space-y-4">
+          <div className="rounded-xl border border-border bg-card p-4 md:p-6">
+            <ChatAccentEditor />
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 md:p-6">
             <div className="mb-4">
               <h2 className="font-semibold">Chat foni</h2>
               <p className="text-sm text-muted-foreground">
