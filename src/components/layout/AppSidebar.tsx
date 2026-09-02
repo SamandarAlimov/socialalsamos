@@ -45,7 +45,6 @@ const NAV_ITEM_ACTIVE = "bg-sidebar-accent text-sidebar-foreground font-semibold
 const NAV_ITEM_INACTIVE = "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground";
 
 /** Aktiv elementning yagona rangli qismi: chapdagi ingichka brend chizig'i. */
-const NAV_ACTIVE_INDICATOR = "absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary";
 
 /** Badge rangi butun platforma bo'ylab bitta: aktiv holatga qarab o'zgarmaydi. */
 const NAV_BADGE = "bg-destructive text-destructive-foreground";
