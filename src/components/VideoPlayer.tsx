@@ -104,6 +104,8 @@ export function VideoPlayer({
   const gestureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTapRef = useRef<{ time: number; zone: 'left' | 'center' | 'right' } | null>(null);
   const lastPointerTypeRef = useRef<string>('mouse');
+  const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
+  const pointerMovedRef = useRef(false);
   const suppressClickRef = useRef(false);
   const longPressActiveRef = useRef(false);
   const longPressOriginalRateRef = useRef(1);
@@ -388,6 +390,8 @@ export function VideoPlayer({
     containerRef.current?.focus({ preventScroll: true });
 
     if (event.pointerType !== 'touch') return;
+    pointerStartRef.current = { x: event.clientX, y: event.clientY };
+    pointerMovedRef.current = false;
     longPressOriginalRateRef.current = playbackRate;
     longPressTimerRef.current = setTimeout(() => {
       const video = videoRef.current;
@@ -396,6 +400,19 @@ export function VideoPlayer({
       changeRate(2);
       flashGesture({ kind: 'speed', text: '2× tezlik' }, 60_000);
     }, LONG_PRESS_MS);
+  };
+
+  const handleSurfacePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'touch' || !pointerStartRef.current) return;
+    const dx = event.clientX - pointerStartRef.current.x;
+    const dy = event.clientY - pointerStartRef.current.y;
+    if (Math.hypot(dx, dy) > 14) {
+      pointerMovedRef.current = true;
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+    }
   };
 
   const handleSurfacePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -409,6 +426,12 @@ export function VideoPlayer({
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
+
+    if (pointerMovedRef.current) {
+      pointerStartRef.current = null;
+      return;
+    }
+    pointerStartRef.current = null;
 
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -573,14 +596,19 @@ export function VideoPlayer({
         setShowVolumeSlider(false);
       }}
       onPointerDown={handleSurfacePointerDown}
+      onPointerMove={handleSurfacePointerMove}
       onPointerUp={handleSurfacePointerUp}
-      onPointerCancel={clearLongPress}
+      onPointerCancel={() => {
+        pointerStartRef.current = null;
+        pointerMovedRef.current = false;
+        clearLongPress();
+      }}
       onPointerLeave={(event) => {
         if (event.pointerType === 'touch') clearLongPress();
       }}
       onClick={handleSurfaceClick}
       onDoubleClick={(event) => {
-        if (event.pointerType !== 'touch') {
+        if (lastPointerTypeRef.current !== 'touch') {
           event.preventDefault();
           toggleFullscreen();
         }
@@ -641,6 +669,7 @@ export function VideoPlayer({
             event.stopPropagation();
             togglePlay();
           }}
+          onPointerDown={(event) => event.stopPropagation()}
           className="absolute left-1/2 top-1/2 z-20 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-xl ring-1 ring-white/20 backdrop-blur-md transition hover:scale-105 hover:bg-black/70 active:scale-95"
           aria-label="Videoni ijro etish"
         >
@@ -673,15 +702,19 @@ export function VideoPlayer({
 
       <div
         className={cn(
-          'absolute inset-0 z-10 flex flex-col justify-end transition-opacity duration-200',
-          showControls || !isPlaying ? 'opacity-100' : 'pointer-events-none opacity-0',
+          'pointer-events-none absolute inset-0 z-10 flex flex-col justify-end transition-opacity duration-200',
+          showControls || !isPlaying ? 'opacity-100' : 'opacity-0',
         )}
-        onClick={(event) => event.stopPropagation()}
       >
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/90 via-black/10 to-black/20" />
 
         {showSettings && (
-          <div className="absolute bottom-16 right-3 z-40 w-60 overflow-hidden rounded-2xl border border-white/10 bg-black/90 shadow-2xl backdrop-blur-xl">
+          <div
+            className="pointer-events-auto absolute bottom-16 right-3 z-40 w-60 overflow-hidden rounded-2xl border border-white/10 bg-black/90 shadow-2xl backdrop-blur-xl"
+            onPointerDown={(event) => event.stopPropagation()}
+            onPointerUp={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+          >
             {settingsPanel === 'main' && (
               <div className="py-1.5">
                 <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-white/45">
@@ -792,9 +825,12 @@ export function VideoPlayer({
 
         <div
           className={cn(
-            'relative z-20 space-y-0.5 px-2.5 pb-2.5 sm:px-3 sm:pb-3',
+            'pointer-events-auto relative z-20 space-y-0.5 px-2.5 pb-2.5 sm:px-3 sm:pb-3',
             isFullscreen && 'px-4 pb-4 md:px-6 md:pb-5',
           )}
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
         >
           <VideoScrubBar
             src={activeSource.src}
