@@ -79,14 +79,14 @@ export function StoryReplyPreview({ storyId, isMine }: StoryReplyPreviewProps) {
         className={cn(
           'mb-2 flex items-center gap-2 rounded-xl p-2 text-xs',
           isMine
-            ? 'bg-primary-foreground/10 text-primary-foreground/70'
+            ? 'bg-bubble-own-foreground/10 text-bubble-own-foreground/65'
             : 'bg-muted/50 text-muted-foreground'
         )}
       >
         <div
           className={cn(
             'flex h-12 w-12 items-center justify-center rounded-xl',
-            isMine ? 'bg-primary-foreground/15' : 'bg-muted'
+            isMine ? 'bg-bubble-own-foreground/10' : 'bg-muted'
           )}
         >
           <ImageIcon className="h-5 w-5 opacity-60" />
@@ -129,8 +129,8 @@ export function StoryReplyPreview({ storyId, isMine }: StoryReplyPreviewProps) {
         className={cn(
           'mb-2 flex w-full items-center gap-2 rounded-xl border-l-2 p-2 text-left transition-colors',
           isMine
-            ? 'border-primary-foreground/50 bg-primary-foreground/10 hover:bg-primary-foreground/15'
-            : 'border-primary bg-muted/50 hover:bg-muted/70'
+            ? 'border-bubble-own-foreground/30 bg-bubble-own-foreground/10 hover:bg-bubble-own-foreground/10'
+            : 'border-border bg-muted/50 hover:bg-muted/70'
         )}
       >
         {/* Stori rasmchasi */}
@@ -158,7 +158,7 @@ export function StoryReplyPreview({ storyId, isMine }: StoryReplyPreviewProps) {
           <p
             className={cn(
               'truncate text-xs font-medium',
-              isMine ? 'text-primary-foreground' : 'text-primary'
+              isMine ? 'text-bubble-own-foreground' : 'text-foreground'
             )}
           >
             {authorName} storisiga javob
@@ -166,7 +166,7 @@ export function StoryReplyPreview({ storyId, isMine }: StoryReplyPreviewProps) {
           <p
             className={cn(
               'truncate text-xs',
-              isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'
+              isMine ? 'text-bubble-own-foreground/65' : 'text-muted-foreground'
             )}
           >
             {story.caption || (isVideo ? 'Video stori' : 'Rasmli stori')}
