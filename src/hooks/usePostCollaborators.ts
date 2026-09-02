@@ -35,6 +35,8 @@ async function requireUserId(): Promise<string> {
 
 export function usePostCollaborators(postId: string | null | undefined) {
   const [collaborators, setCollaborators] = useState<PostCollaborator[]>([]);
+  const [ownerProfile, setOwnerProfile] = useState<PostCollaboratorProfile | null>(null);
+  const [ownerUserId, setOwnerUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(postId));
 
   /*
@@ -47,13 +49,16 @@ export function usePostCollaborators(postId: string | null | undefined) {
   const load = useCallback(async () => {
     if (!postId) {
       setCollaborators([]);
+      setOwnerProfile(null);
+      setOwnerUserId(null);
       setIsLoading(false);
       return;
     }
 
     setIsLoading(true);
     try {
-      const { data, error } = await db
+      const [collaboratorsResult, postResult] = await Promise.all([
+        db
         .from('post_collaborators')
         .select(`
           id,
@@ -73,13 +78,50 @@ export function usePostCollaborators(postId: string | null | undefined) {
           )
         `)
         .eq('post_id', postId)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: true }),
+        db.from('posts').select('user_id').eq('id', postId).maybeSingle(),
+      ]);
 
-      if (error) throw error;
-      setCollaborators((data ?? []) as unknown as PostCollaborator[]);
+      if (collaboratorsResult.error) throw collaboratorsResult.error;
+      setCollaborators(
+        (collaboratorsResult.data ?? []) as unknown as PostCollaborator[],
+      );
+
+      if (postResult.error) {
+        console.warn('Post muallifini yuklash xatosi:', postResult.error);
+        setOwnerProfile(null);
+        setOwnerUserId(null);
+      } else {
+        const userId =
+          typeof postResult.data?.user_id === 'string'
+            ? postResult.data.user_id
+            : null;
+        setOwnerUserId(userId);
+
+        if (userId) {
+          const { data: profileData, error: profileError } = await db
+            .from('profiles')
+            .select('id, username, display_name, avatar_url, is_verified')
+            .eq('id', userId)
+            .maybeSingle();
+
+          if (profileError) {
+            console.warn('Post muallifi profilini yuklash xatosi:', profileError);
+            setOwnerProfile(null);
+          } else {
+            setOwnerProfile(
+              (profileData as unknown as PostCollaboratorProfile | null) ?? null,
+            );
+          }
+        } else {
+          setOwnerProfile(null);
+        }
+      }
     } catch (error) {
       console.error('Hammualliflarni yuklash xatosi:', error);
       setCollaborators([]);
+      setOwnerProfile(null);
+      setOwnerUserId(null);
     } finally {
       setIsLoading(false);
     }
@@ -215,6 +257,8 @@ export function usePostCollaborators(postId: string | null | undefined) {
 
   return {
     collaborators,
+    ownerProfile,
+    ownerUserId,
     isLoading,
     refresh: load,
     invite,
