@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from 'next-themes';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserSettings } from '@/hooks/useUserSettings';
@@ -164,6 +164,7 @@ interface SectionItem {
 
 export default function SettingsPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { theme, setTheme } = useTheme();
   const { user, logout } = useAuth();
   const { settings, sessions, isLoading, updateSettings, logoutSession, logoutAllOtherSessions, refetch } = useUserSettings();
@@ -302,7 +303,12 @@ export default function SettingsPage() {
     }
   };
 
-  const [section, setSection] = useState<string | null>(null);
+  const [section, setSection] = useState<string | null>(() => searchParams.get('tab'));
+
+  useEffect(() => {
+    const requested = searchParams.get('tab');
+    if (requested) setSection(requested);
+  }, [searchParams]);
 
   if (isLoading) {
     return (
