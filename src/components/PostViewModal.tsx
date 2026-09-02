@@ -170,6 +170,14 @@ export function PostViewModal({
   const currentEditState = currentEntry?.editState ?? null;
 
   useEffect(() => {
+    setCurrentMediaIndex((index) =>
+      mediaEntries.length === 0
+        ? 0
+        : Math.min(index, mediaEntries.length - 1),
+    );
+  }, [mediaEntries.length]);
+
+  useEffect(() => {
     if (open) {
       setCurrentMediaIndex(0);
       recordView(post.id);
@@ -245,7 +253,7 @@ export function PostViewModal({
                   {currentKind === 'video' ? (
                     <VideoPlayer
                       key={currentUrl}
-                      src={currentUrl}
+                      src={currentUrl || ''}
                       poster={currentPoster}
                       autoPlay
                       aspectMode="auto"
