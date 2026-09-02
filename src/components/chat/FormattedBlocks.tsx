@@ -32,7 +32,7 @@ export function FormattedBlocks({ text, className, emojiSize = 18 }: FormattedBl
             return (
               <blockquote
                 key={index}
-                className="border-l-2 border-primary/70 pl-3 text-muted-foreground"
+                className="border-l-2 border-border pl-3 text-muted-foreground"
               >
                 <FormattedText text={block.text} emojiSize={emojiSize} />
               </blockquote>
@@ -40,7 +40,7 @@ export function FormattedBlocks({ text, className, emojiSize = 18 }: FormattedBl
           case 'bullet':
             return (
               <div key={index} className="flex gap-2">
-                <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground" />
                 <span className="flex-1">
                   <FormattedText text={block.text} emojiSize={emojiSize} />
                 </span>
@@ -49,7 +49,7 @@ export function FormattedBlocks({ text, className, emojiSize = 18 }: FormattedBl
           case 'ordered':
             return (
               <div key={index} className="flex gap-2">
-                <span className="shrink-0 font-semibold text-primary">{block.index}.</span>
+                <span className="shrink-0 font-semibold text-muted-foreground">{block.index}.</span>
                 <span className="flex-1">
                   <FormattedText text={block.text} emojiSize={emojiSize} />
                 </span>
