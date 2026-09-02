@@ -82,11 +82,8 @@ export default {
           "orange-light": "hsl(var(--alsamos-orange-light))",
           "orange-dark": "hsl(var(--alsamos-orange-dark))",
         },
-        // Xabar bubble'lari uchun alohida semantik tokenlar.
-        // Sabab: joriy foydalanuvchi bubble foni ilgari to'liq to'yingan orange
-        // (bg-primary) edi - stiker, emoji, link preview va media thumbnail'ning
-        // o'z ichki kontrasti buzilardi. Endi brend hue (24) saqlanadi, lekin
-        // kuchli desaturatsiya qilinadi; orange faqat status checkmark'da qoladi.
+        // Xabar bubble'lari brand rangidan mustaqil semantik tokenlar.
+        // Default green tint; foydalanuvchi Sozlamalarda chat accent tanlaydi.
         bubble: {
           own: "hsl(var(--bubble-own-bg))",
           "own-foreground": "hsl(var(--bubble-own-fg))",
