@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type MouseEvent } from 'react';
+import { useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { Image as ImageIcon, Loader2, Play } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -59,7 +59,7 @@ interface PostMediaThumbnailProps {
   url: string;
   mediaType?: string | null;
   poster?: string | null;
-  onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
+  onClick?: (event: MouseEvent<HTMLElement>) => void;
   className?: string;
   mediaClassName?: string;
   ariaLabel?: string;
@@ -88,23 +88,28 @@ export function PostMediaThumbnail({
 
   useEffect(() => setFailed(false), [resolvedUrl, resolvedPoster]);
 
-  const Wrapper = onClick ? 'button' : 'div';
+  const handleClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (!onClick) return;
+    event.stopPropagation();
+    onClick(event);
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!onClick || (event.key !== 'Enter' && event.key !== ' ')) return;
+    event.preventDefault();
+    onClick(event as unknown as MouseEvent<HTMLElement>);
+  };
 
   return (
-    <Wrapper
-      {...(onClick
-        ? {
-            type: 'button' as const,
-            onClick: (event: MouseEvent<HTMLButtonElement>) => {
-              event.stopPropagation();
-              onClick(event);
-            },
-          }
-        : {})}
+    <div
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
       className={cn(
         'relative flex shrink-0 items-center justify-center overflow-hidden bg-muted ring-1 ring-border/60',
         onClick &&
-          'transition hover:ring-foreground/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          'cursor-pointer transition hover:ring-foreground/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         className,
       )}
       aria-label={onClick ? ariaLabel : undefined}
@@ -130,10 +135,12 @@ export function PostMediaThumbnail({
             className={cn('h-full w-full object-cover', mediaClassName)}
             onLoadedMetadata={(event) => {
               const video = event.currentTarget;
-              // Poster bo'lmasa browser birinchi real kadrni ko'rsatsin.
               if (!resolvedPoster && video.duration > 0) {
                 try {
-                  video.currentTime = Math.min(0.08, Math.max(0, video.duration - 0.05));
+                  video.currentTime = Math.min(
+                    0.08,
+                    Math.max(0, video.duration - 0.05),
+                  );
                 } catch {
                   // Safari ba'zan metadata bosqichida seek'ni bloklaydi.
                 }
@@ -156,6 +163,6 @@ export function PostMediaThumbnail({
           onError={() => setFailed(true)}
         />
       )}
-    </Wrapper>
+    </div>
   );
 }
