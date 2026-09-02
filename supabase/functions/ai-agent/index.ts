@@ -32,12 +32,12 @@ const RATE_WINDOW_MINUTES = 60;
 const MAX_ROUNDS = 8;
 
 const MODEL_ROUTES: Record<string, string> = {
-  auto: "google/gemini-3-flash-preview",
+  auto: "google/gemini-3.6-flash",
   fast: "google/gemini-3.1-flash-lite",
-  balanced: "google/gemini-3-flash-preview",
-  coding: "google/gemini-3.5-flash",
-  reasoning: "google/gemini-2.5-pro",
-  vision: "google/gemini-2.5-flash",
+  balanced: "google/gemini-3.6-flash",
+  coding: "google/gemini-3.6-flash",
+  reasoning: "google/gemini-3.1-pro-preview",
+  vision: "google/gemini-3.6-flash",
 };
 
 const DEFAULT_GROUPS = ["web", "image", "code", "alsamos"];
