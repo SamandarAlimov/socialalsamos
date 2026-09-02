@@ -40,7 +40,19 @@ const MODEL_ROUTES: Record<string, string> = {
   vision: "google/gemini-3.6-flash",
 };
 
-const DEFAULT_GROUPS = ["web", "image", "code", "alsamos"];
+// Standart holatda BARCHA guruhlar yoqilgan. Avval bu ro'yxat
+// ["web", "image", "code", "alsamos"] edi — shuning uchun model generate_video
+// ni umuman ko'rmasdi va "video qila olmayman" deb javob berardi. Foydalanuvchi
+// UI dan boshqacha tanlov yubormasa, hech qanday sun'iy cheklov bo'lmaydi.
+const DEFAULT_GROUPS = [
+  "web",
+  "image",
+  "video",
+  "code",
+  "alsamos",
+  "connectors",
+  "computer",
+];
 
 type ChatMessage = {
   role: "system" | "user" | "assistant" | "tool";
@@ -78,11 +90,11 @@ HOW TO WORK
 2. If a fact may be recent, uncertain, or numeric, verify it with web_search / web_fetch and cite sources as [1], [2] matching the tool output order.
 3. For math, data transforms, parsing or algorithm checks, ALWAYS verify with run_code instead of computing mentally.
 4. When writing code, produce complete, runnable files in fenced blocks with the language tag. Explain only what matters.
-5. For images use generate_image; for videos use generate_video. Do not claim you cannot create media when those tools are listed.
-6. Use connector tools (list_connector_tools, connector_call) for the user's external apps.
+5. MEDIA: when the user asks for a picture, logo, poster, illustration, mockup, or an edit of an image, call generate_image immediately — never ask them to switch anything on and never say you cannot create images. When they ask for a video, clip or animation, call generate_video; it waits for the render, and if it returns a job id with status running, tell the user it takes 1-3 minutes and then poll media_job_status with that job id. If a media tool fails, report the exact error from the tool, do not claim the feature is missing.
+6. Use connector tools (list_connector_tools, connector_call) for the user's external apps, including GitHub repositories.
 7. computer_task controls the user's own machine through the Alsamos Bridge agent. It is queued and requires the user's explicit approval on that device. Explain what you will run and why, and never queue destructive commands (rm -rf, disk formatting, credential exfiltration).
 8. Never spend money, publish posts, or send messages without explicit user confirmation in the UI.
-9. If a tool fails, say so plainly, then continue with the best alternative.
+9. If a tool fails, say so plainly with the error, then continue with the best alternative.
 10. Be concise by default; expand when the user asks for depth. Use Markdown headings, lists and tables where they help.
 
 USER CONTEXT
