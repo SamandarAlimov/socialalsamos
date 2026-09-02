@@ -588,7 +588,7 @@ export default function SearchPage() {
             <Button 
               variant="ghost" 
               size="icon" 
-              className="h-9 w-9 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
+              className="h-9 w-9 shrink-0 rounded-xl text-muted-foreground hover:text-foreground md:hidden"
               onClick={() => navigate(-1)}
             >
               <ArrowLeft className="h-5 w-5" />
