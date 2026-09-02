@@ -392,7 +392,7 @@ export default function SettingsPage() {
                       className={cn(
                         'w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors',
                         idx !== 0 && 'border-t border-border/60',
-                        isActive ? 'bg-primary/10' : 'hover:bg-accent/50',
+                        isActive ? 'bg-accent/70' : 'hover:bg-accent/50',
                       )}
                     >
                       <span className={cn('h-9 w-9 rounded-xl flex items-center justify-center shrink-0', item.tint)}>
@@ -402,7 +402,7 @@ export default function SettingsPage() {
                         <span
                           className={cn(
                             'block text-sm font-medium truncate',
-                            isActive && 'text-primary',
+                            isActive && 'font-semibold text-foreground',
                             item.danger && 'text-destructive',
                           )}
                         >
