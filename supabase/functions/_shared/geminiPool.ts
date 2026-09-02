@@ -127,6 +127,24 @@ export type AiFetchResult = {
   keyIndex: number;
 };
 
+/** Zaxira yo'l: so'rovni o'zgartirmasdan Lovable gateway'ga yuborish. */
+async function lovableFetch(
+  body: Record<string, unknown>,
+  lovableKey: string,
+  signal?: AbortSignal,
+): Promise<AiFetchResult> {
+  const response = await fetch(LOVABLE_GATEWAY, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${lovableKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+  return { response, provider: 'lovable', keyIndex: 0 };
+}
+
 /**
  * AI so'rovini yuboradi: avval Gemini kalitlari navbati bilan, keyin Lovable.
  * Muvaffaqiyatli javob (yoki tuzatib bo'lmaydigan xato) qaytguncha uriniladi.
@@ -182,7 +200,18 @@ export async function aiFetch(options: AiFetchOptions): Promise<AiFetchResult> {
       continue;
     }
 
-    // 400 kabi xatolar so'rovning o'zida — kalit almashtirish yordam bermaydi.
+    // 400/404 kabi xatolar so'rovning O'ZIDA — boshqa kalit yordam bermaydi.
+    // Lekin sabab ko'pincha Google'ning OpenAI-mos endpointi ba'zi maydonlarni
+    // (tools, tool_choice, response_format) qo'llab-quvvatlamasligi bo'ladi.
+    // Shunday holatda zaxira gateway'ga o'tamiz, aks holda agentik so'rovlar
+    // butunlay ishlamay qoladi.
+    if (lovableKey) {
+      console.warn(
+        `gemini rejected the request (HTTP ${response.status}) — falling back to Lovable gateway: ${lastDetail.slice(0, 200)}`,
+      );
+      return lovableFetch(body, lovableKey, signal);
+    }
+
     return { response, provider: 'gemini', keyIndex: attempt + 1 };
   }
 
@@ -191,16 +220,7 @@ export async function aiFetch(options: AiFetchOptions): Promise<AiFetchResult> {
     console.warn(
       `all gemini keys exhausted (last HTTP ${lastStatus}) — falling back to Lovable gateway`,
     );
-    const response = await fetch(LOVABLE_GATEWAY, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${lovableKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-      signal,
-    });
-    return { response, provider: 'lovable', keyIndex: 0 };
+    return lovableFetch(body, lovableKey, signal);
   }
 
   throw new Error(
