@@ -10,12 +10,12 @@ const RATE_WINDOW_MINUTES = 60;
 // Task-based model routing across free Lovable AI models.
 // Fast/general is default; heavier tasks upgrade to Pro; simple/high-volume downgrade to Lite.
 const MODEL_ROUTES: Record<string, string> = {
-  general: "google/gemini-3-flash-preview",
+  general: "google/gemini-3.6-flash",
   fast: "google/gemini-3.1-flash-lite",
-  code: "google/gemini-3.5-flash",
-  reasoning: "google/gemini-2.5-pro",
-  vision: "google/gemini-2.5-flash",
-  creative: "google/gemini-3-flash-preview",
+  code: "google/gemini-3.6-flash",
+  reasoning: "google/gemini-3.1-pro-preview",
+  vision: "google/gemini-3.6-flash",
+  creative: "google/gemini-3.6-flash",
 };
 
 async function classifyRequest(
