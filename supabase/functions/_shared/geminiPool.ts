@@ -15,6 +15,9 @@
  *
  * Google'ning OpenAI-mos endpointi ishlatiladi, shuning uchun so'rov tanasi
  * Lovable gateway'inikiga aynan bir xil — chaqiruv joyini almashtirish kifoya.
+ *
+ * Chat bo'lmagan endpointlar (rasm, video, operation polling) uchun
+ * `googleFetch` ishlatiladi — u ham xuddi shu kalitlar navbatidan foydalanadi.
  */
 
 const GOOGLE_HOST = 'https://' + 'generativelanguage.googleapis.com';
@@ -226,6 +229,93 @@ export async function aiFetch(options: AiFetchOptions): Promise<AiFetchResult> {
   throw new Error(
     `Barcha Gemini kalitlari ishlamadi (oxirgi holat: HTTP ${lastStatus || '?'}). ` +
       'Kalitlarni yoki limitlarni tekshiring.',
+  );
+}
+
+/* ------------------------- umumiy Google endpointlari ---------------------- */
+
+export type GoogleFetchResult = {
+  response: Response;
+  /** Nechanchi kalit ishlatildi (1 dan boshlab). */
+  keyIndex: number;
+};
+
+/**
+ * Chat bo'lmagan Google endpointlariga (rasm, video, operations) kalitlar
+ * navbati bilan so'rov yuborish. Rasm/video generatsiyasi ham shu yerdan
+ * o'tadi — to'g'ridan-to'g'ri gateway chaqiruvi taqiqlangan.
+ *
+ * - `pathOrUrl` "/v1beta/..." ko'rinishida bo'lsa host oldiga qo'shiladi,
+ *   to'liq URL bo'lsa (operation natijasidagi video havolasi) o'zi ishlatiladi.
+ * - 429/401/403/5xx va tarmoq xatosida keyingi kalitga o'tadi.
+ * - 400/404 (so'rov yoki model nomi noto'g'ri) javobning o'zi qaytariladi —
+ *   chaqiruvchi keyingi model nomzodini sinab ko'rishi mumkin.
+ */
+export async function googleFetch(
+  pathOrUrl: string,
+  init: { method?: string; body?: unknown; signal?: AbortSignal } = {},
+): Promise<GoogleFetchResult> {
+  const keys = available();
+  if (!keys.length) {
+    throw new Error(
+      'Gemini kalitlari topilmadi. GEMINI_API_KEYS (yoki GEMINI_API_KEY_1..10) ni sozlang.',
+    );
+  }
+
+  const url = pathOrUrl.startsWith('http') ? pathOrUrl : GOOGLE_HOST + pathOrUrl;
+  const method = init.method ?? 'POST';
+  const hasBody = init.body !== undefined && init.body !== null;
+
+  let lastStatus = 0;
+  let lastDetail = '';
+
+  for (let attempt = 0; attempt < keys.length; attempt += 1) {
+    const key = keys[(cursor + attempt) % keys.length];
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method,
+        headers: {
+          'x-goog-api-key': key,
+          ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
+        },
+        body: hasBody ? JSON.stringify(init.body) : undefined,
+        signal: init.signal,
+      });
+    } catch (error) {
+      lastDetail = error instanceof Error ? error.message : 'tarmoq xatosi';
+      markCooldown(key, 503);
+      continue;
+    }
+
+    if (response.ok) {
+      cursor = (cursor + attempt + 1) % keys.length;
+      return { response, keyIndex: attempt + 1 };
+    }
+
+    lastStatus = response.status;
+
+    if (
+      response.status === 429 ||
+      response.status === 401 ||
+      response.status === 403 ||
+      response.status >= 500
+    ) {
+      lastDetail = await response.text().catch(() => '');
+      markCooldown(key, response.status);
+      console.warn(
+        `googleFetch key #${attempt + 1} failed: HTTP ${response.status} ${lastDetail.slice(0, 200)}`,
+      );
+      continue;
+    }
+
+    // So'rovning o'zida muammo — chaqiruvchi hal qiladi (boshqa model nomi va h.k.).
+    return { response, keyIndex: attempt + 1 };
+  }
+
+  throw new Error(
+    `Google API ishlamadi (oxirgi holat: HTTP ${lastStatus || '?'}). ${lastDetail.slice(0, 200)}`.trim(),
   );
 }
 
