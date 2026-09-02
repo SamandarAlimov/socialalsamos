@@ -169,7 +169,7 @@ export function CreateChatDialog({
               >
                 <div className={cn(
                   "h-12 w-12 rounded-full flex items-center justify-center",
-                  type.id === 'private' && 'bg-primary',
+                  type.id === 'private' && 'bg-muted',
                   type.id === 'group' && 'bg-blue-500',
                   type.id === 'channel' && 'bg-violet-500',
                   type.id === 'secret' && 'bg-green-500'
@@ -204,12 +204,12 @@ export function CreateChatDialog({
                   return (
                     <div
                       key={userId}
-                      className="flex items-center gap-1 px-2 py-1 bg-primary/10 rounded-full text-sm"
+                      className="flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-sm"
                     >
                       <span>{selectedUser?.display_name || selectedUser?.username}</span>
                       <button
                         onClick={() => handleUserSelect(userId)}
-                        className="h-4 w-4 rounded-full hover:bg-primary/20"
+                        className="h-4 w-4 rounded-full hover:bg-foreground/10"
                       >
                         <X className="h-3 w-3" />
                       </button>
@@ -222,7 +222,7 @@ export function CreateChatDialog({
             <ScrollArea className="h-[300px]">
               {loading ? (
                 <div className="flex items-center justify-center h-32">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-muted-foreground" />
                 </div>
               ) : users.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
@@ -277,7 +277,7 @@ export function CreateChatDialog({
                 <div className="h-24 w-24 rounded-full bg-muted flex items-center justify-center">
                   <Camera className="h-8 w-8 text-muted-foreground group-hover:text-foreground transition-colors" />
                 </div>
-                <span className="absolute bottom-0 right-0 h-8 w-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground">
+                <span className="absolute bottom-0 right-0 h-8 w-8 bg-foreground rounded-full flex items-center justify-center text-background">
                   <Camera className="h-4 w-4" />
                 </span>
               </button>
