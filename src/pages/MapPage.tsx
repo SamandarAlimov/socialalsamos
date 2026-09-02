@@ -3907,7 +3907,7 @@ export default function MapPage() {
           <div className="relative min-w-0 flex-1">
             <div
               className={cn(
-                'flex h-11 w-full items-center gap-2 rounded-[18px] px-3 shadow-xl ring-1 backdrop-blur-2xl transition focus-within:ring-primary/[0.25]',
+                'flex h-11 w-full items-center gap-2 rounded-[18px] px-3 shadow-xl ring-1 backdrop-blur-2xl transition focus-within:ring-ring/40',
                 contrastLayer
                   ? 'map-imagery-search ring-white/[0.15]'
                   : 'bg-background/[0.84] ring-border/[0.45] focus-within:bg-background/[0.94]',
@@ -4144,7 +4144,7 @@ export default function MapPage() {
           disabled={locating}
           className={cn(
             'flex h-10 w-10 items-center justify-center rounded-xl bg-background/[0.68] text-foreground transition hover:bg-background/[0.95] hover:shadow-sm disabled:cursor-wait',
-            locating && 'bg-primary/[0.12] text-primary',
+            locating && 'bg-muted text-foreground',
           )}
           aria-label={locating ? 'Joylashuv aniqlanmoqda' : 'Mening joylashuvim'}
         >
