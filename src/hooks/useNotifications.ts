@@ -17,6 +17,7 @@ export interface NotificationActor {
 export interface NotificationPost {
   id: string;
   media_urls: string[] | null;
+  media_type: string | null;
 }
 
 export interface NotificationComment {
@@ -120,7 +121,7 @@ async function enrichNotifications(rows: RawNotificationRow[]): Promise<Notifica
           .in('id', Array.from(actorIds))
       : Promise.resolve({ data: [], error: null } as const),
     postIds.size > 0
-      ? supabase.from('posts').select('id, media_urls').in('id', Array.from(postIds))
+      ? supabase.from('posts').select('id, media_urls, media_type').in('id', Array.from(postIds))
       : Promise.resolve({ data: [], error: null } as const),
     commentIds.size > 0
       ? supabase
