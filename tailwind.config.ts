@@ -41,6 +41,10 @@ export default {
         brand: {
           DEFAULT: "hsl(var(--accent-brand))",
         },
+        link: {
+          DEFAULT: "hsl(var(--link))",
+          hover: "hsl(var(--link-hover))",
+        },
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -86,6 +90,7 @@ export default {
         bubble: {
           own: "hsl(var(--bubble-own-bg))",
           "own-foreground": "hsl(var(--bubble-own-fg))",
+          "own-accent": "hsl(var(--bubble-own-accent))",
           other: "hsl(var(--bubble-other-bg))",
           "other-foreground": "hsl(var(--bubble-other-fg))",
         },
