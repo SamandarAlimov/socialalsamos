@@ -15,21 +15,18 @@ export function NotificationsDropdown() {
       size="icon" 
       className={cn(
         "relative rounded-full transition-all duration-200",
-        unreadCount > 0 && "hover:bg-primary/10"
+        unreadCount > 0 && "hover:bg-muted"
       )}
       onClick={() => navigate('/notifications')}
     >
-      <Bell className={cn(
-        "h-5 w-5 transition-colors",
-        unreadCount > 0 && "text-primary"
-      )} />
+      <Bell className="h-5 w-5 text-muted-foreground transition-colors group-hover:text-foreground" />
       <AnimatePresence>
         {unreadCount > 0 && (
           <motion.span 
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
-            className="absolute -top-0.5 -right-0.5 h-5 min-w-5 px-1 rounded-full bg-gradient-to-r from-primary to-primary/80 text-primary-foreground text-xs font-medium flex items-center justify-center shadow-lg shadow-primary/30"
+            className="absolute -top-0.5 -right-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-xs font-medium text-destructive-foreground shadow-sm"
           >
             {unreadCount > 99 ? '99+' : unreadCount}
           </motion.span>
