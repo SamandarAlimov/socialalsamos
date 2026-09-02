@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Heart, MessageCircle, RefreshCw } from 'lucide-react';
+import { Heart, MessageCircle, Music2, Quote, RefreshCw, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PostViewModal } from '@/components/PostViewModal';
 import { PostThumbnailStickers } from '@/components/stickers/PostThumbnailStickers';
-import { PostCardVisual } from '@/components/discovery/PostCardVisual';
+import { PostCardVisual, resolvePostVisualKind } from '@/components/discovery/PostCardVisual';
+import { getPostPreview } from '@/components/discovery/PostPreviewContent';
+import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
@@ -204,47 +206,141 @@ export function ForYouSection({ refreshKey = 0 }: ForYouSectionProps) {
   return (
     <section>
       {header}
-      <div className="grid grid-cols-3 gap-1 sm:gap-2">
-        {posts.map((post) => (
-          <div key={post.id} className="group relative">
-            <button
-              type="button"
-              onClick={() => openPost(post)}
-              className="relative block aspect-square w-full overflow-hidden rounded-lg bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label="Postni ochish"
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+        {posts.map((post) => {
+          const preview = getPostPreview(post.content);
+          const kind = resolvePostVisualKind(
+            post.media_type,
+            post.media_urls?.[0] ?? null,
+            Boolean(preview.music),
+          );
+          const isVisual = kind === 'image' || kind === 'video';
+          const isAudio = kind === 'audio';
+
+          if (isVisual) {
+            return (
+              <div key={post.id} className="group relative">
+                <button
+                  type="button"
+                  onClick={() => openPost(post)}
+                  className="relative block aspect-square w-full overflow-hidden rounded-xl bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label="Postni ochish"
+                >
+                  <PostCardVisual
+                    content={post.content}
+                    mediaUrls={post.media_urls}
+                    mediaType={post.media_type}
+                    variant="tile"
+                  />
+
+                  <span className="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-gradient-to-t from-black/75 via-black/25 to-transparent px-2.5 pb-2 pt-7 text-[11px] text-white opacity-0 transition-opacity group-hover:opacity-100">
+                    <span className="flex items-center gap-1">
+                      <Heart className="h-3 w-3" />
+                      {formatCount(post.likes_count)}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <MessageCircle className="h-3 w-3" />
+                      {formatCount(post.comments_count)}
+                    </span>
+                  </span>
+
+                  <PostThumbnailStickers postId={post.id} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleLike(post)}
+                  className="absolute left-2 top-2 rounded-full bg-black/45 p-1.5 text-white shadow-sm backdrop-blur transition-transform active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-pressed={post.is_liked}
+                  aria-label={post.is_liked ? 'Like olib tashlash' : 'Like bosish'}
+                >
+                  <Heart
+                    className={cn(
+                      'h-3.5 w-3.5',
+                      post.is_liked && 'fill-red-500 text-red-500',
+                    )}
+                  />
+                </button>
+              </div>
+            );
+          }
+
+          return (
+            <article
+              key={post.id}
+              className="group relative flex min-h-[180px] flex-col overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm transition hover:border-border hover:shadow-md"
             >
-              <PostCardVisual
-                content={post.content}
-                mediaUrls={post.media_urls}
-                mediaType={post.media_type}
-                variant="tile"
-              />
+              <button
+                type="button"
+                onClick={() => openPost(post)}
+                className="flex min-h-[180px] flex-1 flex-col p-3.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={isAudio ? 'Audio postni ochish' : 'Matnli postni ochish'}
+              >
+                {isAudio ? (
+                  <>
+                    <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                      <Music2 className="h-4.5 w-4.5" />
+                    </span>
+                    <span className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">
+                      {preview.music?.title || 'Audio'}
+                    </span>
+                    <span className="mt-1 line-clamp-1 text-[11px] text-muted-foreground">
+                      {preview.music?.artist || 'Audio post'}
+                    </span>
+                    {preview.text && (
+                      <span className="mt-3 line-clamp-2 text-xs leading-relaxed text-foreground/75">
+                        {preview.text}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Quote className="mb-3 h-4 w-4 text-muted-foreground/30" />
+                    <span
+                      className={cn(
+                        'line-clamp-6 font-medium leading-[1.45] text-foreground',
+                        preview.text.length < 75 ? 'text-[15px]' : 'text-[13px]',
+                      )}
+                    >
+                      {preview.text || 'Matnsiz post'}
+                    </span>
+                  </>
+                )}
 
-              <span className="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-gradient-to-t from-black/70 to-transparent px-2 py-1.5 text-[11px] text-white opacity-0 transition-opacity group-hover:opacity-100">
-                <span className="flex items-center gap-1">
-                  <Heart className="h-3 w-3" />
-                  {formatCount(post.likes_count)}
+                <span className="mt-auto flex items-center gap-2 pt-4">
+                  <StoryAvatar
+                    avatarUrl={post.profile?.avatar_url ?? null}
+                    username={post.profile?.username ?? ''}
+                    size="xs"
+                  />
+                  <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-muted-foreground">
+                    {post.profile?.display_name || post.profile?.username || 'Foydalanuvchi'}
+                  </span>
+                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <MessageCircle className="h-3 w-3" />
+                    {formatCount(post.comments_count)}
+                  </span>
                 </span>
-                <span className="flex items-center gap-1">
-                  <MessageCircle className="h-3 w-3" />
-                  {formatCount(post.comments_count)}
-                </span>
-              </span>
+              </button>
 
-              <PostThumbnailStickers postId={post.id} />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleLike(post)}
-              className="absolute left-1.5 top-1.5 rounded-full bg-black/50 p-1.5 text-white transition-transform active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-pressed={post.is_liked}
-              aria-label={post.is_liked ? 'Like olib tashlash' : 'Like bosish'}
-            >
-              <Heart className={cn('h-3.5 w-3.5', post.is_liked && 'fill-red-500 text-red-500')} />
-            </button>
-          </div>
-        ))}
+              <button
+                type="button"
+                onClick={() => handleLike(post)}
+                className="absolute right-2 top-2 flex h-8 items-center gap-1 rounded-full bg-background/90 px-2 text-[11px] text-muted-foreground shadow-sm ring-1 ring-border/50 backdrop-blur transition hover:text-foreground active:scale-95"
+                aria-pressed={post.is_liked}
+                aria-label={post.is_liked ? 'Like olib tashlash' : 'Like bosish'}
+              >
+                <Heart
+                  className={cn(
+                    'h-3.5 w-3.5',
+                    post.is_liked && 'fill-red-500 text-red-500',
+                  )}
+                />
+                {formatCount(post.likes_count)}
+              </button>
+            </article>
+          );
+        })}
       </div>
 
       {selected && (
