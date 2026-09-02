@@ -9,9 +9,15 @@ interface CommentMediaUploadProps {
   onMediaSelect: (url: string, type: 'image' | 'video' | 'gif') => void;
   onMediaClear: () => void;
   selectedMedia: { url: string; type: 'image' | 'video' | 'gif' } | null;
+  showSelectedPreview?: boolean;
 }
 
-export function CommentMediaUpload({ onMediaSelect, onMediaClear, selectedMedia }: CommentMediaUploadProps) {
+export function CommentMediaUpload({
+  onMediaSelect,
+  onMediaClear,
+  selectedMedia,
+  showSelectedPreview = true,
+}: CommentMediaUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -79,7 +85,7 @@ export function CommentMediaUpload({ onMediaSelect, onMediaClear, selectedMedia 
       </Button>
 
       {/* Selected Media Preview */}
-      {selectedMedia && (
+      {selectedMedia && showSelectedPreview && (
         <div className="relative ml-2">
           <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-border">
             {selectedMedia.type === 'video' ? (
