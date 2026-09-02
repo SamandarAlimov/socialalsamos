@@ -639,6 +639,270 @@ function navigationalResult(
   }));
 }
 
+type ProviderBatch = {
+  name: string;
+  results: SearchResult[];
+  totalEstimated: number;
+  summary?: string | null;
+  searchSuggestionHtml?: string | null;
+  searchQueries?: string[];
+};
+
+function normalizedResultKey(result: SearchResult) {
+  const raw = result.type === 'image'
+    ? (result.thumbnailUrl || result.url)
+    : result.url;
+
+  try {
+    const url = new URL(raw);
+    url.hash = '';
+    const tracking = [
+      'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+      'gclid', 'fbclid', 'yclid', 'mc_cid', 'mc_eid',
+    ];
+    tracking.forEach((key) => url.searchParams.delete(key));
+
+    const path = url.pathname === '/' ? '' : url.pathname.replace(/\/$/, '');
+    const search = url.searchParams.toString();
+    return (
+      url.hostname.replace(/^www\./, '').toLowerCase() +
+      path +
+      (search ? '?' + search : '')
+    );
+  } catch {
+    return raw.trim().toLowerCase();
+  }
+}
+
+function searchTokens(query: string) {
+  return query
+    .toLocaleLowerCase()
+    .normalize('NFKC')
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((token) => token.length > 1)
+    .slice(0, 12);
+}
+
+function resultScore(
+  result: SearchResult,
+  query: string,
+  providerName: string,
+  category: GlobalCategory,
+) {
+  const q = query.trim().toLocaleLowerCase();
+  const title = result.title.toLocaleLowerCase();
+  const snippet = result.snippet.toLocaleLowerCase();
+  const source = result.source.toLocaleLowerCase();
+  const display = result.displayUrl.toLocaleLowerCase();
+  const tokens = searchTokens(query);
+
+  let score = 0;
+
+  if (providerName === 'direct-navigation') score += 120;
+  else if (providerName === 'supabase-realtime') score += 24;
+  else if (providerName === 'instant-find-it') score += 21;
+  else if (providerName === 'duckduckgo') score += 12;
+  else if (providerName === 'yacy') score += 8;
+
+  if (title === q || source === q || source === q.replace(/^www\./, '')) score += 54;
+  if (title.startsWith(q)) score += 24;
+  else if (title.includes(q)) score += 16;
+  if (source.includes(q.replace(/\s+/g, ''))) score += 14;
+  if (snippet.includes(q)) score += 8;
+
+  for (const token of tokens) {
+    if (title.includes(token)) score += 7;
+    if (source.includes(token) || display.includes(token)) score += 4;
+    if (snippet.includes(token)) score += 2;
+  }
+
+  if (result.url.startsWith('https://')) score += 1.5;
+  if (result.thumbnailUrl) score += 1;
+
+  if (category === 'news' && result.type === 'news') score += 12;
+  if (category === 'images' && result.type === 'image') score += 12;
+  if (category === 'videos' && result.type === 'video') score += 12;
+  if (category === 'wikipedia' && result.type === 'wikipedia') score += 12;
+
+  if (result.publishedAt) {
+    const ageMs = Date.now() - Date.parse(result.publishedAt);
+    if (Number.isFinite(ageMs)) {
+      const day = 24 * 60 * 60 * 1000;
+      if (ageMs <= day) score += 5;
+      else if (ageMs <= 7 * day) score += 3;
+      else if (ageMs <= 30 * day) score += 1.5;
+    }
+  }
+
+  return score;
+}
+
+function mergeProviderBatches(
+  query: string,
+  category: GlobalCategory,
+  pageSize: number,
+  batches: ProviderBatch[],
+) {
+  const byKey = new Map<
+    string,
+    { result: SearchResult; score: number; provider: string }
+  >();
+
+  for (const batch of batches) {
+    for (const result of batch.results) {
+      if (!result?.url || !result?.title) continue;
+
+      const key = normalizedResultKey(result);
+      const score = resultScore(result, query, batch.name, category);
+      const existing = byKey.get(key);
+
+      if (!existing) {
+        byKey.set(key, { result, score, provider: batch.name });
+        continue;
+      }
+
+      const preferred = score > existing.score ? result : existing.result;
+      const alternate = score > existing.score ? existing.result : result;
+
+      byKey.set(key, {
+        result: {
+          ...preferred,
+          snippet: preferred.snippet || alternate.snippet,
+          thumbnailUrl: preferred.thumbnailUrl || alternate.thumbnailUrl,
+          publishedAt: preferred.publishedAt || alternate.publishedAt,
+          author: preferred.author || alternate.author,
+          width: preferred.width || alternate.width,
+          height: preferred.height || alternate.height,
+          durationSeconds:
+            preferred.durationSeconds || alternate.durationSeconds,
+        },
+        score: Math.max(score, existing.score) + 3,
+        provider: score > existing.score ? batch.name : existing.provider,
+      });
+    }
+  }
+
+  const ranked = Array.from(byKey.values()).sort((a, b) => b.score - a.score);
+
+  // Google/Yandex kabi bir domen SERP'ni egallab olmasin.
+  const diversified: typeof ranked = [];
+  const domainCounts = new Map<string, number>();
+
+  for (const entry of ranked) {
+    const domain = sourceFromUrl(entry.result.url);
+    const used = domainCounts.get(domain) || 0;
+    const maxPerDomain = entry.provider === 'direct-navigation' ? 3 : 2;
+    if (used >= maxPerDomain) continue;
+    domainCounts.set(domain, used + 1);
+    diversified.push(entry);
+  }
+
+  if (category !== 'all') {
+    return diversified.slice(0, pageSize).map((entry) => entry.result);
+  }
+
+  const quotas: Record<ResultType, number> = {
+    wikipedia: 2,
+    web: Math.max(8, Math.floor(pageSize * 0.55)),
+    news: Math.max(2, Math.floor(pageSize * 0.2)),
+    image: Math.max(2, Math.floor(pageSize * 0.15)),
+    video: Math.max(1, Math.floor(pageSize * 0.1)),
+  };
+
+  const selected: typeof diversified = [];
+  const selectedKeys = new Set<string>();
+  const usedByType: Record<ResultType, number> = {
+    wikipedia: 0,
+    web: 0,
+    news: 0,
+    image: 0,
+    video: 0,
+  };
+
+  for (const entry of diversified) {
+    if (selected.length >= pageSize) break;
+    if (usedByType[entry.result.type] >= quotas[entry.result.type]) continue;
+    const key = normalizedResultKey(entry.result);
+    selected.push(entry);
+    selectedKeys.add(key);
+    usedByType[entry.result.type] += 1;
+  }
+
+  for (const entry of diversified) {
+    if (selected.length >= pageSize) break;
+    const key = normalizedResultKey(entry.result);
+    if (selectedKeys.has(key)) continue;
+    selected.push(entry);
+    selectedKeys.add(key);
+  }
+
+  return selected.map((entry) => entry.result);
+}
+
+async function runSupabaseRealtimeSearch(input: {
+  query: string;
+  category: GlobalCategory;
+  page: number;
+  pageSize: number;
+  locale: Locale;
+}): Promise<ProviderBatch> {
+  const url = (
+    process.env.SUPABASE_GLOBAL_SEARCH_URL ||
+    'https://mbhjganbihamoiqmankv.supabase.co/functions/v1/global-search'
+  ).trim();
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(input),
+    signal: AbortSignal.timeout(12000),
+  });
+
+  const raw = await response.text();
+  let data: any = null;
+  try {
+    data = raw ? JSON.parse(raw) : null;
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok || !data) {
+    throw new Error(
+      'supabase-global-search HTTP ' +
+        response.status +
+        (raw ? ': ' + raw.slice(0, 160) : ''),
+    );
+  }
+
+  const results = Array.isArray(data.results)
+    ? (data.results as SearchResult[])
+    : [];
+
+  if (results.length === 0 && data.error) {
+    throw new Error(
+      data?.error?.message || String(data?.error || 'no results'),
+    );
+  }
+
+  return {
+    name: 'supabase-realtime',
+    results,
+    totalEstimated: Number(data.totalEstimated) || results.length,
+    summary: typeof data.summary === 'string' ? data.summary : null,
+    searchSuggestionHtml:
+      typeof data.searchSuggestionHtml === 'string'
+        ? data.searchSuggestionHtml
+        : null,
+    searchQueries: Array.isArray(data.searchQueries)
+      ? data.searchQueries.map(String)
+      : [],
+  };
+}
+
+
 async function parseBody(req: any) {
   if (req.body && typeof req.body === 'object') return req.body;
   if (typeof req.body === 'string' && req.body.trim()) {
@@ -692,14 +956,8 @@ export default async function handler(req: any, res: any) {
     ? (requestedLocale as Locale)
     : 'uz';
 
-  const page = Math.max(
-    1,
-    Math.min(20, Number(body?.page) || 1),
-  );
-  const pageSize = Math.max(
-    1,
-    Math.min(20, Number(body?.pageSize) || 20),
-  );
+  const page = Math.max(1, Math.min(20, Number(body?.page) || 1));
+  const pageSize = Math.max(1, Math.min(20, Number(body?.pageSize) || 20));
 
   if (!query) {
     res.status(400).json({
@@ -717,10 +975,8 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
-  // Primary realtime search comes from instant-find-it's working Lovable
-  // Firecrawl connector. YaCy/DuckDuckGo remain as emergency fallbacks.
-
   const cacheKey = [
+    'federated-v2',
     query.toLowerCase(),
     category,
     locale,
@@ -732,126 +988,129 @@ export default async function handler(req: any, res: any) {
   if (cached) {
     res.setHeader(
       'Cache-Control',
-      'private, max-age=60, s-maxage=180, stale-while-revalidate=300',
+      'private, max-age=30, s-maxage=90, stale-while-revalidate=180',
     );
     res.status(200).json({
       ...cached,
       cached: true,
+      tookMs: 0,
     });
     return;
   }
 
   const startedAt = Date.now();
+  const upstreamErrors: string[] = [];
+  const batches: ProviderBatch[] = [];
 
   try {
-    // Exact site/domain navigation should never wait on public search peers.
-    // This also guarantees that searching "alsamos" opens the platform result instantly.
-    if (page === 1) {
-      const direct = await navigationalResult(query, category);
-      if (direct) {
-        const payload = {
-          query,
-          category,
-          page,
-          totalEstimated: 1,
-          tookMs: Date.now() - startedAt,
-          results: [direct],
-          engine: 'direct-navigation',
-          summary: null,
-          searchSuggestionHtml: null,
-          searchQueries: [],
-          error: null,
-        };
+    const directPromise =
+      page === 1
+        ? navigationalResult(query, category)
+        : Promise.resolve(null);
 
-        cacheSet(cacheKey, payload);
-        res.setHeader(
-          'Cache-Control',
-          'private, max-age=60, s-maxage=180, stale-while-revalidate=300',
-        );
-        res.status(200).json(payload);
-        return;
-      }
-    }
-
-    let results: SearchResult[] = [];
-    let totalEstimated = 0;
-    let engine = 'none';
-    const upstreamErrors: string[] = [];
-
-    try {
-      const instant = await runInstantFindItSearch({
+    // Primary live providers run in parallel.
+    const primary = await Promise.allSettled([
+      runSupabaseRealtimeSearch({
         query,
         category,
         page,
         pageSize,
         locale,
-      });
-      results = instant.results;
-      totalEstimated = instant.totalEstimated;
-      engine = 'instant-find-it:' + instant.engine;
-    } catch (error) {
-      upstreamErrors.push(
-        'instant-find-it: ' +
-          (error instanceof Error ? error.message : String(error)),
-      );
-    }
-
-    if (results.length === 0) {
-      try {
-        const yacy = await runYacySearch({
+      }),
+      runInstantFindItSearch({
         query,
         category,
         page,
         pageSize,
         locale,
-      });
-      results = yacy.results;
-      totalEstimated = yacy.totalEstimated;
-      if (yacy.results.length > 0) {
-        const peerLabel = yacy.contributingPeers
-          .slice(0, 2)
-          .map((url) => sourceFromUrl(url))
-          .join(',');
-        engine =
-          yacy.resource === 'local'
-            ? 'yacy-local:' + peerLabel
-            : 'yacy-freeworld:' + peerLabel;
-      }
-      if (yacy.failures.length > 0) {
-        upstreamErrors.push(...yacy.failures.map((failure) => 'yacy-peer: ' + failure));
-      }
-      } catch (error) {
+      }).then((result) => ({
+        name: 'instant-find-it',
+        results: result.results,
+        totalEstimated: result.totalEstimated,
+      } satisfies ProviderBatch)),
+    ]);
+
+    for (const entry of primary) {
+      if (entry.status === 'fulfilled') {
+        batches.push(entry.value);
+      } else {
         upstreamErrors.push(
-          'yacy: ' + (error instanceof Error ? error.message : String(error)),
+          entry.reason instanceof Error
+            ? entry.reason.message
+            : String(entry.reason),
         );
       }
     }
 
-    if (results.length === 0) {
-      try {
-        const ddg = await runDuckDuckGoSearch({
+    const direct = await directPromise;
+    if (direct) {
+      batches.push({
+        name: 'direct-navigation',
+        results: [direct],
+        totalEstimated: 1,
+      });
+    }
+
+    let merged = mergeProviderBatches(query, category, pageSize, batches);
+
+    // Public fallbacks are only needed when primary providers do not provide
+    // enough diversity. They also run in parallel.
+    const minimumUseful = Math.min(pageSize, category === 'all' ? 10 : 8);
+    if (merged.length < minimumUseful) {
+      const fallback = await Promise.allSettled([
+        runYacySearch({
           query,
           category,
           page,
           pageSize,
-        });
+          locale,
+        }).then((result) => ({
+          name: 'yacy',
+          results: result.results,
+          totalEstimated: result.totalEstimated,
+        } satisfies ProviderBatch)),
+        runDuckDuckGoSearch({
+          query,
+          category,
+          page,
+          pageSize,
+        }).then((result) => ({
+          name: 'duckduckgo',
+          results: result.results,
+          totalEstimated: result.totalEstimated,
+        } satisfies ProviderBatch)),
+      ]);
 
-        if (ddg.results.length > 0) {
-          results = ddg.results;
-          totalEstimated = Math.max(totalEstimated, ddg.totalEstimated);
-          engine = 'duckduckgo-html';
+      for (const entry of fallback) {
+        if (entry.status === 'fulfilled') {
+          batches.push(entry.value);
+        } else {
+          upstreamErrors.push(
+            entry.reason instanceof Error
+              ? entry.reason.message
+              : String(entry.reason),
+          );
         }
-      } catch (error) {
-        upstreamErrors.push(
-          'duckduckgo: ' +
-            (error instanceof Error ? error.message : String(error)),
-        );
       }
+
+      merged = mergeProviderBatches(query, category, pageSize, batches);
     }
 
-    if (upstreamErrors.length) {
-      console.warn('Alsamos Global Search upstream notes:', upstreamErrors);
-    }
+    const realtimeBatch = batches.find(
+      (batch) => batch.name === 'supabase-realtime',
+    );
+    const providerNames = Array.from(
+      new Set(
+        batches
+          .filter((batch) => batch.results.length > 0)
+          .map((batch) => batch.name),
+      ),
+    );
+
+    const totalEstimated = Math.max(
+      merged.length,
+      ...batches.map((batch) => batch.totalEstimated || batch.results.length),
+    );
 
     const payload = {
       query,
@@ -859,13 +1118,18 @@ export default async function handler(req: any, res: any) {
       page,
       totalEstimated,
       tookMs: Date.now() - startedAt,
-      results,
-      engine,
-      summary: null,
-      searchSuggestionHtml: null,
-      searchQueries: [],
+      results: merged,
+      engine:
+        providerNames.length > 0
+          ? 'federated:' + providerNames.join('+')
+          : 'none',
+      providers: providerNames,
+      summary: realtimeBatch?.summary || null,
+      searchSuggestionHtml:
+        realtimeBatch?.searchSuggestionHtml || null,
+      searchQueries: realtimeBatch?.searchQueries || [],
       error:
-        results.length > 0
+        merged.length > 0
           ? null
           : {
               code: 'NO_RESULTS',
@@ -874,14 +1138,18 @@ export default async function handler(req: any, res: any) {
             },
     };
 
-    if (results.length > 0 && !payload.error) {
+    if (upstreamErrors.length) {
+      console.warn('Alsamos Global Search upstream notes:', upstreamErrors);
+    }
+
+    if (merged.length > 0) {
       cacheSet(cacheKey, payload);
     }
 
     res.setHeader(
       'Cache-Control',
-      results.length > 0 && !payload.error
-        ? 'private, max-age=60, s-maxage=180, stale-while-revalidate=300'
+      merged.length > 0
+        ? 'private, max-age=30, s-maxage=90, stale-while-revalidate=180'
         : 'no-store',
     );
     res.status(200).json(payload);
@@ -894,13 +1162,12 @@ export default async function handler(req: any, res: any) {
       totalEstimated: 0,
       tookMs: Date.now() - startedAt,
       results: [],
-      engine: 'yacy-freeworld',
+      engine: 'federated',
+      providers: [],
       error: {
         code: 'SEARCH_UPSTREAM_ERROR',
         message:
-          error instanceof Error
-            ? error.message
-            : 'Internet qidiruvi vaqtincha ishlamayapti.',
+          "Internet qidiruv xizmatlariga ulanib bo'lmadi. Birozdan so'ng qayta urinib ko'ring.",
       },
     });
   }
