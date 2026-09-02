@@ -204,6 +204,12 @@
     --bubble-own-accent: 220 10% 40%;
   }
 
+  :root[data-chat-accent='custom'] {
+    --bubble-own-bg: var(--chat-custom-hue, 142) 38% 91%;
+    --bubble-own-fg: var(--chat-custom-hue, 142) 35% 12%;
+    --bubble-own-accent: var(--chat-custom-hue, 142) 70% 32%;
+  }
+
   .dark[data-chat-accent='blue'] {
     --bubble-own-bg: 211 35% 20%;
     --bubble-own-fg: 210 35% 96%;
@@ -226,6 +232,12 @@
     --bubble-own-bg: 220 10% 18%;
     --bubble-own-fg: 210 25% 96%;
     --bubble-own-accent: 215 14% 66%;
+  }
+
+  .dark[data-chat-accent='custom'] {
+    --bubble-own-bg: var(--chat-custom-hue, 142) 25% 18%;
+    --bubble-own-fg: var(--chat-custom-hue, 142) 20% 95%;
+    --bubble-own-accent: var(--chat-custom-hue, 142) 70% 50%;
   }
 
 }
