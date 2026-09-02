@@ -8,9 +8,6 @@ import {
   FileAudio,
   FileCode,
   FileSpreadsheet,
-  ImageOff,
-  ExternalLink,
-  RotateCw,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { VideoMessagePlayer } from './messages/VideoMessagePlayer';
@@ -71,22 +68,13 @@ function formatBytes(bytes?: number): string | null {
   return `${value < 10 && unitIndex > 0 ? value.toFixed(1) : Math.round(value)} ${units[unitIndex]}`;
 }
 
-/** Xato kartasida ko'rsatiladigan host (diagnostika uchun) */
-function hostOf(url: string): string {
-  try {
-    return new URL(url, window.location.origin).hostname;
-  } catch {
-    return 'noma‘lum manba';
-  }
-}
-
 /**
  * Eski chat xabarlarida saqlangan Supabase public-object URL'ni aniqlaydi.
  *
- * 2026-08-20 dan chat-media/message-attachments bucketlari private qilindi.
- * Eski xabarlar esa `/object/public/...` URL'larini saqlab qolgan. Bunday URL
- * brauzerda 403/404 qaytarishi mumkin, lekin authenticated participant uchun
- * shu obyektga vaqtinchalik signed URL olish mumkin.
+ * chat-media/message-attachments bucketlari private qilingandan keyin eski
+ * xabarlar `/object/public/...` URL'larini saqlab qoldi. Bunday URL brauzerda
+ * 403/404 qaytaradi, lekin suhbat qatnashchisi uchun shu obyektga vaqtinchalik
+ * signed URL olish mumkin.
  */
 function parseLegacySupabaseStorageUrl(value: string): { bucket: string; key: string } | null {
   try {
@@ -112,8 +100,8 @@ async function resolveLegacyChatMediaUrl(value: string): Promise<string | null> 
   const parsed = parseLegacySupabaseStorageUrl(value);
   if (!parsed) return null;
 
-  // Only legacy/private chat buckets are resolved here. Public `media` URLs
-  // should remain direct public URLs.
+  // Faqat eski/private chat bucketlari almashtiriladi. Ommaviy `media`
+  // URL'lari o'z holida - to'g'ridan to'g'ri public havola bo'lib qoladi.
   if (!['chat-media', 'message-attachments', 'media-private'].includes(parsed.bucket)) {
     return null;
   }
@@ -155,14 +143,12 @@ export function MessageAttachment({
   const [showFullscreen, setShowFullscreen] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
-  const [attempt, setAttempt] = useState(0);
   const [resolvedImageUrl, setResolvedImageUrl] = useState<string | null>(null);
 
   // URL o'zgarsa holat tozalanadi (masalan xabar tahrirlanganda)
   useEffect(() => {
     setImageLoaded(false);
     setImageFailed(false);
-    setAttempt(0);
     setResolvedImageUrl(null);
   }, [url]);
 
@@ -179,29 +165,17 @@ export function MessageAttachment({
       : url;
     const effectiveUrl = resolvedImageUrl ?? actualUrl;
 
-    // Keshdagi buzuq javobni chetlab o'tish uchun qayta urinishda parametr qo'shiladi
-    const srcUrl =
-      attempt > 0
-        ? `${effectiveUrl}${effectiveUrl.includes('?') ? '&' : '?'}retry=${attempt}`
-        : effectiveUrl;
-
-    const retry = () => {
-      setImageFailed(false);
-      setImageLoaded(false);
-      setAttempt((value) => value + 1);
-    };
-
     const handleImageError = async () => {
-      // First failure on a legacy private Supabase URL: exchange the old
-      // public URL for a participant-authorized signed URL. This repairs old
-      // messages without making private chat storage public again.
+      // Birinchi xatolik eski private Supabase URL'ida bo'lsa: uni qatnashchi
+      // uchun imzolangan (signed) URL'ga almashtiramiz. Shu bilan eski
+      // xabarlar tiklanadi va private storage yana ommaviy qilinmaydi.
+      // src o'zgargani uchun brauzer rasmni o'zi qaytadan yuklaydi.
       if (!resolvedImageUrl) {
         const signedUrl = await resolveLegacyChatMediaUrl(actualUrl);
         if (signedUrl) {
           setResolvedImageUrl(signedUrl);
           setImageFailed(false);
           setImageLoaded(false);
-          setAttempt((value) => value + 1);
           return;
         }
       }
@@ -209,77 +183,26 @@ export function MessageAttachment({
       setImageFailed(true);
     };
 
-    /* Rasm yuklanmasa: ilgari hech qanday belgi yo'q edi - karta shunchaki
-       yig'ilib qolardi va sababi ko'rinmasdi. Endi aniq xato holati,
-       qayta urinish va "yangi oynada ochish" bor: ochilgan havola brauzerda
-       haqiqiy xatoni (403 / 404 / expired) ko'rsatadi. */
+    /* Havola butunlay yaroqsiz bo'lsa: tugmasiz, xolis ramka. Tashqi havola
+       yoki qayta urinish tugmasi ko'rsatilmaydi - kartaning chiziqqa yig'ilib
+       qolmasligi uchun faqat aniq o'lcham saqlanadi. */
     if (imageFailed) {
       return (
         <div
           className={cn(
-            'flex flex-col items-start gap-2 rounded-2xl p-3',
+            'flex items-center justify-center rounded-2xl',
             isMine ? 'bg-primary-foreground/10' : 'bg-muted'
           )}
-          style={{ width: IMAGE_FRAME_WIDTH, maxWidth: '100%' }}
+          style={{ width: IMAGE_FRAME_WIDTH, maxWidth: '100%', height: IMAGE_SKELETON_HEIGHT }}
         >
-          <div className="flex items-center gap-2">
-            <ImageOff
-              className={cn('h-4 w-4 shrink-0', isMine ? 'text-primary-foreground/80' : 'text-muted-foreground')}
-            />
-            <div className="min-w-0">
-              <p
-                className={cn(
-                  'text-[13px] font-medium leading-tight',
-                  isMine ? 'text-primary-foreground' : 'text-foreground'
-                )}
-              >
-                Rasm yuklanmadi
-              </p>
-              <p
-                className={cn(
-                  'truncate text-[11px]',
-                  isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'
-                )}
-                title={effectiveUrl}
-              >
-                {hostOf(effectiveUrl)}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                retry();
-              }}
-              className={cn(
-                'flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors',
-                isMine
-                  ? 'bg-primary-foreground/15 text-primary-foreground hover:bg-primary-foreground/25'
-                  : 'bg-background text-foreground hover:bg-foreground/10'
-              )}
-            >
-              <RotateCw className="h-3 w-3" />
-              Qayta urinish
-            </button>
-            <a
-              href={effectiveUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(event) => event.stopPropagation()}
-              className={cn(
-                'flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors',
-                isMine
-                  ? 'bg-primary-foreground/15 text-primary-foreground hover:bg-primary-foreground/25'
-                  : 'bg-background text-foreground hover:bg-foreground/10'
-              )}
-            >
-              <ExternalLink className="h-3 w-3" />
-              Yangi oynada
-            </a>
-          </div>
+          <p
+            className={cn(
+              'text-[12px]',
+              isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'
+            )}
+          >
+            Rasm mavjud emas
+          </p>
         </div>
       );
     }
@@ -302,7 +225,7 @@ export function MessageAttachment({
           )}
 
           <img
-            src={srcUrl}
+            src={effectiveUrl}
             alt={name || 'Rasm'}
             /* `lazy` EMAS: chat lentasi transform/contain qatlamlari ichida
                bo'lgani uchun lazy kuzatuvchi ba'zan ishga tushmay, bo'sh
