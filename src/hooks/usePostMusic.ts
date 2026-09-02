@@ -45,13 +45,15 @@ function isHttpUrl(value: string): boolean {
  * chiqmasdi. Endi so'rov har doim bajariladi va faqat haqiqiy "jadval yo'q"
  * xatosida jimgina to'xtaydi.
  */
+let postMusicSchemaUnavailable = false;
+
 export function usePostMusic(postId: string | null, enabled = true) {
   const [music, setMusic] = useState<PostMusicItem | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(postId) && enabled);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!postId || !enabled) {
+    if (!postId || !enabled || postMusicSchemaUnavailable) {
       setMusic(null);
       setIsLoading(false);
       return;
@@ -132,6 +134,8 @@ export function usePostMusic(postId: string | null, enabled = true) {
     } catch (loadError) {
       if (isMissingStructuredPostSchemaError(loadError)) {
         writeStructuredPostSchemaCapability('missing');
+        // Missing table'ni har bir feed posti uchun qayta so'ramaymiz.
+        postMusicSchemaUnavailable = true;
       } else {
         console.error('Post musiqasini yuklashda xatolik:', loadError);
         setError('Musiqani yuklab bo\u2018lmadi');

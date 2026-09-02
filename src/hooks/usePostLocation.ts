@@ -39,12 +39,14 @@ export function isLiveActive(location: Pick<PostLocation, 'mode' | 'live_until'>
  * matndagi eski "Current location" yorlig'i ko'rinardi. Endi o'qish hech
  * qachon to'silmaydi — bayroq faqat yozib boriladi.
  */
+let postLocationSchemaUnavailable = false;
+
 export function usePostLocation(postId: string | null, enabled = true) {
   const [location, setLocation] = useState<PostLocation | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(postId) && enabled);
 
   const load = useCallback(async () => {
-    if (!postId || !enabled) {
+    if (!postId || !enabled || postLocationSchemaUnavailable) {
       setLocation(null);
       setIsLoading(false);
       return;
@@ -64,6 +66,9 @@ export function usePostLocation(postId: string | null, enabled = true) {
     } catch (error) {
       if (isMissingStructuredPostSchemaError(error)) {
         writeStructuredPostSchemaCapability('missing');
+        // Jadval yo'q bo'lsa Home'dagi har bir post uchun yana 404 yubormaymiz.
+        // Bu faqat joriy JS runtime uchun; yangi deploy/reload yana tekshiradi.
+        postLocationSchemaUnavailable = true;
       } else {
         console.error('Joylashuvni yuklashda xatolik:', error);
       }

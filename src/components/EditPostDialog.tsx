@@ -60,36 +60,57 @@ export function EditPostDialog({
     let cancelled = false;
     setLoading(true);
 
-    void db
-      .from('posts')
-      .select('content, visibility, formatted_content')
-      .eq('id', postId)
-      .maybeSingle()
-      .then(({ data, error }: { data: any; error: any }) => {
-        if (cancelled) return;
+    const loadPost = async () => {
+      // Production schema migratsiyasi kechiksa ham edit modal ishlashi kerak.
+      // Avval structured column bilan urinib ko'ramiz; ustun mavjud bo'lmasa
+      // legacy columns bilan qayta o'qiymiz.
+      let { data, error } = await db
+        .from('posts')
+        .select('content, visibility, formatted_content')
+        .eq('id', postId)
+        .maybeSingle();
 
-        if (error) {
-          console.error('Post edit yuklash xatosi:', error);
-          toast.error("Postni yuklab bo‘lmadi");
-          setLoading(false);
-          return;
-        }
+      if (
+        error &&
+        (error.code === '42703' ||
+          error.code === 'PGRST204' ||
+          String(error.message ?? '').toLowerCase().includes('formatted_content'))
+      ) {
+        const fallback = await db
+          .from('posts')
+          .select('content, visibility')
+          .eq('id', postId)
+          .maybeSingle();
+        data = fallback.data;
+        error = fallback.error;
+      }
 
-        const storedContent = String(data?.content ?? initialContent ?? '');
-        const structured =
-          normalizeAlsamosRichTextDocument(data?.formatted_content) ??
-          richTextDocumentFromLegacyContent(storedContent);
+      if (cancelled) return;
 
-        setFormattedContent(structured);
-        setContent(richTextDocumentToPlainText(structured));
-        setVisibility(
-          data?.visibility === 'friends' || data?.visibility === 'private'
-            ? data.visibility
-            : 'public',
-        );
-        setEditorVersion((current) => current + 1);
+      if (error) {
+        console.error('Post edit yuklash xatosi:', error);
+        toast.error("Postni yuklab bo‘lmadi");
         setLoading(false);
-      });
+        return;
+      }
+
+      const storedContent = String(data?.content ?? initialContent ?? '');
+      const structured =
+        normalizeAlsamosRichTextDocument(data?.formatted_content) ??
+        richTextDocumentFromLegacyContent(storedContent);
+
+      setFormattedContent(structured);
+      setContent(richTextDocumentToPlainText(structured));
+      setVisibility(
+        data?.visibility === 'friends' || data?.visibility === 'private'
+          ? data.visibility
+          : 'public',
+      );
+      setEditorVersion((current) => current + 1);
+      setLoading(false);
+    };
+
+    void loadPost();
 
     return () => {
       cancelled = true;
@@ -110,7 +131,7 @@ export function EditPostDialog({
       const document =
         formattedContent ?? richTextDocumentFromLegacyContent(content);
 
-      const { error } = await db
+      let { error } = await db
         .from('posts')
         .update({
           content,
@@ -120,6 +141,26 @@ export function EditPostDialog({
         })
         .eq('id', postId)
         .eq('user_id', user.id);
+
+      // formatted_content productionda hali yo'q bo'lsa editni bloklamaymiz.
+      // Legacy posts jadvali content/visibility bilan baribir yangilanadi.
+      if (
+        error &&
+        (error.code === '42703' ||
+          error.code === 'PGRST204' ||
+          String(error.message ?? '').toLowerCase().includes('formatted_content'))
+      ) {
+        const fallback = await db
+          .from('posts')
+          .update({
+            content,
+            visibility,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', postId)
+          .eq('user_id', user.id);
+        error = fallback.error;
+      }
 
       if (error) throw error;
 

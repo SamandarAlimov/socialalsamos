@@ -56,6 +56,8 @@ export function isMissingStructuredPostSchemaError(error: unknown): boolean {
     text.includes('schema cache') ||
     text.includes('does not exist') ||
     text.includes('could not find the table') ||
-    text.includes('could not find the function')
+    text.includes('could not find the function') ||
+    text.includes('404') ||
+    text.includes('not found')
   );
 }
