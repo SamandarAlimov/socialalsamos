@@ -726,11 +726,11 @@ function PushNotificationBanner() {
     <motion.div
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="mx-4 mt-4 p-4 rounded-2xl border border-primary/20 bg-primary/5"
+      className="mx-4 mt-4 p-4 rounded-2xl border border-border bg-card/60"
     >
       <div className="flex items-start gap-3">
-        <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-          <Bell className="h-5 w-5 text-primary-foreground" />
+        <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+          <Bell className="h-5 w-5 text-muted-foreground" />
         </div>
         <div className="flex-1 min-w-0">
           <h4 className="font-semibold text-sm">Push bildirishnomalarni yoqing</h4>
@@ -935,7 +935,7 @@ export default function NotificationsPage() {
                   className={cn(
                     'px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors',
                     isActive
-                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      ? 'bg-background text-foreground shadow-sm ring-1 ring-border'
                       : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground',
                   )}
                 >

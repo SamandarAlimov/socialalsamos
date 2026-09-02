@@ -2692,7 +2692,7 @@ export default function MapPage() {
             <div className="flex items-start gap-2">
               <div className="min-w-0 flex-1 space-y-1.5">
                 <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-border/[0.45] bg-background/[0.55] px-3">
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-primary bg-background" />
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-success bg-background" />
                   <span className="w-10 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                     From
                   </span>
@@ -2743,7 +2743,7 @@ export default function MapPage() {
                       className={cn(
                         'flex min-h-12 items-center gap-1.5 rounded-2xl border border-border/[0.45] bg-background/[0.55] px-2 transition',
                         draggedRouteStopIndex === index &&
-                          'opacity-55 ring-1 ring-primary/[0.30]',
+                          'opacity-55 ring-1 ring-border',
                       )}
                     >
                       <span
@@ -2752,7 +2752,7 @@ export default function MapPage() {
                       >
                         <GripVertical className="h-4 w-4" />
                       </span>
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/[0.12] text-[10px] font-extrabold text-primary">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-extrabold text-foreground">
                         {index + 1}
                       </span>
                       <span className="w-8 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -2844,7 +2844,7 @@ export default function MapPage() {
                   className={cn(
                     'flex min-h-12 items-center gap-1.5 rounded-2xl border border-border/[0.45] bg-background/[0.55] px-2 transition',
                     draggedRouteStopIndex === routeWaypoints.length &&
-                      'opacity-55 ring-1 ring-primary/[0.30]',
+                      'opacity-55 ring-1 ring-border',
                   )}
                 >
                   {destination && (
@@ -2929,8 +2929,8 @@ export default function MapPage() {
                 </div>
 
                 {routeEditField === 'append' ? (
-                  <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-primary/[0.35] bg-primary/[0.05] px-3">
-                    <Plus className="h-4 w-4 shrink-0 text-primary" />
+                  <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-border/[0.45] bg-background/[0.55] px-3">
+                    <Plus className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <span className="w-10 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                       To
                     </span>
@@ -2957,7 +2957,7 @@ export default function MapPage() {
                         setRouteEditField('append');
                         setRouteEditQuery('');
                       }}
-                      className="flex min-h-9 w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-bold text-primary transition hover:bg-primary/[0.06]"
+                      className="flex min-h-9 w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-bold text-foreground transition hover:bg-muted/[0.50]"
                     >
                       <Plus className="h-4 w-4" />
                       Yana manzil qo‘shish
@@ -2972,7 +2972,7 @@ export default function MapPage() {
                       type="button"
                       onClick={() => void optimizeStops()}
                       disabled={routeOptimizing || routeLoading}
-                      className="flex min-h-9 w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-bold text-muted-foreground transition hover:bg-primary/[0.06] hover:text-primary disabled:cursor-wait disabled:opacity-50"
+                      className="flex min-h-9 w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-bold text-muted-foreground transition hover:bg-muted/[0.50] hover:text-foreground disabled:cursor-wait disabled:opacity-50"
                     >
                       {routeOptimizing ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -3013,7 +3013,7 @@ export default function MapPage() {
                     onClick={useCurrentLocationAsOrigin}
                     className="flex w-full items-center gap-2.5 border-b border-border/[0.40] px-3 py-2.5 text-left text-sm hover:bg-muted/[0.50]"
                   >
-                    <Crosshair className="h-4 w-4 text-primary" />
+                    <Crosshair className="h-4 w-4 text-muted-foreground" />
                     <span className="font-medium">Joriy joylashuv</span>
                   </button>
                 )}
@@ -3023,7 +3023,7 @@ export default function MapPage() {
                   onClick={() => beginMapEndpointPick(routeEditField)}
                   className="flex w-full items-center gap-2.5 border-b border-border/[0.40] px-3 py-2.5 text-left text-sm hover:bg-muted/[0.50]"
                 >
-                  <MapPinned className="h-4 w-4 text-primary" />
+                  <MapPinned className="h-4 w-4 text-muted-foreground" />
                   <span className="font-medium">Xaritadan tanlash</span>
                   <span className="ml-auto text-[11px] text-muted-foreground">
                     Nuqtani bosing
@@ -3046,7 +3046,7 @@ export default function MapPage() {
                       onClick={() => selectRouteEndpoint(place)}
                       className="flex w-full items-start gap-2.5 border-b border-border/[0.35] px-3 py-2.5 text-left last:border-0 hover:bg-muted/[0.50]"
                     >
-                      <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                      <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">{place.name}</span>
                         <span className="block truncate text-[11px] text-muted-foreground">
@@ -3081,7 +3081,7 @@ export default function MapPage() {
                   className={cn(
                     'flex h-9 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition',
                     routeMode === mode.id
-                      ? 'bg-background text-primary shadow-sm'
+                      ? 'bg-background text-foreground shadow-sm'
                       : 'text-muted-foreground hover:bg-background/[0.60] hover:text-foreground',
                     mode.id === 'transit' && !transitRoutingAvailable && 'cursor-not-allowed opacity-40',
                   )}
@@ -3112,17 +3112,17 @@ export default function MapPage() {
                     className={cn(
                       'group flex w-full items-center gap-3 rounded-2xl border px-3.5 py-3 text-left transition-all',
                       selected
-                        ? 'border-primary/[0.55] bg-primary/[0.09] shadow-sm ring-1 ring-primary/[0.15]'
+                        ? 'border-border bg-muted/[0.60] shadow-sm ring-1 ring-border'
                         : contrastLayer
                           ? 'border-white/[0.10] bg-white/[0.045] hover:bg-white/[0.075]'
-                          : 'border-border/[0.50] bg-background/[0.55] hover:border-primary/[0.20] hover:bg-muted/[0.45]',
+                          : 'border-border/[0.50] bg-background/[0.55] hover:border-border hover:bg-muted/[0.45]',
                     )}
                   >
                     <span
                       className={cn(
                         'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition',
                         selected
-                          ? 'bg-primary text-primary-foreground'
+                          ? 'bg-foreground text-background'
                           : contrastLayer
                             ? 'bg-white/[0.07] text-white/[0.65]'
                             : 'bg-muted text-muted-foreground group-hover:text-foreground',
@@ -3508,7 +3508,7 @@ export default function MapPage() {
               contrastLayer ? 'border-white/[0.10] bg-black/[0.10]' : 'border-border/[0.60]',
             )}
           >
-            <Bookmark className="h-4 w-4 text-primary" />
+            <Bookmark className="h-4 w-4 text-muted-foreground" />
             <p className="flex-1 text-sm font-semibold">Saqlangan joylar</p>
             <button
               type="button"
@@ -3561,7 +3561,7 @@ export default function MapPage() {
                       'flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition',
                       contrastLayer
                         ? 'border-white/[0.10] bg-white/[0.045] hover:bg-white/[0.075]'
-                        : 'border-border/[0.45] bg-background/[0.55] hover:border-primary/[0.20] hover:bg-muted/[0.45]',
+                        : 'border-border/[0.45] bg-background/[0.55] hover:border-border hover:bg-muted/[0.45]',
                     )}
                   >
                     <span
@@ -3595,7 +3595,7 @@ export default function MapPage() {
               contrastLayer ? 'border-white/[0.10] bg-black/[0.10]' : 'border-border/[0.60]',
             )}
           >
-            <History className="h-4 w-4 text-primary" />
+            <History className="h-4 w-4 text-muted-foreground" />
             <p className="flex-1 text-sm font-semibold">Tashriflar tarixi</p>
             <button
               type="button"
@@ -3632,7 +3632,7 @@ export default function MapPage() {
                       'flex items-start gap-3 rounded-2xl border px-3 py-3 transition',
                       contrastLayer
                         ? 'border-white/[0.10] bg-white/[0.045] hover:bg-white/[0.075]'
-                        : 'border-border/[0.45] bg-background/[0.55] hover:border-primary/[0.20] hover:bg-muted/[0.45]',
+                        : 'border-border/[0.45] bg-background/[0.55] hover:border-border hover:bg-muted/[0.45]',
                     )}
                   >
                     <span
@@ -4047,10 +4047,10 @@ export default function MapPage() {
               'pointer-events-auto mx-auto flex max-w-md items-center gap-3 rounded-[18px] border px-3 py-2.5 shadow-2xl backdrop-blur-2xl',
               contrastLayer
                 ? 'border-white/[0.15] bg-slate-950/[0.92] text-white'
-                : 'border-primary/[0.20] bg-background/[0.94] text-foreground',
+                : 'border-border/[0.45] bg-background/[0.94] text-foreground',
             )}
           >
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/[0.12] text-primary">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
               <MapPinned className="h-4 w-4" />
             </span>
             <div className="min-w-0 flex-1">
@@ -4085,7 +4085,7 @@ export default function MapPage() {
                 : 'border-border/[0.45] bg-background/[0.90] text-foreground',
             )}
           >
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
             Joy aniqlanmoqda...
           </div>
         </div>
@@ -4105,7 +4105,7 @@ export default function MapPage() {
             }}
             className="pointer-events-auto flex h-9 items-center gap-2 rounded-full border border-border/[0.45] bg-background/[0.82] px-3 text-xs font-semibold shadow-lg backdrop-blur-2xl transition hover:bg-background/[0.95]"
           >
-            <Search className="h-3.5 w-3.5 text-primary" />
+            <Search className="h-3.5 w-3.5 text-foreground" />
             Shu hududda qidirish
           </button>
         </div>
@@ -4176,7 +4176,7 @@ export default function MapPage() {
           className={cn(
             'flex h-10 w-10 items-center justify-center rounded-xl transition',
             showStops
-              ? 'bg-primary text-primary-foreground shadow-sm'
+              ? 'bg-foreground text-background shadow-sm'
               : 'bg-background/[0.68] text-foreground hover:bg-background/[0.95] hover:shadow-sm',
           )}
           aria-label="Bekatlar"
@@ -4250,7 +4250,7 @@ export default function MapPage() {
             onClick={() => setSnap('half')}
             className="flex flex-1 items-center gap-3 px-4 pb-3 text-left md:hidden"
           >
-            <MapPin className="h-5 w-5 text-primary" />
+            <MapPin className="h-5 w-5 text-muted-foreground" />
             <span className="flex-1 text-sm font-medium">Yaqin atrofdagi joylar</span>
             <ChevronDown className="h-4 w-4 rotate-180 text-muted-foreground" />
           </button>

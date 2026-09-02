@@ -644,14 +644,14 @@ export default function SearchPage() {
                   className={cn(
                     "relative flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-300 shrink-0",
                     isActive
-                      ? "bg-primary text-primary-foreground shadow-[0_2px_12px_hsl(var(--primary)/0.35)]"
+                      ? "bg-background text-foreground shadow-sm ring-1 ring-border"
                       : "bg-muted/40 text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                   )}
                 >
                   <Icon className={cn("h-3.5 w-3.5", isActive && "drop-shadow-sm")} />
                   <span>{tab.label}</span>
                   {hasQuery && count !== undefined && count > 0 && !isActive && (
-                    <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold leading-none">
+                    <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-bold leading-none">
                       {count > 99 ? '99+' : count}
                     </span>
                   )}
@@ -824,8 +824,8 @@ function EmptySearchState({ recentSearches, trendingSearches, onSelect, onClearH
       {/* Trending */}
       <section>
         <div className="flex items-center gap-2 mb-3">
-          <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center">
-            <TrendingUp className="h-4 w-4 text-primary" />
+          <div className="h-8 w-8 rounded-xl bg-muted flex items-center justify-center">
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </div>
           <h3 className="text-sm font-semibold text-foreground">Trendda</h3>
         </div>
@@ -838,8 +838,8 @@ function EmptySearchState({ recentSearches, trendingSearches, onSelect, onClearH
                 onClick={() => onSelect(item.text)}
                 className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl hover:bg-muted/50 transition-colors group"
               >
-                <div className="h-9 w-9 rounded-xl bg-muted/60 flex items-center justify-center group-hover:bg-primary/10 transition-colors">
-                  <Icon className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                <div className="h-9 w-9 rounded-xl bg-muted/60 flex items-center justify-center group-hover:bg-muted transition-colors">
+                  <Icon className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
                 </div>
                 <span className="text-sm font-medium text-foreground flex-1 text-left">{item.text}</span>
                 <ChevronRight className="h-4 w-4 text-muted-foreground/50" />
@@ -904,16 +904,16 @@ function AITab({
 }) {
   return (
     <div className="space-y-4">
-      <div className="p-4 rounded-2xl bg-gradient-to-br from-primary/5 via-primary/3 to-transparent border border-primary/10 backdrop-blur-sm">
+      <div className="p-4 rounded-2xl bg-card/60 border border-border/50 backdrop-blur-sm">
         <div className="flex items-center gap-2.5 mb-3">
-          <div className="h-9 w-9 rounded-xl bg-primary/15 flex items-center justify-center">
-            <Sparkles className="h-4.5 w-4.5 text-primary" />
+          <div className="h-9 w-9 rounded-xl bg-muted flex items-center justify-center">
+            <Sparkles className="h-4.5 w-4.5 text-muted-foreground" />
           </div>
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-foreground">Alsamos AI Search</h3>
             <p className="text-[11px] text-muted-foreground truncate">"{query}" so'rovi bo'yicha</p>
           </div>
-          {loading && <Loader2 className="ml-auto h-4 w-4 animate-spin text-primary" />}
+          {loading && <Loader2 className="ml-auto h-4 w-4 animate-spin text-muted-foreground" />}
         </div>
 
         {response ? (
@@ -934,7 +934,7 @@ function AITab({
       {sources.length > 0 && (
         <section>
           <div className="flex items-center gap-2 mb-2">
-            <Globe className="h-4 w-4 text-primary" />
+            <Globe className="h-4 w-4 text-muted-foreground" />
             <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Manbalar
             </h4>
@@ -949,7 +949,7 @@ function AITab({
                 className="group rounded-xl border border-border/40 bg-card/50 p-3 hover:bg-muted/40 transition-colors"
               >
                 <div className="flex items-start gap-2">
-                  <span className="flex h-5 min-w-5 items-center justify-center rounded-md bg-primary/10 px-1 text-[10px] font-bold text-primary">
+                  <span className="flex h-5 min-w-5 items-center justify-center rounded-md bg-muted px-1 text-[10px] font-bold text-muted-foreground">
                     {index + 1}
                   </span>
                   <div className="min-w-0 flex-1">
@@ -1100,8 +1100,8 @@ function ResultSection({ title, count, icon: Icon, onSeeAll, children }: {
     <section>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Icon className="h-3.5 w-3.5 text-primary" />
+          <div className="h-7 w-7 rounded-lg bg-muted flex items-center justify-center">
+            <Icon className="h-3.5 w-3.5 text-muted-foreground" />
           </div>
           <h3 className="text-sm font-semibold text-foreground">{title}</h3>
           <span className="text-[11px] font-medium text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full">
@@ -1241,11 +1241,11 @@ function GroupResultCard({ group, onClick }: { group: SearchGroup; onClick: () =
       onClick={onClick}
       className="flex w-full items-center gap-3 rounded-2xl border border-border/20 bg-card/50 p-3 text-left transition-colors hover:bg-card/80"
     >
-      <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-primary/10 flex items-center justify-center">
+      <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-muted flex items-center justify-center">
         {group.avatar_url ? (
           <img src={group.avatar_url} alt="" className="h-full w-full object-cover" />
         ) : (
-          <Users className="h-5 w-5 text-primary" />
+          <Users className="h-5 w-5 text-muted-foreground" />
         )}
       </div>
       <div className="min-w-0 flex-1">
@@ -1386,11 +1386,11 @@ function PremiumChannelCard({ channel, onClick }: { channel: SearchChannel; onCl
       className="flex items-center gap-3 p-3 rounded-2xl bg-card/50 backdrop-blur-sm border border-border/20 cursor-pointer hover:bg-card/80 transition-all duration-200"
       onClick={() => { triggerHaptic('light'); onClick(); }}
     >
-      <div className="h-11 w-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden">
+      <div className="h-11 w-11 rounded-xl bg-muted flex items-center justify-center shrink-0 overflow-hidden">
         {channel.avatar_url ? (
           <img src={channel.avatar_url} className="h-full w-full object-cover" alt="" />
         ) : (
-          <Radio className="h-5 w-5 text-primary" />
+          <Radio className="h-5 w-5 text-muted-foreground" />
         )}
       </div>
       <div className="flex-1 min-w-0">
@@ -1428,7 +1428,7 @@ function PremiumProductCard({ product, onClick }: { product: SearchProduct; onCl
       <div className="p-2.5">
         <p className="text-xs font-medium text-foreground line-clamp-2 leading-snug mb-1.5">{product.title}</p>
         <div className="flex items-center justify-between">
-          <span className="text-sm font-bold text-primary">
+          <span className="text-sm font-bold text-foreground">
             {product.price?.toLocaleString()} {product.currency || 'UZS'}
           </span>
         </div>

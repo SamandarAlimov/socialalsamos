@@ -158,7 +158,7 @@ export function PostCardVisual({
       >
         <span
           className={cn(
-            'flex items-center justify-center rounded-2xl bg-primary/15 text-primary',
+            'flex items-center justify-center rounded-2xl bg-muted text-muted-foreground',
             compact ? 'h-9 w-9' : 'h-14 w-14',
           )}
         >
@@ -228,7 +228,7 @@ export function PostCardVisual({
       )}
     >
       <Quote
-        className={cn('shrink-0 text-primary/30', compact ? 'h-3.5 w-3.5' : 'h-5 w-5')}
+        className={cn('shrink-0 text-muted-foreground/30', compact ? 'h-3.5 w-3.5' : 'h-5 w-5')}
         aria-hidden="true"
       />
       {preview.text ? (

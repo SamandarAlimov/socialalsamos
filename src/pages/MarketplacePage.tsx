@@ -234,17 +234,17 @@ export default function MarketplacePage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-primary via-primary/80 to-primary/60 flex items-center justify-center shadow-lg shadow-primary/20">
-                    <Store className="h-5 w-5 text-primary-foreground" />
+                  <div className="w-11 h-11 rounded-2xl bg-muted flex items-center justify-center shadow-sm">
+                    <Store className="h-5 w-5 text-muted-foreground" />
                   </div>
                   <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-green-500 border-2 border-background" />
                 </div>
                 <div>
                   <h1 className="text-xl font-bold tracking-tight">Marketplace</h1>
                   <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <span className="px-1.5 py-0.5 rounded-md bg-primary/10 text-primary font-medium">B2B</span>
-                    <span className="px-1.5 py-0.5 rounded-md bg-primary/10 text-primary font-medium">B2C</span>
-                    <span className="px-1.5 py-0.5 rounded-md bg-primary/10 text-primary font-medium">C2C</span>
+                    <span className="px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground font-medium">B2B</span>
+                    <span className="px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground font-medium">B2C</span>
+                    <span className="px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground font-medium">C2C</span>
                   </div>
                 </div>
               </div>
@@ -399,7 +399,7 @@ export default function MarketplacePage() {
                     className={cn(
                       'flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-300',
                       selectedCategory === 'all'
-                        ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25'
+                        ? 'bg-background text-foreground shadow-sm ring-1 ring-border'
                         : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground',
                     )}
                   >
@@ -414,7 +414,7 @@ export default function MarketplacePage() {
                       className={cn(
                         'flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-300',
                         selectedCategory === cat.slug
-                          ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25'
+                          ? 'bg-background text-foreground shadow-sm ring-1 ring-border'
                           : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground',
                       )}
                     >
@@ -427,13 +427,13 @@ export default function MarketplacePage() {
 
               {/* Hero Banner */}
               {featuredProducts.length > 0 && selectedCategory === 'all' && !searchQuery && (
-                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/10">
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,hsl(var(--primary)/0.15),transparent_70%)]" />
+                <div className="relative overflow-hidden rounded-2xl bg-card border border-border/60">
+                  <div className="absolute inset-0 bg-gradient-to-br from-muted/30 to-transparent" />
                   <div className="relative p-5 flex items-center gap-4">
                     <div className="flex-1 space-y-2">
                       <div className="flex items-center gap-2">
-                        <Crown className="h-4 w-4 text-primary" />
-                        <span className="text-xs font-semibold text-primary uppercase tracking-wider">{marketplaceUz.page.selected}</span>
+                        <Crown className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{marketplaceUz.page.selected}</span>
                       </div>
                       <h2 className="text-lg font-bold leading-tight">
                         {marketplaceUz.page.heroTitle}
@@ -452,7 +452,7 @@ export default function MarketplacePage() {
                     </div>
                     {featuredProducts[0]?.images?.[0]?.url && (
                       <button
-                        className="w-28 h-28 rounded-xl overflow-hidden ring-2 ring-primary/20 shadow-xl shrink-0"
+                        className="w-28 h-28 rounded-xl overflow-hidden ring-2 ring-border shadow-xl shrink-0"
                         onClick={() => handleProductSelect(featuredProducts[0])}
                         aria-label={featuredProducts[0].title}
                       >
@@ -471,8 +471,8 @@ export default function MarketplacePage() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="p-1.5 rounded-lg bg-orange-500/10">
-                        <Flame className="h-4 w-4 text-orange-500" />
+                      <div className="p-1.5 rounded-lg bg-muted">
+                        <Flame className="h-4 w-4 text-muted-foreground" />
                       </div>
                       <h3 className="font-bold">{marketplaceUz.page.trending}</h3>
                     </div>
@@ -493,7 +493,7 @@ export default function MarketplacePage() {
                           className="w-36 shrink-0 text-left cursor-pointer group"
                           onClick={() => handleProductSelect(product)}
                         >
-                          <div className="aspect-square rounded-xl overflow-hidden bg-muted mb-2 ring-1 ring-border/30 group-hover:ring-primary/30 transition-all">
+                          <div className="aspect-square rounded-xl overflow-hidden bg-muted mb-2 ring-1 ring-border/30 group-hover:ring-foreground/20 transition-all">
                             {product.images?.[0]?.url ? (
                               <MarketplaceProductImage
                                 product={product}
@@ -506,7 +506,7 @@ export default function MarketplacePage() {
                             )}
                           </div>
                           <p className="text-xs font-medium line-clamp-1">{product.title}</p>
-                          <p className="text-sm font-bold text-primary tabular-nums">
+                          <p className="text-sm font-bold text-foreground tabular-nums">
                             {formatPrice(product.price, product.currency)}
                           </p>
                         </button>
@@ -851,7 +851,7 @@ export default function MarketplacePage() {
                     className={cn(
                       'py-2.5 px-3 rounded-xl text-sm font-medium transition-all border',
                       sortBy === s.id
-                        ? 'bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20'
+                        ? 'bg-background text-foreground border-border shadow-sm'
                         : 'bg-muted/50 border-border/30 text-muted-foreground hover:bg-muted',
                     )}
                   >
