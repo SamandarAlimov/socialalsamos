@@ -203,7 +203,7 @@ export default function HomePage() {
   const pageContent = (
     <div 
       className={cn(
-        "max-w-2xl mx-auto py-4 md:py-6 px-3 md:px-4",
+        "w-full max-w-[640px] xl:max-w-[620px] mx-auto py-4 md:py-6 px-3 md:px-4",
         isMobile && "transition-transform duration-100"
       )}
       style={isMobile ? { transform: `translateX(${swipeOffset}px)` } : undefined}
