@@ -8,6 +8,13 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchPageText, isPublicHttpUrl } from "./net.ts";
 import { runJavaScript } from "./sandbox.ts";
 import { duckDuckGoSearch, type WebHit } from "./webFallback.ts";
+import {
+  generateImageBytes,
+  startVideo,
+  uploadGeneratedImage,
+  waitForVideo,
+  type MediaJobRow,
+} from "./geminiMedia.ts";
 
 export type ToolSpec = {
   type: "function";
@@ -87,7 +94,7 @@ export const TOOL_SPECS: Record<string, ToolSpec> = {
     function: {
       name: "generate_image",
       description:
-        "Generate or edit an image from a text description. Returns an image that is shown to the user automatically.",
+        "Generate or edit an image from a text description. Call this whenever the user asks for a picture, logo, poster, illustration, mockup or asks you to change an existing image — do not ask them to enable anything first. The image is shown to the user automatically.",
       parameters: {
         type: "object",
         properties: {
@@ -104,7 +111,7 @@ export const TOOL_SPECS: Record<string, ToolSpec> = {
     function: {
       name: "generate_video",
       description:
-        "Queue a short video generation job from a text prompt (optionally from a start image). Returns a job id; the video appears in the chat when rendering finishes.",
+        "Generate a short video from a text prompt (optionally from a start image). Rendering takes about 1-3 minutes: this tool waits as long as it can and returns the finished video URL, or a job id you must poll with media_job_status. Call it whenever the user asks for a video, clip or animation.",
       parameters: {
         type: "object",
         properties: {
@@ -113,6 +120,20 @@ export const TOOL_SPECS: Record<string, ToolSpec> = {
           image_url: str("Optional first-frame image URL."),
         },
         required: ["prompt"],
+        additionalProperties: false,
+      },
+    },
+  },
+  media_job_status: {
+    type: "function",
+    function: {
+      name: "media_job_status",
+      description:
+        "Check (and keep waiting for) a media generation job started by generate_video. Returns the finished media URL when rendering completes.",
+      parameters: {
+        type: "object",
+        properties: { job_id: str("Job id returned by generate_video.") },
+        required: ["job_id"],
         additionalProperties: false,
       },
     },
@@ -267,7 +288,7 @@ export const TOOL_SPECS: Record<string, ToolSpec> = {
 export const TOOL_GROUPS: Record<string, string[]> = {
   web: ["web_search", "web_fetch"],
   image: ["generate_image"],
-  video: ["generate_video"],
+  video: ["generate_video", "media_job_status"],
   code: ["run_code"],
   alsamos: ["search_posts", "search_marketplace", "remember"],
   connectors: ["list_connector_tools", "connector_call"],
@@ -393,6 +414,10 @@ async function webFetch(args: Record<string, unknown>): Promise<ToolOutcome> {
 }
 
 // ------------------------------------------------------------------ media
+//
+// MUHIM: rasm/video chaqiruvlari _shared/geminiMedia.ts orqali, u esa
+// _shared/geminiPool.ts kalitlar hovuzi orqali ketadi. To'g'ridan-to'g'ri
+// gateway chaqiruvi qilinmaydi (avval shu sabab 401/402 xatolar chiqardi).
 
 async function generateImage(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolOutcome> {
   const prompt = String(args.prompt ?? "").trim();
@@ -402,37 +427,31 @@ async function generateImage(args: Record<string, unknown>, ctx: ToolContext): P
     return fail("edit_image_url ruxsat etilmagan.");
   }
 
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${ctx.lovableKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash-image",
-      modalities: ["image", "text"],
-      messages: [
-        {
-          role: "user",
-          content: editUrl
-            ? [
-                { type: "text", text: prompt },
-                { type: "image_url", image_url: { url: editUrl } },
-              ]
-            : prompt,
-        },
-      ],
-    }),
-  });
-  if (!res.ok) {
-    return fail(
-      res.status === 402 ? "AI kreditlari tugagan." : `Rasm yaratilmadi (HTTP ${res.status}).`,
-    );
+  let image;
+  try {
+    image = await generateImageBytes({
+      prompt,
+      imageUrl: editUrl,
+      lovableKey: ctx.lovableKey || undefined,
+    });
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : String(error));
   }
-  const json = await res.json();
-  const imageUrl = json.choices?.[0]?.message?.images?.[0]?.image_url?.url ?? null;
-  if (!imageUrl) return fail("Model rasm qaytarmadi.");
+
+  // Imkon bo'lsa storage'ga yuklaymiz — data URL chatda juda katta bo'lib ketadi.
+  let imageUrl = `data:${image.mimeType};base64,${image.base64}`;
+  if (ctx.userId) {
+    try {
+      imageUrl = await uploadGeneratedImage(ctx.admin, ctx.userId, image);
+    } catch (error) {
+      console.warn("generated image upload failed", error);
+    }
+  }
+
   return {
     ok: true,
     text: "Rasm muvaffaqiyatli yaratildi va foydalanuvchiga ko'rsatildi. Qisqacha izoh bering.",
-    data: { imageUrl, prompt },
+    data: { imageUrl, prompt, model: image.model },
   };
 }
 
@@ -444,25 +463,104 @@ async function generateVideo(args: Record<string, unknown>, ctx: ToolContext): P
   const imageUrl =
     typeof args.image_url === "string" && isPublicHttpUrl(args.image_url) ? args.image_url : null;
 
-  const { data, error } = await ctx.admin
+  const { data: job, error } = await ctx.admin
     .from("ai_media_jobs")
     .insert({
       user_id: ctx.userId,
       kind: "video",
-      status: "queued",
+      status: "running",
       prompt,
       params: { seconds, image_url: imageUrl },
     })
-    .select("id, status")
+    .select("id, user_id, params")
     .single();
 
-  if (error) return fail(`Video navbatga qo'shilmadi: ${error.message}`);
+  if (error || !job) {
+    return fail(`Video vazifasi yaratilmadi: ${error?.message ?? "noma'lum xato"}`);
+  }
+
+  let started;
+  try {
+    started = await startVideo({ prompt, seconds, imageUrl });
+  } catch (startError) {
+    const message = startError instanceof Error ? startError.message : String(startError);
+    await ctx.admin.from("ai_media_jobs").update({ status: "failed", error: message }).eq("id", job.id);
+    return fail(message);
+  }
+
+  const params = { seconds, image_url: imageUrl, operation: started.operation, model: started.model };
+  await ctx.admin.from("ai_media_jobs").update({ params }).eq("id", job.id);
+
+  const outcome = await waitForVideo(ctx.admin, { id: job.id, user_id: ctx.userId, params });
+
+  if (outcome.status === "done" && outcome.url) {
+    return {
+      ok: true,
+      text: "Video tayyor bo'ldi va foydalanuvchiga ko'rsatildi. Qisqacha izoh bering.",
+      data: { videoUrl: outcome.url, jobId: job.id, kind: "video", prompt, seconds, model: started.model },
+    };
+  }
+
+  if (outcome.status === "failed") {
+    return fail(`Video yaratilmadi: ${outcome.error ?? "noma'lum xato"}`);
+  }
+
   return {
     ok: true,
     text:
-      `Video generatsiya navbatga qo'shildi. job_id=${data.id}, status=${data.status}, ` +
-      `davomiylik=${seconds}s. Tayyor bo'lgach chatda ko'rinadi.`,
-    data: { jobId: data.id, kind: "video", status: data.status, prompt, seconds },
+      `Video hali render qilinmoqda. job_id=${job.id}. ` +
+      "Foydalanuvchiga bir daqiqacha kutishini aytib, so'ng media_job_status(job_id) bilan tekshiring.",
+    data: { jobId: job.id, kind: "video", status: "running", prompt, seconds },
+  };
+}
+
+async function mediaJobStatus(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolOutcome> {
+  if (!ctx.userId) return fail("Tizimga kirish kerak.");
+  const jobId = String(args.job_id ?? "").trim();
+  if (!jobId) return fail("job_id talab qilinadi.");
+
+  const { data, error } = await ctx.admin
+    .from("ai_media_jobs")
+    .select("id, user_id, kind, status, prompt, params, output_url, error")
+    .eq("id", jobId)
+    .eq("user_id", ctx.userId)
+    .maybeSingle();
+  if (error) return fail(error.message);
+  if (!data) return fail("Vazifa topilmadi.");
+
+  if (data.status === "done" && data.output_url) {
+    return {
+      ok: true,
+      text: "Media tayyor va foydalanuvchiga ko'rsatildi.",
+      data:
+        data.kind === "video"
+          ? { videoUrl: data.output_url, jobId: data.id, kind: data.kind }
+          : { imageUrl: data.output_url, jobId: data.id, kind: data.kind },
+    };
+  }
+
+  if (data.status === "failed") {
+    return fail(`Media yaratilmadi: ${data.error ?? "noma'lum xato"}`);
+  }
+
+  // Hali ishlayapti — pollingni davom ettiramiz.
+  const job = data as MediaJobRow;
+  const outcome = await waitForVideo(ctx.admin, job, 60_000);
+
+  if (outcome.status === "done" && outcome.url) {
+    return {
+      ok: true,
+      text: "Video tayyor bo'ldi va foydalanuvchiga ko'rsatildi.",
+      data: { videoUrl: outcome.url, jobId: job.id, kind: "video" },
+    };
+  }
+  if (outcome.status === "failed") {
+    return fail(`Video yaratilmadi: ${outcome.error ?? "noma'lum xato"}`);
+  }
+  return {
+    ok: true,
+    text: `Video hali tayyor emas (job_id=${job.id}). Yana bir marta tekshirish mumkin.`,
+    data: { jobId: job.id, status: "running", kind: "video" },
   };
 }
 
@@ -703,6 +801,7 @@ const EXECUTORS: Record<
   web_fetch: (a) => webFetch(a),
   generate_image: generateImage,
   generate_video: generateVideo,
+  media_job_status: mediaJobStatus,
   run_code: (a) => runCode(a),
   search_posts: searchPosts,
   search_marketplace: searchMarketplace,

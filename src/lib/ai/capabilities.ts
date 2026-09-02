@@ -31,6 +31,9 @@ export type ToolGroup = {
   tools: string[];
 };
 
+// Standart holatda deyarli hamma narsa YOQILGAN: AI o'zi qaysi vositani
+// ishlatishni tanlaydi. Foydalanuvchi "rasm yarat" deb yozsa, avval biror
+// tugmani bosishi shart emas. Faqat "computer" guruhi tasdiq talab qiladi.
 export const TOOL_GROUPS: ToolGroup[] = [
   {
     id: "web",
@@ -59,10 +62,10 @@ export const TOOL_GROUPS: ToolGroup[] = [
   {
     id: "video",
     label: "Video generatsiyasi",
-    description: "Qisqa videolarni navbatga qo'yish va tayyor bo'lgach olish",
+    description: "Matn yoki rasm asosida qisqa video yaratish (1-3 daqiqa render)",
     icon: "video",
-    defaultOn: false,
-    tools: ["generate_video"],
+    defaultOn: true,
+    tools: ["generate_video", "media_job_status"],
   },
   {
     id: "alsamos",
@@ -77,7 +80,7 @@ export const TOOL_GROUPS: ToolGroup[] = [
     label: "Konnektorlar (MCP)",
     description: "Ulangan pluginlar: Notion, GitHub, Drive va boshqa MCP serverlar",
     icon: "plug",
-    defaultOn: false,
+    defaultOn: true,
     tools: ["list_connector_tools", "connector_call"],
   },
   {
@@ -154,6 +157,7 @@ export const TOOL_LABELS: Record<string, string> = {
   web_fetch: "Sahifani o'qimoqda",
   generate_image: "Rasm yaratmoqda",
   generate_video: "Video tayyorlamoqda",
+  media_job_status: "Media holatini tekshirmoqda",
   run_code: "Kodni ishga tushirmoqda",
   search_posts: "Postlarni izlamoqda",
   search_marketplace: "Mahsulotlarni izlamoqda",
