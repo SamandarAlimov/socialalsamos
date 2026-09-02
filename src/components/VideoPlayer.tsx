@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react';
 import {
+  AlertCircle,
   ArrowLeft,
   Captions,
   Check,
@@ -18,6 +19,7 @@ import {
   Pause,
   PictureInPicture2,
   Play,
+  RefreshCw,
   RotateCcw,
   RotateCw,
   Settings,
@@ -138,6 +140,7 @@ export function VideoPlayer({
   const [isNativeFullscreen, setIsNativeFullscreen] = useState(false);
   const [isPseudoFullscreen, setIsPseudoFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [playbackError, setPlaybackError] = useState(false);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
@@ -146,6 +149,11 @@ export function VideoPlayer({
   const [captionsEnabled, setCaptionsEnabled] = useState(false);
   const [detectedRatio, setDetectedRatio] = useState(16 / 9);
   const [gestureFlash, setGestureFlash] = useState<GestureFlash>(null);
+
+  useEffect(() => {
+    setPlaybackError(false);
+    setIsLoading(true);
+  }, [activeSource?.src]);
 
   const flashGesture = useCallback((gesture: NonNullable<GestureFlash>, timeout = 650) => {
     if (gestureTimerRef.current) clearTimeout(gestureTimerRef.current);
@@ -668,8 +676,18 @@ export function VideoPlayer({
         className="h-full w-full object-contain"
         onLoadedMetadata={handleLoadedMetadata}
         onTimeUpdate={handleTimeUpdate}
-        onWaiting={() => setIsLoading(true)}
-        onCanPlay={() => setIsLoading(false)}
+        onWaiting={() => {
+          if (!playbackError) setIsLoading(true);
+        }}
+        onCanPlay={() => {
+          setPlaybackError(false);
+          setIsLoading(false);
+        }}
+        onError={() => {
+          setPlaybackError(true);
+          setIsLoading(false);
+          setIsPlaying(false);
+        }}
         onPlay={() => {
           setIsPlaying(true);
           setIsLoading(false);
@@ -698,13 +716,47 @@ export function VideoPlayer({
         ))}
       </video>
 
-      {isLoading && (
+      {isLoading && !playbackError && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <Loader2 className="h-9 w-9 animate-spin text-white/85" />
         </div>
       )}
 
-      {!isLoading && !isPlaying && (
+      {playbackError && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-neutral-950/92 px-6 text-white">
+          <div className="max-w-xs text-center">
+            <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-white/10">
+              <AlertCircle className="h-5 w-5" />
+            </span>
+            <p className="mt-3 text-sm font-semibold">Videoni yuklab bo‘lmadi</p>
+            <p className="mt-1 text-xs leading-relaxed text-white/60">
+              Media havolasi vaqtincha ishlamayapti yoki tarmoq uzildi.
+            </p>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setPlaybackError(false);
+                setIsLoading(true);
+                const video = videoRef.current;
+                if (video) {
+                  video.load();
+                  if (autoPlay) {
+                    void video.play().catch(() => undefined);
+                  }
+                }
+              }}
+              onPointerDown={(event) => event.stopPropagation()}
+              className="mx-auto mt-4 inline-flex h-9 items-center gap-2 rounded-full bg-white px-4 text-xs font-semibold text-black transition hover:bg-white/90"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Qayta urinish
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!isLoading && !playbackError && !isPlaying && (
         <button
           type="button"
           onClick={(event) => {
