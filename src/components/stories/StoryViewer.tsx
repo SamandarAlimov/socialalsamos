@@ -107,7 +107,9 @@ function compactStoryAge(iso: string): string {
 function isInteractiveTarget(target: EventTarget | null): boolean {
   return Boolean(
     target instanceof HTMLElement &&
-      target.closest('[data-story-interactive="true"]'),
+      target.closest(
+        '[data-story-interactive="true"], button, input, textarea, select, a, [role="button"]',
+      ),
   );
 }
 
@@ -221,6 +223,7 @@ export function StoryViewer({
     document.body.style.overscrollBehavior = 'none';
 
     return () => {
+      clearHoldTimer();
       document.body.style.overflow = previousOverflow;
       document.body.style.overscrollBehavior = previousOverscroll;
     };
@@ -358,6 +361,12 @@ export function StoryViewer({
     (event: React.PointerEvent<HTMLDivElement>) => {
       if (isInteractiveTarget(event.target)) return;
 
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {
+        // Ba'zi webview'larda pointer capture yo'q.
+      }
+
       pointerStartRef.current = {
         x: event.clientX,
         y: event.clientY,
@@ -420,8 +429,12 @@ export function StoryViewer({
 
       pointerStartRef.current = null;
 
-      if (absY > SWIPE_DOWN_DISTANCE && absY > absX * 1.15 && dy > 0) {
-        onClose();
+      if (absY > SWIPE_DOWN_DISTANCE && absY > absX * 1.15) {
+        if (dy > 0) {
+          onClose();
+        } else if (isOwnStory) {
+          setShowViewers(true);
+        }
         return;
       }
 
@@ -443,7 +456,7 @@ export function StoryViewer({
         nextStory();
       }
     },
-    [clearHoldTimer, nextStory, onClose, prevStory],
+    [clearHoldTimer, isOwnStory, nextStory, onClose, prevStory],
   );
 
   const handlePointerCancel = useCallback(() => {
@@ -931,7 +944,7 @@ export function StoryViewer({
         {currentStory.caption && (
           <div
             className={cn(
-              'pointer-events-none absolute inset-x-5 z-25 flex justify-center transition-opacity duration-150',
+              'pointer-events-none absolute inset-x-5 z-[25] flex justify-center transition-opacity duration-150',
               isOwnStory ? 'bottom-20' : 'bottom-[92px]',
               isHolding && 'opacity-0',
             )}
@@ -1155,7 +1168,7 @@ export function StoryViewer({
           </div>
 
           <div className="flex items-center gap-2 border-b border-border/60 px-5 py-3">
-            <Users className="h-4.5 w-4.5 text-link" />
+            <Users className="h-[18px] w-[18px] text-link" />
             <span className="text-sm font-semibold">
               Ko‘rganlar
             </span>
