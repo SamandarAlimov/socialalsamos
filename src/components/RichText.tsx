@@ -51,7 +51,7 @@ function renderTokenText(text: string, keyPrefix: string) {
         <Link
           key={`${keyPrefix}-m-${match.index}`}
           to={`/user/${match[1].slice(1)}`}
-          className="font-semibold text-alsamos-orange-light hover:underline"
+          className="font-semibold text-link hover:text-link-hover hover:underline"
           onClick={(event) => event.stopPropagation()}
         >
           {match[1]}
@@ -62,7 +62,7 @@ function renderTokenText(text: string, keyPrefix: string) {
         <Link
           key={`${keyPrefix}-h-${match.index}`}
           to={`/search?q=%23${encodeURIComponent(match[2].slice(1))}`}
-          className="font-medium text-blue-400 hover:underline"
+          className="font-medium text-link hover:text-link-hover hover:underline"
           onClick={(event) => event.stopPropagation()}
         >
           {match[2]}
@@ -75,7 +75,7 @@ function renderTokenText(text: string, keyPrefix: string) {
           href={match[3]}
           target="_blank"
           rel="noopener noreferrer"
-          className="break-all text-sky-400 underline underline-offset-2"
+          className="break-all text-link underline underline-offset-2 hover:text-link-hover"
           onClick={(event) => event.stopPropagation()}
         >
           {match[3]}
@@ -157,7 +157,7 @@ export function RichText({ content, formattedContent, className }: RichTextProps
             return (
               <blockquote
                 key={blockIndex}
-                className="border-l-2 border-primary/60 pl-3 text-muted-foreground"
+                className="border-l-2 border-border pl-3 text-muted-foreground"
               >
                 {children}
               </blockquote>
