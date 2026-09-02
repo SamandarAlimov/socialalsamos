@@ -88,7 +88,7 @@ export function VideoCommentsSheet({
           </DrawerHeader>
 
           <div className="min-h-0 flex-1 overflow-hidden">
-            <CommentsSection postId={postId} />
+            <CommentsSection postId={postId} layout="panel" />
           </div>
         </DrawerContent>
       </Drawer>
@@ -100,7 +100,7 @@ export function VideoCommentsSheet({
       <SheetContent
         side="right"
         className="z-[10020] flex w-[min(430px,38vw)] min-w-[360px] flex-col overflow-hidden border-l border-border/70 bg-background/98 p-0 shadow-2xl backdrop-blur-xl sm:max-w-none"
-        overlayClassName="bg-black/45 backdrop-blur-[2px]"
+        overlayClassName="bg-black/25 backdrop-blur-[1px]"
         hideDefaultClose
       >
         <SheetHeader className="shrink-0 border-b border-border/60 px-4 py-3 text-left">
@@ -112,7 +112,7 @@ export function VideoCommentsSheet({
         </SheetHeader>
 
         <div className="min-h-0 flex-1 overflow-hidden">
-          <CommentsSection postId={postId} />
+          <CommentsSection postId={postId} layout="panel" />
         </div>
       </SheetContent>
     </Sheet>
