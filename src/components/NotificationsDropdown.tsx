@@ -19,14 +19,14 @@ export function NotificationsDropdown() {
       )}
       onClick={() => navigate('/notifications')}
     >
-      <Bell className="h-5 w-5 text-muted-foreground transition-colors group-hover:text-foreground" />
+      <Bell className="h-5 w-5 text-muted-foreground transition-colors" />
       <AnimatePresence>
         {unreadCount > 0 && (
           <motion.span 
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
-            className="absolute -top-0.5 -right-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-xs font-medium text-destructive-foreground shadow-sm"
+            className="absolute -top-0.5 -right-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-xs font-medium text-primary-foreground shadow-sm"
           >
             {unreadCount > 99 ? '99+' : unreadCount}
           </motion.span>
