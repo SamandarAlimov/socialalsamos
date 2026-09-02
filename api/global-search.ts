@@ -28,7 +28,7 @@ const ALLOWED_CATEGORIES = new Set<GlobalCategory>([
 ]);
 const ALLOWED_LOCALES = new Set<Locale>(['uz', 'ru', 'en']);
 const memoryCache = new Map<string, { at: number; payload: any }>();
-const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_TTL_MS = 90 * 1000;
 const CACHE_MAX = 200;
 
 function setCors(res: any) {
