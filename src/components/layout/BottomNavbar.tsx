@@ -115,15 +115,6 @@ export function BottomNavbar() {
                     isActive ? 'text-foreground' : 'text-muted-foreground'
                   )}
                 >
-                  {/* Aktiv fon kapsulasi (silliq ko'chadi) */}
-                  {isActive && !isCreate && (
-                    <motion.span
-                      layoutId="bottomNavActiveIndicator"
-                      className="absolute top-1 h-0.5 w-5 rounded-full bg-primary"
-                      transition={{ type: 'spring', stiffness: 480, damping: 34 }}
-                    />
-                  )}
-
                   {isCreate ? (
                     <motion.div
                       whileTap={{ scale: 0.9 }}
