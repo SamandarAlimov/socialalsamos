@@ -92,7 +92,7 @@ export default function ComposePage() {
                   className={cn(
                     'flex h-9 min-w-[58px] items-center justify-center gap-1.5 rounded-xl px-2 text-[11px] font-medium transition sm:min-w-[82px] sm:px-3 sm:text-xs',
                     mode === id
-                      ? 'bg-background text-primary shadow-sm ring-1 ring-border/50'
+                      ? 'bg-background text-foreground shadow-sm ring-1 ring-border/50'
                       : 'text-muted-foreground hover:bg-background/60 hover:text-foreground',
                     disabled && 'cursor-not-allowed opacity-40',
                   )}
