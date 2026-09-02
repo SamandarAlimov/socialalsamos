@@ -902,9 +902,9 @@ export default function AIPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.04 }}
                     onClick={() => void send(s.prompt)}
-                    className="group flex items-center gap-2.5 rounded-2xl border border-border/50 bg-card/50 p-3 text-left transition-all hover:border-alsamos-orange/30 hover:bg-card/80"
+                    className="group flex items-center gap-2.5 rounded-2xl border border-border/50 bg-card/50 p-3 text-left transition-all hover:border-border hover:bg-muted/40"
                   >
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-alsamos-orange/10 text-alsamos-orange">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
                       {s.icon}
                     </span>
                     <span className="min-w-0 truncate text-[13px] font-medium">{s.title}</span>
