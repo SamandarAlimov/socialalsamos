@@ -10,7 +10,6 @@ import {
   Presentation,
   Rows3,
   Search,
-  Table2,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -65,6 +64,17 @@ function TypeIcon({ kind, className }: { kind: DocumentPreviewKind; className?: 
   return <File className={className} />;
 }
 
+function spreadsheetColumnLabel(index: number): string {
+  let value = index + 1;
+  let label = '';
+  while (value > 0) {
+    value -= 1;
+    label = String.fromCharCode(65 + (value % 26)) + label;
+    value = Math.floor(value / 26);
+  }
+  return label;
+}
+
 function SpreadsheetPreview({ sheet }: { sheet: SpreadsheetSheet }) {
   const maxColumns = Math.max(1, ...sheet.rows.map((row) => row.length));
 
@@ -81,7 +91,7 @@ function SpreadsheetPreview({ sheet }: { sheet: SpreadsheetSheet }) {
                 key={index}
                 className="h-8 min-w-28 border border-border bg-muted px-2 text-left font-semibold text-foreground"
               >
-                {String.fromCharCode(65 + (index % 26))}
+                {spreadsheetColumnLabel(index)}
               </th>
             ))}
           </tr>
