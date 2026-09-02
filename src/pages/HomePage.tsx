@@ -570,7 +570,7 @@ function PostCard({
             onClick={() => setShowComments(!showComments)}
             className={cn(
               "flex items-center gap-1.5 md:gap-2 transition-colors touch-feedback",
-              showComments ? 'text-primary' : 'text-muted-foreground hover:text-primary'
+              showComments ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
             )}
           >
             <MessageCircle className={cn("h-5 w-5 md:h-5 md:w-5", showComments && 'fill-current')} />
@@ -578,7 +578,7 @@ function PostCard({
           </button>
           <button 
             onClick={() => setShowShareDialog(true)}
-            className="flex items-center gap-1.5 md:gap-2 text-muted-foreground hover:text-primary transition-colors touch-feedback"
+            className="flex items-center gap-1.5 md:gap-2 text-muted-foreground hover:text-foreground transition-colors touch-feedback"
           >
             <Share2 className="h-5 w-5 md:h-5 md:w-5" />
             <span className="text-xs md:text-sm font-medium">{post.shares_count}</span>
@@ -601,7 +601,7 @@ function PostCard({
             onClick={() => setIsBookmarked(!isBookmarked)}
             className={cn(
               "transition-colors touch-feedback",
-              isBookmarked ? 'text-primary' : 'text-muted-foreground hover:text-primary'
+              isBookmarked ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
             )}
           >
             <Bookmark className={cn("h-5 w-5 md:h-5 md:w-5", isBookmarked && 'fill-current')} />
