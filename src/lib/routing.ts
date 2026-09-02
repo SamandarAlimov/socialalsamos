@@ -101,14 +101,14 @@ export function maneuverText(step: {
   const name = step.name ? ' - ' + step.name : '';
   switch (step.maneuver) {
     case 'depart':
-      return 'Yo\u2019lni boshlang' + name;
+      return 'Yo\u2018lni boshlang' + name;
     case 'arrive':
       return 'Manzilga yetib keldingiz';
     case 'roundabout':
     case 'rotary':
-      return 'Aylanma yo\u2019lga kiring' + name;
+      return 'Aylanma yo\u2018lga kiring' + name;
     case 'merge':
-      return 'Qo\u2019shiling' + name;
+      return 'Qo\u2018shiling' + name;
     case 'fork':
       return 'Ayirilishda davom eting' + name;
     default:
@@ -122,22 +122,22 @@ export function maneuverText(step: {
     case 'sharp left':
       return 'Keskin chapga buriling' + name;
     case 'right':
-      return 'O\u2019ngga buriling' + name;
+      return 'O\u2018ngga buriling' + name;
     case 'slight right':
-      return 'O\u2019ngga ozgina buriling' + name;
+      return 'O\u2018ngga ozgina buriling' + name;
     case 'sharp right':
-      return 'Keskin o\u2019ngga buriling' + name;
+      return 'Keskin o\u2018ngga buriling' + name;
     case 'uturn':
       return 'Teskari buriling' + name;
     default:
-      return 'To\u2019g\u2019ri davom eting' + name;
+      return 'To\u2018g\u2018ri davom eting' + name;
   }
 }
 
 function labelFor(mode: RouteMode, index: number): string {
-  if (index === 0) return 'Eng tez yo\u2019l';
-  if (index === 1) return 'Muqobil yo\u2019l';
-  return 'Yana bir yo\u2019l';
+  if (index === 0) return 'Eng tez yo\u2018l';
+  if (index === 1) return 'Muqobil yo\u2018l';
+  return 'Yana bir yo\u2018l';
 }
 
 interface OsrmStep {
