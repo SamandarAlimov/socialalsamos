@@ -236,7 +236,7 @@ export function MessageBubble({ message, isMine, formatTime, isGroup = false, on
                   <AlertCircle className="h-3.5 w-3.5 text-destructive" />
                 ) : message.status === 'read' || message.is_read ? (
                   /* Orange'ning ruxsat etilgan joyi: status aksenti. */
-                  <CheckCheck className="h-3.5 w-3.5 text-primary" />
+                  <CheckCheck className="h-3.5 w-3.5 text-link" />
                 ) : message.status === 'delivered' ? (
                   <CheckCheck className="h-3.5 w-3.5" />
                 ) : (
@@ -265,7 +265,7 @@ export function MessageBubble({ message, isMine, formatTime, isGroup = false, on
                 className={cn(
                   "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs transition-colors",
                   reaction.hasReacted
-                    ? "bg-primary/15 text-primary border border-primary/30"
+                    ? "bg-muted text-foreground border border-border"
                     : "bg-muted hover:bg-accent border border-transparent"
                 )}
               >
