@@ -218,7 +218,7 @@ export function GroupChannelSettingsSheet({
       <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
         <SheetHeader className="border-b border-border px-4 py-3">
           <SheetTitle className="flex items-center gap-2 text-base">
-            <Sparkles className="h-4 w-4 text-primary" />
+            <Sparkles className="h-4 w-4 text-muted-foreground" />
             {isChannel ? 'Kanal sozlamalari' : 'Guruh sozlamalari'}
             {isSaving && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
           </SheetTitle>
@@ -234,7 +234,7 @@ export function GroupChannelSettingsSheet({
               className={cn(
                 'tg-transition flex flex-shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium',
                 tab === id
-                  ? 'bg-primary text-primary-foreground'
+                  ? 'bg-primary text-muted-foreground-foreground'
                   : 'text-muted-foreground hover:bg-accent'
               )}
             >
@@ -358,7 +358,7 @@ export function GroupChannelSettingsSheet({
                 {/* Slow mode */}
                 <div className="space-y-2 rounded-2xl border border-border p-3">
                   <div className="flex items-center gap-2 text-sm font-medium">
-                    <Timer className="h-4 w-4 text-primary" />
+                    <Timer className="h-4 w-4 text-muted-foreground" />
                     Sekin rejim: {formatSlowMode(settings.slow_mode_seconds)}
                   </div>
                   <div className="flex flex-wrap gap-1.5">
@@ -371,7 +371,7 @@ export function GroupChannelSettingsSheet({
                         className={cn(
                           'tg-transition rounded-full px-3 py-1 text-xs',
                           settings.slow_mode_seconds === value
-                            ? 'bg-primary text-primary-foreground'
+                            ? 'bg-primary text-muted-foreground-foreground'
                             : 'bg-muted text-muted-foreground hover:bg-accent'
                         )}
                       >
@@ -387,7 +387,7 @@ export function GroupChannelSettingsSheet({
                 {/* Avtomatik o'chirish */}
                 <div className="space-y-2 rounded-2xl border border-border p-3">
                   <div className="flex items-center gap-2 text-sm font-medium">
-                    <Clock className="h-4 w-4 text-primary" />
+                    <Clock className="h-4 w-4 text-muted-foreground" />
                     Avtomatik o'chirish: {formatAutoDelete(settings.auto_delete_seconds)}
                   </div>
                   <div className="flex flex-wrap gap-1.5">
@@ -400,7 +400,7 @@ export function GroupChannelSettingsSheet({
                         className={cn(
                           'tg-transition rounded-full px-3 py-1 text-xs',
                           settings.auto_delete_seconds === value
-                            ? 'bg-primary text-primary-foreground'
+                            ? 'bg-primary text-muted-foreground-foreground'
                             : 'bg-muted text-muted-foreground hover:bg-accent'
                         )}
                       >
@@ -429,7 +429,7 @@ export function GroupChannelSettingsSheet({
                         className={cn(
                           'tg-transition rounded-full px-3 py-1 text-xs',
                           settings.reactions_mode === option.id
-                            ? 'bg-primary text-primary-foreground'
+                            ? 'bg-primary text-muted-foreground-foreground'
                             : 'bg-muted text-muted-foreground hover:bg-accent'
                         )}
                       >
@@ -673,8 +673,8 @@ export function GroupChannelSettingsSheet({
 
             {settings && tab === 'boost' && (
               <div className="space-y-4">
-                <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 text-center">
-                  <Rocket className="mx-auto mb-2 h-8 w-8 text-primary" />
+                <div className="rounded-2xl border border-border bg-muted/30 p-4 text-center">
+                  <Rocket className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
                   <p className="text-lg font-semibold">{settings.boost_level}-daraja</p>
                   <p className="text-sm text-muted-foreground">
                     {settings.boosts_count} boost
