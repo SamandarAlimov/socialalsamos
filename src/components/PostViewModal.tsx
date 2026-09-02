@@ -35,6 +35,7 @@ import {
 } from '@/lib/postMarkers';
 import { usePostMedia } from '@/hooks/usePostMedia';
 import { MediaStickerOverlay } from '@/components/stickers/MediaStickerOverlay';
+import { VideoPlayer } from '@/components/VideoPlayer';
 import { PostCollaboratorByline } from '@/components/PostCollaboratorByline';
 import type { WithEditState } from '@/lib/stickerPlacements';
 
@@ -182,13 +183,12 @@ export function PostViewModal({
                 */}
                 <div className="relative inline-block max-h-[92vh]">
                   {post.media_type === 'video' ? (
-                    <video
+                    <VideoPlayer
                       key={currentUrl}
                       src={currentUrl}
-                      controls
                       autoPlay
-                      playsInline
-                      className="max-h-[92vh] max-w-full object-contain"
+                      aspectMode="auto"
+                      className="max-h-[92vh] max-w-full"
                     />
                   ) : (
                     <img

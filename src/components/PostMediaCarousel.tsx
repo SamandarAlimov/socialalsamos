@@ -86,6 +86,11 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
             muted={true}
             autoPlay={false}
             className="rounded-none w-full h-full"
+            onAspectRatio={(ratio) => {
+              if (ratio > 0 && Number.isFinite(ratio)) {
+                setRatios((prev) => ({ ...prev, [currentIndex]: ratio }));
+              }
+            }}
           />
         ) : (
           <>

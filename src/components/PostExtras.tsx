@@ -12,6 +12,7 @@ import { PostAudioPlayer } from '@/components/PostAudioPlayer';
 import { PostDocumentCard } from '@/components/PostDocumentViewer';
 import { fileNameFromUrl } from '@/lib/documentPreview';
 import { PostMediaCarousel } from '@/components/PostMediaCarousel';
+import { VideoPlayer } from '@/components/VideoPlayer';
 import { MediaStickerOverlay } from '@/components/stickers/MediaStickerOverlay';
 import type { WithEditState } from '@/lib/stickerPlacements';
 import type { LegacyPostLocation, PostMusic } from '@/lib/postMarkers';
@@ -225,14 +226,12 @@ export function PostExtras({
                   className="h-full max-h-[520px] w-full object-cover"
                 />
               ) : (
-                <video
+                <VideoPlayer
                   src={item.storage_url}
                   poster={item.thumbnail_url ?? undefined}
-                  controls
-                  playsInline
-                  preload="metadata"
-                  onClick={(event) => event.stopPropagation()}
-                  className="h-full max-h-[520px] w-full bg-black object-contain"
+                  aspectMode="auto"
+                  autoPlay={false}
+                  className="max-h-[520px] w-full rounded-none"
                 />
               )}
 

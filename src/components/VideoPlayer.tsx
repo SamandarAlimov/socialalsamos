@@ -1,7 +1,45 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { Play, Pause, Volume2, VolumeX, Volume1, Maximize2, Minimize2, Settings, Subtitles, SkipForward, SkipBack, Loader2, ChevronRight, Check, ArrowLeft } from 'lucide-react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import {
+  ArrowLeft,
+  Captions,
+  Check,
+  ChevronRight,
+  Gauge,
+  Loader2,
+  Maximize2,
+  Minimize2,
+  Pause,
+  PictureInPicture2,
+  Play,
+  RotateCcw,
+  RotateCw,
+  Settings,
+  Volume1,
+  Volume2,
+  VolumeX,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useVideoPlayerContext } from '@/contexts/VideoPlayerContext';
+import { VideoScrubBar } from '@/components/video/VideoScrubBar';
+
+export interface VideoPlayerSource {
+  src: string;
+  label: string;
+}
+
+export interface VideoPlayerTrack {
+  src: string;
+  srcLang: string;
+  label: string;
+  default?: boolean;
+}
 
 interface VideoPlayerProps {
   src: string;
@@ -10,25 +48,38 @@ interface VideoPlayerProps {
   muted?: boolean;
   loop?: boolean;
   poster?: string;
-  /** portrait = 9:16 (reel), landscape = 16:9, square = 1:1, auto = detect */
   aspectMode?: 'portrait' | 'landscape' | 'square' | 'auto';
+  sources?: VideoPlayerSource[];
+  tracks?: VideoPlayerTrack[];
+  title?: string;
   onEnded?: () => void;
+  onAspectRatio?: (ratio: number) => void;
 }
 
 const PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
-const QUALITIES = ['Auto', '1080p', '720p', '480p', '360p', '240p'];
+const CONTROL_HIDE_MS = 2600;
+const LONG_PRESS_MS = 480;
+const DOUBLE_TAP_MS = 320;
 
 function formatTime(seconds: number) {
-  if (!isFinite(seconds) || isNaN(seconds)) return '0:00';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  return `${m}:${s.toString().padStart(2, '0')}`;
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
+  const total = Math.floor(seconds);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const rest = total % 60;
+  if (hours > 0) {
+    return hours + ':' + String(minutes).padStart(2, '0') + ':' + String(rest).padStart(2, '0');
+  }
+  return minutes + ':' + String(rest).padStart(2, '0');
 }
 
-// Settings panel state type
 type SettingsPanel = 'main' | 'speed' | 'quality';
+type GestureFlash =
+  | { kind: 'back'; text: string }
+  | { kind: 'forward'; text: string }
+  | { kind: 'speed'; text: string }
+  | { kind: 'play'; text: string }
+  | null;
 
 export function VideoPlayer({
   src,
@@ -38,435 +89,700 @@ export function VideoPlayer({
   loop = false,
   poster,
   aspectMode = 'auto',
+  sources,
+  tracks = [],
+  title,
   onEnded,
+  onAspectRatio,
 }: VideoPlayerProps) {
+  const playerId = useId();
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const controlsTimerRef = useRef<ReturnType<typeof setTimeout>>();
-  const seekBarRef = useRef<HTMLDivElement>(null);
-  const seekPreviewCanvasRef = useRef<HTMLCanvasElement>(null);
-  const volumeHideTimer = useRef<ReturnType<typeof setTimeout>>();
+  const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const volumeHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gestureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTapRef = useRef<{ time: number; zone: 'left' | 'center' | 'right' } | null>(null);
+  const lastPointerTypeRef = useRef<string>('mouse');
+  const suppressClickRef = useRef(false);
+  const longPressActiveRef = useRef(false);
+  const longPressOriginalRateRef = useRef(1);
+  const resumeAfterSourceChangeRef = useRef(false);
+  const restoreTimeAfterSourceChangeRef = useRef<number | null>(null);
 
-  // Global mute/volume state shared across all players
-  const { isMuted: globalMuted, volume: globalVolume, setMuted: setGlobalMuted, setVolume: setGlobalVolume } = useVideoPlayerContext();
+  const {
+    isMuted: globalMuted,
+    volume: globalVolume,
+    setMuted: setGlobalMuted,
+    setVolume: setGlobalVolume,
+  } = useVideoPlayerContext();
+
+  const normalizedSources = useMemo<VideoPlayerSource[]>(() => {
+    const list = sources?.length ? sources : [{ src, label: 'Original' }];
+    if (!list.some((item) => item.src === src)) return [{ src, label: 'Original' }, ...list];
+    return list;
+  }, [sources, src]);
+
+  const [sourceIndex, setSourceIndex] = useState(() =>
+    Math.max(0, normalizedSources.findIndex((item) => item.src === src)),
+  );
+  const activeSource = normalizedSources[sourceIndex] ?? normalizedSources[0];
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [progress, setProgress] = useState(0);
-  const [buffered, setBuffered] = useState(0);
+  const [bufferedSeconds, setBufferedSeconds] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isScrubbing, setIsScrubbing] = useState(false);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
-  const [quality, setQuality] = useState('Auto');
-  const [seekPreviewX, setSeekPreviewX] = useState(0);
-  const [seekPreviewTime, setSeekPreviewTime] = useState(0);
-  const [showSeekPreview, setShowSeekPreview] = useState(false);
-  const [detectedAspect, setDetectedAspect] = useState<'portrait' | 'landscape' | 'square'>('landscape');
   const [showSettings, setShowSettings] = useState(false);
   const [settingsPanel, setSettingsPanel] = useState<SettingsPanel>('main');
-  const [subtitlesEnabled, setSubtitlesEnabled] = useState(false);
-  // Local volume slider display value
-  const [localVolume, setLocalVolume] = useState(globalVolume * 100);
+  const [captionsEnabled, setCaptionsEnabled] = useState(false);
+  const [detectedRatio, setDetectedRatio] = useState(16 / 9);
+  const [gestureFlash, setGestureFlash] = useState<GestureFlash>(null);
 
-  const effectiveAspect = aspectMode === 'auto' ? detectedAspect : aspectMode;
-
-  // Sync local volume from global
-  useEffect(() => {
-    setLocalVolume(globalVolume * 100);
-  }, [globalVolume]);
-
-  // ── Controls visibility ──────────────────────────────────────────────────
-  const showControlsTemporarily = useCallback(() => {
-    setShowControls(true);
-    clearTimeout(controlsTimerRef.current);
-    controlsTimerRef.current = setTimeout(() => {
-      if (videoRef.current && !videoRef.current.paused) {
-        setShowControls(false);
-        setShowSettings(false);
-      }
-    }, 3000);
+  const flashGesture = useCallback((gesture: NonNullable<GestureFlash>, timeout = 650) => {
+    if (gestureTimerRef.current) clearTimeout(gestureTimerRef.current);
+    setGestureFlash(gesture);
+    gestureTimerRef.current = setTimeout(() => setGestureFlash(null), timeout);
   }, []);
 
-  // ── Intersection-observer autoplay ───────────────────────────────────────
+  const scheduleControlsHide = useCallback(() => {
+    if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
+    controlsTimerRef.current = setTimeout(() => {
+      const video = videoRef.current;
+      if (video && !video.paused && !isScrubbing && !showSettings) {
+        setShowControls(false);
+        setShowVolumeSlider(false);
+      }
+    }, CONTROL_HIDE_MS);
+  }, [isScrubbing, showSettings]);
+
+  const showControlsTemporarily = useCallback(() => {
+    setShowControls(true);
+    scheduleControlsHide();
+  }, [scheduleControlsHide]);
+
   useEffect(() => {
+    if (!autoPlay) return;
     const video = videoRef.current;
     const container = containerRef.current;
     if (!video || !container) return;
 
     const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
-            // Apply global mute state on play
-            video.muted = globalMuted;
-            video.volume = globalVolume;
-            video.play().catch(() => {});
-          } else {
-            video.pause();
-          }
-        });
+      ([entry]) => {
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.65) {
+          video.play().catch(() => {});
+        } else {
+          video.pause();
+        }
       },
-      { threshold: [0, 0.5, 1] }
+      { threshold: [0, 0.65, 1] },
     );
-
     observer.observe(container);
     return () => observer.disconnect();
-  }, [autoPlay, globalMuted, globalVolume]);
+  }, [autoPlay, activeSource.src]);
 
-  // ── Sync global mute/volume to video element ─────────────────────────────
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    video.muted = globalMuted;
+    video.muted = initialMuted ?? globalMuted;
     video.volume = globalVolume;
-  }, [globalMuted, globalVolume]);
+  }, [globalMuted, globalVolume, initialMuted, activeSource.src]);
 
-  // ── Fullscreen change ────────────────────────────────────────────────────
   useEffect(() => {
-    const handler = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', handler);
-    return () => document.removeEventListener('fullscreenchange', handler);
+    const pauseOther = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail;
+      const video = videoRef.current;
+      if (!video || detail === playerId || video.paused) return;
+      video.pause();
+    };
+    window.addEventListener('alsamos:video-play', pauseOther);
+    return () => window.removeEventListener('alsamos:video-play', pauseOther);
+  }, [playerId]);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      const active = document.fullscreenElement === containerRef.current;
+      setIsFullscreen(active);
+      if (active) {
+        setShowControls(true);
+        requestAnimationFrame(() => containerRef.current?.focus());
+      }
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
   }, []);
 
-  // ── Video event handlers ─────────────────────────────────────────────────
-  const handleTimeUpdate = () => {
-    const v = videoRef.current;
-    if (!v) return;
-    setCurrentTime(v.currentTime);
-    setProgress((v.currentTime / v.duration) * 100 || 0);
-    if (v.buffered.length > 0) {
-      setBuffered((v.buffered.end(v.buffered.length - 1) / v.duration) * 100);
-    }
-  };
+  useEffect(() => {
+    return () => {
+      if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
+      if (volumeHideTimerRef.current) clearTimeout(volumeHideTimerRef.current);
+      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+      if (gestureTimerRef.current) clearTimeout(gestureTimerRef.current);
+    };
+  }, []);
 
-  const handleLoadedMetadata = () => {
-    const v = videoRef.current;
-    if (!v) return;
-    setDuration(v.duration);
-    setIsLoading(false);
-    // Apply global state
-    v.muted = globalMuted;
-    v.volume = globalVolume;
-
-    if (v.videoWidth && v.videoHeight) {
-      const ratio = v.videoWidth / v.videoHeight;
-      if (ratio < 0.8) setDetectedAspect('portrait');
-      else if (ratio > 1.2) setDetectedAspect('landscape');
-      else setDetectedAspect('square');
-    }
-  };
-
-  const handleWaiting = () => setIsLoading(true);
-  const handleCanPlay = () => setIsLoading(false);
-  const handleEnded = () => {
-    setIsPlaying(false);
-    setShowControls(true);
-    onEnded?.();
-  };
-
-  // ── Controls ─────────────────────────────────────────────────────────────
-  const togglePlay = useCallback((e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    const v = videoRef.current;
-    if (!v) return;
-    if (v.paused) {
-      v.play().catch(() => {});
+  const togglePlay = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) {
+      window.dispatchEvent(new CustomEvent('alsamos:video-play', { detail: playerId }));
+      video.play().catch(() => {});
     } else {
-      v.pause();
+      video.pause();
     }
     showControlsTemporarily();
-  }, [showControlsTemporarily]);
+  }, [playerId, showControlsTemporarily]);
 
-  const toggleMute = useCallback((e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    const next = !globalMuted;
-    setGlobalMuted(next);
-    if (!next && globalVolume === 0) {
-      setGlobalVolume(0.5);
-    }
-  }, [globalMuted, globalVolume, setGlobalMuted, setGlobalVolume]);
-
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const vol = parseFloat(e.target.value) / 100;
-    setLocalVolume(parseFloat(e.target.value));
-    setGlobalVolume(vol);
-    if (vol === 0) setGlobalMuted(true);
-    else setGlobalMuted(false);
-  };
-
-  const handleSeekClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    const v = videoRef.current;
-    const bar = seekBarRef.current;
-    if (!v || !bar) return;
-    const rect = bar.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    v.currentTime = ratio * duration;
-    setProgress(ratio * 100);
-    setCurrentTime(ratio * duration);
-  };
-
-  const handleSeekBarMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const bar = seekBarRef.current;
-    if (!bar) return;
-    const rect = bar.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    setSeekPreviewX(e.clientX - rect.left);
-    setSeekPreviewTime(ratio * duration);
-    setShowSeekPreview(true);
-
-    // Draw frame preview on canvas
-    const canvas = seekPreviewCanvasRef.current;
+  const seekTo = useCallback((time: number) => {
     const video = videoRef.current;
-    if (canvas && video && duration > 0) {
-      // We draw current frame scaled — for real thumbnail seek we'd need server-side sprites
-      // This draws the current video frame as preview
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        try {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        } catch (_) {}
-      }
-    }
-  };
-
-  const skip = useCallback((secs: number) => {
-    const v = videoRef.current;
-    if (!v) return;
-    v.currentTime = Math.max(0, Math.min(duration, v.currentTime + secs));
+    if (!video || !Number.isFinite(time)) return;
+    const next = Math.max(0, Math.min(video.duration || duration || 0, time));
+    video.currentTime = next;
+    setCurrentTime(next);
     showControlsTemporarily();
   }, [duration, showControlsTemporarily]);
 
-  const handlePlaybackRate = (rate: number) => {
-    const v = videoRef.current;
-    if (!v) return;
-    v.playbackRate = rate;
-    setPlaybackRate(rate);
-    setSettingsPanel('main');
-  };
+  const skip = useCallback((seconds: number, showFlash = true) => {
+    const video = videoRef.current;
+    if (!video) return;
+    seekTo(video.currentTime + seconds);
+    if (showFlash) {
+      flashGesture({
+        kind: seconds < 0 ? 'back' : 'forward',
+        text: (seconds < 0 ? '−' : '+') + Math.abs(seconds) + ' soniya',
+      });
+    }
+  }, [flashGesture, seekTo]);
 
-  const handleQuality = (q: string) => {
-    setQuality(q);
-    setSettingsPanel('main');
-  };
+  const toggleMute = useCallback(() => {
+    const next = !globalMuted;
+    setGlobalMuted(next);
+    if (!next && globalVolume === 0) setGlobalVolume(0.5);
+    showControlsTemporarily();
+  }, [globalMuted, globalVolume, setGlobalMuted, setGlobalVolume, showControlsTemporarily]);
 
-  const handleFullscreen = useCallback((e?: React.MouseEvent) => {
-    e?.stopPropagation();
+  const changeVolume = useCallback((next: number) => {
+    const value = Math.max(0, Math.min(1, next));
+    setGlobalVolume(value);
+    setGlobalMuted(value === 0);
+    showControlsTemporarily();
+  }, [setGlobalMuted, setGlobalVolume, showControlsTemporarily]);
+
+  const changeRate = useCallback((rate: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    const value = Math.max(0.25, Math.min(2, rate));
+    video.playbackRate = value;
+    setPlaybackRate(value);
+    showControlsTemporarily();
+  }, [showControlsTemporarily]);
+
+  const stepRate = useCallback((direction: 1 | -1) => {
+    const index = PLAYBACK_RATES.findIndex((item) => item === playbackRate);
+    const safeIndex = index >= 0 ? index : PLAYBACK_RATES.indexOf(1);
+    const nextIndex = Math.max(0, Math.min(PLAYBACK_RATES.length - 1, safeIndex + direction));
+    const next = PLAYBACK_RATES[nextIndex];
+    changeRate(next);
+    flashGesture({ kind: 'speed', text: next + '×' });
+  }, [changeRate, flashGesture, playbackRate]);
+
+  const toggleFullscreen = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
-    if (!document.fullscreenElement) {
-      container.requestFullscreen().catch(() => {});
-    } else {
+    if (document.fullscreenElement === container) {
       document.exitFullscreen().catch(() => {});
+    } else if (!document.fullscreenElement) {
+      container.requestFullscreen().catch(() => {});
     }
   }, []);
 
-  // ── Keyboard shortcuts ───────────────────────────────────────────────────
+  const togglePictureInPicture = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video || !('pictureInPictureEnabled' in document)) return;
+    try {
+      if (document.pictureInPictureElement === video) await document.exitPictureInPicture();
+      else if ('requestPictureInPicture' in video) await video.requestPictureInPicture();
+    } catch {
+      // Browser yoki permission PiP'ni rad qilishi mumkin.
+    }
+  }, []);
+
+  const setCaptions = useCallback((enabled: boolean) => {
+    const video = videoRef.current;
+    if (!video) return;
+    Array.from(video.textTracks).forEach((track, index) => {
+      track.mode = enabled && index === 0 ? 'showing' : 'disabled';
+    });
+    setCaptionsEnabled(enabled);
+  }, []);
+
+  const handleQualityChange = useCallback((index: number) => {
+    if (index === sourceIndex) {
+      setSettingsPanel('main');
+      return;
+    }
+    const video = videoRef.current;
+    if (video) {
+      restoreTimeAfterSourceChangeRef.current = video.currentTime;
+      resumeAfterSourceChangeRef.current = !video.paused;
+    }
+    setSourceIndex(index);
+    setSettingsPanel('main');
+  }, [sourceIndex]);
+
+  const handleLoadedMetadata = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    setDuration(Number.isFinite(video.duration) ? video.duration : 0);
+    setIsLoading(false);
+    video.volume = globalVolume;
+    video.muted = initialMuted ?? globalMuted;
+    video.playbackRate = playbackRate;
+
+    if (video.videoWidth && video.videoHeight) {
+      const ratio = video.videoWidth / video.videoHeight;
+      setDetectedRatio(ratio);
+      onAspectRatio?.(ratio);
+    }
+
+    const restore = restoreTimeAfterSourceChangeRef.current;
+    if (restore !== null) {
+      video.currentTime = Math.min(restore, Math.max(0, video.duration - 0.05));
+      restoreTimeAfterSourceChangeRef.current = null;
+    }
+    if (resumeAfterSourceChangeRef.current) {
+      resumeAfterSourceChangeRef.current = false;
+      video.play().catch(() => {});
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    setCurrentTime(video.currentTime);
+    if (video.buffered.length > 0) {
+      setBufferedSeconds(video.buffered.end(video.buffered.length - 1));
+    }
+  };
+
+  const clearLongPress = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    if (longPressActiveRef.current) {
+      longPressActiveRef.current = false;
+      changeRate(longPressOriginalRateRef.current);
+      setGestureFlash(null);
+      suppressClickRef.current = true;
+    }
+  }, [changeRate]);
+
+  const handleSurfacePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    lastPointerTypeRef.current = event.pointerType;
+    containerRef.current?.focus({ preventScroll: true });
+
+    if (event.pointerType !== 'touch') return;
+    longPressOriginalRateRef.current = playbackRate;
+    longPressTimerRef.current = setTimeout(() => {
+      const video = videoRef.current;
+      if (!video || video.paused) return;
+      longPressActiveRef.current = true;
+      changeRate(2);
+      flashGesture({ kind: 'speed', text: '2× tezlik' }, 60_000);
+    }, LONG_PRESS_MS);
+  };
+
+  const handleSurfacePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'touch') return;
+
+    if (longPressActiveRef.current) {
+      clearLongPress();
+      return;
+    }
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const ratio = (event.clientX - rect.left) / rect.width;
+    const zone: 'left' | 'center' | 'right' =
+      ratio < 0.38 ? 'left' : ratio > 0.62 ? 'right' : 'center';
+    const now = Date.now();
+    const last = lastTapRef.current;
+
+    if (last && last.zone === zone && now - last.time <= DOUBLE_TAP_MS) {
+      suppressClickRef.current = true;
+      lastTapRef.current = null;
+      if (zone === 'left') skip(-10);
+      else if (zone === 'right') skip(10);
+      else {
+        togglePlay();
+        flashGesture({ kind: 'play', text: videoRef.current?.paused ? 'Pauza' : 'Ijro' });
+      }
+      return;
+    }
+
+    lastTapRef.current = { time: now, zone };
+  };
+
+  const handleSurfaceClick = () => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
+    if (lastPointerTypeRef.current === 'touch') {
+      setShowControls((current) => !current);
+      return;
+    }
+    if (!showSettings) togglePlay();
+  };
+
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      const focused = document.activeElement;
-      if (!containerRef.current?.contains(focused) && focused !== containerRef.current) return;
-      if (['INPUT', 'TEXTAREA'].includes((focused as HTMLElement)?.tagName)) return;
-      if (e.key === ' ' || e.key === 'k') { e.preventDefault(); togglePlay(); }
-      if (e.key === 'ArrowRight') { e.preventDefault(); skip(10); }
-      if (e.key === 'ArrowLeft') { e.preventDefault(); skip(-10); }
-      if (e.key === 'm') { e.preventDefault(); toggleMute(); }
-      if (e.key === 'f') { e.preventDefault(); handleFullscreen(); }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const container = containerRef.current;
+      if (!container) return;
+
+      const focused = document.activeElement as HTMLElement | null;
+      const isActive =
+        document.fullscreenElement === container ||
+        focused === container ||
+        Boolean(focused && container.contains(focused));
+      if (!isActive) return;
+
+      const tag = focused?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || focused?.isContentEditable) return;
+
+      const key = event.key.toLowerCase();
+      const video = videoRef.current;
+      if (!video) return;
+
+      if (event.key === ' ' || key === 'k') {
+        event.preventDefault();
+        togglePlay();
+      } else if (key === 'j') {
+        event.preventDefault();
+        skip(-10);
+      } else if (key === 'l') {
+        event.preventDefault();
+        skip(10);
+      } else if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        skip(-5);
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        skip(5);
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        changeVolume(globalVolume + 0.05);
+      } else if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        changeVolume(globalVolume - 0.05);
+      } else if (key === 'm') {
+        event.preventDefault();
+        toggleMute();
+      } else if (key === 'f') {
+        event.preventDefault();
+        toggleFullscreen();
+      } else if (key === 'c' && tracks.length > 0) {
+        event.preventDefault();
+        setCaptions(!captionsEnabled);
+      } else if (event.key === '>' || (event.key === '.' && event.shiftKey)) {
+        event.preventDefault();
+        stepRate(1);
+      } else if (event.key === '<' || (event.key === ',' && event.shiftKey)) {
+        event.preventDefault();
+        stepRate(-1);
+      } else if (key === 'i') {
+        event.preventDefault();
+        void togglePictureInPicture();
+      } else if (event.key === 'Home') {
+        event.preventDefault();
+        seekTo(0);
+      } else if (event.key === 'End') {
+        event.preventDefault();
+        seekTo(video.duration || duration);
+      } else if (/^[0-9]$/.test(event.key)) {
+        event.preventDefault();
+        const digit = Number(event.key);
+        seekTo((digit / 10) * (video.duration || duration));
+        flashGesture({ kind: 'forward', text: digit * 10 + '%' });
+      }
     };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [togglePlay, skip, toggleMute, handleFullscreen]);
 
-  // Close settings when controls hide
-  useEffect(() => {
-    if (!showControls) setShowSettings(false);
-  }, [showControls]);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [
+    captionsEnabled,
+    changeVolume,
+    duration,
+    flashGesture,
+    globalVolume,
+    seekTo,
+    setCaptions,
+    skip,
+    stepRate,
+    toggleFullscreen,
+    toggleMute,
+    togglePictureInPicture,
+    togglePlay,
+    tracks.length,
+  ]);
 
-  // ── Aspect container class ───────────────────────────────────────────────
-  // When parent enforces sizing (e.g. PostMediaCarousel uses aspect-ratio
-  // matching the natural video ratio), we stretch to fill. Otherwise we
-  // fall back to an Instagram/YouTube-style centered container.
-  const containerClass = cn(
-    'relative overflow-hidden bg-black select-none outline-none group/player w-full h-full',
-    !className && effectiveAspect === 'portrait' && 'aspect-[9/16] max-h-[80vh] mx-auto max-w-[420px] rounded-xl',
-    !className && effectiveAspect === 'landscape' && 'aspect-video',
-    !className && effectiveAspect === 'square' && 'aspect-square max-w-[500px] mx-auto rounded-xl',
-    className
-  );
+  const effectiveRatio = useMemo(() => {
+    if (aspectMode === 'portrait') return 9 / 16;
+    if (aspectMode === 'landscape') return 16 / 9;
+    if (aspectMode === 'square') return 1;
+    return detectedRatio || 16 / 9;
+  }, [aspectMode, detectedRatio]);
 
-  const VolumeIcon = globalMuted || globalVolume === 0 ? VolumeX : globalVolume < 0.5 ? Volume1 : Volume2;
-  const displayVolume = globalMuted ? 0 : localVolume;
+  const VolumeIcon = globalMuted || globalVolume === 0
+    ? VolumeX
+    : globalVolume < 0.5
+      ? Volume1
+      : Volume2;
+
+  const supportsPiP =
+    typeof document !== 'undefined' &&
+    'pictureInPictureEnabled' in document &&
+    Boolean(document.pictureInPictureEnabled);
 
   return (
     <div
       ref={containerRef}
       tabIndex={0}
-      className={containerClass}
+      role="region"
+      aria-label={title ? title + ' video player' : 'Video player'}
+      className={cn(
+        'group/player relative w-full overflow-hidden bg-black text-white outline-none select-none',
+        'focus-visible:ring-2 focus-visible:ring-white/70',
+        isFullscreen && 'h-screen w-screen max-h-none max-w-none rounded-none',
+        className,
+      )}
+      style={isFullscreen ? undefined : { aspectRatio: String(effectiveRatio) }}
       onMouseMove={showControlsTemporarily}
       onMouseLeave={() => {
-        if (isPlaying) setShowControls(false);
+        if (isPlaying && !showSettings && !isScrubbing) setShowControls(false);
         setShowVolumeSlider(false);
-        setShowSeekPreview(false);
       }}
-      onTouchStart={showControlsTemporarily}
-      onClick={() => { if (!showSettings) togglePlay(); }}
+      onPointerDown={handleSurfacePointerDown}
+      onPointerUp={handleSurfacePointerUp}
+      onPointerCancel={clearLongPress}
+      onPointerLeave={(event) => {
+        if (event.pointerType === 'touch') clearLongPress();
+      }}
+      onClick={handleSurfaceClick}
+      onDoubleClick={(event) => {
+        if (event.pointerType !== 'touch') {
+          event.preventDefault();
+          toggleFullscreen();
+        }
+      }}
     >
-      {/* ── Video element ── */}
       <video
         ref={videoRef}
-        src={src}
+        key={activeSource.src}
+        src={activeSource.src}
         poster={poster}
-        muted={globalMuted}
+        muted={initialMuted ?? globalMuted}
         loop={loop}
         playsInline
         preload="metadata"
-        className={cn(
-          'w-full h-full object-contain'
-        )}
-        onTimeUpdate={handleTimeUpdate}
+        className="h-full w-full object-contain"
         onLoadedMetadata={handleLoadedMetadata}
-        onWaiting={handleWaiting}
-        onCanPlay={handleCanPlay}
-        onPlay={() => { setIsPlaying(true); showControlsTemporarily(); }}
-        onPause={() => { setIsPlaying(false); setShowControls(true); }}
-        onEnded={handleEnded}
-      />
+        onTimeUpdate={handleTimeUpdate}
+        onWaiting={() => setIsLoading(true)}
+        onCanPlay={() => setIsLoading(false)}
+        onPlay={() => {
+          setIsPlaying(true);
+          setIsLoading(false);
+          window.dispatchEvent(new CustomEvent('alsamos:video-play', { detail: playerId }));
+          showControlsTemporarily();
+        }}
+        onPause={() => {
+          setIsPlaying(false);
+          setShowControls(true);
+        }}
+        onEnded={() => {
+          setIsPlaying(false);
+          setShowControls(true);
+          onEnded?.();
+        }}
+      >
+        {tracks.map((track) => (
+          <track
+            key={track.src + track.srcLang}
+            src={track.src}
+            srcLang={track.srcLang}
+            label={track.label}
+            default={track.default}
+            kind="subtitles"
+          />
+        ))}
+      </video>
 
-      {/* ── Loading spinner ── */}
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <Loader2 className="h-10 w-10 text-white animate-spin opacity-80" />
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <Loader2 className="h-9 w-9 animate-spin text-white/85" />
         </div>
       )}
 
-      {/* ── Big center play/pause (click flash) ── */}
       {!isLoading && !isPlaying && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="h-16 w-16 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center border border-white/20">
-            <Play className="h-8 w-8 text-white fill-white ml-1" />
-          </div>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            togglePlay();
+          }}
+          className="absolute left-1/2 top-1/2 z-20 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-xl ring-1 ring-white/20 backdrop-blur-md transition hover:scale-105 hover:bg-black/70 active:scale-95"
+          aria-label="Videoni ijro etish"
+        >
+          <Play className="h-7 w-7 translate-x-0.5 fill-current" />
+        </button>
+      )}
+
+      {gestureFlash && (
+        <div
+          className={cn(
+            'pointer-events-none absolute top-1/2 z-30 flex -translate-y-1/2 flex-col items-center gap-1 rounded-full bg-black/60 px-4 py-3 text-white shadow-xl backdrop-blur-md',
+            gestureFlash.kind === 'back' && 'left-[14%]',
+            gestureFlash.kind === 'forward' && 'right-[14%]',
+            (gestureFlash.kind === 'speed' || gestureFlash.kind === 'play') &&
+              'left-1/2 -translate-x-1/2',
+          )}
+        >
+          {gestureFlash.kind === 'back' ? (
+            <RotateCcw className="h-6 w-6" />
+          ) : gestureFlash.kind === 'forward' ? (
+            <RotateCw className="h-6 w-6" />
+          ) : gestureFlash.kind === 'speed' ? (
+            <Gauge className="h-6 w-6" />
+          ) : (
+            <Play className="h-6 w-6 fill-current" />
+          )}
+          <span className="text-xs font-semibold tabular-nums">{gestureFlash.text}</span>
         </div>
       )}
 
-      {/* ── Controls overlay ── */}
       <div
         className={cn(
-          'absolute inset-0 flex flex-col justify-end transition-opacity duration-300',
-          showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          'absolute inset-0 z-10 flex flex-col justify-end transition-opacity duration-200',
+          showControls || !isPlaying ? 'opacity-100' : 'pointer-events-none opacity-0',
         )}
-        onClick={(e) => e.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
       >
-        {/* Gradient */}
-        <div className="absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-black/95 via-black/60 to-transparent pointer-events-none" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/90 via-black/10 to-black/20" />
 
-        {/* Settings panel */}
         {showSettings && (
-          <div
-            className="absolute bottom-16 right-2 w-52 bg-black/90 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl z-20"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Main panel */}
+          <div className="absolute bottom-16 right-3 z-40 w-60 overflow-hidden rounded-2xl border border-white/10 bg-black/90 shadow-2xl backdrop-blur-xl">
             {settingsPanel === 'main' && (
-              <div className="py-1">
-                <div className="px-3 py-2 text-xs font-semibold text-white/40 uppercase tracking-wider">
-                  Sozlamalar
+              <div className="py-1.5">
+                <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-white/45">
+                  Video sozlamalari
                 </div>
-
-                {/* Subtitles row */}
+                {tracks.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCaptions(!captionsEnabled);
+                      setShowSettings(false);
+                    }}
+                    className="flex w-full items-center justify-between px-3 py-2.5 text-sm hover:bg-white/10"
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <Captions className="h-4 w-4 text-white/70" />
+                      Subtitrlar
+                    </span>
+                    <span className="text-xs text-white/60">{captionsEnabled ? 'Yoqiq' : 'O‘chiq'}</span>
+                  </button>
+                )}
                 <button
-                  className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-white/10 transition-colors"
-                  onClick={() => {
-                    setSubtitlesEnabled(p => !p);
-                    setShowSettings(false);
-                  }}
+                  type="button"
+                  onClick={() => setSettingsPanel('speed')}
+                  className="flex w-full items-center justify-between px-3 py-2.5 text-sm hover:bg-white/10"
                 >
-                  <div className="flex items-center gap-2.5">
-                    <Subtitles className="h-4 w-4 text-white/70" />
-                    <span className="text-sm text-white">Subtitrlar</span>
-                  </div>
-                  <span className={cn('text-xs font-medium', subtitlesEnabled ? 'text-primary' : 'text-white/40')}>
-                    {subtitlesEnabled ? 'Yoqiq' : 'O\'chiq'}
+                  <span className="flex items-center gap-2.5">
+                    <Gauge className="h-4 w-4 text-white/70" />
+                    Ijro tezligi
+                  </span>
+                  <span className="flex items-center gap-1 text-xs text-white/60">
+                    {playbackRate === 1 ? 'Oddiy' : playbackRate + '×'}
+                    <ChevronRight className="h-3.5 w-3.5" />
                   </span>
                 </button>
-
-                {/* Playback speed row */}
                 <button
-                  className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-white/10 transition-colors"
-                  onClick={() => setSettingsPanel('speed')}
+                  type="button"
+                  onClick={() => normalizedSources.length > 1 && setSettingsPanel('quality')}
+                  className={cn(
+                    'flex w-full items-center justify-between px-3 py-2.5 text-sm',
+                    normalizedSources.length > 1 ? 'hover:bg-white/10' : 'cursor-default opacity-65',
+                  )}
                 >
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-white/70 text-sm font-mono w-4">⚡</span>
-                    <span className="text-sm text-white">Tezlik</span>
-                  </div>
-                  <div className="flex items-center gap-1 text-white/60 text-xs">
-                    {playbackRate === 1 ? 'Oddiy' : `${playbackRate}x`}
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </div>
-                </button>
-
-                {/* Quality row */}
-                <button
-                  className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-white/10 transition-colors"
-                  onClick={() => setSettingsPanel('quality')}
-                >
-                  <div className="flex items-center gap-2.5">
+                  <span className="flex items-center gap-2.5">
                     <Settings className="h-4 w-4 text-white/70" />
-                    <span className="text-sm text-white">Sifat</span>
-                  </div>
-                  <div className="flex items-center gap-1 text-white/60 text-xs">
-                    {quality}
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </div>
+                    Sifat
+                  </span>
+                  <span className="flex items-center gap-1 text-xs text-white/60">
+                    {activeSource.label}
+                    {normalizedSources.length > 1 && <ChevronRight className="h-3.5 w-3.5" />}
+                  </span>
                 </button>
               </div>
             )}
 
-            {/* Speed sub-panel */}
             {settingsPanel === 'speed' && (
-              <div className="py-1">
+              <div className="py-1.5">
                 <button
-                  className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-white/10 transition-colors border-b border-white/10"
+                  type="button"
                   onClick={() => setSettingsPanel('main')}
+                  className="flex w-full items-center gap-2 border-b border-white/10 px-3 py-2.5 text-sm font-medium hover:bg-white/10"
                 >
-                  <ArrowLeft className="h-4 w-4 text-white/70" />
-                  <span className="text-sm text-white font-medium">Ijro tezligi</span>
+                  <ArrowLeft className="h-4 w-4" />
+                  Ijro tezligi
                 </button>
                 {PLAYBACK_RATES.map((rate) => (
                   <button
                     key={rate}
-                    className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-white/10 transition-colors"
-                    onClick={() => handlePlaybackRate(rate)}
+                    type="button"
+                    onClick={() => {
+                      changeRate(rate);
+                      setSettingsPanel('main');
+                    }}
+                    className="flex w-full items-center justify-between px-3 py-2 text-sm hover:bg-white/10"
                   >
-                    <span className="text-sm text-white">
-                      {rate === 1 ? 'Oddiy' : `${rate}x`}
-                    </span>
-                    {playbackRate === rate && <Check className="h-4 w-4 text-primary" />}
+                    <span>{rate === 1 ? 'Oddiy' : rate + '×'}</span>
+                    {playbackRate === rate && <Check className="h-4 w-4" />}
                   </button>
                 ))}
               </div>
             )}
 
-            {/* Quality sub-panel */}
             {settingsPanel === 'quality' && (
-              <div className="py-1">
+              <div className="py-1.5">
                 <button
-                  className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-white/10 transition-colors border-b border-white/10"
+                  type="button"
                   onClick={() => setSettingsPanel('main')}
+                  className="flex w-full items-center gap-2 border-b border-white/10 px-3 py-2.5 text-sm font-medium hover:bg-white/10"
                 >
-                  <ArrowLeft className="h-4 w-4 text-white/70" />
-                  <span className="text-sm text-white font-medium">Sifat</span>
+                  <ArrowLeft className="h-4 w-4" />
+                  Video sifati
                 </button>
-                {QUALITIES.map((q) => (
+                {normalizedSources.map((source, index) => (
                   <button
-                    key={q}
-                    className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-white/10 transition-colors"
-                    onClick={() => handleQuality(q)}
+                    key={source.src + source.label}
+                    type="button"
+                    onClick={() => handleQualityChange(index)}
+                    className="flex w-full items-center justify-between px-3 py-2 text-sm hover:bg-white/10"
                   >
-                    <span className="text-sm text-white">{q}</span>
-                    {quality === q && <Check className="h-4 w-4 text-primary" />}
+                    <span>{source.label}</span>
+                    {sourceIndex === index && <Check className="h-4 w-4" />}
                   </button>
                 ))}
               </div>
@@ -474,205 +790,172 @@ export function VideoPlayer({
           </div>
         )}
 
-        {/* Controls bar */}
-        <div className="relative z-10 px-3 pb-3 space-y-1">
-          {/* ── Progress / Seek bar ── */}
-          <div
-            ref={seekBarRef}
-            className="relative pt-5 pb-1 cursor-pointer group/seek"
-            onMouseMove={handleSeekBarMouseMove}
-            onMouseLeave={() => setShowSeekPreview(false)}
-            onClick={handleSeekClick}
-          >
-            {/* Seek preview tooltip + mini canvas */}
-            {showSeekPreview && (
-              <div
-                className="absolute bottom-8 flex flex-col items-center gap-1 pointer-events-none z-20"
-                style={{ left: seekPreviewX, transform: 'translateX(-50%)' }}
-              >
-                {/* Mini preview canvas */}
-                <div className="rounded-md overflow-hidden border border-white/20 shadow-xl bg-black">
-                  <canvas
-                    ref={seekPreviewCanvasRef}
-                    width={112}
-                    height={63}
-                    className="block"
-                  />
-                </div>
-                {/* Time label */}
-                <div className="bg-black/90 text-white text-xs px-2 py-0.5 rounded font-medium whitespace-nowrap">
-                  {formatTime(seekPreviewTime)}
-                </div>
-              </div>
-            )}
+        <div
+          className={cn(
+            'relative z-20 space-y-0.5 px-2.5 pb-2.5 sm:px-3 sm:pb-3',
+            isFullscreen && 'px-4 pb-4 md:px-6 md:pb-5',
+          )}
+        >
+          <VideoScrubBar
+            src={activeSource.src}
+            duration={duration}
+            currentTime={currentTime}
+            bufferedSeconds={bufferedSeconds}
+            onSeek={seekTo}
+            onScrubStateChange={(value) => {
+              setIsScrubbing(value);
+              setShowControls(true);
+              if (!value) scheduleControlsHide();
+            }}
+            enablePreview={duration > 0}
+            showHeatmap={false}
+            playedClassName="bg-red-500"
+            thumbClassName="bg-red-500"
+            className={cn(isFullscreen && 'mb-1')}
+          />
 
-            {/* Track */}
-            <div className="relative h-1 rounded-full bg-white/20 group-hover/seek:h-[5px] transition-all duration-150">
-              {/* Buffered */}
-              <div
-                className="absolute inset-y-0 left-0 rounded-full bg-white/30"
-                style={{ width: `${buffered}%` }}
-              />
-              {/* Played */}
-              <div
-                className="absolute inset-y-0 left-0 rounded-full bg-destructive"
-                style={{ width: `${progress}%` }}
-              />
-              {/* Thumb dot */}
-              <div
-                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-3.5 w-3.5 rounded-full bg-destructive shadow-lg opacity-0 group-hover/seek:opacity-100 transition-opacity"
-                style={{ left: `${progress}%` }}
-              />
-            </div>
-          </div>
-
-          {/* ── Bottom row buttons ── */}
-          <div className="flex items-center justify-between gap-1">
-            {/* Left side */}
-            <div className="flex items-center gap-0.5">
-              {/* Skip back */}
+          <div className="flex min-w-0 items-center justify-between gap-1">
+            <div className="flex min-w-0 items-center gap-0.5">
               <button
-                onClick={(e) => { e.stopPropagation(); skip(-10); }}
-                className="h-8 w-8 flex items-center justify-center hover:bg-white/15 rounded-lg transition-colors relative group/btn"
-                title="-10s"
+                type="button"
+                onClick={() => skip(-10)}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg hover:bg-white/15 active:scale-95"
+                title="10 soniya orqaga (J)"
+                aria-label="10 soniya orqaga"
               >
-                <SkipBack className="h-4 w-4 text-white" />
-                <span className="absolute -top-6 left-1/2 -translate-x-1/2 bg-black/80 text-white text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none">
-                  -10s
-                </span>
+                <RotateCcw className="h-4 w-4" />
               </button>
 
-              {/* Play/Pause */}
               <button
+                type="button"
                 onClick={togglePlay}
-                className="h-9 w-9 flex items-center justify-center hover:bg-white/15 rounded-lg transition-colors"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg hover:bg-white/15 active:scale-95"
                 title={isPlaying ? 'Pauza (K)' : 'Ijro (K)'}
+                aria-label={isPlaying ? 'Pauza' : 'Ijro'}
               >
                 {isPlaying ? (
-                  <Pause className="h-5 w-5 text-white fill-white" />
+                  <Pause className="h-5 w-5 fill-current" />
                 ) : (
-                  <Play className="h-5 w-5 text-white fill-white ml-0.5" />
+                  <Play className="h-5 w-5 translate-x-0.5 fill-current" />
                 )}
               </button>
 
-              {/* Skip forward */}
               <button
-                onClick={(e) => { e.stopPropagation(); skip(10); }}
-                className="h-8 w-8 flex items-center justify-center hover:bg-white/15 rounded-lg transition-colors relative group/btn"
-                title="+10s"
+                type="button"
+                onClick={() => skip(10)}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg hover:bg-white/15 active:scale-95"
+                title="10 soniya oldinga (L)"
+                aria-label="10 soniya oldinga"
               >
-                <SkipForward className="h-4 w-4 text-white" />
-                <span className="absolute -top-6 left-1/2 -translate-x-1/2 bg-black/80 text-white text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none">
-                  +10s
-                </span>
+                <RotateCw className="h-4 w-4" />
               </button>
 
-              {/* Volume */}
               <div
-                className="flex items-center gap-1 relative"
+                className="hidden items-center sm:flex"
                 onMouseEnter={() => {
-                  clearTimeout(volumeHideTimer.current);
+                  if (volumeHideTimerRef.current) clearTimeout(volumeHideTimerRef.current);
                   setShowVolumeSlider(true);
                 }}
                 onMouseLeave={() => {
-                  volumeHideTimer.current = setTimeout(() => setShowVolumeSlider(false), 300);
+                  volumeHideTimerRef.current = setTimeout(() => setShowVolumeSlider(false), 260);
                 }}
               >
                 <button
+                  type="button"
                   onClick={toggleMute}
-                  className="h-8 w-8 flex items-center justify-center hover:bg-white/15 rounded-lg transition-colors"
-                  title={globalMuted ? 'Ovoz yoq (M)' : "Ovoz o'ch (M)"}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-white/15"
+                  title="Ovoz (M)"
                 >
-                  <VolumeIcon className="h-4 w-4 text-white" />
+                  <VolumeIcon className="h-4 w-4" />
                 </button>
-
-                {/* Volume slider (hover) */}
-                <div
-                  className={cn(
-                    'flex items-center gap-1 transition-all duration-200 overflow-hidden',
-                    showVolumeSlider ? 'w-24 opacity-100' : 'w-0 opacity-0 pointer-events-none'
-                  )}
-                >
+                <div className={cn('overflow-hidden transition-all', showVolumeSlider ? 'w-24 opacity-100' : 'w-0 opacity-0')}>
                   <input
                     type="range"
                     min={0}
-                    max={100}
-                    step={1}
-                    value={displayVolume}
-                    onChange={handleVolumeChange}
-                    onClick={(e) => e.stopPropagation()}
-                    className="w-full h-1 accent-white cursor-pointer"
-                    style={{
-                      background: `linear-gradient(to right, white ${displayVolume}%, rgba(255,255,255,0.3) ${displayVolume}%)`
-                    }}
+                    max={1}
+                    step={0.01}
+                    value={globalMuted ? 0 : globalVolume}
+                    onChange={(event) => changeVolume(Number(event.target.value))}
+                    className="h-1 w-20 cursor-pointer accent-white"
+                    aria-label="Ovoz balandligi"
                   />
-                  <span className="text-white text-[10px] w-6 text-right tabular-nums shrink-0">
-                    {Math.round(displayVolume)}
-                  </span>
                 </div>
               </div>
 
-              {/* Time */}
-              <span className="text-white text-xs font-medium tabular-nums ml-1 select-none">
-                {formatTime(currentTime)} / {formatTime(duration)}
+              <span className="ml-1 truncate text-[11px] font-medium tabular-nums text-white/95 sm:text-xs">
+                {formatTime(currentTime)}
+                <span className="text-white/55"> / {formatTime(duration)}</span>
               </span>
             </div>
 
-            {/* Right side */}
-            <div className="flex items-center gap-0.5">
-              {/* Subtitles (CC) */}
+            <div className="flex shrink-0 items-center gap-0.5">
               <button
-                className={cn(
-                  'h-8 w-8 flex items-center justify-center hover:bg-white/15 rounded-lg transition-colors',
-                  subtitlesEnabled ? 'bg-white/20' : ''
-                )}
-                title="Subtitrlar (C)"
-                onClick={(e) => { e.stopPropagation(); setSubtitlesEnabled(p => !p); }}
+                type="button"
+                onClick={toggleMute}
+                className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-white/15 sm:hidden"
+                aria-label={globalMuted ? 'Ovozni yoqish' : 'Ovozni o‘chirish'}
               >
-                <Subtitles className={cn('h-4 w-4', subtitlesEnabled ? 'text-white' : 'text-white/60')} />
+                <VolumeIcon className="h-4 w-4" />
               </button>
 
-              {/* Settings */}
+              {tracks.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setCaptions(!captionsEnabled)}
+                  className={cn(
+                    'hidden h-9 w-9 items-center justify-center rounded-lg hover:bg-white/15 sm:flex',
+                    captionsEnabled && 'bg-white/15',
+                  )}
+                  title="Subtitrlar (C)"
+                >
+                  <Captions className="h-4 w-4" />
+                </button>
+              )}
+
+              {supportsPiP && (
+                <button
+                  type="button"
+                  onClick={() => void togglePictureInPicture()}
+                  className="hidden h-9 w-9 items-center justify-center rounded-lg hover:bg-white/15 md:flex"
+                  title="Picture-in-Picture (I)"
+                >
+                  <PictureInPicture2 className="h-4 w-4" />
+                </button>
+              )}
+
               <button
-                className={cn(
-                  'h-8 w-8 flex items-center justify-center hover:bg-white/15 rounded-lg transition-colors',
-                  showSettings ? 'bg-white/20' : ''
-                )}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowSettings(p => !p);
+                type="button"
+                onClick={() => {
+                  setShowSettings((current) => !current);
                   setSettingsPanel('main');
+                  setShowControls(true);
                 }}
+                className={cn(
+                  'flex h-9 w-9 items-center justify-center rounded-lg hover:bg-white/15',
+                  showSettings && 'bg-white/15',
+                )}
                 title="Sozlamalar"
               >
-                <Settings className={cn('h-4 w-4 text-white transition-transform duration-300', showSettings ? 'rotate-45' : '')} />
+                <Settings className={cn('h-4 w-4 transition-transform', showSettings && 'rotate-45')} />
               </button>
 
-              {/* Fullscreen */}
               <button
-                onClick={handleFullscreen}
-                className="h-8 w-8 flex items-center justify-center hover:bg-white/15 rounded-lg transition-colors"
-                title={isFullscreen ? "To'liq ekrandan chiqish (F)" : "To'liq ekran (F)"}
+                type="button"
+                onClick={toggleFullscreen}
+                className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-white/15"
+                title={isFullscreen ? 'To‘liq ekrandan chiqish (F)' : 'To‘liq ekran (F)'}
+                aria-label={isFullscreen ? 'To‘liq ekrandan chiqish' : 'To‘liq ekran'}
               >
-                {isFullscreen ? (
-                  <Minimize2 className="h-4 w-4 text-white" />
-                ) : (
-                  <Maximize2 className="h-4 w-4 text-white" />
-                )}
+                {isFullscreen ? <Minimize2 className="h-4.5 w-4.5" /> : <Maximize2 className="h-4.5 w-4.5" />}
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Subtitles overlay (placeholder) */}
-      {subtitlesEnabled && (
-        <div className="absolute bottom-20 inset-x-4 flex justify-center pointer-events-none">
-          <div className="bg-black/75 text-foreground text-sm px-3 py-1 rounded-md text-center max-w-xs">
-            Subtitrlar faol (hozircha namuna)
-          </div>
-        </div>
-      )}
+      <div className="sr-only" aria-live="polite">
+        {isPlaying ? 'Video ijro etilmoqda' : 'Video pauzada'}
+      </div>
     </div>
   );
 }
