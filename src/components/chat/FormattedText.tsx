@@ -73,7 +73,7 @@ function PlainText({ text, emojiSize }: { text: string; emojiSize: number }) {
               <Link
                 key={index}
                 to={'/user/' + part.value}
-                className="font-medium text-primary hover:underline"
+                className="font-medium text-link hover:text-link-hover hover:underline"
                 onClick={(event) => event.stopPropagation()}
               >
                 @{part.value}
@@ -84,7 +84,7 @@ function PlainText({ text, emojiSize }: { text: string; emojiSize: number }) {
               <Link
                 key={index}
                 to={'/search?q=%23' + encodeURIComponent(part.value)}
-                className="font-medium text-sky-500 hover:underline"
+                className="font-medium text-link hover:text-link-hover hover:underline"
                 onClick={(event) => event.stopPropagation()}
               >
                 #{part.value}
@@ -97,7 +97,7 @@ function PlainText({ text, emojiSize }: { text: string; emojiSize: number }) {
                 href={part.value}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="break-all text-sky-500 underline underline-offset-2"
+                className="break-all text-link underline underline-offset-2 hover:text-link-hover"
                 onClick={(event) => event.stopPropagation()}
               >
                 {part.value}
@@ -142,7 +142,7 @@ function renderNodes(nodes: InlineNode[], emojiSize: number): React.ReactNode {
             href={node.href}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sky-500 underline underline-offset-2"
+            className="text-link underline underline-offset-2 hover:text-link-hover"
             onClick={(event) => event.stopPropagation()}
           >
             {children}
