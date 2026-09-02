@@ -106,6 +106,7 @@ interface GroupedNotification {
   postId?: string;
   postThumbnail?: string;
   postMediaType?: string | null;
+  postPoster?: string | null;
   actors: Array<{
     id: string;
     username: string | null;
@@ -180,16 +181,19 @@ function NotificationIcon({ type }: { type: Notification['type'] }) {
 function PostThumbnail({
   url,
   mediaType,
+  poster,
   onClick,
 }: {
   url: string;
   mediaType?: string | null;
+  poster?: string | null;
   onClick: (event: React.MouseEvent) => void;
 }) {
   return (
     <PostMediaThumbnail
       url={url}
       mediaType={mediaType}
+      poster={poster}
       onClick={onClick}
       className="h-16 w-16 rounded-2xl"
       ariaLabel="Postni ochish"
@@ -211,6 +215,7 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
       (media) => typeof media === 'string' && media.length > 0,
     );
     const postMediaType = notification.post?.media_type ?? null;
+    const postPoster = notification.post?.preview_poster ?? null;
     const isCollaboration = COLLABORATION_TYPES.includes(notification.type);
 
     // Context-rich eventlar (comment/mention/reply) alohida qoladi.
@@ -249,6 +254,7 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
         if (!existing.postThumbnail && postThumbnail) {
           existing.postThumbnail = postThumbnail;
           existing.postMediaType = postMediaType;
+          existing.postPoster = postPoster;
         }
         return;
       }
@@ -262,6 +268,7 @@ function consolidateNotifications(notifications: Notification[]): GroupedNotific
       postId,
       postThumbnail,
       postMediaType,
+      postPoster,
       actors: actor
         ? [{
             id: actor.id,
@@ -548,6 +555,7 @@ function GroupedNotificationItem({
           <PostThumbnail
             url={group.postThumbnail}
             mediaType={group.postMediaType}
+            poster={group.postPoster}
             onClick={handlePostClick}
           />
         ) : target && group.type !== 'follow' ? (
