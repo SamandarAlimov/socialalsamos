@@ -36,6 +36,9 @@ const RENDER_WINDOW = 1;
 /** Ro'yxat oxiriga shuncha video qolganda keyingi sahifa yuklanadi. */
 const LOAD_MORE_THRESHOLD = 3;
 
+/** YouTube'ga yaqin tezlik pog'onalari. */
+const VIDEO_PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
+
 interface VideoCardProps {
   video: VideoPost;
   isActive: boolean;
@@ -49,6 +52,9 @@ interface VideoCardProps {
   isMobile: boolean;
   globalMuted: boolean;
   onMuteToggle: () => void;
+  keyboardEnabled: boolean;
+  onNextVideo: () => void;
+  onPreviousVideo: () => void;
 }
 
 function VideoCard({
@@ -64,6 +70,9 @@ function VideoCard({
   isMobile,
   globalMuted,
   onMuteToggle,
+  keyboardEnabled,
+  onNextVideo,
+  onPreviousVideo,
 }: VideoCardProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
@@ -217,6 +226,41 @@ function VideoCard({
     setCurrentTime(time);
   }, [markSeek, video.id]);
 
+  const seekToFraction = useCallback((fraction: number) => {
+    const el = videoRef.current;
+    if (!el || !Number.isFinite(el.duration) || el.duration <= 0) return;
+    markSeek(video.id);
+    const next = el.duration * Math.min(1, Math.max(0, fraction));
+    el.currentTime = next;
+    setCurrentTime(next);
+  }, [markSeek, video.id]);
+
+  const adjustVolume = useCallback((delta: number) => {
+    const el = videoRef.current;
+    const current = el?.volume ?? volume;
+    const next = Math.min(1, Math.max(0, Number((current + delta).toFixed(2))));
+    setVolume(next);
+    if (el) el.volume = next;
+
+    if (next > 0 && globalMuted) onMuteToggle();
+    if (next === 0 && !globalMuted) onMuteToggle();
+  }, [globalMuted, onMuteToggle, volume]);
+
+  const adjustPlaybackSpeed = useCallback((direction: -1 | 1) => {
+    setSpeed((current) => {
+      const currentIndex = VIDEO_PLAYBACK_RATES.reduce((best, rate, index) => (
+        Math.abs(rate - current) < Math.abs(VIDEO_PLAYBACK_RATES[best] - current) ? index : best
+      ), 0);
+      const nextIndex = Math.min(
+        VIDEO_PLAYBACK_RATES.length - 1,
+        Math.max(0, currentIndex + direction),
+      );
+      const next = VIDEO_PLAYBACK_RATES[nextIndex];
+      if (videoRef.current && !holdActive.current) videoRef.current.playbackRate = next;
+      return next;
+    });
+  }, []);
+
   const toggleFullscreen = useCallback(() => {
     const node = frameRef.current;
     if (!node) return;
@@ -233,45 +277,110 @@ function VideoCard({
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
-  // Keyboard shortcuts for the active video
+  // YouTube uslubidagi professional klaviatura boshqaruvi.
   useEffect(() => {
-    if (!isActive) return;
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target && ['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
-      switch (e.key) {
+    if (!isActive || !keyboardEnabled) return;
+
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      const isInteractive = target?.closest(
+        'input, textarea, select, button, a, [contenteditable="true"], [role="textbox"], [role="slider"]',
+      );
+      if (isInteractive || event.metaKey || event.ctrlKey || event.altKey) return;
+
+      const key = event.key.toLowerCase();
+
+      if (event.shiftKey && key === 'n') {
+        event.preventDefault();
+        onNextVideo();
+        return;
+      }
+      if (event.shiftKey && key === 'p') {
+        event.preventDefault();
+        onPreviousVideo();
+        return;
+      }
+
+      if (event.repeat && [' ', 'k', 'm', 'f'].includes(key)) return;
+
+      switch (key) {
         case ' ':
         case 'k':
-          e.preventDefault();
+          event.preventDefault();
           togglePlay();
           break;
-        case 'ArrowRight':
-          e.preventDefault();
+        case 'arrowright':
+          event.preventDefault();
           seekBy(5);
           break;
-        case 'ArrowLeft':
-          e.preventDefault();
+        case 'arrowleft':
+          event.preventDefault();
           seekBy(-5);
           break;
+        case 'arrowup':
+          event.preventDefault();
+          adjustVolume(0.05);
+          break;
+        case 'arrowdown':
+          event.preventDefault();
+          adjustVolume(-0.05);
+          break;
         case 'l':
+          event.preventDefault();
           seekBy(10);
           break;
         case 'j':
+          event.preventDefault();
           seekBy(-10);
           break;
         case 'm':
+          event.preventDefault();
           onMuteToggle();
           break;
         case 'f':
+          event.preventDefault();
           toggleFullscreen();
           break;
+        case 'home':
+          event.preventDefault();
+          seekToFraction(0);
+          break;
+        case 'end':
+          event.preventDefault();
+          seekToFraction(1);
+          break;
+        case '>':
+          event.preventDefault();
+          adjustPlaybackSpeed(1);
+          break;
+        case '<':
+          event.preventDefault();
+          adjustPlaybackSpeed(-1);
+          break;
         default:
+          if (!event.shiftKey && /^[0-9]$/.test(event.key)) {
+            event.preventDefault();
+            seekToFraction(Number(event.key) / 10);
+          }
           break;
       }
     };
+
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isActive, seekBy, togglePlay, toggleFullscreen, onMuteToggle]);
+  }, [
+    adjustPlaybackSpeed,
+    adjustVolume,
+    isActive,
+    keyboardEnabled,
+    onMuteToggle,
+    onNextVideo,
+    onPreviousVideo,
+    seekBy,
+    seekToFraction,
+    toggleFullscreen,
+    togglePlay,
+  ]);
 
   const handleLike = () => {
     successFeedback();
@@ -363,7 +472,8 @@ function VideoCard({
               event.stopPropagation();
               onMuteToggle();
             }}
-            aria-label={globalMuted ? 'Unmute' : 'Mute'}
+            aria-label={globalMuted ? 'Unmute (M)' : 'Mute (M)'}
+            title={globalMuted ? 'Unmute (M)' : 'Mute (M)'}
             className="flex h-9 w-9 items-center justify-center rounded-full bg-black/48 text-white shadow-lg ring-1 ring-white/12 backdrop-blur-md transition hover:bg-black/65 active:scale-90"
           >
             {globalMuted ? (
@@ -753,11 +863,12 @@ function VideoCard({
               <button
                 onClick={() => setSpeed((s) => (s >= 2 ? 0.5 : Number((s + 0.25).toFixed(2))))}
                 className="rounded-full bg-black/40 px-2.5 py-1 text-[11px] font-semibold tabular-nums ring-1 ring-white/15 backdrop-blur transition hover:bg-black/55 active:scale-95"
-                aria-label="Playback speed"
+                aria-label="Playback speed (< / >)"
+                title="Playback speed (< / >)"
               >
                 {speed}x
               </button>
-              <button onClick={toggleFullscreen} aria-label="Fullscreen" className="flex h-7 w-7 items-center justify-center rounded-full bg-black/35 ring-1 ring-white/10 backdrop-blur transition hover:bg-black/55 active:scale-90">
+              <button onClick={toggleFullscreen} aria-label="Fullscreen (F)" title="Fullscreen (F)" className="flex h-7 w-7 items-center justify-center rounded-full bg-black/35 ring-1 ring-white/10 backdrop-blur transition hover:bg-black/55 active:scale-90">
                 {isFullscreen ? <Minimize2 className="h-4.5 w-4.5" /> : <Maximize2 className="h-4.5 w-4.5" />}
               </button>
             </div>
@@ -936,6 +1047,17 @@ export default function VideosPage() {
   const handleMuteToggle = useCallback(() => {
     setGlobalMuted(prev => !prev);
   }, []);
+
+  const goToVideoIndex = useCallback((index: number) => {
+    if (index < 0 || index >= videos.length) return;
+    const container = containerRef.current;
+    setActiveIndex(index);
+    mediumTap();
+    container?.scrollTo({
+      top: index * (container.clientHeight || 0),
+      behavior: 'smooth',
+    });
+  }, [mediumTap, videos.length]);
 
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
@@ -1165,6 +1287,9 @@ export default function VideosPage() {
                   isMobile={isMobile}
                   globalMuted={globalMuted}
                   onMuteToggle={handleMuteToggle}
+                  keyboardEnabled={!commentsOpen && !shareDialogOpen && !likesDialogOpen && !watchVideoId}
+                  onNextVideo={() => goToVideoIndex(index + 1)}
+                  onPreviousVideo={() => goToVideoIndex(index - 1)}
                 />
               ) : (
                 <VideoPlaceholder video={video} isMobile={isMobile} />
@@ -1186,6 +1311,7 @@ export default function VideosPage() {
           onShare={(item) => openShareDialog(item.id)}
           onComments={(item) => openComments(item.id)}
           onOpenProfile={(item) => openProfile(item)}
+          keyboardEnabled={!commentsOpen && !shareDialogOpen && !likesDialogOpen}
         />
       )}
 
