@@ -81,11 +81,11 @@
     --link-hover: 217 91% 40%;
 
     /* Chat bubble ranglari brand rangidan butunlay mustaqil.
-       Default — Telegram/ChatGPT ruhidagi chuqur professional green:
-       oq matn bilan WCAG AA kontrast saqlanadi va bubble "hira" ko'rinmaydi. */
-    --bubble-own-bg: 152 55% 32%;
-    --bubble-own-fg: 0 0% 100%;
-    --bubble-own-accent: 152 62% 24%;
+       Default outgoing bubble Telegram Desktop'ning och yashil kartasiga yaqin:
+       fon #e2ffc7, matn esa oq emas — neytral to'q rang. */
+    --bubble-own-bg: 91 100% 89%;
+    --bubble-own-fg: 220 20% 12%;
+    --bubble-own-accent: 142 46% 40%;
     --bubble-other-bg: 0 0% 99%;
     --bubble-other-fg: 220 20% 10%;
 
