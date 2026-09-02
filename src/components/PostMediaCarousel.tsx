@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, ZoomIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -9,9 +9,20 @@ import { MediaFrame } from '@/components/media/MediaFrame';
 interface PostMediaCarouselProps {
   mediaUrls: string[];
   mediaType: string;
+  mediaKinds?: Array<'image' | 'video'>;
+  posters?: Array<string | null | undefined>;
+  altTexts?: Array<string | null | undefined>;
+  overlays?: Array<ReactNode>;
 }
 
-export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselProps) {
+export function PostMediaCarousel({
+  mediaUrls,
+  mediaType,
+  mediaKinds,
+  posters,
+  altTexts,
+  overlays,
+}: PostMediaCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [ratios, setRatios] = useState<Record<number, number>>({});
 
@@ -54,7 +65,9 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
 
   const currentMedia = mediaUrls[currentIndex];
 
-  const isCurrentVideo = isVideo(currentMedia);
+  const isCurrentVideo =
+    mediaKinds?.[currentIndex] === 'video' ||
+    (mediaKinds?.[currentIndex] !== 'image' && isVideo(currentMedia));
 
   // Transform style for zoomed content (images only)
   const zoomTransformStyle = {
@@ -82,6 +95,7 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
           <VideoPlayer
             key={currentMedia}
             src={currentMedia}
+            poster={posters?.[currentIndex] ?? undefined}
             aspectMode="auto"
             muted={true}
             autoPlay={false}
@@ -97,7 +111,7 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
             <img
               key={currentMedia}
               src={currentMedia}
-              alt={`Post media ${currentIndex + 1}`}
+              alt={altTexts?.[currentIndex] || `Post media ${currentIndex + 1}`}
               className="w-full h-full object-contain will-change-transform"
               style={zoomTransformStyle}
               loading="lazy"
@@ -122,6 +136,8 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
             )}
           </>
         )}
+
+        {overlays?.[currentIndex]}
 
         {/* Navigation Arrows - Only show if multiple media and not zoomed */}
         {mediaUrls.length > 1 && !isZoomed && (
@@ -183,8 +199,8 @@ export function PostMediaCarousel({ mediaUrls, mediaType }: PostMediaCarouselPro
               }}
               className={cn(
                 "h-1.5 rounded-full transition-all duration-300",
-                index === currentIndex 
-                  ? "w-5 bg-gradient-to-r from-alsamos-orange-light to-alsamos-orange-dark" 
+                index === currentIndex
+                  ? "w-5 bg-foreground/80"
                   : "w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/50"
               )}
             />
