@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useComments, type Comment } from '@/hooks/useComments';
 import { useAutocompleteInput } from '@/hooks/useAutocompleteInput';
@@ -50,6 +51,12 @@ function serializeCommentContent(text: string, media: SelectedMedia): string {
 
 function commentDisplayName(comment: Comment): string {
   return comment.profile?.display_name || comment.profile?.username || 'User';
+}
+
+function commentProfilePath(comment: Comment, currentUserId?: string): string {
+  if (currentUserId && comment.user_id === currentUserId) return '/profile';
+  const identity = comment.profile?.username || comment.user_id;
+  return '/user/' + encodeURIComponent(identity);
 }
 
 function CommentAttachmentPreview({
@@ -351,19 +358,41 @@ export function CommentsSection({
         )}
       >
         <div className="flex gap-3 py-3">
-          <Avatar className="h-8 w-8 shrink-0 ring-1 ring-border/80">
-            <AvatarImage src={comment.profile?.avatar_url || ''} />
-            <AvatarFallback className="bg-muted text-xs">
-              {commentDisplayName(comment).charAt(0).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
+          <Link
+            to={commentProfilePath(comment, user?.id)}
+            onClick={(event) => event.stopPropagation()}
+            className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+            aria-label={commentDisplayName(comment) + ' profilini ochish'}
+          >
+            <Avatar className="h-8 w-8 ring-1 ring-border/80 transition-opacity hover:opacity-90">
+              <AvatarImage src={comment.profile?.avatar_url || ''} />
+              <AvatarFallback className="bg-muted text-xs">
+                {commentDisplayName(comment).charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+          </Link>
 
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-sm font-semibold">
-                {commentDisplayName(comment)}
-              </span>
-              {comment.profile?.is_verified && <VerifiedBadge size="xs" />}
+            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+              <Link
+                to={commentProfilePath(comment, user?.id)}
+                onClick={(event) => event.stopPropagation()}
+                className="inline-flex min-w-0 items-center gap-1 text-sm font-semibold text-foreground transition hover:underline"
+              >
+                <span className="truncate">{commentDisplayName(comment)}</span>
+                {comment.profile?.is_verified && <VerifiedBadge size="xs" />}
+              </Link>
+
+              {comment.profile?.username && (
+                <Link
+                  to={commentProfilePath(comment, user?.id)}
+                  onClick={(event) => event.stopPropagation()}
+                  className="max-w-[180px] truncate text-xs text-muted-foreground transition hover:text-foreground hover:underline"
+                >
+                  @{comment.profile.username}
+                </Link>
+              )}
+
               <span className="text-xs text-muted-foreground">
                 {formatDistanceToNow(new Date(comment.created_at), {
                   addSuffix: true,
