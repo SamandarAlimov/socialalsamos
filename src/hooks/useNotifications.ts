@@ -153,14 +153,45 @@ async function enrichNotifications(rows: RawNotificationRow[]): Promise<Notifica
     ]),
   );
 
-  return normalized.map(({ row, data, actorId, postId, commentId }) => ({
-    ...row,
-    data,
-    type: row.type as NotificationType,
-    actor: actorId ? profileMap.get(actorId) : undefined,
-    post: postId ? postMap.get(postId) : undefined,
-    comment: commentId ? commentMap.get(commentId) : undefined,
-  }));
+  // Post lookup muvaffaqiyatli bo'lsa, mavjud bo'lmagan postga tegishli
+  // notificationni umuman UI'ga bermaymiz. Lookupning o'zi xato qilsa esa
+  // vaqtinchalik tarmoq/RLS muammosi sabab notificationni yashirmaymiz.
+  return normalized
+    .filter(({ postId }) => !postId || Boolean(postsResult.error) || postMap.has(postId))
+    .map(({ row, data, actorId, postId, commentId }) => ({
+      ...row,
+      data,
+      type: row.type as NotificationType,
+      actor: actorId ? profileMap.get(actorId) : undefined,
+      post: postId ? postMap.get(postId) : undefined,
+      comment: commentId ? commentMap.get(commentId) : undefined,
+    }));
+}
+
+function stalePostNotificationIds(
+  rows: RawNotificationRow[],
+  enriched: Notification[],
+): string[] {
+  const visibleIds = new Set(enriched.map((item) => item.id));
+  return rows
+    .filter((row) => {
+      const data = (row.data ?? {}) as Record<string, unknown>;
+      return Boolean(resolvePostId(data)) && !visibleIds.has(row.id);
+    })
+    .map((row) => row.id);
+}
+
+async function cleanupStaleNotifications(userId: string, ids: string[]) {
+  if (ids.length === 0) return;
+  const { error } = await supabase
+    .from('notifications')
+    .delete()
+    .eq('user_id', userId)
+    .in('id', ids);
+
+  if (error) {
+    console.warn('O‘chirilgan post bildirishnomalarini tozalab bo‘lmadi:', error);
+  }
 }
 
 function dedupe(items: Notification[]): Notification[] {
@@ -186,15 +217,50 @@ export function useNotifications() {
   const loadedCountRef = useRef(0);
 
   const refreshUnreadCount = useCallback(async (userId: string) => {
-    const { count, error: countError } = await supabase
+    const { data, error: unreadError } = await supabase
       .from('notifications')
-      .select('id', { count: 'exact', head: true })
+      .select('id, data')
       .eq('user_id', userId)
       .eq('is_read', false);
 
-    if (!countError && typeof count === 'number') {
-      setUnreadCount(count);
+    if (unreadError) return;
+
+    const rows = (data || []) as Array<{ id: string; data: unknown }>;
+    const postIds = Array.from(
+      new Set(
+        rows
+          .map((row) => resolvePostId((row.data ?? {}) as Record<string, unknown>))
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+
+    if (postIds.length === 0) {
+      setUnreadCount(rows.length);
+      return;
     }
+
+    const { data: existingPosts, error: postsError } = await supabase
+      .from('posts')
+      .select('id')
+      .in('id', postIds);
+
+    if (postsError) {
+      setUnreadCount(rows.length);
+      return;
+    }
+
+    const existingIds = new Set((existingPosts || []).map((post) => post.id));
+    const staleIds: string[] = [];
+    let validUnread = 0;
+
+    rows.forEach((row) => {
+      const postId = resolvePostId((row.data ?? {}) as Record<string, unknown>);
+      if (!postId || existingIds.has(postId)) validUnread += 1;
+      else staleIds.push(row.id);
+    });
+
+    setUnreadCount(validUnread);
+    if (staleIds.length > 0) void cleanupStaleNotifications(userId, staleIds);
   }, []);
 
   const fetchNotifications = useCallback(async () => {
@@ -230,9 +296,11 @@ export function useNotifications() {
 
       const rows = (data || []) as RawNotificationRow[];
       const enriched = dedupe(await enrichNotifications(rows));
+      const staleIds = stalePostNotificationIds(rows, enriched);
 
       if (requestId !== requestIdRef.current) return;
 
+      if (staleIds.length > 0) void cleanupStaleNotifications(user.id, staleIds);
       loadedCountRef.current = enriched.length;
       setNotifications(enriched);
       setHasMore(rows.length === limit);
@@ -270,6 +338,8 @@ export function useNotifications() {
 
       const rows = (data || []) as RawNotificationRow[];
       const enriched = await enrichNotifications(rows);
+      const staleIds = stalePostNotificationIds(rows, enriched);
+      if (staleIds.length > 0) void cleanupStaleNotifications(user.id, staleIds);
 
       setNotifications((prev) => {
         const merged = dedupe([...prev, ...enriched]);

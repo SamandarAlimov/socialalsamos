@@ -40,6 +40,8 @@ export function AppLayout() {
   }, []);
 
   const isMapPage = location.pathname === '/map';
+  const hasPostPreview =
+    location.pathname === '/home' && new URLSearchParams(location.search).has('post');
   const isCreatePage = location.pathname === '/create';
   // AI sahifasi ham to'liq ekranli: o'zining header va composer'i bor,
   // shuning uchun layout padding qo'shmaydi (aks holda tagida oq joy qoladi).
@@ -78,7 +80,7 @@ export function AppLayout() {
         50% qismini yopib qo'ya olmaydi. left qiymati dividerning o'zi, translate
         esa tugmani aynan 50% sidebar / 50% page qilib markazlaydi.
       */}
-      <button
+      {!hasPostPreview && <button
         type="button"
         aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         onClick={() => setSidebarCollapsed((current) => !current)}
@@ -92,7 +94,7 @@ export function AppLayout() {
         ) : (
           <ChevronLeft className="h-4 w-4 text-muted-foreground" />
         )}
-      </button>
+      </button>}
 
       {!hideHeaderOnPages && <MobileHeader />}
 

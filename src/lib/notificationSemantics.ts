@@ -126,7 +126,10 @@ export function notificationNeedsExplicitRead(notification: Notification): boole
   );
 }
 
-export function notificationTarget(notification: Notification): string | null {
+export function notificationTarget(
+  notification: Notification,
+  returnTo?: string | null,
+): string | null {
   const postId = notificationPostId(notification);
   const commentId = notificationCommentId(notification);
 
@@ -143,6 +146,7 @@ export function notificationTarget(notification: Notification): string | null {
   if (postId) {
     const params = new URLSearchParams({ post: postId });
     if (commentId) params.set('comment', commentId);
+    if (returnTo && returnTo.startsWith('/')) params.set('returnTo', returnTo);
     return '/home?' + params.toString();
   }
 

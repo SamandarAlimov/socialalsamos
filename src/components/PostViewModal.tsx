@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import {
+  ArrowLeft,
   Heart,
   MessageCircle,
   Share2,
@@ -68,6 +69,7 @@ interface PostViewModalProps {
   onLike: () => void;
   isOwnProfile?: boolean;
   focusCommentId?: string | null;
+  onBack?: () => void;
 }
 
 export function PostViewModal({
@@ -78,6 +80,7 @@ export function PostViewModal({
   onLike,
   isOwnProfile = false,
   focusCommentId = null,
+  onBack,
 }: PostViewModalProps) {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -205,8 +208,22 @@ export function PostViewModal({
                   />
                 </div>
 
+                {onBack && (
+                  <button
+                    type="button"
+                    onClick={onBack}
+                    aria-label={t('common.back', { defaultValue: 'Orqaga' })}
+                    className="absolute left-3 top-3 z-30 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur transition hover:bg-black/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                  >
+                    <ArrowLeft className="h-5 w-5" />
+                  </button>
+                )}
+
                 {post.is_pinned && (
-                  <span className="absolute left-3 top-3 flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white backdrop-blur">
+                  <span className={cn(
+                    'absolute top-3 flex items-center gap-1 rounded-full bg-black/60',
+                    onBack ? 'left-14' : 'left-3',
+                  )} px-2.5 py-1 text-xs font-medium text-white backdrop-blur">
                     <Pin className="h-3 w-3" />
                     {t('post.pinned', { defaultValue: 'Mahkamlangan' })}
                   </span>
@@ -271,7 +288,17 @@ export function PostViewModal({
               )}
             >
               <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
-                <div className="flex min-w-0 items-center gap-3">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  {onBack && (
+                    <button
+                      type="button"
+                      onClick={onBack}
+                      aria-label={t('common.back', { defaultValue: 'Orqaga' })}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                    >
+                      <ArrowLeft className="h-5 w-5" />
+                    </button>
+                  )}
                   <Avatar className="h-10 w-10 ring-2 ring-primary/25">
                     <AvatarImage src={profile.avatar_url || ''} />
                     <AvatarFallback>{profile.username?.[0]?.toUpperCase() || 'U'}</AvatarFallback>

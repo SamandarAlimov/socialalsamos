@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   differenceInMinutes,
   isThisMonth,
@@ -303,12 +303,16 @@ function GroupedNotificationItem({
   onMarkAsRead,
   onDelete,
   onRespondCollaboration,
+  onBeforeOpen,
+  returnTo,
   index,
 }: {
   group: GroupedNotification;
   onMarkAsRead: (id: string) => void | Promise<void>;
   onDelete: (id: string) => Promise<void> | void;
   onRespondCollaboration: (collaborationId: string, accept: boolean) => Promise<void>;
+  onBeforeOpen: () => void;
+  returnTo: string;
   index: number;
 }) {
   const navigate = useNavigate();
@@ -373,7 +377,7 @@ function GroupedNotificationItem({
     return formatDate(date, 'd MMM', i18n.language);
   };
 
-  const target = notificationTarget(firstNotification);
+  const target = notificationTarget(firstNotification, returnTo);
   const preview = notificationPreviewText(firstNotification);
   const contextLabel = notificationContextLabel(firstNotification);
   const actorName = firstActor?.displayName || firstActor?.username || 'Foydalanuvchi';
@@ -382,7 +386,10 @@ function GroupedNotificationItem({
 
   const openTarget = () => {
     markGroupRead();
-    if (target) navigate(target);
+    if (target) {
+      onBeforeOpen();
+      navigate(target);
+    }
   };
 
   const handleActorClick = (event: React.MouseEvent) => {
@@ -395,7 +402,10 @@ function GroupedNotificationItem({
   const handlePostClick = (event: React.MouseEvent) => {
     event.stopPropagation();
     markGroupRead();
-    if (target) navigate(target);
+    if (target) {
+      onBeforeOpen();
+      navigate(target);
+    }
   };
 
   const handleDelete = async (event: React.MouseEvent) => {
@@ -611,6 +621,8 @@ function NotificationGroup({
   onMarkAsRead,
   onDelete,
   onRespondCollaboration,
+  onBeforeOpen,
+  returnTo,
   startIndex,
 }: {
   title: string;
@@ -618,6 +630,8 @@ function NotificationGroup({
   onMarkAsRead: (id: string) => void | Promise<void>;
   onDelete: (id: string) => Promise<void> | void;
   onRespondCollaboration: (collaborationId: string, accept: boolean) => Promise<void>;
+  onBeforeOpen: () => void;
+  returnTo: string;
   startIndex: number;
 }) {
   if (!groups.length) return null;
@@ -638,6 +652,8 @@ function NotificationGroup({
             onMarkAsRead={onMarkAsRead}
             onDelete={onDelete}
             onRespondCollaboration={onRespondCollaboration}
+            onBeforeOpen={onBeforeOpen}
+            returnTo={returnTo}
             index={startIndex + index}
           />
         ))}
@@ -700,6 +716,10 @@ function PushNotificationBanner() {
 export default function NotificationsPage() {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const scrollRootRef = useRef<HTMLDivElement>(null);
+  const restoredScrollRef = useRef(false);
   const {
     notifications,
     unreadCount,
@@ -715,8 +735,64 @@ export default function NotificationsPage() {
     refetch,
   } = useNotifications();
 
-  const [filter, setFilter] = useState<NotificationFilter>('all');
+  const requestedFilter = searchParams.get('filter') as NotificationFilter | null;
+  const initialFilter = FILTERS.some((item) => item.id === requestedFilter)
+    ? (requestedFilter as NotificationFilter)
+    : 'all';
+  const [filter, setFilterState] = useState<NotificationFilter>(initialFilter);
   const [markingAll, setMarkingAll] = useState(false);
+
+  const setFilter = useCallback((next: NotificationFilter) => {
+    setFilterState(next);
+    const params = new URLSearchParams(searchParams);
+    if (next === 'all') params.delete('filter');
+    else params.set('filter', next);
+    setSearchParams(params, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  const returnTo = location.pathname + location.search;
+
+  const captureReturnState = useCallback(() => {
+    const viewport = scrollRootRef.current?.querySelector<HTMLElement>(
+      '[data-radix-scroll-area-viewport]',
+    );
+    sessionStorage.setItem(
+      'alsamos.notifications.returnState',
+      JSON.stringify({
+        scrollTop: viewport?.scrollTop ?? 0,
+        filter,
+      }),
+    );
+  }, [filter]);
+
+  useEffect(() => {
+    if (loading || restoredScrollRef.current) return;
+    restoredScrollRef.current = true;
+
+    try {
+      const raw = sessionStorage.getItem('alsamos.notifications.returnState');
+      if (!raw) return;
+      sessionStorage.removeItem('alsamos.notifications.returnState');
+
+      const saved = JSON.parse(raw) as { scrollTop?: number; filter?: NotificationFilter };
+      if (saved.filter && FILTERS.some((item) => item.id === saved.filter) && saved.filter !== filter) {
+        setFilter(saved.filter);
+      }
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const viewport = scrollRootRef.current?.querySelector<HTMLElement>(
+            '[data-radix-scroll-area-viewport]',
+          );
+          if (viewport && typeof saved.scrollTop === 'number') {
+            viewport.scrollTop = saved.scrollTop;
+          }
+        });
+      });
+    } catch {
+      sessionStorage.removeItem('alsamos.notifications.returnState');
+    }
+  }, [filter, loading, setFilter]);
 
   const filteredNotifications = useMemo(() => {
     if (filter === 'all') return notifications;
@@ -815,9 +891,6 @@ export default function NotificationsPage() {
                   </Badge>
                 )}
               </div>
-              <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
-                Sizga tegishli faollik, eslatish va hammualliflik voqealari.
-              </p>
             </div>
 
             <div className="flex items-center gap-1">
@@ -871,7 +944,7 @@ export default function NotificationsPage() {
         </div>
       </header>
 
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollArea ref={scrollRootRef} className="min-h-0 flex-1">
         <div className="mx-auto grid w-full max-w-6xl gap-5 px-4 py-5 md:px-6 xl:grid-cols-[minmax(0,1fr)_280px]">
           <main className="min-w-0">
             <PushNotificationBanner />
@@ -919,11 +992,11 @@ export default function NotificationsPage() {
                   </div>
                 )}
 
-                <NotificationGroup title="Bugun" groups={groupedNotifications.today} onMarkAsRead={markAsRead} onDelete={deleteNotification} onRespondCollaboration={respondToCollaboration} startIndex={takeIndex(groupedNotifications.today)} />
-                <NotificationGroup title="Kecha" groups={groupedNotifications.yesterday} onMarkAsRead={markAsRead} onDelete={deleteNotification} onRespondCollaboration={respondToCollaboration} startIndex={takeIndex(groupedNotifications.yesterday)} />
-                <NotificationGroup title="Shu hafta" groups={groupedNotifications.thisWeek} onMarkAsRead={markAsRead} onDelete={deleteNotification} onRespondCollaboration={respondToCollaboration} startIndex={takeIndex(groupedNotifications.thisWeek)} />
-                <NotificationGroup title="Shu oy" groups={groupedNotifications.thisMonth} onMarkAsRead={markAsRead} onDelete={deleteNotification} onRespondCollaboration={respondToCollaboration} startIndex={takeIndex(groupedNotifications.thisMonth)} />
-                <NotificationGroup title="Avvalroq" groups={groupedNotifications.older} onMarkAsRead={markAsRead} onDelete={deleteNotification} onRespondCollaboration={respondToCollaboration} startIndex={takeIndex(groupedNotifications.older)} />
+                <NotificationGroup title="Bugun" groups={groupedNotifications.today} onMarkAsRead={markAsRead} onDelete={deleteNotification} onRespondCollaboration={respondToCollaboration} onBeforeOpen={captureReturnState} returnTo={returnTo} startIndex={takeIndex(groupedNotifications.today)} />
+                <NotificationGroup title="Kecha" groups={groupedNotifications.yesterday} onMarkAsRead={markAsRead} onDelete={deleteNotification} onRespondCollaboration={respondToCollaboration} onBeforeOpen={captureReturnState} returnTo={returnTo} startIndex={takeIndex(groupedNotifications.yesterday)} />
+                <NotificationGroup title="Shu hafta" groups={groupedNotifications.thisWeek} onMarkAsRead={markAsRead} onDelete={deleteNotification} onRespondCollaboration={respondToCollaboration} onBeforeOpen={captureReturnState} returnTo={returnTo} startIndex={takeIndex(groupedNotifications.thisWeek)} />
+                <NotificationGroup title="Shu oy" groups={groupedNotifications.thisMonth} onMarkAsRead={markAsRead} onDelete={deleteNotification} onRespondCollaboration={respondToCollaboration} onBeforeOpen={captureReturnState} returnTo={returnTo} startIndex={takeIndex(groupedNotifications.thisMonth)} />
+                <NotificationGroup title="Avvalroq" groups={groupedNotifications.older} onMarkAsRead={markAsRead} onDelete={deleteNotification} onRespondCollaboration={respondToCollaboration} onBeforeOpen={captureReturnState} returnTo={returnTo} startIndex={takeIndex(groupedNotifications.older)} />
 
                 {hasMore && (
                   <div className="flex justify-center pb-8 pt-2">

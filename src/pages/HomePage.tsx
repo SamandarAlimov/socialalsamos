@@ -134,9 +134,18 @@ export default function HomePage() {
     }
   }, [searchParams]);
 
+  const returnTo = searchParams.get('returnTo');
+  const safeReturnTo = returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//')
+    ? returnTo
+    : null;
+
   const closePostModal = () => {
     setSelectedPostForModal(null);
-    setSearchParams({});
+    if (safeReturnTo) {
+      navigate(safeReturnTo);
+    } else {
+      setSearchParams({});
+    }
   };
 
   // Infinite scroll
@@ -224,6 +233,7 @@ export default function HomePage() {
           onOpenChange={(open) => !open && closePostModal()}
           onLike={() => likePost(selectedPostForModal.id)}
           focusCommentId={searchParams.get('comment')}
+          onBack={safeReturnTo ? closePostModal : undefined}
         />
       )}
 
