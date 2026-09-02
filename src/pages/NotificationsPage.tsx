@@ -190,7 +190,7 @@ function PostThumbnail({
     <PostMediaThumbnail
       url={url}
       mediaType={mediaType}
-      onClick={() => onClick({ stopPropagation() {} } as React.MouseEvent)}
+      onClick={onClick}
       className="h-16 w-16 rounded-2xl"
       ariaLabel="Postni ochish"
     />
