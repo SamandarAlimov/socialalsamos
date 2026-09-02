@@ -125,7 +125,7 @@ const LAST_MESSAGE_SCAN_LIMIT = 400;
 /** O'qilmagan xabarlarni bitta so'rovda hisoblash chegarasi */
 const UNREAD_SCAN_LIMIT = 1000;
 /** Realtime hodisalar ketma-ket kelganda ro'yxatni bir marta yangilash */
-const LIST_REFRESH_DEBOUNCE = 500;
+const LIST_REFRESH_DEBOUNCE = 180;
 
 export function useConversations(
   type?: 'private' | 'group' | 'channel',
@@ -381,13 +381,21 @@ export function useConversations(
     }
   }, [user, type, showArchived, toast]);
 
-  /** Realtime hodisalar to'planganda ro'yxatni bir marta yangilash */
+  /** Realtime hodisalar to'planganda ro'yxatni bir marta yangilash.
+   * Agar oldingi fetch hali tugamagan bo'lsa hodisani yo'qotmaymiz — navbatga qo'yamiz. */
   const scheduleRefresh = useCallback(() => {
     if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
-    refreshTimerRef.current = window.setTimeout(() => {
+
+    const runRefresh = () => {
+      if (inFlightRef.current) {
+        refreshTimerRef.current = window.setTimeout(runRefresh, LIST_REFRESH_DEBOUNCE);
+        return;
+      }
       refreshTimerRef.current = null;
       void fetchConversations();
-    }, LIST_REFRESH_DEBOUNCE);
+    };
+
+    refreshTimerRef.current = window.setTimeout(runRefresh, LIST_REFRESH_DEBOUNCE);
   }, [fetchConversations]);
 
   const createPrivateConversation = useCallback(
@@ -599,7 +607,66 @@ export function useConversations(
       .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => {
         scheduleRefresh();
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+        const row = payload.new as {
+          id?: string;
+          conversation_id?: string;
+          content?: string | null;
+          media_type?: string | null;
+          media_url?: string | null;
+          media_file_name?: string | null;
+          metadata?: Record<string, unknown> | null;
+          sender_id?: string | null;
+          created_at?: string;
+        };
+
+        // Chat-list preview server round-tripini kutmaydi: yangi xabar kelishi bilan
+        // shu conversation darhol yangilanadi, keyin background refresh ma'lumotni
+        // authoritative holat bilan tekislaydi.
+        if (row.conversation_id) {
+          const createdAt = row.created_at || new Date().toISOString();
+          setConversations((previous) => {
+            let changed = false;
+            const next = previous.map((conversation) => {
+              if (conversation.id !== row.conversation_id) return conversation;
+              changed = true;
+              return {
+                ...conversation,
+                last_message: row.content ?? null,
+                last_message_at: createdAt,
+                last_message_meta: {
+                  id: row.id ?? null,
+                  content: row.content ?? null,
+                  media_type: row.media_type ?? null,
+                  media_url: row.media_url ?? null,
+                  media_file_name: row.media_file_name ?? null,
+                  metadata: row.metadata ?? null,
+                  sender_id: row.sender_id ?? null,
+                  is_read: false,
+                },
+                unread_count:
+                  row.sender_id && row.sender_id !== user.id
+                    ? (conversation.unread_count ?? 0) + 1
+                    : conversation.unread_count,
+              };
+            });
+
+            if (!changed) return previous;
+
+            return next.sort((a, b) => {
+              if (a.is_pinned && !b.is_pinned) return -1;
+              if (!a.is_pinned && b.is_pinned) return 1;
+
+              const aUnread = (a.unread_count ?? 0) > 0;
+              const bUnread = (b.unread_count ?? 0) > 0;
+              if (aUnread && !bUnread) return -1;
+              if (!aUnread && bUnread) return 1;
+
+              return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime();
+            });
+          });
+        }
+
         scheduleRefresh();
       })
       .on(
