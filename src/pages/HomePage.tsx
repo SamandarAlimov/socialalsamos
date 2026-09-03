@@ -37,6 +37,7 @@ import { useActiveAds } from '@/hooks/useAds';
 import { FeedAd } from '@/components/ads/FeedAd';
 import { PostViewsDialog } from '@/components/PostViewsDialog';
 import { usePostViews } from '@/hooks/usePostViews';
+import { useHomeRecommendations } from '@/hooks/useHomeRecommendations';
 import { parseLocationFromContent, parseMusicFromContent, resolvePostMusic } from '@/lib/postMarkers';
 
 /**
@@ -72,8 +73,15 @@ export default function HomePage() {
     loadMore, 
     createPost, 
     likePost,
+    toggleBookmark,
+    hidePost,
     refresh: refreshPosts
-  } = usePosts('global');
+  } = usePosts('recommended');
+
+  const {
+    rankedPosts,
+    refreshProfile: refreshRecommendationProfile,
+  } = useHomeRecommendations(posts);
 
   const { storyGroups, isLoading: storiesLoading, refresh: refreshStories } = useStories();
   const { markAsViewed, hasViewedAll, hasUnviewed } = useStoryViews();
@@ -83,7 +91,10 @@ export default function HomePage() {
   const { ads: feedAds, trackImpression, trackClick } = useActiveAds('feed', 2);
 
   // Get post IDs for real-time counts
-  const postIds = useMemo(() => posts.map(p => p.id), [posts]);
+  const postIds = useMemo(
+    () => rankedPosts.map((post) => post.id),
+    [rankedPosts],
+  );
   const { getPostCounts } = useRealtimePostCounts(postIds, user?.id || null);
 
   // Request notification permission on first load
@@ -198,7 +209,11 @@ export default function HomePage() {
   }, [storyGroups, user?.id]);
 
   const handleRefresh = async () => {
-    await Promise.all([refreshPosts(), refreshStories()]);
+    await Promise.all([
+      refreshPosts(),
+      refreshStories(),
+      refreshRecommendationProfile(),
+    ]);
   };
 
   const pageContent = (
@@ -343,7 +358,7 @@ export default function HomePage() {
 
       {/* Feed */}
       <div className="space-y-4 md:space-y-6">
-        {posts.map((post, index) => (
+        {rankedPosts.map((post, index) => (
           <div key={post.id}>
             <PostCard 
               post={post as FeedPost} 
@@ -352,6 +367,8 @@ export default function HomePage() {
               isMobile={isMobile}
               realtimeCounts={getPostCounts(post.id)}
               onDelete={refreshPosts}
+              onBookmark={() => toggleBookmark(post.id)}
+              onHide={() => hidePost(post.id)}
               isOwner={post.user_id === user?.id}
             />
             
@@ -375,7 +392,7 @@ export default function HomePage() {
               <Loader2 className="h-6 w-6 md:h-8 md:w-8 animate-spin text-muted-foreground" />
             </div>
           )}
-          {!hasMore && posts.length > 0 && (
+          {!hasMore && rankedPosts.length > 0 && (
             <p className="text-center text-muted-foreground text-xs md:text-sm">
               You've reached the end of the feed
             </p>
@@ -412,6 +429,8 @@ function PostCard({
   isMobile,
   realtimeCounts,
   onDelete,
+  onBookmark,
+  onHide,
   isOwner
 }: { 
   post: FeedPost; 
@@ -420,18 +439,55 @@ function PostCard({
   isMobile: boolean;
   realtimeCounts: RealtimePostCounts;
   onDelete?: () => void;
+  onBookmark?: () => void | Promise<void>;
+  onHide?: () => void | Promise<void>;
   isOwner?: boolean;
 }) {
   const navigate = useNavigate();
-  const [isBookmarked, setIsBookmarked] = useState(false);
+  const articleRef = useRef<HTMLElement | null>(null);
   const [showComments, setShowComments] = useState(false);
   const [showLikesDialog, setShowLikesDialog] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
   const { recordView } = usePostViews();
 
-  // Record view when post appears
+  // Recommendation quality depends on true impressions. A mounted card is not
+  // automatically a view: it must be at least 55% visible for 900ms.
   useEffect(() => {
-    recordView(post.id);
+    const node = articleRef.current;
+    if (!node) return;
+
+    let dwellTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearDwell = () => {
+      if (dwellTimer) clearTimeout(dwellTimer);
+      dwellTimer = null;
+    };
+
+    if (typeof IntersectionObserver === 'undefined') {
+      dwellTimer = setTimeout(() => void recordView(post.id), 900);
+      return clearDwell;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.55) {
+          if (!dwellTimer) {
+            dwellTimer = setTimeout(() => {
+              dwellTimer = null;
+              void recordView(post.id);
+            }, 900);
+          }
+        } else {
+          clearDwell();
+        }
+      },
+      { threshold: [0, 0.55, 0.8] },
+    );
+
+    observer.observe(node);
+    return () => {
+      clearDwell();
+      observer.disconnect();
+    };
   }, [post.id, recordView]);
 
   // Use real-time counts
@@ -479,7 +535,10 @@ function PostCard({
   };
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-border/70 bg-card/95 shadow-sm transition-[box-shadow,border-color] duration-200 hover:border-border hover:shadow-md md:rounded-3xl animate-fade-in">
+    <article
+      ref={articleRef}
+      className="overflow-hidden rounded-2xl border border-border/70 bg-card/95 shadow-sm transition-[box-shadow,border-color] duration-200 hover:border-border hover:shadow-md md:rounded-3xl animate-fade-in"
+    >
       {/* Post Header */}
       <div className="flex items-center justify-between p-4 md:p-5">
         <div className="flex min-w-0 items-center gap-2.5 md:gap-3">
@@ -523,7 +582,11 @@ function PostCard({
         <PostActionsMenu
           postId={post.id}
           postUserId={post.user_id}
+          postContent={post.content ?? undefined}
           isPinned={post.is_pinned}
+          isBookmarked={Boolean(post.is_bookmarked)}
+          onToggleBookmark={onBookmark}
+          onHide={onHide}
           onDelete={onDelete}
         />
       </div>
@@ -627,14 +690,16 @@ function PostCard({
             iconClassName="h-5 w-5 md:h-5 md:w-5"
             textClassName="text-xs md:text-sm"
           />
-          <button 
-            onClick={() => setIsBookmarked(!isBookmarked)}
+          <button
+            onClick={() => void onBookmark?.()}
+            aria-pressed={Boolean(post.is_bookmarked)}
+            aria-label={post.is_bookmarked ? 'Saqlanganlardan olib tashlash' : 'Postni saqlash'}
             className={cn(
               "transition-colors touch-feedback",
-              isBookmarked ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+              post.is_bookmarked ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
             )}
           >
-            <Bookmark className={cn("h-5 w-5 md:h-5 md:w-5", isBookmarked && 'fill-current')} />
+            <Bookmark className={cn("h-5 w-5 md:h-5 md:w-5", post.is_bookmarked && 'fill-current')} />
           </button>
         </div>
       </div>

@@ -51,6 +51,8 @@ export interface Post {
   };
   is_liked?: boolean;
   is_bookmarked?: boolean;
+  hashtags?: string[] | null;
+  post_kind?: string | null;
 }
 
 export type PostVisibility = 'public' | 'friends' | 'private';
@@ -153,14 +155,17 @@ export interface CreatePostOptions {
   editState?: Record<string, unknown> | null;
 }
 
-export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') {
+export function usePosts(
+  filter: 'global' | 'friends' | 'following' | 'recommended' = 'global',
+) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
   const { user } = useAuth();
   const { toast } = useToast();
-  const PAGE_SIZE = 10;
+  const PAGE_SIZE = filter === 'recommended' ? 18 : 10;
+  const QUALITY_POOL_SIZE = filter === 'recommended' ? 12 : 0;
 
   const fetchPosts = useCallback(async (pageNum: number, refresh = false) => {
     setIsLoading(true);
@@ -219,35 +224,83 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
         return;
       }
 
-      // post_kind is intentionally not used as a REST filter here. Production
-      // can temporarily run an older posts schema while migrations catch up;
-      // selecting "*" works on both schemas and stories are filtered client-side.
-      const { data, error } = await runWithProfileEmbedFallback<PostRow>(
-        postEmbedGuard,
-        (select) => {
-          let query = db
-            .from('posts')
-            .select(select)
-            .order('created_at', { ascending: false })
-            .range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1);
+      // Home recommendation uses retrieval + ranking. Retrieval intentionally
+      // mixes a fresh pool with a quality pool; personalization happens in
+      // useHomeRecommendations after candidates are hydrated.
+      const fetchPool = (
+        mode: 'fresh' | 'quality',
+        start: number,
+        end: number,
+      ) =>
+        runWithProfileEmbedFallback<PostRow>(
+          postEmbedGuard,
+          (select) => {
+            let query = db.from('posts').select(select);
 
-          query = Array.isArray(visibility)
-            ? query.in('visibility', visibility)
-            : query.eq('visibility', visibility);
+            if (mode === 'quality') {
+              const cutoff = new Date(
+                Date.now() - 30 * 24 * 60 * 60 * 1000,
+              ).toISOString();
+              query = query
+                .gte('created_at', cutoff)
+                .order('likes_count', { ascending: false })
+                .order('comments_count', { ascending: false })
+                .order('created_at', { ascending: false });
+            } else {
+              query = query.order('created_at', { ascending: false });
+            }
 
-          if (allowedUserIds) query = query.in('user_id', allowedUserIds);
+            query = query.range(start, end);
+            query = Array.isArray(visibility)
+              ? query.in('visibility', visibility)
+              : query.eq('visibility', visibility);
 
-          return query as unknown as PromiseLike<EmbedQueryResult<PostRow>>;
-        },
-        {
-          embedSelect: POST_SELECT_WITH_PROFILE,
-          plainSelect: POST_SELECT_PLAIN,
-        },
+            if (allowedUserIds) query = query.in('user_id', allowedUserIds);
+
+            return query as unknown as PromiseLike<EmbedQueryResult<PostRow>>;
+          },
+          {
+            embedSelect: POST_SELECT_WITH_PROFILE,
+            plainSelect: POST_SELECT_PLAIN,
+          },
+        );
+
+      const freshResult = await fetchPool(
+        'fresh',
+        pageNum * PAGE_SIZE,
+        (pageNum + 1) * PAGE_SIZE - 1,
       );
 
-      if (error) throw error;
+      if (freshResult.error) throw freshResult.error;
 
-      const rawPosts = (data ?? []) as unknown as Array<Post & { post_kind?: string | null }>;
+      const freshRows = (freshResult.data ?? []) as PostRow[];
+      let candidateRows = [...freshRows];
+
+      if (filter === 'recommended' && QUALITY_POOL_SIZE > 0) {
+        const qualityResult = await fetchPool(
+          'quality',
+          pageNum * QUALITY_POOL_SIZE,
+          (pageNum + 1) * QUALITY_POOL_SIZE - 1,
+        );
+
+        if (qualityResult.error) {
+          console.warn(
+            'Recommendation quality pool unavailable; fresh pool ishlatiladi:',
+            qualityResult.error,
+          );
+        } else {
+          const merged = new Map<string, PostRow>();
+          for (const row of [...freshRows, ...(qualityResult.data ?? [])]) {
+            const id = String((row as Record<string, unknown>).id ?? '');
+            if (id && !merged.has(id)) merged.set(id, row);
+          }
+          candidateRows = Array.from(merged.values());
+        }
+      }
+
+      const rawPosts = candidateRows as unknown as Array<
+        Post & { post_kind?: string | null }
+      >;
 
       // select("*") da post_kind ustuni production schema'da mavjud bo'lsa
       // har bir row obyektida key sifatida keladi. U yo'q bo'lsa atomic publish
@@ -260,37 +313,60 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
 
       const visiblePosts = rawPosts.filter((post) => post.post_kind !== 'story');
 
+      const mergePage = (previous: Post[], next: Post[]) => {
+        if (refresh) return next;
+        const existingIds = new Set(previous.map((post) => post.id));
+        return [
+          ...previous,
+          ...next.filter((post) => !existingIds.has(post.id)),
+        ];
+      };
+
       if (user && visiblePosts.length > 0) {
         const postIds = visiblePosts.map((post) => post.id);
-        const { data: likes, error: likesError } = await supabase
-          .from('post_likes')
-          .select('post_id')
-          .eq('user_id', user.id)
-          .in('post_id', postIds);
+        const [likesResult, bookmarksResult] = await Promise.all([
+          supabase
+            .from('post_likes')
+            .select('post_id')
+            .eq('user_id', user.id)
+            .in('post_id', postIds),
+          db
+            .from('bookmarks')
+            .select('post_id')
+            .eq('user_id', user.id)
+            .in('post_id', postIds),
+        ]);
 
-        if (likesError) {
-          console.warn('Post like state hydrate failed:', likesError);
+        if (likesResult.error) {
+          console.warn('Post like state hydrate failed:', likesResult.error);
+        }
+        if (bookmarksResult.error) {
+          console.warn(
+            'Post bookmark state hydrate failed:',
+            bookmarksResult.error,
+          );
         }
 
-        const likedPostIds = new Set((likes ?? []).map((row) => row.post_id));
+        const likedPostIds = new Set(
+          (likesResult.data ?? []).map((row) => String(row.post_id)),
+        );
+        const bookmarkedPostIds = new Set(
+          (bookmarksResult.data ?? []).map((row: any) => String(row.post_id)),
+        );
         const postsWithStatus = visiblePosts.map((post) => ({
           ...post,
           is_liked: likedPostIds.has(post.id),
-          is_bookmarked: false,
+          is_bookmarked: bookmarkedPostIds.has(post.id),
         }));
 
-        setPosts((previous) =>
-          refresh ? postsWithStatus : [...previous, ...postsWithStatus]
-        );
+        setPosts((previous) => mergePage(previous, postsWithStatus));
       } else {
-        setPosts((previous) =>
-          refresh ? visiblePosts : [...previous, ...visiblePosts]
-        );
+        setPosts((previous) => mergePage(previous, visiblePosts));
       }
 
-      // Pagination is based on the raw database page so a page containing a
-      // story does not incorrectly signal the end of the feed.
-      setHasMore(rawPosts.length === PAGE_SIZE);
+      // Pagination follows the fresh retrieval pool. The quality pool can
+      // contain duplicates and must not incorrectly terminate scrolling.
+      setHasMore(freshRows.length === PAGE_SIZE);
     } catch (error: any) {
       console.error('Error fetching posts:', error);
       setHasMore(false);
@@ -692,6 +768,62 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
     }
   }, [user, posts]);
 
+  const toggleBookmark = useCallback(async (postId: string) => {
+    if (!user) return;
+
+    const current = posts.find((post) => post.id === postId);
+    if (!current) return;
+
+    const wasBookmarked = Boolean(current.is_bookmarked);
+    setPosts((previous) =>
+      previous.map((post) =>
+        post.id === postId
+          ? { ...post, is_bookmarked: !wasBookmarked }
+          : post,
+      ),
+    );
+
+    try {
+      const result = wasBookmarked
+        ? await db
+            .from('bookmarks')
+            .delete()
+            .eq('post_id', postId)
+            .eq('user_id', user.id)
+        : await db
+            .from('bookmarks')
+            .insert({ post_id: postId, user_id: user.id });
+
+      if (result.error) throw result.error;
+    } catch (error) {
+      console.error('Bookmark saqlanmadi:', error);
+      setPosts((previous) =>
+        previous.map((post) =>
+          post.id === postId
+            ? { ...post, is_bookmarked: wasBookmarked }
+            : post,
+        ),
+      );
+    }
+  }, [posts, user]);
+
+  const hidePost = useCallback(async (postId: string) => {
+    setPosts((previous) => previous.filter((post) => post.id !== postId));
+    if (!user) return;
+
+    const { error } = await db.from('content_hides').insert({
+      post_id: postId,
+      user_id: user.id,
+      reason: 'not_interested',
+    });
+
+    // Duplicate hide rows are harmless; any other failure is logged. The local
+    // feed still respects the user's immediate action.
+    if (error && String((error as any).code ?? '') !== '23505') {
+      console.warn('Not interested signali saqlanmadi:', error);
+    }
+  }, [user]);
+
   const deletePost = useCallback(async (postId: string) => {
     try {
       const { error } = await supabase
@@ -784,6 +916,8 @@ export function usePosts(filter: 'global' | 'friends' | 'following' = 'global') 
     refresh,
     createPost,
     likePost,
+    toggleBookmark,
+    hidePost,
     deletePost,
   };
 }

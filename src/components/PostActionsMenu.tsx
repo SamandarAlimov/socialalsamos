@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/db';
 import { MoreHorizontal, Edit, Trash2, Pin, PinOff, Flag, Copy, Share2, Bookmark, EyeOff, Link, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,6 +24,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { EditPostDialog } from '@/components/EditPostDialog';
+import { cn } from '@/lib/utils';
 
 interface PostActionsMenuProps {
   postId: string;
@@ -32,6 +34,9 @@ interface PostActionsMenuProps {
   onDelete?: () => void;
   onEdit?: () => void;
   onPin?: () => void;
+  isBookmarked?: boolean;
+  onToggleBookmark?: () => void | Promise<void>;
+  onHide?: () => void | Promise<void>;
 }
 
 export function PostActionsMenu({ 
@@ -41,7 +46,10 @@ export function PostActionsMenu({
   isPinned = false,
   onDelete, 
   onEdit,
-  onPin 
+  onPin,
+  isBookmarked = false,
+  onToggleBookmark,
+  onHide,
 }: PostActionsMenuProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -130,8 +138,62 @@ export function PostActionsMenu({
     toast.success('Post reported. We will review it shortly.');
   };
 
-  const handleHidePost = () => {
-    toast.success('Post hidden from your feed');
+  const handleSavePost = async () => {
+    if (!user) {
+      toast.error('Postni saqlash uchun tizimga kiring');
+      return;
+    }
+
+    try {
+      if (onToggleBookmark) {
+        await onToggleBookmark();
+      } else {
+        const result = isBookmarked
+          ? await db
+              .from('bookmarks')
+              .delete()
+              .eq('post_id', postId)
+              .eq('user_id', user.id)
+          : await db
+              .from('bookmarks')
+              .insert({ post_id: postId, user_id: user.id });
+
+        if (result.error) throw result.error;
+      }
+
+      toast.success(
+        isBookmarked ? 'Saqlanganlardan olib tashlandi' : 'Post saqlandi',
+      );
+    } catch (error) {
+      console.error('Post save error:', error);
+      toast.error('Postni saqlab bo‘lmadi');
+    }
+  };
+
+  const handleHidePost = async () => {
+    if (!user) {
+      toast.error('Tavsiyalarni sozlash uchun tizimga kiring');
+      return;
+    }
+
+    try {
+      if (onHide) {
+        await onHide();
+      } else {
+        const { error } = await db.from('content_hides').insert({
+          post_id: postId,
+          user_id: user.id,
+          reason: 'not_interested',
+        });
+        if (error && String((error as any).code ?? '') !== '23505') {
+          throw error;
+        }
+      }
+      toast.success('Bu post tavsiyalardan olib tashlandi');
+    } catch (error) {
+      console.error('Hide post error:', error);
+      toast.error('Tavsiyani yangilab bo‘lmadi');
+    }
   };
 
   return (
@@ -208,9 +270,17 @@ export function PostActionsMenu({
             Share post
           </DropdownMenuItem>
           
-          <DropdownMenuItem className="cursor-pointer">
-            <Bookmark className="h-4 w-4 mr-2" />
-            Save post
+          <DropdownMenuItem
+            onClick={handleSavePost}
+            className="cursor-pointer"
+          >
+            <Bookmark
+              className={cn(
+                'h-4 w-4 mr-2',
+                isBookmarked && 'fill-current',
+              )}
+            />
+            {isBookmarked ? 'Saqlanganlardan olib tashlash' : 'Saqlash'}
           </DropdownMenuItem>
 
           <DropdownMenuItem 
