@@ -60,8 +60,8 @@ export function BecomeSeller({ onSuccess }: BecomeSellerProps) {
       {step === 1 && (
         <div className="space-y-6">
           <div className="text-center space-y-2">
-            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-              <Briefcase className="h-8 w-8 text-primary" />
+            <div className="w-16 h-16 rounded-full bg-foreground/10 flex items-center justify-center mx-auto mb-4">
+              <Briefcase className="h-8 w-8 text-foreground" />
             </div>
             <h2 className="text-2xl font-bold">{copy.startSelling}</h2>
             <p className="text-muted-foreground">{copy.startSellingDescription}</p>
@@ -73,8 +73,8 @@ export function BecomeSeller({ onSuccess }: BecomeSellerProps) {
               <Card
                 key={type.id}
                 className={cn(
-                  'p-4 cursor-pointer transition-all hover:border-primary',
-                  businessType === type.id && 'border-primary bg-primary/5',
+                  'p-4 cursor-pointer transition-all hover:border-foreground',
+                  businessType === type.id && 'border-foreground bg-foreground/5',
                 )}
                 onClick={() => setBusinessType(type.id)}
               >
@@ -82,7 +82,7 @@ export function BecomeSeller({ onSuccess }: BecomeSellerProps) {
                   <div className={cn(
                     'w-12 h-12 rounded-xl flex items-center justify-center',
                     businessType === type.id
-                      ? 'bg-primary text-primary-foreground'
+                      ? 'bg-foreground text-background'
                       : 'bg-muted',
                   )}>
                     <type.icon className="h-6 w-6" />
@@ -91,7 +91,7 @@ export function BecomeSeller({ onSuccess }: BecomeSellerProps) {
                     <h3 className="font-semibold">{type.title}</h3>
                     <p className="text-sm text-muted-foreground">{type.description}</p>
                   </div>
-                  {businessType === type.id && <Check className="h-5 w-5 text-primary" />}
+                  {businessType === type.id && <Check className="h-5 w-5 text-foreground" />}
                 </div>
               </Card>
             ))}
