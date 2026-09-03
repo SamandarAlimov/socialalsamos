@@ -9,6 +9,7 @@ import { useActivityTracking } from '@/hooks/useActivityTracking';
 import { LocationPermissionDialog } from '@/components/LocationPermissionDialog';
 import { cn } from '@/lib/utils';
 import { resumeMyLiveLocationSharing } from '@/lib/liveLocationSharing';
+import { UI_LAYER } from '@/lib/uiLayers';
 
 export function AppLayout() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -86,7 +87,8 @@ export function AppLayout() {
         aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         onClick={() => setSidebarCollapsed((current) => !current)}
         className={cn(
-          'fixed top-20 z-[1300] hidden h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-sidebar-border bg-background shadow-lg transition-[left,background-color,color,box-shadow] duration-300 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 md:flex',
+          'fixed top-20 hidden h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-sidebar-border bg-background shadow-lg transition-[left,background-color,color,box-shadow] duration-300 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 md:flex',
+          UI_LAYER.shellFloating,
           sidebarCollapsed ? 'left-[72px]' : 'left-64',
         )}
       >
