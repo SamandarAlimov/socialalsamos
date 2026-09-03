@@ -49,6 +49,7 @@ import {
   useConversationPremium,
 } from '@/hooks/useConversationPremium';
 import { uploadMedia } from '@/lib/mediaUpload';
+import { db } from '@/lib/db';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -213,6 +214,7 @@ export function GroupChannelSettingsSheet({
 
   const [newTopicTitle, setNewTopicTitle] = useState('');
   const [discussionCandidates, setDiscussionCandidates] = useState<Array<{ id: string; name: string | null }>>([]);
+  const [myAdminRights, setMyAdminRights] = useState<Record<string, boolean> | null>(null);
 
   const {
     settings,
@@ -253,21 +255,32 @@ export function GroupChannelSettingsSheet({
     let cancelled = false;
 
     const loadStats = async () => {
-      const { data } = await supabase
-        .from('conversation_participants')
-        .select('role')
-        .eq('conversation_id', conversationId);
+      const [{ data }, { data: rights }] = await Promise.all([
+        supabase
+          .from('conversation_participants')
+          .select('role')
+          .eq('conversation_id', conversationId),
+        user?.id
+          ? db
+              .from('conversation_admin_rights')
+              .select('*')
+              .eq('conversation_id', conversationId)
+              .eq('user_id', user.id)
+              .maybeSingle()
+          : Promise.resolve({ data: null } as any),
+      ]);
       if (cancelled) return;
       const rows = data || [];
       setMemberCount(rows.length);
       setAdminCount(rows.filter((row) => row.role === 'owner' || row.role === 'admin').length);
+      setMyAdminRights((rights as Record<string, boolean> | null) || null);
     };
 
     void loadStats();
     return () => {
       cancelled = true;
     };
-  }, [open, conversationId]);
+  }, [open, conversationId, user?.id]);
 
   useEffect(() => {
     if (!open || !isChannel || !user?.id) {
@@ -304,6 +317,13 @@ export function GroupChannelSettingsSheet({
       cancelled = true;
     };
   }, [open, isChannel, user?.id]);
+
+  const isOwner = Boolean(settings?.owner_id && user?.id && settings.owner_id === user.id);
+  const canChangeInfo = isOwner || Boolean(myAdminRights?.can_change_info);
+  const canInvite = isOwner || Boolean(myAdminRights?.can_invite_users);
+  const canRestrict = isOwner || Boolean(myAdminRights?.can_restrict_members);
+  const canManageTopics = isOwner || Boolean(myAdminRights?.can_manage_topics);
+  const canPost = isOwner || Boolean(myAdminRights?.can_post_messages);
 
   const tabs = useMemo(() => {
     const items: Array<{ id: SettingsTab; label: string; icon: typeof Sparkles; badge?: number }> = [
@@ -359,7 +379,7 @@ export function GroupChannelSettingsSheet({
   const uploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
-    if (!file || !isAdmin) return;
+    if (!file || !canChangeInfo) return;
     setAvatarUploading(true);
     try {
       const uploaded = await uploadMedia(file, { type: 'chat', visibility: 'public' });
@@ -499,7 +519,7 @@ export function GroupChannelSettingsSheet({
                         type="file"
                         accept="image/*"
                         className="hidden"
-                        disabled={!isAdmin}
+                        disabled={!canChangeInfo}
                         onChange={uploadAvatar}
                       />
                       <Avatar className="h-24 w-24 ring-1 ring-border">
@@ -508,7 +528,7 @@ export function GroupChannelSettingsSheet({
                           {(settings.name || (isChannel ? 'K' : 'G'))[0]?.toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
-                      {isAdmin && (
+                      {canChangeInfo && (
                         <span className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full border border-border bg-foreground text-background shadow-sm">
                           {avatarUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
                         </span>
@@ -527,7 +547,7 @@ export function GroupChannelSettingsSheet({
                         <Input
                           id="community-name"
                           value={profileDraft.name}
-                          disabled={!isAdmin}
+                          disabled={!canChangeInfo}
                           maxLength={120}
                           onChange={(event) => {
                             setProfileDraft((prev) => ({ ...prev, name: event.target.value }));
@@ -541,7 +561,7 @@ export function GroupChannelSettingsSheet({
                         <Textarea
                           id="community-description"
                           value={profileDraft.description}
-                          disabled={!isAdmin}
+                          disabled={!canChangeInfo}
                           maxLength={500}
                           rows={4}
                           onChange={(event) => {
@@ -553,7 +573,7 @@ export function GroupChannelSettingsSheet({
                         />
                         <p className="text-right text-[11px] text-muted-foreground">{profileDraft.description.length}/500</p>
                       </div>
-                      {isAdmin && (
+                      {canChangeInfo && (
                         <Button disabled={!profileDirty || isSaving} onClick={saveProfile} className="w-full rounded-xl">
                           <Save className="mr-2 h-4 w-4" />
                           O‘zgarishlarni saqlash
@@ -566,7 +586,7 @@ export function GroupChannelSettingsSheet({
                     <button
                       type="button"
                       onClick={onManageMembers}
-                      disabled={!onManageMembers}
+                      disabled={!onManageMembers || !isAdmin}
                       className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-muted/60 disabled:cursor-default"
                     >
                       <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted">
@@ -595,7 +615,7 @@ export function GroupChannelSettingsSheet({
                       }
                       checked={Boolean(settings.is_public)}
                       onCheckedChange={(value) => updateSettings({ is_public: value })}
-                      disabled={!isAdmin}
+                      disabled={!canChangeInfo}
                     />
                     <SettingRow
                       icon={UserCheck}
@@ -603,7 +623,7 @@ export function GroupChannelSettingsSheet({
                       hint="Yangi foydalanuvchi admin tasdig‘idan keyin qo‘shiladi"
                       checked={settings.join_by_request}
                       onCheckedChange={(value) => updateSettings({ join_by_request: value })}
-                      disabled={!isAdmin}
+                      disabled={!canChangeInfo}
                     />
                   </Section>
 
@@ -614,7 +634,7 @@ export function GroupChannelSettingsSheet({
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">@</span>
                           <Input
                             value={profileDraft.username}
-                            disabled={!isAdmin}
+                            disabled={!canChangeInfo}
                             maxLength={32}
                             onChange={(event) => {
                               setProfileDraft((prev) => ({
@@ -685,7 +705,7 @@ export function GroupChannelSettingsSheet({
                         hint="A’zolar boshqa foydalanuvchilarni taklif qila oladi"
                         checked={settings.permissions.add_members}
                         onCheckedChange={(value) => updatePermission('add_members', value)}
-                        disabled={!isAdmin}
+                        disabled={!canChangeInfo}
                       />
                       <SettingRow
                         icon={MessageCircle}
@@ -715,7 +735,7 @@ export function GroupChannelSettingsSheet({
                               hint={item.hint}
                               checked={settings.permissions[item.key]}
                               onCheckedChange={(value) => updatePermission(item.key, value)}
-                              disabled={!isAdmin}
+                              disabled={!canChangeInfo}
                             />
                           ))}
                         </Section>
@@ -734,7 +754,7 @@ export function GroupChannelSettingsSheet({
                           <button
                             key={value}
                             type="button"
-                            disabled={!isAdmin}
+                            disabled={!canChangeInfo}
                             onClick={() => updateSettings({ slow_mode_seconds: value })}
                             className={cn(
                               'rounded-xl px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50',
@@ -756,7 +776,7 @@ export function GroupChannelSettingsSheet({
                         <button
                           key={value}
                           type="button"
-                          disabled={!isAdmin}
+                          disabled={!canChangeInfo}
                           onClick={() => updateSettings({ auto_delete_seconds: value })}
                           className={cn(
                             'rounded-xl px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50',
@@ -782,7 +802,7 @@ export function GroupChannelSettingsSheet({
                           <button
                             key={value}
                             type="button"
-                            disabled={!isAdmin}
+                            disabled={!canChangeInfo}
                             onClick={() => updateSettings({ reactions_mode: value })}
                             className={cn(
                               'rounded-xl px-3 py-2 text-xs font-medium',
@@ -803,7 +823,7 @@ export function GroupChannelSettingsSheet({
                               <button
                                 key={emoji}
                                 type="button"
-                                disabled={!isAdmin}
+                                disabled={!canChangeInfo}
                                 onClick={() => toggleReaction(emoji)}
                                 className={cn(
                                   'flex h-10 w-10 items-center justify-center rounded-xl border text-lg',
@@ -828,7 +848,7 @@ export function GroupChannelSettingsSheet({
                           hint="Post ostida uni joylagan admin nomi ko‘rinadi"
                           checked={settings.sign_messages}
                           onCheckedChange={(value) => updateSettings({ sign_messages: value })}
-                          disabled={!isAdmin}
+                          disabled={!canPost}
                         />
                       </Section>
 
@@ -836,7 +856,7 @@ export function GroupChannelSettingsSheet({
                         <div className="p-4">
                           <select
                             value={settings.linked_chat_id || ''}
-                            disabled={!isAdmin}
+                            disabled={!canChangeInfo}
                             onChange={(event) => updateSettings({ linked_chat_id: event.target.value || null })}
                             className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
                           >
@@ -859,7 +879,7 @@ export function GroupChannelSettingsSheet({
                         hint="Katta guruhni mavzular bo‘yicha bo‘limlarga ajratadi"
                         checked={settings.is_forum}
                         onCheckedChange={(value) => updateSettings({ is_forum: value })}
-                        disabled={!isAdmin}
+                        disabled={!canChangeInfo}
                       />
                       {settings.is_forum && (
                         <button
@@ -885,7 +905,7 @@ export function GroupChannelSettingsSheet({
                       hint="Forward, media saqlash va kontentni tashqariga chiqarishni cheklaydi"
                       checked={settings.restrict_saving_content}
                       onCheckedChange={(value) => updateSettings({ restrict_saving_content: value })}
-                      disabled={!isAdmin}
+                      disabled={!canChangeInfo}
                     />
                     {!isChannel && (
                       <SettingRow
@@ -894,7 +914,7 @@ export function GroupChannelSettingsSheet({
                         hint="Oddiy a’zolar to‘liq a’zolar ro‘yxatini ko‘rmaydi"
                         checked={settings.hide_members}
                         onCheckedChange={(value) => updateSettings({ hide_members: value })}
-                        disabled={!isAdmin}
+                        disabled={!canRestrict}
                       />
                     )}
                   </Section>
@@ -906,7 +926,7 @@ export function GroupChannelSettingsSheet({
                       hint="Xavfli va takroriy xabarlarni filtrlash"
                       checked={settings.anti_spam}
                       onCheckedChange={(value) => updateSettings({ anti_spam: value })}
-                      disabled={!isAdmin}
+                      disabled={!canRestrict}
                     />
                     {settings.anti_spam && (
                       <SettingRow
@@ -915,7 +935,7 @@ export function GroupChannelSettingsSheet({
                         hint="Yuqori xavfli xabarlar uchun qat’iyroq moderatsiya"
                         checked={settings.aggressive_anti_spam}
                         onCheckedChange={(value) => updateSettings({ aggressive_anti_spam: value })}
-                        disabled={!isAdmin}
+                        disabled={!canRestrict}
                       />
                     )}
                   </Section>
@@ -940,7 +960,7 @@ export function GroupChannelSettingsSheet({
 
               {tab === 'links' && (
                 <>
-                  {isAdmin && (
+                  {canInvite && (
                     <Section title="Yangi taklif havolasi" hint="Har bir manba uchun alohida link yaratib, limit va amal qilish muddatini boshqarishingiz mumkin.">
                       <div className="space-y-3 p-4">
                         <Input
@@ -1013,7 +1033,7 @@ export function GroupChannelSettingsSheet({
                                     <Ban className="mr-2 h-4 w-4" /> Bekor qilish
                                   </DropdownMenuItem>
                                 )}
-                                {isAdmin && (
+                                {canInvite && (
                                   <>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem className="text-destructive" onClick={() => deleteInviteLink(link.id)}>
@@ -1049,12 +1069,12 @@ export function GroupChannelSettingsSheet({
                           <p className="truncate text-sm font-medium">{request.profile?.display_name || request.profile?.username || 'Foydalanuvchi'}</p>
                           <p className="truncate text-xs text-muted-foreground">{request.profile?.username ? `@${request.profile.username}` : request.bio || 'Qo‘shilish so‘rovi'}</p>
                         </div>
-                        {isAdmin && (
+                        {(canInvite || canRestrict) && (
                           <div className="flex gap-1">
-                            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" onClick={() => declineJoinRequest(request)}>
+                            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" disabled={!canRestrict} onClick={() => declineJoinRequest(request)}>
                               <Ban className="h-4 w-4" />
                             </Button>
-                            <Button size="icon" className="h-9 w-9 rounded-full" onClick={() => approveJoinRequest(request)}>
+                            <Button size="icon" className="h-9 w-9 rounded-full" disabled={!canInvite} onClick={() => approveJoinRequest(request)}>
                               <Check className="h-4 w-4" />
                             </Button>
                           </div>
@@ -1068,7 +1088,7 @@ export function GroupChannelSettingsSheet({
               {!isChannel && tab === 'topics' && (
                 <>
                   <Section title="Forum topiklari" hint="Mavzularni alohida oqimlarga ajrating. Pinned topiklar yuqorida turadi.">
-                    {isAdmin && (
+                    {canManageTopics && (
                       <div className="flex gap-2 border-b border-border/70 p-4">
                         <Input
                           value={newTopicTitle}
