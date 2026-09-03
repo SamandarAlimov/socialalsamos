@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Globe2, Lock, UploadCloud, UsersRound } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { UI_LAYER } from '@/lib/uiLayers';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -747,7 +748,10 @@ export function PostComposer() {
       onDrop={handleDrop}
     >
       {isDraggingFiles && (
-        <div className="pointer-events-none fixed inset-0 z-[1300] flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm">
+        <div className={cn(
+          'pointer-events-none fixed inset-0 flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm',
+          UI_LAYER.immersive
+        )}>
           <div className="flex w-full max-w-md flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-primary bg-background px-8 py-12 text-center shadow-2xl">
             <UploadCloud className="h-8 w-8 text-primary" />
             <p className="font-semibold">Fayllarni shu yerga tashlang</p>
