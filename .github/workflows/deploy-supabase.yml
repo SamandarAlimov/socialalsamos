@@ -43,7 +43,8 @@ jobs:
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Supabase deploy skipped: add SUPABASE_ACCESS_TOKEN and SUPABASE_DB_PASSWORD repository secrets."
+            echo "::error::Production Supabase deploy is NOT configured. Add SUPABASE_ACCESS_TOKEN and SUPABASE_DB_PASSWORD repository secrets."
+            exit 1
           fi
 
       - name: Setup Supabase CLI
@@ -100,6 +101,10 @@ jobs:
             supabase secrets set ALSAMOS_APP_URL="$ALSAMOS_APP_URL" --project-ref "$PROJECT_REF"
           else
             supabase secrets set ALSAMOS_APP_URL="https://www.alsamos.com/payment?topup=return" --project-ref "$PROJECT_REF"
+          fi
+
+          if [ -z "$PAYME_MERCHANT_ID" ] || [ -z "$PAYME_LOGIN" ] || [ -z "$PAYME_KEY" ]; then
+            echo "::warning::Payme live money is not active yet. Configure PAYME_MERCHANT_ID, PAYME_LOGIN and PAYME_KEY repository secrets after merchant onboarding."
           fi
 
       - name: Push database migrations
