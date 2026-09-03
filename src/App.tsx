@@ -104,6 +104,22 @@ function PostPermalink() {
   return <Navigate to={postId ? '/home?post=' + encodeURIComponent(postId) : '/home'} replace />;
 }
 
+function ChannelPermalink() {
+  const { channel } = useParams<{ channel: string }>();
+  return <Navigate to={channel ? '/channels?channel=' + encodeURIComponent(channel) : '/channels'} replace />;
+}
+
+function GroupPermalink() {
+  const { group } = useParams<{ group: string }>();
+  return <Navigate to={group ? '/messages?conversation=' + encodeURIComponent(group) : '/messages'} replace />;
+}
+
+function HashtagPermalink() {
+  const { tag } = useParams<{ tag: string }>();
+  const clean = (tag || '').replace(/^#/, '');
+  return <Navigate to={clean ? '/search?q=%23' + encodeURIComponent(clean) + '&tab=hashtags' : '/search?tab=hashtags'} replace />;
+}
+
 function AppRoutes() {
   return (
     <>
@@ -132,6 +148,9 @@ function AppRoutes() {
       <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
         <Route path="/home" element={<HomePage />} />
         <Route path="/post/:postId" element={<PostPermalink />} />
+        <Route path="/channel/:channel" element={<ChannelPermalink />} />
+        <Route path="/group/:group" element={<GroupPermalink />} />
+        <Route path="/hashtag/:tag" element={<HashtagPermalink />} />
         <Route path="/discover" element={<DiscoveryPage />} />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/web" element={<WebViewerPage />} />
