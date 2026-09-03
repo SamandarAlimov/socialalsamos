@@ -291,6 +291,10 @@ function PreviewBody({
     );
   }
 
+  // Explicit structural guard keeps TypeScript narrowing stable for the
+  // grouped xlsx/csv discriminant used by LoadedDocumentPreview.
+  if (!('text' in preview)) return null;
+
   const codeLike = preview.kind === 'json' || preview.kind === 'xml';
   return (
     <ScrollArea className="h-full">
