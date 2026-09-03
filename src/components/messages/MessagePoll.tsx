@@ -124,20 +124,23 @@ export function MessagePoll({ messageId, poll, isMine }: MessagePollProps) {
               key={option.id}
               type="button"
               disabled={!user || busyOption !== null}
-              onClick={() => void vote(option.id)}
+              onClick={(event) => {
+                event.stopPropagation();
+                void vote(option.id);
+              }}
               className={cn(
                 'relative block w-full overflow-hidden rounded-xl border px-3 py-2 text-left tg-transition',
                 isMine
-                  ? 'border-bubble-own-foreground/20 hover:bg-bubble-own-foreground/10'
-                  : 'border-border hover:bg-muted/60',
-                selected && (isMine ? 'border-bubble-own-accent/70' : 'border-foreground/40')
+                  ? 'border-emerald-700/15 bg-white/20 hover:bg-emerald-500/[0.07]'
+                  : 'border-sky-500/15 bg-sky-500/[0.035] hover:bg-sky-500/[0.07]',
+                selected && (isMine ? 'border-emerald-600/45' : 'border-sky-500/45')
               )}
             >
               {showResult && (
                 <span
                   className={cn(
                     'pointer-events-none absolute inset-y-0 left-0 opacity-15 transition-[width] duration-300',
-                    isMine ? 'bg-bubble-own-accent' : 'bg-foreground'
+                    isMine ? 'bg-emerald-500' : 'bg-sky-500'
                   )}
                   style={{ width: `${percentage}%` }}
                 />
@@ -148,11 +151,11 @@ export function MessagePoll({ messageId, poll, isMine }: MessagePollProps) {
                     'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border',
                     selected
                       ? isMine
-                        ? 'border-bubble-own-accent bg-bubble-own-accent text-background'
-                        : 'border-foreground bg-foreground text-background'
+                        ? 'border-emerald-600 bg-emerald-500 text-white'
+                        : 'border-sky-500 bg-sky-500 text-white'
                       : isMine
-                        ? 'border-bubble-own-foreground/40'
-                        : 'border-muted-foreground/50'
+                        ? 'border-emerald-700/35'
+                        : 'border-sky-500/45'
                   )}
                 >
                   {selected && <Check className="h-3 w-3" />}
