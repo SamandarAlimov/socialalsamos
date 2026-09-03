@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { UI_LAYER } from '@/lib/uiLayers';
 import { supabase } from '@/integrations/supabase/client';
 import { useLiveStreamViewer as useLiveStreamViewerDB, useLiveStreamComments, useLiveStreamReactions } from '@/hooks/useLiveStream';
 import { useLiveStreamViewer as useLiveStreamViewerWebRTC } from '@/hooks/useLiveStreamWebRTC';
@@ -121,14 +122,14 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
   const overlayContent = (
     <>
       {!stream ? (
-        <div className="fixed inset-0 z-[9999] bg-black flex items-center justify-center">
+        <div className={cn('fixed inset-0 bg-black flex items-center justify-center', UI_LAYER.immersive)}>
           <div className="text-center">
             <Loader2 className="h-8 w-8 animate-spin text-white mx-auto mb-4" />
             <p className="text-white">Loading stream...</p>
           </div>
         </div>
       ) : stream.status === 'ended' ? (
-        <div className="fixed inset-0 z-[9999] bg-black flex items-center justify-center">
+        <div className={cn('fixed inset-0 bg-black flex items-center justify-center', UI_LAYER.immersive)}>
           <div className="text-center">
             <Radio className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
             <h2 className="text-white text-xl font-bold mb-2">Live has ended</h2>
@@ -139,7 +140,7 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
           </div>
         </div>
       ) : (
-    <div className="fixed inset-0 z-[9999] bg-black flex flex-col" style={{ height: '100dvh' }}>
+    <div className={cn('fixed inset-0 bg-black flex flex-col', UI_LAYER.immersive)} style={{ height: '100dvh' }}>
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-10 p-4 bg-gradient-to-b from-black/80 to-transparent safe-area-top">
         <div className="flex items-center justify-between">
