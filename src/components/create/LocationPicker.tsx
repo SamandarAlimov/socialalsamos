@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import {
   Check,
   Crosshair,
@@ -24,7 +23,6 @@ import {
 } from '@/lib/mapPlaces';
 import type { PostLocationInput } from '@/lib/postMeta';
 import { reverseGeocode, type ResolvedAddress } from '@/lib/reverseGeocode';
-import { UI_LAYER } from '@/lib/uiLayers';
 import { AlsamosMapSurface } from '@/components/map/AlsamosMapSurface';
 import { categoryUi } from '@/lib/placeIcons';
 import type { MapSceneMarker } from '@/lib/mapEngine';
@@ -142,18 +140,12 @@ export function LocationPicker({
   useEffect(() => {
     if (!open) return;
 
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
     };
 
     window.addEventListener('keydown', handleEscape);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener('keydown', handleEscape);
-    };
+    return () => window.removeEventListener('keydown', handleEscape);
   }, [onClose, open]);
 
   useEffect(() => {
@@ -487,20 +479,16 @@ export function LocationPicker({
 
   if (!open) return null;
 
-  const picker = (
-    <div
-      className={cn(
-        'fixed inset-0 flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-background',
-        UI_LAYER.immersive,
-      )}
-      role="dialog"
-      aria-modal="true"
+  return (
+    <section
+      className="absolute bottom-0 left-1/2 top-0 z-[1250] flex w-full max-w-3xl -translate-x-1/2 flex-col overflow-hidden bg-background shadow-[0_18px_55px_rgba(15,23,42,0.12)] sm:rounded-[22px] sm:border sm:border-border/60"
+      role="region"
       aria-label="Joylashuvni tanlash"
     >
-      <header className="flex shrink-0 items-center justify-between border-b border-border/60 bg-background/95 px-4 py-3 backdrop-blur-xl sm:px-5">
+      <header className="flex shrink-0 items-center justify-between border-b border-border/60 bg-background/95 px-4 py-3 backdrop-blur-xl">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
-            <MapPinned className="h-5 w-5" />
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
+            <MapPinned className="h-[18px] w-[18px]" />
           </span>
           <div className="min-w-0">
             <h2 className="truncate text-[15px] font-semibold tracking-[-0.01em] sm:text-base">
@@ -523,8 +511,8 @@ export function LocationPicker({
         </button>
       </header>
 
-      <div className="shrink-0 border-b border-border/50 bg-background/95 px-3 py-2.5 sm:px-5">
-        <div className="mx-auto grid max-w-5xl grid-cols-3 gap-1.5 rounded-2xl border border-border/50 bg-muted/35 p-1.5">
+      <div className="shrink-0 border-b border-border/50 bg-background/95 px-3 py-2.5 sm:px-4">
+        <div className="mx-auto grid max-w-2xl grid-cols-3 gap-1 rounded-xl border border-border/50 bg-muted/35 p-1">
           {([
             ['place', 'Joy', 'Yaqin joylar', MapPin],
             ['pin', 'Aniq pin', 'Xaritadan belgilang', MapPinned],
@@ -542,7 +530,7 @@ export function LocationPicker({
                   setPinLabel(null);
                 }}
                 className={cn(
-                  'flex min-w-0 items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-left transition-all duration-200 sm:px-3',
+                  'flex min-w-0 items-center justify-center gap-2 rounded-lg px-2 py-2 text-left transition-all duration-200 sm:px-3',
                   active
                     ? 'bg-background text-foreground shadow-sm ring-1 ring-border/60'
                     : 'text-muted-foreground hover:bg-background/55 hover:text-foreground',
@@ -550,7 +538,7 @@ export function LocationPicker({
               >
                 <span
                   className={cn(
-                    'flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors',
+                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors',
                     active
                       ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
                       : 'bg-background/70 text-muted-foreground',
@@ -568,8 +556,8 @@ export function LocationPicker({
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col bg-muted/[0.14]">
-        <div className="relative mx-3 mt-3 h-[31dvh] min-h-[220px] shrink-0 overflow-hidden rounded-[24px] border border-border/60 bg-muted shadow-sm sm:mx-5 sm:h-[34dvh]">
+      <div className="flex min-h-0 flex-1 flex-col bg-muted/[0.12]">
+        <div className="relative mx-auto mt-3 h-[190px] w-[calc(100%-1.5rem)] max-w-[520px] shrink-0 overflow-hidden rounded-[20px] border border-border/60 bg-muted shadow-sm sm:h-[210px] sm:w-[calc(100%-2rem)]">
           <AlsamosMapSurface
             center={{ latitude: center.latitude, longitude: center.longitude }}
             referenceCenter={myCoords ?? { latitude: center.latitude, longitude: center.longitude }}
@@ -602,7 +590,7 @@ export function LocationPicker({
             onClick={locateMe}
             aria-label="Mening joylashuvim"
             title="Mening joylashuvim"
-            className="absolute bottom-3 right-3 z-[500] flex h-11 w-11 items-center justify-center rounded-2xl border border-border/60 bg-background/95 text-foreground shadow-xl backdrop-blur-xl transition hover:bg-background active:scale-95"
+            className="absolute bottom-3 right-3 z-[500] flex h-9 w-9 items-center justify-center rounded-xl border border-border/60 bg-background/95 text-foreground shadow-lg backdrop-blur-xl transition hover:bg-background active:scale-95"
           >
             {isLocating ? (
               <Loader2 className="h-[18px] w-[18px] animate-spin text-blue-600 dark:text-blue-400" />
@@ -613,7 +601,7 @@ export function LocationPicker({
         </div>
 
         {selectionLabel && (
-          <div className="mx-3 mt-3 flex shrink-0 items-center gap-3 rounded-2xl border border-blue-500/20 bg-blue-500/[0.055] p-3 shadow-sm sm:mx-5">
+          <div className="mx-auto mt-3 flex w-[calc(100%-1.5rem)] max-w-2xl shrink-0 items-center gap-3 rounded-2xl border border-blue-500/20 bg-blue-500/[0.055] p-3 shadow-sm sm:w-[calc(100%-2rem)]">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
               {mode === 'place' ? (
                 <MapPin className="h-[18px] w-[18px]" />
@@ -640,14 +628,14 @@ export function LocationPicker({
         )}
 
         {locationError && (
-          <div className="mx-3 mt-3 rounded-xl border border-destructive/20 bg-destructive/[0.055] px-3 py-2 text-xs text-destructive sm:mx-5">
+          <div className="mx-auto mt-3 w-[calc(100%-1.5rem)] max-w-2xl rounded-xl border border-destructive/20 bg-destructive/[0.055] px-3 py-2 text-xs text-destructive sm:w-[calc(100%-2rem)]">
             {locationError}
           </div>
         )}
 
         {mode === 'place' ? (
-          <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col">
-            <div className="shrink-0 space-y-3 px-3 pt-3 sm:px-5">
+          <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col">
+            <div className="shrink-0 space-y-3 px-3 pt-3 sm:px-4">
               <div className="flex h-12 items-center gap-2.5 rounded-2xl border border-border/60 bg-card px-3.5 shadow-sm">
                 <Search className="h-[18px] w-[18px] shrink-0 text-muted-foreground" />
                 <input
@@ -670,7 +658,7 @@ export function LocationPicker({
               </div>
 
               {query.trim().length < 2 && (
-                <div className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 scrollbar-hidden sm:-mx-5 sm:px-5">
+                <div className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 scrollbar-hidden sm:-mx-4 sm:px-4">
                   <button
                     type="button"
                     onClick={() => setSelectedCategory(null)}
@@ -710,7 +698,7 @@ export function LocationPicker({
             </div>
 
             {query.trim().length < 2 && (
-              <div className="px-3 pt-3 sm:px-5">
+              <div className="px-3 pt-3 sm:px-4">
                 <button
                   type="button"
                   onClick={handleSelectCurrentLocation}
@@ -745,7 +733,7 @@ export function LocationPicker({
               </div>
             )}
 
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 [-webkit-overflow-scrolling:touch] sm:px-5">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 [-webkit-overflow-scrolling:touch] sm:px-4">
               {(isLoadingNearby || isSearching) && list.length === 0 ? (
                 <div className="flex flex-col items-center justify-center gap-2 py-10 text-muted-foreground">
                   <Loader2 className="h-5 w-5 animate-spin" />
@@ -876,7 +864,6 @@ export function LocationPicker({
         )}
       </div>
     </div>
+    </section>
   );
-
-  return createPortal(picker, document.body);
 }
