@@ -37,15 +37,15 @@ export function CartSheet({ open, onOpenChange }: CartSheetProps) {
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent className="w-full sm:max-w-md p-0 flex flex-col border-l border-border/30">
+        <SheetContent className="marketplace-neutral w-full sm:max-w-md p-0 flex flex-col border-l border-border/30">
           <SheetHeader className="p-4 border-b border-border/30">
             <SheetTitle className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-primary/10">
-                <ShoppingBag className="h-4 w-4 text-primary" />
+              <div className="p-2 rounded-xl bg-foreground/10">
+                <ShoppingBag className="h-4 w-4 text-foreground" />
               </div>
               <span>{marketplaceUz.cart.title}</span>
               {itemCount > 0 && (
-                <span className="ml-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold tabular-nums">
+                <span className="ml-1 px-2 py-0.5 rounded-full bg-foreground/10 text-foreground text-xs font-bold tabular-nums">
                   {itemCount}
                 </span>
               )}
@@ -137,7 +137,7 @@ export function CartSheet({ open, onOpenChange }: CartSheetProps) {
                 </div>
 
                 <Button
-                  className="w-full h-12 rounded-xl text-sm font-semibold shadow-lg shadow-primary/20"
+                  className="w-full h-12 rounded-xl text-sm font-semibold shadow-lg shadow-black/10"
                   disabled={hasBlockingIssues}
                   onClick={() => { setShowCheckout(true); onOpenChange(false); }}
                 >
@@ -246,7 +246,7 @@ function CartItemCard({ item, onUpdateQuantity, onRemove }: {
               <Plus className="h-3 w-3" />
             </button>
           </div>
-          <span className="font-bold text-primary text-sm tabular-nums">
+          <span className="font-bold text-foreground text-sm tabular-nums">
             {formatPrice(itemTotal, currency)}
           </span>
         </div>
