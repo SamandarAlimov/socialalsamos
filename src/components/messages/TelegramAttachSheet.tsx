@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import {
+  Banknote,
   BarChart3,
   BookOpen,
   Camera,
@@ -17,7 +18,7 @@ import {
 import { cn } from '@/lib/utils';
 import { LocationShareButton } from './LocationShareButton';
 
-type AttachTab = 'gallery' | 'article' | 'location' | 'poll' | 'file';
+type AttachTab = 'gallery' | 'article' | 'location' | 'payment' | 'poll' | 'file';
 
 interface PickedFile {
   file: File;
@@ -43,6 +44,7 @@ interface TelegramAttachSheetProps {
     multiple: boolean;
     anonymous: boolean;
   }) => void | Promise<void>;
+  onSendMoney?: () => void;
   maxFileMb?: number;
 }
 
@@ -50,6 +52,7 @@ const TABS: Array<{ id: AttachTab; label: string; icon: typeof Images }> = [
   { id: 'gallery', label: 'Galereya', icon: Images },
   { id: 'article', label: 'Maqola', icon: BookOpen },
   { id: 'location', label: 'Joylashuv', icon: MapPin },
+  { id: 'payment', label: 'Pul', icon: Banknote },
   { id: 'poll', label: "So'rovnoma", icon: BarChart3 },
   { id: 'file', label: 'Fayl', icon: FileIcon },
 ];
@@ -91,6 +94,7 @@ export function TelegramAttachSheet({
   onArticle,
   onShareLocation,
   onCreatePoll,
+  onSendMoney,
   maxFileMb = 50,
 }: TelegramAttachSheetProps) {
   const [tab, setTab] = useState<AttachTab>('gallery');
@@ -370,6 +374,38 @@ export function TelegramAttachSheet({
               ) : (
                 <p className="text-xs text-muted-foreground">
                   Bu chatda joylashuv ulashish mavjud emas.
+                </p>
+              )}
+            </div>
+          )}
+
+
+          {tab === 'payment' && (
+            <div className="space-y-3 py-2">
+              <div className="flex items-start gap-3 rounded-2xl border border-border/70 bg-muted/40 p-3">
+                <Banknote className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">Pul yuborish</p>
+                  <p className="text-xs text-muted-foreground">
+                    Shaxsiy chatdagi foydalanuvchiga Alsamos hisobidan atomik P2P o‘tkazma yuboring.
+                  </p>
+                </div>
+              </div>
+
+              {onSendMoney ? (
+                <Button
+                  className="w-full rounded-xl bg-foreground text-background hover:bg-foreground/90"
+                  onClick={() => {
+                    onOpenChange(false);
+                    onSendMoney();
+                  }}
+                >
+                  <Banknote className="mr-2 h-4 w-4" />
+                  O‘tkazma ochish
+                </Button>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Bu chatda pul yuborish mavjud emas.
                 </p>
               )}
             </div>
