@@ -35,6 +35,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { UI_LAYER } from '@/lib/uiLayers';
+import { usePlatformScrollLock } from '@/hooks/usePlatformScrollLock';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { EmojiText } from '@/components/emoji/EmojiText';
 import { EmojiPicker } from '@/components/EmojiPicker';
@@ -154,6 +155,8 @@ export function StoryViewer({
 
   const currentStory = activeGroup.stories[activeIndex];
   const isOwnStory = user?.id === activeGroup.user_id;
+
+  usePlatformScrollLock(true);
   const isVideo = currentStory?.media_type === 'video';
 
   const {
@@ -674,6 +677,10 @@ export function StoryViewer({
         UI_LAYER.immersive
       )}
       onContextMenu={(event) => event.preventDefault()}
+      onTouchStart={(event) => event.stopPropagation()}
+      onTouchMove={(event) => event.stopPropagation()}
+      onTouchEnd={(event) => event.stopPropagation()}
+      onTouchCancel={(event) => event.stopPropagation()}
     >
       {/* Desktop navigatsiya — story stage tashqarisida, mobilga xalaqit bermaydi. */}
       <button
