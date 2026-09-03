@@ -66,7 +66,7 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
         role="button"
         tabIndex={0}
         aria-label={product.title}
-        className="flex gap-3 p-3 rounded-2xl bg-card/50 backdrop-blur-sm border border-border/30 cursor-pointer hover:bg-card/80 transition-all active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        className="flex gap-3 p-3 rounded-2xl bg-card/50 backdrop-blur-sm border border-border/30 cursor-pointer hover:bg-card/80 transition-all active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40"
         onClick={() => onSelect?.(product)}
         onKeyDown={handleKeyDown}
       >
@@ -94,13 +94,13 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
             {product.seller && (
               <div className="flex items-center gap-1 mt-1 text-[11px] text-muted-foreground">
                 <span className="truncate">{product.seller.business_name}</span>
-                {product.seller.is_verified && <ShieldCheck className="h-3 w-3 text-primary shrink-0" />}
+                {product.seller.is_verified && <ShieldCheck className="h-3 w-3 text-foreground shrink-0" />}
               </div>
             )}
           </div>
           <div className="flex items-center justify-between">
             <div className="flex items-baseline gap-1.5 flex-wrap">
-              <span className="text-base font-bold text-primary tabular-nums">
+              <span className="text-base font-bold text-foreground tabular-nums">
                 {formatPrice(product.price, currency)}
               </span>
               {hasDiscount && (
@@ -131,7 +131,7 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
       role="button"
       tabIndex={0}
       aria-label={product.title}
-      className="group cursor-pointer rounded-2xl overflow-hidden bg-card border border-border/40 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 active:scale-[0.98] flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      className="group cursor-pointer rounded-2xl overflow-hidden bg-card border border-border/40 hover:border-foreground/30 hover:shadow-xl hover:shadow-black/5 transition-all duration-300 active:scale-[0.98] flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40"
       onClick={() => onSelect?.(product)}
       onKeyDown={handleKeyDown}
     >
@@ -200,7 +200,7 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
         {/* Bottom badge */}
         {product.is_negotiable && !isSoldOut && (
           <div className="absolute bottom-2 left-2">
-            <span className="px-2 py-0.5 rounded-md bg-background/90 backdrop-blur-md text-[10px] font-semibold text-primary border border-primary/20">
+            <span className="px-2 py-0.5 rounded-md bg-background/90 backdrop-blur-md text-[10px] font-semibold text-foreground border border-foreground/20">
               Kelishiladi
             </span>
           </div>
@@ -237,7 +237,7 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
         {product.seller ? (
           <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-auto pt-1 border-t border-border/30">
             <span className="truncate flex-1">{product.seller.business_name}</span>
-            {product.seller.is_verified && <ShieldCheck className="h-3 w-3 text-primary shrink-0" />}
+            {product.seller.is_verified && <ShieldCheck className="h-3 w-3 text-foreground shrink-0" />}
           </div>
         ) : (
           (product.location || null) && (
