@@ -4,6 +4,15 @@
 @tailwind components;
 @tailwind utilities;
 
+
+/* Marketplace is intentionally neutral. Brand orange remains in Alsamos identity,
+   while commerce navigation/actions use the platform's black/white/gray system. */
+.marketplace-neutral {
+  --primary: var(--foreground);
+  --primary-foreground: var(--background);
+  --accent-brand: var(--foreground);
+}
+
 /* Hide scrollbar for video feed */
 .scrollbar-hide {
   -ms-overflow-style: none;
