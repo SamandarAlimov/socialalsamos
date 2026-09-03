@@ -96,7 +96,7 @@ export function SellerStorefront({
 
   return (
     <Sheet open={!!sellerId} onOpenChange={() => onClose()}>
-      <SheetContent side="bottom" className="h-[95vh] p-0 rounded-t-3xl border-t border-border/30">
+      <SheetContent side="bottom" className="marketplace-neutral h-[95vh] p-0 rounded-t-3xl border-t border-border/30">
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -105,7 +105,7 @@ export function SellerStorefront({
           <div className="flex flex-col h-full">
             {/* Header */}
             <div className="relative">
-              <div className="h-32 bg-gradient-to-br from-primary/20 via-primary/10 to-transparent" />
+              <div className="h-32 bg-gradient-to-br from-foreground/20 via-foreground/10 to-transparent" />
               <div className="absolute top-3 left-3 right-3 flex justify-between">
                 <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full bg-background/70 backdrop-blur-xl" onClick={onClose}>
                   <ArrowLeft className="h-5 w-5" />
@@ -115,14 +115,14 @@ export function SellerStorefront({
                 <div className="flex items-end gap-3">
                   <Avatar className="h-20 w-20 ring-4 ring-background shadow-xl">
                     <AvatarImage src={seller.logo_url || seller.profile?.avatar_url || ''} />
-                    <AvatarFallback className="bg-primary/10 text-primary text-2xl font-bold">
+                    <AvatarFallback className="bg-foreground/10 text-foreground text-2xl font-bold">
                       {seller.business_name?.[0]?.toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 pb-1">
                     <div className="flex items-center gap-1.5">
                       <h2 className="text-xl font-bold">{seller.business_name}</h2>
-                      {seller.is_verified && <ShieldCheck className="h-5 w-5 text-primary" />}
+                      {seller.is_verified && <ShieldCheck className="h-5 w-5 text-foreground" />}
                     </div>
                     <p className="text-sm text-muted-foreground">{seller.business_type}</p>
                   </div>
@@ -159,7 +159,7 @@ export function SellerStorefront({
                 {/* Actions */}
                 <div className="flex gap-2 mt-3">
                   <Button
-                    className="flex-1 rounded-xl h-10 shadow-lg shadow-primary/20"
+                    className="flex-1 rounded-xl h-10 shadow-lg shadow-black/10"
                     size="sm"
                     disabled={!onMessageSeller || !seller.user_id}
                     onClick={() => seller.user_id && onMessageSeller?.(seller.user_id)}
