@@ -17,6 +17,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { UI_LAYER } from '@/lib/uiLayers';
 import { callPhaseLabel, deriveCallUiPhase, formatCallDuration } from '@/lib/callUi';
 import { NetworkQualityIndicator } from './NetworkQualityIndicator';
 import { CallDebugPanel } from './CallDebugPanel';
@@ -414,7 +415,10 @@ export function VideoCallOverlay({
   return (
     <div
       ref={rootRef}
-      className="chat-no-select fixed inset-0 z-40 overflow-hidden bg-[#080b0f] text-white"
+      className={cn(
+        'chat-no-select fixed inset-0 overflow-hidden bg-[#080b0f] text-white',
+        UI_LAYER.immersive
+      )}
       style={{ height: '100dvh', width: '100vw' }}
       onMouseMove={revealControls}
       onTouchStart={revealControls}
