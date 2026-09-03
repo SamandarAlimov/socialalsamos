@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { UI_LAYER } from '@/lib/uiLayers';
 import { Button } from '@/components/ui/button';
 import { VideoPost } from '@/hooks/useVideoPosts';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
@@ -442,7 +443,7 @@ export function VideoWatchPanel({
   );
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex flex-col bg-background lg:flex-row">
+    <div className={cn('fixed inset-0 flex flex-col bg-background lg:flex-row', UI_LAYER.immersive)}>
       {/* CHAP USTUN: pleyer + ma'lumot */}
       <div className="flex min-h-0 flex-1 flex-col">
         {/* PLEYER */}
