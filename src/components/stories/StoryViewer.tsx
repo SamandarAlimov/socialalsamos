@@ -34,6 +34,7 @@ import { useStoryViewers } from '@/hooks/useStoryViews';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { UI_LAYER } from '@/lib/uiLayers';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { EmojiText } from '@/components/emoji/EmojiText';
 import { EmojiPicker } from '@/components/EmojiPicker';
@@ -668,7 +669,10 @@ export function StoryViewer({
 
   const storyViewerContent = (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden overscroll-none bg-[#090a0d] text-white"
+      className={cn(
+        'fixed inset-0 flex items-center justify-center overflow-hidden overscroll-none bg-[#090a0d] text-white',
+        UI_LAYER.immersive
+      )}
       onContextMenu={(event) => event.preventDefault()}
     >
       {/* Desktop navigatsiya — story stage tashqarisida, mobilga xalaqit bermaydi. */}
