@@ -90,5 +90,37 @@
       "source": "/((?!api/.*|mp/.*).*)",
       "destination": "/index.html"
     }
+  ],
+  "redirects": [
+    {
+      "source": "/terms",
+      "destination": "/legal/terms",
+      "permanent": true
+    },
+    {
+      "source": "/terms-of-service",
+      "destination": "/legal/terms",
+      "permanent": true
+    },
+    {
+      "source": "/privacy",
+      "destination": "/legal/privacy",
+      "permanent": true
+    },
+    {
+      "source": "/privacy-policy",
+      "destination": "/legal/privacy",
+      "permanent": true
+    },
+    {
+      "source": "/help-center",
+      "destination": "/help",
+      "permanent": true
+    },
+    {
+      "source": "/auth",
+      "destination": "/",
+      "permanent": true
+    }
   ]
 }
