@@ -301,6 +301,39 @@ export function useWallet() {
     return data;
   }, [refresh]);
 
+  const createPaymeTopUp = useCallback(async (amount: number) => {
+    const returnUrl =
+      typeof window !== 'undefined'
+        ? window.location.origin + '/payment?topup=return'
+        : 'https://www.alsamos.com/payment?topup=return';
+
+    const { data, error } = await db.functions.invoke('wallet-payme-create', {
+      body: { amount, returnUrl },
+    });
+
+    if (error) {
+      const message = String((error as any)?.context?.body?.message || (error as any)?.message || '');
+      if (message.includes('PAYME_MERCHANT_ID') || message.includes('payme_not_configured')) {
+        throw new Error('Payme merchant ulanishi hali faollashtirilmagan.');
+      }
+      throw new Error(walletError(error));
+    }
+
+    if (!data?.paymentUrl) {
+      throw new Error(data?.message || 'Payme to‘lov havolasi olinmadi.');
+    }
+
+    return data as {
+      configured: boolean;
+      provider: 'payme';
+      intentId: string;
+      amount: number;
+      currency: string;
+      expiresAt: string;
+      paymentUrl: string;
+    };
+  }, []);
+
   const pendingTopUps = useMemo(
     () => topUps.filter((item) => item.status === 'pending'),
     [topUps]
@@ -320,6 +353,7 @@ export function useWallet() {
     transferToConversation,
     requestTopUp,
     cancelTopUp,
+    createPaymeTopUp,
   };
 }
 
