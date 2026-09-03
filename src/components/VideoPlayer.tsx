@@ -30,6 +30,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useVideoPlayerContext } from '@/contexts/VideoPlayerContext';
 import { VideoScrubBar } from '@/components/video/VideoScrubBar';
+import { usePlatformScrollLock } from '@/hooks/usePlatformScrollLock';
 
 export interface VideoPlayerSource {
   src: string;
@@ -619,6 +620,8 @@ export function VideoPlayer({
 
   const isFullscreen = isNativeFullscreen || isPseudoFullscreen;
 
+  usePlatformScrollLock(isPseudoFullscreen);
+
   const VolumeIcon = globalMuted || globalVolume === 0
     ? VolumeX
     : globalVolume < 0.5
@@ -651,6 +654,18 @@ export function VideoPlayer({
       onMouseLeave={() => {
         if (isPlaying && !showSettings && !isScrubbing) setShowControls(false);
         setShowVolumeSlider(false);
+      }}
+      onTouchStart={(event) => {
+        if (isPseudoFullscreen) event.stopPropagation();
+      }}
+      onTouchMove={(event) => {
+        if (isPseudoFullscreen) event.stopPropagation();
+      }}
+      onTouchEnd={(event) => {
+        if (isPseudoFullscreen) event.stopPropagation();
+      }}
+      onTouchCancel={(event) => {
+        if (isPseudoFullscreen) event.stopPropagation();
       }}
       onPointerDown={handleSurfacePointerDown}
       onPointerMove={handleSurfacePointerMove}
