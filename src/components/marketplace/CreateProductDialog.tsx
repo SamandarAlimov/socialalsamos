@@ -249,7 +249,7 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] p-0">
+      <DialogContent className="marketplace-neutral max-w-lg max-h-[90vh] p-0">
         <DialogHeader className="p-4 pb-0">
           <DialogTitle>{copy.title}</DialogTitle>
         </DialogHeader>
@@ -291,7 +291,7 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
                     )}
 
                     {index === 0 && (
-                      <span className="pointer-events-none absolute left-1 top-1 rounded bg-primary px-1.5 py-0.5 text-[9px] font-bold text-primary-foreground">
+                      <span className="pointer-events-none absolute left-1 top-1 rounded bg-foreground px-1.5 py-0.5 text-[9px] font-bold text-background">
                         Muqova
                       </span>
                     )}
@@ -311,7 +311,7 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
                   <label className={cn(
                     'aspect-square rounded-lg border-2 border-dashed border-muted-foreground/30',
                     'flex flex-col items-center justify-center cursor-pointer',
-                    'hover:border-primary hover:bg-primary/5 transition-colors',
+                    'hover:border-foreground hover:bg-foreground/5 transition-colors',
                     isUploading && 'pointer-events-none opacity-60',
                   )}>
                     <input
@@ -385,7 +385,7 @@ export function CreateProductDialog({ open, onOpenChange, onSuccess }: CreatePro
             <div className="space-y-3 rounded-2xl border border-border/40 bg-muted/15 p-3.5">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-2.5">
-                  <div className="mt-0.5 rounded-lg bg-primary/10 p-1.5 text-primary">
+                  <div className="mt-0.5 rounded-lg bg-foreground/10 p-1.5 text-foreground">
                     <SlidersHorizontal className="h-4 w-4" />
                   </div>
                   <div>
