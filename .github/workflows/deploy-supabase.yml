@@ -23,6 +23,12 @@ jobs:
       FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
       LOVABLE_API_KEY: ${{ secrets.LOVABLE_API_KEY }}
       CRAWLER_SECRET: ${{ secrets.CRAWLER_SECRET }}
+      PAYME_MERCHANT_ID: ${{ secrets.PAYME_MERCHANT_ID }}
+      PAYME_LOGIN: ${{ secrets.PAYME_LOGIN }}
+      PAYME_KEY: ${{ secrets.PAYME_KEY }}
+      PAYME_TEST_KEY: ${{ secrets.PAYME_TEST_KEY }}
+      PAYME_CHECKOUT_URL: ${{ secrets.PAYME_CHECKOUT_URL }}
+      ALSAMOS_APP_URL: ${{ secrets.ALSAMOS_APP_URL }}
       PROJECT_REF: mbhjganbihamoiqmankv
 
     steps:
@@ -75,6 +81,27 @@ jobs:
             supabase secrets set CRAWLER_SECRET="$CRAWLER_SECRET" --project-ref "$PROJECT_REF"
           fi
 
+          if [ -n "$PAYME_MERCHANT_ID" ]; then
+            supabase secrets set PAYME_MERCHANT_ID="$PAYME_MERCHANT_ID" --project-ref "$PROJECT_REF"
+          fi
+          if [ -n "$PAYME_LOGIN" ]; then
+            supabase secrets set PAYME_LOGIN="$PAYME_LOGIN" --project-ref "$PROJECT_REF"
+          fi
+          if [ -n "$PAYME_KEY" ]; then
+            supabase secrets set PAYME_KEY="$PAYME_KEY" --project-ref "$PROJECT_REF"
+          fi
+          if [ -n "$PAYME_TEST_KEY" ]; then
+            supabase secrets set PAYME_TEST_KEY="$PAYME_TEST_KEY" --project-ref "$PROJECT_REF"
+          fi
+          if [ -n "$PAYME_CHECKOUT_URL" ]; then
+            supabase secrets set PAYME_CHECKOUT_URL="$PAYME_CHECKOUT_URL" --project-ref "$PROJECT_REF"
+          fi
+          if [ -n "$ALSAMOS_APP_URL" ]; then
+            supabase secrets set ALSAMOS_APP_URL="$ALSAMOS_APP_URL" --project-ref "$PROJECT_REF"
+          else
+            supabase secrets set ALSAMOS_APP_URL="https://www.alsamos.com/payment?topup=return" --project-ref "$PROJECT_REF"
+          fi
+
       - name: Push database migrations
         if: steps.gate.outputs.enabled == 'true'
         shell: bash
@@ -111,6 +138,16 @@ jobs:
 
           echo "::error::Firecrawl Global Search did not become live. Check FIRECRAWL_API_KEY / Lovable Firecrawl connection."
           exit 1
+
+      - name: Deploy Payme wallet checkout
+        if: steps.gate.outputs.enabled == 'true'
+        shell: bash
+        run: supabase functions deploy wallet-payme-create --project-ref "$PROJECT_REF"
+
+      - name: Deploy Payme Merchant API
+        if: steps.gate.outputs.enabled == 'true'
+        shell: bash
+        run: supabase functions deploy wallet-payme-merchant --project-ref "$PROJECT_REF" --no-verify-jwt
 
       - name: Deploy web crawler
         if: steps.gate.outputs.enabled == 'true'
