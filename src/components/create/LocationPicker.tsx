@@ -1,26 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 import {
-  Banknote,
   Check,
-  CircleParking,
-  Coffee,
   Crosshair,
-  Fuel,
-  Landmark,
   Loader2,
   LocateFixed,
   MapPinned,
   MapPin,
   Navigation,
-  Pill,
   Radio,
   Search,
-  Store,
-  UtensilsCrossed,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -36,6 +25,9 @@ import {
 import type { PostLocationInput } from '@/lib/postMeta';
 import { reverseGeocode, type ResolvedAddress } from '@/lib/reverseGeocode';
 import { UI_LAYER } from '@/lib/uiLayers';
+import { AlsamosMapSurface } from '@/components/map/AlsamosMapSurface';
+import { categoryUi } from '@/lib/placeIcons';
+import type { MapSceneMarker } from '@/lib/mapEngine';
 
 interface LocationPickerProps {
   open: boolean;
@@ -46,21 +38,7 @@ interface LocationPickerProps {
 
 type PickerMode = 'place' | 'pin' | 'live';
 
-const TILE_URL = ['https://', '{s}', '.tile.openstreetmap.org/', '{z}/{x}/{y}', '.png'].join('');
 const DEFAULT_CENTER = { latitude: 41.2995, longitude: 69.2401 };
-
-const PIN_ICON = L.divIcon({
-  className: 'alsamos-map-pin',
-  html: [
-    '<span style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;transform:translate(-50%,-100%)">',
-    '<svg viewBox="0 0 24 24" width="34" height="34" fill="#2563eb" stroke="#ffffff" stroke-width="1.6" style="filter:drop-shadow(0 4px 7px rgba(15,23,42,.28))">',
-    '<path d="M12 2c-3.9 0-7 3.1-7 7 0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7z"/>',
-    '<circle cx="12" cy="9" r="2.4" fill="#ffffff" stroke="none"/>',
-    '</svg></span>',
-  ].join(''),
-  iconSize: [34, 34],
-  iconAnchor: [0, 0],
-});
 
 const LIVE_DURATIONS = [
   { label: '15 daqiqa', minutes: 15 },
@@ -73,61 +51,6 @@ const QUICK_CATEGORIES = PLACE_CATEGORIES.filter((category) =>
     category.id,
   ),
 );
-
-function categoryIcon(categoryId?: PlaceCategoryId | null) {
-  switch (categoryId) {
-    case 'restaurant':
-      return UtensilsCrossed;
-    case 'cafe':
-      return Coffee;
-    case 'fuel':
-      return Fuel;
-    case 'pharmacy':
-      return Pill;
-    case 'market':
-    case 'supermarket':
-      return Store;
-    case 'mosque':
-      return Landmark;
-    case 'parking':
-      return CircleParking;
-    case 'atm':
-    case 'bank':
-      return Banknote;
-    default:
-      return MapPin;
-  }
-}
-
-function MapClickHandler({
-  enabled,
-  onPick,
-}: {
-  enabled: boolean;
-  onPick: (lat: number, lng: number, zoom: number) => void;
-}) {
-  const map = useMapEvents({
-    click: (event) => {
-      if (enabled) onPick(event.latlng.lat, event.latlng.lng, map.getZoom());
-    },
-  });
-  return null;
-}
-
-function MapCenterSync({
-  latitude,
-  longitude,
-}: {
-  latitude: number;
-  longitude: number;
-}) {
-  const map = useMap();
-  useEffect(() => {
-    const zoom = map.getZoom();
-    map.setView([latitude, longitude], zoom < 14 ? 15 : zoom, { animate: true });
-  }, [latitude, longitude, map]);
-  return null;
-}
 
 function toLocation(place: MapPlace): PostLocationInput {
   return {
@@ -524,6 +447,44 @@ export function LocationPicker({
     return null;
   }, [isResolvingPin, mode, pin, pinLabel, selectedPlace]);
 
+  const mapMarkers = useMemo<MapSceneMarker[]>(() => {
+    const markers: MapSceneMarker[] = [];
+
+    if (myCoords) {
+      markers.push({
+        id: 'me',
+        kind: 'me',
+        latitude: myCoords.latitude,
+        longitude: myCoords.longitude,
+        label: 'Joriy joylashuv',
+      });
+    }
+
+    if (mode === 'place' && selectedPlace) {
+      markers.push({
+        id: 'selected-place',
+        kind: 'selected',
+        latitude: selectedPlace.latitude,
+        longitude: selectedPlace.longitude,
+        color: categoryUi(selectedPlace.categoryId).color,
+        label: selectedPlace.name,
+        active: true,
+      });
+    } else if (mode === 'pin' && pin) {
+      markers.push({
+        id: 'selected-pin',
+        kind: 'selected',
+        latitude: pin.latitude,
+        longitude: pin.longitude,
+        color: '#2F6FED',
+        label: pinLabel ?? 'Aniq nuqta',
+        active: true,
+      });
+    }
+
+    return markers;
+  }, [mode, myCoords, pin, pinLabel, selectedPlace]);
+
   if (!open) return null;
 
   const picker = (
@@ -609,29 +570,14 @@ export function LocationPicker({
 
       <div className="flex min-h-0 flex-1 flex-col bg-muted/[0.14]">
         <div className="relative mx-3 mt-3 h-[31dvh] min-h-[220px] shrink-0 overflow-hidden rounded-[24px] border border-border/60 bg-muted shadow-sm sm:mx-5 sm:h-[34dvh]">
-          <MapContainer
-            center={[center.latitude, center.longitude]}
+          <AlsamosMapSurface
+            center={{ latitude: center.latitude, longitude: center.longitude }}
+            referenceCenter={myCoords ?? { latitude: center.latitude, longitude: center.longitude }}
             zoom={15}
-            scrollWheelZoom
-            className="h-full w-full"
-            attributionControl={false}
-          >
-            <TileLayer url={TILE_URL} maxZoom={19} />
-            <MapCenterSync latitude={center.latitude} longitude={center.longitude} />
-            <MapClickHandler enabled={mode !== 'live'} onPick={handleMapPick} />
-            {mode === 'place' && selectedPlace && (
-              <Marker
-                position={[selectedPlace.latitude, selectedPlace.longitude]}
-                icon={PIN_ICON}
-              />
-            )}
-            {mode === 'pin' && pin && (
-              <Marker position={[pin.latitude, pin.longitude]} icon={PIN_ICON} />
-            )}
-            {mode === 'live' && myCoords && (
-              <Marker position={[myCoords.latitude, myCoords.longitude]} icon={PIN_ICON} />
-            )}
-          </MapContainer>
+            markers={mapMarkers}
+            pickMode={mode !== 'live'}
+            onMapClick={mode !== 'live' ? handleMapPick : undefined}
+          />
 
           <div className="pointer-events-none absolute inset-x-0 top-0 z-[500] flex items-start justify-between gap-3 p-3">
             {mode !== 'live' ? (
@@ -736,7 +682,7 @@ export function LocationPicker({
                   </button>
 
                   {QUICK_CATEGORIES.map((category) => {
-                    const CategoryIcon = categoryIcon(category.id);
+                    const CategoryIcon = categoryUi(category.id).Icon;
                     const active = selectedCategory === category.id;
                     return (
                       <button
@@ -819,7 +765,7 @@ export function LocationPicker({
                 <div className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
                   <ul className="divide-y divide-border/50">
                     {list.map((place) => {
-                      const PlaceIcon = categoryIcon(place.categoryId);
+                      const PlaceIcon = categoryUi(place.categoryId).Icon;
                       return (
                         <li key={place.id}>
                           <button
