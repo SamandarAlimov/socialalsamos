@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
+import { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -8,37 +7,24 @@ import { useAdminOnlineUsers } from '@/hooks/useAdminOnlineUsers';
 import { Globe, Users, RefreshCw, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import 'leaflet/dist/leaflet.css';
-
-// Component to handle map updates
-function MapUpdater({ center }: { center: [number, number] }) {
-  const map = useMap();
-  useEffect(() => {
-    map.setView(center, 2);
-  }, [center, map]);
-  return null;
-}
+import { AlsamosMapSurface } from '@/components/map/AlsamosMapSurface';
+import type { MapSceneMarker } from '@/lib/mapEngine';
 
 export function AdminOnlineUsersMap() {
   const { countryStats, totalOnline, isLoading, refetch } = useAdminOnlineUsers();
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
-  const mapRef = useRef<L.Map | null>(null);
-
-  const getMarkerRadius = (count: number) => {
-    if (count >= 100) return 30;
-    if (count >= 50) return 25;
-    if (count >= 20) return 20;
-    if (count >= 10) return 15;
-    if (count >= 5) return 12;
-    return 8;
-  };
-
-  const getMarkerColor = (count: number) => {
-    if (count >= 50) return 'hsl(var(--destructive))';
-    if (count >= 20) return 'hsl(var(--chart-1))';
-    if (count >= 10) return 'hsl(var(--chart-2))';
-    return 'hsl(var(--primary))';
-  };
+  const mapMarkers = useMemo<MapSceneMarker[]>(
+    () =>
+      countryStats.map((stat) => ({
+        id: 'country|' + stat.country,
+        kind: 'cluster' as const,
+        latitude: stat.lat,
+        longitude: stat.lng,
+        count: Math.max(1, stat.count),
+        label: stat.country,
+      })),
+    [countryStats],
+  );
 
   if (isLoading) {
     return (
@@ -81,65 +67,20 @@ export function AdminOnlineUsersMap() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
           {/* Map */}
           <div className="lg:col-span-2 h-[400px] relative rounded-bl-lg overflow-hidden">
-            <MapContainer
-              center={[41.3775, 64.5853]}
+            <AlsamosMapSurface
+              center={{ latitude: 41.3775, longitude: 64.5853 }}
+              referenceCenter={{ latitude: 41.3775, longitude: 64.5853 }}
               zoom={2}
-              className="h-full w-full z-0"
-              ref={mapRef}
-              scrollWheelZoom={true}
-              style={{ background: 'hsl(var(--muted))' }}
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-              />
-              
-              {countryStats.map((stat) => (
-                <CircleMarker
-                  key={stat.country}
-                  center={[stat.lat, stat.lng]}
-                  radius={getMarkerRadius(stat.count)}
-                  pathOptions={{
-                    fillColor: getMarkerColor(stat.count),
-                    fillOpacity: 0.7,
-                    color: 'white',
-                    weight: 2,
-                  }}
-                  eventHandlers={{
-                    click: () => setSelectedCountry(stat.country),
-                  }}
-                >
-                  <Popup>
-                    <div className="text-center p-1">
-                      <p className="font-semibold">{stat.country}</p>
-                      <p className="text-sm">{stat.count} foydalanuvchi onlayn</p>
-                    </div>
-                  </Popup>
-                </CircleMarker>
-              ))}
-            </MapContainer>
+              layerId="night"
+              markers={mapMarkers}
+              onMarkerClick={(id) => {
+                if (!id.startsWith('country|')) return;
+                setSelectedCountry(id.slice('country|'.length));
+              }}
+            />
 
-            {/* Legend */}
-            <div className="absolute bottom-4 left-4 bg-background/90 backdrop-blur-sm rounded-lg p-3 border shadow-sm z-[1000]">
-              <p className="text-xs font-medium mb-2">Foydalanuvchilar soni</p>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 text-xs">
-                  <div className="h-3 w-3 rounded-full" style={{ backgroundColor: 'hsl(var(--destructive))' }} />
-                  <span>50+</span>
-                </div>
-                <div className="flex items-center gap-2 text-xs">
-                  <div className="h-3 w-3 rounded-full" style={{ backgroundColor: 'hsl(var(--chart-1))' }} />
-                  <span>20-49</span>
-                </div>
-                <div className="flex items-center gap-2 text-xs">
-                  <div className="h-3 w-3 rounded-full" style={{ backgroundColor: 'hsl(var(--chart-2))' }} />
-                  <span>10-19</span>
-                </div>
-                <div className="flex items-center gap-2 text-xs">
-                  <div className="h-3 w-3 rounded-full" style={{ backgroundColor: 'hsl(var(--primary))' }} />
-                  <span>1-9</span>
-                </div>
-              </div>
+            <div className="absolute bottom-4 left-4 z-[500] rounded-xl border border-border/60 bg-background/90 px-3 py-2 text-xs text-muted-foreground shadow-lg backdrop-blur-xl">
+              Marker ichidagi son — shu davlatdagi onlayn foydalanuvchilar
             </div>
           </div>
 
