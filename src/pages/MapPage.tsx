@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 import {
   ArrowDown,
   ArrowDownUp,
@@ -32,15 +29,7 @@ import {
 import { toast } from 'sonner';
 
 import { getLayer, getOverlay, type MapLayerId } from '@/lib/mapLayers';
-import {
-  categoryUi,
-  clusterSvg,
-  meDotSvg,
-  navigationArrowSvg,
-  pinSvg,
-  stopSvg,
-  vehicleSvg,
-} from '@/lib/placeIcons';
+import { categoryUi } from '@/lib/placeIcons';
 import {
   canonicalPlaceId,
   resolveMapClickPlace,
@@ -194,159 +183,6 @@ function transitModeLabel(mode?: string): string {
   }
 }
 
-function placeIcon(color: string, active: boolean) {
-  return L.divIcon({
-    html: pinSvg(color, { size: active ? 40 : 30, active }),
-    className: 'alsamos-pin',
-    iconSize: [active ? 40 : 30, active ? 56 : 42],
-    iconAnchor: [active ? 20 : 15, active ? 56 : 42],
-  });
-}
-
-function routeLocationIcon(color = '#2F6FED', active = false) {
-  const size = active ? 38 : 34;
-  const height = Math.round(size * 1.4);
-  return L.divIcon({
-    html: pinSvg(color, { size, active }),
-    className: 'alsamos-route-location',
-    iconSize: [size, height],
-    iconAnchor: [size / 2, height],
-  });
-}
-
-const ME_ICON = L.divIcon({
-  html: meDotSvg(),
-  className: 'alsamos-me',
-  iconSize: [26, 26],
-  iconAnchor: [13, 13],
-});
-
-const STOP_ICON = L.divIcon({
-  html: stopSvg(),
-  className: 'alsamos-stop',
-  iconSize: [22, 22],
-  iconAnchor: [11, 11],
-});
-
-function MapController({
-  center,
-  zoom,
-  fitTo,
-}: {
-  center: { latitude: number; longitude: number } | null;
-  zoom?: number;
-  fitTo?: [number, number][] | null;
-}) {
-  const map = useMap();
-
-  useEffect(() => {
-    if (fitTo && fitTo.length > 1) {
-      map.fitBounds(L.latLngBounds(fitTo), { padding: [48, 48] });
-    }
-  }, [fitTo, map]);
-
-  useEffect(() => {
-    if (center && !fitTo) {
-      map.setView([center.latitude, center.longitude], zoom ?? map.getZoom(), {
-        animate: true,
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [center?.latitude, center?.longitude, zoom]);
-
-  return null;
-}
-
-interface MapViewport {
-  south: number;
-  west: number;
-  north: number;
-  east: number;
-  zoom: number;
-}
-
-function MapViewportObserver({
-  referenceCenter,
-  onViewport,
-  onMovedCenter,
-}: {
-  referenceCenter: { latitude: number; longitude: number };
-  onViewport: (viewport: MapViewport) => void;
-  onMovedCenter: (center: { latitude: number; longitude: number } | null) => void;
-}) {
-  const publish = useCallback(
-    (map: L.Map, moved: boolean) => {
-      const bounds = map.getBounds();
-      onViewport({
-        south: bounds.getSouth(),
-        west: bounds.getWest(),
-        north: bounds.getNorth(),
-        east: bounds.getEast(),
-        zoom: map.getZoom(),
-      });
-      if (!moved) return;
-      const mapCenter = map.getCenter();
-      const candidate = { latitude: mapCenter.lat, longitude: mapCenter.lng };
-      onMovedCenter(
-        distanceMeters(
-          referenceCenter.latitude,
-          referenceCenter.longitude,
-          candidate.latitude,
-          candidate.longitude,
-        ) > 250
-          ? candidate
-          : null,
-      );
-    },
-    [referenceCenter.latitude, referenceCenter.longitude, onViewport, onMovedCenter],
-  );
-
-  const map = useMapEvents({
-    moveend: (event) => publish(event.target as L.Map, true),
-    zoomend: (event) => publish(event.target as L.Map, true),
-  });
-
-  useEffect(() => {
-    publish(map, false);
-  }, [map, publish]);
-
-  return null;
-}
-
-function MapClickObserver({
-  onMapClick,
-}: {
-  onMapClick: (
-    point: { latitude: number; longitude: number },
-    zoom: number,
-  ) => void | Promise<void>;
-}) {
-  useMapEvents({
-    click: (event) => {
-      void onMapClick(
-        {
-          latitude: event.latlng.lat,
-          longitude: event.latlng.lng,
-        },
-        (event.target as L.Map).getZoom(),
-      );
-    },
-  });
-
-  return null;
-}
-
-function NavigationInteractionObserver({
-  onManualPan,
-}: {
-  onManualPan: () => void;
-}) {
-  useMapEvents({
-    dragstart: () => onManualPan(),
-  });
-  return null;
-}
-
 type PlaceMarkerGroup =
   | { type: 'place'; place: MapPlace }
   | {
@@ -400,25 +236,6 @@ function clusterPlaces(
   return result;
 }
 
-function clusterIcon(count: number) {
-  const size = count > 20 ? 42 : count > 8 ? 38 : 34;
-  return L.divIcon({
-    html: clusterSvg(count),
-    className: 'alsamos-cluster',
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-  });
-}
-
-function liveVehicleIcon(ref: string, color?: string | null, bearing?: number | null) {
-  return L.divIcon({
-    html: vehicleSvg(ref, color, bearing),
-    className: 'alsamos-live-vehicle',
-    iconSize: [42, 38],
-    iconAnchor: [21, 32],
-  });
-}
-
 function navigationCameraTarget(
   position: NavigationPosition,
 ): { latitude: number; longitude: number } {
@@ -452,15 +269,6 @@ function navigationCameraTarget(
     latitude: (lat2 * 180) / Math.PI,
     longitude: (lng2 * 180) / Math.PI,
   };
-}
-
-function navigationArrowIcon(heading?: number | null) {
-  return L.divIcon({
-    html: navigationArrowSvg(heading),
-    className: 'alsamos-navigation-arrow',
-    iconSize: [44, 44],
-    iconAnchor: [22, 22],
-  });
 }
 
 export default function MapPage() {
