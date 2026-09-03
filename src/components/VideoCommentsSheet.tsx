@@ -99,7 +99,7 @@ export function VideoCommentsSheet({
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <SheetContent
         side="right"
-        className="z-[10020] flex w-[min(430px,38vw)] min-w-[360px] flex-col overflow-hidden border-l border-border/70 bg-background/98 p-0 shadow-2xl backdrop-blur-xl sm:max-w-none"
+        className="flex w-[min(430px,38vw)] min-w-[360px] flex-col overflow-hidden border-l border-border/70 bg-background/98 p-0 shadow-2xl backdrop-blur-xl sm:max-w-none"
         overlayClassName="bg-black/25 backdrop-blur-[1px]"
         hideDefaultClose
       >
