@@ -51,6 +51,7 @@ export interface Conversation {
   is_archived?: boolean;
   is_request?: boolean;
   is_self_chat?: boolean;
+  my_role?: 'owner' | 'admin' | 'member' | string | null;
   other_participant?: {
     id: string;
     username: string | null;
@@ -154,7 +155,7 @@ export function useConversations(
     try {
       const { data: participations, error: partError } = await supabase
         .from('conversation_participants')
-        .select('conversation_id, is_pinned, is_muted, is_archived, is_request, last_read_at')
+        .select('conversation_id, is_pinned, is_muted, is_archived, is_request, last_read_at, role')
         .eq('user_id', user.id)
         .eq('is_archived', showArchived);
 
@@ -176,6 +177,7 @@ export function useConversations(
             is_archived: p.is_archived ?? false,
             is_request: (p as any).is_request ?? false,
             last_read_at: p.last_read_at as string | null,
+            role: p.role as string | null,
           },
         ])
       );
@@ -351,6 +353,7 @@ export function useConversations(
           is_archived: settings?.is_archived ?? false,
           is_request: settings?.is_request ?? false,
           is_self_chat: isSelfChat,
+          my_role: settings?.role ?? null,
         } as Conversation;
       });
 
