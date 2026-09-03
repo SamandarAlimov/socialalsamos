@@ -3,6 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { CallControlButton } from '@/components/calls/CallControlButton';
 import { Mic, MicOff, Phone, PhoneOff, Video, VideoOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { UI_LAYER } from '@/lib/uiLayers';
 
 export interface CallLobbyStartOptions {
   withVideo: boolean;
@@ -170,7 +171,7 @@ export function CallLobbyOverlay({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[10020] overflow-hidden bg-[#11161c] text-white">
+    <div className={cn('fixed inset-0 overflow-hidden bg-[#11161c] text-white', UI_LAYER.immersive)}>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(76,166,255,0.12),transparent_34%),radial-gradient(circle_at_50%_100%,rgba(60,200,100,0.08),transparent_30%)]" />
 
       <div className="relative mx-auto flex h-[100dvh] w-full max-w-[1200px] flex-col items-center px-4 pb-[max(18px,env(safe-area-inset-bottom))] pt-[max(22px,env(safe-area-inset-top))] sm:px-8">
