@@ -2,17 +2,25 @@
   "id": "/",
   "name": "Alsamos",
   "short_name": "Alsamos",
-  "description": "Alsamos — ulaning, ulashing, kashf eting. Zamonaviy ijtimoiy tarmoq.",
+  "description": "Alsamos — xabarlar, hamjamiyatlar, videolar, marketplace, xarita, to‘lovlar, AI va mini ilovalarni birlashtirgan superapp.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["standalone", "fullscreen"],
+  "display_override": [
+    "standalone",
+    "fullscreen"
+  ],
   "background_color": "#ffffff",
   "theme_color": "#f97316",
   "orientation": "portrait-primary",
   "lang": "uz",
   "dir": "ltr",
-  "categories": ["social", "communication"],
+  "categories": [
+    "communication",
+    "productivity",
+    "utilities",
+    "shopping"
+  ],
   "icons": [
     {
       "src": "/icons/icon-192.png",
