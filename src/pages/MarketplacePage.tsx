@@ -237,7 +237,9 @@ export default function MarketplacePage() {
                   <div className="w-11 h-11 rounded-2xl bg-muted flex items-center justify-center shadow-sm">
                     <Store className="h-5 w-5 text-muted-foreground" />
                   </div>
-                  <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-green-500 border-2 border-background" />
+                  <div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-background bg-foreground">
+                    <div className="h-1.5 w-1.5 rounded-full bg-background" />
+                  </div>
                 </div>
                 <div>
                   <h1 className="text-xl font-bold tracking-tight">Marketplace</h1>
@@ -323,7 +325,7 @@ export default function MarketplacePage() {
             </div>
 
             {/* Premium Tab Navigation */}
-            <div className="flex gap-1 p-1 rounded-xl bg-muted/40 backdrop-blur-sm" role="tablist">
+            <div className="grid grid-cols-4 gap-1 rounded-2xl border border-border/60 bg-muted/35 p-1" role="tablist">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -334,16 +336,19 @@ export default function MarketplacePage() {
                     aria-selected={isActive}
                     onClick={() => selectTab(tab.id)}
                     className={cn(
-                      'flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium transition-all duration-300',
+                      'flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-sm font-medium transition-colors',
                       isActive
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground',
+                        ? 'bg-foreground text-background shadow-sm'
+                        : 'text-muted-foreground hover:bg-background/70 hover:text-foreground',
                     )}
                   >
                     <Icon className="h-4 w-4" />
                     <span>{tab.label}</span>
                     {tab.id === 'saved' && savedProducts.length > 0 && (
-                      <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-bold">
+                      <span className={cn(
+                        "ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold",
+                        isActive ? "bg-background/15 text-background" : "bg-background text-muted-foreground"
+                      )}>
                         {savedProducts.length}
                       </span>
                     )}
@@ -443,7 +448,7 @@ export default function MarketplacePage() {
                       </p>
                       <Button
                         size="sm"
-                        className="mt-2 rounded-lg shadow-lg shadow-primary/20"
+                        className="mt-2 rounded-xl bg-foreground text-background shadow-sm hover:bg-foreground/90"
                         onClick={() => handleProductSelect(featuredProducts[0])}
                       >
                         {marketplaceUz.page.view}
@@ -632,7 +637,7 @@ export default function MarketplacePage() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              className="p-4"
+              className="p-4 sm:p-5"
             >
               {!user ? (
                 <EmptyState
@@ -672,21 +677,35 @@ export default function MarketplacePage() {
                 </div>
               ) : (
                 <div className="space-y-5">
-                  {/* Seller Stats Glass Cards */}
-                  <div className="grid grid-cols-3 gap-3">
-                    {[
-                      { value: sellerProducts.length, label: 'Mahsulotlar', color: 'from-blue-500/10 to-blue-500/5' },
-                      { value: seller.total_sales ?? 0, label: marketplaceUz.page.sales, color: 'from-green-500/10 to-green-500/5' },
-                      { value: (seller.rating ?? 0) > 0 ? seller.rating.toFixed(1) : '—', label: marketplaceUz.page.rating, color: 'from-amber-500/10 to-amber-500/5' },
-                    ].map((stat, i) => (
-                      <div key={i} className={cn(
-                        'rounded-2xl p-4 text-center border border-border/30',
-                        `bg-gradient-to-br ${stat.color}`,
-                      )}>
-                        <p className="text-2xl font-bold tabular-nums">{stat.value}</p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">{stat.label}</p>
+                  {/* Seller overview: neutral, information-first cards. */}
+                  <div className="overflow-hidden rounded-2xl border border-border/70 bg-card">
+                    <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3.5">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">{seller.business_name}</p>
+                        <p className="text-xs text-muted-foreground">Sotuvchi markazi</p>
                       </div>
-                    ))}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 rounded-lg px-2.5 text-xs"
+                        onClick={() => setShowDashboard(true)}
+                      >
+                        <LayoutDashboard className="mr-1.5 h-3.5 w-3.5" />
+                        Analitika
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-3 divide-x divide-border/60">
+                      {[
+                        { value: sellerProducts.length, label: 'Mahsulotlar' },
+                        { value: seller.total_sales ?? 0, label: marketplaceUz.page.sales },
+                        { value: (seller.rating ?? 0) > 0 ? seller.rating.toFixed(1) : '—', label: marketplaceUz.page.rating },
+                      ].map((stat) => (
+                        <div key={stat.label} className="px-3 py-4 text-center">
+                          <p className="text-xl font-semibold tabular-nums sm:text-2xl">{stat.value}</p>
+                          <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{stat.label}</p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
                   {/*
@@ -694,7 +713,7 @@ export default function MarketplacePage() {
                     buried inside the analytics dashboard, so sellers had no
                     obvious place to accept or ship an order.
                   */}
-                  <div className="flex gap-1 p-1 rounded-xl bg-muted/40" role="tablist">
+                  <div className="grid grid-cols-2 gap-1 rounded-2xl border border-border/60 bg-muted/35 p-1" role="tablist">
                     {sellerViews.map((view) => {
                       const Icon = view.icon;
                       const isActive = sellingView === view.id;
@@ -705,10 +724,10 @@ export default function MarketplacePage() {
                           aria-selected={isActive}
                           onClick={() => { triggerHaptic('light'); setSellingView(view.id); }}
                           className={cn(
-                            'flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium transition-all',
+                            'flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
                             isActive
-                              ? 'bg-background text-foreground shadow-sm'
-                              : 'text-muted-foreground hover:text-foreground',
+                              ? 'bg-foreground text-background shadow-sm'
+                              : 'text-muted-foreground hover:bg-background/70 hover:text-foreground',
                           )}
                         >
                           <Icon className="h-4 w-4" />
@@ -722,22 +741,23 @@ export default function MarketplacePage() {
                     <SellerOrdersView />
                   ) : (
                     <>
-                      <Button
-                        variant="outline"
-                        className="w-full rounded-xl h-11"
-                        onClick={() => setShowDashboard(true)}
-                      >
-                        <LayoutDashboard className="h-4 w-4 mr-2" />
-                        {marketplaceUz.page.sellerDashboard}
-                      </Button>
-
-                      <Button
-                        className="w-full rounded-xl h-12 shadow-lg shadow-primary/20"
-                        onClick={() => setShowCreateProduct(true)}
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        {marketplaceUz.page.addProduct}
-                      </Button>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+                        <Button
+                          className="h-11 rounded-xl bg-foreground text-background shadow-sm hover:bg-foreground/90"
+                          onClick={() => setShowCreateProduct(true)}
+                        >
+                          <Plus className="mr-2 h-4 w-4" />
+                          {marketplaceUz.page.addProduct}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="h-11 rounded-xl px-4"
+                          onClick={() => setShowDashboard(true)}
+                        >
+                          <LayoutDashboard className="mr-2 h-4 w-4" />
+                          {marketplaceUz.page.sellerDashboard}
+                        </Button>
+                      </div>
 
                       {sellerLoading ? (
                         <div className="grid grid-cols-2 gap-3">
@@ -831,11 +851,20 @@ export default function MarketplacePage() {
 
       {/* Filters Sheet */}
       <Sheet open={showFilters} onOpenChange={setShowFilters}>
-        <SheetContent side="bottom" className="rounded-t-3xl">
-          <SheetHeader>
-            <SheetTitle>Filtrlar</SheetTitle>
+        <SheetContent
+          side={isMobile ? 'bottom' : 'right'}
+          className={cn(
+            'p-0',
+            isMobile
+              ? 'max-h-[86dvh] rounded-t-[28px] border-x border-t border-border/70'
+              : 'w-[420px] border-l border-border/70 sm:max-w-[420px]'
+          )}
+        >
+          <SheetHeader className="border-b border-border/60 px-5 py-4 text-left">
+            <SheetTitle className="text-base">Filtr va saralash</SheetTitle>
+            <p className="text-xs text-muted-foreground">Natijalarni tezroq topish uchun ko‘rinishni sozlang.</p>
           </SheetHeader>
-          <div className="space-y-6 py-4">
+          <div className="space-y-6 overflow-y-auto px-5 py-5">
             <div className="space-y-3">
               <label className="text-sm font-medium">Saralash</label>
               <div className="grid grid-cols-2 gap-2">
@@ -849,10 +878,10 @@ export default function MarketplacePage() {
                     key={s.id}
                     onClick={() => setSortBy(s.id)}
                     className={cn(
-                      'py-2.5 px-3 rounded-xl text-sm font-medium transition-all border',
+                      'min-h-11 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors',
                       sortBy === s.id
-                        ? 'bg-background text-foreground border-border shadow-sm'
-                        : 'bg-muted/50 border-border/30 text-muted-foreground hover:bg-muted',
+                        ? 'border-foreground bg-foreground text-background'
+                        : 'border-border/60 bg-muted/35 text-muted-foreground hover:bg-muted hover:text-foreground',
                     )}
                   >
                     {s.label}
@@ -867,7 +896,7 @@ export default function MarketplacePage() {
                 </label>
                 {priceFilterActive && (
                   <button
-                    className="text-xs font-semibold text-link hover:text-link-hover"
+                    className="text-xs font-semibold text-foreground underline-offset-4 hover:underline"
                     onClick={() => setPriceRange(null)}
                   >
                     Tozalash
@@ -886,12 +915,15 @@ export default function MarketplacePage() {
                 Katalogdagi eng yuqori narx: {formatPrice(maxProductPrice)}
               </p>
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" className="flex-1 rounded-xl h-11" onClick={resetFilters}>
+            <div className="grid grid-cols-2 gap-2 border-t border-border/60 pt-4">
+              <Button variant="outline" className="h-11 rounded-xl" onClick={resetFilters}>
                 Tiklash
               </Button>
-              <Button className="flex-1 rounded-xl h-11" onClick={() => setShowFilters(false)}>
-                Qo'llash
+              <Button
+                className="h-11 rounded-xl bg-foreground text-background hover:bg-foreground/90"
+                onClick={() => setShowFilters(false)}
+              >
+                Qo‘llash
               </Button>
             </div>
           </div>
