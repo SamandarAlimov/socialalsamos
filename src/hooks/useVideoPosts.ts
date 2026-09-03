@@ -411,7 +411,7 @@ export function useVideoPosts() {
   }, [userId, videos]);
 
   const toggleFollow = useCallback(async (targetUserId: string) => {
-    if (!user || !targetUserId || targetUserId === userId) return;
+    if (!userId || !targetUserId || targetUserId === userId) return;
 
     const targetVideo = videos.find((video) => video.user_id === targetUserId);
     const wasFollowing = Boolean(targetVideo?.is_following);

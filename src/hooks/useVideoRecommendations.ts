@@ -245,6 +245,10 @@ async function loadVideoRecommendationProfile(
   // Canonical recommendation event stream is optional and schema-safe. Watch
   // sessions remain the source of truth if this table is unavailable.
   for (const row of recommendationRows) {
+    // Video watch events mirror video_watch_sessions. Those sessions are the
+    // authoritative signal above, so do not double-count the same behavior.
+    if (String(row.source ?? '') === 'videos') continue;
+
     const postId = String(row.post_id ?? '');
     if (!postId) continue;
     const rawWeight = Math.max(-8, Math.min(8, Number(row.weight ?? 0)));

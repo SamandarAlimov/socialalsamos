@@ -123,13 +123,13 @@ begin
   freshness :=
     3.4 * exp(
       -greatest(
-        extract(epoch from (now() - p.created_at)) / 3600.0,
+        extract(epoch from (now() - coalesce(p.created_at, now()))) / 3600.0,
         0
       ) / 120.0
     )
     + 0.7 * exp(
       -greatest(
-        extract(epoch from (now() - p.created_at)) / 86400.0,
+        extract(epoch from (now() - coalesce(p.created_at, now()))) / 86400.0,
         0
       ) / 45.0
     );
@@ -217,12 +217,15 @@ security definer
 set search_path = public
 as $$
 begin
-  perform public.recalculate_video_recommendation_rank(
-    coalesce(new.post_id, old.post_id)
-  );
-  return coalesce(new, old);
+  if tg_op = 'DELETE' then
+    perform public.recalculate_video_recommendation_rank(old.post_id);
+    return old;
+  end if;
+
+  perform public.recalculate_video_recommendation_rank(new.post_id);
+  return new;
 end;
-$$;
+$;
 
 drop trigger if exists video_watch_refresh_recommendation_rank
   on public.video_watch_sessions;

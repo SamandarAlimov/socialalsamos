@@ -1130,7 +1130,7 @@ export default function VideosPage() {
       top: index * (container.clientHeight || 0),
       behavior: 'smooth',
     });
-  }, [mediumTap, videos.length]);
+  }, [mediumTap, rankedVideos.length]);
 
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
