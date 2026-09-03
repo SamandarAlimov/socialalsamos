@@ -521,7 +521,8 @@ export function CommentsSection({
     <div
       className={cn(
         'border-t border-border',
-        isPanel && 'flex h-full min-h-0 flex-col border-t-0',
+        isPanel &&
+          'flex h-full min-h-0 flex-col border-t-0 bg-background text-foreground',
       )}
     >
       {user && (
@@ -645,7 +646,7 @@ export function CommentsSection({
         className={cn(
           'overflow-y-auto px-3 md:px-4',
           isPanel
-            ? 'order-1 min-h-0 flex-1 overscroll-contain'
+            ? 'order-1 min-h-0 flex-1 overscroll-contain bg-background text-foreground'
             : 'max-h-[min(48vh,560px)]',
         )}
       >

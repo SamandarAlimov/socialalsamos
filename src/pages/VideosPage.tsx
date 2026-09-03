@@ -10,6 +10,7 @@ import { PostLikesViewsDialog } from '@/components/PostLikesViewsDialog';
 import { SharePostDialog } from '@/components/SharePostDialog';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { usePostViews } from '@/hooks/usePostViews';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
@@ -49,6 +50,8 @@ interface VideoCardProps {
   onLikesClick: () => void;
   onProfileClick: () => void;
   onWatchClick: () => void;
+  onFollow: () => void;
+  currentUserId?: string | null;
   isMobile: boolean;
   globalMuted: boolean;
   onMuteToggle: () => void;
@@ -67,6 +70,8 @@ function VideoCard({
   onLikesClick,
   onProfileClick,
   onWatchClick,
+  onFollow,
+  currentUserId,
   isMobile,
   globalMuted,
   onMuteToggle,
@@ -80,7 +85,6 @@ function VideoCard({
   const holdActive = useRef(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showPlayButton, setShowPlayButton] = useState(false);
-  const [isFollowing, setIsFollowing] = useState(false);
   const [expanded, setExpanded] = useState(false);
   // Player state
   const [aspect, setAspect] = useState<number | null>(null);
@@ -394,7 +398,7 @@ function VideoCard({
 
   const handleFollow = () => {
     lightTap();
-    setIsFollowing(!isFollowing);
+    onFollow();
   };
 
   const handleShare = (e: React.MouseEvent) => {
@@ -649,19 +653,23 @@ function VideoCard({
                   </span>
                   {video.profile?.is_verified && <VerifiedBadge size="xs" />}
                 </button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleFollow}
-                  className={cn(
-                    "ml-1 h-7 shrink-0 rounded-md border px-3 text-xs font-semibold",
-                    isFollowing
-                      ? "border-white/40 bg-transparent text-white hover:bg-white/10"
-                      : "border-white bg-transparent text-white hover:bg-white/10"
-                  )}
-                >
-                  {isFollowing ? t('common.following', 'Following') : t('common.follow', 'Follow')}
-                </Button>
+                {video.user_id !== currentUserId && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleFollow}
+                    className={cn(
+                      "ml-1 h-7 shrink-0 rounded-full border px-3 text-xs font-semibold backdrop-blur-md transition-all",
+                      video.is_following
+                        ? "border-white/30 bg-white/12 text-white hover:bg-white/18"
+                        : "border-white/70 bg-black/20 text-white hover:bg-white/12"
+                    )}
+                  >
+                    {video.is_following
+                      ? t('common.following', 'Following')
+                      : t('common.follow', 'Follow')}
+                  </Button>
+                )}
               </div>
 
               {/*
@@ -982,7 +990,16 @@ export default function VideosPage() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const [searchParams] = useSearchParams();
-  const { videos, isLoading, hasMore, loadMore, likeVideo, toggleBookmark } = useVideoPosts();
+  const { user } = useAuth();
+  const {
+    videos,
+    isLoading,
+    hasMore,
+    loadMore,
+    likeVideo,
+    toggleBookmark,
+    toggleFollow,
+  } = useVideoPosts();
   const [activeIndex, setActiveIndex] = useState(0);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
@@ -991,6 +1008,13 @@ export default function VideosPage() {
   const [likesDialogOpen, setLikesDialogOpen] = useState(false);
   const [likesVideoId, setLikesVideoId] = useState<string | null>(null);
   const [watchVideoId, setWatchVideoId] = useState<string | null>(null);
+  const initialDeepLinkRef = useRef(
+    Boolean(
+      searchParams.get('v') ||
+        searchParams.get('post') ||
+        searchParams.get('id'),
+    ),
+  );
   const [globalMuted, setGlobalMuted] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const { mediumTap, lightTap } = useHapticFeedback();
@@ -1008,9 +1032,44 @@ export default function VideosPage() {
     Bunday holatda foydalanuvchiga qaytish yo'li kerak - avval u faqat mobil
     ko'rinishda chizilgani uchun desktopda "qamalib" qolardi.
   */
-  const isDeepLink = Boolean(
-    searchParams.get('v') || searchParams.get('post') || searchParams.get('id')
-  );
+  const isDeepLink = initialDeepLinkRef.current;
+
+  // URL doimo joriy videoni ko'rsatadi. Scroll yoki "keyingi video" historyni
+  // spam qilmasligi uchun replace ishlatiladi.
+  useEffect(() => {
+    const currentVideo = watchVideoId
+      ? videos.find((item) => item.id === watchVideoId)
+      : videos[activeIndex];
+
+    if (!currentVideo?.id) return;
+
+    const currentParam =
+      searchParams.get('v') ||
+      searchParams.get('post') ||
+      searchParams.get('id');
+
+    if (
+      currentParam === currentVideo.id &&
+      searchParams.get('v') === currentVideo.id &&
+      !searchParams.has('post') &&
+      !searchParams.has('id')
+    ) {
+      return;
+    }
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('post');
+    nextParams.delete('id');
+    nextParams.set('v', currentVideo.id);
+
+    navigate(
+      {
+        pathname: '/videos',
+        search: `?${nextParams.toString()}`,
+      },
+      { replace: true },
+    );
+  }, [activeIndex, navigate, searchParams, videos, watchVideoId]);
 
   const handleBack = useCallback(() => {
     lightTap();
@@ -1284,6 +1343,8 @@ export default function VideosPage() {
                   onLikesClick={() => openLikesDialog(video.id)}
                   onProfileClick={() => openProfile(video)}
                   onWatchClick={() => setWatchVideoId(video.id)}
+                  onFollow={() => toggleFollow(video.user_id)}
+                  currentUserId={user?.id}
                   isMobile={isMobile}
                   globalMuted={globalMuted}
                   onMuteToggle={handleMuteToggle}
@@ -1308,6 +1369,8 @@ export default function VideosPage() {
           onClose={closeWatchPanel}
           onLike={(id) => likeVideo(id)}
           onBookmark={(id) => toggleBookmark(id)}
+          onFollow={(id) => toggleFollow(id)}
+          currentUserId={user?.id}
           onShare={(item) => openShareDialog(item.id)}
           onComments={(item) => openComments(item.id)}
           onOpenProfile={(item) => openProfile(item)}

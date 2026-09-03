@@ -81,7 +81,7 @@ export function VideoCommentsSheet({
   if (isMobile) {
     return (
       <Drawer open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <DrawerContent className="flex h-[74dvh] max-h-[760px] flex-col overflow-hidden rounded-t-[28px] border-border/70 bg-background">
+        <DrawerContent className="flex h-[74dvh] max-h-[760px] flex-col overflow-hidden rounded-t-[28px] border-border/70 bg-background text-foreground shadow-2xl">
           <div className="mx-auto mt-2 h-1.5 w-10 rounded-full bg-muted-foreground/20" />
           <DrawerHeader className="shrink-0 border-b border-border/60 px-4 pb-3 pt-2">
             <CommentsHeader commentsCount={commentsCount} onClose={onClose} />
@@ -99,11 +99,11 @@ export function VideoCommentsSheet({
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <SheetContent
         side="right"
-        className="flex w-[min(430px,38vw)] min-w-[360px] flex-col overflow-hidden border-l border-border/70 bg-background/98 p-0 shadow-2xl backdrop-blur-xl sm:max-w-none"
-        overlayClassName="bg-black/25 backdrop-blur-[1px]"
+        className="flex w-[min(440px,40vw)] min-w-[380px] flex-col overflow-hidden border-l border-border/70 bg-background p-0 text-foreground shadow-[-24px_0_70px_rgba(0,0,0,0.18)] sm:max-w-none"
+        overlayClassName="bg-black/10 backdrop-blur-[0.5px]"
         hideDefaultClose
       >
-        <SheetHeader className="shrink-0 border-b border-border/60 px-4 py-3 text-left">
+        <SheetHeader className="shrink-0 border-b border-border/60 bg-background px-4 py-3 text-left text-foreground">
           <CommentsHeader
             commentsCount={commentsCount}
             onClose={onClose}

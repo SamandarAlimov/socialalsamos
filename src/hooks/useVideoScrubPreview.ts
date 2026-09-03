@@ -12,8 +12,27 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * CORS talab qilinmaydi va tashqi CDN videolar ham ishlaydi.
  */
 
-export const SCRUB_PREVIEW_WIDTH = 168;
-export const SCRUB_PREVIEW_HEIGHT = 94;
+export const SCRUB_PREVIEW_MAX_WIDTH = 168;
+export const SCRUB_PREVIEW_MAX_HEIGHT = 168;
+
+export function resolveScrubPreviewSize(ratio?: number | null) {
+  const safeRatio =
+    ratio && Number.isFinite(ratio) && ratio > 0 ? ratio : 16 / 9;
+
+  if (safeRatio >= 1) {
+    const width = SCRUB_PREVIEW_MAX_WIDTH;
+    return {
+      width,
+      height: Math.max(72, Math.round(width / safeRatio)),
+    };
+  }
+
+  const height = SCRUB_PREVIEW_MAX_HEIGHT;
+  return {
+    width: Math.max(72, Math.round(height * safeRatio)),
+    height,
+  };
+}
 
 export function useVideoScrubPreview(src?: string, enabled = true) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -21,10 +40,12 @@ export function useVideoScrubPreview(src?: string, enabled = true) {
   const pendingTimeRef = useRef<number | null>(null);
   const seekingRef = useRef(false);
   const [isReady, setIsReady] = useState(false);
+  const [sourceRatio, setSourceRatio] = useState<number | null>(null);
 
   useEffect(() => {
     if (!enabled || !src || typeof document === 'undefined') {
       setIsReady(false);
+      setSourceRatio(null);
       return;
     }
 
@@ -61,13 +82,20 @@ export function useVideoScrubPreview(src?: string, enabled = true) {
       }
     };
 
-    const handleLoaded = () => setIsReady(true);
+    const handleLoaded = () => {
+      setIsReady(true);
+      if (el.videoWidth > 0 && el.videoHeight > 0) {
+        setSourceRatio(el.videoWidth / el.videoHeight);
+      }
+    };
 
+    el.addEventListener('loadedmetadata', handleLoaded);
     el.addEventListener('loadeddata', handleLoaded);
     el.addEventListener('seeked', drawCurrentFrame);
     el.load();
 
     return () => {
+      el.removeEventListener('loadedmetadata', handleLoaded);
       el.removeEventListener('loadeddata', handleLoaded);
       el.removeEventListener('seeked', drawCurrentFrame);
       el.removeAttribute('src');
@@ -102,11 +130,14 @@ export function useVideoScrubPreview(src?: string, enabled = true) {
     }
   }, []);
 
+  const previewSize = resolveScrubPreviewSize(sourceRatio);
+
   return {
     canvasRef,
     requestFrame,
     isReady,
-    previewWidth: SCRUB_PREVIEW_WIDTH,
-    previewHeight: SCRUB_PREVIEW_HEIGHT,
+    previewWidth: previewSize.width,
+    previewHeight: previewSize.height,
+    sourceRatio,
   };
 }

@@ -56,6 +56,8 @@ export interface VideoWatchPanelProps {
   onClose: () => void;
   onLike: (videoId: string) => void;
   onBookmark: (videoId: string) => void;
+  onFollow: (userId: string) => void;
+  currentUserId?: string | null;
   onShare: (video: VideoPost) => void;
   onComments: (video: VideoPost) => void;
   onOpenProfile: (video: VideoPost) => void;
@@ -69,6 +71,8 @@ export function VideoWatchPanel({
   onClose,
   onLike,
   onBookmark,
+  onFollow,
+  currentUserId,
   onShare,
   onComments,
   onOpenProfile,
@@ -418,42 +422,177 @@ export function VideoWatchPanel({
 
   const title = deriveVideoTitle(video.content, video.profile?.username);
   const description = video.content?.split('\n').slice(1).join('\n').trim();
+  const isOwnVideo = Boolean(currentUserId && video.user_id === currentUserId);
 
-  // Mobileda pastdagi scrollda, desktopda o'ng ustunda ishlatiladi.
+  const glassAction =
+    'pointer-events-auto inline-flex h-9 items-center gap-2 rounded-full border border-white/15 bg-black/35 px-3 text-xs font-semibold text-white shadow-lg backdrop-blur-xl transition hover:bg-white/15 active:scale-[0.97]';
+
   const upNextList = (
-    <div className="pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+88px)] lg:pb-8">
-      <h2 className="px-3 pb-1 text-sm font-semibold text-foreground">Keyingi videolar</h2>
-      {upNext.map((item) => (
-        <VideoUpNextItem
-          key={item.id}
-          video={item}
-          onClick={() => {
-            onSelectVideo(item.id);
+    <div className="min-h-full bg-background pb-[calc(env(safe-area-inset-bottom,0px)+24px)] text-foreground">
+      <div className="sticky top-0 z-10 border-b border-border/70 bg-background/95 px-4 py-3 backdrop-blur-xl">
+        <h2 className="text-sm font-semibold">Keyingi videolar</h2>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">
+          Tavsiya etilgan videolar
+        </p>
+      </div>
+      <div className="py-1">
+        {upNext.map((item) => (
+          <VideoUpNextItem
+            key={item.id}
+            video={item}
+            onClick={() => {
+              onSelectVideo(item.id);
+              lightTap();
+            }}
+            onProfileClick={() => onOpenProfile(item)}
+          />
+        ))}
+        {upNext.length === 0 && (
+          <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+            Hozircha boshqa video yo'q
+          </p>
+        )}
+      </div>
+    </div>
+  );
+
+  const authorOverlay = (
+    <div className="pointer-events-none absolute inset-x-0 bottom-[72px] z-20 hidden items-end justify-between gap-4 px-5 lg:flex">
+      <div className="min-w-0 max-w-[min(680px,70%)]">
+        <div className="mb-2 flex items-center gap-2.5">
+          <button
+            type="button"
+            className="pointer-events-auto"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenProfile(video);
+            }}
+          >
+            <StoryAvatar
+              userId={video.user_id}
+              avatarUrl={video.profile?.avatar_url}
+              username={video.profile?.username}
+              size="sm"
+            />
+          </button>
+
+          <button
+            type="button"
+            className="pointer-events-auto flex min-w-0 items-center gap-1.5 text-left"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenProfile(video);
+            }}
+          >
+            <span className="truncate text-sm font-semibold text-white">
+              @{video.profile?.username || 'user'}
+            </span>
+            {video.profile?.is_verified && <VerifiedBadge size="xs" />}
+          </button>
+
+          {!isOwnVideo && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onFollow(video.user_id);
+                lightTap();
+              }}
+              className={cn(
+                'pointer-events-auto h-8 rounded-full border px-3 text-xs font-semibold backdrop-blur-xl transition active:scale-95',
+                video.is_following
+                  ? 'border-white/20 bg-white/12 text-white hover:bg-white/18'
+                  : 'border-white/80 bg-white text-black hover:bg-white/90',
+              )}
+            >
+              {video.is_following ? 'Kuzatilmoqda' : 'Kuzatish'}
+            </button>
+          )}
+        </div>
+
+        <h1 className="line-clamp-2 text-base font-semibold leading-snug text-white drop-shadow-lg">
+          {title}
+        </h1>
+        <p className="mt-1 text-[11px] text-white/70">
+          {formatCompactNumber(video.views_count || 0)} ko'rish ·{' '}
+          {formatDistanceToNow(new Date(video.created_at), { addSuffix: true })}
+        </p>
+      </div>
+
+      <div className="pointer-events-auto flex shrink-0 flex-wrap justify-end gap-2">
+        <button
+          type="button"
+          className={cn(
+            glassAction,
+            video.is_liked && 'border-red-400/30 bg-red-500/20 text-red-100',
+          )}
+          onClick={(event) => {
+            event.stopPropagation();
+            onLike(video.id);
+            mediumTap();
+          }}
+        >
+          <ThumbsUp className={cn('h-4 w-4', video.is_liked && 'fill-current')} />
+          {formatCompactNumber(video.likes_count || 0)}
+        </button>
+        <button
+          type="button"
+          className={glassAction}
+          onClick={(event) => {
+            event.stopPropagation();
+            onComments(video);
+          }}
+        >
+          <MessageCircle className="h-4 w-4" />
+          {formatCompactNumber(video.comments_count || 0)}
+        </button>
+        <button
+          type="button"
+          className={glassAction}
+          onClick={(event) => {
+            event.stopPropagation();
+            onShare(video);
+          }}
+        >
+          <Send className="h-4 w-4" />
+          Ulashish
+        </button>
+        <button
+          type="button"
+          className={cn(
+            glassAction,
+            video.is_bookmarked && 'border-primary/40 bg-primary/20',
+          )}
+          onClick={(event) => {
+            event.stopPropagation();
+            onBookmark(video.id);
             lightTap();
           }}
-          onProfileClick={() => onOpenProfile(item)}
-        />
-      ))}
-      {upNext.length === 0 && (
-        <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-          Hozircha boshqa video yo'q
-        </p>
-      )}
+        >
+          <Bookmark
+            className={cn('h-4 w-4', video.is_bookmarked && 'fill-current')}
+          />
+          Saqlash
+        </button>
+      </div>
     </div>
   );
 
   return createPortal(
-    <div className={cn('fixed inset-0 flex flex-col bg-background lg:flex-row', UI_LAYER.immersive)}>
-      {/* CHAP USTUN: pleyer + ma'lumot */}
-      <div className="flex min-h-0 flex-1 flex-col">
-        {/* PLEYER */}
+    <div
+      className={cn(
+        'fixed inset-0 flex min-h-0 flex-col bg-background lg:grid lg:grid-cols-[minmax(0,1fr)_400px]',
+        UI_LAYER.immersive,
+      )}
+    >
+      <section className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-black">
         <div
           ref={playerRef}
           className={cn(
-            'relative w-full shrink-0 overflow-hidden bg-black',
+            'group/player relative w-full shrink-0 overflow-hidden bg-black',
             isFullscreen
               ? 'h-full'
-              : 'aspect-video lg:mx-auto lg:aspect-auto lg:h-[min(62vh,640px)] lg:max-w-[1180px]',
+              : 'aspect-video lg:h-full lg:flex-1 lg:aspect-auto',
           )}
           aria-keyshortcuts="Space K J L M F I ArrowLeft ArrowRight ArrowUp ArrowDown Home End Shift+N Shift+P"
           onPointerMove={revealControls}
@@ -465,7 +604,6 @@ export function VideoWatchPanel({
           onPointerCancel={endHold}
           onPointerLeave={endHold}
           onClick={() => {
-            // Uzoq bosishdan keyin play/pause ishlamasligi kerak.
             if (justHeldRef.current) {
               justHeldRef.current = false;
               return;
@@ -474,15 +612,17 @@ export function VideoWatchPanel({
             else revealControls();
           }}
         >
-          {/* 9:16 yoki 1:1 video 16:9 konteynerda ochiq joy qoldirmasligi uchun blur fon */}
           {aspectKind !== 'landscape' && !fitCover && videoUrl && (
-            <video
-              src={videoUrl}
-              muted
-              playsInline
-              aria-hidden
-              className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-40 blur-2xl"
-            />
+            <>
+              <video
+                src={videoUrl}
+                muted
+                playsInline
+                aria-hidden
+                className="pointer-events-none absolute inset-0 h-full w-full scale-[1.12] object-cover opacity-50 blur-[34px] saturate-125"
+              />
+              <div className="pointer-events-none absolute inset-0 bg-black/28" />
+            </>
           )}
 
           <video
@@ -490,7 +630,7 @@ export function VideoWatchPanel({
             src={videoUrl}
             poster={video.media_urls?.[1]}
             className={cn(
-              'relative h-full w-full',
+              'relative z-[1] h-full w-full',
               fitCover ? 'object-cover' : 'object-contain',
             )}
             playsInline
@@ -500,25 +640,30 @@ export function VideoWatchPanel({
             onLoadedMetadata={(event) => {
               const el = event.currentTarget;
               setDuration(el.duration || 0);
-              if (el.videoWidth && el.videoHeight) setRatio(el.videoWidth / el.videoHeight);
+              if (el.videoWidth && el.videoHeight) {
+                setRatio(el.videoWidth / el.videoHeight);
+              }
               el.playbackRate = speed;
               el.volume = volume;
             }}
-            onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+            onTimeUpdate={(event) =>
+              setCurrentTime(event.currentTarget.currentTime)
+            }
             onProgress={(event) => {
               const el = event.currentTarget;
-              if (el.buffered.length > 0) setBuffered(el.buffered.end(el.buffered.length - 1));
+              if (el.buffered.length > 0) {
+                setBuffered(el.buffered.end(el.buffered.length - 1));
+              }
             }}
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
             onEnded={() => selectAdjacentVideo(1)}
           />
 
-          {/* Ikki marta bosib oldinga/orqaga */}
           <button
             type="button"
             aria-label="10 soniya orqaga"
-            className="absolute left-0 top-0 h-full w-1/4"
+            className="absolute left-0 top-0 z-[2] h-full w-1/4"
             onDoubleClick={(event) => {
               event.stopPropagation();
               seekBy(-10);
@@ -528,7 +673,7 @@ export function VideoWatchPanel({
           <button
             type="button"
             aria-label="10 soniya oldinga"
-            className="absolute right-0 top-0 h-full w-1/4"
+            className="absolute right-0 top-0 z-[2] h-full w-1/4"
             onDoubleClick={(event) => {
               event.stopPropagation();
               seekBy(10);
@@ -536,29 +681,30 @@ export function VideoWatchPanel({
             }}
           />
 
-          {/* Yuqori qatlam */}
           <div
             className={cn(
-              'pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent p-2 transition-opacity',
+              'pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-between bg-gradient-to-b from-black/70 via-black/15 to-transparent p-3 transition-opacity',
               showControls ? 'opacity-100' : 'opacity-0',
             )}
           >
             <Button
               variant="ghost"
               size="icon"
-              className="pointer-events-auto h-9 w-9 rounded-full text-white hover:bg-white/15"
+              className="pointer-events-auto h-10 w-10 rounded-full border border-white/10 bg-black/25 text-white backdrop-blur-xl hover:bg-white/15"
               onClick={(event) => {
                 event.stopPropagation();
                 onClose();
               }}
+              aria-label="Videolarga qaytish"
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <div className="pointer-events-auto flex items-center gap-1">
+
+            <div className="pointer-events-auto flex items-center gap-2">
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 rounded-full px-2 text-xs font-semibold text-white hover:bg-white/15"
+                className="h-9 rounded-full border border-white/10 bg-black/25 px-3 text-xs font-semibold text-white backdrop-blur-xl hover:bg-white/15"
                 onClick={(event) => {
                   event.stopPropagation();
                   cycleSpeed();
@@ -569,54 +715,57 @@ export function VideoWatchPanel({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-full text-white hover:bg-white/15"
+                className="h-10 w-10 rounded-full border border-white/10 bg-black/25 text-white backdrop-blur-xl hover:bg-white/15"
                 onClick={(event) => {
                   event.stopPropagation();
-                  setFitCover((prev) => !prev);
+                  setFitCover((previous) => !previous);
                   lightTap();
                 }}
-                aria-label="Ekranga moslash"
+                aria-label="Media sig‘imini almashtirish"
               >
-                {fitCover ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                {fitCover ? (
+                  <Minimize2 className="h-4.5 w-4.5" />
+                ) : (
+                  <Maximize2 className="h-4.5 w-4.5" />
+                )}
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
-                className="hidden h-9 w-9 rounded-full text-white hover:bg-white/15 md:inline-flex"
+                className="hidden h-10 w-10 rounded-full border border-white/10 bg-black/25 text-white backdrop-blur-xl hover:bg-white/15 md:inline-flex"
                 onClick={(event) => {
                   event.stopPropagation();
-                  togglePip();
+                  void togglePip();
                 }}
                 aria-label="Mini pleyer"
               >
-                <PictureInPicture2 className="h-4 w-4" />
+                <PictureInPicture2 className="h-4.5 w-4.5" />
               </Button>
             </div>
           </div>
 
-          {/* Markaziy play tugmasi */}
           {!isPlaying && (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-black/55 backdrop-blur-sm">
+            <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-black/45 shadow-2xl backdrop-blur-xl">
                 <Play className="h-8 w-8 fill-white text-white" />
               </div>
             </div>
           )}
 
-          {/* Bosib turilganda 2x ko'rsatkichi */}
           {isHolding && (
-            <div className="pointer-events-none absolute left-1/2 top-[16%] -translate-x-1/2">
-              <div className="flex items-center gap-1.5 rounded-full bg-black/65 px-3 py-1.5 backdrop-blur-sm">
-                <Gauge className="h-3.5 w-3.5 text-white" />
-                <span className="text-xs font-bold text-white">2x</span>
+            <div className="pointer-events-none absolute left-1/2 top-[14%] z-30 -translate-x-1/2">
+              <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-white shadow-xl backdrop-blur-xl">
+                <Gauge className="h-3.5 w-3.5" />
+                <span className="text-xs font-bold">2x</span>
               </div>
             </div>
           )}
 
-          {/* Pastki boshqaruv */}
+          {authorOverlay}
+
           <div
             className={cn(
-              'absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent px-3 pb-2 pt-8 transition-opacity',
+              'absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-3 pb-2 pt-10 transition-opacity lg:px-5 lg:pb-3 lg:pt-12',
               showControls ? 'opacity-100' : 'opacity-0',
             )}
             onClick={(event) => event.stopPropagation()}
@@ -635,8 +784,8 @@ export function VideoWatchPanel({
                 else revealControls();
               }}
               enablePreview={duration > 0}
-              playedClassName="bg-red-600"
-              thumbClassName="bg-red-600"
+              playedClassName="bg-primary"
+              thumbClassName="bg-primary"
             />
 
             <div className="mt-1 flex items-center justify-between">
@@ -648,143 +797,171 @@ export function VideoWatchPanel({
                   onClick={togglePlay}
                   aria-label={isPlaying ? 'Pauza (K)' : 'Ijro (K)'}
                 >
-                  {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+                  {isPlaying ? (
+                    <Pause className="h-5 w-5" />
+                  ) : (
+                    <Play className="h-5 w-5" />
+                  )}
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-9 w-9 rounded-full text-white hover:bg-white/15"
-                  onClick={() => setIsMuted((prev) => !prev)}
-                  aria-label={isMuted ? 'Ovozni yoqish (M)' : 'Ovozni o‘chirish (M)'}
-                title={isMuted ? 'Ovozni yoqish (M)' : 'Ovozni o‘chirish (M)'}
+                  onClick={() => setIsMuted((previous) => !previous)}
+                  aria-label={
+                    isMuted ? 'Ovozni yoqish (M)' : 'Ovozni o‘chirish (M)'
+                  }
                 >
-                  {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                  {isMuted ? (
+                    <VolumeX className="h-5 w-5" />
+                  ) : (
+                    <Volume2 className="h-5 w-5" />
+                  )}
                 </Button>
                 <span className="ml-1 text-[11px] font-medium tabular-nums text-white/90">
                   {formatMediaTime(currentTime)} / {formatMediaTime(duration)}
                 </span>
               </div>
+
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-9 w-9 rounded-full text-white hover:bg-white/15"
-                onClick={toggleFullscreen}
-                aria-label="To'liq ekran (F)"
+                onClick={() => void toggleFullscreen()}
+                aria-label="To‘liq ekran (F)"
               >
-                {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
+                {isFullscreen ? (
+                  <Minimize2 className="h-5 w-5" />
+                ) : (
+                  <Maximize2 className="h-5 w-5" />
+                )}
               </Button>
             </div>
           </div>
         </div>
 
-        {/* Ma'lumot + (mobileda) keyingi videolar */}
-        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <div className="px-3 pt-3 lg:mx-auto lg:max-w-[1180px]">
-            <h1 className="text-[15px] font-semibold leading-snug text-foreground lg:text-lg">{title}</h1>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {formatCompactNumber(video.views_count || 0)} ko'rish ·{' '}
-              {formatDistanceToNow(new Date(video.created_at), { addSuffix: true })}
-            </p>
-
-            {description && (
-              <button
-                type="button"
-                onClick={() => setDescOpen((prev) => !prev)}
-                className="mt-2 w-full rounded-xl bg-muted/60 p-3 text-left"
-              >
-                <p className={cn('whitespace-pre-wrap text-[13px] text-foreground', !descOpen && 'line-clamp-2')}>
-                  {description}
-                </p>
-                <span className="mt-1 inline-block text-[11px] font-semibold text-muted-foreground">
-                  {descOpen ? 'Yopish' : 'Batafsil'}
-                </span>
-              </button>
-            )}
-          </div>
-
-          {/* Harakatlar */}
-          <div className="mt-3 flex gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none] lg:mx-auto lg:max-w-[1180px] [&::-webkit-scrollbar]:hidden">
-            <button
-              type="button"
-              onClick={() => {
-                onLike(video.id);
-                mediumTap();
-              }}
-              className={cn(
-                'flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-3.5 py-2 text-xs font-semibold',
-                video.is_liked && 'bg-primary/15 text-primary',
-              )}
-            >
-              <ThumbsUp className={cn('h-4 w-4', video.is_liked && 'fill-primary')} />
-              {formatCompactNumber(video.likes_count || 0)}
-            </button>
-            <button
-              type="button"
-              onClick={() => onComments(video)}
-              className="flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-3.5 py-2 text-xs font-semibold"
-            >
-              <MessageCircle className="h-4 w-4" />
-              {formatCompactNumber(video.comments_count || 0)}
-            </button>
-            <button
-              type="button"
-              onClick={() => onShare(video)}
-              className="flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-3.5 py-2 text-xs font-semibold"
-            >
-              <Send className="h-4 w-4" />
-              Ulashish
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                onBookmark(video.id);
-                lightTap();
-              }}
-              className={cn(
-                'flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-3.5 py-2 text-xs font-semibold',
-                video.is_bookmarked && 'bg-primary/15 text-primary',
-              )}
-            >
-              <Bookmark className={cn('h-4 w-4', video.is_bookmarked && 'fill-primary')} />
-              Saqlash
-            </button>
-          </div>
-
-          {/* Muallif */}
-          <button
-            type="button"
-            onClick={() => onOpenProfile(video)}
-            className="mt-3 flex w-full items-center gap-3 border-y border-border px-3 py-3 text-left lg:mx-auto lg:max-w-[1180px]"
+        {!isFullscreen && (
+          <div
+            ref={scrollRef}
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background text-foreground lg:hidden"
           >
-            <StoryAvatar
-              userId={video.user_id}
-              avatarUrl={video.profile?.avatar_url}
-              username={video.profile?.username}
-              size="sm"
-            />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1">
-                <span className="truncate text-sm font-semibold">
-                  {video.profile?.display_name || video.profile?.username || 'user'}
-                </span>
-                {video.profile?.is_verified && <VerifiedBadge size="xs" />}
+            <div className="px-4 pt-4">
+              <h1 className="text-base font-semibold leading-snug">{title}</h1>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {formatCompactNumber(video.views_count || 0)} ko'rish ·{' '}
+                {formatDistanceToNow(new Date(video.created_at), {
+                  addSuffix: true,
+                })}
+              </p>
+
+              <div className="mt-3 flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => onOpenProfile(video)}
+                  className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                >
+                  <StoryAvatar
+                    userId={video.user_id}
+                    avatarUrl={video.profile?.avatar_url}
+                    username={video.profile?.username}
+                    size="sm"
+                  />
+                  <span className="flex min-w-0 items-center gap-1">
+                    <span className="truncate text-sm font-semibold">
+                      @{video.profile?.username || 'user'}
+                    </span>
+                    {video.profile?.is_verified && <VerifiedBadge size="xs" />}
+                  </span>
+                </button>
+
+                {!isOwnVideo && (
+                  <button
+                    type="button"
+                    onClick={() => onFollow(video.user_id)}
+                    className={cn(
+                      'h-8 rounded-full px-3 text-xs font-semibold transition',
+                      video.is_following
+                        ? 'border border-border bg-background'
+                        : 'bg-foreground text-background',
+                    )}
+                  >
+                    {video.is_following ? 'Kuzatilmoqda' : 'Kuzatish'}
+                  </button>
+                )}
               </div>
-              <span className="text-xs text-muted-foreground">@{video.profile?.username || 'user'}</span>
+
+              {description && (
+                <button
+                  type="button"
+                  onClick={() => setDescOpen((previous) => !previous)}
+                  className="mt-3 w-full rounded-2xl bg-muted/60 p-3 text-left"
+                >
+                  <p
+                    className={cn(
+                      'whitespace-pre-wrap text-[13px]',
+                      !descOpen && 'line-clamp-2',
+                    )}
+                  >
+                    {description}
+                  </p>
+                  <span className="mt-1 inline-block text-[11px] font-semibold text-muted-foreground">
+                    {descOpen ? 'Yopish' : 'Batafsil'}
+                  </span>
+                </button>
+              )}
+
+              <div className="mt-3 flex gap-2 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <button
+                  type="button"
+                  onClick={() => onLike(video.id)}
+                  className={cn(
+                    'flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-3.5 py-2 text-xs font-semibold',
+                    video.is_liked && 'bg-primary/15 text-primary',
+                  )}
+                >
+                  <ThumbsUp className={cn('h-4 w-4', video.is_liked && 'fill-current')} />
+                  {formatCompactNumber(video.likes_count || 0)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onComments(video)}
+                  className="flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-3.5 py-2 text-xs font-semibold"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  {formatCompactNumber(video.comments_count || 0)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onShare(video)}
+                  className="flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-3.5 py-2 text-xs font-semibold"
+                >
+                  <Send className="h-4 w-4" />
+                  Ulashish
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onBookmark(video.id)}
+                  className={cn(
+                    'flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-3.5 py-2 text-xs font-semibold',
+                    video.is_bookmarked && 'bg-primary/15 text-primary',
+                  )}
+                >
+                  <Bookmark className={cn('h-4 w-4', video.is_bookmarked && 'fill-current')} />
+                  Saqlash
+                </button>
+              </div>
             </div>
-            <span className="rounded-full bg-foreground px-4 py-1.5 text-xs font-semibold text-background">
-              Profil
-            </span>
-          </button>
 
-          {/* Keyingi videolar — faqat mobile/tabletda shu ustunda */}
-          <div className="lg:hidden">{upNextList}</div>
-        </div>
-      </div>
+            {upNextList}
+          </div>
+        )}
+      </section>
 
-      {/* O'NG USTUN (desktop): keyingi videolar alohida scroll bo'ladi */}
-      <aside className="hidden w-[400px] shrink-0 overflow-y-auto overscroll-contain border-l border-border lg:block">
-        {upNextList}
-      </aside>
+      {!isFullscreen && (
+        <aside className="hidden h-full min-h-0 overflow-y-auto overscroll-contain border-l border-border bg-background [scrollbar-gutter:stable] lg:block">
+          {upNextList}
+        </aside>
+      )}
     </div>,
     document.body,
   );

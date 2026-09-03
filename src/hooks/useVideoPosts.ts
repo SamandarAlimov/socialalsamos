@@ -29,6 +29,7 @@ export interface VideoPost {
   };
   is_liked?: boolean;
   is_bookmarked?: boolean;
+  is_following?: boolean;
 }
 
 /**
@@ -107,6 +108,31 @@ export function useVideoPosts() {
 
       const likedPostIds = new Set(likesData?.map((l) => l.post_id) || []);
 
+      const creatorIds = Array.from(
+        new Set(
+          rows
+            .map((post) => post.user_id)
+            .filter((creatorId) => creatorId && creatorId !== user.id),
+        ),
+      );
+
+      let followingIds = new Set<string>();
+      if (creatorIds.length > 0) {
+        const { data: followingData, error: followingError } = await supabase
+          .from('follows')
+          .select('following_id')
+          .eq('follower_id', user.id)
+          .in('following_id', creatorIds);
+
+        if (followingError) {
+          console.warn('Video follow holatini yuklab bo‘lmadi:', followingError);
+        } else {
+          followingIds = new Set(
+            (followingData ?? []).map((row) => String(row.following_id)),
+          );
+        }
+      }
+
       // Saqlanganlar (bookmark) holati: jadval mavjud bo'lmasa yoki ruxsat
       // bo'lmasa sahifa ishlashda davom etadi, faqat holat bo'sh qoladi.
       let bookmarkedPostIds = new Set<string>();
@@ -130,6 +156,8 @@ export function useVideoPosts() {
         ...post,
         is_liked: likedPostIds.has(post.id),
         is_bookmarked: bookmarkedPostIds.has(post.id),
+        is_following:
+          post.user_id === user.id ? false : followingIds.has(post.user_id),
       }));
     },
     [user],
@@ -287,6 +315,46 @@ export function useVideoPosts() {
     }
   }, [user, videos]);
 
+  const toggleFollow = useCallback(async (targetUserId: string) => {
+    if (!user || !targetUserId || targetUserId === user.id) return;
+
+    const targetVideo = videos.find((video) => video.user_id === targetUserId);
+    const wasFollowing = Boolean(targetVideo?.is_following);
+
+    setVideos((previous) =>
+      previous.map((video) =>
+        video.user_id === targetUserId
+          ? { ...video, is_following: !wasFollowing }
+          : video,
+      ),
+    );
+
+    try {
+      if (wasFollowing) {
+        const { error } = await supabase
+          .from('follows')
+          .delete()
+          .eq('follower_id', user.id)
+          .eq('following_id', targetUserId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('follows')
+          .insert({ follower_id: user.id, following_id: targetUserId });
+        if (error) throw error;
+      }
+    } catch (error) {
+      console.error('Video follow holatini o‘zgartirib bo‘lmadi:', error);
+      setVideos((previous) =>
+        previous.map((video) =>
+          video.user_id === targetUserId
+            ? { ...video, is_following: wasFollowing }
+            : video,
+        ),
+      );
+    }
+  }, [user, videos]);
+
   const toggleBookmark = useCallback(async (postId: string) => {
     const video = videos.find(v => v.id === postId);
     if (!video) return;
@@ -415,6 +483,39 @@ export function useVideoPosts() {
         {
           event: '*',
           schema: 'public',
+          table: 'follows',
+          ...(user?.id ? { filter: `follower_id=eq.${user.id}` } : {}),
+        },
+        (payload) => {
+          if (!user?.id) return;
+
+          const inserted = payload.new as {
+            follower_id?: string;
+            following_id?: string;
+          } | null;
+          const removed = payload.old as {
+            follower_id?: string;
+            following_id?: string;
+          } | null;
+          const row = inserted?.following_id ? inserted : removed;
+
+          if (!row?.following_id || row.follower_id !== user.id) return;
+
+          const isFollowing = payload.eventType === 'INSERT';
+          setVideos((previous) =>
+            previous.map((video) =>
+              video.user_id === row.following_id
+                ? { ...video, is_following: isFollowing }
+                : video,
+            ),
+          );
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
           table: 'comments',
         },
         (payload) => {
@@ -474,5 +575,6 @@ export function useVideoPosts() {
     refresh,
     likeVideo,
     toggleBookmark,
+    toggleFollow,
   };
 }
