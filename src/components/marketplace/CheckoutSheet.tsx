@@ -339,7 +339,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent side="bottom" className="h-[95vh] p-0 rounded-t-3xl border-t border-border/30 sm:max-w-2xl sm:mx-auto">
+      <SheetContent side="bottom" className="marketplace-neutral h-[95vh] p-0 rounded-t-3xl border-t border-border/30 sm:max-w-2xl sm:mx-auto">
         <div className="flex flex-col h-full">
           <SheetHeader className="p-4 border-b border-border/30">
             <div className="flex items-center gap-3">
@@ -456,7 +456,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
 
                       {attachedLocation && (
                         <div className="flex items-start gap-2 rounded-lg bg-background/60 p-2.5">
-                          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-foreground" />
                           <div className="min-w-0 flex-1">
                             <p className="line-clamp-2 text-xs font-medium">
                               {attachedLocation.label || 'Joylashuv aniqlandi'}
@@ -561,7 +561,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   <button
                     type="button"
                     onClick={goToPaymentSettings}
-                    className="w-full flex items-center justify-between p-3 rounded-xl border border-dashed border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-colors text-sm"
+                    className="w-full flex items-center justify-between p-3 rounded-xl border border-dashed border-border/50 hover:border-foreground/50 hover:bg-foreground/5 transition-colors text-sm"
                   >
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Plus className="h-4 w-4" />
@@ -572,11 +572,11 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
 
                   <div className="pt-2 flex items-center gap-4 text-xs text-muted-foreground">
                     <div className="flex items-center gap-1">
-                      <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                      <ShieldCheck className="h-3.5 w-3.5 text-foreground" />
                       256-bit SSL
                     </div>
                     <div className="flex items-center gap-1">
-                      <Truck className="h-3.5 w-3.5 text-primary" />
+                      <Truck className="h-3.5 w-3.5 text-foreground" />
                       Xaridor himoyasi
                     </div>
                   </div>
@@ -593,7 +593,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                 >
                   <div className="p-3 rounded-xl bg-muted/30 border border-border/20 space-y-1">
                     <div className="flex items-center gap-2 text-sm font-medium">
-                      <MapPin className="h-4 w-4 text-primary" />
+                      <MapPin className="h-4 w-4 text-foreground" />
                       Yetkazib berish manzili
                     </div>
                     <p className="text-sm text-muted-foreground">
@@ -603,7 +603,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                       {address.street}, {address.city} {address.region}
                     </p>
                     {attachedLocation && (
-                      <p className="flex items-center gap-1 text-[11px] text-primary">
+                      <p className="flex items-center gap-1 text-[11px] text-foreground">
                         <LocateFixed className="h-3 w-3 shrink-0" />
                         <span className="line-clamp-1">
                           {attachedLocation.label
@@ -615,12 +615,12 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
 
                   <div className="p-3 rounded-xl bg-muted/30 border border-border/20 flex items-center justify-between">
                     <div className="flex items-center gap-2 text-sm font-medium">
-                      <CreditCard className="h-4 w-4 text-primary" />
+                      <CreditCard className="h-4 w-4 text-foreground" />
                       {selectedProvider?.label || "To'lov usuli"}
                     </div>
                     <button
                       onClick={() => setStep('payment')}
-                      className="text-xs text-primary font-semibold"
+                      className="text-xs text-foreground font-semibold"
                     >
                       O'zgartirish
                     </button>
@@ -693,17 +693,17 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                     <div className="h-px bg-border/30" />
                     <div className="flex justify-between font-bold">
                       <span>{marketplaceUz.checkout.total}</span>
-                      <span className="text-primary text-lg tabular-nums">{formatPrice(grandTotal, currency)}</span>
+                      <span className="text-foreground text-lg tabular-nums">{formatPrice(grandTotal, currency)}</span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-4 text-xs text-muted-foreground">
                     <div className="flex items-center gap-1">
-                      <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                      <ShieldCheck className="h-3.5 w-3.5 text-foreground" />
                       Xavfsiz to'lov
                     </div>
                     <div className="flex items-center gap-1">
-                      <Truck className="h-3.5 w-3.5 text-primary" />
+                      <Truck className="h-3.5 w-3.5 text-foreground" />
                       Kafolat
                     </div>
                   </div>
@@ -717,8 +717,8 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                   animate={{ opacity: 1, scale: 1 }}
                   className="p-6 flex flex-col items-center text-center"
                 >
-                  <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
-                    <Truck className="h-10 w-10 text-primary" />
+                  <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-foreground/10">
+                    <Truck className="h-10 w-10 text-foreground" />
                   </div>
                   <h2 className="mb-1 text-xl font-bold">{marketplaceUz.checkout.orderAccepted}</h2>
                   <p className="mb-5 max-w-xs text-sm text-muted-foreground">
@@ -737,7 +737,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">{marketplaceUz.checkout.overall}</span>
-                      <span className="font-bold text-primary tabular-nums">{formatPrice(paidTotal, currency)}</span>
+                      <span className="font-bold text-foreground tabular-nums">{formatPrice(paidTotal, currency)}</span>
                     </div>
                   </div>
                   <div className="flex w-full flex-col gap-2">
@@ -791,7 +791,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">{marketplaceUz.checkout.overall}</span>
-                      <span className="font-bold text-primary tabular-nums">{formatPrice(paidTotal, currency)}</span>
+                      <span className="font-bold text-foreground tabular-nums">{formatPrice(paidTotal, currency)}</span>
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 w-full">
@@ -850,7 +850,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
             <div className="p-4 border-t border-border/30 bg-background/95 backdrop-blur-xl">
               {step === 'address' && (
                 <Button
-                  className="w-full h-12 rounded-xl text-sm font-semibold shadow-lg shadow-primary/20"
+                  className="w-full h-12 rounded-xl text-sm font-semibold shadow-lg shadow-black/10"
                   disabled={!isAddressValid || cartItems.length === 0 || unavailableItems.length > 0}
                   onClick={() => setStep('payment')}
                 >
@@ -860,7 +860,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
               )}
               {step === 'payment' && (
                 <Button
-                  className="w-full h-12 rounded-xl text-sm font-semibold shadow-lg shadow-primary/20"
+                  className="w-full h-12 rounded-xl text-sm font-semibold shadow-lg shadow-black/10"
                   disabled={walletInsufficient || !selectedProvider}
                   onClick={() => setStep('review')}
                 >
@@ -870,7 +870,7 @@ export function CheckoutSheet({ open, onOpenChange, onSuccess }: CheckoutSheetPr
               )}
               {step === 'review' && (
                 <Button
-                  className="w-full h-12 rounded-xl text-sm font-semibold shadow-lg shadow-primary/20"
+                  className="w-full h-12 rounded-xl text-sm font-semibold shadow-lg shadow-black/10"
                   disabled={!canPlaceOrder}
                   onClick={handlePlaceOrder}
                 >
@@ -910,19 +910,19 @@ function PaymentOption({
       className={cn(
         'w-full text-left rounded-2xl p-4 border transition-all',
         active
-          ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+          ? 'border-foreground bg-foreground/5 ring-2 ring-foreground/20'
           : 'border-border/50 hover:border-border bg-muted/20',
       )}
     >
       <div className="flex items-center gap-3">
-        <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shrink-0">
+        <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-foreground to-foreground/70 flex items-center justify-center shrink-0">
           {icon}
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm">{title}</p>
           <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
         </div>
-        {active && <CheckCircle className="h-5 w-5 text-primary shrink-0" />}
+        {active && <CheckCircle className="h-5 w-5 text-foreground shrink-0" />}
       </div>
     </button>
   );
@@ -930,7 +930,7 @@ function PaymentOption({
 
 
 function paymentProviderIcon(id: PaymentProviderId, inverse = true) {
-  const className = cn('h-5 w-5', inverse ? 'text-primary-foreground' : 'text-muted-foreground');
+  const className = cn('h-5 w-5', inverse ? 'text-background' : 'text-muted-foreground');
   switch (id) {
     case 'wallet':
       return <Wallet className={className} />;
