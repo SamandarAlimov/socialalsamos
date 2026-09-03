@@ -117,8 +117,11 @@ export function GroupReadReceipts({ messageId, senderId, isMine }: GroupReadRece
 
   if (loading || receipts.length === 0) return null;
 
-  const displayReceipts = receipts.slice(0, 4);
-  const remainingCount = receipts.length - displayReceipts.length;
+  const sortedReceipts = [...receipts].sort(
+    (a, b) => new Date(b.read_at).getTime() - new Date(a.read_at).getTime()
+  );
+  const displayReceipts = sortedReceipts.slice(0, 4);
+  const remainingCount = sortedReceipts.length - displayReceipts.length;
 
   const formatReadTime = (dateString: string) => {
     const date = new Date(dateString);
@@ -128,9 +131,11 @@ export function GroupReadReceipts({ messageId, senderId, isMine }: GroupReadRece
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button 
+        <button
+          type="button"
+          aria-label={`${receipts.length} kishi ko‘rdi`}
           className={cn(
-            "flex items-center gap-1 mt-1 cursor-pointer hover:opacity-80 transition-opacity",
+            "mt-1 flex items-center gap-1 rounded-full px-1 py-0.5 transition-colors hover:bg-muted/70",
             isMine ? "justify-end" : "justify-start"
           )}
         >
@@ -152,23 +157,30 @@ export function GroupReadReceipts({ messageId, senderId, isMine }: GroupReadRece
           <Eye className="h-3 w-3 text-muted-foreground ml-1" />
         </button>
       </PopoverTrigger>
-      <PopoverContent 
-        side={isMine ? "left" : "right"} 
-        align="start"
-        className="w-64 p-0"
+      <PopoverContent
+        side="top"
+        align={isMine ? "end" : "start"}
+        sideOffset={8}
+        collisionPadding={16}
+        sticky="always"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        className="w-[min(300px,calc(100vw-24px))] overflow-hidden rounded-2xl border-border/80 p-0 shadow-xl"
       >
-        <div className="p-3 border-b border-border">
-          <h4 className="font-medium text-sm flex items-center gap-2">
-            <Eye className="h-4 w-4" />
-            Seen by {receipts.length}
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <h4 className="flex items-center gap-2 text-sm font-semibold">
+            <Eye className="h-4 w-4 text-muted-foreground" />
+            Ko‘rganlar
           </h4>
+          <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+            {receipts.length}
+          </span>
         </div>
-        <ScrollArea className="max-h-60">
-          <div className="p-2 space-y-1">
-            {receipts.map((receipt) => (
+        <ScrollArea className="max-h-[min(320px,55vh)]">
+          <div className="space-y-0.5 p-2">
+            {sortedReceipts.map((receipt) => (
               <div 
                 key={receipt.user_id} 
-                className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent transition-colors"
+                className="flex items-center gap-3 rounded-xl p-2.5 transition-colors hover:bg-muted/70"
               >
                 <Avatar className="h-9 w-9">
                   <AvatarImage src={receipt.profile?.avatar_url || undefined} />
@@ -178,7 +190,7 @@ export function GroupReadReceipts({ messageId, senderId, isMine }: GroupReadRece
                 </Avatar>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">
-                    {receipt.profile?.display_name || receipt.profile?.username || 'User'}
+                    {receipt.profile?.display_name || receipt.profile?.username || 'Foydalanuvchi'}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {formatReadTime(receipt.read_at)}
