@@ -132,6 +132,14 @@ function AppRoutes() {
         </AuthRoute>
       } />
 
+      {/* Legacy public URLs: keep old indexed/bookmarked links alive. */}
+      <Route path="/terms" element={<Navigate to="/legal/terms" replace />} />
+      <Route path="/terms-of-service" element={<Navigate to="/legal/terms" replace />} />
+      <Route path="/privacy" element={<Navigate to="/legal/privacy" replace />} />
+      <Route path="/privacy-policy" element={<Navigate to="/legal/privacy" replace />} />
+      <Route path="/help-center" element={<Navigate to="/help" replace />} />
+      <Route path="/auth" element={<Navigate to="/" replace />} />
+
       {/* Password recovery (public) */}
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
