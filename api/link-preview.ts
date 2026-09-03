@@ -90,6 +90,61 @@ function numberMeta(value?: string): number | undefined {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
+function decodeJsonUrl(value?: string | null): string | undefined {
+  if (!value) return undefined;
+  try {
+    return decodeHtml(
+      value
+        .replace(/\\u0026/gi, '&')
+        .replace(/\\u003d/gi, '=')
+        .replace(/\\u002f/gi, '/')
+        .replace(/\\\//g, '/')
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+function instagramTarget(url: URL): { id: string; kind: string } | null {
+  const match = url.pathname.match(/^\/(reel|reels|p|tv)\/([\w-]+)/i);
+  if (!match) return null;
+  return {
+    kind: match[1].toLowerCase() === 'reels' ? 'reel' : match[1].toLowerCase(),
+    id: match[2],
+  };
+}
+
+function instagramEmbedMedia(html: string, base: URL) {
+  const directVideo =
+    decodeJsonUrl(/"video_url"\s*:\s*"([^"]+)"/i.exec(html)?.[1]) ||
+    decodeJsonUrl(/<source[^>]+src=["']([^"']+)["']/i.exec(html)?.[1]) ||
+    decodeJsonUrl(/<video[^>]+src=["']([^"']+)["']/i.exec(html)?.[1]) ||
+    metaContent(sourceHtml, ['og:video:secure_url', 'og:video:url', 'og:video']);
+
+  const poster =
+    decodeJsonUrl(/"thumbnail_src"\s*:\s*"([^"]+)"/i.exec(html)?.[1]) ||
+    decodeJsonUrl(/"display_url"\s*:\s*"([^"]+)"/i.exec(html)?.[1]) ||
+    decodeJsonUrl(/<video[^>]+poster=["']([^"']+)["']/i.exec(html)?.[1]) ||
+    metaContent(sourceHtml, ['og:image:secure_url', 'og:image', 'twitter:image']);
+
+  return {
+    video: absoluteUrl(directVideo, base),
+    image: absoluteUrl(poster, base),
+  };
+}
+
+async function fetchInstagramMedia(target: URL) {
+  const parsed = instagramTarget(target);
+  if (!parsed) return null;
+
+  const embedUrl = new URL(
+    'https://www.instagram.com/' + parsed.kind + '/' + parsed.id + '/embed/'
+  );
+  const html = await fetchHtml(embedUrl);
+  if (!html) return null;
+  return instagramEmbedMedia(html, embedUrl);
+}
+
 async function fetchHtml(url: URL): Promise<string | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -140,7 +195,12 @@ export default async function handler(req: any, res: any) {
   }
 
   const html = await fetchHtml(target);
-  if (!html) {
+  const instagramMedia =
+    /(^|\.)instagram\.com$/i.test(target.hostname)
+      ? await fetchInstagramMedia(target)
+      : null;
+
+  if (!html && !instagramMedia) {
     res.status(200).json({
       siteName: target.hostname.replace(/^www\./, ''),
       title: target.hostname.replace(/^www\./, ''),
@@ -148,12 +208,13 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
-  const image = absoluteUrl(
-    metaContent(html, ['og:image:secure_url', 'og:image', 'twitter:image']),
+  const sourceHtml = html || '';
+  const image = instagramMedia?.image || absoluteUrl(
+    metaContent(sourceHtml, ['og:image:secure_url', 'og:image', 'twitter:image']),
     target,
   );
-  const video = absoluteUrl(
-    metaContent(html, [
+  const video = instagramMedia?.video || absoluteUrl(
+    metaContent(sourceHtml, [
       'og:video:secure_url',
       'og:video:url',
       'og:video',
@@ -165,20 +226,20 @@ export default async function handler(req: any, res: any) {
   res.setHeader('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=3600');
   res.status(200).json({
     siteName:
-      metaContent(html, ['og:site_name', 'application-name']) ||
+      metaContent(sourceHtml, ['og:site_name', 'application-name']) ||
       target.hostname.replace(/^www\./, ''),
     title:
-      metaContent(html, ['og:title', 'twitter:title']) ||
-      titleContent(html) ||
+      metaContent(sourceHtml, ['og:title', 'twitter:title']) ||
+      titleContent(sourceHtml) ||
       target.hostname.replace(/^www\./, ''),
-    description: metaContent(html, ['og:description', 'twitter:description', 'description']),
+    description: metaContent(sourceHtml, ['og:description', 'twitter:description', 'description']),
     image,
     video,
-    videoWidth: numberMeta(metaContent(html, ['og:video:width'])),
-    videoHeight: numberMeta(metaContent(html, ['og:video:height'])),
-    imageWidth: numberMeta(metaContent(html, ['og:image:width'])),
-    imageHeight: numberMeta(metaContent(html, ['og:image:height'])),
-    author: metaContent(html, ['author', 'article:author']),
-    duration: numberMeta(metaContent(html, ['video:duration', 'og:video:duration'])),
+    videoWidth: numberMeta(metaContent(sourceHtml, ['og:video:width'])),
+    videoHeight: numberMeta(metaContent(sourceHtml, ['og:video:height'])),
+    imageWidth: numberMeta(metaContent(sourceHtml, ['og:image:width'])),
+    imageHeight: numberMeta(metaContent(sourceHtml, ['og:image:height'])),
+    author: metaContent(sourceHtml, ['author', 'article:author']),
+    duration: numberMeta(metaContent(sourceHtml, ['video:duration', 'og:video:duration'])),
   });
 }
