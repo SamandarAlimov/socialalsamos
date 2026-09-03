@@ -225,7 +225,7 @@ export default function MarketplacePage() {
   ];
 
   const pageContent = (
-    <div className="min-h-screen bg-background pb-24 md:pb-4">
+    <div className="marketplace-neutral min-h-screen bg-background pb-24 md:pb-4">
       {/* Premium Glass Header */}
       <div className="sticky top-0 z-30 border-b border-border/30">
         <div className="bg-gradient-to-b from-background via-background/98 to-background/95 backdrop-blur-2xl">
