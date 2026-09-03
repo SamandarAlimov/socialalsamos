@@ -31,6 +31,7 @@ import { LiveStreamCard } from '@/components/live/LiveStreamCard';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { StoryViewer } from '@/components/stories/StoryViewer';
 import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/db';
 import { RepostButton } from '@/components/RepostButton';
 import { useActiveAds } from '@/hooks/useAds';
 import { FeedAd } from '@/components/ads/FeedAd';
@@ -97,7 +98,7 @@ export default function HomePage() {
     const postId = searchParams.get('post');
     if (postId) {
       async function fetchPost() {
-        let { data, error } = await supabase
+        let { data, error } = await db
           .from('posts')
           .select(`
             id, content, formatted_content, media_urls, media_type, likes_count, comments_count, is_pinned, created_at, user_id,
@@ -112,7 +113,7 @@ export default function HomePage() {
             error.code === 'PGRST204' ||
             String(error.message ?? '').toLowerCase().includes('formatted_content'))
         ) {
-          const fallback = await supabase
+          const fallback = await db
             .from('posts')
             .select(`
               id, content, media_urls, media_type, likes_count, comments_count, is_pinned, created_at, user_id,

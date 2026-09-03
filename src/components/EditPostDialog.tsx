@@ -82,7 +82,9 @@ export function EditPostDialog({
           .select('content, visibility')
           .eq('id', postId)
           .maybeSingle();
-        data = fallback.data;
+        data = fallback.data
+          ? { ...fallback.data, formatted_content: null }
+          : null;
         error = fallback.error;
       }
 

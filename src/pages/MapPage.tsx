@@ -88,6 +88,7 @@ import {
   type MapEngineId,
   type MapSceneLine,
   type MapSceneMarker,
+  type MapViewport,
   type VectorRenderedFeature,
 } from '@/lib/mapEngine';
 import {
