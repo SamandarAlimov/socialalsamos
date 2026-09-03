@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Plus, Search, Megaphone, Users, TrendingUp, Bookmark } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -11,16 +11,29 @@ import { CreateChannelDialog } from '@/components/channels/CreateChannelDialog';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { cn } from '@/lib/utils';
+import { useSearchParams } from 'react-router-dom';
 
 type ChannelTab = 'my' | 'discover' | 'popular';
 
 export default function ChannelsPage() {
   const isMobile = useIsMobile();
+  const [searchParams] = useSearchParams();
   const { channels, isLoading, fetchChannels, createChannel, joinChannel, leaveChannel } = useChannels();
   const [activeTab, setActiveTab] = useState<ChannelTab>('my');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+
+  useEffect(() => {
+    const requested = searchParams.get('channel')?.trim();
+    if (!requested || channels.length === 0) return;
+    const normalized = requested.toLocaleLowerCase();
+    const match = channels.find((channel) =>
+      channel.id === requested ||
+      channel.username?.toLocaleLowerCase() === normalized,
+    );
+    if (match) setSelectedChannel(match);
+  }, [channels, searchParams]);
 
   const myChannels = channels.filter(c => c.is_member);
   const discoverChannels = channels.filter(c => !c.is_member && c.channel_type === 'public');
