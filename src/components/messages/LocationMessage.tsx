@@ -1,23 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, Navigation, ExternalLink, Radio } from 'lucide-react';
-import { MapContainer, TileLayer, Marker } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import { MapPin, Navigation, Radio } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-// Standart marker ikonkasini tuzatish
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-const LEAFLET_IMG = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images';
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: `${LEAFLET_IMG}/marker-icon-2x.png`,
-  iconUrl: `${LEAFLET_IMG}/marker-icon.png`,
-  shadowUrl: `${LEAFLET_IMG}/marker-shadow.png`,
-});
-
-// OpenStreetMap tile template ({s}/{z}/{x}/{y} Leaflet tomonidan almashtiriladi)
-const OSM_TILE_URL = 'https://' + '{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-const GMAPS_SEARCH = 'https://' + 'www.google.com/maps/search/?api=1&query=';
+import {
+  MapDestinationPreview,
+  mapDestinationHref,
+} from '@/components/map/MapDestinationPreview';
 
 interface LocationMessageProps {
   latitude: number;
@@ -64,53 +52,30 @@ export function LocationMessage({
 
   const handleOpenInApp = () => {
     navigate(
-      `/map?destLat=${latitude}&destLng=${longitude}&destName=${encodeURIComponent(title)}`
+      mapDestinationHref({
+        latitude,
+        longitude,
+        title,
+        address,
+      }),
     );
-  };
-
-  const handleOpenExternal = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    window.open(`${GMAPS_SEARCH}${latitude},${longitude}`, '_blank', 'noopener,noreferrer');
   };
 
   return (
     <div className="w-[240px] max-w-full overflow-hidden rounded-2xl border border-border/60 bg-card sm:w-[260px]">
-      {/* Xarita preview - bosilsa ilova ichidagi xaritaga o'tadi */}
+      {/* Preview alohida xarita emas — real interaction yagona /map tizimiga o'tadi. */}
       <button
         type="button"
         onClick={handleOpenInApp}
-        className="relative block h-[140px] w-full cursor-pointer sm:h-[150px]"
-        aria-label="Xaritada ko'rish"
+        className="relative block h-[132px] w-full cursor-pointer overflow-hidden sm:h-[142px]"
+        aria-label="Alsamos Xaritada ko'rish"
       >
-        <MapContainer
-          center={[latitude, longitude]}
-          zoom={15}
-          style={{ height: '100%', width: '100%' }}
-          zoomControl={false}
-          dragging={false}
-          scrollWheelZoom={false}
-          doubleClickZoom={false}
-          touchZoom={false}
-          keyboard={false}
-          attributionControl={true}
-        >
-          <TileLayer url={OSM_TILE_URL} attribution="OpenStreetMap" />
-          <Marker position={[latitude, longitude]} />
-        </MapContainer>
-
-        {/* Klik xaritaga tushmasligi uchun qatlam */}
-        <div className="absolute inset-0 z-[400] bg-gradient-to-t from-black/25 via-transparent to-transparent" />
-
-        {isLive && (
-          <span className="absolute left-2 top-2 z-[401] flex items-center gap-1 rounded-full bg-green-500/90 px-2 py-0.5 text-[10px] font-semibold text-white">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
-            JONLI
-          </span>
-        )}
-
-        <span className="absolute bottom-2 left-2 z-[401] rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">
-          {latitude.toFixed(4)}, {longitude.toFixed(4)}
-        </span>
+        <MapDestinationPreview
+          latitude={latitude}
+          longitude={longitude}
+          title={title}
+          live={isLive}
+        />
       </button>
 
       {/* Ma'lumot va amallar */}
@@ -145,26 +110,17 @@ export function LocationMessage({
           </div>
         </div>
 
-        <div className="flex gap-1.5">
+        <div className="flex">
           <button
             type="button"
             onClick={handleOpenInApp}
             className={cn(
-              'tg-transition flex h-8 flex-1 items-center justify-center gap-1.5 rounded-xl text-xs font-medium',
-              'bg-muted text-foreground hover:bg-muted/70 active:scale-95'
+              'tg-transition flex h-8 w-full items-center justify-center gap-1.5 rounded-xl text-xs font-medium',
+              'bg-muted text-foreground hover:bg-muted/70 active:scale-[0.99]'
             )}
           >
             <Navigation className="h-3.5 w-3.5" />
-            Yo'nalish
-          </button>
-          <button
-            type="button"
-            onClick={handleOpenExternal}
-            aria-label="Tashqi xaritada ochish"
-            title="Tashqi xaritada ochish"
-            className="tg-transition flex h-8 w-9 items-center justify-center rounded-xl bg-muted text-foreground hover:bg-muted/70 active:scale-95"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
+            Alsamos Xarita
           </button>
         </div>
       </div>
