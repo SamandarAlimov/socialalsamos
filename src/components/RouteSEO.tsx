@@ -17,8 +17,26 @@ function useRouteMeta(): RouteMeta {
   // Pre-defined per-route metadata
   if (pathname === '/' || pathname === '/auth') {
     return {
-      title: t('auth.signIn', 'Kirish'),
-      description: 'Alsamos — ulaning, ulashing, kashf eting. Hisobingizga kiring yoki ro\'yxatdan o\'ting.',
+      title: 'Alsamos — Superapp',
+      description: 'Alsamos — xabarlar, hamjamiyatlar, videolar, marketplace, xarita, to‘lovlar, AI va mini ilovalarni bir joyda birlashtirgan superapp.',
+    };
+  }
+  if (pathname === '/legal/terms' || pathname === '/terms' || pathname === '/terms-of-service') {
+    return {
+      title: 'Foydalanish shartlari',
+      description: 'Alsamos superappdan foydalanish shartlari va qoidalari.',
+    };
+  }
+  if (pathname === '/legal/privacy' || pathname === '/privacy' || pathname === '/privacy-policy') {
+    return {
+      title: 'Maxfiylik siyosati',
+      description: 'Alsamos superapp maxfiylik siyosati: ma’lumotlarni yig‘ish, himoya qilish va boshqarish tartibi.',
+    };
+  }
+  if (pathname === '/help' || pathname === '/help-center') {
+    return {
+      title: 'Yordam markazi',
+      description: 'Alsamos superapp bo‘yicha yordam, akkaunt, xavfsizlik va foydalanish bo‘yicha ma’lumotlar.',
     };
   }
   if (pathname.startsWith('/home')) {
@@ -98,7 +116,11 @@ function useRouteMeta(): RouteMeta {
   if (pathname.startsWith('/story-archive')) {
     return { title: 'Hikoyalar arxivi', description: 'Sizning eski hikoyalaringiz.', noindex: true };
   }
-  return { title: 'Alsamos', description: 'Alsamos — ulaning, ulashing, kashf eting.' };
+  return {
+    title: 'Alsamos — Superapp',
+    description: 'Alsamos — xabarlar, hamjamiyatlar, videolar, marketplace, xarita, to‘lovlar, AI va mini ilovalarni birlashtirgan superapp.',
+    noindex: true,
+  };
 }
 
 export function RouteSEO() {
