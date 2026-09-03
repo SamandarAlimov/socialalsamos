@@ -139,8 +139,15 @@ export function VideoMessagePlayer({
       ref={containerRef}
       data-message-id={messageId}
       data-message-interactive="true"
-      className={cn('relative shrink-0 cursor-pointer select-none', className)}
-      style={{ width: SIZE, height: SIZE, maxWidth: '100%' }}
+      className={cn(
+        'relative aspect-square shrink-0 cursor-pointer select-none rounded-full shadow-[0_4px_18px_rgba(0,0,0,0.16)]',
+        className
+      )}
+      style={{
+        width: `min(${SIZE}px, 72vw)`,
+        height: `min(${SIZE}px, 72vw)`,
+        maxWidth: '100%',
+      }}
       onMouseMove={resetControlsTimeout}
       onMouseLeave={() => isPlaying && setShowControls(false)}
       onClick={togglePlayPause}
@@ -182,9 +189,7 @@ export function VideoMessagePlayer({
 
       {/* Aylana bo'ylab progress (Telegramdek) */}
       <svg
-        className="pointer-events-none absolute inset-0 -rotate-90"
-        width={SIZE}
-        height={SIZE}
+        className="pointer-events-none absolute inset-0 h-full w-full -rotate-90"
         viewBox={`0 0 ${SIZE} ${SIZE}`}
       >
         <circle
