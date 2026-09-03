@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, ZoomIn } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { usePinchZoom } from '@/hooks/usePinchZoom';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { MediaFrame } from '@/components/media/MediaFrame';
+import { ImageLightbox } from '@/components/media/ImageLightbox';
 
 interface PostMediaCarouselProps {
   mediaUrls: string[];
@@ -25,67 +25,101 @@ export function PostMediaCarousel({
 }: PostMediaCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [ratios, setRatios] = useState<Record<number, number>>({});
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const swipeStartRef = useRef<{ x: number; y: number; at: number } | null>(null);
-
-  // Pinch-to-zoom hook (for images)
-  const {
-    scale,
-    translateX,
-    translateY,
-    isZoomed,
-    handlers: zoomHandlers,
-    resetZoom,
-    containerRef: zoomContainerRef,
-  } = usePinchZoom(3, 1);
+  const didSwipeRef = useRef(false);
+  const mediaFrameRef = useRef<HTMLDivElement | null>(null);
 
   const isReel = mediaType === 'reel' || mediaType === 'short';
   const isVideoType = mediaType === 'video' || isReel;
 
-  // Reset zoom when changing media
-  useEffect(() => {
-    resetZoom();
-  }, [currentIndex, resetZoom]);
+  const isVideoAt = useCallback(
+    (index: number) => {
+      const url = mediaUrls[index] ?? '';
+      if (mediaKinds?.[index] === 'video') return true;
+      if (mediaKinds?.[index] === 'image') return false;
 
-  const goToPrevious = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isZoomed) return;
-    setCurrentIndex((prev) => (prev > 0 ? prev - 1 : prev));
+      return (
+        isVideoType ||
+        /\.(mp4|webm|mov|m4v|ogv|mkv|avi|3gp|hevc)(?:[?#].*)?$/i.test(url)
+      );
+    },
+    [isVideoType, mediaKinds, mediaUrls],
+  );
+
+  const imageEntries = useMemo(
+    () =>
+      mediaUrls
+        .map((url, sourceIndex) => ({
+          url,
+          sourceIndex,
+          alt: altTexts?.[sourceIndex] || `Post media ${sourceIndex + 1}`,
+        }))
+        .filter((item) => !isVideoAt(item.sourceIndex)),
+    [altTexts, isVideoAt, mediaUrls],
+  );
+
+  const openImageViewer = useCallback(
+    (sourceIndex: number) => {
+      const nextLightboxIndex = imageEntries.findIndex(
+        (item) => item.sourceIndex === sourceIndex,
+      );
+      if (nextLightboxIndex < 0) return;
+
+      setLightboxIndex(nextLightboxIndex);
+      setLightboxOpen(true);
+    },
+    [imageEntries],
+  );
+
+  const goToPrevious = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    setCurrentIndex((previous) => (previous > 0 ? previous - 1 : previous));
   };
 
-  const goToNext = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isZoomed) return;
-    setCurrentIndex((prev) => (prev < mediaUrls.length - 1 ? prev + 1 : prev));
-  };
-
-  const isVideo = (url: string) => {
-    return (
-      isVideoType ||
-      /\.(mp4|webm|mov|m4v|ogv|mkv|avi|3gp|hevc)(?:[?#].*)?$/i.test(url)
+  const goToNext = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    setCurrentIndex((previous) =>
+      previous < mediaUrls.length - 1 ? previous + 1 : previous,
     );
   };
 
-  if (mediaUrls.length === 0) return null;
-
-  const currentMedia = mediaUrls[currentIndex];
-
-  const isCurrentVideo =
-    mediaKinds?.[currentIndex] === 'video' ||
-    (mediaKinds?.[currentIndex] !== 'image' && isVideo(currentMedia));
-
-  // Transform style for zoomed content (images only)
-  const zoomTransformStyle = {
-    transform: `scale(${scale}) translate(${translateX / scale}px, ${translateY / scale}px)`,
-    transition: isZoomed ? 'none' : 'transform 0.3s ease-out',
-  };
-
+  const currentMedia = mediaUrls[currentIndex] ?? '';
+  const isCurrentVideo = currentMedia ? isVideoAt(currentIndex) : false;
   const naturalRatio = ratios[currentIndex] ?? (isReel ? 9 / 16 : undefined);
+
+  // Chrome/Edge touchpad pinch is exposed as Ctrl+wheel. On a post image that
+  // gesture should open the media viewer instead of zooming the whole website.
+  useEffect(() => {
+    const node = mediaFrameRef.current;
+    if (!node || isCurrentVideo || !currentMedia) return;
+
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      event.stopPropagation();
+      openImageViewer(currentIndex);
+    };
+
+    node.addEventListener('wheel', onWheel, { passive: false });
+    return () => node.removeEventListener('wheel', onWheel);
+  }, [currentIndex, currentMedia, isCurrentVideo, openImageViewer]);
+
+  if (mediaUrls.length === 0) return null;
 
   const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
     event.stopPropagation();
-    if (!isCurrentVideo) zoomHandlers.onTouchStart(event);
+    didSwipeRef.current = false;
 
-    if (!isZoomed && event.touches.length === 1) {
+    if (!isCurrentVideo && event.touches.length >= 2) {
+      event.preventDefault();
+      swipeStartRef.current = null;
+      openImageViewer(currentIndex);
+      return;
+    }
+
+    if (event.touches.length === 1) {
       swipeStartRef.current = {
         x: event.touches[0].clientX,
         y: event.touches[0].clientY,
@@ -98,7 +132,6 @@ export function PostMediaCarousel({
 
   const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
     event.stopPropagation();
-    if (!isCurrentVideo) zoomHandlers.onTouchMove(event);
   };
 
   const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
@@ -106,19 +139,15 @@ export function PostMediaCarousel({
 
     const start = swipeStartRef.current;
     const changed = event.changedTouches[0];
-    const canSwipe =
-      !isZoomed &&
-      Boolean(start) &&
-      Boolean(changed) &&
-      mediaUrls.length > 1;
 
-    if (canSwipe && start && changed) {
+    if (start && changed && mediaUrls.length > 1) {
       const dx = changed.clientX - start.x;
       const dy = changed.clientY - start.y;
       const elapsed = Date.now() - start.at;
       const horizontalIntent = Math.abs(dx) > Math.abs(dy) * 1.25;
 
       if (horizontalIntent && Math.abs(dx) >= 44 && elapsed < 900) {
+        didSwipeRef.current = true;
         if (dx < 0 && currentIndex < mediaUrls.length - 1) {
           setCurrentIndex((index) => index + 1);
         } else if (dx > 0 && currentIndex > 0) {
@@ -128,25 +157,24 @@ export function PostMediaCarousel({
     }
 
     swipeStartRef.current = null;
-    if (!isCurrentVideo) zoomHandlers.onTouchEnd(event);
   };
 
   return (
     <div className="relative group w-full">
       {/* Main Media Display */}
       <MediaFrame
-        containerRef={zoomContainerRef}
+        containerRef={mediaFrameRef}
         variant={isReel ? 'reel' : 'feed'}
         naturalRatio={naturalRatio}
-        className={cn(
-          !isCurrentVideo && (isZoomed ? 'touch-none' : 'touch-pan-y'),
-          isCurrentVideo && 'touch-pan-y',
-        )}
+        backdropUrl={
+          isCurrentVideo
+            ? posters?.[currentIndex] ?? null
+            : currentMedia || null
+        }
+        className="touch-pan-y"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        onDoubleClick={!isCurrentVideo ? zoomHandlers.onDoubleClick : undefined}
-        onWheel={!isCurrentVideo ? zoomHandlers.onWheel : undefined}
       >
         {isCurrentVideo ? (
           <VideoPlayer
@@ -164,40 +192,44 @@ export function PostMediaCarousel({
             }}
           />
         ) : (
-          <>
+          <button
+            type="button"
+            aria-label="Rasmni to'liq ekranda ochish"
+            className="relative z-[1] flex h-full w-full cursor-zoom-in items-center justify-center"
+            onClick={(event) => {
+              event.stopPropagation();
+              if (didSwipeRef.current) {
+                didSwipeRef.current = false;
+                return;
+              }
+              openImageViewer(currentIndex);
+            }}
+          >
             <img
               key={currentMedia}
               src={currentMedia}
               alt={altTexts?.[currentIndex] || `Post media ${currentIndex + 1}`}
-              className="w-full h-full object-contain will-change-transform"
-              style={zoomTransformStyle}
+              className="h-full w-full select-none object-contain"
               loading="lazy"
               draggable={false}
-              onLoad={(e) => {
-                const img = e.currentTarget;
-                if (img.naturalWidth && img.naturalHeight) {
-                  setRatios((prev) => ({
-                    ...prev,
-                    [currentIndex]: img.naturalWidth / img.naturalHeight,
+              onLoad={(event) => {
+                const image = event.currentTarget;
+                if (image.naturalWidth && image.naturalHeight) {
+                  setRatios((previous) => ({
+                    ...previous,
+                    [currentIndex]:
+                      image.naturalWidth / image.naturalHeight,
                   }));
                 }
               }}
             />
-
-            {/* Zoom indicator for images */}
-            {isZoomed && (
-              <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-md text-white text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1.5 z-20">
-                <ZoomIn className="h-3 w-3" />
-                {Math.round(scale * 100)}%
-              </div>
-            )}
-          </>
+          </button>
         )}
 
         {overlays?.[currentIndex]}
 
         {/* Navigation Arrows - Only show if multiple media and not zoomed */}
-        {mediaUrls.length > 1 && !isZoomed && (
+        {mediaUrls.length > 1 && (
           <>
             {currentIndex > 0 && (
               <Button
@@ -223,25 +255,23 @@ export function PostMediaCarousel({
         )}
 
         {/* Media Counter */}
-        {mediaUrls.length > 1 && !isZoomed && (
+        {mediaUrls.length > 1 && (
           <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md text-white text-xs px-2.5 py-1 rounded-full font-medium z-10">
             {currentIndex + 1}/{mediaUrls.length}
           </div>
         )}
 
-        {/* Zoom reset button when zoomed */}
-        {isZoomed && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              resetZoom();
-            }}
-            className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-xs px-3 py-1.5 rounded-full font-medium flex items-center gap-1.5 z-20 hover:bg-black/80 transition-colors"
-          >
-            Yopish
-          </button>
-        )}
       </MediaFrame>
+
+      <ImageLightbox
+        open={lightboxOpen}
+        images={imageEntries.map((item) => ({
+          url: item.url,
+          alt: item.alt,
+        }))}
+        initialIndex={lightboxIndex}
+        onClose={() => setLightboxOpen(false)}
+      />
 
       {/* Dot Indicators - Only show if multiple media */}
       {mediaUrls.length > 1 && (
@@ -251,7 +281,6 @@ export function PostMediaCarousel({
               key={index}
               onClick={(e) => {
                 e.stopPropagation();
-                if (isZoomed) return;
                 setCurrentIndex(index);
               }}
               className={cn(

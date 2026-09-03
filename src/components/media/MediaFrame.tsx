@@ -7,7 +7,8 @@ import { cn } from '@/lib/utils';
  * Behaves like Instagram / YouTube / Telegram:
  *   - Preserves the media's natural aspect ratio (no cropping, no distortion).
  *   - Clamps extreme ratios into a feed-friendly range so the layout stays stable.
- *   - Always centers media on a solid black backdrop (letterbox / pillarbox).
+ *   - Centers media over an optional blurred media-derived backdrop, avoiding
+ *     harsh black pillarboxes for portrait/square content.
  *
  * Variants:
  *   - "feed"    → 4:5 ≤ ratio ≤ 1.91:1 + viewport-height budget
@@ -30,6 +31,8 @@ export interface MediaFrameProps {
   variant?: MediaFrameVariant;
   className?: string;
   innerClassName?: string;
+  /** Image/poster used to create a soft premium backdrop behind contained media. */
+  backdropUrl?: string | null;
   rounded?: boolean;
   style?: CSSProperties;
   onClick?: (e: React.MouseEvent<HTMLDivElement>) => void;
@@ -64,6 +67,7 @@ export function MediaFrame({
   variant = 'feed',
   className,
   innerClassName,
+  backdropUrl = null,
   rounded = false,
   style,
   onClick,
@@ -81,7 +85,7 @@ export function MediaFrame({
     <div
       ref={containerRef}
       className={cn(
-        'relative w-full overflow-hidden bg-black flex items-center justify-center',
+        'relative w-full overflow-hidden bg-neutral-950 flex items-center justify-center',
         isFeed &&
           'max-h-[min(72dvh,720px)] sm:max-h-[min(74dvh,720px)] xl:max-h-[min(76dvh,740px)]',
         rounded && 'rounded-2xl',
@@ -95,7 +99,27 @@ export function MediaFrame({
       onDoubleClick={onDoubleClick}
       onWheel={onWheel}
     >
-      <div className={cn('absolute inset-0 flex items-center justify-center', innerClassName)}>
+      {backdropUrl && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 overflow-hidden"
+        >
+          <img
+            src={backdropUrl}
+            alt=""
+            className="h-full w-full scale-[1.14] object-cover opacity-70 blur-[30px] saturate-125"
+            draggable={false}
+          />
+          <div className="absolute inset-0 bg-black/20" />
+        </div>
+      )}
+
+      <div
+        className={cn(
+          'absolute inset-0 z-[1] flex items-center justify-center',
+          innerClassName,
+        )}
+      >
         {children}
       </div>
     </div>

@@ -11,6 +11,7 @@
  * modal backdrop      6000
  * modal content       6010
  * modal popover       6020
+ * media viewer        7000
  */
 export const UI_LAYER = {
   shellFloating: 'z-[1300]',
@@ -18,4 +19,5 @@ export const UI_LAYER = {
   modalOverlay: 'z-[6000]',
   modalContent: 'z-[6010]',
   modalPopover: 'z-[6020]',
+  mediaViewer: 'z-[7000]',
 } as const;
