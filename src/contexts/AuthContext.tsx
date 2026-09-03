@@ -24,6 +24,7 @@ import {
   purgeLegacyTokenStore,
   readAccountMeta,
   rememberAccountMeta,
+  removeAccountMeta,
   setActiveSlot,
   touchAccountMeta,
 } from '@/lib/accountSlots';
@@ -176,6 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isPrimary: existing?.isPrimary ?? true,
       identityEmail: existing?.identityEmail ?? user.email ?? null,
       source: existing?.source ?? 'login',
+      saveLoginInfo: existing?.saveLoginInfo ?? true,
       lastUsedAt: Date.now(),
     });
   }, [
@@ -420,12 +422,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (uid) await setOffline(uid);
 
     const currentSlot = getActiveSlot();
+    const currentMeta = readAccountMeta().find((item) => item.slot === currentSlot);
 
     await supabase.auth.signOut({ scope: 'local' }).catch(() => {
       /* offline: local slot is still cleared below */
     });
 
     clearSlot(currentSlot);
+    if (currentMeta?.saveLoginInfo === false) {
+      removeAccountMeta(currentSlot);
+    }
 
     const fallbackSlot = occupiedSlots().find((slot) => slot !== currentSlot) ?? null;
 

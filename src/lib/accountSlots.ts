@@ -34,6 +34,8 @@ export type AccountMeta = {
   isPrimary: boolean;
   identityEmail?: string | null;
   source?: 'login' | 'linked';
+  /** Account kartasi logoutdan keyin ham qurilmada eslab qolinsinmi. */
+  saveLoginInfo?: boolean;
   lastUsedAt?: number;
 };
 
@@ -211,6 +213,8 @@ export function writeAccountMeta(accounts: AccountMeta[]): void {
       ...item,
       source: item.source ?? merged.get(item.slot)?.source ?? 'login',
       identityEmail: item.identityEmail ?? merged.get(item.slot)?.identityEmail ?? null,
+      saveLoginInfo:
+        item.saveLoginInfo ?? merged.get(item.slot)?.saveLoginInfo ?? true,
       lastUsedAt: item.lastUsedAt ?? merged.get(item.slot)?.lastUsedAt ?? Date.now(),
     });
   }
@@ -246,6 +250,12 @@ export function removeAccountMeta(slot: number): void {
 export function touchAccountMeta(slot: number): void {
   const account = readAccountMeta().find((item) => item.slot === slot);
   if (account) rememberAccountMeta(account);
+}
+
+export function setAccountSaveLoginInfo(slot: number, enabled: boolean): void {
+  const account = readAccountMeta().find((item) => item.slot === slot);
+  if (!account) return;
+  writeAccountMeta([{ ...account, saveLoginInfo: enabled, lastUsedAt: Date.now() }]);
 }
 
 export function preferredSlotForLogin(identifier: string): number | null {

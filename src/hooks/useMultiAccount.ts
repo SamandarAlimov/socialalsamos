@@ -34,6 +34,7 @@ import {
   readAccountMeta,
   rememberAccountMeta,
   removeAccountMeta,
+  setAccountSaveLoginInfo,
   setActiveSlot,
   touchAccountMeta,
   writeAccountMeta,
@@ -49,6 +50,7 @@ export type LinkedAccount = {
   isPrimary: boolean;
   identityEmail?: string | null;
   source?: 'linked' | 'remembered';
+  saveLoginInfo: boolean;
   /** A session for this account is stored on this device. */
   hasLocalSession: boolean;
   isActive: boolean;
@@ -173,6 +175,7 @@ export function useMultiAccount(enabled = true) {
       isPrimary: item.isPrimary,
       identityEmail: item.identityEmail ?? null,
       source: item.source === 'linked' ? 'linked' as const : 'remembered' as const,
+      saveLoginInfo: item.saveLoginInfo ?? true,
       hasLocalSession: localSlots.includes(item.slot),
       isActive: item.userId === user?.id,
     }));
@@ -188,6 +191,7 @@ export function useMultiAccount(enabled = true) {
         isPrimary: true,
         identityEmail: user.email ?? null,
         source: 'remembered',
+        saveLoginInfo: true,
         hasLocalSession: true,
         isActive: true,
       });
@@ -280,6 +284,7 @@ export function useMultiAccount(enabled = true) {
           isPrimary: Boolean(row.is_primary),
           identityEmail: (identity?.alsamos_email as string | null) ?? user.email ?? null,
           source: 'linked' as const,
+          saveLoginInfo: remembered?.saveLoginInfo ?? true,
           hasLocalSession:
             localSlots.includes(slot) &&
             (remembered?.userId === rowUserId || rowUserId === user.id),
@@ -316,6 +321,7 @@ export function useMultiAccount(enabled = true) {
           isPrimary: account.isPrimary,
           identityEmail: account.identityEmail ?? null,
           source: 'linked',
+          saveLoginInfo: account.saveLoginInfo,
           lastUsedAt: account.isActive ? Date.now() : undefined,
         })),
       );
@@ -340,7 +346,8 @@ export function useMultiAccount(enabled = true) {
     void refresh();
   }, [enabled, refresh]);
 
-  const canAddAccount = isSupported && accounts.length < maxAccounts;
+  const linkedAccountCount = accounts.filter((account) => account.source === 'linked').length;
+  const canAddAccount = isSupported && linkedAccountCount < maxAccounts;
 
   /**
    * Switch to another account of the same identity. Instant when a session for
@@ -356,6 +363,8 @@ export function useMultiAccount(enabled = true) {
 
       touchAccountMeta(account.slot);
       setActiveSlot(account.slot);
+      // Reactga progress transitionni bo'yash uchun bir frame beramiz.
+      await new Promise((resolve) => window.setTimeout(resolve, 180));
       window.location.assign('/home');
       return { ok: true };
     },
@@ -364,7 +373,11 @@ export function useMultiAccount(enabled = true) {
 
   /** Instagram-style: add another existing account to this device. */
   const addExistingAccount = useCallback(
-    async (identifier: string, password: string): Promise<SwitchResult> => {
+    async (
+      identifier: string,
+      password: string,
+      saveLoginInfo = true,
+    ): Promise<SwitchResult> => {
       if (occupiedSlots().length >= MAX_ACCOUNTS_PER_IDENTITY) {
         return {
           ok: false,
@@ -374,6 +387,8 @@ export function useMultiAccount(enabled = true) {
 
       try {
         await directPasswordLogin(identifier, password);
+        setAccountSaveLoginInfo(getActiveSlot(), saveLoginInfo);
+        await new Promise((resolve) => window.setTimeout(resolve, 120));
         window.location.assign('/home');
         return { ok: true };
       } catch (e) {
@@ -390,6 +405,8 @@ export function useMultiAccount(enabled = true) {
       try {
         if (account.source === 'remembered' && account.identityEmail) {
           await directPasswordLogin(account.identityEmail, password);
+          setAccountSaveLoginInfo(getActiveSlot(), account.saveLoginInfo);
+          await new Promise((resolve) => window.setTimeout(resolve, 120));
           window.location.assign('/home');
           return { ok: true };
         }
@@ -429,6 +446,7 @@ export function useMultiAccount(enabled = true) {
           isPrimary: account.isPrimary,
           identityEmail,
           source: 'linked',
+          saveLoginInfo: account.saveLoginInfo,
           lastUsedAt: Date.now(),
         });
         window.location.assign('/home');
@@ -469,7 +487,8 @@ export function useMultiAccount(enabled = true) {
             return { ok: false, error: authErrorMessage('SESSION_MINT_FAILED') };
           }
 
-          window.location.reload();
+          await new Promise((resolve) => window.setTimeout(resolve, 120));
+          window.location.assign('/home');
           return { ok: true };
         }
 
@@ -522,6 +541,17 @@ export function useMultiAccount(enabled = true) {
     [accounts, activeSlot, refresh],
   );
 
+  const setSaveLoginInfo = useCallback((account: LinkedAccount, enabled: boolean) => {
+    setAccountSaveLoginInfo(account.slot, enabled);
+    setAccounts((current) =>
+      current.map((item) =>
+        item.userId === account.userId
+          ? { ...item, saveLoginInfo: enabled }
+          : item,
+      ),
+    );
+  }, []);
+
   const activeAccount = useMemo(
     () => accounts.find((account) => account.isActive) ?? null,
     [accounts],
@@ -533,7 +563,7 @@ export function useMultiAccount(enabled = true) {
     activeSlot,
     identityEmail,
     maxAccounts,
-    usedAccounts: accounts.length,
+    usedAccounts: linkedAccountCount,
     canAddAccount,
     isSupported,
     isLoading,
@@ -544,5 +574,6 @@ export function useMultiAccount(enabled = true) {
     addExistingAccount,
     addAccount,
     removeAccount,
+    setSaveLoginInfo,
   };
 }
