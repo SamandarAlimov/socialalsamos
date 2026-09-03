@@ -6,6 +6,7 @@ import {
   CheckCheck,
   Clock,
   AlertCircle,
+  Banknote,
   ReplyIcon,
   Forward,
   Pin,
@@ -485,6 +486,21 @@ export function EnhancedMessageBubble({
    */
   const showTail = true;
 
+  const paymentTransfer =
+    message.metadata?.message_type === 'wallet_transfer'
+      ? {
+          transferId:
+            typeof message.metadata.transfer_id === 'string'
+              ? message.metadata.transfer_id
+              : '',
+          amount: Number(message.metadata.amount || 0),
+          currency:
+            typeof message.metadata.currency === 'string'
+              ? message.metadata.currency
+              : 'USD',
+        }
+      : null;
+
   const renderStatusRow = (transparent = false) => (
     <div
       className={cn(
@@ -684,6 +700,41 @@ export function EnhancedMessageBubble({
             />
           ) : pollData ? (
             <MessagePoll messageId={message.id} poll={pollData} isMine={isMine} />
+          ) : paymentTransfer ? (
+            <div className="min-w-[220px] max-w-[280px] py-0.5">
+              <div className="flex items-start gap-3">
+                <span
+                  className={cn(
+                    'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
+                    isMine
+                      ? 'bg-bubble-own-foreground/10 text-bubble-own-foreground'
+                      : 'bg-foreground text-background'
+                  )}
+                >
+                  <Banknote className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium opacity-65">
+                    {isMine ? 'Pul yuborildi' : 'Pul qabul qilindi'}
+                  </p>
+                  <p className="mt-0.5 text-xl font-semibold tabular-nums">
+                    {new Intl.NumberFormat('uz-UZ', {
+                      style: 'currency',
+                      currency: paymentTransfer.currency,
+                      maximumFractionDigits: paymentTransfer.currency === 'UZS' ? 0 : 2,
+                    }).format(paymentTransfer.amount)}
+                  </p>
+                  {paymentTransfer.transferId && (
+                    <p className="mt-1 font-mono text-[10px] opacity-55">
+                      #{paymentTransfer.transferId.slice(0, 8).toUpperCase()}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="mt-3 border-t border-current/10 pt-2 text-[10px] opacity-60">
+                Alsamos Wallet · server tasdiqlagan o‘tkazma
+              </div>
+            </div>
           ) : (
             <>
               {message.story_id && <StoryReplyPreview storyId={message.story_id} isMine={isMine} />}
