@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, Loader2, Plus, ShieldCheck } from 'lucide-react';
+import { Check, ExternalLink, Loader2, Plus, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -14,11 +14,14 @@ interface WalletTopUpDialogProps {
   wallet?: WalletInfo | null;
 }
 
+type TopUpMethod = 'payme' | WalletTopUpRequest['method'];
+
 const METHODS: Array<{
-  id: WalletTopUpRequest['method'];
+  id: TopUpMethod;
   label: string;
   hint: string;
 }> = [
+  { id: 'payme', label: 'Payme', hint: 'Uzcard/HUMO orqali provayder tasdiqlagan real-time to‘lov.' },
   { id: 'bank_transfer', label: 'Bank o‘tkazmasi', hint: 'Bank orqali yuborilgan to‘lov reference bilan tekshiriladi.' },
   { id: 'p2p_card', label: 'Kartadan o‘tkazma', hint: 'Karta orqali tashqi P2P o‘tkazmasi reference bilan tasdiqlanadi.' },
   { id: 'cash_office', label: 'Kassa', hint: 'Operator yoki kassada qabul qilingan to‘lov.' },
@@ -28,7 +31,7 @@ export function WalletTopUpDialog({ open, onOpenChange, wallet: providedWallet }
   const walletApi = useWallet();
   const wallet = providedWallet || walletApi.wallet;
   const [amount, setAmount] = useState('');
-  const [method, setMethod] = useState<WalletTopUpRequest['method']>('bank_transfer');
+  const [method, setMethod] = useState<TopUpMethod>('payme');
   const [reference, setReference] = useState('');
   const [note, setNote] = useState('');
   const [sending, setSending] = useState(false);
@@ -38,7 +41,7 @@ export function WalletTopUpDialog({ open, onOpenChange, wallet: providedWallet }
   useEffect(() => {
     if (!open) return;
     setAmount('');
-    setMethod('bank_transfer');
+    setMethod('payme');
     setReference('');
     setNote('');
     setSending(false);
@@ -54,6 +57,12 @@ export function WalletTopUpDialog({ open, onOpenChange, wallet: providedWallet }
     setSending(true);
     setError(null);
     try {
+      if (method === 'payme') {
+        const checkout = await walletApi.createPaymeTopUp(numericAmount);
+        window.location.assign(checkout.paymentUrl);
+        return;
+      }
+
       await walletApi.requestTopUp({
         amount: numericAmount,
         method,
@@ -108,8 +117,7 @@ export function WalletTopUpDialog({ open, onOpenChange, wallet: providedWallet }
                 Xavfsiz to‘ldirish oqimi
               </div>
               <p className="mt-2 text-sm leading-relaxed">
-                Hozirgi rail tashqi bank/karta to‘lovini reference orqali tekshiradi.
-                Payme, Click yoki boshqa PSP merchant shartnomasi ulangach tasdiqlash webhook orqali avtomatik bo‘ladi.
+                Payme tanlansa, to‘lov provayder sahifasida bajariladi va muvaffaqiyatli Merchant API tasdig‘idan keyin balans atomik tarzda yangilanadi. Qo‘lda usullar esa operator tekshiruvini talab qiladi.
               </p>
             </div>
 
@@ -147,7 +155,10 @@ export function WalletTopUpDialog({ open, onOpenChange, wallet: providedWallet }
                           : 'border-border/70 bg-card hover:bg-muted/50'
                       )}
                     >
-                      <p className="text-sm font-medium">{item.label}</p>
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium">{item.label}</p>
+                        {item.id === 'payme' && <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-60" />}
+                      </div>
                       <p className={cn('mt-0.5 text-xs', active ? 'text-background/70' : 'text-muted-foreground')}>
                         {item.hint}
                       </p>
@@ -157,29 +168,33 @@ export function WalletTopUpDialog({ open, onOpenChange, wallet: providedWallet }
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="topup-reference">To‘lov reference</Label>
-              <Input
-                id="topup-reference"
-                value={reference}
-                onChange={(event) => setReference(event.target.value)}
-                maxLength={80}
-                placeholder="Tranzaksiya ID yoki izoh"
-                className="h-11 rounded-xl"
-              />
-            </div>
+            {method !== 'payme' && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="topup-reference">To‘lov reference</Label>
+                  <Input
+                    id="topup-reference"
+                    value={reference}
+                    onChange={(event) => setReference(event.target.value)}
+                    maxLength={80}
+                    placeholder="Tranzaksiya ID yoki izoh"
+                    className="h-11 rounded-xl"
+                  />
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="topup-note">Izoh <span className="text-muted-foreground">(ixtiyoriy)</span></Label>
-              <Textarea
-                id="topup-note"
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-                maxLength={200}
-                rows={2}
-                className="resize-none rounded-xl"
-              />
-            </div>
+                <div className="space-y-2">
+                  <Label htmlFor="topup-note">Izoh <span className="text-muted-foreground">(ixtiyoriy)</span></Label>
+                  <Textarea
+                    id="topup-note"
+                    value={note}
+                    onChange={(event) => setNote(event.target.value)}
+                    maxLength={200}
+                    rows={2}
+                    className="resize-none rounded-xl"
+                  />
+                </div>
+              </>
+            )}
 
             {error && (
               <div className="rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">
@@ -193,7 +208,7 @@ export function WalletTopUpDialog({ open, onOpenChange, wallet: providedWallet }
               onClick={submit}
             >
               {sending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              So‘rov yuborish
+              {method === 'payme' ? 'Payme orqali davom etish' : 'So‘rov yuborish'}
             </Button>
           </div>
         )}
