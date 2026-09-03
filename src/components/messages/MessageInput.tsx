@@ -15,6 +15,7 @@ import {
 import { MediaPanel } from '@/components/chat/MediaPanel';
 import { TelegramMediaRecorder } from './TelegramMediaRecorder';
 import { TelegramAttachSheet } from './TelegramAttachSheet';
+import { WalletTransferDialog } from '@/components/payment/WalletTransferDialog';
 import { ScheduleMessageDialog } from './ScheduleMessageDialog';
 import { MentionAutocomplete } from '@/components/MentionAutocomplete';
 import { SelectionFormatMenu } from '@/components/chat/SelectionFormatMenu';
@@ -131,6 +132,7 @@ export function MessageInput({
   const [pendingAlbum, setPendingAlbum] = useState<AlbumItem[] | null>(null);
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const [showArticleComposer, setShowArticleComposer] = useState(false);
+  const [showWalletTransfer, setShowWalletTransfer] = useState(false);
   const [attachmentOpen, setAttachmentOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const composerRef = useRef<RichComposerHandle>(null);
@@ -205,6 +207,7 @@ export function MessageInput({
     setAttachmentOpen(false);
     setShowScheduleDialog(false);
     setShowArticleComposer(false);
+    setShowWalletTransfer(false);
     setIsDragging(false);
     closeMention();
     onCancelReply?.();
@@ -856,6 +859,28 @@ export function MessageInput({
         onArticle={() => setShowArticleComposer(true)}
         onShareLocation={onShareLocation}
         onCreatePoll={onCreatePoll}
+        onSendMoney={conversationId ? () => setShowWalletTransfer(true) : undefined}
+      />
+
+      <WalletTransferDialog
+        open={showWalletTransfer}
+        onOpenChange={setShowWalletTransfer}
+        conversationId={conversationId}
+        onSuccess={async (result) => {
+          const receiptMessage = await onSend('', undefined, undefined, {
+            metadata: {
+              message_type: 'wallet_transfer',
+              transfer_id: result.transfer_id,
+              amount: result.amount,
+              currency: result.currency,
+              recipient_id: result.recipient_id,
+            },
+          });
+
+          if (receiptMessage === null) {
+            toast.warning('Pul o‘tkazildi, lekin chat kvitansiyasi yuborilmadi. Tranzaksiya To‘lov tarixida saqlangan.');
+          }
+        }}
       />
 
       {/* Rejalashtirish dialogi */}
