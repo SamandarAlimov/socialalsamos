@@ -50,6 +50,53 @@ where published_at is null
 
 
 -- ============================================================
+-- 1A. LEGACY POSTS TAGS TRIGGER NULL GUARD
+-- ============================================================
+--
+-- Some Lovable-era databases contain an older posts trigger that executes:
+--
+--   jsonb_array_elements_text(
+--     coalesce(to_jsonb(NEW)->'tags', '[]'::jsonb)
+--   )
+--
+-- SQL NULL in a text[] column becomes JSON "null" after to_jsonb(), which is
+-- a scalar (not SQL NULL), so jsonb_array_elements_text() raises 22023.
+--
+-- This BEFORE trigger runs first (aaa_ prefix) and normalizes NULL tags to an
+-- actual empty text array. It repairs the legacy trigger for Story and normal
+-- posts without dropping unknown production triggers.
+-- ============================================================
+
+create or replace function public.normalize_posts_tags_before_legacy_triggers()
+returns trigger
+language plpgsql
+set search_path = public
+as $normalize_posts_tags_function$
+begin
+  if new.tags is null then
+    new.tags := array[]::text[];
+  end if;
+
+  return new;
+end;
+$normalize_posts_tags_function$;
+
+drop trigger if exists aaa_normalize_posts_tags_before_legacy_triggers
+  on public.posts;
+
+create trigger aaa_normalize_posts_tags_before_legacy_triggers
+  before insert or update of tags
+  on public.posts
+  for each row
+  execute function public.normalize_posts_tags_before_legacy_triggers();
+
+-- Repair existing NULL rows too, so future UPDATE triggers are safe.
+update public.posts
+set tags = array[]::text[]
+where tags is null;
+
+
+-- ============================================================
 -- 2. MEDIA KIND ENUM
 -- ============================================================
 
@@ -323,6 +370,7 @@ begin
     media_urls,
     media_type,
     visibility,
+    tags,
     post_kind,
     status,
     scheduled_at,
@@ -343,6 +391,7 @@ begin
     ),
     v_kind,
     v_visibility,
+    array[]::text[],
     'story',
     'draft',
     null,
