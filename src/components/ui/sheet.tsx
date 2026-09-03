@@ -5,8 +5,40 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 import { UI_LAYER } from "@/lib/uiLayers";
+import { usePlatformScrollLock } from "@/hooks/usePlatformScrollLock";
 
-const Sheet = SheetPrimitive.Root;
+type SheetProps = React.ComponentProps<typeof SheetPrimitive.Root>;
+
+const Sheet = ({
+  open,
+  defaultOpen,
+  onOpenChange,
+  modal = true,
+  ...props
+}: SheetProps) => {
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(Boolean(defaultOpen));
+  const resolvedOpen = open ?? uncontrolledOpen;
+
+  usePlatformScrollLock(modal && resolvedOpen);
+
+  const handleOpenChange = React.useCallback(
+    (nextOpen: boolean) => {
+      if (open === undefined) setUncontrolledOpen(nextOpen);
+      onOpenChange?.(nextOpen);
+    },
+    [onOpenChange, open],
+  );
+
+  return (
+    <SheetPrimitive.Root
+      {...props}
+      open={open}
+      defaultOpen={defaultOpen}
+      onOpenChange={handleOpenChange}
+      modal={modal}
+    />
+  );
+};
 
 const SheetTrigger = SheetPrimitive.Trigger;
 
@@ -17,13 +49,29 @@ const SheetPortal = SheetPrimitive.Portal;
 const SheetOverlay = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof SheetPrimitive.Overlay>
->(({ className, ...props }, ref) => (
+>(({ className, onTouchStart, onTouchMove, onTouchEnd, onTouchCancel, ...props }, ref) => (
   <SheetPrimitive.Overlay
     className={cn(
-      "fixed inset-0 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "fixed inset-0 touch-none overscroll-none bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       UI_LAYER.modalOverlay,
       className,
     )}
+    onTouchStart={(event) => {
+      onTouchStart?.(event);
+      event.stopPropagation();
+    }}
+    onTouchMove={(event) => {
+      onTouchMove?.(event);
+      event.stopPropagation();
+    }}
+    onTouchEnd={(event) => {
+      onTouchEnd?.(event);
+      event.stopPropagation();
+    }}
+    onTouchCancel={(event) => {
+      onTouchCancel?.(event);
+      event.stopPropagation();
+    }}
     {...props}
     ref={ref}
   />
@@ -57,10 +105,46 @@ interface SheetContentProps
 }
 
 const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Content>, SheetContentProps>(
-  ({ side = "right", className, children, overlayClassName, hideDefaultClose = false, ...props }, ref) => (
+  ({
+    side = "right",
+    className,
+    children,
+    overlayClassName,
+    hideDefaultClose = false,
+    onTouchStart,
+    onTouchMove,
+    onTouchEnd,
+    onTouchCancel,
+    onWheel,
+    ...props
+  }, ref) => (
     <SheetPortal>
       <SheetOverlay className={overlayClassName} />
-      <SheetPrimitive.Content ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
+      <SheetPrimitive.Content
+        ref={ref}
+        className={cn(sheetVariants({ side }), 'overscroll-contain', className)}
+        onTouchStart={(event) => {
+          onTouchStart?.(event);
+          event.stopPropagation();
+        }}
+        onTouchMove={(event) => {
+          onTouchMove?.(event);
+          event.stopPropagation();
+        }}
+        onTouchEnd={(event) => {
+          onTouchEnd?.(event);
+          event.stopPropagation();
+        }}
+        onTouchCancel={(event) => {
+          onTouchCancel?.(event);
+          event.stopPropagation();
+        }}
+        onWheel={(event) => {
+          onWheel?.(event);
+          event.stopPropagation();
+        }}
+        {...props}
+      >
         {children}
         {!hideDefaultClose && (
           <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity data-[state=open]:bg-secondary hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
