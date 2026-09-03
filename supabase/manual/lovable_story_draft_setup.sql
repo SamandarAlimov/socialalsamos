@@ -43,12 +43,6 @@ alter table public.posts
 alter table public.posts
   add column if not exists formatted_content jsonb;
 
-update public.posts
-set published_at = coalesce(published_at, created_at, now())
-where published_at is null
-  and coalesce(status, 'published') = 'published';
-
-
 -- ============================================================
 -- 1A. LEGACY POSTS TAGS TRIGGER NULL GUARD
 -- ============================================================
@@ -102,17 +96,10 @@ create trigger aaa_normalize_posts_tags_before_legacy_triggers
   for each row
   execute function public.normalize_posts_tags_before_legacy_triggers();
 
--- Repair existing NULL rows too, so future UPDATE triggers are safe.
-update public.posts
-set
-  tags = coalesce(tags, array[]::text[]),
-  hashtags = coalesce(hashtags, array[]::text[]),
-  effects_used = coalesce(effects_used, array[]::text[]),
-  mentioned_users = coalesce(mentioned_users, array[]::text[])
-where tags is null
-   or hashtags is null
-   or effects_used is null
-   or mentioned_users is null;
+-- Existing rows are intentionally NOT bulk-updated here. Old Lovable databases
+-- may have unrelated UPDATE triggers; touching every post during setup can
+-- activate them. The BEFORE guard above normalizes arrays on the next real
+-- write instead.
 
 
 -- ============================================================
