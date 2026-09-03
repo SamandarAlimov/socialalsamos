@@ -11,7 +11,7 @@ import {
   RefreshCw,
   ShieldCheck,
   ShoppingBag,
-  Taxi,
+  Car,
   WalletCards,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -245,7 +245,7 @@ export default function PaymentSettingsPage() {
               </div>
 
               <div className="p-4">
-                <Taxi className="h-4 w-4 text-muted-foreground" />
+                <Car className="h-4 w-4 text-muted-foreground" />
                 <p className="mt-2 text-sm font-medium">Taxi / Map</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Wallet rail tayyor; charge faqat native booking tasdiqlanganda ishlatiladi.
