@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { UI_LAYER } from "@/lib/uiLayers";
+import { usePlatformScrollLock } from "@/hooks/usePlatformScrollLock";
 
 /**
  * Global modal stack:
@@ -13,87 +14,6 @@ import { UI_LAYER } from "@/lib/uiLayers";
  * Modal backdrop ularning barchasini hira qiladi, content esa backdropdan yuqori.
  */
 type DialogProps = React.ComponentProps<typeof DialogPrimitive.Root>;
-
-type PlatformScrollSnapshot = {
-  overflow: string;
-  overflowY: string;
-  overscrollBehavior: string;
-  touchAction: string;
-  scrollbarGutter: string;
-  scrollTop: number;
-  scrollLeft: number;
-};
-
-let platformScrollLockCount = 0;
-let lockedPlatformScrollRoot: HTMLElement | null = null;
-let platformScrollSnapshot: PlatformScrollSnapshot | null = null;
-
-function acquirePlatformScrollLock() {
-  if (typeof document === 'undefined') return;
-
-  platformScrollLockCount += 1;
-  if (platformScrollLockCount !== 1) return;
-
-  const root = document.querySelector<HTMLElement>('[data-platform-scroll-root="true"]');
-  if (!root) return;
-
-  lockedPlatformScrollRoot = root;
-  platformScrollSnapshot = {
-    overflow: root.style.overflow,
-    overflowY: root.style.overflowY,
-    overscrollBehavior: root.style.overscrollBehavior,
-    touchAction: root.style.touchAction,
-    scrollbarGutter: root.style.scrollbarGutter,
-    scrollTop: root.scrollTop,
-    scrollLeft: root.scrollLeft,
-  };
-
-  // Radix locks document/body scroll, but Alsamos pages scroll inside <main>.
-  // Lock that canonical nested scroller too so iOS/Android cannot move the
-  // feed behind a portal dialog while the user's finger is on the modal.
-  root.style.overflow = 'hidden';
-  root.style.overflowY = 'hidden';
-  root.style.overscrollBehavior = 'none';
-  root.style.touchAction = 'none';
-  root.style.scrollbarGutter = 'stable';
-  root.scrollTop = platformScrollSnapshot.scrollTop;
-  root.scrollLeft = platformScrollSnapshot.scrollLeft;
-  root.dataset.modalScrollLocked = 'true';
-}
-
-function releasePlatformScrollLock() {
-  if (typeof document === 'undefined') return;
-
-  platformScrollLockCount = Math.max(0, platformScrollLockCount - 1);
-  if (platformScrollLockCount !== 0) return;
-
-  const root = lockedPlatformScrollRoot;
-  const snapshot = platformScrollSnapshot;
-
-  lockedPlatformScrollRoot = null;
-  platformScrollSnapshot = null;
-
-  if (!root || !snapshot) return;
-
-  root.style.overflow = snapshot.overflow;
-  root.style.overflowY = snapshot.overflowY;
-  root.style.overscrollBehavior = snapshot.overscrollBehavior;
-  root.style.touchAction = snapshot.touchAction;
-  root.style.scrollbarGutter = snapshot.scrollbarGutter;
-  delete root.dataset.modalScrollLocked;
-
-  // Restore the exact feed position after cancelling any mobile momentum.
-  root.scrollTop = snapshot.scrollTop;
-  root.scrollLeft = snapshot.scrollLeft;
-}
-
-function usePlatformDialogScrollLock(locked: boolean) {
-  React.useEffect(() => {
-    if (!locked) return;
-    acquirePlatformScrollLock();
-    return releasePlatformScrollLock;
-  }, [locked]);
-}
 
 const Dialog = ({
   open,
@@ -105,7 +25,7 @@ const Dialog = ({
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(Boolean(defaultOpen));
   const resolvedOpen = open ?? uncontrolledOpen;
 
-  usePlatformDialogScrollLock(modal && resolvedOpen);
+  usePlatformScrollLock(modal && resolvedOpen);
 
   const handleOpenChange = React.useCallback(
     (nextOpen: boolean) => {
