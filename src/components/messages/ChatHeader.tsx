@@ -19,7 +19,6 @@ import {
   Ban,
   Flag,
   Settings2,
-  Rocket,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -133,7 +132,6 @@ export function ChatHeader({
   const [blockOpen, setBlockOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsTabBoost, setSettingsTabBoost] = useState(false);
   const { blockedIds, refresh: refreshBlocks } = useBlockedUsers();
 
   const isChannel = conversation.type === 'channel';
@@ -232,8 +230,7 @@ export function ChatHeader({
 
   const handleHeaderClick = () => {
     if (isGroupOrChannel) {
-      setSettingsTabBoost(false);
-      setSettingsOpen(true);
+setSettingsOpen(true);
       return;
     }
     onViewInfo?.();
@@ -247,8 +244,7 @@ export function ChatHeader({
           <AvatarFallback
             className={cn(
               'text-foreground',
-              isGroup && 'bg-blue-500',
-              isChannel && 'bg-violet-500',
+              isGroupOrChannel && 'bg-muted',
               isSelfChat && 'bg-muted text-foreground',
               conversation.type === 'private' && !isSelfChat && 'bg-muted'
             )}
@@ -280,14 +276,9 @@ export function ChatHeader({
           {conversation.type === 'private' && conversation.other_participant?.is_verified && (
             <VerifiedBadge size="xs" />
           )}
-          {isChannel && (
-            <span className="hidden shrink-0 rounded-full bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-medium text-violet-500 sm:inline">
-              Kanal
-            </span>
-          )}
-          {isGroup && (
-            <span className="hidden shrink-0 rounded-full bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-medium text-blue-500 sm:inline">
-              Guruh
+          {isGroupOrChannel && (
+            <span className="hidden shrink-0 rounded-full border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline">
+              {isChannel ? 'Kanal' : 'Guruh'}
             </span>
           )}
         </div>
@@ -422,21 +413,11 @@ export function ChatHeader({
               <>
                 <DropdownMenuItem
                   onClick={() => {
-                    setSettingsTabBoost(false);
-                    setSettingsOpen(true);
+                            setSettingsOpen(true);
                   }}
                 >
                   <Settings2 className="mr-2 h-4 w-4" />
                   {isChannel ? 'Kanal sozlamalari' : 'Guruh sozlamalari'}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    setSettingsTabBoost(true);
-                    setSettingsOpen(true);
-                  }}
-                >
-                  <Rocket className="mr-2 h-4 w-4" />
-                  Boost berish
                 </DropdownMenuItem>
                 {onManageMembers && (
                   <DropdownMenuItem onClick={onManageMembers}>
@@ -494,7 +475,8 @@ export function ChatHeader({
           conversationId={conversation.id}
           conversationType={isChannel ? 'channel' : 'group'}
           isAdmin={Boolean(isAdmin)}
-          initialTab={settingsTabBoost ? 'boost' : 'general'}
+          initialTab="profile"
+          onManageMembers={onManageMembers}
         />
       )}
 
