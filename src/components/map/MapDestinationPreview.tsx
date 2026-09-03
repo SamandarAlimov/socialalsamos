@@ -1,5 +1,8 @@
-import { MapPinned, Navigation, Radio } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Navigation, Radio } from 'lucide-react';
 
+import { AlsamosMapSurface } from '@/components/map/AlsamosMapSurface';
+import type { MapSceneMarker } from '@/lib/mapEngine';
 import { cn } from '@/lib/utils';
 
 export function mapDestinationHref({
@@ -31,9 +34,10 @@ interface MapDestinationPreviewProps {
 }
 
 /**
- * Lightweight preview for posts/messages.
- * Bu joyda alohida Leaflet/iframe xarita ochilmaydi: preview faqat destination
- * kartasi, real interaction esa yagona /map tizimiga o'tadi.
+ * Home / Discover / Messages uchun real map preview.
+ *
+ * Bu alohida xarita emas — MapPage ishlatadigan AlsamosMapSurface'ning
+ * read-only preview rejimi. Viewportga yaqinlashmaguncha mount bo'lmaydi.
  */
 export function MapDestinationPreview({
   latitude,
@@ -42,44 +46,85 @@ export function MapDestinationPreview({
   live = false,
   className,
 }: MapDestinationPreviewProps) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [shouldRenderMap, setShouldRenderMap] = useState(
+    () => typeof IntersectionObserver === 'undefined',
+  );
+
+  useEffect(() => {
+    if (shouldRenderMap) return;
+    const node = rootRef.current;
+    if (!node) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        setShouldRenderMap(true);
+        observer.disconnect();
+      },
+      {
+        rootMargin: '320px 0px',
+        threshold: 0.01,
+      },
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [shouldRenderMap]);
+
+  const markers = useMemo<MapSceneMarker[]>(
+    () => [
+      {
+        id: 'destination-preview',
+        kind: 'selected',
+        latitude,
+        longitude,
+        color: live ? '#10B981' : '#2F6FED',
+        active: true,
+      },
+    ],
+    [latitude, live, longitude],
+  );
+
   return (
     <div
-      className={cn(
-        'relative flex h-full w-full items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_25%_25%,hsl(var(--muted))_0,transparent_34%),linear-gradient(135deg,hsl(var(--background)),hsl(var(--muted)))]',
-        className,
-      )}
+      ref={rootRef}
+      className={cn('relative h-full w-full overflow-hidden bg-muted', className)}
+      aria-label={title ? `${title} xarita preview` : 'Joylashuv xarita preview'}
     >
+      {shouldRenderMap ? (
+        <div className="pointer-events-none absolute inset-0">
+          <AlsamosMapSurface
+            center={{ latitude, longitude }}
+            referenceCenter={{ latitude, longitude }}
+            zoom={15}
+            markers={markers}
+            renderMode="preview"
+          />
+        </div>
+      ) : (
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 animate-pulse bg-gradient-to-br from-muted via-background to-muted/70"
+        />
+      )}
+
       <div
         aria-hidden="true"
-        className="absolute inset-0 opacity-[0.22] [background-image:linear-gradient(to_right,hsl(var(--border))_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--border))_1px,transparent_1px)] [background-size:24px_24px]"
+        className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/[0.10] via-transparent to-white/[0.05]"
       />
 
-      <div className="relative z-[1] flex max-w-[85%] flex-col items-center gap-2 text-center">
-        <span
-          className={cn(
-            'flex h-12 w-12 items-center justify-center rounded-2xl border shadow-sm backdrop-blur-sm',
-            live
-              ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-              : 'border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-400',
-          )}
-        >
-          {live ? <Radio className="h-5 w-5" /> : <MapPinned className="h-5 w-5" />}
+      {live && (
+        <span className="pointer-events-none absolute left-2.5 top-2.5 inline-flex items-center gap-1.5 rounded-full border border-white/35 bg-emerald-500/92 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white shadow-lg backdrop-blur">
+          <Radio className="h-3 w-3 animate-pulse" />
+          Live
         </span>
+      )}
 
-        <div className="min-w-0">
-          <p className="truncate text-xs font-semibold text-foreground">
-            {title || 'Alsamos Xarita'}
-          </p>
-          <p className="mt-0.5 text-[10px] tabular-nums text-muted-foreground">
-            {latitude.toFixed(4)}, {longitude.toFixed(4)}
-          </p>
-        </div>
-
-        <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/80 px-2.5 py-1 text-[10px] font-semibold text-foreground shadow-sm backdrop-blur">
-          <Navigation className="h-3 w-3" />
-          Alsamos Xarita
-        </span>
-      </div>
+      <span className="pointer-events-none absolute bottom-2.5 right-2.5 inline-flex items-center gap-1 rounded-full border border-border/45 bg-background/88 px-2.5 py-1 text-[10px] font-semibold text-foreground shadow-md backdrop-blur-xl">
+        <Navigation className="h-3 w-3" />
+        Alsamos Xarita
+      </span>
     </div>
   );
 }

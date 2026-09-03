@@ -21,6 +21,11 @@ interface AlsamosMapSurfaceProps {
   layerId?: MapLayerId;
   overlays?: string[];
   pickMode?: boolean;
+  /**
+   * Feed/message preview uchun MapPage bilan bir xil raster renderer ishlatiladi,
+   * ammo har bir card uchun og'ir vector runtime yuklanmaydi.
+   */
+  renderMode?: 'default' | 'preview';
   referenceCenter?: { latitude: number; longitude: number };
   controllerRef?: MutableRefObject<MapEngineController | null>;
   className?: string;
@@ -50,6 +55,7 @@ export function AlsamosMapSurface({
   layerId = 'map',
   overlays = [],
   pickMode = false,
+  renderMode = 'default',
   referenceCenter,
   controllerRef,
   className,
@@ -63,9 +69,11 @@ export function AlsamosMapSurface({
   const [engine, setEngine] = useState(() => readPreferredMapEngine());
 
   const effectiveEngine =
-    engine === 'vector' && (layerId === 'map' || layerId === 'night')
-      ? 'vector'
-      : 'raster';
+    renderMode === 'preview'
+      ? 'raster'
+      : engine === 'vector' && (layerId === 'map' || layerId === 'night')
+        ? 'vector'
+        : 'raster';
 
   const stableReferenceCenter = referenceCenter ?? center;
 
