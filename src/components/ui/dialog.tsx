@@ -12,7 +12,119 @@ import { UI_LAYER } from "@/lib/uiLayers";
  * AppLayout collapse control z-[1300], xarita/create chrome ham shu diapazonda.
  * Modal backdrop ularning barchasini hira qiladi, content esa backdropdan yuqori.
  */
-const Dialog = DialogPrimitive.Root;
+type DialogProps = React.ComponentProps<typeof DialogPrimitive.Root>;
+
+type PlatformScrollSnapshot = {
+  overflow: string;
+  overflowY: string;
+  overscrollBehavior: string;
+  touchAction: string;
+  scrollbarGutter: string;
+  scrollTop: number;
+  scrollLeft: number;
+};
+
+let platformScrollLockCount = 0;
+let lockedPlatformScrollRoot: HTMLElement | null = null;
+let platformScrollSnapshot: PlatformScrollSnapshot | null = null;
+
+function acquirePlatformScrollLock() {
+  if (typeof document === 'undefined') return;
+
+  platformScrollLockCount += 1;
+  if (platformScrollLockCount !== 1) return;
+
+  const root = document.querySelector<HTMLElement>('[data-platform-scroll-root="true"]');
+  if (!root) return;
+
+  lockedPlatformScrollRoot = root;
+  platformScrollSnapshot = {
+    overflow: root.style.overflow,
+    overflowY: root.style.overflowY,
+    overscrollBehavior: root.style.overscrollBehavior,
+    touchAction: root.style.touchAction,
+    scrollbarGutter: root.style.scrollbarGutter,
+    scrollTop: root.scrollTop,
+    scrollLeft: root.scrollLeft,
+  };
+
+  // Radix locks document/body scroll, but Alsamos pages scroll inside <main>.
+  // Lock that canonical nested scroller too so iOS/Android cannot move the
+  // feed behind a portal dialog while the user's finger is on the modal.
+  root.style.overflow = 'hidden';
+  root.style.overflowY = 'hidden';
+  root.style.overscrollBehavior = 'none';
+  root.style.touchAction = 'none';
+  root.style.scrollbarGutter = 'stable';
+  root.scrollTop = platformScrollSnapshot.scrollTop;
+  root.scrollLeft = platformScrollSnapshot.scrollLeft;
+  root.dataset.modalScrollLocked = 'true';
+}
+
+function releasePlatformScrollLock() {
+  if (typeof document === 'undefined') return;
+
+  platformScrollLockCount = Math.max(0, platformScrollLockCount - 1);
+  if (platformScrollLockCount !== 0) return;
+
+  const root = lockedPlatformScrollRoot;
+  const snapshot = platformScrollSnapshot;
+
+  lockedPlatformScrollRoot = null;
+  platformScrollSnapshot = null;
+
+  if (!root || !snapshot) return;
+
+  root.style.overflow = snapshot.overflow;
+  root.style.overflowY = snapshot.overflowY;
+  root.style.overscrollBehavior = snapshot.overscrollBehavior;
+  root.style.touchAction = snapshot.touchAction;
+  root.style.scrollbarGutter = snapshot.scrollbarGutter;
+  delete root.dataset.modalScrollLocked;
+
+  // Restore the exact feed position after cancelling any mobile momentum.
+  root.scrollTop = snapshot.scrollTop;
+  root.scrollLeft = snapshot.scrollLeft;
+}
+
+function usePlatformDialogScrollLock(locked: boolean) {
+  React.useEffect(() => {
+    if (!locked) return;
+    acquirePlatformScrollLock();
+    return releasePlatformScrollLock;
+  }, [locked]);
+}
+
+const Dialog = ({
+  open,
+  defaultOpen,
+  onOpenChange,
+  modal = true,
+  ...props
+}: DialogProps) => {
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(Boolean(defaultOpen));
+  const resolvedOpen = open ?? uncontrolledOpen;
+
+  usePlatformDialogScrollLock(modal && resolvedOpen);
+
+  const handleOpenChange = React.useCallback(
+    (nextOpen: boolean) => {
+      if (open === undefined) setUncontrolledOpen(nextOpen);
+      onOpenChange?.(nextOpen);
+    },
+    [onOpenChange, open],
+  );
+
+  return (
+    <DialogPrimitive.Root
+      {...props}
+      open={open}
+      defaultOpen={defaultOpen}
+      onOpenChange={handleOpenChange}
+      modal={modal}
+    />
+  );
+};
 
 const DialogTrigger = DialogPrimitive.Trigger;
 
@@ -23,14 +135,30 @@ const DialogClose = DialogPrimitive.Close;
 const DialogOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
->(({ className, ...props }, ref) => (
+>(({ className, onTouchStart, onTouchMove, onTouchEnd, onTouchCancel, ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "fixed inset-0 touch-none overscroll-none bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       UI_LAYER.modalOverlay,
       className,
     )}
+    onTouchStart={(event) => {
+      onTouchStart?.(event);
+      event.stopPropagation();
+    }}
+    onTouchMove={(event) => {
+      onTouchMove?.(event);
+      event.stopPropagation();
+    }}
+    onTouchEnd={(event) => {
+      onTouchEnd?.(event);
+      event.stopPropagation();
+    }}
+    onTouchCancel={(event) => {
+      onTouchCancel?.(event);
+      event.stopPropagation();
+    }}
     {...props}
   />
 ));
@@ -39,16 +167,36 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+>(({ className, children, onTouchStart, onTouchMove, onTouchEnd, onTouchCancel, onWheel, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+        "fixed left-[50%] top-[50%] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overscroll-contain border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
         UI_LAYER.modalContent,
         className,
       )}
+      onTouchStart={(event) => {
+        onTouchStart?.(event);
+        event.stopPropagation();
+      }}
+      onTouchMove={(event) => {
+        onTouchMove?.(event);
+        event.stopPropagation();
+      }}
+      onTouchEnd={(event) => {
+        onTouchEnd?.(event);
+        event.stopPropagation();
+      }}
+      onTouchCancel={(event) => {
+        onTouchCancel?.(event);
+        event.stopPropagation();
+      }}
+      onWheel={(event) => {
+        onWheel?.(event);
+        event.stopPropagation();
+      }}
       {...props}
     >
       {children}
