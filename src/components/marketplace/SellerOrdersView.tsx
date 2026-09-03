@@ -124,7 +124,7 @@ export function SellerOrdersView() {
             className={cn(
               'shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
               filter === f.id
-                ? 'bg-primary text-primary-foreground border-primary'
+                ? 'bg-foreground text-background border-primary'
                 : 'bg-muted/30 text-muted-foreground border-border/40 hover:text-foreground',
             )}
           >
@@ -196,7 +196,7 @@ export function SellerOrdersView() {
                     {order.buyer?.display_name || order.buyer?.username || marketplaceUz.sellerOrders.buyer} • {order.items.length} ta mahsulot
                   </p>
                 </div>
-                <p className="font-bold text-primary tabular-nums shrink-0">
+                <p className="font-bold text-foreground tabular-nums shrink-0">
                   {formatPrice(order.total, order.currency)}
                 </p>
               </div>
@@ -231,11 +231,11 @@ export function SellerOrdersView() {
                   {order.shipping_address && (
                     <div className="p-2.5 rounded-lg bg-muted/20 text-xs text-muted-foreground space-y-1">
                       <p className="flex items-center gap-1.5">
-                        <MapPin className="h-3.5 w-3.5 text-primary" />
+                        <MapPin className="h-3.5 w-3.5 text-foreground" />
                         {order.shipping_address.street}, {order.shipping_address.city}
                       </p>
                       <p className="flex items-center gap-1.5">
-                        <Phone className="h-3.5 w-3.5 text-primary" />
+                        <Phone className="h-3.5 w-3.5 text-foreground" />
                         {order.shipping_address.full_name} • {order.shipping_address.phone}
                       </p>
                     </div>
