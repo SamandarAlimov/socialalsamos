@@ -12,9 +12,8 @@ declare
   v_conversation_id uuid;
   v_last_message_at timestamptz;
 begin
-  v_conversation_id := coalesce(new.conversation_id, old.conversation_id);
-
   if tg_op = 'INSERT' then
+    v_conversation_id := new.conversation_id;
     update public.conversations
     set last_message_at = greatest(
       coalesce(last_message_at, new.created_at),
@@ -23,6 +22,10 @@ begin
     where id = new.conversation_id;
 
     return new;
+  elsif tg_op = 'DELETE' then
+    v_conversation_id := old.conversation_id;
+  else
+    v_conversation_id := new.conversation_id;
   end if;
 
   -- If a message is restored, it becomes eligible for latest activity again.
@@ -50,7 +53,11 @@ begin
   set last_message_at = coalesce(v_last_message_at, c.created_at)
   where c.id = v_conversation_id;
 
-  return coalesce(new, old);
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+
+  return new;
 end;
 $$;
 
