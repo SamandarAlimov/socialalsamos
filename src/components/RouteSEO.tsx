@@ -6,6 +6,7 @@ interface RouteMeta {
   title: string;
   description: string;
   type?: 'website' | 'article' | 'profile';
+  noindex?: boolean;
 }
 
 function useRouteMeta(): RouteMeta {
@@ -33,7 +34,7 @@ function useRouteMeta(): RouteMeta {
     return { title: t('nav.videos'), description: 'Qisqa videolar, jonli efirlar va eng zo\'r kontent Alsamos\'da.' };
   }
   if (pathname.startsWith('/messages')) {
-    return { title: t('nav.messages'), description: 'Xabar almashing, audio va video qo\'ng\'iroqlar qiling.' };
+    return { title: t('nav.messages'), description: 'Xabar almashing, audio va video qo\'ng\'iroqlar qiling.', noindex: true };
   }
   if (pathname.startsWith('/marketplace')) {
     return { title: t('nav.marketplace'), description: 'Mahsulotlarni xarid qiling va soting — Alsamos Marketplace.' };
@@ -42,13 +43,13 @@ function useRouteMeta(): RouteMeta {
     return { title: t('nav.map'), description: 'Atrofingizdagi joylarni, do\'stlaringizni va marshrutlarni toping.' };
   }
   if (pathname.startsWith('/notifications')) {
-    return { title: t('nav.notifications'), description: 'Sizning bildirishnomalaringiz: layklar, izohlar, obunalar va eslatmalar.' };
+    return { title: t('nav.notifications'), description: 'Sizning bildirishnomalaringiz: layklar, izohlar, obunalar va eslatmalar.', noindex: true };
   }
   if (pathname.startsWith('/create')) {
-    return { title: t('nav.create'), description: 'Post, hikoya yoki video yarating va dunyo bilan bo\'lishing.' };
+    return { title: t('nav.create'), description: 'Post, hikoya yoki video yarating va dunyo bilan bo\'lishing.', noindex: true };
   }
   if (pathname.startsWith('/profile')) {
-    return { title: t('nav.profile'), description: 'Sizning Alsamos profilingiz.' };
+    return { title: t('nav.profile'), description: 'Sizning Alsamos profilingiz.', noindex: true };
   }
   if (pathname.startsWith('/user/')) {
     const username = params.username || '';
@@ -58,17 +59,29 @@ function useRouteMeta(): RouteMeta {
       type: 'profile',
     };
   }
+  if (pathname.startsWith('/post/')) {
+    return { title: 'Post', description: 'Alsamos dagi ommaviy post.', type: 'article' };
+  }
+  if (pathname.startsWith('/channel/')) {
+    return { title: 'Kanal', description: 'Alsamos ommaviy kanali.' };
+  }
+  if (pathname.startsWith('/group/')) {
+    return { title: 'Guruh', description: 'Alsamos ommaviy guruhi.' };
+  }
+  if (pathname.startsWith('/hashtag/')) {
+    return { title: 'Hashtag', description: 'Alsamos dagi hashtag bo‘yicha ommaviy postlar.' };
+  }
   if (pathname.startsWith('/settings')) {
-    return { title: t('nav.settings'), description: 'Akkaunt sozlamalari, tilni o\'zgartirish va maxfiylik.' };
+    return { title: t('nav.settings'), description: 'Akkaunt sozlamalari, tilni o\'zgartirish va maxfiylik.', noindex: true };
   }
   if (pathname.startsWith('/payment')) {
-    return { title: t('nav.payment'), description: 'To\'lov, hamyon va karta sozlamalari.' };
+    return { title: t('nav.payment'), description: 'To\'lov, hamyon va karta sozlamalari.', noindex: true };
   }
   if (pathname.startsWith('/ai')) {
-    return { title: t('nav.ai'), description: 'Alsamos AI yordamchisi bilan suhbatlashing.' };
+    return { title: t('nav.ai'), description: 'Alsamos AI yordamchisi bilan suhbatlashing.', noindex: true };
   }
   if (pathname.startsWith('/ads')) {
-    return { title: 'Ads Manager', description: 'Reklama kampaniyalarini yarating va kuzating.' };
+    return { title: 'Ads Manager', description: 'Reklama kampaniyalarini yarating va kuzating.', noindex: true };
   }
   if (pathname.startsWith('/channels')) {
     return { title: 'Channels', description: 'Ommaviy va xususiy kanallar — Telegram uslubidagi yangiliklar.' };
@@ -77,18 +90,18 @@ function useRouteMeta(): RouteMeta {
     return { title: t('nav.miniApps'), description: 'Mini ilovalar va integratsiyalar — bevosita Alsamos ichida.' };
   }
   if (pathname.startsWith('/admin')) {
-    return { title: 'Admin', description: 'Alsamos boshqaruv paneli.' };
+    return { title: 'Admin', description: 'Alsamos boshqaruv paneli.', noindex: true };
   }
   if (pathname.startsWith('/activity')) {
-    return { title: 'Activity', description: 'Faollik va vaqt statistikasi.' };
+    return { title: 'Activity', description: 'Faollik va vaqt statistikasi.', noindex: true };
   }
   if (pathname.startsWith('/story-archive')) {
-    return { title: 'Hikoyalar arxivi', description: 'Sizning eski hikoyalaringiz.' };
+    return { title: 'Hikoyalar arxivi', description: 'Sizning eski hikoyalaringiz.', noindex: true };
   }
   return { title: 'Alsamos', description: 'Alsamos — ulaning, ulashing, kashf eting.' };
 }
 
 export function RouteSEO() {
   const meta = useRouteMeta();
-  return <SEO title={meta.title} description={meta.description} type={meta.type} />;
+  return <SEO title={meta.title} description={meta.description} type={meta.type} noindex={meta.noindex} />;
 }
