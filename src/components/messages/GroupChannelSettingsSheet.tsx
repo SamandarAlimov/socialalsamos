@@ -514,7 +514,7 @@ export function GroupChannelSettingsSheet({
               {settings && tab === 'profile' && (
                 <>
                   <div className="flex flex-col items-center py-2 text-center">
-                    <label className={cn('group relative', isAdmin ? 'cursor-pointer' : 'cursor-default')}>
+                    <label className={cn('group relative', canChangeInfo ? 'cursor-pointer' : 'cursor-default')}>
                       <input
                         type="file"
                         accept="image/*"
@@ -1028,7 +1028,7 @@ export function GroupChannelSettingsSheet({
                                 <DropdownMenuItem onClick={() => copyText(url)}>
                                   <Copy className="mr-2 h-4 w-4" /> Nusxa olish
                                 </DropdownMenuItem>
-                                {isAdmin && !link.is_revoked && (
+                                {canInvite && !link.is_revoked && (
                                   <DropdownMenuItem onClick={() => revokeInviteLink(link.id)}>
                                     <Ban className="mr-2 h-4 w-4" /> Bekor qilish
                                   </DropdownMenuItem>
