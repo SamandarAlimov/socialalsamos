@@ -1,8 +1,94 @@
 {
-	"rewrites": [
-		{ "source": "/mp/health", "destination": "/api/mini-app-proxy?health=1" },
-		{ "source": "/mp/:host/:path*", "destination": "/api/mini-app-proxy?__host=:host&__path=:path*" },
-		{ "source": "/mp/:host", "destination": "/api/mini-app-proxy?__host=:host" },
-		{ "source": "/((?!api/.*|mp/.*).*)", "destination": "/index.html" }
-	]
+  "rewrites": [
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api/sitemap?type=index"
+    },
+    {
+      "source": "/sitemaps/:type.xml",
+      "destination": "/api/sitemap?type=:type"
+    },
+    {
+      "source": "/user/:username",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(Googlebot|Bingbot|bingbot|YandexBot|DuckDuckBot|Baiduspider|Applebot|facebookexternalhit|Twitterbot|LinkedInBot|Slackbot|Discordbot).*"
+        }
+      ],
+      "destination": "/api/seo?kind=profile&value=:username"
+    },
+    {
+      "source": "/post/:postId",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(Googlebot|Bingbot|bingbot|YandexBot|DuckDuckBot|Baiduspider|Applebot|facebookexternalhit|Twitterbot|LinkedInBot|Slackbot|Discordbot).*"
+        }
+      ],
+      "destination": "/api/seo?kind=post&value=:postId"
+    },
+    {
+      "source": "/channel/:channel",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(Googlebot|Bingbot|bingbot|YandexBot|DuckDuckBot|Baiduspider|Applebot|facebookexternalhit|Twitterbot|LinkedInBot|Slackbot|Discordbot).*"
+        }
+      ],
+      "destination": "/api/seo?kind=channel&value=:channel"
+    },
+    {
+      "source": "/group/:group",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(Googlebot|Bingbot|bingbot|YandexBot|DuckDuckBot|Baiduspider|Applebot|facebookexternalhit|Twitterbot|LinkedInBot|Slackbot|Discordbot).*"
+        }
+      ],
+      "destination": "/api/seo?kind=group&value=:group"
+    },
+    {
+      "source": "/marketplace/product/:productId",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(Googlebot|Bingbot|bingbot|YandexBot|DuckDuckBot|Baiduspider|Applebot|facebookexternalhit|Twitterbot|LinkedInBot|Slackbot|Discordbot).*"
+        }
+      ],
+      "destination": "/api/seo?kind=product&value=:productId"
+    },
+    {
+      "source": "/hashtag/:tag",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(Googlebot|Bingbot|bingbot|YandexBot|DuckDuckBot|Baiduspider|Applebot|facebookexternalhit|Twitterbot|LinkedInBot|Slackbot|Discordbot).*"
+        }
+      ],
+      "destination": "/api/seo?kind=hashtag&value=:tag"
+    },
+    {
+      "source": "/mp/health",
+      "destination": "/api/mini-app-proxy?health=1"
+    },
+    {
+      "source": "/mp/:host/:path*",
+      "destination": "/api/mini-app-proxy?__host=:host&__path=:path*"
+    },
+    {
+      "source": "/mp/:host",
+      "destination": "/api/mini-app-proxy?__host=:host"
+    },
+    {
+      "source": "/((?!api/.*|mp/.*).*)",
+      "destination": "/index.html"
+    }
+  ]
 }
