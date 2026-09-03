@@ -549,18 +549,50 @@ create policy "post_music_write_compat"
 -- ============================================================
 -- 3D. LEGACY MEDIA BACKFILL
 -- ============================================================
+--
+-- Existing legacy posts store media in posts.media_urls. Backfill structured
+-- post_media without UPDATE-ing posts, so unknown legacy posts triggers are
+-- never fired during setup.
+-- ============================================================
 
 insert into public.post_media (
-  post_id, position, kind, storage_url, thumbnail_url
+  post_id,
+  position,
+  kind,
+  storage_url,
+  thumbnail_url
 )
 select
   p.id,
   (media_item.ordinality - 1)::integer,
   (
     case
-      when lower(coalesce(p.media_type, '')) in ('video', 'reel', 'short') then 'video'
-      when lower(coalesce(p.media_type, '')) = 'image' then 'image'
-      when media_item.value ~* '\.(mp4|webm|mov|m4v|ogv|mkv|avi|3gp)([?#].*)?
+      when lower(coalesce(p.media_type, '')) in ('video', 'reel', 'short')
+        then 'video'::public.media_kind
+      else 'image'::public.media_kind
+    end
+  ),
+  media_item.value,
+  case
+    when media_item.ordinality = 1 then p.thumbnail_url
+    else null
+  end
+from public.posts p
+cross join lateral unnest(
+  coalesce(p.media_urls, array[]::text[])
+) with ordinality as media_item(value, ordinality)
+where nullif(media_item.value, '') is not null
+  and not exists (
+    select 1
+    from public.post_media pm
+    where pm.post_id = p.id
+      and pm.position = (media_item.ordinality - 1)::integer
+  );
+
+
+-- ============================================================
+-- 4. STORIES — CANONICAL LINK COLUMNS
+-- ============================================================
 
 alter table public.stories
   add column if not exists post_id uuid references public.posts(id) on delete cascade;
