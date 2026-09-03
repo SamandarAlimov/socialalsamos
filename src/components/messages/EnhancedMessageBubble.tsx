@@ -158,7 +158,9 @@ export function EnhancedMessageBubble({
 
   const isInteractiveTarget = (target: EventTarget | null) => {
     const el = target as HTMLElement | null;
-    return !!el?.closest('a,button,iframe,input,textarea,video,audio,[role="button"]');
+    return !!el?.closest(
+      'a,button,iframe,input,textarea,video,audio,[role="button"],[role="slider"],[role="option"],[role="switch"],[data-message-interactive="true"]'
+    );
   };
 
   const clearSelection = () => {
@@ -230,15 +232,15 @@ export function EnhancedMessageBubble({
       const selection = window.getSelection();
       if (selection && selection.toString().length > 0) return;
 
+      // Telegram tartibi: desktopda left-click, touchda oddiy tap menyu ochmaydi.
+      // Menyu faqat right-click yoki long-press orqali ochiladi.
       lightTap();
-      openContextMenu();
     },
     [
       isSelectionMode,
       onSelect,
       message.id,
       lightTap,
-      openContextMenu,
       addReaction,
       successFeedback,
     ]
@@ -423,9 +425,11 @@ export function EnhancedMessageBubble({
       className={cn(
         'mt-1 flex items-center justify-end gap-1.5',
         transparent
-          ? 'text-muted-foreground'
+          ? isMine
+            ? 'text-emerald-700/75 dark:text-emerald-300/80'
+            : 'text-muted-foreground'
           : isMine
-            ? 'text-bubble-own-foreground/60'
+            ? 'text-bubble-own-foreground/65'
             : 'text-muted-foreground'
       )}
     >
@@ -528,10 +532,10 @@ export function EnhancedMessageBubble({
 
         <div
           className={cn(
-            'relative z-[1] min-w-0 max-w-full overflow-hidden rounded-2xl px-3.5 py-2',
+            'relative z-[1] min-w-0 max-w-full overflow-hidden rounded-[18px] px-3.5 py-2',
             isMine
-              ? 'rounded-br-[6px] border border-border/60 bg-bubble-own text-bubble-own-foreground'
-              : 'rounded-bl-[6px] border border-border bg-card text-card-foreground',
+              ? 'rounded-br-[5px] border border-bubble-own-accent/15 bg-bubble-own text-bubble-own-foreground shadow-[0_1px_2px_rgba(15,23,42,0.055)]'
+              : 'rounded-bl-[5px] border border-border/80 bg-card text-card-foreground shadow-[0_1px_2px_rgba(15,23,42,0.045)]',
             !showTail && (isMine ? 'rounded-br-2xl' : 'rounded-bl-2xl'),
             message.status === 'failed' && 'border-destructive bg-destructive/20'
           )}
@@ -671,12 +675,13 @@ export function EnhancedMessageBubble({
             lightTap();
           }
         }}
-        onTouchStart={(e) => handleLongPressStart(e.touches[0].clientX, e.touches[0].clientY)}
+        onTouchStart={(e) => {
+          if (!isInteractiveTarget(e.target)) {
+            handleLongPressStart(e.touches[0].clientX, e.touches[0].clientY);
+          }
+        }}
         onTouchEnd={handleLongPressEnd}
         onTouchCancel={handleLongPressEnd}
-        onMouseDown={(e) => handleLongPressStart(e.clientX, e.clientY)}
-        onMouseUp={handleLongPressEnd}
-        onMouseLeave={handleLongPressEnd}
         onContextMenu={handleContextMenu}
       >
         {isSelectionMode && (
@@ -717,8 +722,11 @@ export function EnhancedMessageBubble({
           isSelected && 'bg-muted'
         )}
         onTouchStart={(e) => {
-          if (!isSelectionMode) handleTouchStart(e);
-          handleLongPressStart(e.touches[0].clientX, e.touches[0].clientY);
+          if (isSelectionMode) return;
+          handleTouchStart(e);
+          if (!isInteractiveTarget(e.target)) {
+            handleLongPressStart(e.touches[0].clientX, e.touches[0].clientY);
+          }
         }}
         onTouchMove={handleTouchMove}
         onTouchEnd={() => {
@@ -730,9 +738,6 @@ export function EnhancedMessageBubble({
           handleLongPressEnd();
         }}
         onClick={handleClick}
-        onMouseDown={(e) => handleLongPressStart(e.clientX, e.clientY)}
-        onMouseUp={handleLongPressEnd}
-        onMouseLeave={handleLongPressEnd}
         onContextMenu={handleContextMenu}
       >
         {/* Tanlash belgisi */}
