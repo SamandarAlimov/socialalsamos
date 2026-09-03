@@ -138,6 +138,7 @@ export function VideoMessagePlayer({
     <div
       ref={containerRef}
       data-message-id={messageId}
+      data-message-interactive="true"
       className={cn('relative shrink-0 cursor-pointer select-none', className)}
       style={{ width: SIZE, height: SIZE, maxWidth: '100%' }}
       onMouseMove={resetControlsTimeout}
