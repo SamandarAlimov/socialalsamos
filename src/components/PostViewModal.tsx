@@ -44,6 +44,7 @@ import { VideoPlayer } from '@/components/VideoPlayer';
 import { PostCollaboratorByline } from '@/components/PostCollaboratorByline';
 import type { WithEditState } from '@/lib/stickerPlacements';
 import { resolveStorageUrl } from '@/lib/mediaUpload';
+import { usePlatformScrollLock } from '@/hooks/usePlatformScrollLock';
 
 interface PostViewModalProps {
   post: {
@@ -94,6 +95,10 @@ export function PostViewModal({
   const [showEdit, setShowEdit] = useState(false);
   const [commentFocusRequest, setCommentFocusRequest] = useState(0);
   const { recordView } = usePostViews();
+
+  // Only the post preview freezes the feed behind it. Keeping this lock local
+  // avoids affecting normal Home/Discover/Search/Notifications scrolling.
+  usePlatformScrollLock(open);
 
   const counts = useRealtimeCounts(post.id);
 
