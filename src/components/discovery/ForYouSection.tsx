@@ -7,6 +7,8 @@ import { PostViewModal } from '@/components/PostViewModal';
 import { PostThumbnailStickers } from '@/components/stickers/PostThumbnailStickers';
 import { PostCardVisual, resolvePostVisualKind } from '@/components/discovery/PostCardVisual';
 import { getPostPreview } from '@/components/discovery/PostPreviewContent';
+import { mapDestinationHref } from '@/components/map/MapDestinationPreview';
+import { fetchPostLocations, type PostLocation } from '@/hooks/usePostLocation';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -34,6 +36,7 @@ interface ForYouPost {
   views_count: number | null;
   created_at: string;
   is_liked: boolean;
+  location: PostLocation | null;
   profile: ForYouProfile | null;
 }
 
@@ -74,13 +77,20 @@ export function ForYouSection({ refreshKey = 0 }: ForYouSectionProps) {
 
       if (error) throw error;
 
-      const rows = (data ?? []) as unknown as Omit<ForYouPost, 'is_liked'>[];
-      const likedIds = await fetchLikedPostIds(
-        user?.id,
-        rows.map((row) => row.id),
-      );
+      const rows = (data ?? []) as unknown as Omit<ForYouPost, 'is_liked' | 'location'>[];
+      const postIds = rows.map((row) => row.id);
+      const [likedIds, locationsByPost] = await Promise.all([
+        fetchLikedPostIds(user?.id, postIds),
+        fetchPostLocations(postIds),
+      ]);
 
-      setPosts(rows.map((row) => ({ ...row, is_liked: likedIds.has(row.id) })));
+      setPosts(
+        rows.map((row) => ({
+          ...row,
+          is_liked: likedIds.has(row.id),
+          location: locationsByPost.get(row.id) ?? null,
+        })),
+      );
     } catch (error) {
       console.error('For You postlarini yuklashda xatolik:', error);
       setHasError(true);
@@ -131,16 +141,31 @@ export function ForYouSection({ refreshKey = 0 }: ForYouSectionProps) {
     (post: ForYouPost) => {
       triggerHaptic('light');
       const preview = getPostPreview(post.content);
+      const location = post.location ?? preview.location;
       const kind = resolvePostVisualKind(
         post.media_type,
         post.media_urls?.[0] ?? null,
         Boolean(preview.music),
+        Boolean(location),
       );
 
       if (kind === 'video') {
         navigate(`/videos?v=${post.id}`);
         return;
       }
+
+      if (kind === 'location' && location) {
+        navigate(
+          mapDestinationHref({
+            latitude: location.latitude,
+            longitude: location.longitude,
+            title: location.place?.name ?? location.label ?? 'Joylashuv',
+            address: location.place?.address ?? null,
+          }),
+        );
+        return;
+      }
+
       setSelected(post);
     },
     [navigate, triggerHaptic],
@@ -216,12 +241,14 @@ export function ForYouSection({ refreshKey = 0 }: ForYouSectionProps) {
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
         {posts.map((post) => {
           const preview = getPostPreview(post.content);
+          const location = post.location ?? preview.location;
           const kind = resolvePostVisualKind(
             post.media_type,
             post.media_urls?.[0] ?? null,
             Boolean(preview.music),
+            Boolean(location),
           );
-          const isVisual = kind === 'image' || kind === 'video';
+          const isVisual = kind === 'image' || kind === 'video' || kind === 'location';
           const isAudio = kind === 'audio';
 
           if (isVisual) {
@@ -237,6 +264,7 @@ export function ForYouSection({ refreshKey = 0 }: ForYouSectionProps) {
                     content={post.content}
                     mediaUrls={post.media_urls}
                     mediaType={post.media_type}
+                    location={post.location}
                     variant="tile"
                   />
 

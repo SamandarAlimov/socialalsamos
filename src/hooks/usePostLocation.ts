@@ -41,6 +41,42 @@ export function isLiveActive(location: Pick<PostLocation, 'mode' | 'live_until'>
  */
 let postLocationSchemaUnavailable = false;
 
+/**
+ * Grid/feedlar uchun post locationlarni bitta query bilan yuklaydi.
+ * N+1 so'rov yuborilmaydi.
+ */
+export async function fetchPostLocations(
+  postIds: string[],
+): Promise<Map<string, PostLocation>> {
+  const uniqueIds = Array.from(new Set(postIds.filter(Boolean)));
+  const locations = new Map<string, PostLocation>();
+
+  if (uniqueIds.length === 0 || postLocationSchemaUnavailable) return locations;
+
+  try {
+    const { data, error } = await db
+      .from('post_locations')
+      .select('*, place:places(id, name, address, category)')
+      .in('post_id', uniqueIds);
+
+    if (error) throw error;
+
+    writeStructuredPostSchemaCapability('available');
+    for (const row of (data ?? []) as PostLocation[]) {
+      if (row?.post_id) locations.set(row.post_id, row);
+    }
+  } catch (error) {
+    if (isMissingStructuredPostSchemaError(error)) {
+      writeStructuredPostSchemaCapability('missing');
+      postLocationSchemaUnavailable = true;
+    } else {
+      console.error('Post joylashuvlarini batch yuklashda xatolik:', error);
+    }
+  }
+
+  return locations;
+}
+
 export function usePostLocation(postId: string | null, enabled = true) {
   const [location, setLocation] = useState<PostLocation | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(postId) && enabled);

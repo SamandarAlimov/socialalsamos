@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { FileText, ImageIcon, Music2, Play, Quote, MapPin } from 'lucide-react';
 import { getPostPreview } from '@/components/discovery/PostPreviewContent';
-import { formatTrackDuration } from '@/lib/postMarkers';
+import { MapDestinationPreview } from '@/components/map/MapDestinationPreview';
+import type { PostLocation } from '@/hooks/usePostLocation';
+import { formatTrackDuration, type LegacyPostLocation } from '@/lib/postMarkers';
 import { cn } from '@/lib/utils';
 
 /**
@@ -15,7 +17,9 @@ import { cn } from '@/lib/utils';
  * Bu modul post turini aniqlab, har biriga mos professional ko'rinish beradi.
  */
 
-export type PostVisualKind = 'image' | 'video' | 'audio' | 'file' | 'text';
+export type PostVisualKind = 'image' | 'video' | 'audio' | 'file' | 'location' | 'text';
+
+type DiscoveryLocation = PostLocation | LegacyPostLocation;
 
 const IMAGE_EXT = /\.(jpe?g|png|gif|webp|avif|bmp|svg|heic)(\?|#|$)/i;
 const VIDEO_EXT = /\.(mp4|webm|mov|m4v|ogv|avi|mkv)(\?|#|$)/i;
@@ -50,8 +54,13 @@ export function resolvePostVisualKind(
   mediaType: string | null | undefined,
   url: string | null | undefined,
   hasMusicMarker = false,
+  hasLocation = false,
 ): PostVisualKind {
-  if (!url) return hasMusicMarker ? 'audio' : 'text';
+  if (!url) {
+    if (hasMusicMarker) return 'audio';
+    if (hasLocation) return 'location';
+    return 'text';
+  }
 
   const type = (mediaType ?? '').toLowerCase();
 
@@ -68,6 +77,7 @@ interface PostCardVisualProps {
   content: string | null | undefined;
   mediaUrls: string[] | null | undefined;
   mediaType: string | null | undefined;
+  location?: PostLocation | null;
   /** `grid` - kattaroq kartochka, `tile` - 3 ustunli kichik katak. */
   variant?: 'grid' | 'tile';
   className?: string;
@@ -77,6 +87,7 @@ export function PostCardVisual({
   content,
   mediaUrls,
   mediaType,
+  location = null,
   variant = 'grid',
   className,
 }: PostCardVisualProps) {
@@ -84,7 +95,13 @@ export function PostCardVisual({
 
   const url = mediaUrls?.[0] ?? null;
   const preview = getPostPreview(content);
-  const kind = resolvePostVisualKind(mediaType, url, !!preview.music);
+  const locationPreview: DiscoveryLocation | null = location ?? preview.location;
+  const kind = resolvePostVisualKind(
+    mediaType,
+    url,
+    !!preview.music,
+    Boolean(locationPreview),
+  );
   const compact = variant === 'tile';
 
   const wrapper = cn('relative h-full w-full overflow-hidden', className);
@@ -214,6 +231,56 @@ export function PostCardVisual({
             {ext}
           </span>
         )}
+      </div>
+    );
+  }
+
+  // ── Joylashuv: "Matnsiz post" emas, mustaqil destination kartasi ──
+  if (kind === 'location' && locationPreview) {
+    const title =
+      locationPreview.place?.name ??
+      locationPreview.label ??
+      'Joylashuv';
+    const address = locationPreview.place?.address ?? null;
+    const liveUntil =
+      'live_until' in locationPreview
+        ? locationPreview.live_until
+        : locationPreview.liveUntil;
+    const isLive =
+      locationPreview.mode === 'live' &&
+      (!liveUntil || new Date(liveUntil).getTime() > Date.now());
+
+    return (
+      <div className={cn(wrapper, 'bg-muted')}>
+        <MapDestinationPreview
+          latitude={locationPreview.latitude}
+          longitude={locationPreview.longitude}
+          title={title}
+          live={isLive}
+        />
+
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-background/95 via-background/78 to-transparent px-3 pb-3 pt-8">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 shadow-sm dark:text-blue-400">
+              <MapPin className="h-3.5 w-3.5" />
+            </span>
+            <span className="min-w-0">
+              <span
+                className={cn(
+                  'block truncate font-semibold text-foreground',
+                  compact ? 'text-[11px]' : 'text-sm',
+                )}
+              >
+                {title}
+              </span>
+              {address && !compact && (
+                <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                  {address}
+                </span>
+              )}
+            </span>
+          </div>
+        </div>
       </div>
     );
   }
