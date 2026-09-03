@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin, Navigation, Radio, Square } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  MapDestinationPreview,
+  mapDestinationHref,
+} from '@/components/map/MapDestinationPreview';
 import { isLiveActive, type PostLocation } from '@/hooks/usePostLocation';
 import { useLiveLocationSharing } from '@/hooks/useLiveLocationSharing';
 import {
@@ -29,30 +33,6 @@ function remainingLabel(liveUntil: string): string {
 
   const hours = Math.floor(minutes / 60);
   return hours + ' soat ' + (minutes % 60) + ' daq qoldi';
-}
-
-/**
- * OSM embed preview.
- * staticmap.openstreetmap.de production'da ba'zan rasm qaytarmaydi;
- * OSM export embed esa browserda to'g'ridan-to'g'ri xarita tile'larini chizadi.
- */
-function osmEmbedUrl(latitude: number, longitude: number): string {
-  const latSpan = 0.0048;
-  const lonScale = Math.max(0.35, Math.cos((latitude * Math.PI) / 180));
-  const lonSpan = latSpan / lonScale;
-  const bbox = [
-    longitude - lonSpan,
-    latitude - latSpan,
-    longitude + lonSpan,
-    latitude + latSpan,
-  ].join(',');
-
-  const params = new URLSearchParams({
-    bbox,
-    layer: 'mapnik',
-    marker: latitude + ',' + longitude,
-  });
-  return 'https://www.openstreetmap.org/export/embed.html?' + params.toString();
 }
 
 /** Lentada post joylashuvini korsatish. */
@@ -131,15 +111,12 @@ export function PostLocationCard({
   const detail = savedAddress ?? resolved?.full ?? coordinateLabel;
   const subtitle = detail === title ? coordinateLabel : detail;
 
-  const mapHref =
-    '/map?destLat=' +
-    location.latitude +
-    '&destLng=' +
-    location.longitude +
-    '&destName=' +
-    encodeURIComponent(title) +
-    '&destAddress=' +
-    encodeURIComponent(subtitle);
+  const mapHref = mapDestinationHref({
+    latitude: location.latitude,
+    longitude: location.longitude,
+    title,
+    address: subtitle,
+  });
 
   const handleStop = async (event: React.MouseEvent) => {
     event.preventDefault();
@@ -179,20 +156,14 @@ export function PostLocationCard({
       )}
     >
       <div className="relative h-36 w-full overflow-hidden bg-muted">
-        <iframe
-          src={osmEmbedUrl(location.latitude, location.longitude)}
-          title={title + ' xarita preview'}
-          loading="lazy"
-          tabIndex={-1}
-          aria-hidden="true"
-          className="pointer-events-none h-full w-full border-0"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/10 via-transparent to-transparent"
+        <MapDestinationPreview
+          latitude={location.latitude}
+          longitude={location.longitude}
+          title={title}
+          live={live}
         />
         {live && (
-          <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold uppercase text-white shadow-sm">
+          <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold uppercase text-white shadow-sm">
             <Radio className="h-3 w-3 animate-pulse" /> Live
           </span>
         )}
