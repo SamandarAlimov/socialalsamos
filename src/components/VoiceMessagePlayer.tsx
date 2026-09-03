@@ -195,8 +195,8 @@ export function VoiceMessagePlayer({
     <div
       ref={containerRef}
       className={cn(
-        'flex min-w-[220px] max-w-[280px] items-center gap-2.5',
-        isMine ? 'text-primary-foreground' : 'text-foreground'
+        'flex min-w-[220px] max-w-[300px] items-center gap-2.5',
+        isMine ? 'text-bubble-own-foreground' : 'text-foreground'
       )}
     >
       {/* Play / Pause */}
@@ -208,8 +208,8 @@ export function VoiceMessagePlayer({
         className={cn(
           'relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors',
           isMine
-            ? 'bg-primary-foreground/15 text-primary-foreground hover:bg-primary-foreground/25'
-            : 'bg-muted text-foreground hover:bg-muted/70',
+            ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-700/15 hover:bg-emerald-600'
+            : 'bg-sky-500 text-white shadow-sm shadow-sky-700/15 hover:bg-sky-600',
           isLoading && 'opacity-50'
         )}
       >
@@ -251,11 +251,11 @@ export function VoiceMessagePlayer({
                   'w-[2px] rounded-full transition-colors duration-75',
                   isFilled
                     ? isMine
-                      ? 'bg-primary-foreground'
-                      : 'bg-foreground/80'
+                      ? 'bg-emerald-600 dark:bg-emerald-400'
+                      : 'bg-sky-500 dark:bg-sky-400'
                     : isMine
-                      ? 'bg-primary-foreground/30'
-                      : 'bg-muted-foreground/30'
+                      ? 'bg-emerald-500/30 dark:bg-emerald-400/30'
+                      : 'bg-sky-500/25 dark:bg-sky-400/30'
                 )}
                 animate={{ height: `${height}%`, scaleY: isActive ? 1.25 : 1 }}
                 transition={{ duration: 0.1 }}
@@ -269,7 +269,9 @@ export function VoiceMessagePlayer({
           <span
             className={cn(
               'flex items-center gap-1 text-[11px] tabular-nums',
-              isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'
+              isMine
+                ? 'text-emerald-700/85 dark:text-emerald-300'
+                : 'text-sky-600/85 dark:text-sky-400'
             )}
           >
             <Mic className="h-3 w-3" />
@@ -283,8 +285,8 @@ export function VoiceMessagePlayer({
               className={cn(
                 'rounded-full px-1.5 py-0.5 text-[10px] font-semibold transition-colors',
                 isMine
-                  ? 'text-primary-foreground/80 hover:bg-primary-foreground/15'
-                  : 'text-muted-foreground hover:bg-muted'
+                  ? 'text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300'
+                  : 'text-sky-600 hover:bg-sky-500/10 dark:text-sky-400'
               )}
             >
               {playbackSpeed}x
