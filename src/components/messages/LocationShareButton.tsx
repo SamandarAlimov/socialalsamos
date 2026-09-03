@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { MapPin, Loader2, Navigation, Radio } from 'lucide-react';
 import { toast } from 'sonner';
@@ -9,22 +9,10 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 import { LIVE_LOCATION_DURATIONS } from '@/hooks/useLiveLocation';
 import { cn } from '@/lib/utils';
-
-const LEAFLET_IMG = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images';
-const OSM_TILE_URL = 'https://' + '{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-
-// Standart marker ikonkalarini to'g'rilash
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: LEAFLET_IMG + '/marker-icon-2x.png',
-  iconUrl: LEAFLET_IMG + '/marker-icon.png',
-  shadowUrl: LEAFLET_IMG + '/marker-shadow.png',
-});
+import { AlsamosMapSurface } from '@/components/map/AlsamosMapSurface';
+import type { MapSceneMarker } from '@/lib/mapEngine';
 
 export interface SharedLocationPayload {
   latitude: number;
@@ -36,13 +24,6 @@ export interface SharedLocationPayload {
 
 interface LocationShareButtonProps {
   onShareLocation: (location: SharedLocationPayload) => void;
-}
-
-function MapClickHandler({ onSelect }: { onSelect: (lat: number, lng: number) => void }) {
-  useMapEvents({
-    click: (e) => onSelect(e.latlng.lat, e.latlng.lng),
-  });
-  return null;
 }
 
 export function LocationShareButton({ onShareLocation }: LocationShareButtonProps) {
@@ -94,6 +75,31 @@ export function LocationShareButton({ onShareLocation }: LocationShareButtonProp
     !!currentLocation &&
     (selectedLocation.lat !== currentLocation.lat || selectedLocation.lng !== currentLocation.lng);
 
+  const mapMarkers = useMemo<MapSceneMarker[]>(() => {
+    const markers: MapSceneMarker[] = [];
+    if (currentLocation) {
+      markers.push({
+        id: 'me',
+        kind: 'me',
+        latitude: currentLocation.lat,
+        longitude: currentLocation.lng,
+        label: 'Joriy joylashuv',
+      });
+    }
+    if (selectedLocation && isMoved) {
+      markers.push({
+        id: 'selected',
+        kind: 'selected',
+        latitude: selectedLocation.lat,
+        longitude: selectedLocation.lng,
+        label: 'Tanlangan joy',
+        color: '#2F6FED',
+        active: true,
+      });
+    }
+    return markers;
+  }, [currentLocation, isMoved, selectedLocation]);
+
   return (
     <>
       <button
@@ -120,20 +126,25 @@ export function LocationShareButton({ onShareLocation }: LocationShareButtonProp
 
           <div className="relative h-[45vh] max-h-[400px] min-h-[220px]">
             {currentLocation && (
-              <MapContainer
-                center={[currentLocation.lat, currentLocation.lng]}
+              <AlsamosMapSurface
+                center={{
+                  latitude: selectedLocation?.lat ?? currentLocation.lat,
+                  longitude: selectedLocation?.lng ?? currentLocation.lng,
+                }}
+                referenceCenter={{
+                  latitude: currentLocation.lat,
+                  longitude: currentLocation.lng,
+                }}
                 zoom={15}
-                style={{ height: '100%', width: '100%' }}
-              >
-                <TileLayer
-                  attribution='&copy; OpenStreetMap'
-                  url={OSM_TILE_URL}
-                />
-                <MapClickHandler onSelect={(lat, lng) => setSelectedLocation({ lat, lng })} />
-                {selectedLocation && (
-                  <Marker position={[selectedLocation.lat, selectedLocation.lng]} />
-                )}
-              </MapContainer>
+                markers={mapMarkers}
+                pickMode
+                onMapClick={(point) =>
+                  setSelectedLocation({
+                    lat: point.latitude,
+                    lng: point.longitude,
+                  })
+                }
+              />
             )}
           </div>
 
