@@ -222,14 +222,14 @@ export function MessageAttachment({
         <div
           className={cn(
             'flex items-center justify-center rounded-2xl',
-            isMine ? 'bg-primary-foreground/10' : 'bg-muted'
+            isMine ? 'bg-bubble-own-foreground/[0.07]' : 'bg-muted'
           )}
           style={{ width: IMAGE_FRAME_WIDTH, maxWidth: '100%', height: IMAGE_SKELETON_HEIGHT }}
         >
           <p
             className={cn(
               'text-[12px]',
-              isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'
+              isMine ? 'text-bubble-own-foreground/70' : 'text-muted-foreground'
             )}
           >
             Rasm mavjud emas
@@ -331,7 +331,7 @@ export function MessageAttachment({
     <div
       className={cn(
         'flex min-w-[220px] max-w-[320px] items-center gap-3 rounded-2xl p-2.5 transition-colors',
-        isMine ? 'bg-primary-foreground/10' : 'bg-muted'
+        isMine ? 'bg-bubble-own-foreground/[0.07]' : 'bg-muted'
       )}
     >
       <a
@@ -341,18 +341,18 @@ export function MessageAttachment({
         onClick={(e) => e.stopPropagation()}
         className={cn(
           'flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-transform active:scale-95',
-          isMine ? 'bg-primary-foreground/20' : 'bg-primary/10'
+          isMine ? 'bg-emerald-500/15' : 'bg-sky-500/10'
         )}
         aria-label={fileName}
       >
-        <DocIcon className={cn('h-5 w-5', isMine ? 'text-primary-foreground' : 'text-primary')} />
+        <DocIcon className={cn('h-5 w-5', isMine ? 'text-emerald-700 dark:text-emerald-300' : 'text-sky-600 dark:text-sky-400')} />
       </a>
 
       <div className="min-w-0 flex-1">
         <p
           className={cn(
             'truncate text-[14px] font-medium',
-            isMine ? 'text-primary-foreground' : 'text-foreground'
+            isMine ? 'text-bubble-own-foreground' : 'text-foreground'
           )}
           title={fileName}
         >
@@ -361,7 +361,7 @@ export function MessageAttachment({
         <p
           className={cn(
             'mt-0.5 truncate text-[11px]',
-            isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'
+            isMine ? 'text-bubble-own-foreground/70' : 'text-muted-foreground'
           )}
         >
           {[prettySize, fileExtension].filter(Boolean).join(' · ')}
@@ -378,8 +378,8 @@ export function MessageAttachment({
         className={cn(
           'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors',
           isMine
-            ? 'text-primary-foreground/80 hover:bg-primary-foreground/15'
-            : 'text-muted-foreground hover:bg-foreground/10'
+            ? 'text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300'
+            : 'text-sky-600 hover:bg-sky-500/10 dark:text-sky-400'
         )}
       >
         <Download className="h-4 w-4" />
