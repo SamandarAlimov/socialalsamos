@@ -143,11 +143,11 @@ export function VideoCommerceSection({ onProductSelect }: VideoCommerceSectionPr
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <div className="rounded-lg bg-primary/10 p-1.5">
-          <Play className="h-4 w-4 text-primary" />
+        <div className="rounded-lg bg-foreground/10 p-1.5">
+          <Play className="h-4 w-4 text-foreground" />
         </div>
         <h3 className="font-bold">{marketplaceUz.video.title}</h3>
-        <Badge variant="outline" className="border-primary/20 bg-primary/5 text-[10px] text-primary">
+        <Badge variant="outline" className="border-foreground/20 bg-foreground/5 text-[10px] text-foreground">
           Yangi
         </Badge>
       </div>
@@ -220,7 +220,7 @@ function VideoCommerceCard({
         </div>
 
         <div className="absolute right-2 top-2">
-          <Badge className="bg-primary/90 px-1.5 py-0.5 text-[9px] text-primary-foreground backdrop-blur-sm">
+          <Badge className="bg-foreground/90 px-1.5 py-0.5 text-[9px] text-background backdrop-blur-sm">
             <ShoppingBag className="mr-0.5 h-2.5 w-2.5" />
             {products.length}
           </Badge>
@@ -259,7 +259,7 @@ function VideoCommerceCard({
                   />
                 </div>
               </div>
-              <p className="mt-0.5 truncate text-[10px] font-bold text-primary">
+              <p className="mt-0.5 truncate text-[10px] font-bold text-foreground">
                 {formatPrice(product.price, product.currency)}
               </p>
             </motion.button>
