@@ -371,11 +371,36 @@ export function EnhancedMessageBubble({
    * Yangi xabarlar canonical `video_note` bo'ladi; eski `video_123.webm`
    * yozuvlar ham regressiyasiz video-note sifatida taniladi.
    */
+  const videoFileName =
+    typeof message.metadata?.file_name === 'string'
+      ? message.metadata.file_name
+      : typeof message.metadata?.filename === 'string'
+        ? message.metadata.filename
+        : '';
+
+  const hasVideoCaption = Boolean(
+    message.content?.trim() &&
+      !message.content.startsWith('[') &&
+      !message.shared_post_id &&
+      !message.story_id
+  );
+
   const isVideoNote = Boolean(
     message.media_url &&
       (message.media_type === 'video_note' ||
         (message.media_type === 'video' &&
-          /(?:^|\/)video_\d+\.(?:webm|mp4|mov|m4v)(?:[?#]|$)/i.test(message.media_url)))
+          (
+            // Recorder uploads are stored as "...-video_<timestamp>.webm".
+            // The old regexp only matched "/video_...", so real recorder
+            // messages fell through into the normal green message bubble.
+            /video_\d+\.(?:webm|mp4|mov|m4v)(?:[?#]|$)/i.test(message.media_url) ||
+            /video_\d+\.(?:webm|mp4|mov|m4v)$/i.test(videoFileName) ||
+            message.metadata?.message_type === 'video_note' ||
+            message.metadata?.kind === 'video_note' ||
+            // Legacy recorder messages sometimes only preserved media_type=video.
+            // A captioned uploaded video remains a regular attachment.
+            !hasVideoCaption
+          )))
   );
 
   /** Stiker va GIF - alohida media turlari, fonsiz ko'rinadi (Telegramdek) */
@@ -527,11 +552,27 @@ export function EnhancedMessageBubble({
       );
     }
 
-    // Telegram video-note: yashil/to'q bubble kartasiz, mustaqil doiraviy media.
-    // Shu bilan video xabar oddiy video attachmentdan vizual jihatdan ajraladi.
+    // Video message is a standalone media object — no chat-card/bubble behind it.
+    // Time/status stays as lightweight metadata below the circle.
     if (isVideoNote && message.media_url) {
       return (
-        <div className={cn('flex max-w-[250px] flex-col gap-1', isMine ? 'items-end' : 'items-start')}>
+        <div className={cn('flex max-w-[252px] flex-col gap-1.5', isMine ? 'items-end' : 'items-start')}>
+          {(isGroup || showSender) && !isMine && message.sender && (
+            senderProfilePath && !isPreview ? (
+              <Link
+                to={senderProfilePath}
+                onClick={(event) => event.stopPropagation()}
+                className="max-w-[240px] truncate px-1 text-xs font-semibold text-foreground/80 hover:underline"
+              >
+                {senderLabel}
+              </Link>
+            ) : (
+              <p className="max-w-[240px] truncate px-1 text-xs font-semibold text-foreground/80">
+                {senderLabel}
+              </p>
+            )
+          )}
+
           {message.reply_to_id && message.reply_to && (
             <div className="w-full max-w-[240px] rounded-xl border border-border/60 bg-card/90 p-1 shadow-sm backdrop-blur-sm">
               <ReplyMessagePreview
@@ -541,14 +582,18 @@ export function EnhancedMessageBubble({
               />
             </div>
           )}
+
           <VideoMessagePlayer
             url={message.media_url}
             isMine={isMine}
             messageId={message.id}
             autoPlay={false}
-            isWebcamRecording={message.media_url.includes('/video_') || message.media_url.includes('video_')}
+            isWebcamRecording={/video_\d+/i.test(message.media_url) || /video_\d+/i.test(videoFileName)}
           />
-          {renderStatusRow(true)}
+
+          <div className="px-1">
+            {renderStatusRow(true)}
+          </div>
         </div>
       );
     }
