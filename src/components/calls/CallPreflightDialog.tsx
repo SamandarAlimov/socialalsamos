@@ -111,7 +111,10 @@ export function CallPreflightDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent className="w-[calc(100vw-1rem)] max-w-2xl gap-0 overflow-hidden rounded-[30px] border-white/10 bg-[#11161d]/98 p-0 text-white shadow-2xl backdrop-blur-2xl">
+      <DialogContent
+        hideDefaultClose
+        className="w-[calc(100vw-1rem)] max-w-2xl gap-0 overflow-hidden rounded-[30px] border-white/10 bg-[#11161d]/98 p-0 text-white shadow-2xl backdrop-blur-2xl"
+      >
         <div className="sr-only">
           <DialogTitle>Qo‘ng‘iroqni boshlash</DialogTitle>
           <DialogDescription>Kamera va qo‘ng‘iroq turini tanlang.</DialogDescription>
