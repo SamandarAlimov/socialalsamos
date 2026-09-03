@@ -25,6 +25,7 @@ import { VideoScrubBar } from '@/components/video/VideoScrubBar';
 import { VideoWatchPanel } from '@/components/video/VideoWatchPanel';
 import { useVideoHeatmap } from '@/hooks/useVideoHeatmap';
 import { useVideoWatchTracker } from '@/hooks/useVideoWatchTracker';
+import { usePinchZoom } from '@/hooks/usePinchZoom';
 import { formatCompactNumber, formatMediaTime, resolveAspectKind } from '@/lib/videoFormat';
 
 /** Bosib turish 2x tezlikka o'tishi uchun kerakli vaqt (ms). */
@@ -86,6 +87,7 @@ function VideoCard({
 }: VideoCardProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
+  const zoom = usePinchZoom(2.5, 1, frameRef);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdActive = useRef(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -113,8 +115,10 @@ function VideoCard({
   useEffect(() => {
     if (isActive) {
       recordView(video.id);
+    } else {
+      zoom.resetZoom();
     }
-  }, [isActive, video.id, recordView]);
+  }, [isActive, video.id, recordView, zoom.resetZoom]);
 
   const videoUrl = video.media_urls?.[0] || '';
   const posterUrl = video.media_urls?.[1];
@@ -441,6 +445,24 @@ function VideoCard({
           userSelect: 'none',
         }}
         onContextMenu={(event) => event.preventDefault()}
+        onWheel={zoom.handlers.onWheel}
+        onTouchStart={(event) => {
+          if (event.touches.length >= 2 || zoom.isZoomed) {
+            event.stopPropagation();
+            endHold();
+          }
+          zoom.handlers.onTouchStart(event);
+        }}
+        onTouchMove={(event) => {
+          if (event.touches.length >= 2 || zoom.isZoomed) {
+            event.stopPropagation();
+          }
+          zoom.handlers.onTouchMove(event);
+        }}
+        onTouchEnd={(event) => {
+          if (zoom.isZoomed) event.stopPropagation();
+          zoom.handlers.onTouchEnd(event);
+        }}
       >
         {/*
           Instagram Reels uslubi: 16:9 yoki 1:1 video 9:16 ekranda qora
@@ -516,7 +538,11 @@ function VideoCard({
         <video
           ref={videoRef}
           src={videoUrl}
-          className="absolute inset-0 h-full w-full select-none object-contain"
+          className="absolute inset-0 h-full w-full select-none object-contain will-change-transform"
+          style={{
+            transform: `translate3d(${zoom.translateX}px, ${zoom.translateY}px, 0) scale(${zoom.scale})`,
+            transformOrigin: 'center center',
+          }}
           draggable={false}
           controls={false}
           disablePictureInPicture
@@ -561,6 +587,25 @@ function VideoCard({
           onPause={() => setIsPlaying(false)}
           poster={posterUrl}
         />
+
+        {zoom.isZoomed && (
+          <button
+            type="button"
+            data-video-interactive="true"
+            onPointerDown={stopBubble}
+            onPointerUp={stopBubble}
+            onClick={(event) => {
+              event.stopPropagation();
+              zoom.resetZoom();
+              lightTap();
+            }}
+            className="absolute left-1/2 top-3 z-[45] -translate-x-1/2 rounded-full bg-black/55 px-3 py-1.5 text-[11px] font-semibold tabular-nums text-white shadow-lg ring-1 ring-white/15 backdrop-blur-xl transition hover:bg-black/70 active:scale-95"
+            aria-label="Video masshtabini tiklash"
+            title="Zoomni tiklash"
+          >
+            {zoom.scale.toFixed(1)}× · Reset
+          </button>
+        )}
 
         {/* Play/Pause Overlay — faqat markazda */}
         <div

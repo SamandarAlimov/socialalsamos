@@ -22,14 +22,19 @@ interface UsePinchZoomReturn {
   containerRef: React.RefObject<HTMLDivElement>;
 }
 
-export function usePinchZoom(maxScale = 3, minScale = 1): UsePinchZoomReturn {
+export function usePinchZoom(
+  maxScale = 3,
+  minScale = 1,
+  targetRef?: React.RefObject<HTMLDivElement>,
+): UsePinchZoomReturn {
   const [state, setState] = useState<ZoomState>({
     scale: 1,
     translateX: 0,
     translateY: 0,
   });
 
-  const containerRef = useRef<HTMLDivElement>(null);
+  const internalContainerRef = useRef<HTMLDivElement>(null);
+  const containerRef = targetRef ?? internalContainerRef;
   const initialDistance = useRef<number>(0);
   const initialScale = useRef<number>(1);
   const lastTap = useRef<number>(0);
@@ -242,7 +247,62 @@ export function usePinchZoom(maxScale = 3, minScale = 1): UsePinchZoomReturn {
     }
   }, [state.scale, state.translateX, state.translateY, resetZoom, clampTranslation, maxScale, minScale, isZoomed]);
 
-  // Reset zoom when component unmounts or media changes
+  // Browser-level zoomni faqat media hududida ushlab qolamiz.
+  // Chrome/Edge trackpad pinch gesture'ni ctrlKey=true bo'lgan WheelEvent
+  // sifatida yuboradi. Passive listener bo'lsa preventDefault ishlamaydi,
+  // shuning uchun native passive:false listener majburiy.
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
+
+    const preventBrowserWheelZoom = (event: WheelEvent) => {
+      if (event.ctrlKey) event.preventDefault();
+    };
+
+    const preventBrowserTouchZoom = (event: TouchEvent) => {
+      if (
+        event.touches.length >= 2 ||
+        isPinching.current ||
+        isDragging.current
+      ) {
+        event.preventDefault();
+      }
+    };
+
+    const preventSafariGestureZoom = (event: Event) => {
+      event.preventDefault();
+    };
+
+    node.addEventListener('wheel', preventBrowserWheelZoom, { passive: false });
+    node.addEventListener('touchmove', preventBrowserTouchZoom, {
+      passive: false,
+    });
+    node.addEventListener(
+      'gesturestart',
+      preventSafariGestureZoom as EventListener,
+      { passive: false },
+    );
+    node.addEventListener(
+      'gesturechange',
+      preventSafariGestureZoom as EventListener,
+      { passive: false },
+    );
+
+    return () => {
+      node.removeEventListener('wheel', preventBrowserWheelZoom);
+      node.removeEventListener('touchmove', preventBrowserTouchZoom);
+      node.removeEventListener(
+        'gesturestart',
+        preventSafariGestureZoom as EventListener,
+      );
+      node.removeEventListener(
+        'gesturechange',
+        preventSafariGestureZoom as EventListener,
+      );
+    };
+  }, [containerRef]);
+
+  // Reset zoom when component unmounts.
   useEffect(() => {
     return () => resetZoom();
   }, [resetZoom]);

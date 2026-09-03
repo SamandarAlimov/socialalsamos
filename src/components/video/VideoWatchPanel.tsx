@@ -26,6 +26,7 @@ import { VideoScrubBar } from '@/components/video/VideoScrubBar';
 import { VideoUpNextItem } from '@/components/video/VideoUpNextItem';
 import { useVideoHeatmap } from '@/hooks/useVideoHeatmap';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
+import { usePinchZoom } from '@/hooks/usePinchZoom';
 import {
   deriveVideoTitle,
   formatCompactNumber,
@@ -93,6 +94,7 @@ export function VideoWatchPanel({
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
+  const zoom = usePinchZoom(2.5, 1, playerRef);
   const scrollRef = useRef<HTMLDivElement>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -142,6 +144,7 @@ export function VideoWatchPanel({
     setRatio(null);
     setDescOpen(false);
     setIsPlaying(true);
+    zoom.resetZoom();
     revealControls();
     scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     const el = videoRef.current;
@@ -151,7 +154,7 @@ export function VideoWatchPanel({
       el.play().catch(() => setIsPlaying(false));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeVideoId]);
+  }, [activeVideoId, zoom.resetZoom]);
 
   useEffect(() => {
     const handler = () => setIsFullscreen(!!document.fullscreenElement);
@@ -623,6 +626,24 @@ export function VideoWatchPanel({
           )}
           aria-keyshortcuts="Space K J L M F I ArrowLeft ArrowRight ArrowUp ArrowDown Home End Shift+N Shift+P"
           onPointerMove={revealControls}
+          onWheel={zoom.handlers.onWheel}
+          onTouchStart={(event) => {
+            if (event.touches.length >= 2 || zoom.isZoomed) {
+              event.stopPropagation();
+              endHold();
+            }
+            zoom.handlers.onTouchStart(event);
+          }}
+          onTouchMove={(event) => {
+            if (event.touches.length >= 2 || zoom.isZoomed) {
+              event.stopPropagation();
+            }
+            zoom.handlers.onTouchMove(event);
+          }}
+          onTouchEnd={(event) => {
+            if (zoom.isZoomed) event.stopPropagation();
+            zoom.handlers.onTouchEnd(event);
+          }}
           onPointerDown={(event) => {
             const target =
               event.target instanceof HTMLElement ? event.target : null;
@@ -676,9 +697,13 @@ export function VideoWatchPanel({
             src={videoUrl}
             poster={video.media_urls?.[1]}
             className={cn(
-              'relative z-[1] h-full w-full',
+              'relative z-[1] h-full w-full will-change-transform',
               fitCover ? 'object-cover' : 'object-contain',
             )}
+            style={{
+              transform: `translate3d(${zoom.translateX}px, ${zoom.translateY}px, 0) scale(${zoom.scale})`,
+              transformOrigin: 'center center',
+            }}
             playsInline
             autoPlay
             muted={isMuted}
@@ -797,6 +822,25 @@ export function VideoWatchPanel({
               </Button>
             </div>
           </div>
+
+          {zoom.isZoomed && (
+            <button
+              type="button"
+              data-video-interactive="true"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                zoom.resetZoom();
+                revealControls();
+                lightTap();
+              }}
+              className="absolute left-1/2 top-3 z-50 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1.5 text-[11px] font-semibold tabular-nums text-white shadow-lg ring-1 ring-white/15 backdrop-blur-xl transition hover:bg-black/70 active:scale-95"
+              aria-label="Video masshtabini tiklash"
+              title="Zoomni tiklash"
+            >
+              {zoom.scale.toFixed(1)}× · Reset
+            </button>
+          )}
 
           {!isPlaying && (
             <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
