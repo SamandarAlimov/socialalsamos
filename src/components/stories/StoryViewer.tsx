@@ -868,7 +868,7 @@ export function StoryViewer({
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="end"
-                className="z-[10020] min-w-[210px] rounded-2xl p-1.5"
+                className={cn(UI_LAYER.modalPopover, 'min-w-[210px] rounded-2xl p-1.5')}
               >
                 {isOwnStory ? (
                   <>
@@ -1102,7 +1102,7 @@ export function StoryViewer({
       >
         <SheetContent
           side="bottom"
-          className="z-[10010] h-[78dvh] overflow-hidden rounded-t-[28px] border-border/70 px-0 pb-0 sm:mx-auto sm:h-[680px] sm:max-h-[84dvh] sm:max-w-[560px]"
+          className="h-[78dvh] overflow-hidden rounded-t-[28px] border-border/70 px-0 pb-0 sm:mx-auto sm:h-[680px] sm:max-h-[84dvh] sm:max-w-[560px]"
         >
           <div className="mx-auto mt-2 h-1.5 w-10 rounded-full bg-muted-foreground/25" />
 
