@@ -863,7 +863,6 @@ export function LocationPicker({
           </div>
         )}
       </div>
-    </div>
     </section>
   );
 }
