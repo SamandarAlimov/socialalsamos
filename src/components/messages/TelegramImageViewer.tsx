@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Download, ZoomIn, ZoomOut, RotateCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { UI_LAYER } from '@/lib/uiLayers';
 
 interface TelegramImageViewerProps {
   open: boolean;
@@ -73,7 +74,7 @@ export function TelegramImageViewer({ open, url, name, caption, onClose }: Teleg
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
-          className="fixed inset-0 z-[200] flex flex-col bg-black/95 backdrop-blur-sm"
+          className={cn('fixed inset-0 flex flex-col bg-black/95 backdrop-blur-sm', UI_LAYER.immersive)}
           onClick={onClose}
         >
           {/* Top bar */}
