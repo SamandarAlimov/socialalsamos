@@ -576,7 +576,11 @@ export function LocationPicker({
             zoom={15}
             markers={mapMarkers}
             pickMode={mode !== 'live'}
-            onMapClick={mode !== 'live' ? handleMapPick : undefined}
+            onMapClick={
+              mode !== 'live'
+                ? (point, zoom) => handleMapPick(point.latitude, point.longitude, zoom)
+                : undefined
+            }
           />
 
           <div className="pointer-events-none absolute inset-x-0 top-0 z-[500] flex items-start justify-between gap-3 p-3">
