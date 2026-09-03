@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronRight, LogOut, X, Moon, Sun, UserPlus } from "lucide-react";
+import { ChevronRight, LogOut, X, Moon, Sun, UsersRound } from "lucide-react";
 import { useTheme } from "next-themes";
 
 import { cn } from "@/lib/utils";
@@ -241,7 +241,7 @@ export function MobileMenuDrawer({
                 </motion.nav>
               </ScrollArea>
 
-              {/* Footer with Theme, Switch Accounts, and Logout */}
+              {/* Footer with Theme, Hisobni almashtirish, and Logout */}
               <motion.div
                 className="shrink-0 border-t border-border bg-background safe-area-bottom"
                 initial={{ opacity: 0, y: 20 }}

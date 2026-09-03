@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UserPlus } from 'lucide-react';
+import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UsersRound } from 'lucide-react';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -128,7 +128,7 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
                 <DropdownMenuContent align="end" side="top" className="w-56">
                   <DropdownMenuItem onClick={() => navigate('/settings')}><Settings className="h-4 w-4 mr-3" />{t('nav.settings')}</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun className="h-4 w-4 mr-3" /> : <Moon className="h-4 w-4 mr-3" />}{theme === 'dark' ? 'Yorug rejim' : 'Tungi rejim'}</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setShowSwitchAccount(true)}><UserPlus className="h-4 w-4 mr-3" />Hisobni almashtirish</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowSwitchAccount(true)}><UsersRound className="h-4 w-4 mr-3" />Hisobni almashtirish</DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive"><LogOut className="h-4 w-4 mr-3" />{t('nav.logout')}</DropdownMenuItem>
                 </DropdownMenuContent>
@@ -142,7 +142,7 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
           <DropdownMenuContent align="center" side="right" className="w-56">
             <DropdownMenuItem onClick={() => navigate('/settings')}><Settings className="h-4 w-4 mr-3" />{t('nav.settings')}</DropdownMenuItem>
             <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun className="h-4 w-4 mr-3" /> : <Moon className="h-4 w-4 mr-3" />}{theme === 'dark' ? 'Yorug rejim' : 'Tungi rejim'}</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setShowSwitchAccount(true)}><UserPlus className="h-4 w-4 mr-3" />Hisobni almashtirish</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setShowSwitchAccount(true)}><UsersRound className="h-4 w-4 mr-3" />Hisobni almashtirish</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive"><LogOut className="h-4 w-4 mr-3" />{t('nav.logout')}</DropdownMenuItem>
           </DropdownMenuContent>

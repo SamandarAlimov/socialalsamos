@@ -18,10 +18,14 @@ import {
 } from '@/lib/alsamosAuth';
 import { checkPassword } from '@/lib/passwordStrength';
 import {
-  clearAllSlots,
+  clearSlot,
   getActiveSlot,
+  occupiedSlots,
   purgeLegacyTokenStore,
+  readAccountMeta,
+  rememberAccountMeta,
   setActiveSlot,
+  touchAccountMeta,
 } from '@/lib/accountSlots';
 
 interface Profile {
@@ -156,6 +160,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!user || !profile) return;
+
+    const slot = getActiveSlot();
+    const existing = readAccountMeta().find((item) => item.slot === slot);
+
+    rememberAccountMeta({
+      slot,
+      accountId: existing?.accountId ?? user.id,
+      userId: user.id,
+      username: profile.username,
+      displayName: profile.display_name,
+      avatarUrl: profile.avatar_url,
+      isPrimary: existing?.isPrimary ?? true,
+      identityEmail: existing?.identityEmail ?? user.email ?? null,
+      source: existing?.source ?? 'login',
+      lastUsedAt: Date.now(),
+    });
+  }, [
+    activeSlot,
+    profile?.avatar_url,
+    profile?.display_name,
+    profile?.username,
+    user?.email,
+    user?.id,
+  ]);
+
   // ---------------------------------------------------------------------
   // Login
   //
@@ -182,8 +213,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: err };
       }
 
-      setActiveSlot(1);
-      setActiveSlotState(1);
+      const currentSlot = getActiveSlot();
+      setActiveSlotState(currentSlot);
       return { error: null };
     }
 
@@ -382,23 +413,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // ---------------------------------------------------------------------
-  // Logout - clears the server session AND every local account slot
+  // Logout - current account only. Other remembered accounts stay switchable.
   // ---------------------------------------------------------------------
   const logout = async () => {
     const uid = userIdRef.current;
     if (uid) await setOffline(uid);
 
-    await supabase.auth.signOut({ scope: 'global' }).catch(() => {
-      /* offline: still wipe local state below */
+    const currentSlot = getActiveSlot();
+
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => {
+      /* offline: local slot is still cleared below */
     });
 
-    clearAllSlots();
+    clearSlot(currentSlot);
+
+    const fallbackSlot = occupiedSlots().find((slot) => slot !== currentSlot) ?? null;
 
     userIdRef.current = null;
     setUser(null);
     setSession(null);
     setProfile(null);
+
+    if (fallbackSlot) {
+      setActiveSlot(fallbackSlot);
+      touchAccountMeta(fallbackSlot);
+      setActiveSlotState(fallbackSlot);
+      window.location.assign('/home');
+      return;
+    }
+
+    setActiveSlot(1);
     setActiveSlotState(1);
+    window.location.assign('/');
   };
 
   const updateProfile = async (updates: Partial<Profile>) => {

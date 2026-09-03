@@ -32,6 +32,9 @@ export type AccountMeta = {
   displayName: string | null;
   avatarUrl: string | null;
   isPrimary: boolean;
+  identityEmail?: string | null;
+  source?: 'login' | 'linked';
+  lastUsedAt?: number;
 };
 
 function hasWindow(): boolean {
@@ -192,9 +195,73 @@ export function readAccountMeta(): AccountMeta[] {
 
 export function writeAccountMeta(accounts: AccountMeta[]): void {
   if (!hasWindow()) return;
+
+  const merged = new Map<number, AccountMeta>();
+  for (const item of readAccountMeta()) merged.set(item.slot, item);
+
+  for (const item of accounts) {
+    if (!isValidSlot(item.slot) || !item.userId) continue;
+
+    for (const [slot, existing] of merged) {
+      if (existing.userId === item.userId && slot !== item.slot) merged.delete(slot);
+    }
+
+    merged.set(item.slot, {
+      ...merged.get(item.slot),
+      ...item,
+      source: item.source ?? merged.get(item.slot)?.source ?? 'login',
+      identityEmail: item.identityEmail ?? merged.get(item.slot)?.identityEmail ?? null,
+      lastUsedAt: item.lastUsedAt ?? merged.get(item.slot)?.lastUsedAt ?? Date.now(),
+    });
+  }
+
   try {
-    window.localStorage.setItem(ACCOUNT_META_KEY, JSON.stringify(accounts));
+    window.localStorage.setItem(
+      ACCOUNT_META_KEY,
+      JSON.stringify(
+        Array.from(merged.values()).sort(
+          (a, b) => (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0) || a.slot - b.slot,
+        ),
+      ),
+    );
   } catch {
     /* quota / private mode - metadata cache is optional */
   }
+}
+
+export function rememberAccountMeta(account: AccountMeta): void {
+  writeAccountMeta([{ ...account, lastUsedAt: Date.now() }]);
+}
+
+export function removeAccountMeta(slot: number): void {
+  if (!hasWindow()) return;
+  const next = readAccountMeta().filter((item) => item.slot !== slot);
+  try {
+    window.localStorage.setItem(ACCOUNT_META_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function touchAccountMeta(slot: number): void {
+  const account = readAccountMeta().find((item) => item.slot === slot);
+  if (account) rememberAccountMeta(account);
+}
+
+export function preferredSlotForLogin(identifier: string): number | null {
+  const normalized = (identifier ?? '').trim().toLowerCase();
+  const remembered = readAccountMeta();
+
+  const existing = remembered.find((item) => {
+    const email = (item.identityEmail ?? '').toLowerCase();
+    const username = (item.username ?? '').toLowerCase();
+    return (
+      normalized === email ||
+      normalized === username ||
+      normalized === '@' + username
+    );
+  });
+
+  if (existing) return existing.slot;
+  return firstFreeSlot();
 }

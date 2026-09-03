@@ -19,6 +19,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   AlsamosAuthError,
   authErrorMessage,
+  directPasswordLogin,
   MAX_ACCOUNTS_PER_IDENTITY,
   requestAccountCreate,
   requestAccountRevoke,
@@ -27,9 +28,14 @@ import {
 } from '@/lib/alsamosAuth';
 import {
   clearSlot,
+  firstFreeSlot,
   getActiveSlot,
   occupiedSlots,
+  readAccountMeta,
+  rememberAccountMeta,
+  removeAccountMeta,
   setActiveSlot,
+  touchAccountMeta,
   writeAccountMeta,
 } from '@/lib/accountSlots';
 
@@ -41,6 +47,8 @@ export type LinkedAccount = {
   displayName: string | null;
   avatarUrl: string | null;
   isPrimary: boolean;
+  identityEmail?: string | null;
+  source?: 'linked' | 'remembered';
   /** A session for this account is stored on this device. */
   hasLocalSession: boolean;
   isActive: boolean;
@@ -142,7 +150,7 @@ async function probeOwnIdentity(userId: string): Promise<{
 }
 
 export function useMultiAccount(enabled = true) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [accounts, setAccounts] = useState<LinkedAccount[]>([]);
   const [identityEmail, setIdentityEmail] = useState<string | null>(null);
   const [maxAccounts, setMaxAccounts] = useState<number>(MAX_ACCOUNTS_PER_IDENTITY);
@@ -152,6 +160,52 @@ export function useMultiAccount(enabled = true) {
   const [isSupported, setIsSupported] = useState(() => !schemaProbeSuppressed());
 
   const activeSlot = getActiveSlot();
+
+  const readLocalAccounts = useCallback((): LinkedAccount[] => {
+    const localSlots = occupiedSlots();
+    const local = readAccountMeta().map((item) => ({
+      id: item.accountId || item.userId,
+      userId: item.userId,
+      slot: item.slot,
+      username: item.username,
+      displayName: item.displayName,
+      avatarUrl: item.avatarUrl,
+      isPrimary: item.isPrimary,
+      identityEmail: item.identityEmail ?? null,
+      source: item.source === 'linked' ? 'linked' as const : 'remembered' as const,
+      hasLocalSession: localSlots.includes(item.slot),
+      isActive: item.userId === user?.id,
+    }));
+
+    if (user && !local.some((item) => item.userId === user.id)) {
+      local.unshift({
+        id: user.id,
+        userId: user.id,
+        slot: activeSlot,
+        username: profile?.username ?? null,
+        displayName: profile?.display_name ?? null,
+        avatarUrl: profile?.avatar_url ?? null,
+        isPrimary: true,
+        identityEmail: user.email ?? null,
+        source: 'remembered',
+        hasLocalSession: true,
+        isActive: true,
+      });
+    }
+
+    return local.sort(
+      (a, b) =>
+        Number(b.isActive) - Number(a.isActive) ||
+        Number(b.hasLocalSession) - Number(a.hasLocalSession) ||
+        a.slot - b.slot,
+    );
+  }, [
+    activeSlot,
+    profile?.avatar_url,
+    profile?.display_name,
+    profile?.username,
+    user,
+  ]);
 
   const refresh = useCallback(async () => {
     if (!user) {
@@ -163,12 +217,16 @@ export function useMultiAccount(enabled = true) {
     setIsLoading(true);
     setError(null);
 
+    const localAccounts = readLocalAccounts();
+    setAccounts(localAccounts);
+    setIdentityEmail(user.email ?? null);
+
     try {
       const { data: own, error: ownError } = await probeOwnIdentity(user.id);
 
       if (ownError) throw ownError;
       if (!own?.identity_id) {
-        setAccounts([]);
+        setIsSupported(false);
         return;
       }
 
@@ -202,27 +260,49 @@ export function useMultiAccount(enabled = true) {
         (profiles ?? []).map((p) => [p.id as string, p as Record<string, unknown>] as const),
       );
       const localSlots = occupiedSlots();
+      const localMetaByUser = new Map(
+        readAccountMeta().map((item) => [item.userId, item] as const),
+      );
 
       const mapped: LinkedAccount[] = list.map((row) => {
-        const slot = row.slot_no as number;
-        const profile = profileById.get(row.user_id as string);
+        const rowUserId = row.user_id as string;
+        const remembered = localMetaByUser.get(rowUserId);
+        const slot = remembered?.slot ?? (row.slot_no as number);
+        const profile = profileById.get(rowUserId);
 
         return {
           id: row.id as string,
-          userId: row.user_id as string,
+          userId: rowUserId,
           slot,
           username: (profile?.username as string | null) ?? null,
           displayName: (profile?.display_name as string | null) ?? null,
           avatarUrl: (profile?.avatar_url as string | null) ?? null,
           isPrimary: Boolean(row.is_primary),
-          hasLocalSession: localSlots.includes(slot),
-          isActive: (row.user_id as string) === user.id,
+          identityEmail: (identity?.alsamos_email as string | null) ?? user.email ?? null,
+          source: 'linked' as const,
+          hasLocalSession:
+            localSlots.includes(slot) &&
+            (remembered?.userId === rowUserId || rowUserId === user.id),
+          isActive: rowUserId === user.id,
         };
       });
 
-      setAccounts(mapped);
-      setIdentityEmail((identity?.alsamos_email as string | null) ?? null);
+      const merged = new Map<string, LinkedAccount>();
+      for (const account of localAccounts) merged.set(account.userId, account);
+      for (const account of mapped) merged.set(account.userId, account);
+
+      setAccounts(
+        Array.from(merged.values()).sort(
+          (a, b) =>
+            Number(b.isActive) - Number(a.isActive) ||
+            Number(b.hasLocalSession) - Number(a.hasLocalSession) ||
+            a.slot - b.slot,
+        ),
+      );
+      setIdentityEmail((identity?.alsamos_email as string | null) ?? user.email ?? null);
       setMaxAccounts((identity?.max_accounts as number | null) ?? MAX_ACCOUNTS_PER_IDENTITY);
+      setIsSupported(true);
+      clearSchemaMissingMark();
 
       // Cache non-sensitive metadata only (no tokens, ever).
       writeAccountMeta(
@@ -234,6 +314,9 @@ export function useMultiAccount(enabled = true) {
           displayName: account.displayName,
           avatarUrl: account.avatarUrl,
           isPrimary: account.isPrimary,
+          identityEmail: account.identityEmail ?? null,
+          source: 'linked',
+          lastUsedAt: account.isActive ? Date.now() : undefined,
         })),
       );
     } catch (e) {
@@ -241,7 +324,6 @@ export function useMultiAccount(enabled = true) {
         // Migratsiya qo'llanmagan: funksiyani jimgina o'chiramiz
         markSchemaMissing();
         setIsSupported(false);
-        setAccounts([]);
         setError(null);
         return;
       }
@@ -251,12 +333,12 @@ export function useMultiAccount(enabled = true) {
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [readLocalAccounts, user]);
 
   useEffect(() => {
-    if (!enabled || !isSupported) return;
+    if (!enabled) return;
     void refresh();
-  }, [enabled, refresh, isSupported]);
+  }, [enabled, refresh]);
 
   const canAddAccount = isSupported && accounts.length < maxAccounts;
 
@@ -272,9 +354,32 @@ export function useMultiAccount(enabled = true) {
         return { ok: false, needsPassword: true };
       }
 
+      touchAccountMeta(account.slot);
       setActiveSlot(account.slot);
-      window.location.reload();
+      window.location.assign('/home');
       return { ok: true };
+    },
+    [],
+  );
+
+  /** Instagram-style: add another existing account to this device. */
+  const addExistingAccount = useCallback(
+    async (identifier: string, password: string): Promise<SwitchResult> => {
+      if (occupiedSlots().length >= MAX_ACCOUNTS_PER_IDENTITY) {
+        return {
+          ok: false,
+          error: 'Bu qurilmada saqlanadigan akkauntlar limiti to‘ldi.',
+        };
+      }
+
+      try {
+        await directPasswordLogin(identifier, password);
+        window.location.assign('/home');
+        return { ok: true };
+      } catch (e) {
+        const err = e instanceof AlsamosAuthError ? e : new AlsamosAuthError('UNKNOWN');
+        return { ok: false, error: err.message };
+      }
     },
     [],
   );
@@ -282,15 +387,29 @@ export function useMultiAccount(enabled = true) {
   /** Re-authenticate a specific account with the identity password. */
   const authenticateAccount = useCallback(
     async (account: LinkedAccount, password: string): Promise<SwitchResult> => {
-      if (!identityEmail) {
-        return { ok: false, error: 'Identifikator emaili topilmadi.' };
-      }
-
       try {
+        if (account.source === 'remembered' && account.identityEmail) {
+          await directPasswordLogin(account.identityEmail, password);
+          window.location.assign('/home');
+          return { ok: true };
+        }
+
+        if (!identityEmail) {
+          return { ok: false, error: 'Identifikator emaili topilmadi.' };
+        }
+
         const step = await requestLoginTicket(identityEmail, password);
         const result = await requestAccountSession(step.ticket, account.id);
+        const rememberedSlot = readAccountMeta().find(
+          (item) => item.userId === account.userId,
+        )?.slot;
+        const localSlot = rememberedSlot ?? firstFreeSlot();
 
-        setActiveSlot(result.slot_no);
+        if (!localSlot) {
+          return { ok: false, error: 'Bu qurilmada saqlanadigan akkauntlar limiti to‘ldi.' };
+        }
+
+        setActiveSlot(localSlot);
         const { error: verifyError } = await supabase.auth.verifyOtp({
           type: 'magiclink',
           token_hash: result.token_hash,
@@ -300,7 +419,19 @@ export function useMultiAccount(enabled = true) {
           return { ok: false, error: authErrorMessage('SESSION_MINT_FAILED') };
         }
 
-        window.location.reload();
+        rememberAccountMeta({
+          slot: localSlot,
+          accountId: account.id,
+          userId: account.userId,
+          username: account.username,
+          displayName: account.displayName,
+          avatarUrl: account.avatarUrl,
+          isPrimary: account.isPrimary,
+          identityEmail,
+          source: 'linked',
+          lastUsedAt: Date.now(),
+        });
+        window.location.assign('/home');
         return { ok: true };
       } catch (e) {
         const err = e instanceof AlsamosAuthError ? e : new AlsamosAuthError('UNKNOWN');
@@ -321,7 +452,13 @@ export function useMultiAccount(enabled = true) {
         const created = await requestAccountCreate({ username, displayName });
 
         if (created.token_hash) {
-          setActiveSlot(created.slot_no);
+          const localSlot = firstFreeSlot();
+          if (!localSlot) {
+            await refresh();
+            return { ok: false, error: 'Bu qurilmada saqlanadigan akkauntlar limiti to‘ldi.' };
+          }
+
+          setActiveSlot(localSlot);
           const { error: verifyError } = await supabase.auth.verifyOtp({
             type: 'magiclink',
             token_hash: created.token_hash,
@@ -348,25 +485,34 @@ export function useMultiAccount(enabled = true) {
 
   /**
    * Remove an account from this device.
-   * `mode: 'unlink'` additionally frees its slot for the identity.
-   * Server-side refresh tokens are revoked in both cases, so a stolen token
-   * cannot be replayed (the old implementation only cleared localStorage).
+   * Local "signout" must work even when the optional identity backend is
+   * unavailable. Full unlink still requires a successful server operation.
    */
   const removeAccount = useCallback(
     async (account: LinkedAccount, mode: 'signout' | 'unlink' = 'signout'): Promise<SwitchResult> => {
-      try {
-        await requestAccountRevoke(account.id, mode);
-      } catch (e) {
-        const err = e instanceof AlsamosAuthError ? e : new AlsamosAuthError('UNKNOWN');
-        return { ok: false, error: err.message };
+      if (mode === 'unlink' && account.source === 'linked') {
+        try {
+          await requestAccountRevoke(account.id, mode);
+        } catch (e) {
+          const err = e instanceof AlsamosAuthError ? e : new AlsamosAuthError('UNKNOWN');
+          return { ok: false, error: err.message };
+        }
+      } else if (account.source === 'linked') {
+        void requestAccountRevoke(account.id, 'signout').catch(() => undefined);
+      }
+
+      if (account.isActive) {
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
       }
 
       clearSlot(account.slot);
+      removeAccountMeta(account.slot);
 
       if (account.slot === activeSlot) {
         const fallback = accounts.find((a) => a.slot !== account.slot && a.hasLocalSession);
         setActiveSlot(fallback?.slot ?? 1);
-        window.location.href = fallback ? '/home' : '/';
+        if (fallback) touchAccountMeta(fallback.slot);
+        window.location.assign(fallback ? '/home' : '/');
         return { ok: true };
       }
 
@@ -395,6 +541,7 @@ export function useMultiAccount(enabled = true) {
     refresh,
     switchToAccount,
     authenticateAccount,
+    addExistingAccount,
     addAccount,
     removeAccount,
   };

@@ -28,7 +28,12 @@ import {
   MAX_ACCOUNTS_PER_IDENTITY,
   TOS_VERSION,
 } from '@/lib/authConstants';
-import { setActiveSlot } from '@/lib/accountSlots';
+import {
+  getActiveSlot,
+  preferredSlotForLogin,
+  rememberAccountMeta,
+  setActiveSlot,
+} from '@/lib/accountSlots';
 import { getDeviceId } from '@/lib/deviceId';
 
 export {
@@ -267,8 +272,11 @@ function loginEmailCandidates(identifier: string): string[] {
 }
 
 /**
- * Sign in straight against Supabase Auth. Works with email, username or phone
- * and opens the session in slot 1, exactly like the pre-multi-account flow.
+ * Sign in straight against Supabase Auth.
+ *
+ * Old behavior always forced slot 1 and overwrote the previous account on this
+ * device. Now a remembered account reuses its own slot; a new login receives
+ * the first free slot. This keeps previously logged-in accounts switchable.
  */
 export async function directPasswordLogin(
   identifier: string,
@@ -282,8 +290,17 @@ export async function directPasswordLogin(
     throw new AlsamosAuthError('INVALID_CREDENTIALS', authErrorMessage('INVALID_CREDENTIALS'));
   }
 
-  // The primary account always lives in slot 1.
-  setActiveSlot(1);
+  const previousSlot = getActiveSlot();
+  const targetSlot = preferredSlotForLogin(identifier);
+
+  if (!targetSlot) {
+    throw new AlsamosAuthError(
+      'ACCOUNT_LIMIT_REACHED',
+      'Bu qurilmada saqlanadigan akkauntlar limiti to‘ldi.',
+    );
+  }
+
+  setActiveSlot(targetSlot);
 
   const attempts: Array<() => ReturnType<typeof supabase.auth.signInWithPassword>> = phone
     ? [() => supabase.auth.signInWithPassword({ phone, password })]
@@ -301,16 +318,33 @@ export async function directPasswordLogin(
         .eq('id', authUser.id)
         .maybeSingle();
 
+      const username = (prof?.username as string | null) ?? null;
+      const displayName = (prof?.display_name as string | null) ?? null;
+      const avatarUrl = (prof?.avatar_url as string | null) ?? null;
+
+      rememberAccountMeta({
+        slot: targetSlot,
+        accountId: authUser.id,
+        userId: authUser.id,
+        username,
+        displayName,
+        avatarUrl,
+        identityEmail: authUser.email ?? null,
+        isPrimary: true,
+        source: 'login',
+        lastUsedAt: Date.now(),
+      });
+
       return {
         ticket: DIRECT_SESSION_TICKET,
         accounts: [
           {
             id: authUser.id,
-            slot_no: 1,
+            slot_no: targetSlot,
             is_primary: true,
-            username: (prof?.username as string | null) ?? null,
-            display_name: (prof?.display_name as string | null) ?? null,
-            avatar_url: (prof?.avatar_url as string | null) ?? null,
+            username,
+            display_name: displayName,
+            avatar_url: avatarUrl,
           },
         ],
         identity: {
@@ -326,13 +360,16 @@ export async function directPasswordLogin(
 
     const message = error?.message ?? '';
     if (/not confirmed/i.test(message)) {
+      setActiveSlot(previousSlot);
       throw new AlsamosAuthError('EMAIL_NOT_CONFIRMED', authErrorMessage('EMAIL_NOT_CONFIRMED'));
     }
     if (/too many|rate limit/i.test(message)) {
+      setActiveSlot(previousSlot);
       throw new AlsamosAuthError('TOO_MANY_ATTEMPTS', authErrorMessage('TOO_MANY_ATTEMPTS'));
     }
   }
 
+  setActiveSlot(previousSlot);
   throw new AlsamosAuthError('INVALID_CREDENTIALS', authErrorMessage('INVALID_CREDENTIALS'));
 }
 
