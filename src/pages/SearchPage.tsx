@@ -87,6 +87,8 @@ interface SearchGroup {
 
 type TabKey = 'global' | 'ai' | 'all' | 'users' | 'posts' | 'groups' | 'channels' | 'products' | 'hashtags';
 
+const DEFAULT_SEARCH_TAB: TabKey = 'all';
+
 const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
   { key: 'global', label: 'Global', icon: Globe },
   { key: 'ai', label: 'AI', icon: Sparkles },
@@ -142,7 +144,7 @@ export default function SearchPage() {
   const [query, setQuery] = useState(searchParams.get('q') || '');
   const debouncedQuery = useDebounce(query, 300);
   const [activeTab, setActiveTab] = useState<TabKey>(
-    initialTab && TABS.some((tab) => tab.key === initialTab) ? initialTab : 'global',
+    initialTab && TABS.some((tab) => tab.key === initialTab) ? initialTab : DEFAULT_SEARCH_TAB,
   );
   const [isFocused, setIsFocused] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>(readLocalSearchHistory);
@@ -183,7 +185,7 @@ export default function SearchPage() {
       if (query.trim()) next.set('q', query);
       else next.delete('q');
 
-      if (activeTab === 'global') next.delete('tab');
+      if (activeTab === DEFAULT_SEARCH_TAB) next.delete('tab');
       else next.set('tab', activeTab);
 
       return next;
