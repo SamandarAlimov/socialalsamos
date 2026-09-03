@@ -1,52 +1,75 @@
-# To'lov qatlami (`src/lib/payments`)
+# To‘lov qatlami
 
-Bu papka checkout va provayder o'rtasidagi yagona shartnoma. `CheckoutSheet`
-hech qachon provayder nomiga qarab shartlanmaydi — u faqat `getEnabledPaymentProviders()`,
-`getPendingPaymentProviders()` va `initPayment()` bilan gaplashadi.
+Alsamos to‘lov arxitekturasi ikki qatlamdan iborat:
 
-## Hozir real ishlaydigan rellslar
+1. **Alsamos Wallet** — platforma ichidagi server-authoritative balans, P2P,
+   Marketplace debit/refund/seller settlement va chat transferlari.
+2. **Tashqi provider rail** — bank/karta pulini walletga kiritish yoki tashqariga
+   chiqarish. Bu qism real PSP merchant/payout shartnomalariga bog‘liq.
 
-| Provayder | `settlement` | Holat | Izoh |
-|---|---|---|---|
-| `wallet` | `instant` | Yoqilgan | Pul `process_marketplace_order` ichida atomik yechiladi, shuning uchun `initPayment` darhol `settled` qaytaradi. |
-| `card_on_delivery` | `on_delivery` | Yoqilgan | Buyurtma `payment_status = 'pending'` bo'lib turadi, `delivered` bo'lganda yopiladi. |
-| `cash` | `on_delivery` | Yoqilgan | Yuqoridagi bilan bir xil oqim. |
+## Hozir kodda ishlaydigan real oqimlar
 
-## Hali ulanmagan (huquqiy shakl kerak)
+| Oqim | Holat | Qanday ishlaydi |
+|---|---|---|
+| Wallet P2P | Tayyor | DB transaction + row lock + idempotency + immutable ledger |
+| Messages transfer | Tayyor | Private chat recipient serverda aniqlanadi, pul wallet RPC orqali ko‘chadi |
+| Marketplace wallet checkout | Tayyor | Buyer wallet atomik debit qilinadi |
+| Marketplace refund | Tayyor | Cancel qilinganda buyer walletga credit |
+| Marketplace seller settlement | Tayyor | Delivery tasdiqlanganda seller walletga credit |
+| Manual top-up | Tayyor | Bank/P2P/kassa reference operator tasdig‘idan keyin credit |
+| Payme top-up | **Kod tayyor** | One-time intent + Payme Merchant API + idempotent settlement |
 
-| Provayder | Nima kerak |
-|---|---|
-| `payme` | YaTT yoki MCHJ + Payme merchant shartnomasi |
-| `click` | YaTT yoki MCHJ + Click merchant shartnomasi |
-| `uzum` | MCHJ + Uzum Nasiya shartnomasi |
+## Payme live rail
 
-Uchtasi ham `enabled: false` va checkoutda "tez kunda" bo'limida
-`unavailableReason` matni bilan ko'rinadi. Ular tanlanmaydi, ya'ni foydalanuvchi
-ishlamaydigan usulni bosib qolmaydi.
+Quyidagi Edge Functionlar mavjud:
 
-## Muhim ogohlantirish: hamyonni to'ldirish
+- `wallet-payme-create` — authenticated user uchun bir martalik Payme checkout
+  link yaratadi.
+- `wallet-payme-merchant` — Payme Merchant API endpoint:
+  `CheckPerformTransaction`, `CreateTransaction`, `PerformTransaction`,
+  `CancelTransaction`, `CheckTransaction`, `GetStatement`.
 
-`wallet` yagona "instant" usul, lekin **balansga pul kirituvchi backend yo'q**.
-Hech qanday PSP webhooki yozilmagan, shuning uchun hozircha balans faqat qo'lda
-(SQL yoki admin) to'ldiriladi. Real xaridlar uchun standart usul
-`card_on_delivery` bo'lishi kerak.
+Pul faqat `PerformTransaction` muvaffaqiyatli kelgandan keyin walletga tushadi.
+Takroriy callback bir marta credit qiladi. Balans browserdan o‘zgartirilmaydi.
 
-## PSP ulanadigan kun nima yoziladi
+### Live qilish uchun majburiy tashqi ma’lumotlar
 
-1. `providers.ts` da tegishli provayderning `initPayment` ini yozing: PSP dan
-   to'lov havolasini olib `{ status: 'redirect', redirectUrl, providerRef }`
-   qaytaring.
-2. `enabled: true` qiling va `unavailableReason` ni olib tashlang.
-3. `supabase/functions/<provider>-webhook/` yarating. Webhook:
-   - imzoni tekshiradi (`service_role` kaliti bilan emas, PSP siri bilan);
-   - `orders.payment_status` ni `paid` ga o'tkazadi, `paid_at` va
-     `receipt_number` yozadi;
-   - `marketplace_payments` ga `direction = 'credit'` yozuvi qo'shadi;
-   - idempotent bo'ladi (bir xil `providerRef` ikki marta kelsa, ikkinchisi
-     hech narsa qilmaydi).
-4. Bekor qilish/qaytarish uchun `marketplace_update_order_status` allaqachon
-   hamyonga qaytaradi — PSP refund chaqiruvini shu joyga ulash kerak.
+Supabase/GitHub secrets:
 
-Checkout, buyurtma holati mashinasi va qaytarish mantiqi bu interfeysni
-allaqachon biladi, shuning uchun yuqoridagi 4 qadamdan boshqa hech narsa
-o'zgarmaydi.
+- `SUPABASE_ACCESS_TOKEN`
+- `SUPABASE_DB_PASSWORD`
+- `PAYME_MERCHANT_ID`
+- `PAYME_LOGIN`
+- `PAYME_KEY`
+
+Sandbox uchun `PAYME_TEST_KEY` va kerak bo‘lsa
+`PAYME_CHECKOUT_URL=https://test.paycom.uz`.
+
+Payme kabinetida Merchant API endpoint sifatida production Edge Function URL
+ko‘rsatiladi:
+
+`https://<project-ref>.supabase.co/functions/v1/wallet-payme-merchant`
+
+Merchant onboarding, sandbox testlari va Payme tomonidan production kassaning
+faollashtirilishi tugamaguncha kod real bank kartasidan pul yecha olmaydi.
+
+## Muhim: “real pul” va ichki balans bir xil narsa emas
+
+Ichki wallet transferi texnik jihatdan real ledger operatsiyasi. Ammo
+foydalanuvchining bank kartasidan real fiat kirishi uchun acquiring provider,
+cash-out uchun esa alohida payout rail/shartnoma kerak.
+
+Shuning uchun:
+
+- provider credential yo‘q bo‘lsa UI “muvaffaqiyat” deb soxta balans yozmaydi;
+- webhook tasdiqlamasa balance credit qilinmaydi;
+- seller settlement delivery’dan oldin bajarilmaydi;
+- Payme completed top-up avtomatik clawback qilinmaydi; settled wallet value
+  qaytarilishi kontrolli refund oqimi orqali bajarilishi kerak.
+
+## Keyingi providerlar
+
+`click` uchun DB intent modeli allaqachon provider-agnostic. Click merchant
+credentiallari mavjud bo‘lganda xuddi shu settlement RPC qatlamiga Shop/Merchant
+API adapter ulanadi. Cash-out/payout esa acquiring’dan alohida provider
+shartnomasini talab qiladi.
