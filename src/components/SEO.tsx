@@ -10,7 +10,7 @@ interface SEOProps {
   noindex?: boolean;
 }
 
-const SITE_URL = 'https://socialalsamos.lovable.app';
+const SITE_URL = 'https://www.alsamos.com';
 const DEFAULT_IMAGE = `${SITE_URL}/apple-touch-icon.png`;
 const DEFAULT_DESC = 'Alsamos — ulaning, ulashing, kashf eting. Zamonaviy ijtimoiy tarmoq: xabarlar, hikoyalar, jonli efirlar, marketplace.';
 
