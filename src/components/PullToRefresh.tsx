@@ -22,9 +22,10 @@ export function PullToRefresh({
   });
 
   return (
-    <div 
+    <div
       ref={containerRef}
-      className={cn("relative overflow-auto", className)}
+      className={cn("relative overflow-auto overscroll-y-contain", className)}
+      style={{ touchAction: 'pan-y' }}
     >
       {/* Pull indicator */}
       <div 
@@ -58,10 +59,17 @@ export function PullToRefresh({
       </div>
       
       {/* Content with transform */}
-      <div 
-        style={{ 
-          transform: `translateY(${pullDistance}px)`,
-          transition: pullDistance === 0 ? 'transform 0.2s ease-out' : 'none'
+      <div
+        style={{
+          ...(pullDistance > 0
+            ? {
+                transform: `translateY(${pullDistance}px)`,
+                transition: 'none',
+                willChange: 'transform',
+              }
+            : {
+                transition: 'transform 0.2s ease-out',
+              }),
         }}
       >
         {children}

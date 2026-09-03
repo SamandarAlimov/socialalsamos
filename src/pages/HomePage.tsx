@@ -61,7 +61,13 @@ export default function HomePage() {
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   // Swipe navigation
-  const { swipeOffset, handleTouchStart, handleTouchMove, handleTouchEnd } = useSwipeNavigation();
+  const {
+    swipeOffset,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd,
+    handleTouchCancel,
+  } = useSwipeNavigation();
 
   // Enable push notifications
   const { permission, requestPermission } = useNotificationPermission();
@@ -220,12 +226,22 @@ export default function HomePage() {
     <div 
       className={cn(
         "w-full max-w-[640px] xl:max-w-[620px] mx-auto py-4 md:py-6 px-3 md:px-4",
-        isMobile && "transition-transform duration-100"
+        isMobile && swipeOffset !== 0 && "transition-transform duration-100"
       )}
-      style={isMobile ? { transform: `translateX(${swipeOffset}px)` } : undefined}
+      style={
+        isMobile
+          ? {
+              touchAction: 'pan-y',
+              ...(swipeOffset !== 0
+                ? { transform: `translateX(${swipeOffset}px)` }
+                : {}),
+            }
+          : undefined
+      }
       onTouchStart={isMobile ? handleTouchStart : undefined}
       onTouchMove={isMobile ? handleTouchMove : undefined}
       onTouchEnd={isMobile ? handleTouchEnd : undefined}
+      onTouchCancel={isMobile ? handleTouchCancel : undefined}
     >
       {/* Story Viewer Modal */}
       {activeStoryGroup && (

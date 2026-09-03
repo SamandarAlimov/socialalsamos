@@ -3,89 +3,124 @@ import { useNavigate, useLocation } from 'react-router-dom';
 
 const SWIPE_THRESHOLD = 80;
 const SWIPE_VELOCITY_THRESHOLD = 0.3;
+const INTENT_THRESHOLD = 12;
 
 // Define navigation order for swipe
 const NAVIGATION_ORDER = ['/home', '/messages', '/create', '/videos', '/profile'];
 
+/**
+ * Mobile page navigation gesture.
+ *
+ * Muhim qoida: oddiy tap yoki vertikal scroll React state'ni o'zgartirmaydi.
+ * Horizontal gesture faqat yo'nalish aniq bo'lgandan keyin aktivlashadi.
+ * Bu mobile Safari/Chrome inertial scroll'ini card ustidagi tapdan keyin
+ * "qamalib" qolishidan saqlaydi.
+ */
 export function useSwipeNavigation() {
   const navigate = useNavigate();
   const location = useLocation();
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
-  
+
   const startX = useRef(0);
   const startY = useRef(0);
   const startTime = useRef(0);
-  const isHorizontalSwipe = useRef<boolean | null>(null);
+  const intent = useRef<'unknown' | 'horizontal' | 'vertical'>('unknown');
+  const offsetRef = useRef(0);
 
   const getCurrentIndex = useCallback(() => {
     return NAVIGATION_ORDER.indexOf(location.pathname);
   }, [location.pathname]);
 
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    startX.current = e.touches[0].clientX;
-    startY.current = e.touches[0].clientY;
-    startTime.current = Date.now();
-    isHorizontalSwipe.current = null;
-    setIsSwiping(true);
+  const resetGesture = useCallback(() => {
+    intent.current = 'unknown';
+    offsetRef.current = 0;
+    setSwipeOffset(0);
+    setIsSwiping(false);
   }, []);
 
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    if (!touch) return;
+
+    startX.current = touch.clientX;
+    startY.current = touch.clientY;
+    startTime.current = Date.now();
+    intent.current = 'unknown';
+    offsetRef.current = 0;
+
+    // Tap/vertical scroll paytida render qilmaymiz.
+    if (isSwiping) setIsSwiping(false);
+    if (swipeOffset !== 0) setSwipeOffset(0);
+  }, [isSwiping, swipeOffset]);
+
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!isSwiping) return;
-    
-    const currentX = e.touches[0].clientX;
-    const currentY = e.touches[0].clientY;
-    const diffX = currentX - startX.current;
-    const diffY = currentY - startY.current;
-    
-    // Determine if this is a horizontal swipe (only once per gesture)
-    if (isHorizontalSwipe.current === null) {
-      if (Math.abs(diffX) > 10 || Math.abs(diffY) > 10) {
-        isHorizontalSwipe.current = Math.abs(diffX) > Math.abs(diffY);
+    const touch = e.touches[0];
+    if (!touch) return;
+
+    const diffX = touch.clientX - startX.current;
+    const diffY = touch.clientY - startY.current;
+
+    if (intent.current === 'unknown') {
+      if (Math.abs(diffX) < INTENT_THRESHOLD && Math.abs(diffY) < INTENT_THRESHOLD) {
+        return;
       }
-    }
-    
-    if (isHorizontalSwipe.current) {
-      const currentIndex = getCurrentIndex();
-      const canSwipeRight = currentIndex > 0;
-      const canSwipeLeft = currentIndex < NAVIGATION_ORDER.length - 1 && currentIndex >= 0;
-      
-      // Limit swipe if at edges
-      if ((diffX > 0 && !canSwipeRight) || (diffX < 0 && !canSwipeLeft)) {
-        setSwipeOffset(diffX * 0.2); // Reduced resistance at edges
-      } else {
-        setSwipeOffset(diffX * 0.5); // Normal swipe with some resistance
+
+      // Vertikal intent har doim native scrollga topshiriladi.
+      if (Math.abs(diffY) >= Math.abs(diffX)) {
+        intent.current = 'vertical';
+        return;
       }
+
+      intent.current = 'horizontal';
+      setIsSwiping(true);
     }
-  }, [isSwiping, getCurrentIndex]);
+
+    if (intent.current !== 'horizontal') return;
+
+    const currentIndex = getCurrentIndex();
+    const canSwipeRight = currentIndex > 0;
+    const canSwipeLeft =
+      currentIndex < NAVIGATION_ORDER.length - 1 && currentIndex >= 0;
+
+    const nextOffset =
+      (diffX > 0 && !canSwipeRight) || (diffX < 0 && !canSwipeLeft)
+        ? diffX * 0.2
+        : diffX * 0.5;
+
+    offsetRef.current = nextOffset;
+    setSwipeOffset(nextOffset);
+  }, [getCurrentIndex]);
 
   const handleTouchEnd = useCallback(() => {
-    if (!isSwiping) return;
-    
-    const endTime = Date.now();
-    const duration = endTime - startTime.current;
-    const velocity = Math.abs(swipeOffset) / duration;
-    
+    const currentOffset = offsetRef.current;
     const currentIndex = getCurrentIndex();
-    
-    if (isHorizontalSwipe.current && currentIndex >= 0) {
-      const shouldNavigate = Math.abs(swipeOffset) > SWIPE_THRESHOLD || velocity > SWIPE_VELOCITY_THRESHOLD;
-      
+
+    if (intent.current === 'horizontal' && currentIndex >= 0) {
+      const duration = Math.max(Date.now() - startTime.current, 1);
+      const velocity = Math.abs(currentOffset) / duration;
+      const shouldNavigate =
+        Math.abs(currentOffset) > SWIPE_THRESHOLD ||
+        velocity > SWIPE_VELOCITY_THRESHOLD;
+
       if (shouldNavigate) {
-        if (swipeOffset > 0 && currentIndex > 0) {
-          // Swipe right - go to previous page
+        if (currentOffset > 0 && currentIndex > 0) {
           navigate(NAVIGATION_ORDER[currentIndex - 1]);
-        } else if (swipeOffset < 0 && currentIndex < NAVIGATION_ORDER.length - 1) {
-          // Swipe left - go to next page
+        } else if (
+          currentOffset < 0 &&
+          currentIndex < NAVIGATION_ORDER.length - 1
+        ) {
           navigate(NAVIGATION_ORDER[currentIndex + 1]);
         }
       }
     }
-    
-    setSwipeOffset(0);
-    setIsSwiping(false);
-    isHorizontalSwipe.current = null;
-  }, [isSwiping, swipeOffset, getCurrentIndex, navigate]);
+
+    resetGesture();
+  }, [getCurrentIndex, navigate, resetGesture]);
+
+  const handleTouchCancel = useCallback(() => {
+    resetGesture();
+  }, [resetGesture]);
 
   return {
     swipeOffset,
@@ -93,5 +128,6 @@ export function useSwipeNavigation() {
     handleTouchStart,
     handleTouchMove,
     handleTouchEnd,
+    handleTouchCancel,
   };
 }

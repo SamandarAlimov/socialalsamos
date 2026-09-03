@@ -14,6 +14,7 @@ export function usePullToRefresh({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const startY = useRef(0);
+  const pullingRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const handleTouchStart = useCallback((e: TouchEvent) => {
@@ -22,18 +23,24 @@ export function usePullToRefresh({
     const container = containerRef.current;
     if (!container) return;
     
-    // Only trigger if at top of scroll
+    // Only arm pull-to-refresh at the very top. Normal feed taps/scrolls
+    // remain completely native.
     if (container.scrollTop <= 0) {
       startY.current = e.touches[0].clientY;
+      pullingRef.current = true;
+    } else {
+      startY.current = 0;
+      pullingRef.current = false;
     }
   }, [disabled, isRefreshing]);
 
   const handleTouchMove = useCallback((e: TouchEvent) => {
-    if (disabled || isRefreshing || startY.current === 0) return;
+    if (disabled || isRefreshing || !pullingRef.current || startY.current === 0) return;
     
     const container = containerRef.current;
     if (!container || container.scrollTop > 0) {
       startY.current = 0;
+      pullingRef.current = false;
       setPullDistance(0);
       return;
     }
@@ -66,7 +73,14 @@ export function usePullToRefresh({
     
     setPullDistance(0);
     startY.current = 0;
+    pullingRef.current = false;
   }, [disabled, isRefreshing, onRefresh, pullDistance, threshold]);
+
+  const handleTouchCancel = useCallback(() => {
+    startY.current = 0;
+    pullingRef.current = false;
+    setPullDistance(0);
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -75,13 +89,15 @@ export function usePullToRefresh({
     container.addEventListener('touchstart', handleTouchStart, { passive: true });
     container.addEventListener('touchmove', handleTouchMove, { passive: false });
     container.addEventListener('touchend', handleTouchEnd, { passive: true });
+    container.addEventListener('touchcancel', handleTouchCancel, { passive: true });
 
     return () => {
       container.removeEventListener('touchstart', handleTouchStart);
       container.removeEventListener('touchmove', handleTouchMove);
       container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('touchcancel', handleTouchCancel);
     };
-  }, [handleTouchStart, handleTouchMove, handleTouchEnd]);
+  }, [handleTouchStart, handleTouchMove, handleTouchEnd, handleTouchCancel]);
 
   const progress = Math.min(pullDistance / threshold, 1);
 

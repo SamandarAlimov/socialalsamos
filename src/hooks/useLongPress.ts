@@ -27,6 +27,7 @@ export function useLongPress({
 }: LongPressOptions) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firedRef = useRef(false);
+  const movedRef = useRef(false);
   const startRef = useRef({ x: 0, y: 0 });
   const { mediumTap } = useHapticFeedback();
 
@@ -43,6 +44,7 @@ export function useLongPress({
     (x: number, y: number) => {
       if (disabled) return;
       firedRef.current = false;
+      movedRef.current = false;
       startRef.current = { x, y };
       clear();
       timerRef.current = setTimeout(() => {
@@ -59,16 +61,21 @@ export function useLongPress({
       if (!timerRef.current) return;
       const dx = Math.abs(x - startRef.current.x);
       const dy = Math.abs(y - startRef.current.y);
-      if (dx > moveTolerance || dy > moveTolerance) clear();
+      if (dx > moveTolerance || dy > moveTolerance) {
+        movedRef.current = true;
+        clear();
+      }
     },
     [clear, moveTolerance]
   );
 
   const finish = useCallback(() => {
     const wasLongPress = firedRef.current;
+    const didMove = movedRef.current;
     clear();
     firedRef.current = false;
-    if (!wasLongPress && onClick) onClick();
+    movedRef.current = false;
+    if (!wasLongPress && !didMove && onClick) onClick();
   }, [clear, onClick]);
 
   return {

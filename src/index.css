@@ -618,6 +618,8 @@
 .chat-shell [data-radix-scroll-area-viewport] {
   /* Skroll faqat shu konteyner ichida qoladi */
   overscroll-behavior: contain;
+  /* Vertical touch scroll har doim browserning native gesture'i. */
+  touch-action: pan-y;
   /* iOS/Safari inersiyali silliq skroll */
   -webkit-overflow-scrolling: touch;
   /* Programmatik scrollTo bilan urishmasligi uchun smooth EMAS */
@@ -627,6 +629,18 @@
   /* Doimiy kompozitor qatlami - skrollda repaint o'rniga siljish */
   transform: translateZ(0);
   backface-visibility: hidden;
+}
+
+/* Mobile/tabletda transformed scroll container Safari/Chromium inertial
+   scrollingni tap bilan to'xtatgandan keyin gesture lock holatiga olib kelishi
+   mumkin. Native mobile compositor allaqachon scroll layer yaratadi. */
+@media (hover: none) and (pointer: coarse) {
+  .chat-shell [class*="overflow-y-auto"],
+  .chat-shell [class*="overflow-y-scroll"],
+  .chat-shell [data-radix-scroll-area-viewport] {
+    transform: none;
+    backface-visibility: visible;
+  }
 }
 
 /* Rasm/video/iframe yuklanganda "langar" bo'lib qolmasin: aks holda brauzer

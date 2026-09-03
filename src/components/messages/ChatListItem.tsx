@@ -533,6 +533,9 @@ export function ChatListItem({
         dragRef.current.axis = 'h';
       } else if (Math.abs(dy) > 10) {
         dragRef.current.axis = 'v';
+        // Vertical intent belongs to the native scroll container.
+        // Any previously open swipe actions must not keep transform state.
+        if (Math.abs(swipeRef.current) > 0) closeSwipe();
       }
     }
     if (dragRef.current.axis !== 'h') return;
@@ -544,9 +547,10 @@ export function ChatListItem({
   };
 
   const handleTouchEnd = () => {
-    if (dragRef.current.axis !== 'h') return;
-    const value = swipeRef.current;
+    const axis = dragRef.current.axis;
     dragRef.current.axis = 'none';
+    if (axis !== 'h') return;
+    const value = swipeRef.current;
 
     if (maxLeftDrag > 0 && value <= -(maxLeftDrag + ACTION_WIDTH * FULL_SWIPE_RATIO)) {
       lightTap();
@@ -565,6 +569,11 @@ export function ChatListItem({
       onPin?.();
       return;
     }
+    closeSwipe();
+  };
+
+  const handleTouchCancel = () => {
+    dragRef.current.axis = 'none';
     closeSwipe();
   };
 
@@ -694,7 +703,7 @@ export function ChatListItem({
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
-          onTouchCancel={closeSwipe}
+          onTouchCancel={handleTouchCancel}
           className={cn(
             'relative w-full px-4 py-3 md:px-3 md:py-2.5 flex items-center gap-3 border-b border-border/30',
             'min-h-[72px] md:min-h-0',
@@ -702,7 +711,10 @@ export function ChatListItem({
             isSelected ? SELECTED_ROW : DEFAULT_ROW,
             !isSelected && HOVER_ROW
           )}
-          style={{ transform: 'translateX(' + swipeX + 'px)' }}
+          style={{
+            transform: 'translateX(' + swipeX + 'px)',
+            touchAction: 'pan-y',
+          }}
         >
           <div className="relative flex-shrink-0">
             <Avatar className="h-14 w-14 md:h-12 md:w-12">

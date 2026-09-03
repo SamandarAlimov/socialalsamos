@@ -28,6 +28,7 @@ export function PostMediaCarousel({
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const swipeStartRef = useRef<{ x: number; y: number; at: number } | null>(null);
+  const swipeAxisRef = useRef<'unknown' | 'horizontal' | 'vertical'>('unknown');
   const didSwipeRef = useRef(false);
   const mediaFrameRef = useRef<HTMLDivElement | null>(null);
 
@@ -109,11 +110,12 @@ export function PostMediaCarousel({
   if (mediaUrls.length === 0) return null;
 
   const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
-    event.stopPropagation();
     didSwipeRef.current = false;
+    swipeAxisRef.current = 'unknown';
 
     if (!isCurrentVideo && event.touches.length >= 2) {
       event.preventDefault();
+      event.stopPropagation();
       swipeStartRef.current = null;
       openImageViewer(currentIndex);
       return;
@@ -131,22 +133,42 @@ export function PostMediaCarousel({
   };
 
   const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
-    event.stopPropagation();
+    const start = swipeStartRef.current;
+    const touch = event.touches[0];
+    if (!start || !touch) return;
+
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+
+    if (swipeAxisRef.current === 'unknown') {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      swipeAxisRef.current =
+        Math.abs(dx) > Math.abs(dy) * 1.25 ? 'horizontal' : 'vertical';
+    }
+
+    // Faqat carouselning real gorizontal swipe'i parent page gesture'idan
+    // ajratiladi. Vertikal gesture native feed scroll bo'lib qoladi.
+    if (swipeAxisRef.current === 'horizontal') {
+      event.stopPropagation();
+    }
   };
 
   const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
-    event.stopPropagation();
-
     const start = swipeStartRef.current;
     const changed = event.changedTouches[0];
 
-    if (start && changed && mediaUrls.length > 1) {
-      const dx = changed.clientX - start.x;
-      const dy = changed.clientY - start.y;
-      const elapsed = Date.now() - start.at;
-      const horizontalIntent = Math.abs(dx) > Math.abs(dy) * 1.25;
+    if (
+      swipeAxisRef.current === 'horizontal' &&
+      start &&
+      changed &&
+      mediaUrls.length > 1
+    ) {
+      event.stopPropagation();
 
-      if (horizontalIntent && Math.abs(dx) >= 44 && elapsed < 900) {
+      const dx = changed.clientX - start.x;
+      const elapsed = Date.now() - start.at;
+
+      if (Math.abs(dx) >= 44 && elapsed < 900) {
         didSwipeRef.current = true;
         if (dx < 0 && currentIndex < mediaUrls.length - 1) {
           setCurrentIndex((index) => index + 1);
@@ -157,6 +179,13 @@ export function PostMediaCarousel({
     }
 
     swipeStartRef.current = null;
+    swipeAxisRef.current = 'unknown';
+  };
+
+  const handleTouchCancel = () => {
+    swipeStartRef.current = null;
+    swipeAxisRef.current = 'unknown';
+    didSwipeRef.current = false;
   };
 
   return (
@@ -175,6 +204,7 @@ export function PostMediaCarousel({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchCancel}
       >
         {isCurrentVideo ? (
           <VideoPlayer

@@ -1981,7 +1981,7 @@ export default function MessagesPage() {
       )}
 
       {/* Natijalar / suhbatlar - guruh, kanal va shaxsiy chatlar bitta ko'rinishda */}
-      <ScrollArea className="min-h-0 flex-1 [&_[data-radix-scroll-area-viewport]>div]:!block [&_[data-radix-scroll-area-viewport]>div]:!w-full [&_[data-radix-scroll-area-viewport]>div]:!min-w-0">
+      <ScrollArea className="min-h-0 flex-1 [&_[data-radix-scroll-area-viewport]]:[touch-action:pan-y] [&_[data-radix-scroll-area-viewport]>div]:!block [&_[data-radix-scroll-area-viewport]>div]:!w-full [&_[data-radix-scroll-area-viewport]>div]:!min-w-0">
         {isSearching ? (
           <GlobalSearchResults
             query={searchQuery}
@@ -2182,7 +2182,7 @@ export default function MessagesPage() {
               ref={messagesScrollRef}
               onScroll={handleMessagesScroll}
               className="scrollbar-custom absolute inset-0 overflow-y-auto overflow-x-hidden overscroll-contain bg-muted/20 [overflow-anchor:none]"
-              style={isSelectionMode ? { touchAction: 'pan-y' } : undefined}
+              style={{ touchAction: 'pan-y' }}
               onPointerDown={handleMessagesPointerDown}
               onPointerMove={handleMessagesPointerMove}
               onPointerUp={handleMessagesPointerUp}

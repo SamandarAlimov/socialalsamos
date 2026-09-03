@@ -146,6 +146,7 @@ export function EnhancedMessageBubble({
   // Surib javob berish holati
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const gestureActiveRef = useRef(false);
   const startX = useRef(0);
   const startY = useRef(0);
   const axisRef = useRef<'unknown' | 'horizontal' | 'vertical'>('unknown');
@@ -155,6 +156,7 @@ export function EnhancedMessageBubble({
 
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggered = useRef(false);
+  const longPressStartRef = useRef({ x: 0, y: 0 });
 
   const isInteractiveTarget = (target: EventTarget | null) => {
     const el = target as HTMLElement | null;
@@ -170,8 +172,9 @@ export function EnhancedMessageBubble({
   };
 
   const handleLongPressStart = useCallback(
-    (x?: number, y?: number) => {
+    (x = 0, y = 0) => {
       longPressTriggered.current = false;
+      longPressStartRef.current = { x, y };
       if (longPressTimer.current) clearTimeout(longPressTimer.current);
       longPressTimer.current = setTimeout(() => {
         longPressTriggered.current = true;
@@ -191,6 +194,16 @@ export function EnhancedMessageBubble({
       longPressTimer.current = null;
     }
   }, []);
+
+  const handleLongPressMove = useCallback(
+    (x: number, y: number) => {
+      if (!longPressTimer.current) return;
+      const dx = Math.abs(x - longPressStartRef.current.x);
+      const dy = Math.abs(y - longPressStartRef.current.y);
+      if (dx > 8 || dy > 8) handleLongPressEnd();
+    },
+    [handleLongPressEnd],
+  );
 
   const addReaction = useCallback(
     async (emoji: string) => {
@@ -256,20 +269,30 @@ export function EnhancedMessageBubble({
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (isInteractiveTarget(e.target)) return;
-    startX.current = e.touches[0].clientX;
-    startY.current = e.touches[0].clientY;
+    const touch = e.touches[0];
+    if (!touch) return;
+
+    startX.current = touch.clientX;
+    startY.current = touch.clientY;
     axisRef.current = 'unknown';
     hasTriggeredHaptic.current = false;
-    setIsDragging(true);
+    gestureActiveRef.current = true;
+
+    // Tap/vertical scroll paytida React state o'zgarmaydi.
+    setIsDragging(false);
   }, []);
 
   const handleTouchMove = useCallback(
     (e: React.TouchEvent) => {
-      if (!isDragging) return;
+      if (!gestureActiveRef.current) return;
       if (isInteractiveTarget(e.target)) return;
 
-      const currentX = e.touches[0].clientX;
-      const currentY = e.touches[0].clientY;
+      const touch = e.touches[0];
+      if (!touch) return;
+
+      const currentX = touch.clientX;
+      const currentY = touch.clientY;
+      handleLongPressMove(currentX, currentY);
       const rawDx = currentX - startX.current;
       const dy = currentY - startY.current;
 
@@ -277,6 +300,14 @@ export function EnhancedMessageBubble({
       if (axisRef.current === 'unknown') {
         if (Math.abs(rawDx) < 8 && Math.abs(dy) < 8) return;
         axisRef.current = Math.abs(rawDx) > Math.abs(dy) ? 'horizontal' : 'vertical';
+
+        if (axisRef.current === 'vertical') {
+          // Native chat scroll owns the gesture; no drag state/long-press remains.
+          setIsDragging(false);
+          return;
+        }
+
+        setIsDragging(true);
       }
       if (axisRef.current !== 'horizontal') return;
 
@@ -300,14 +331,18 @@ export function EnhancedMessageBubble({
         hasTriggeredHaptic.current = false;
       }
     },
-    [isDragging, isMine, mediumTap, handleLongPressEnd]
+    [isMine, mediumTap, handleLongPressEnd, handleLongPressMove]
   );
 
   const handleTouchEnd = useCallback(() => {
-    if (swipeOffset >= SWIPE_THRESHOLD && onReply) {
+    const wasHorizontal = axisRef.current === 'horizontal';
+
+    if (wasHorizontal && swipeOffset >= SWIPE_THRESHOLD && onReply) {
       successFeedback();
       onReply(message);
     }
+
+    gestureActiveRef.current = false;
     setSwipeOffset(0);
     setIsDragging(false);
     axisRef.current = 'unknown';
@@ -669,6 +704,7 @@ export function EnhancedMessageBubble({
           'chat-no-select animate-tg-message-in relative',
           isSelected && 'rounded-lg bg-muted'
         )}
+        style={{ touchAction: 'pan-y' }}
         onClick={() => {
           if (isSelectionMode && onSelect) {
             onSelect(message.id);
@@ -679,6 +715,10 @@ export function EnhancedMessageBubble({
           if (!isInteractiveTarget(e.target)) {
             handleLongPressStart(e.touches[0].clientX, e.touches[0].clientY);
           }
+        }}
+        onTouchMove={(e) => {
+          const touch = e.touches[0];
+          if (touch) handleLongPressMove(touch.clientX, touch.clientY);
         }}
         onTouchEnd={handleLongPressEnd}
         onTouchCancel={handleLongPressEnd}
@@ -734,6 +774,7 @@ export function EnhancedMessageBubble({
           handleLongPressEnd();
         }}
         onTouchCancel={() => {
+          gestureActiveRef.current = false;
           handleTouchEnd();
           handleLongPressEnd();
         }}
