@@ -20,6 +20,7 @@ import {
 
 import { UI_LAYER } from '@/lib/uiLayers';
 import { cn } from '@/lib/utils';
+import { usePlatformScrollLock } from '@/hooks/usePlatformScrollLock';
 
 export interface ImageLightboxItem {
   url: string;
@@ -93,6 +94,8 @@ export function ImageLightbox({
 
   const current = images[index] ?? null;
   const hasMultiple = images.length > 1;
+
+  usePlatformScrollLock(open);
 
   const resetTransform = useCallback(() => {
     setScale(1);
@@ -366,6 +369,10 @@ export function ImageLightbox({
       role="dialog"
       aria-modal="true"
       aria-label="Rasmni to'liq ekranda ko'rish"
+      onTouchStart={(event) => event.stopPropagation()}
+      onTouchMove={(event) => event.stopPropagation()}
+      onTouchEnd={(event) => event.stopPropagation()}
+      onTouchCancel={(event) => event.stopPropagation()}
       onClick={onClose}
     >
       <img
