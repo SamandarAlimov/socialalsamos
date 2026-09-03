@@ -88,6 +88,7 @@ export function PostViewModal({
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const [commentFocusRequest, setCommentFocusRequest] = useState(0);
   const { recordView } = usePostViews();
 
   const counts = useRealtimeCounts(post.id);
@@ -207,6 +208,10 @@ export function PostViewModal({
     return () => window.removeEventListener('keydown', onKey);
   }, [open, hasMultipleMedia, nextMedia, prevMedia]);
 
+  const focusCommentComposer = useCallback(() => {
+    setCommentFocusRequest((request) => request + 1);
+  }, []);
+
   const handleShare = async () => {
     const url = `${window.location.origin}/user/${profile.username ?? ''}?post=${post.id}`;
 
@@ -239,8 +244,21 @@ export function PostViewModal({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="w-[96vw] max-w-6xl overflow-hidden rounded-2xl border-border/60 bg-background p-0 shadow-2xl sm:rounded-2xl md:max-h-[92vh]">
-          <div className="flex max-h-[92vh] flex-col md:flex-row">
+        <DialogContent
+          className={cn(
+            'w-[calc(100vw-24px)] overflow-hidden border-border/60 bg-background p-0 shadow-[0_28px_90px_rgba(15,23,42,0.28)]',
+            'rounded-[22px] sm:rounded-[24px]',
+            hasMedia
+              ? 'max-w-6xl md:max-h-[92vh]'
+              : 'max-w-3xl md:max-h-[88vh]',
+          )}
+        >
+          <div
+            className={cn(
+              'flex min-h-0 flex-col',
+              hasMedia ? 'max-h-[92vh] md:flex-row' : 'max-h-[88vh]',
+            )}
+          >
             {/* Media */}
             {hasMedia && (
               <div className="group relative flex flex-1 items-center justify-center bg-gradient-to-b from-neutral-950 to-black min-h-[46vh] md:min-h-[560px]">
@@ -355,7 +373,7 @@ export function PostViewModal({
                 hasMedia ? 'md:w-[400px] md:border-l md:border-border/60' : 'w-full',
               )}
             >
-              <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
+              <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-background/95 px-4 py-3 backdrop-blur-xl">
                 <div className="flex min-w-0 items-center gap-2.5">
                   {onBack && !hasMedia && (
                     <button
@@ -407,7 +425,7 @@ export function PostViewModal({
                 )}
               </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                 {(textContent || post.formatted_content || music || pollData || legacyLocation) && (
                   <div className="space-y-3 border-b border-border/60 px-4 py-3">
                     {(textContent || post.formatted_content) && (
@@ -429,7 +447,11 @@ export function PostViewModal({
                 )}
 
                 <div className="px-4 py-3">
-                  <CommentsSection postId={post.id} focusCommentId={focusCommentId} />
+                  <CommentsSection
+                    postId={post.id}
+                    focusCommentId={focusCommentId}
+                    focusComposerRequest={commentFocusRequest}
+                  />
                 </div>
               </div>
 
@@ -454,12 +476,17 @@ export function PostViewModal({
                     {formatCompactCount(likes)}
                   </span>
 
-                  <div className="flex h-10 items-center gap-1.5 rounded-full px-2 text-muted-foreground">
+                  <button
+                    type="button"
+                    onClick={focusCommentComposer}
+                    aria-label={t('post.comment', { defaultValue: 'Izoh yozish' })}
+                    className="flex h-10 items-center gap-1.5 rounded-full px-2 text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-[0.97]"
+                  >
                     <MessageCircle className="h-[22px] w-[22px]" />
                     <span className="text-sm font-semibold tabular-nums">
                       {formatCompactCount(comments)}
                     </span>
-                  </div>
+                  </button>
 
                   <button
                     type="button"

@@ -36,6 +36,11 @@ interface CommentsSectionProps {
   postId: string;
   focusCommentId?: string | null;
   layout?: 'default' | 'panel';
+  /**
+   * Qiymat o'zgarganda asosiy comment composer ko'rinadigan joyga keladi
+   * va input fokuslanadi. Post action panelidagi comment tugmasi uchun.
+   */
+  focusComposerRequest?: number;
 }
 
 type SelectedMedia = {
@@ -99,6 +104,7 @@ export function CommentsSection({
   postId,
   focusCommentId = null,
   layout = 'default',
+  focusComposerRequest = 0,
 }: CommentsSectionProps) {
   const { user } = useAuth();
   const { comments, isLoading, addComment, likeComment, deleteComment } =
@@ -156,6 +162,27 @@ export function CommentsSection({
     if (!replyingTo) return;
     requestAnimationFrame(() => replyInputRef.current?.focus());
   }, [replyingTo]);
+
+  useEffect(() => {
+    if (!focusComposerRequest || !user) return;
+
+    const frame = requestAnimationFrame(() => {
+      const input = commentInputRef.current;
+      if (!input) return;
+
+      input.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+        inline: 'nearest',
+      });
+
+      window.setTimeout(() => {
+        input.focus({ preventScroll: true });
+      }, 180);
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [focusComposerRequest, user]);
 
   const handleAutocompleteSelect = (value: string) => {
     const next = insertAutocomplete(newComment, value, commentInputRef);
@@ -499,6 +526,7 @@ export function CommentsSection({
     >
       {user && (
         <form
+          data-comment-composer="true"
           onSubmit={handleSubmit}
           className={cn(
             'border-b border-border bg-muted/20 p-3 md:p-4',
