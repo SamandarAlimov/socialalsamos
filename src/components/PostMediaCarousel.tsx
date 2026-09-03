@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { MediaFrame } from '@/components/media/MediaFrame';
 import { ImageLightbox } from '@/components/media/ImageLightbox';
+import { resolveTouchAxis, type TouchAxis } from '@/lib/touchGesture';
 
 interface PostMediaCarouselProps {
   mediaUrls: string[];
@@ -28,7 +29,7 @@ export function PostMediaCarousel({
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const swipeStartRef = useRef<{ x: number; y: number; at: number } | null>(null);
-  const swipeAxisRef = useRef<'unknown' | 'horizontal' | 'vertical'>('unknown');
+  const swipeAxisRef = useRef<TouchAxis>('unknown');
   const didSwipeRef = useRef(false);
   const mediaFrameRef = useRef<HTMLDivElement | null>(null);
 
@@ -141,9 +142,11 @@ export function PostMediaCarousel({
     const dy = touch.clientY - start.y;
 
     if (swipeAxisRef.current === 'unknown') {
-      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-      swipeAxisRef.current =
-        Math.abs(dx) > Math.abs(dy) * 1.25 ? 'horizontal' : 'vertical';
+      swipeAxisRef.current = resolveTouchAxis(dx, dy, {
+        threshold: 8,
+        horizontalRatio: 1.25,
+      });
+      if (swipeAxisRef.current === 'unknown') return;
     }
 
     // Faqat carouselning real gorizontal swipe'i parent page gesture'idan

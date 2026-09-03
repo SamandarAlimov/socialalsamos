@@ -44,21 +44,27 @@ export function AppLayout() {
   const hasPostPreview =
     location.pathname === '/home' && new URLSearchParams(location.search).has('post');
   const isCreatePage = location.pathname === '/create';
+  const isMessagesPage = location.pathname === '/messages';
+  const isVideosPage = location.pathname === '/videos';
   // AI sahifasi ham to'liq ekranli: o'zining header va composer'i bor,
   // shuning uchun layout padding qo'shmaydi (aks holda tagida oq joy qoladi).
   const isAiPage = location.pathname === '/ai';
 
   const hideHeaderOnPages =
-    location.pathname === '/messages' ||
+    isMessagesPage ||
     isMapPage ||
-    location.pathname === '/videos' ||
+    isVideosPage ||
     isCreatePage ||
     isAiPage ||
     location.pathname.startsWith('/marketplace/product/');
 
   const immersiveMobile = isCreatePage || isMapPage;
   // Balandligi ekranga qat'iy teng bo'lishi kerak bo'lgan sahifalar.
-  const fullHeightPage = isCreatePage || isMapPage || isAiPage;
+  // Messages va Videos o'zining ichki canonical scroll containeriga ega.
+  // Ularning tashqarisida AppLayout yana scroll qilsa mobile browserda
+  // nested-scroller gesture lock paydo bo'lishi mumkin.
+  const fullHeightPage =
+    isCreatePage || isMapPage || isAiPage || isMessagesPage || isVideosPage;
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-background"><div className="flex flex-col items-center gap-4"><Loader2 className="h-10 w-10 animate-spin text-muted-foreground" /><p className="text-muted-foreground">Loading...</p></div></div>;
@@ -101,16 +107,19 @@ export function AppLayout() {
 
       {!hideHeaderOnPages && <MobileHeader />}
 
-      <main className={cn(
+      <main
+        data-platform-scroll-root={fullHeightPage ? undefined : 'true'}
+        className={cn(
         'flex-1 md:ml-0 md:pt-0 md:pb-0',
         fullHeightPage
           ? 'h-full min-h-0 overflow-hidden p-0'
-          : 'alsamos-scrollbar overflow-auto',
+          : 'alsamos-scrollbar overflow-auto overscroll-y-contain',
         hideHeaderOnPages ? 'pt-0' : 'pt-14',
         immersiveMobile ? 'pb-0' : 'pb-20',
         // AI sahifasida mobil pastki navbar joyi kerak, desktopda esa umuman kerak emas.
         isAiPage && 'pb-16 md:pb-0'
-      )}>
+      )}
+      >
         <Outlet />
       </main>
 

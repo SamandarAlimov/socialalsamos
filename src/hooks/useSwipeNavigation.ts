@@ -1,10 +1,9 @@
 import { useCallback, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { resolveTouchAxis, type TouchAxis } from '@/lib/touchGesture';
 
 const SWIPE_THRESHOLD = 80;
 const SWIPE_VELOCITY_THRESHOLD = 0.3;
-const INTENT_THRESHOLD = 12;
-
 // Define navigation order for swipe
 const NAVIGATION_ORDER = ['/home', '/messages', '/create', '/videos', '/profile'];
 
@@ -25,7 +24,7 @@ export function useSwipeNavigation() {
   const startX = useRef(0);
   const startY = useRef(0);
   const startTime = useRef(0);
-  const intent = useRef<'unknown' | 'horizontal' | 'vertical'>('unknown');
+  const intent = useRef<TouchAxis>('unknown');
   const offsetRef = useRef(0);
 
   const getCurrentIndex = useCallback(() => {
@@ -62,17 +61,12 @@ export function useSwipeNavigation() {
     const diffY = touch.clientY - startY.current;
 
     if (intent.current === 'unknown') {
-      if (Math.abs(diffX) < INTENT_THRESHOLD && Math.abs(diffY) < INTENT_THRESHOLD) {
-        return;
-      }
+      intent.current = resolveTouchAxis(diffX, diffY, { threshold: 12 });
+      if (intent.current === 'unknown') return;
 
       // Vertikal intent har doim native scrollga topshiriladi.
-      if (Math.abs(diffY) >= Math.abs(diffX)) {
-        intent.current = 'vertical';
-        return;
-      }
+      if (intent.current === 'vertical') return;
 
-      intent.current = 'horizontal';
       setIsSwiping(true);
     }
 

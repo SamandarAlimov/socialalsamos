@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useHapticFeedback } from './useHapticFeedback';
+import { movedBeyondTouchTolerance } from '@/lib/touchGesture';
 
 interface LongPressOptions {
   /** Telegramdagi kabi standart uzoq bosish vaqti (ms) */
@@ -59,9 +60,9 @@ export function useLongPress({
   const move = useCallback(
     (x: number, y: number) => {
       if (!timerRef.current) return;
-      const dx = Math.abs(x - startRef.current.x);
-      const dy = Math.abs(y - startRef.current.y);
-      if (dx > moveTolerance || dy > moveTolerance) {
+      const dx = x - startRef.current.x;
+      const dy = y - startRef.current.y;
+      if (movedBeyondTouchTolerance(dx, dy, moveTolerance)) {
         movedRef.current = true;
         clear();
       }

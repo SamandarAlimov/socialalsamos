@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { useHapticFeedback } from './useHapticFeedback';
+import { resolveTouchAxis, type TouchAxis } from '@/lib/touchGesture';
 
 interface SwipeToReplyOptions {
   /** Javob berish uchun kerakli masofa (Telegramda ~50-60px) */
@@ -27,7 +28,7 @@ export function useSwipeToReply({
   const [isDragging, setIsDragging] = useState(false);
   const startX = useRef(0);
   const startY = useRef(0);
-  const axis = useRef<'unknown' | 'horizontal' | 'vertical'>('unknown');
+  const axis = useRef<TouchAxis>('unknown');
   const hasTriggered = useRef(false);
   const { mediumTap, successFeedback } = useHapticFeedback();
 
@@ -57,12 +58,15 @@ export function useSwipeToReply({
       const dx = x - startX.current;
       const dy = y - startY.current;
 
-      // Yo'nalishni bir marta aniqlaymiz: vertikal bo'lsa swipe bekor qilinadi
+      // Yo'nalishni bir marta aniqlaymiz: vertikal bo'lsa native scroll yutadi.
       if (axis.current === 'unknown') {
-        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-        axis.current = Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical';
+        axis.current = resolveTouchAxis(dx, dy, { threshold: 8 });
+        if (axis.current === 'unknown') return;
       }
-      if (axis.current !== 'horizontal') return;
+      if (axis.current !== 'horizontal') {
+        setIsDragging(false);
+        return;
+      }
 
       if (dx <= 0) {
         setOffset(0);

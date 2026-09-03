@@ -426,9 +426,13 @@ export function VideoPlayer({
 
   const handleSurfacePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     lastPointerTypeRef.current = event.pointerType;
-    containerRef.current?.focus({ preventScroll: true });
 
-    if (event.pointerType !== 'touch') return;
+    // Touchda focus olish inertial page scrollni uzishi mumkin. Keyboard/mouse
+    // uchun focus kerak, touch gesture esa native scrollga tegmaydi.
+    if (event.pointerType !== 'touch') {
+      containerRef.current?.focus({ preventScroll: true });
+      return;
+    }
     pointerStartRef.current = { x: event.clientX, y: event.clientY };
     pointerMovedRef.current = false;
     longPressOriginalRateRef.current = playbackRate;
@@ -639,7 +643,10 @@ export function VideoPlayer({
         isPseudoFullscreen && 'fixed inset-0 z-[9999] h-[100dvh] w-screen max-h-none max-w-none rounded-none',
         className,
       )}
-      style={isFullscreen ? undefined : { aspectRatio: String(effectiveRatio) }}
+      style={{
+        ...(isFullscreen ? {} : { aspectRatio: String(effectiveRatio) }),
+        touchAction: isFullscreen ? 'none' : 'pan-y',
+      }}
       onMouseMove={showControlsTemporarily}
       onMouseLeave={() => {
         if (isPlaying && !showSettings && !isScrubbing) setShowControls(false);

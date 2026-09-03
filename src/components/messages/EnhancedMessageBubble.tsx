@@ -13,6 +13,11 @@ import {
   CheckSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  movedBeyondTouchTolerance,
+  resolveTouchAxis,
+  type TouchAxis,
+} from '@/lib/touchGesture';
 import { MessageAttachment } from '@/components/MessageAttachment';
 import { VideoMessagePlayer } from './VideoMessagePlayer';
 import { VoiceMessagePlayer } from '@/components/VoiceMessagePlayer';
@@ -149,7 +154,7 @@ export function EnhancedMessageBubble({
   const gestureActiveRef = useRef(false);
   const startX = useRef(0);
   const startY = useRef(0);
-  const axisRef = useRef<'unknown' | 'horizontal' | 'vertical'>('unknown');
+  const axisRef = useRef<TouchAxis>('unknown');
   const hasTriggeredHaptic = useRef(false);
 
   const lastTapRef = useRef<number>(0);
@@ -198,9 +203,9 @@ export function EnhancedMessageBubble({
   const handleLongPressMove = useCallback(
     (x: number, y: number) => {
       if (!longPressTimer.current) return;
-      const dx = Math.abs(x - longPressStartRef.current.x);
-      const dy = Math.abs(y - longPressStartRef.current.y);
-      if (dx > 8 || dy > 8) handleLongPressEnd();
+      const dx = x - longPressStartRef.current.x;
+      const dy = y - longPressStartRef.current.y;
+      if (movedBeyondTouchTolerance(dx, dy, 8)) handleLongPressEnd();
     },
     [handleLongPressEnd],
   );
@@ -298,8 +303,8 @@ export function EnhancedMessageBubble({
 
       // Yo'nalishni aniqlash: vertikal scroll bilan urushmasligi uchun
       if (axisRef.current === 'unknown') {
-        if (Math.abs(rawDx) < 8 && Math.abs(dy) < 8) return;
-        axisRef.current = Math.abs(rawDx) > Math.abs(dy) ? 'horizontal' : 'vertical';
+        axisRef.current = resolveTouchAxis(rawDx, dy, { threshold: 8 });
+        if (axisRef.current === 'unknown') return;
 
         if (axisRef.current === 'vertical') {
           // Native chat scroll owns the gesture; no drag state/long-press remains.

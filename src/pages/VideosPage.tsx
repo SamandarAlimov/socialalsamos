@@ -27,6 +27,7 @@ import { useVideoHeatmap } from '@/hooks/useVideoHeatmap';
 import { useVideoWatchTracker } from '@/hooks/useVideoWatchTracker';
 import { usePinchZoom } from '@/hooks/usePinchZoom';
 import { formatCompactNumber, formatMediaTime, resolveAspectKind } from '@/lib/videoFormat';
+import { resolveTouchAxis, type TouchAxis } from '@/lib/touchGesture';
 
 /** Bosib turish 2x tezlikka o'tishi uchun kerakli vaqt (ms). */
 const HOLD_TO_SPEED_MS = 300;
@@ -443,6 +444,7 @@ function VideoCard({
         style={{
           WebkitUserSelect: 'none',
           userSelect: 'none',
+          touchAction: zoom.isZoomed ? 'none' : 'pan-y',
         }}
         onContextMenu={(event) => event.preventDefault()}
         onWheel={zoom.handlers.onWheel}
@@ -1078,13 +1080,12 @@ export default function VideosPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const { mediumTap, lightTap } = useHapticFeedback();
 
-  // Touch gesture tracking
+  // Touch gesture tracking. Vertical gesture is owned by native scroll-snap;
+  // custom JS only observes a clearly horizontal intent (profile / back).
   const touchStartY = useRef<number>(0);
   const touchStartX = useRef<number>(0);
-  const touchStartTime = useRef<number>(0);
   const horizontalDelta = useRef<number>(0);
-  const verticalDelta = useRef<number>(0);
-  const [swipeProgress, setSwipeProgress] = useState(0);
+  const touchAxisRef = useRef<TouchAxis>('unknown');
 
   /*
     Deep-link: Discover, Search yoki tashqi havoladan aniq bir video ochilgan.
@@ -1202,82 +1203,64 @@ export default function VideosPage() {
     void loadMore();
   }, [activeIndex, rankedVideos.length, hasMore, isLoading, loadMore]);
 
-  // Swipe gesture handlers for mobile
+  // Mobile gesture arbitration:
+  // vertical motion is 100% native scroll-snap; only a clear horizontal gesture
+  // is interpreted by JS. This avoids double-scrolling and momentum lock.
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    touchStartY.current = e.touches[0].clientY;
-    touchStartX.current = e.touches[0].clientX;
-    touchStartTime.current = Date.now();
+    const touch = e.touches[0];
+    if (!touch) return;
+    touchStartY.current = touch.clientY;
+    touchStartX.current = touch.clientX;
     horizontalDelta.current = 0;
-    verticalDelta.current = 0;
+    touchAxisRef.current = 'unknown';
   }, []);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    const deltaY = e.touches[0].clientY - touchStartY.current;
-    const deltaX = e.touches[0].clientX - touchStartX.current;
-    verticalDelta.current = deltaY;
+    const touch = e.touches[0];
+    if (!touch) return;
+
+    const deltaY = touch.clientY - touchStartY.current;
+    const deltaX = touch.clientX - touchStartX.current;
+
+    if (touchAxisRef.current === 'unknown') {
+      touchAxisRef.current = resolveTouchAxis(deltaX, deltaY, {
+        threshold: 12,
+        horizontalRatio: 1.35,
+      });
+      if (touchAxisRef.current === 'unknown') return;
+    }
+
+    if (touchAxisRef.current !== 'horizontal') return;
     horizontalDelta.current = deltaX;
-    const progress = Math.max(-1, Math.min(1, deltaY / 150));
-    setSwipeProgress(progress);
+  }, []);
+
+  const resetTouchGesture = useCallback(() => {
+    horizontalDelta.current = 0;
+    touchAxisRef.current = 'unknown';
   }, []);
 
   const handleTouchEnd = useCallback(() => {
-    const deltaX = horizontalDelta.current;
-    const deltaY = verticalDelta.current;
+    if (touchAxisRef.current !== 'horizontal') {
+      resetTouchGesture();
+      return;
+    }
 
-    /*
-      Instagramdagi kabi: o'ngdan chapga surilsa — muallif profili ochiladi.
-      Vertikal snap-scroll buzilmasligi uchun harakat aniq gorizontal
-      bo'lgandagina ishlaydi.
-    */
-    if (deltaX < -70 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
-      setSwipeProgress(0);
-      horizontalDelta.current = 0;
-      verticalDelta.current = 0;
+    const deltaX = horizontalDelta.current;
+
+    if (deltaX < -70) {
+      resetTouchGesture();
       openProfile(rankedVideos[activeIndex]);
       return;
     }
 
-    /*
-      Deep-link rejimida o'ngga surish orqaga qaytaradi (iOS uslubidagi
-      "swipe back"), chunki bu holatda pastdagi navbar ko'rinmasligi mumkin.
-    */
-    if (isDeepLink && deltaX > 70 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
-      setSwipeProgress(0);
-      horizontalDelta.current = 0;
-      verticalDelta.current = 0;
+    if (isDeepLink && deltaX > 70) {
+      resetTouchGesture();
       handleBack();
       return;
     }
 
-    const swipeThreshold = 0.3;
-    const timeElapsed = Date.now() - touchStartTime.current;
-    const isQuickSwipe = timeElapsed < 300;
-
-    if (Math.abs(swipeProgress) > swipeThreshold || (isQuickSwipe && Math.abs(swipeProgress) > 0.1)) {
-      if (swipeProgress < 0 && activeIndex < rankedVideos.length - 1) {
-        // Swipe up - next video
-        const nextIndex = activeIndex + 1;
-        setActiveIndex(nextIndex);
-        mediumTap();
-        containerRef.current?.scrollTo({
-          top: nextIndex * (containerRef.current?.clientHeight || 0),
-          behavior: 'smooth'
-        });
-      } else if (swipeProgress > 0 && activeIndex > 0) {
-        // Swipe down - previous video
-        const prevIndex = activeIndex - 1;
-        setActiveIndex(prevIndex);
-        mediumTap();
-        containerRef.current?.scrollTo({
-          top: prevIndex * (containerRef.current?.clientHeight || 0),
-          behavior: 'smooth'
-        });
-      }
-    }
-    setSwipeProgress(0);
-    horizontalDelta.current = 0;
-    verticalDelta.current = 0;
-  }, [swipeProgress, activeIndex, rankedVideos, mediumTap, openProfile, isDeepLink, handleBack]);
+    resetTouchGesture();
+  }, [activeIndex, rankedVideos, openProfile, isDeepLink, handleBack, resetTouchGesture]);
 
   const openComments = (videoId: string) => {
     setSelectedVideoId(videoId);
@@ -1384,6 +1367,7 @@ export default function VideosPage() {
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onTouchCancel={resetTouchGesture}
       >
         {rankedVideos.map((video, index) => {
           // Virtualizatsiya: faqat aktiv va uning qo'shnilari haqiqiy pleyer.

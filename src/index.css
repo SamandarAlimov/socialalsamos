@@ -586,7 +586,7 @@
 
   /* Swipe-to-reply paytida silliq siljish */
   .tg-swipe {
-    touch-action: pan-y;
+    touch-action: pan-y pinch-zoom;
     will-change: transform;
   }
 
@@ -601,6 +601,25 @@
 .chat-shell img,
 .chat-shell video {
   -webkit-user-drag: none;
+}
+
+/* ===== Platform vertical scroll policy =====
+   Oddiy sahifalarda AppLayout main yagona canonical vertical scroller.
+   Mobile/tabletda browserning native pan-y/momentum mexanizmini ustun qo'yamiz.
+   Ichki maxsus scrollerlar (Messages/Videos/Map/Create/AI) AppLayout tomonidan
+   overflow-hidden rejimida ishlaydi va o'z touch policy'sini boshqaradi. */
+[data-platform-scroll-root="true"] {
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: auto;
+  overscroll-behavior-y: contain;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  [data-platform-scroll-root="true"] {
+    transform: none;
+    backface-visibility: visible;
+  }
 }
 
 /* ===== Chat skrolli: silliq, sakramaydigan ===== */

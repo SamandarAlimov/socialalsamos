@@ -15,6 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { parseArticlePayload, stripFormatting } from '@/lib/messageFormat';
 import { albumPreviewText, parseAlbumPayload } from '@/lib/mediaAlbum';
 import { resolveAttachmentFileName } from '@/lib/attachmentPreview';
+import { resolveTouchAxis, type TouchAxis } from '@/lib/touchGesture';
 
 interface ChatListItemProps {
   conversation: Conversation & { is_self_chat?: boolean };
@@ -498,11 +499,16 @@ export function ChatListItem({
 
   const [swipeX, setSwipeX] = useState(0);
   const swipeRef = useRef(0);
-  const dragRef = useRef<{ x: number; y: number; base: number; axis: 'none' | 'h' | 'v' }>({
+  const dragRef = useRef<{
+    x: number;
+    y: number;
+    base: number;
+    axis: TouchAxis;
+  }>({
     x: 0,
     y: 0,
     base: 0,
-    axis: 'none',
+    axis: 'unknown',
   });
 
   const setSwipe = useCallback((value: number) => {
@@ -519,7 +525,12 @@ export function ChatListItem({
   const handleTouchStart = (e: React.TouchEvent) => {
     if (maxLeftDrag === 0 && maxRightDrag === 0) return;
     const touch = e.touches[0];
-    dragRef.current = { x: touch.clientX, y: touch.clientY, base: swipeRef.current, axis: 'none' };
+    dragRef.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+      base: swipeRef.current,
+      axis: 'unknown',
+    };
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -528,17 +539,19 @@ export function ChatListItem({
     const dx = touch.clientX - dragRef.current.x;
     const dy = touch.clientY - dragRef.current.y;
 
-    if (dragRef.current.axis === 'none') {
-      if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
-        dragRef.current.axis = 'h';
-      } else if (Math.abs(dy) > 10) {
-        dragRef.current.axis = 'v';
+    if (dragRef.current.axis === 'unknown') {
+      dragRef.current.axis = resolveTouchAxis(dx, dy, { threshold: 9 });
+
+      if (dragRef.current.axis === 'vertical') {
         // Vertical intent belongs to the native scroll container.
         // Any previously open swipe actions must not keep transform state.
         if (Math.abs(swipeRef.current) > 0) closeSwipe();
+        return;
       }
+
+      if (dragRef.current.axis === 'unknown') return;
     }
-    if (dragRef.current.axis !== 'h') return;
+    if (dragRef.current.axis !== 'horizontal') return;
 
     let next = dragRef.current.base + dx;
     if (next > maxRightDrag) next = maxRightDrag + (next - maxRightDrag) * 0.25;
@@ -548,8 +561,8 @@ export function ChatListItem({
 
   const handleTouchEnd = () => {
     const axis = dragRef.current.axis;
-    dragRef.current.axis = 'none';
-    if (axis !== 'h') return;
+    dragRef.current.axis = 'unknown';
+    if (axis !== 'horizontal') return;
     const value = swipeRef.current;
 
     if (maxLeftDrag > 0 && value <= -(maxLeftDrag + ACTION_WIDTH * FULL_SWIPE_RATIO)) {
@@ -573,7 +586,7 @@ export function ChatListItem({
   };
 
   const handleTouchCancel = () => {
-    dragRef.current.axis = 'none';
+    dragRef.current.axis = 'unknown';
     closeSwipe();
   };
 

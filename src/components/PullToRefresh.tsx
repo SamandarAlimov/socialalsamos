@@ -24,8 +24,8 @@ export function PullToRefresh({
   return (
     <div
       ref={containerRef}
-      className={cn("relative overflow-auto overscroll-y-contain", className)}
-      style={{ touchAction: 'pan-y' }}
+      className={cn("relative min-w-0", className)}
+      style={{ touchAction: 'pan-y pinch-zoom' }}
     >
       {/* Pull indicator */}
       <div 
@@ -68,7 +68,7 @@ export function PullToRefresh({
                 willChange: 'transform',
               }
             : {
-                transition: 'transform 0.2s ease-out',
+                transform: 'none',
               }),
         }}
       >
