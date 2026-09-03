@@ -74,8 +74,8 @@ begin
       select '/hashtag/' || h.tag,
              coalesce(h.last_used_at, now())
       from public.hashtags h
-      where h.posts_count > 0
-      order by h.last_used_at desc nulls last, h.posts_count desc
+      where coalesce(h.post_count, 0) > 0
+      order by h.last_used_at desc nulls last, coalesce(h.post_count, 0) desc
       limit v_limit offset v_offset;
 
     else
@@ -206,9 +206,9 @@ begin
     left join public.sellers s on s.id = p.seller_id
     left join lateral (
       select m.url
-      from public.product_media m
+      from public.product_images m
       where m.product_id = p.id
-      order by m.sort_order asc nulls last, m.created_at asc
+      order by m.position asc nulls last, m.created_at asc
       limit 1
     ) pm on true
     where p.id::text = v_value
@@ -222,13 +222,13 @@ begin
       'canonicalPath', '/hashtag/' || h.tag,
       'title', '#' || h.tag,
       'description', '#' || h.tag || ' bo‘yicha Alsamos dagi ommaviy postlar.',
-      'postsCount', h.posts_count,
+      'postsCount', coalesce(h.post_count, 0),
       'updatedAt', h.last_used_at
     )
     into result
     from public.hashtags h
     where lower(h.tag) = lower(trim(both '#' from v_value))
-      and h.posts_count > 0
+      and coalesce(h.post_count, 0) > 0
     limit 1;
   end if;
 
