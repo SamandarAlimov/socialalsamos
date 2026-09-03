@@ -464,7 +464,7 @@ export function ProductDetail({
       <Button
         variant="outline"
         className={cn(
-          'flex-1 rounded-2xl h-12 text-sm font-semibold border-primary/30 text-primary hover:bg-primary/5',
+          'flex-1 rounded-2xl h-12 text-sm font-semibold border-foreground/30 text-foreground hover:bg-foreground/5',
           addedToCart && 'border-emerald-500/40 text-emerald-600 bg-emerald-500/5',
         )}
         onClick={handleAddToCart}
@@ -478,14 +478,14 @@ export function ProductDetail({
           <><ShoppingCart className="mr-1.5 h-4 w-4" /> {marketplaceUz.productDetail.addToCart}</>
         )}
         {inCartQty > 0 && !isAddingToCart && (
-          <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold">
+          <span className="ml-2 rounded-full bg-foreground/10 px-2 py-0.5 text-[10px] font-bold">
             savatda {inCartQty}
           </span>
         )}
       </Button>
 
       <Button
-        className="flex-1 rounded-2xl h-12 text-sm font-bold shadow-lg shadow-primary/20"
+        className="flex-1 rounded-2xl h-12 text-sm font-bold shadow-lg shadow-black/10"
         onClick={handleBuyNow}
         disabled={isSoldOut || isBuying || isAddingToCart || variantsLoading}
       >
@@ -514,7 +514,7 @@ export function ProductDetail({
         )}
       </div>
       {product.description.length > 220 && (
-        <button type="button" onClick={() => setDescExpanded(value => !value)} className="text-xs font-semibold text-primary">
+        <button type="button" onClick={() => setDescExpanded(value => !value)} className="text-xs font-semibold text-foreground">
           {descExpanded ? marketplaceUz.productDetail.collapse : marketplaceUz.productDetail.readAll}
         </button>
       )}
@@ -579,7 +579,7 @@ export function ProductDetail({
             <p className="truncate text-sm font-semibold md:text-base">{product.title}</p>
             <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
               {product.category?.name && <span className="truncate">{product.category.name}</span>}
-              <span className="font-bold text-primary">{formatPrice(displayPrice, currency)}</span>
+              <span className="font-bold text-foreground">{formatPrice(displayPrice, currency)}</span>
             </div>
           </div>
 
@@ -593,7 +593,7 @@ export function ProductDetail({
             >
               <ShoppingCart className="h-[18px] w-[18px]" />
               {inCartQty > 0 && (
-                <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-primary px-1 text-[9px] font-bold leading-4 text-primary-foreground">
+                <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-foreground px-1 text-[9px] font-bold leading-4 text-background">
                   {inCartQty > 99 ? '99+' : inCartQty}
                 </span>
               )}
@@ -634,7 +634,7 @@ export function ProductDetail({
           <button
             type="button"
             onClick={onBrowseMarketplace}
-            className="shrink-0 transition-colors hover:text-primary"
+            className="shrink-0 transition-colors hover:text-foreground"
           >
             {marketplaceUz.productDetail.marketplace}
           </button>
@@ -644,7 +644,7 @@ export function ProductDetail({
               <button
                 type="button"
                 onClick={() => onBrowseCategory?.(product.category!.slug)}
-                className="max-w-40 truncate transition-colors hover:text-primary"
+                className="max-w-40 truncate transition-colors hover:text-foreground"
               >
                 {product.category.name}
               </button>
@@ -765,7 +765,7 @@ export function ProductDetail({
                         onClick={() => setCurrentImageIndex(index)}
                         className={cn(
                           'h-16 w-16 shrink-0 overflow-hidden rounded-xl border-2 bg-muted transition-all',
-                          index === currentImageIndex ? 'border-primary ring-2 ring-primary/20' : 'border-border/30 opacity-70',
+                          index === currentImageIndex ? 'border-foreground ring-2 ring-foreground/20' : 'border-border/30 opacity-70',
                         )}
                       >
                         {imageFailed[index] ? (
@@ -817,9 +817,9 @@ export function ProductDetail({
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-primary/10 bg-primary/[0.035] p-4">
+                <div className="rounded-2xl border border-foreground/10 bg-foreground/[0.035] p-4">
                   <div className="flex flex-wrap items-baseline gap-2">
-                    <span className="text-3xl font-extrabold tracking-tight text-primary">
+                    <span className="text-3xl font-extrabold tracking-tight text-foreground">
                       {formatPrice(displayPrice, currency)}
                     </span>
                     {hasDiscount && (
@@ -850,7 +850,7 @@ export function ProductDetail({
                       <span className="rounded-md bg-muted px-2 py-1 text-muted-foreground">{marketplaceUz.productDetail.sold}</span>
                     )}
                     {product.is_negotiable && (
-                      <span className="rounded-md bg-primary/10 px-2 py-1 font-medium text-primary">{marketplaceUz.productDetail.negotiable}</span>
+                      <span className="rounded-md bg-foreground/10 px-2 py-1 font-medium text-foreground">{marketplaceUz.productDetail.negotiable}</span>
                     )}
                   </div>
                 </div>
@@ -912,8 +912,8 @@ export function ProductDetail({
                                   className={cn(
                                     'min-h-9 rounded-xl border px-3 py-1.5 text-xs font-medium transition-all',
                                     selected
-                                      ? 'border-primary bg-primary/10 text-primary ring-2 ring-primary/10'
-                                      : 'border-border/50 bg-background hover:border-primary/50',
+                                      ? 'border-foreground bg-foreground/10 text-foreground ring-2 ring-foreground/10'
+                                      : 'border-border/50 bg-background hover:border-foreground/50',
                                     soldOutValue && 'cursor-not-allowed opacity-40 line-through',
                                   )}
                                 >
@@ -963,7 +963,7 @@ export function ProductDetail({
                     <span className="text-sm text-muted-foreground">
                       {shippingApplies ? marketplaceUz.productDetail.productDeliveryTotal(quantity) : marketplaceUz.productDetail.total(quantity)}
                     </span>
-                    <span className="text-lg font-extrabold text-primary">
+                    <span className="text-lg font-extrabold text-foreground">
                       {formatPrice(grandTotal, currency)}
                     </span>
                   </div>
@@ -977,7 +977,7 @@ export function ProductDetail({
 
                 <div className="space-y-3 rounded-2xl border border-border/30 bg-muted/20 p-3">
                   <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-foreground/10 text-foreground">
                       <CalendarClock className="h-5 w-5" />
                     </div>
                     <div className="min-w-0 flex-1">
@@ -990,7 +990,7 @@ export function ProductDetail({
                   </div>
 
                   <div className="flex items-start gap-3 rounded-xl border border-border/30 bg-background/70 p-3">
-                    <Navigation className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <Navigation className="mt-0.5 h-4 w-4 shrink-0 text-foreground" />
                     <div className="min-w-0 flex-1">
                       <p className="text-[11px] font-medium text-muted-foreground">
                         {marketplaceUz.productDetail.deliveryTo}
@@ -1006,7 +1006,7 @@ export function ProductDetail({
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-8 shrink-0 rounded-lg px-2 text-xs text-primary"
+                      className="h-8 shrink-0 rounded-lg px-2 text-xs text-foreground"
                       onClick={() => void locateDelivery()}
                       disabled={isLocatingDelivery}
                     >
@@ -1063,14 +1063,14 @@ export function ProductDetail({
                     <div className="flex items-center gap-3">
                       <Avatar className="h-12 w-12 ring-2 ring-background">
                         <AvatarImage src={product.seller.logo_url || product.seller.profile?.avatar_url || ''} />
-                        <AvatarFallback className="bg-primary/10 font-bold text-primary">
+                        <AvatarFallback className="bg-foreground/10 font-bold text-foreground">
                           {(product.seller.business_name || '?')[0].toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           <span className="truncate text-sm font-semibold">{product.seller.business_name}</span>
-                          {product.seller.is_verified && <ShieldCheck className="h-4 w-4 text-primary" />}
+                          {product.seller.is_verified && <ShieldCheck className="h-4 w-4 text-foreground" />}
                         </div>
                         <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
                           <Store className="h-3 w-3" /> {product.seller.business_type}
@@ -1162,7 +1162,7 @@ export function ProductDetail({
                   </div>
 
                   {reviewEligibility === 'eligible' && (
-                    <div className="space-y-3 rounded-xl border border-primary/20 bg-primary/[0.03] p-3">
+                    <div className="space-y-3 rounded-xl border border-foreground/20 bg-foreground/[0.03] p-3">
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-sm font-semibold">{marketplaceUz.productDetail.rate}</p>
                         <div className="flex gap-1">
@@ -1340,7 +1340,7 @@ export function ProductDetail({
                 {(recentlyViewedLoading || recentlyViewedProducts.length > 0) && (
                   <section className="space-y-3 rounded-2xl border border-border/30 bg-muted/10 p-4">
                     <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-primary" />
+                      <Clock className="h-4 w-4 text-foreground" />
                       <h3 className="text-sm font-semibold">{marketplaceUz.productDetail.recentlyViewed}</h3>
                     </div>
                     {recentlyViewedLoading ? (
@@ -1390,12 +1390,12 @@ export function ProductDetail({
               </div>
               <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-border/30 pt-3">
                 <span className="text-xs text-muted-foreground">{marketplaceUz.productDetail.total(quantity)}</span>
-                <strong className="text-xl text-primary">{formatPrice(grandTotal, currency)}</strong>
+                <strong className="text-xl text-foreground">{formatPrice(grandTotal, currency)}</strong>
               </div>
               {inCartQty > 0 && onOpenCart && (
                 <Button
                   variant="ghost"
-                  className="mt-3 h-9 w-full rounded-xl text-xs text-primary"
+                  className="mt-3 h-9 w-full rounded-xl text-xs text-foreground"
                   onClick={onOpenCart}
                 >
                   <ShoppingCart className="mr-1.5 h-3.5 w-3.5" />
