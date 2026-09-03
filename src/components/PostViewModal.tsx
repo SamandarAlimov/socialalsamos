@@ -249,12 +249,14 @@ export function PostViewModal({
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          onCloseAutoFocus={(event) => event.preventDefault()}
           className={cn(
             'w-[calc(100vw-24px)] overflow-hidden border-border/60 bg-background p-0 shadow-[0_28px_90px_rgba(15,23,42,0.28)]',
             'rounded-[22px] sm:rounded-[24px]',
             hasMedia
-              ? 'max-w-6xl md:max-h-[92vh]'
-              : 'max-w-3xl md:max-h-[88vh]',
+              ? 'max-w-6xl md:max-h-[92dvh]'
+              : 'max-w-3xl md:max-h-[88dvh]',
           )}
         >
           <DialogDescription className="sr-only">
@@ -263,18 +265,18 @@ export function PostViewModal({
           <div
             className={cn(
               'flex min-h-0 flex-col',
-              hasMedia ? 'max-h-[92vh] md:flex-row' : 'max-h-[88vh]',
+              hasMedia ? 'max-h-[92dvh] md:flex-row' : 'max-h-[88dvh]',
             )}
           >
             {/* Media */}
             {hasMedia && (
-              <div className="group relative flex flex-1 items-center justify-center bg-gradient-to-b from-neutral-950 to-black min-h-[46vh] md:min-h-[560px]">
+              <div className="group relative flex flex-1 items-center justify-center bg-gradient-to-b from-neutral-950 to-black min-h-[46dvh] md:min-h-[560px]">
                 {/*
                   Stiker qatlami media bilan bir xil o'lchamda bo'lishi shart.
                   `object-contain` konteynerni to'liq egallamaydi, shuning uchun
                   media'ni o'z o'lchamiga moslashuvchi `relative` o'ramga olamiz.
                 */}
-                <div className="relative inline-block max-h-[92vh]">
+                <div className="relative inline-block max-h-[92dvh]">
                   {currentKind === 'video' ? (
                     <VideoPlayer
                       key={currentUrl}
@@ -282,14 +284,14 @@ export function PostViewModal({
                       poster={currentPoster}
                       autoPlay
                       aspectMode="auto"
-                      className="max-h-[92vh] max-w-full"
+                      className="max-h-[92dvh] max-w-full"
                     />
                   ) : (
                     <img
                       key={currentUrl}
                       src={currentUrl}
                       alt=""
-                      className="max-h-[92vh] max-w-full animate-in fade-in duration-200 object-contain"
+                      className="max-h-[92dvh] max-w-full animate-in fade-in duration-200 object-contain"
                     />
                   )}
 
