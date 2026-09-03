@@ -476,7 +476,14 @@ setSettingsOpen(true);
           conversationType={isChannel ? 'channel' : 'group'}
           isAdmin={Boolean(isAdmin)}
           initialTab="profile"
-          onManageMembers={onManageMembers}
+          onManageMembers={
+            onManageMembers
+              ? () => {
+                  setSettingsOpen(false);
+                  window.setTimeout(() => onManageMembers(), 120);
+                }
+              : undefined
+          }
         />
       )}
 
