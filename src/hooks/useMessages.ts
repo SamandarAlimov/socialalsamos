@@ -24,6 +24,7 @@ export interface LastMessageMeta {
   media_file_name: string | null;
   metadata?: Record<string, unknown> | null;
   sender_id: string | null;
+  created_at?: string | null;
   /**
    * Telegramdek ptichkalar uchun: o'zimiz yuborgan oxirgi xabarni suhbatdagi
    * boshqa a'zo o'qiganmi (ikkita ko'k ptichka) yoki hali yo'qmi (bitta).
@@ -127,6 +128,76 @@ const LAST_MESSAGE_SCAN_LIMIT = 400;
 const UNREAD_SCAN_LIMIT = 1000;
 /** Realtime hodisalar ketma-ket kelganda ro'yxatni bir marta yangilash */
 const LIST_REFRESH_DEBOUNCE = 180;
+
+type ConversationActivity = {
+  id: string | null;
+  conversation_id: string;
+  content: string | null;
+  media_type: string | null;
+  media_url: string | null;
+  media_file_name: string | null;
+  metadata: Record<string, unknown> | null;
+  sender_id: string | null;
+  created_at: string;
+};
+
+class ConversationActivityEmitter {
+  private listeners = new Set<(activity: ConversationActivity) => void>();
+
+  subscribe(listener: (activity: ConversationActivity) => void) {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  emit(activity: ConversationActivity) {
+    for (const listener of this.listeners) listener(activity);
+  }
+}
+
+const conversationActivityEmitter = new ConversationActivityEmitter();
+
+function sortConversationList(list: Conversation[]) {
+  return [...list].sort((a, b) => {
+    if (a.is_pinned && !b.is_pinned) return -1;
+    if (!a.is_pinned && b.is_pinned) return 1;
+    return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime();
+  });
+}
+
+function applyConversationActivity(
+  previous: Conversation[],
+  activity: ConversationActivity,
+  currentUserId: string,
+) {
+  let changed = false;
+  const next = previous.map((conversation) => {
+    if (conversation.id !== activity.conversation_id) return conversation;
+    changed = true;
+
+    return {
+      ...conversation,
+      last_message: activity.content,
+      last_message_at: activity.created_at,
+      last_message_meta: {
+        id: activity.id,
+        content: activity.content,
+        media_type: activity.media_type,
+        media_url: activity.media_url,
+        media_file_name: activity.media_file_name,
+        metadata: activity.metadata,
+        sender_id: activity.sender_id,
+        created_at: activity.created_at,
+        is_read: false,
+      },
+      unread_count:
+        activity.sender_id && activity.sender_id !== currentUserId
+          ? (conversation.unread_count ?? 0) + 1
+          : conversation.unread_count,
+    } as Conversation;
+  });
+
+  return changed ? sortConversationList(next) : previous;
+}
 
 export function useConversations(
   type?: 'private' | 'group' | 'channel',
@@ -269,6 +340,7 @@ export function useConversations(
           metadata:
             ((msg as any).metadata as Record<string, unknown> | null | undefined) ?? null,
           sender_id: msg.sender_id,
+          created_at: msg.created_at,
           is_read: false,
         });
       }
@@ -338,9 +410,11 @@ export function useConversations(
             : null;
         const meta = lastMessageMap.get(conv.id);
         const draft = draftMap.get(conv.id);
+        const effectiveLastMessageAt = meta?.created_at || conv.last_message_at;
 
         return {
           ...conv,
+          last_message_at: effectiveLastMessageAt,
           type: conv.type as 'private' | 'group' | 'channel',
           other_participant: otherParticipant,
           last_message: meta?.content ?? null,
@@ -357,19 +431,7 @@ export function useConversations(
         } as Conversation;
       });
 
-      conversationsWithDetails.sort((a, b) => {
-        if (a.is_pinned && !b.is_pinned) return -1;
-        if (!a.is_pinned && b.is_pinned) return 1;
-
-        const aUnread = (a.unread_count ?? 0) > 0;
-        const bUnread = (b.unread_count ?? 0) > 0;
-        if (aUnread && !bUnread) return -1;
-        if (!aUnread && bUnread) return 1;
-
-        return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime();
-      });
-
-      setConversations(conversationsWithDetails);
+      setConversations(sortConversationList(conversationsWithDetails));
     } catch (error: any) {
       console.error('Error fetching conversations:', error);
       toast({
@@ -604,6 +666,9 @@ export function useConversations(
     const unsubscribeDrafts = messageDraftsEmitter.subscribe(() => {
       scheduleRefresh();
     });
+    const unsubscribeActivity = conversationActivityEmitter.subscribe((activity) => {
+      setConversations((previous) => applyConversationActivity(previous, activity, user.id));
+    });
 
     channelRef.current = supabase
       .channel(`conversations-list-${user.id}-${showArchived ? 'arch' : 'live'}-${type || 'all'}`)
@@ -627,47 +692,18 @@ export function useConversations(
         // shu conversation darhol yangilanadi, keyin background refresh ma'lumotni
         // authoritative holat bilan tekislaydi.
         if (row.conversation_id) {
-          const createdAt = row.created_at || new Date().toISOString();
-          setConversations((previous) => {
-            let changed = false;
-            const next = previous.map((conversation) => {
-              if (conversation.id !== row.conversation_id) return conversation;
-              changed = true;
-              return {
-                ...conversation,
-                last_message: row.content ?? null,
-                last_message_at: createdAt,
-                last_message_meta: {
-                  id: row.id ?? null,
-                  content: row.content ?? null,
-                  media_type: row.media_type ?? null,
-                  media_url: row.media_url ?? null,
-                  media_file_name: row.media_file_name ?? null,
-                  metadata: row.metadata ?? null,
-                  sender_id: row.sender_id ?? null,
-                  is_read: false,
-                },
-                unread_count:
-                  row.sender_id && row.sender_id !== user.id
-                    ? (conversation.unread_count ?? 0) + 1
-                    : conversation.unread_count,
-              };
-            });
-
-            if (!changed) return previous;
-
-            return next.sort((a, b) => {
-              if (a.is_pinned && !b.is_pinned) return -1;
-              if (!a.is_pinned && b.is_pinned) return 1;
-
-              const aUnread = (a.unread_count ?? 0) > 0;
-              const bUnread = (b.unread_count ?? 0) > 0;
-              if (aUnread && !bUnread) return -1;
-              if (!aUnread && bUnread) return 1;
-
-              return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime();
-            });
-          });
+          const activity: ConversationActivity = {
+            id: row.id ?? null,
+            conversation_id: row.conversation_id,
+            content: row.content ?? null,
+            media_type: row.media_type ?? null,
+            media_url: row.media_url ?? null,
+            media_file_name: row.media_file_name ?? null,
+            metadata: row.metadata ?? null,
+            sender_id: row.sender_id ?? null,
+            created_at: row.created_at || new Date().toISOString(),
+          };
+          setConversations((previous) => applyConversationActivity(previous, activity, user.id));
         }
 
         scheduleRefresh();
@@ -694,6 +730,7 @@ export function useConversations(
     return () => {
       unsubscribeEmitter();
       unsubscribeDrafts();
+      unsubscribeActivity();
       if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
       if (channelRef.current) supabase.removeChannel(channelRef.current);
     };
@@ -992,6 +1029,18 @@ export function useMessages(conversationId: string | null) {
           } as Message)
         );
 
+        conversationActivityEmitter.emit({
+          id: persisted.id,
+          conversation_id: conversationId,
+          content: persisted.content ?? null,
+          media_type: persisted.media_type ?? null,
+          media_url: persisted.media_url ?? null,
+          media_file_name: persisted.media_file_name ?? null,
+          metadata: (persisted.metadata as Record<string, unknown> | null | undefined) ?? null,
+          sender_id: persisted.sender_id ?? user.id,
+          created_at: persisted.created_at || new Date().toISOString(),
+        });
+
         void supabase
           .from('conversations')
           .update({ last_message_at: new Date().toISOString() })
@@ -1067,6 +1116,17 @@ export function useMessages(conversationId: string | null) {
               status: 'sent' as const,
             } as Message)
           );
+          conversationActivityEmitter.emit({
+            id: recovered.id,
+            conversation_id: conversationId,
+            content: recovered.content ?? null,
+            media_type: recovered.media_type ?? null,
+            media_url: recovered.media_url ?? null,
+            media_file_name: recovered.media_file_name ?? null,
+            metadata: (recovered.metadata as Record<string, unknown> | null | undefined) ?? null,
+            sender_id: recovered.sender_id ?? user.id,
+            created_at: recovered.created_at || new Date().toISOString(),
+          });
           return recovered;
         }
 
@@ -1114,6 +1174,18 @@ export function useMessages(conversationId: string | null) {
             status: 'sent' as const,
           } as Message)
         );
+
+        conversationActivityEmitter.emit({
+          id: persisted.id,
+          conversation_id: conversationId,
+          content: persisted.content ?? null,
+          media_type: persisted.media_type ?? null,
+          media_url: persisted.media_url ?? null,
+          media_file_name: persisted.media_file_name ?? null,
+          metadata: (persisted.metadata as Record<string, unknown> | null | undefined) ?? null,
+          sender_id: persisted.sender_id ?? user.id,
+          created_at: persisted.created_at || new Date().toISOString(),
+        });
 
         void supabase
           .from('conversations')
