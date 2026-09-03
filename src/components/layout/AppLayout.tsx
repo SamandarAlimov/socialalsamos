@@ -76,16 +76,17 @@ export function AppLayout() {
 
       {/*
         Global collapse control sidebar ichida emas, layout overlay sifatida turadi.
-        Shu sabab AI/Map kabi z-index'i baland ichki panellar uning page tomondagi
-        50% qismini yopib qo'ya olmaydi. left qiymati dividerning o'zi, translate
-        esa tugmani aynan 50% sidebar / 50% page qilib markazlaydi.
+        U oddiy page chrome'dan yuqori, lekin modal backdropdan qat'iy past turishi
+        kerak. Aks holda dialog ochilganda collapse tugmasi hira qatlam ustiga chiqib
+        qoladi. left qiymati dividerning o'zi, translate esa tugmani aynan 50%
+        sidebar / 50% page qilib markazlaydi.
       */}
       {!hasPostPreview && <button
         type="button"
         aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         onClick={() => setSidebarCollapsed((current) => !current)}
         className={cn(
-          'fixed top-20 z-[5000] hidden h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-sidebar-border bg-background shadow-lg transition-[left,background-color,color,box-shadow] duration-300 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 md:flex',
+          'fixed top-20 z-[1300] hidden h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-sidebar-border bg-background shadow-lg transition-[left,background-color,color,box-shadow] duration-300 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 md:flex',
           sidebarCollapsed ? 'left-[72px]' : 'left-64',
         )}
       >
