@@ -119,13 +119,13 @@ function instagramEmbedMedia(html: string, base: URL) {
     decodeJsonUrl(/"video_url"\s*:\s*"([^"]+)"/i.exec(html)?.[1]) ||
     decodeJsonUrl(/<source[^>]+src=["']([^"']+)["']/i.exec(html)?.[1]) ||
     decodeJsonUrl(/<video[^>]+src=["']([^"']+)["']/i.exec(html)?.[1]) ||
-    metaContent(sourceHtml, ['og:video:secure_url', 'og:video:url', 'og:video']);
+    metaContent(html, ['og:video:secure_url', 'og:video:url', 'og:video']);
 
   const poster =
     decodeJsonUrl(/"thumbnail_src"\s*:\s*"([^"]+)"/i.exec(html)?.[1]) ||
     decodeJsonUrl(/"display_url"\s*:\s*"([^"]+)"/i.exec(html)?.[1]) ||
     decodeJsonUrl(/<video[^>]+poster=["']([^"']+)["']/i.exec(html)?.[1]) ||
-    metaContent(sourceHtml, ['og:image:secure_url', 'og:image', 'twitter:image']);
+    metaContent(html, ['og:image:secure_url', 'og:image', 'twitter:image']);
 
   return {
     video: absoluteUrl(directVideo, base),
