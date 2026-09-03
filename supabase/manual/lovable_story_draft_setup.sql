@@ -1,28 +1,195 @@
 -- ============================================================
--- ALSAMOS / LOVABLE — STORY DRAFT LIFECYCLE SETUP
+-- ALSAMOS / LOVABLE — COMPLETE STORY FOUNDATION + DRAFT SETUP
 -- ============================================================
 --
--- Fixes PGRST202:
---   public.create_story_draft(p_payload) not found
+-- Self-contained repair for Lovable databases that missed the later Create
+-- migrations. It does NOT assume public.post_media already exists.
 --
--- This script is designed for Lovable projects where the normal migration
--- chain was not fully applied. It installs the canonical Story foundation +
--- hidden draft lifecycle used by src/components/create/StoryComposer.tsx.
+-- Fixes:
+--   PGRST202 create_story_draft(p_payload) not found
+--   42P01 public.post_media does not exist
 --
--- Prerequisites expected to already exist in Alsamos:
---   public.posts
---   public.post_media
---   public.stories
---   public.publish_post_draft(jsonb)
---   public.can_view_post(uuid)
+-- Installs only what StoryComposer needs:
+--   - required posts columns
+--   - media_kind + post_media
+--   - story compatibility columns
+--   - create / activate / discard story draft RPCs
+--   - story_stickers + responses + RPCs
+--   - RLS for story/media/stickers
 --
 -- Safe to run repeatedly.
--- Tagged dollar quotes are used intentionally for Lovable SQL Editor.
 -- ============================================================
 
 
 -- ============================================================
--- 1. STORY COMPATIBILITY COLUMNS
+-- 1. POSTS — STORY/CREATE COMPATIBILITY COLUMNS
+-- ============================================================
+
+alter table public.posts
+  add column if not exists post_kind text not null default 'post';
+
+alter table public.posts
+  add column if not exists status text not null default 'published';
+
+alter table public.posts
+  add column if not exists scheduled_at timestamptz;
+
+alter table public.posts
+  add column if not exists published_at timestamptz;
+
+alter table public.posts
+  add column if not exists edit_state jsonb;
+
+alter table public.posts
+  add column if not exists formatted_content jsonb;
+
+update public.posts
+set published_at = coalesce(published_at, created_at, now())
+where published_at is null
+  and coalesce(status, 'published') = 'published';
+
+
+-- ============================================================
+-- 2. MEDIA KIND ENUM
+-- ============================================================
+
+do $story_media_kind_bootstrap$
+begin
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where n.nspname = 'public'
+      and t.typname = 'media_kind'
+  ) then
+    create type public.media_kind as enum (
+      'image',
+      'video',
+      'audio',
+      'document',
+      'archive',
+      'other'
+    );
+  end if;
+end;
+$story_media_kind_bootstrap$;
+
+
+-- ============================================================
+-- 3. POST MEDIA — CANONICAL STRUCTURED MEDIA TABLE
+-- ============================================================
+
+create table if not exists public.post_media (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references public.posts(id) on delete cascade,
+  position integer not null default 0,
+  kind public.media_kind not null default 'other',
+  storage_url text not null,
+  storage_bucket text,
+  storage_key text,
+  thumbnail_url text,
+  thumbnail_bucket text,
+  thumbnail_key text,
+  mime_type text,
+  file_name text,
+  file_size bigint,
+  width integer,
+  height integer,
+  duration_seconds numeric(10, 3),
+  aspect_ratio text,
+  alt_text text,
+  edit_state jsonb,
+  created_at timestamptz not null default now()
+);
+
+alter table public.post_media
+  add column if not exists storage_bucket text;
+
+alter table public.post_media
+  add column if not exists storage_key text;
+
+alter table public.post_media
+  add column if not exists thumbnail_bucket text;
+
+alter table public.post_media
+  add column if not exists thumbnail_key text;
+
+alter table public.post_media
+  add column if not exists edit_state jsonb;
+
+create index if not exists post_media_post_idx
+  on public.post_media (post_id, position);
+
+create index if not exists post_media_kind_idx
+  on public.post_media (kind);
+
+create index if not exists post_media_storage_object_idx
+  on public.post_media (storage_bucket, storage_key)
+  where storage_bucket is not null
+    and storage_key is not null;
+
+alter table public.post_media enable row level security;
+
+drop policy if exists "post_media_select_story_compat"
+  on public.post_media;
+
+create policy "post_media_select_story_compat"
+  on public.post_media
+  for select
+  using (
+    exists (
+      select 1
+      from public.posts p
+      where p.id = post_media.post_id
+        and (
+          p.user_id = auth.uid()
+          or p.visibility = 'public'
+          or (
+            p.visibility = 'friends'
+            and auth.uid() is not null
+            and exists (
+              select 1
+              from public.follows f1
+              where f1.follower_id = auth.uid()
+                and f1.following_id = p.user_id
+            )
+            and exists (
+              select 1
+              from public.follows f2
+              where f2.follower_id = p.user_id
+                and f2.following_id = auth.uid()
+            )
+          )
+        )
+    )
+  );
+
+drop policy if exists "post_media_write_story_compat"
+  on public.post_media;
+
+create policy "post_media_write_story_compat"
+  on public.post_media
+  for all
+  using (
+    exists (
+      select 1
+      from public.posts p
+      where p.id = post_media.post_id
+        and p.user_id = auth.uid()
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from public.posts p
+      where p.id = post_media.post_id
+        and p.user_id = auth.uid()
+    )
+  );
+
+
+-- ============================================================
+-- 4. STORIES — CANONICAL LINK COLUMNS
 -- ============================================================
 
 alter table public.stories
@@ -40,7 +207,6 @@ alter table public.stories
 alter table public.stories
   add column if not exists is_active boolean not null default true;
 
-
 create unique index if not exists stories_post_id_uniq
   on public.stories (post_id)
   where post_id is not null;
@@ -48,11 +214,6 @@ create unique index if not exists stories_post_id_uniq
 create index if not exists stories_active_post_idx
   on public.stories (expires_at desc, post_id)
   where is_active is distinct from false;
-
-
--- ============================================================
--- 2. CANONICAL STORY VISIBILITY POLICY
--- ============================================================
 
 alter table public.stories enable row level security;
 
@@ -68,36 +229,64 @@ create policy "stories_select_visible"
       is_active is distinct from false
       and (
         post_id is null
-        or public.can_view_post(post_id)
+        or exists (
+          select 1
+          from public.posts p
+          where p.id = stories.post_id
+            and (
+              p.visibility = 'public'
+              or p.user_id = auth.uid()
+              or (
+                p.visibility = 'friends'
+                and auth.uid() is not null
+                and exists (
+                  select 1
+                  from public.follows f1
+                  where f1.follower_id = auth.uid()
+                    and f1.following_id = p.user_id
+                )
+                and exists (
+                  select 1
+                  from public.follows f2
+                  where f2.follower_id = p.user_id
+                    and f2.following_id = auth.uid()
+                )
+              )
+            )
+        )
       )
     )
   );
 
 
 -- ============================================================
--- 3. PUBLISH STORY GRAPH
+-- 5. CREATE HIDDEN STORY DRAFT
 -- ============================================================
 --
--- Creates the canonical posts/post_media graph through publish_post_draft()
--- and then adds the compatibility public.stories row.
+-- This implementation is deliberately independent from publish_post_draft().
+-- Lovable databases that missed Create Foundation can therefore create Story
+-- drafts without pulling in Poll/Location/Music schema first.
 -- ============================================================
 
-create or replace function public.publish_story_draft(
+create or replace function public.create_story_draft(
   p_payload jsonb
 )
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $publish_story_draft_function$
+as $create_story_draft_function$
 declare
   v_user uuid := auth.uid();
-  v_payload jsonb;
-  v_post_id uuid;
-  v_media_id uuid;
   v_media jsonb;
   v_kind text;
+  v_visibility text;
+  v_post_id uuid;
+  v_media_id uuid;
   v_story_id uuid;
+  v_storage_url text;
+  v_storage_bucket text;
+  v_storage_key text;
 begin
   if v_user is null then
     raise exception 'Autentifikatsiya talab qilinadi';
@@ -110,30 +299,99 @@ begin
 
   v_media := p_payload -> 'media' -> 0;
   v_kind := coalesce(v_media ->> 'kind', '');
+  v_visibility := coalesce(nullif(p_payload ->> 'visibility', ''), 'public');
 
   if v_kind not in ('image', 'video') then
     raise exception 'Story faqat rasm yoki video bo''lishi mumkin';
   end if;
 
-  if nullif(p_payload ->> 'scheduledAt', '') is not null then
-    raise exception 'Story scheduling hali qo''llanmaydi';
+  if v_visibility not in ('public', 'friends', 'private') then
+    raise exception 'Noto''g''ri visibility';
   end if;
 
-  v_payload :=
-    p_payload
-    || jsonb_build_object(
-      'postKind', 'story',
-      'scheduledAt', null
-    );
+  v_storage_url := nullif(v_media ->> 'storageUrl', '');
+  v_storage_bucket := nullif(v_media ->> 'storageBucket', '');
+  v_storage_key := nullif(v_media ->> 'storageKey', '');
 
-  v_post_id := public.publish_post_draft(v_payload);
+  if v_storage_url is null then
+    raise exception 'Story media manzili topilmadi';
+  end if;
 
-  select pm.id
-  into v_media_id
-  from public.post_media pm
-  where pm.post_id = v_post_id
-  order by pm.position asc
-  limit 1;
+  insert into public.posts (
+    user_id,
+    content,
+    media_urls,
+    media_type,
+    visibility,
+    post_kind,
+    status,
+    scheduled_at,
+    published_at,
+    edit_state
+  )
+  values (
+    v_user,
+    coalesce(p_payload ->> 'content', ''),
+    coalesce(
+      (
+        select array_agg(value order by ordinality)
+        from jsonb_array_elements_text(
+          coalesce(p_payload -> 'mediaUrls', '[]'::jsonb)
+        ) with ordinality as urls(value, ordinality)
+      ),
+      array[]::text[]
+    ),
+    v_kind,
+    v_visibility,
+    'story',
+    'draft',
+    null,
+    null,
+    p_payload -> 'editState'
+  )
+  returning id into v_post_id;
+
+  insert into public.post_media (
+    post_id,
+    position,
+    kind,
+    storage_url,
+    storage_bucket,
+    storage_key,
+    thumbnail_url,
+    thumbnail_bucket,
+    thumbnail_key,
+    mime_type,
+    file_name,
+    file_size,
+    width,
+    height,
+    duration_seconds,
+    aspect_ratio,
+    alt_text,
+    edit_state
+  )
+  values (
+    v_post_id,
+    0,
+    v_kind::public.media_kind,
+    v_storage_url,
+    v_storage_bucket,
+    v_storage_key,
+    nullif(v_media ->> 'thumbnailUrl', ''),
+    nullif(v_media ->> 'thumbnailBucket', ''),
+    nullif(v_media ->> 'thumbnailKey', ''),
+    nullif(v_media ->> 'mimeType', ''),
+    nullif(v_media ->> 'fileName', ''),
+    nullif(v_media ->> 'fileSize', '')::bigint,
+    nullif(v_media ->> 'width', '')::integer,
+    nullif(v_media ->> 'height', '')::integer,
+    nullif(v_media ->> 'durationSeconds', '')::numeric,
+    nullif(v_media ->> 'aspectRatio', ''),
+    nullif(v_media ->> 'altText', ''),
+    v_media -> 'editState'
+  )
+  returning id into v_media_id;
 
   insert into public.stories (
     user_id,
@@ -152,14 +410,14 @@ begin
     v_user,
     v_post_id,
     v_media_id,
-    v_media ->> 'storageUrl',
-    nullif(v_media ->> 'storageBucket', ''),
-    nullif(v_media ->> 'storageKey', ''),
+    v_storage_url,
+    v_storage_bucket,
+    v_storage_key,
     v_kind,
     nullif(p_payload ->> 'content', ''),
     nullif(v_media ->> 'durationSeconds', '')::numeric,
     now() + interval '24 hours',
-    true
+    false
   )
   returning id into v_story_id;
 
@@ -168,51 +426,6 @@ begin
     'postId', v_post_id,
     'mediaId', v_media_id
   );
-end;
-$publish_story_draft_function$;
-
-revoke all
-  on function public.publish_story_draft(jsonb)
-  from public, anon;
-
-grant execute
-  on function public.publish_story_draft(jsonb)
-  to authenticated;
-
-
--- ============================================================
--- 4. CREATE HIDDEN STORY DRAFT
--- ============================================================
---
--- StoryComposer uploads media first, then calls this RPC. The new story stays
--- hidden while the owner configures interactive stickers.
--- ============================================================
-
-create or replace function public.create_story_draft(
-  p_payload jsonb
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $create_story_draft_function$
-declare
-  v_result jsonb;
-  v_story_id uuid;
-begin
-  v_result := public.publish_story_draft(p_payload);
-  v_story_id := (v_result ->> 'storyId')::uuid;
-
-  update public.stories
-  set is_active = false
-  where id = v_story_id
-    and user_id = auth.uid();
-
-  if not found then
-    raise exception 'Story qoralamasi yaratilmadi';
-  end if;
-
-  return v_result;
 end;
 $create_story_draft_function$;
 
@@ -226,7 +439,7 @@ grant execute
 
 
 -- ============================================================
--- 5. ACTIVATE STORY DRAFT
+-- 6. ACTIVATE STORY DRAFT
 -- ============================================================
 
 create or replace function public.activate_story_draft(
@@ -270,6 +483,7 @@ begin
 
   update public.posts
   set
+    status = 'published',
     published_at = now(),
     updated_at = now()
   where id = v_post_id
@@ -289,7 +503,7 @@ grant execute
 
 
 -- ============================================================
--- 6. DISCARD HIDDEN STORY DRAFT
+-- 7. DISCARD STORY DRAFT
 -- ============================================================
 
 create or replace function public.discard_story_draft(
@@ -346,32 +560,494 @@ grant execute
 
 
 -- ============================================================
--- 7. FORCE POSTGREST SCHEMA CACHE REFRESH
+-- 8. STORY STICKER TYPE
 -- ============================================================
---
--- Supabase/PostgREST normally notices DDL automatically, but Lovable projects
--- can retain a stale function schema cache for a short period.
+
+do $story_sticker_type_bootstrap$
+begin
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where n.nspname = 'public'
+      and t.typname = 'story_sticker_type'
+  ) then
+    create type public.story_sticker_type as enum (
+      'poll',
+      'question',
+      'quiz',
+      'slider',
+      'location',
+      'music',
+      'mention',
+      'hashtag',
+      'link',
+      'countdown'
+    );
+  end if;
+end;
+$story_sticker_type_bootstrap$;
+
+
+-- ============================================================
+-- 9. STORY STICKERS + RESPONSES
+-- ============================================================
+
+create table if not exists public.story_stickers (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references public.posts(id) on delete cascade,
+  media_id uuid references public.post_media(id) on delete cascade,
+  type public.story_sticker_type not null,
+  x numeric not null default 0.5,
+  y numeric not null default 0.5,
+  scale numeric not null default 0.6,
+  rotation numeric not null default 0,
+  z integer not null default 0,
+  start_seconds numeric,
+  end_seconds numeric,
+  config jsonb not null default '{}'::jsonb,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  constraint story_stickers_position_check
+    check (x >= -0.5 and x <= 1.5 and y >= -0.5 and y <= 1.5),
+  constraint story_stickers_scale_check
+    check (scale > 0 and scale <= 3),
+  constraint story_stickers_window_check
+    check (
+      start_seconds is null
+      or end_seconds is null
+      or end_seconds > start_seconds
+    ),
+  constraint story_stickers_window_positive_check
+    check (
+      (start_seconds is null or start_seconds >= 0)
+      and (end_seconds is null or end_seconds >= 0)
+    )
+);
+
+create index if not exists story_stickers_post_idx
+  on public.story_stickers (post_id, z);
+
+create index if not exists story_stickers_media_idx
+  on public.story_stickers (media_id);
+
+create table if not exists public.story_sticker_responses (
+  id uuid primary key default gen_random_uuid(),
+  sticker_id uuid not null references public.story_stickers(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  option_index integer,
+  numeric_value numeric,
+  text_answer text,
+  created_at timestamptz not null default now(),
+  unique (sticker_id, user_id)
+);
+
+create index if not exists story_sticker_responses_sticker_idx
+  on public.story_sticker_responses (sticker_id);
+
+alter table public.story_stickers enable row level security;
+alter table public.story_sticker_responses enable row level security;
+
+drop policy if exists "story_stickers_visible"
+  on public.story_stickers;
+
+create policy "story_stickers_visible"
+  on public.story_stickers
+  for select
+  using (
+    exists (
+      select 1
+      from public.posts p
+      where p.id = story_stickers.post_id
+        and (
+          p.user_id = auth.uid()
+          or p.visibility = 'public'
+          or (
+            p.visibility = 'friends'
+            and auth.uid() is not null
+            and exists (
+              select 1
+              from public.follows f1
+              where f1.follower_id = auth.uid()
+                and f1.following_id = p.user_id
+            )
+            and exists (
+              select 1
+              from public.follows f2
+              where f2.follower_id = p.user_id
+                and f2.following_id = auth.uid()
+            )
+          )
+        )
+    )
+  );
+
+drop policy if exists "story_stickers_owner_write"
+  on public.story_stickers;
+
+create policy "story_stickers_owner_write"
+  on public.story_stickers
+  for all
+  using (
+    exists (
+      select 1
+      from public.posts p
+      where p.id = story_stickers.post_id
+        and p.user_id = auth.uid()
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from public.posts p
+      where p.id = story_stickers.post_id
+        and p.user_id = auth.uid()
+    )
+  );
+
+drop policy if exists "story_sticker_responses_read"
+  on public.story_sticker_responses;
+
+create policy "story_sticker_responses_read"
+  on public.story_sticker_responses
+  for select
+  using (
+    user_id = auth.uid()
+    or exists (
+      select 1
+      from public.story_stickers s
+      join public.posts p on p.id = s.post_id
+      where s.id = story_sticker_responses.sticker_id
+        and p.user_id = auth.uid()
+    )
+  );
+
+drop policy if exists "story_sticker_responses_write"
+  on public.story_sticker_responses;
+
+create policy "story_sticker_responses_write"
+  on public.story_sticker_responses
+  for all
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+
+-- ============================================================
+-- 10. VALIDATE STORY STICKER RESPONSE
+-- ============================================================
+
+create or replace function public.validate_story_sticker_response()
+returns trigger
+language plpgsql
+set search_path = public
+as $validate_story_sticker_response_function$
+declare
+  v_type public.story_sticker_type;
+  v_config jsonb;
+  v_options integer;
+begin
+  select type, config
+  into v_type, v_config
+  from public.story_stickers
+  where id = new.sticker_id;
+
+  if v_type is null then
+    raise exception 'Stiker topilmadi';
+  end if;
+
+  if v_type in ('poll', 'quiz') then
+    v_options := coalesce(jsonb_array_length(v_config -> 'options'), 0);
+
+    if new.option_index is null then
+      raise exception 'Variant tanlanishi kerak';
+    end if;
+
+    if new.option_index < 0 or new.option_index >= v_options then
+      raise exception 'Variant mavjud emas';
+    end if;
+
+    new.numeric_value := null;
+    new.text_answer := null;
+
+  elsif v_type = 'slider' then
+    if new.numeric_value is null
+       or new.numeric_value < 0
+       or new.numeric_value > 100 then
+      raise exception 'Slayder qiymati 0..100 oralig''ida bo''lishi kerak';
+    end if;
+
+    new.option_index := null;
+    new.text_answer := null;
+
+  elsif v_type = 'question' then
+    if new.text_answer is null
+       or length(btrim(new.text_answer)) = 0 then
+      raise exception 'Javob matni bo''sh bo''lmasligi kerak';
+    end if;
+
+    new.text_answer := left(btrim(new.text_answer), 280);
+    new.option_index := null;
+    new.numeric_value := null;
+
+  else
+    raise exception 'Bu stiker turi javob qabul qilmaydi';
+  end if;
+
+  return new;
+end;
+$validate_story_sticker_response_function$;
+
+drop trigger if exists validate_story_sticker_response_trigger
+  on public.story_sticker_responses;
+
+create trigger validate_story_sticker_response_trigger
+  before insert or update
+  on public.story_sticker_responses
+  for each row
+  execute function public.validate_story_sticker_response();
+
+
+-- ============================================================
+-- 11. RESPOND TO STORY STICKER
+-- ============================================================
+
+create or replace function public.respond_story_sticker(
+  p_sticker_id uuid,
+  p_option_index integer default null,
+  p_numeric_value numeric default null,
+  p_text_answer text default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $respond_story_sticker_function$
+declare
+  v_user uuid := auth.uid();
+  v_id uuid;
+  v_post_id uuid;
+begin
+  if v_user is null then
+    raise exception 'Avtorizatsiya talab qilinadi';
+  end if;
+
+  select s.post_id
+  into v_post_id
+  from public.story_stickers s
+  where s.id = p_sticker_id;
+
+  if v_post_id is null then
+    raise exception 'Stiker topilmadi';
+  end if;
+
+  insert into public.story_sticker_responses (
+    sticker_id,
+    user_id,
+    option_index,
+    numeric_value,
+    text_answer
+  )
+  values (
+    p_sticker_id,
+    v_user,
+    p_option_index,
+    p_numeric_value,
+    p_text_answer
+  )
+  on conflict (sticker_id, user_id)
+  do update set
+    option_index = excluded.option_index,
+    numeric_value = excluded.numeric_value,
+    text_answer = excluded.text_answer,
+    created_at = now()
+  returning id into v_id;
+
+  return v_id;
+end;
+$respond_story_sticker_function$;
+
+
+-- ============================================================
+-- 12. STORY STICKER RESULTS
+-- ============================================================
+
+create or replace function public.story_sticker_results(
+  p_sticker_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $story_sticker_results_function$
+declare
+  v_user uuid := auth.uid();
+  v_type public.story_sticker_type;
+  v_config jsonb;
+  v_is_owner boolean;
+  v_total integer;
+  v_result jsonb;
+begin
+  select
+    s.type,
+    s.config,
+    (p.user_id = v_user)
+  into
+    v_type,
+    v_config,
+    v_is_owner
+  from public.story_stickers s
+  join public.posts p on p.id = s.post_id
+  where s.id = p_sticker_id;
+
+  if v_type is null then
+    raise exception 'Stiker topilmadi';
+  end if;
+
+  select count(*)
+  into v_total
+  from public.story_sticker_responses
+  where sticker_id = p_sticker_id;
+
+  if v_type in ('poll', 'quiz') then
+    select jsonb_build_object(
+      'type', v_type,
+      'total', v_total,
+      'counts',
+        coalesce(
+          jsonb_object_agg(option_index::text, cnt),
+          '{}'::jsonb
+        ),
+      'myChoice',
+        (
+          select option_index
+          from public.story_sticker_responses
+          where sticker_id = p_sticker_id
+            and user_id = v_user
+        ),
+      'correctIndex',
+        case
+          when v_type = 'quiz'
+            then v_config -> 'correctIndex'
+          else null
+        end
+    )
+    into v_result
+    from (
+      select option_index, count(*) as cnt
+      from public.story_sticker_responses
+      where sticker_id = p_sticker_id
+      group by option_index
+    ) grouped;
+
+  elsif v_type = 'slider' then
+    select jsonb_build_object(
+      'type', 'slider',
+      'total', v_total,
+      'average', round(coalesce(avg(numeric_value), 0), 1),
+      'myValue',
+        (
+          select numeric_value
+          from public.story_sticker_responses
+          where sticker_id = p_sticker_id
+            and user_id = v_user
+        )
+    )
+    into v_result
+    from public.story_sticker_responses
+    where sticker_id = p_sticker_id;
+
+  elsif v_type = 'question' then
+    v_result := jsonb_build_object(
+      'type', 'question',
+      'total', v_total,
+      'answers',
+        case
+          when v_is_owner then (
+            select coalesce(
+              jsonb_agg(
+                jsonb_build_object(
+                  'userId', user_id,
+                  'text', text_answer,
+                  'createdAt', created_at
+                )
+                order by created_at desc
+              ),
+              '[]'::jsonb
+            )
+            from public.story_sticker_responses
+            where sticker_id = p_sticker_id
+          )
+          else '[]'::jsonb
+        end
+    );
+
+  else
+    v_result := jsonb_build_object(
+      'type', v_type,
+      'total', 0
+    );
+  end if;
+
+  return coalesce(
+    v_result,
+    jsonb_build_object(
+      'type', v_type,
+      'total', v_total
+    )
+  );
+end;
+$story_sticker_results_function$;
+
+revoke all
+  on function public.respond_story_sticker(
+    uuid,
+    integer,
+    numeric,
+    text
+  )
+  from public, anon;
+
+revoke all
+  on function public.story_sticker_results(uuid)
+  from public, anon;
+
+grant execute
+  on function public.respond_story_sticker(
+    uuid,
+    integer,
+    numeric,
+    text
+  )
+  to authenticated;
+
+grant execute
+  on function public.story_sticker_results(uuid)
+  to authenticated;
+
+
+-- ============================================================
+-- 13. POSTGREST SCHEMA CACHE + VERIFICATION
 -- ============================================================
 
 notify pgrst, 'reload schema';
 
-
--- ============================================================
--- 8. OPTIONAL VERIFICATION
--- ============================================================
+select
+  to_regclass('public.post_media') as post_media_table,
+  to_regclass('public.story_stickers') as story_stickers_table,
+  to_regclass('public.story_sticker_responses') as story_sticker_responses_table;
 
 select
   p.proname as function_name,
   pg_get_function_identity_arguments(p.oid) as arguments
 from pg_proc p
-join pg_namespace n
-  on n.oid = p.pronamespace
+join pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public'
   and p.proname in (
-    'publish_story_draft',
     'create_story_draft',
     'activate_story_draft',
-    'discard_story_draft'
+    'discard_story_draft',
+    'respond_story_sticker',
+    'story_sticker_results'
   )
 order by p.proname;
 
