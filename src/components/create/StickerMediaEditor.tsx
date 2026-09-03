@@ -3,6 +3,7 @@ import { Eraser, Sticker as StickerIcon } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -67,6 +68,9 @@ export function StickerMediaEditor({
           <div className="flex items-center gap-2">
             <StickerIcon className="h-4 w-4 text-primary" />
             <DialogTitle className="text-base">Stikerlar</DialogTitle>
+            <DialogDescription className="sr-only">
+              Media ustiga stikerlarni qo‘shish va tahrirlash.
+            </DialogDescription>
             <span className="ml-auto text-xs text-muted-foreground">
               {placements.length}/{MAX_STICKERS_PER_MEDIA}
             </span>

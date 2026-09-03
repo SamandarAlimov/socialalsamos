@@ -1,8 +1,9 @@
 import db from '@/lib/supabaseAny';
 import {
+  ensureStructuredPostTable,
   isMissingStructuredPostSchemaError,
-  readStructuredPostSchemaCapability,
   writeStructuredPostSchemaCapability,
+  writeStructuredPostTableCapability,
 } from '@/lib/structuredPostSchema';
 
 export interface PostMediaPreview {
@@ -22,12 +23,16 @@ export async function getStructuredPostMediaPreviewMap(
   const ids = Array.from(new Set(postIds.filter(Boolean)));
   const previews = new Map<string, PostMediaPreview>();
 
-  if (
-    ids.length === 0 ||
-    readStructuredPostSchemaCapability() === 'missing'
-  ) {
-    return previews;
-  }
+  if (ids.length === 0) return previews;
+
+  const schemaAvailable = await ensureStructuredPostTable(
+    'post_media',
+    async () => {
+      const { error } = await db.from('post_media').select('id').limit(1);
+      return { error };
+    },
+  );
+  if (!schemaAvailable) return previews;
 
   try {
     const { data, error } = await db
@@ -39,6 +44,7 @@ export async function getStructuredPostMediaPreviewMap(
 
     if (error) throw error;
     writeStructuredPostSchemaCapability('available');
+    writeStructuredPostTableCapability('post_media', 'available');
 
     for (const row of (data ?? []) as Array<{
       post_id: string;
@@ -58,6 +64,7 @@ export async function getStructuredPostMediaPreviewMap(
   } catch (error) {
     if (isMissingStructuredPostSchemaError(error)) {
       writeStructuredPostSchemaCapability('missing');
+      writeStructuredPostTableCapability('post_media', 'missing');
     } else {
       console.warn('Post media previewlarini yuklab bo‘lmadi:', error);
     }

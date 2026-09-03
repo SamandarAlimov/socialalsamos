@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { db } from '@/lib/db';
 import { resolveStorageUrl } from '@/lib/mediaUpload';
 import {
+  ensureStructuredPostTable,
   isMissingStructuredPostSchemaError,
   writeStructuredPostSchemaCapability,
+  writeStructuredPostTableCapability,
 } from '@/lib/structuredPostSchema';
 
 export interface PostMusicTrack {
@@ -45,7 +47,6 @@ function isHttpUrl(value: string): boolean {
  * chiqmasdi. Endi so'rov har doim bajariladi va faqat haqiqiy "jadval yo'q"
  * xatosida jimgina to'xtaydi.
  */
-let postMusicSchemaUnavailable = false;
 
 export function usePostMusic(postId: string | null, enabled = true) {
   const [music, setMusic] = useState<PostMusicItem | null>(null);
@@ -53,7 +54,20 @@ export function usePostMusic(postId: string | null, enabled = true) {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!postId || !enabled || postMusicSchemaUnavailable) {
+    if (!postId || !enabled) {
+      setMusic(null);
+      setIsLoading(false);
+      return;
+    }
+
+    const schemaAvailable = await ensureStructuredPostTable(
+      'post_music',
+      async () => {
+        const { error } = await db.from('post_music').select('id').limit(1);
+        return { error };
+      },
+    );
+    if (!schemaAvailable) {
       setMusic(null);
       setIsLoading(false);
       return;
@@ -73,6 +87,7 @@ export function usePostMusic(postId: string | null, enabled = true) {
 
       if (linkError) throw linkError;
       writeStructuredPostSchemaCapability('available');
+      writeStructuredPostTableCapability('post_music', 'available');
 
       const link = (links ?? [])[0];
       if (!link?.track_id) {
@@ -134,8 +149,7 @@ export function usePostMusic(postId: string | null, enabled = true) {
     } catch (loadError) {
       if (isMissingStructuredPostSchemaError(loadError)) {
         writeStructuredPostSchemaCapability('missing');
-        // Missing table'ni har bir feed posti uchun qayta so'ramaymiz.
-        postMusicSchemaUnavailable = true;
+        writeStructuredPostTableCapability('post_music', 'missing');
       } else {
         console.error('Post musiqasini yuklashda xatolik:', loadError);
         setError('Musiqani yuklab bo\u2018lmadi');

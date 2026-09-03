@@ -11,7 +11,14 @@ import {
   SunMedium,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
 import type { Attachment } from '@/hooks/usePostAttachments';
@@ -211,6 +218,9 @@ export function ImageEditor({
         <DialogHeader className="shrink-0 border-b border-border/60 bg-background/90 px-5 py-4 backdrop-blur">
           <div className="flex items-center justify-between gap-3">
             <DialogTitle className="text-base">Rasmni tahrirlash</DialogTitle>
+            <DialogDescription className="sr-only">
+              Rasmni crop, rotate, filter va boshqa vositalar bilan tahrirlash.
+            </DialogDescription>
             <Button
               type="button"
               variant="ghost"

@@ -1,5 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import {
   ArrowLeft,
   Heart,
@@ -253,6 +257,9 @@ export function PostViewModal({
               : 'max-w-3xl md:max-h-[88vh]',
           )}
         >
+          <DialogDescription className="sr-only">
+            Post tafsilotlari, media, amallar va izohlar.
+          </DialogDescription>
           <div
             className={cn(
               'flex min-h-0 flex-col',

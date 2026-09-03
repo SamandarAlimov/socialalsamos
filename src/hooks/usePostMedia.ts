@@ -3,9 +3,10 @@ import { db } from '@/lib/db';
 import type { MediaKind } from '@/lib/postComposer';
 import { resolveStorageUrl } from '@/lib/mediaUpload';
 import {
+  ensureStructuredPostTable,
   isMissingStructuredPostSchemaError,
-  readStructuredPostSchemaCapability,
   writeStructuredPostSchemaCapability,
+  writeStructuredPostTableCapability,
 } from '@/lib/structuredPostSchema';
 
 export interface PostMediaItem {
@@ -37,13 +38,26 @@ export interface PostMediaItem {
  * o'lchami, davomiyligi va tartibi yo'q edi.
  */
 export function usePostMedia(postId: string | null, enabled = true) {
-  const schemaEnabled = enabled && readStructuredPostSchemaCapability() !== 'missing';
+  const schemaEnabled = enabled;
   const [media, setMedia] = useState<PostMediaItem[]>([]);
   const [isLoading, setIsLoading] = useState(Boolean(postId) && schemaEnabled);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!postId || !schemaEnabled) {
+      setMedia([]);
+      setIsLoading(false);
+      return;
+    }
+
+    const schemaAvailable = await ensureStructuredPostTable(
+      'post_media',
+      async () => {
+        const { error } = await db.from('post_media').select('id').limit(1);
+        return { error };
+      },
+    );
+    if (!schemaAvailable) {
       setMedia([]);
       setIsLoading(false);
       return;
@@ -61,6 +75,7 @@ export function usePostMedia(postId: string | null, enabled = true) {
 
       if (queryError) throw queryError;
       writeStructuredPostSchemaCapability('available');
+      writeStructuredPostTableCapability('post_media', 'available');
 
       const rows = ((data ?? []) as PostMediaItem[]);
       const resolved = await Promise.all(
@@ -85,6 +100,7 @@ export function usePostMedia(postId: string | null, enabled = true) {
     } catch (loadError) {
       if (isMissingStructuredPostSchemaError(loadError)) {
         writeStructuredPostSchemaCapability('missing');
+        writeStructuredPostTableCapability('post_media', 'missing');
       } else {
         console.error('Post fayllarini yuklashda xatolik:', loadError);
         setError('Fayllarni yuklab bo\u2018lmadi');

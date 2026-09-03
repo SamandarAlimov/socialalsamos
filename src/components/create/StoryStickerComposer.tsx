@@ -19,6 +19,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -294,6 +295,9 @@ export function StoryStickerComposer({
       <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Interaktiv stikerlar</DialogTitle>
+          <DialogDescription className="sr-only">
+            Story ustiga interaktiv stikerlarni joylashtirish va sozlash.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 md:grid-cols-[minmax(0,320px)_1fr]">

@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -270,6 +271,9 @@ export function StickerStudio({
               </span>
               Stiker studiyasi
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Stiker yaratish va uning ko‘rinishini sozlash.
+            </DialogDescription>
 
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

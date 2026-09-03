@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { db } from '@/lib/db';
 import {
+  ensureStructuredPostTable,
   isMissingStructuredPostSchemaError,
   writeStructuredPostSchemaCapability,
+  writeStructuredPostTableCapability,
 } from '@/lib/structuredPostSchema';
 
 export interface PostLocation {
@@ -39,7 +41,6 @@ export function isLiveActive(location: Pick<PostLocation, 'mode' | 'live_until'>
  * matndagi eski "Current location" yorlig'i ko'rinardi. Endi o'qish hech
  * qachon to'silmaydi — bayroq faqat yozib boriladi.
  */
-let postLocationSchemaUnavailable = false;
 
 /**
  * Grid/feedlar uchun post locationlarni bitta query bilan yuklaydi.
@@ -51,7 +52,16 @@ export async function fetchPostLocations(
   const uniqueIds = Array.from(new Set(postIds.filter(Boolean)));
   const locations = new Map<string, PostLocation>();
 
-  if (uniqueIds.length === 0 || postLocationSchemaUnavailable) return locations;
+  if (uniqueIds.length === 0) return locations;
+
+  const schemaAvailable = await ensureStructuredPostTable(
+    'post_locations',
+    async () => {
+      const { error } = await db.from('post_locations').select('id').limit(1);
+      return { error };
+    },
+  );
+  if (!schemaAvailable) return locations;
 
   try {
     const { data, error } = await db
@@ -62,13 +72,14 @@ export async function fetchPostLocations(
     if (error) throw error;
 
     writeStructuredPostSchemaCapability('available');
+    writeStructuredPostTableCapability('post_locations', 'available');
     for (const row of (data ?? []) as PostLocation[]) {
       if (row?.post_id) locations.set(row.post_id, row);
     }
   } catch (error) {
     if (isMissingStructuredPostSchemaError(error)) {
       writeStructuredPostSchemaCapability('missing');
-      postLocationSchemaUnavailable = true;
+      writeStructuredPostTableCapability('post_locations', 'missing');
     } else {
       console.error('Post joylashuvlarini batch yuklashda xatolik:', error);
     }
@@ -82,7 +93,20 @@ export function usePostLocation(postId: string | null, enabled = true) {
   const [isLoading, setIsLoading] = useState(Boolean(postId) && enabled);
 
   const load = useCallback(async () => {
-    if (!postId || !enabled || postLocationSchemaUnavailable) {
+    if (!postId || !enabled) {
+      setLocation(null);
+      setIsLoading(false);
+      return;
+    }
+
+    const schemaAvailable = await ensureStructuredPostTable(
+      'post_locations',
+      async () => {
+        const { error } = await db.from('post_locations').select('id').limit(1);
+        return { error };
+      },
+    );
+    if (!schemaAvailable) {
       setLocation(null);
       setIsLoading(false);
       return;
@@ -98,13 +122,12 @@ export function usePostLocation(postId: string | null, enabled = true) {
 
       if (error) throw error;
       writeStructuredPostSchemaCapability('available');
+    writeStructuredPostTableCapability('post_locations', 'available');
       setLocation((data as PostLocation) ?? null);
     } catch (error) {
       if (isMissingStructuredPostSchemaError(error)) {
         writeStructuredPostSchemaCapability('missing');
-        // Jadval yo'q bo'lsa Home'dagi har bir post uchun yana 404 yubormaymiz.
-        // Bu faqat joriy JS runtime uchun; yangi deploy/reload yana tekshiradi.
-        postLocationSchemaUnavailable = true;
+        writeStructuredPostTableCapability('post_locations', 'missing');
       } else {
         console.error('Joylashuvni yuklashda xatolik:', error);
       }
