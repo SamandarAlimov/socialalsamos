@@ -4,6 +4,7 @@ import { AlertTriangle, ExternalLink, Flag, RotateCcw, Star, X } from 'lucide-re
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { UI_LAYER } from '@/lib/uiLayers';
 
 import { getApiBase, rateMiniApp, reportMiniApp, trackMiniAppEvent } from '../api';
 import {
@@ -140,7 +141,7 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
   const showFrame = step && (step.kind === 'embed' || step.kind === 'direct' || step.kind === 'proxy');
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-background">
+    <div className={cn('fixed inset-0 flex flex-col bg-background', UI_LAYER.immersive)}>
       <header className="flex items-center gap-2 border-b px-3 py-2">
         <Button size="icon" variant="ghost" onClick={onClose} aria-label="Yopish">
           <X className="h-5 w-5" />
