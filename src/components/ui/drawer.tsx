@@ -2,9 +2,7 @@ import * as React from "react";
 import { Drawer as DrawerPrimitive } from "vaul";
 
 import { cn } from "@/lib/utils";
-
-const DRAWER_OVERLAY_LAYER = "z-[6000]";
-const DRAWER_CONTENT_LAYER = "z-[6010]";
+import { UI_LAYER } from "@/lib/uiLayers";
 
 const Drawer = ({ shouldScaleBackground = true, ...props }: React.ComponentProps<typeof DrawerPrimitive.Root>) => (
   <DrawerPrimitive.Root shouldScaleBackground={shouldScaleBackground} {...props} />
@@ -23,7 +21,7 @@ const DrawerOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DrawerPrimitive.Overlay
     ref={ref}
-    className={cn("fixed inset-0 bg-black/80", DRAWER_OVERLAY_LAYER, className)}
+    className={cn("fixed inset-0 bg-black/80", UI_LAYER.modalOverlay, className)}
     {...props}
   />
 ));
@@ -39,7 +37,7 @@ const DrawerContent = React.forwardRef<
       ref={ref}
       className={cn(
         "fixed inset-x-0 bottom-0 mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background",
-        DRAWER_CONTENT_LAYER,
+        UI_LAYER.modalContent,
         className,
       )}
       {...props}
