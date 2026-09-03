@@ -20,6 +20,8 @@ export interface VideoPost {
   bookmarks_count: number;
   views_count: number;
   created_at: string;
+  hashtags?: string[] | null;
+  post_kind?: string | null;
   profile?: {
     id: string;
     username: string | null;
@@ -41,6 +43,8 @@ export interface VideoPost {
  * yaqinlashganda keyingisi yuklanadi.
  */
 const PAGE_SIZE = 12;
+const QUALITY_POOL_SIZE = 14;
+const GLOBAL_POOL_SIZE = 20;
 
 // `posts_user_id_fkey` nomi bazada bo'lmasa PostgREST butun so'rovni rad etadi
 // va Videolar sahifasi bo'sh qoladi. Shuning uchun embedsiz variant ham bor.
@@ -193,6 +197,79 @@ export function useVideoPosts() {
     return (rows ?? []) as unknown as VideoPost[];
   }, []);
 
+  const fetchQualityCandidates = useCallback(async (): Promise<VideoPost[]> => {
+    const cutoff = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
+
+    const { data: rows, error } = await runWithProfileEmbedFallback<PostRow>(
+      videoEmbedGuard,
+      (select) =>
+        supabase
+          .from('posts')
+          .select(select)
+          .eq('media_type', 'video')
+          .eq('visibility', 'public')
+          .gte('created_at', cutoff)
+          .order('likes_count', { ascending: false })
+          .order('comments_count', { ascending: false })
+          .order('views_count', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(QUALITY_POOL_SIZE) as unknown as PromiseLike<
+            EmbedQueryResult<PostRow>
+          >,
+      {
+        embedSelect: VIDEO_SELECT_WITH_PROFILE,
+        plainSelect: VIDEO_SELECT_PLAIN,
+      },
+    );
+
+    if (error) return [];
+    return (rows ?? []) as unknown as VideoPost[];
+  }, []);
+
+  const fetchGlobalRankCandidates = useCallback(async (): Promise<VideoPost[]> => {
+    try {
+      const { data: rankingRows, error: rankingError } = await db
+        .from('recommendation_global_rankings')
+        .select('post_id, score')
+        .eq('content_mode', 'video')
+        .order('score', { ascending: false })
+        .limit(GLOBAL_POOL_SIZE);
+
+      if (rankingError || !rankingRows?.length) return [];
+
+      const ids = rankingRows.map((row: any) => String(row.post_id)).filter(Boolean);
+      if (ids.length === 0) return [];
+
+      const { data: rows, error } = await runWithProfileEmbedFallback<PostRow>(
+        videoEmbedGuard,
+        (select) =>
+          supabase
+            .from('posts')
+            .select(select)
+            .in('id', ids)
+            .eq('media_type', 'video')
+            .eq('visibility', 'public') as unknown as PromiseLike<
+              EmbedQueryResult<PostRow>
+            >,
+        {
+          embedSelect: VIDEO_SELECT_WITH_PROFILE,
+          plainSelect: VIDEO_SELECT_PLAIN,
+        },
+      );
+
+      if (error) return [];
+
+      const byId = new Map(
+        ((rows ?? []) as unknown as VideoPost[]).map((video) => [video.id, video]),
+      );
+      return ids
+        .map((id) => byId.get(id))
+        .filter((video): video is VideoPost => Boolean(video));
+    } catch {
+      return [];
+    }
+  }, []);
+
   const fetchVideos = useCallback(async () => {
     // Faqat birinchi bootstrapda skeleton ko'rsatamiz. Auth token refresh,
     // manual refresh yoki background reconciliation player DOMini unmount qilmaydi.
@@ -200,14 +277,22 @@ export function useVideoPosts() {
     cursorRef.current = null;
 
     try {
-      const page = await fetchPage(null);
+      const [page, qualityPool, globalPool] = await Promise.all([
+        fetchPage(null),
+        fetchQualityCandidates(),
+        fetchGlobalRankCandidates(),
+      ]);
 
-      // Kursor deep-link aralashuvidan oldin, xom natijadan olinadi.
+      // Kursor faqat chronological pool bo'yicha yuradi.
       const last = page[page.length - 1];
       cursorRef.current = last ? last.created_at : null;
       setHasMore(page.length === PAGE_SIZE);
 
-      let data = page;
+      const merged = new Map<string, VideoPost>();
+      for (const video of [...page, ...qualityPool, ...globalPool]) {
+        if (!merged.has(video.id)) merged.set(video.id, video);
+      }
+      let data = Array.from(merged.values());
 
       // ── Deep-link: aynan so'ralgan video birinchi bo'lib ko'rsatiladi ──
       const deepLinkId = readDeepLinkVideoId();
@@ -250,7 +335,12 @@ export function useVideoPosts() {
       hasLoadedOnceRef.current = true;
       setIsLoading(false);
     }
-  }, [fetchPage, attachUserState]);
+  }, [
+    fetchPage,
+    fetchQualityCandidates,
+    fetchGlobalRankCandidates,
+    attachUserState,
+  ]);
 
   /** Keyingi sahifa. Foydalanuvchi ro'yxat oxiriga yaqinlashganda chaqiriladi. */
   const loadMore = useCallback(async () => {

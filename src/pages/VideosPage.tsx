@@ -11,6 +11,11 @@ import { SharePostDialog } from '@/components/SharePostDialog';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useVideoRecommendations } from '@/hooks/useVideoRecommendations';
+import {
+  getBrowserNavigationType,
+  shouldShowVideoDeepLinkBack,
+} from '@/lib/videoNavigation';
 import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { usePostViews } from '@/hooks/usePostViews';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
@@ -1000,6 +1005,12 @@ export default function VideosPage() {
     toggleBookmark,
     toggleFollow,
   } = useVideoPosts();
+  const {
+    feedVideos,
+    rankForContext,
+    isReady: recommendationReady,
+  } = useVideoRecommendations(videos);
+  const rankedVideos = feedVideos;
   const [activeIndex, setActiveIndex] = useState(0);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
@@ -1009,10 +1020,13 @@ export default function VideosPage() {
   const [likesVideoId, setLikesVideoId] = useState<string | null>(null);
   const [watchVideoId, setWatchVideoId] = useState<string | null>(null);
   const initialDeepLinkRef = useRef(
-    Boolean(
-      searchParams.get('v') ||
-        searchParams.get('post') ||
-        searchParams.get('id'),
+    shouldShowVideoDeepLinkBack(
+      Boolean(
+        searchParams.get('v') ||
+          searchParams.get('post') ||
+          searchParams.get('id'),
+      ),
+      getBrowserNavigationType(),
     ),
   );
   const [globalMuted, setGlobalMuted] = useState(true);
@@ -1038,8 +1052,8 @@ export default function VideosPage() {
   // spam qilmasligi uchun replace ishlatiladi.
   useEffect(() => {
     const currentVideo = watchVideoId
-      ? videos.find((item) => item.id === watchVideoId)
-      : videos[activeIndex];
+      ? rankedVideos.find((item) => item.id === watchVideoId)
+      : rankedVideos[activeIndex];
 
     if (!currentVideo?.id) return;
 
@@ -1069,7 +1083,7 @@ export default function VideosPage() {
       },
       { replace: true },
     );
-  }, [activeIndex, navigate, searchParams, videos, watchVideoId]);
+  }, [activeIndex, navigate, rankedVideos, searchParams, watchVideoId]);
 
   const handleBack = useCallback(() => {
     lightTap();
@@ -1108,7 +1122,7 @@ export default function VideosPage() {
   }, []);
 
   const goToVideoIndex = useCallback((index: number) => {
-    if (index < 0 || index >= videos.length) return;
+    if (index < 0 || index >= rankedVideos.length) return;
     const container = containerRef.current;
     setActiveIndex(index);
     mediumTap();
@@ -1126,11 +1140,11 @@ export default function VideosPage() {
     const itemHeight = container.clientHeight;
     const newIndex = Math.round(scrollTop / itemHeight);
 
-    if (newIndex !== activeIndex && newIndex >= 0 && newIndex < videos.length) {
+    if (newIndex !== activeIndex && newIndex >= 0 && newIndex < rankedVideos.length) {
       mediumTap();
       setActiveIndex(newIndex);
     }
-  }, [activeIndex, videos.length, mediumTap]);
+  }, [activeIndex, rankedVideos.length, mediumTap]);
 
   /*
     Cheksiz scroll: ro'yxat oxiriga yaqinlashganda keyingi sahifa yuklanadi.
@@ -1138,10 +1152,10 @@ export default function VideosPage() {
   */
   useEffect(() => {
     if (isLoading || !hasMore) return;
-    if (videos.length === 0) return;
-    if (activeIndex < videos.length - LOAD_MORE_THRESHOLD) return;
+    if (rankedVideos.length === 0) return;
+    if (activeIndex < rankedVideos.length - LOAD_MORE_THRESHOLD) return;
     void loadMore();
-  }, [activeIndex, videos.length, hasMore, isLoading, loadMore]);
+  }, [activeIndex, rankedVideos.length, hasMore, isLoading, loadMore]);
 
   // Swipe gesture handlers for mobile
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -1174,7 +1188,7 @@ export default function VideosPage() {
       setSwipeProgress(0);
       horizontalDelta.current = 0;
       verticalDelta.current = 0;
-      openProfile(videos[activeIndex]);
+      openProfile(rankedVideos[activeIndex]);
       return;
     }
 
@@ -1195,7 +1209,7 @@ export default function VideosPage() {
     const isQuickSwipe = timeElapsed < 300;
 
     if (Math.abs(swipeProgress) > swipeThreshold || (isQuickSwipe && Math.abs(swipeProgress) > 0.1)) {
-      if (swipeProgress < 0 && activeIndex < videos.length - 1) {
+      if (swipeProgress < 0 && activeIndex < rankedVideos.length - 1) {
         // Swipe up - next video
         const nextIndex = activeIndex + 1;
         setActiveIndex(nextIndex);
@@ -1218,7 +1232,7 @@ export default function VideosPage() {
     setSwipeProgress(0);
     horizontalDelta.current = 0;
     verticalDelta.current = 0;
-  }, [swipeProgress, activeIndex, videos, mediumTap, openProfile, isDeepLink, handleBack]);
+  }, [swipeProgress, activeIndex, rankedVideos, mediumTap, openProfile, isDeepLink, handleBack]);
 
   const openComments = (videoId: string) => {
     setSelectedVideoId(videoId);
@@ -1235,9 +1249,9 @@ export default function VideosPage() {
     setLikesDialogOpen(true);
   };
 
-  const selectedVideo = videos.find(v => v.id === selectedVideoId);
-  const shareVideo = videos.find(v => v.id === shareVideoId);
-  const likesVideo = videos.find(v => v.id === likesVideoId);
+  const selectedVideo = rankedVideos.find(v => v.id === selectedVideoId);
+  const shareVideo = rankedVideos.find(v => v.id === shareVideoId);
+  const likesVideo = rankedVideos.find(v => v.id === likesVideoId);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -1249,7 +1263,7 @@ export default function VideosPage() {
 
   // Watch view yopilganda feed o'sha videoga tenglashadi
   const closeWatchPanel = useCallback(() => {
-    const index = videos.findIndex(v => v.id === watchVideoId);
+    const index = rankedVideos.findIndex(v => v.id === watchVideoId);
     setWatchVideoId(null);
     if (index >= 0 && index !== activeIndex) {
       setActiveIndex(index);
@@ -1258,7 +1272,7 @@ export default function VideosPage() {
         behavior: 'auto',
       });
     }
-  }, [videos, watchVideoId, activeIndex]);
+  }, [rankedVideos, watchVideoId, activeIndex]);
 
   // Skeleton va empty holatlarida ham tugma kerak, aks holda yuklanish
   // paytida sahifadan chiqib bo'lmaydi.
@@ -1273,7 +1287,7 @@ export default function VideosPage() {
     </div>
   ) : null;
 
-  if (isLoading) {
+  if (isLoading || !recommendationReady) {
     return (
       <div className={cn(
         "relative bg-black flex items-center justify-center",
@@ -1285,7 +1299,7 @@ export default function VideosPage() {
     );
   }
 
-  if (videos.length === 0) {
+  if (rankedVideos.length === 0) {
     return (
       <div className={cn(
         "relative bg-black",
@@ -1326,7 +1340,7 @@ export default function VideosPage() {
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        {videos.map((video, index) => {
+        {rankedVideos.map((video, index) => {
           // Virtualizatsiya: faqat aktiv va uning qo'shnilari haqiqiy pleyer.
           const isMounted = Math.abs(index - activeIndex) <= RENDER_WINDOW;
 
@@ -1363,7 +1377,7 @@ export default function VideosPage() {
       {/* YouTube uslubidagi watch ekrani: tepada video, pastda boshqa videolar */}
       {watchVideoId && (
         <VideoWatchPanel
-          videos={videos}
+          videos={rankForContext(watchVideoId)}
           activeVideoId={watchVideoId}
           onSelectVideo={(id) => setWatchVideoId(id)}
           onClose={closeWatchPanel}

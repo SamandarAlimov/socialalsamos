@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from 'react';
 import db from '@/lib/supabaseAny';
+import { useAuth } from '@/contexts/AuthContext';
 
 /**
  * Video ko'rish vaqtini (watch-time) va videoning qaysi qismlari ko'rilganini
@@ -40,6 +41,7 @@ type WatchSession = {
   maxPositionSeconds: number;
   lastTime: number | null;
   completed: boolean;
+  userId: string | null;
 };
 
 const sessions = new Map<string, WatchSession>();
@@ -78,7 +80,11 @@ function isUnavailableError(error: unknown): boolean {
   );
 }
 
-function ensureSession(postId: string, durationSeconds: number | null): WatchSession {
+function ensureSession(
+  postId: string,
+  durationSeconds: number | null,
+  userId: string | null,
+): WatchSession {
   const existing = sessions.get(postId);
   if (existing) {
     if (existing.durationSeconds === null && durationSeconds) {
@@ -95,6 +101,7 @@ function ensureSession(postId: string, durationSeconds: number | null): WatchSes
     maxPositionSeconds: 0,
     lastTime: null,
     completed: false,
+    userId,
   };
 
   sessions.set(postId, created);
@@ -121,6 +128,54 @@ async function sendSession(session: WatchSession): Promise<void> {
     }
 
     capability = 'available';
+
+    if (session.userId) {
+      const duration = session.durationSeconds ?? 0;
+      const retention =
+        duration > 0
+          ? Math.min(2.5, session.watchedSeconds / duration)
+          : Math.min(1.25, session.watchedSeconds / 30);
+
+      let eventType = 'video_watch';
+      let weight = 0.4;
+
+      if (session.completed) {
+        eventType = 'video_complete';
+        weight = 6.4;
+      } else if (retention >= 0.75) {
+        eventType = 'video_high_retention';
+        weight = 4.2;
+      } else if (retention < 0.1 && session.watchedSeconds < 4.5) {
+        eventType = 'video_quick_skip';
+        weight = -3.4;
+      } else if (retention < 0.2) {
+        eventType = 'video_low_retention';
+        weight = -1.8;
+      } else if (retention >= 0.5) {
+        weight = 2.7;
+      } else if (retention >= 0.25) {
+        weight = 1.1;
+      }
+
+      try {
+        await db.from('recommendation_events').insert({
+          user_id: session.userId,
+          post_id: session.postId,
+          event_type: eventType,
+          source: 'videos',
+          weight,
+          dwell_ms: Math.round(session.watchedSeconds * 1000),
+          metadata: {
+            retention,
+            watched_seconds: session.watchedSeconds,
+            duration_seconds: session.durationSeconds,
+            completed: session.completed,
+          },
+        });
+      } catch {
+        // Recommendation event stream optional; watch session is authoritative.
+      }
+    }
   } catch {
     // Statistika kritik emas - jimgina o'tkazib yuboriladi.
   }
@@ -140,6 +195,9 @@ function flushAllSessions(): void {
 }
 
 export function useVideoWatchTracker() {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+
   /**
    * `onTimeUpdate` da chaqiriladi. Ketma-ket kelgan kichik qadamlar sof
    * ko'rish vaqtiga qo'shiladi, sakrashlar esa faqat pozitsiyani yangilaydi.
@@ -154,7 +212,7 @@ export function useVideoWatchTracker() {
           ? durationSeconds
           : null;
 
-      const session = ensureSession(postId, duration);
+      const session = ensureSession(postId, duration, userId);
       const previous = session.lastTime;
       session.lastTime = currentTime;
 
@@ -186,7 +244,7 @@ export function useVideoWatchTracker() {
         }
       }
     },
-    [],
+    [userId],
   );
 
   /** Video oxiriga yetdi (`onEnded`). */
