@@ -120,7 +120,7 @@ export function OrdersView({ onProductSelect }: OrdersViewProps) {
               role="button"
               tabIndex={0}
               aria-label={`Buyurtma ${shortOrderNumber(order)}`}
-              className="p-4 rounded-2xl bg-card/50 backdrop-blur-sm border border-border/30 cursor-pointer hover:border-primary/20 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              className="p-4 rounded-2xl bg-card/50 backdrop-blur-sm border border-border/30 cursor-pointer hover:border-foreground/20 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40"
               onClick={() => setSelectedOrder(order)}
               onKeyDown={e => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -181,7 +181,7 @@ export function OrdersView({ onProductSelect }: OrdersViewProps) {
                   <p className="text-xs text-muted-foreground">{marketplaceUz.orders.itemCount(order.items.length)}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-bold text-primary tabular-nums">
+                  <p className="font-bold text-foreground tabular-nums">
                     {formatPrice(order.total, order.currency)}
                   </p>
                 </div>
@@ -254,7 +254,7 @@ function OrderDetailSheet({
                 <div className="relative flex items-start justify-between">
                   <div className="absolute left-[18px] right-[18px] top-[18px] h-0.5 bg-muted rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-primary transition-all duration-500"
+                      className="h-full bg-foreground transition-all duration-500"
                       style={{ width: `${progress}%` }}
                     />
                   </div>
@@ -268,9 +268,9 @@ function OrderDetailSheet({
                         <div className={cn(
                           'w-9 h-9 rounded-full flex items-center justify-center transition-all',
                           isCurrent
-                            ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/30'
+                            ? 'bg-foreground text-background shadow-lg shadow-black/15'
                             : isActive
-                              ? 'bg-primary/20 text-primary'
+                              ? 'bg-foreground/20 text-primary'
                               : 'bg-muted text-muted-foreground',
                         )}>
                           <StepIcon className="h-4 w-4" />
@@ -311,7 +311,7 @@ function OrderDetailSheet({
                   key={item.id}
                   className={cn(
                     'flex gap-3 p-3 rounded-xl bg-muted/20 border border-border/20',
-                    onProductSelect && 'cursor-pointer hover:border-primary/20 transition-colors',
+                    onProductSelect && 'cursor-pointer hover:border-foreground/20 transition-colors',
                   )}
                   onClick={() => onProductSelect?.(item.product_id)}
                 >
@@ -328,7 +328,7 @@ function OrderDetailSheet({
                     <p className="text-xs text-muted-foreground tabular-nums">
                       {item.quantity} × {formatPrice(item.price, order.currency)}
                     </p>
-                    <p className="text-sm font-bold text-primary mt-1 tabular-nums">
+                    <p className="text-sm font-bold text-foreground mt-1 tabular-nums">
                       {formatPrice(item.total, order.currency)}
                     </p>
                   </div>
@@ -339,10 +339,10 @@ function OrderDetailSheet({
             {/* Seller */}
             {order.seller && (
               <div className="p-3 rounded-xl bg-muted/20 border border-border/20 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center overflow-hidden">
+                <div className="w-10 h-10 rounded-xl bg-foreground/10 flex items-center justify-center overflow-hidden">
                   {order.seller.logo_url
                     ? <Thumb url={order.seller.logo_url} alt={order.seller.business_name} />
-                    : <Package className="h-5 w-5 text-primary" />}
+                    : <Package className="h-5 w-5 text-foreground" />}
                 </div>
                 <div>
                   <p className="text-sm font-medium">{order.seller.business_name}</p>
@@ -355,7 +355,7 @@ function OrderDetailSheet({
             {order.shipping_address && (
               <div className="p-3 rounded-xl bg-muted/20 border border-border/20 space-y-1">
                 <div className="flex items-center gap-2 text-sm font-medium">
-                  <MapPin className="h-4 w-4 text-primary" />
+                  <MapPin className="h-4 w-4 text-foreground" />
                   {marketplaceUz.orders.deliveryAddress}
                 </div>
                 <p className="text-sm text-muted-foreground">
@@ -383,7 +383,7 @@ function OrderDetailSheet({
               <div className="h-px bg-border/30" />
               <div className="flex justify-between font-bold">
                 <span>{marketplaceUz.orders.total}</span>
-                <span className="text-primary tabular-nums">{formatPrice(order.total, order.currency)}</span>
+                <span className="text-foreground tabular-nums">{formatPrice(order.total, order.currency)}</span>
               </div>
             </div>
 
