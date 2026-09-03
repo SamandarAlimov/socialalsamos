@@ -40,6 +40,7 @@ export interface MediaFrameProps {
   onTouchStart?: React.TouchEventHandler<HTMLDivElement>;
   onTouchMove?: React.TouchEventHandler<HTMLDivElement>;
   onTouchEnd?: React.TouchEventHandler<HTMLDivElement>;
+  onTouchCancel?: React.TouchEventHandler<HTMLDivElement>;
   onDoubleClick?: React.MouseEventHandler<HTMLDivElement>;
   onWheel?: React.WheelEventHandler<HTMLDivElement>;
   containerRef?: React.Ref<HTMLDivElement>;
@@ -74,6 +75,7 @@ export function MediaFrame({
   onTouchStart,
   onTouchMove,
   onTouchEnd,
+  onTouchCancel,
   onDoubleClick,
   onWheel,
   containerRef,
@@ -96,6 +98,7 @@ export function MediaFrame({
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
+      onTouchCancel={onTouchCancel}
       onDoubleClick={onDoubleClick}
       onWheel={onWheel}
     >
