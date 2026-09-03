@@ -77,6 +77,18 @@ begin
     new.tags := array[]::text[];
   end if;
 
+  if new.hashtags is null then
+    new.hashtags := array[]::text[];
+  end if;
+
+  if new.effects_used is null then
+    new.effects_used := array[]::text[];
+  end if;
+
+  if new.mentioned_users is null then
+    new.mentioned_users := array[]::text[];
+  end if;
+
   return new;
 end;
 $normalize_posts_tags_function$;
@@ -85,15 +97,22 @@ drop trigger if exists aaa_normalize_posts_tags_before_legacy_triggers
   on public.posts;
 
 create trigger aaa_normalize_posts_tags_before_legacy_triggers
-  before insert or update of tags
+  before insert or update
   on public.posts
   for each row
   execute function public.normalize_posts_tags_before_legacy_triggers();
 
 -- Repair existing NULL rows too, so future UPDATE triggers are safe.
 update public.posts
-set tags = array[]::text[]
-where tags is null;
+set
+  tags = coalesce(tags, array[]::text[]),
+  hashtags = coalesce(hashtags, array[]::text[]),
+  effects_used = coalesce(effects_used, array[]::text[]),
+  mentioned_users = coalesce(mentioned_users, array[]::text[])
+where tags is null
+   or hashtags is null
+   or effects_used is null
+   or mentioned_users is null;
 
 
 -- ============================================================
@@ -371,6 +390,9 @@ begin
     media_type,
     visibility,
     tags,
+    hashtags,
+    effects_used,
+    mentioned_users,
     post_kind,
     status,
     scheduled_at,
@@ -391,6 +413,9 @@ begin
     ),
     v_kind,
     v_visibility,
+    array[]::text[],
+    array[]::text[],
+    array[]::text[],
     array[]::text[],
     'story',
     'draft',
