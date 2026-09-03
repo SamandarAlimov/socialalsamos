@@ -12,7 +12,7 @@ interface SEOProps {
 
 const SITE_URL = 'https://www.alsamos.com';
 const DEFAULT_IMAGE = `${SITE_URL}/apple-touch-icon.png`;
-const DEFAULT_DESC = 'Alsamos — ulaning, ulashing, kashf eting. Zamonaviy ijtimoiy tarmoq: xabarlar, hikoyalar, jonli efirlar, marketplace.';
+const DEFAULT_DESC = 'Alsamos — xabarlar, hamjamiyatlar, videolar, marketplace, xarita, to‘lovlar, AI va mini ilovalarni birlashtirgan superapp.';
 
 export function SEO({
   title,
@@ -23,7 +23,11 @@ export function SEO({
   noindex,
 }: SEOProps) {
   const location = useLocation();
-  const fullTitle = title ? `${title} • Alsamos` : 'Alsamos';
+  const fullTitle = title
+    ? /alsamos/i.test(title)
+      ? title
+      : `${title} • Alsamos`
+    : 'Alsamos — Superapp';
   const url = canonical || `${SITE_URL}${location.pathname}`;
   const img = image.startsWith('http') ? image : `${SITE_URL}${image}`;
 
