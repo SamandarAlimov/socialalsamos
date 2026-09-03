@@ -33,6 +33,9 @@ export function MessageContent({ content, isMine, className }: MessageContentPro
     return Array.from(new Set(found));
   }, [content, article, album]);
 
+  const singleLinkOnly =
+    links.length === 1 && content.trim().replace(/[\u200B-\u200D\uFEFF]/g, '') === links[0];
+
   // Maqola xabari - alohida karta va to'liq o'qish oynasi
   if (article) {
     return (
@@ -53,20 +56,28 @@ export function MessageContent({ content, isMine, className }: MessageContentPro
 
   return (
     <div className={cn('min-w-0 max-w-full space-y-1.5', className)}>
-      {/* Matn har doim ko'rinadi: havola ham to'liq holda, bosiladigan ko'k link sifatida */}
-      <div
-        className={cn(
-          'min-w-0 max-w-full space-y-2 text-[15px] leading-[1.35]',
-          isMine ? '[&_blockquote]:border-bubble-own-accent/60' : ''
-        )}
-        style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
-      >
-        <FormattedBlocks text={content} emojiSize={20} className="space-y-2" />
-      </div>
+      {!singleLinkOnly && (
+        <div
+          className={cn(
+            'min-w-0 max-w-full space-y-2 text-[15px] leading-[1.35]',
+            isMine ? '[&_blockquote]:border-bubble-own-accent/60' : ''
+          )}
+          style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
+        >
+          <FormattedBlocks text={content} emojiSize={20} className="space-y-2" />
+        </div>
+      )}
 
-      {/* Telegramdagidek faqat birinchi havola uchun karta */}
+      {/* Single-link messages keep the URL inside the preview so the bubble width
+          follows the media instead of stretching across the chat. */}
       {links.slice(0, 1).map((url, index) => (
-        <TelegramLinkPreview key={index} url={url} isMine={isMine} className="mt-1" />
+        <TelegramLinkPreview
+          key={index}
+          url={url}
+          isMine={isMine}
+          showUrl={singleLinkOnly}
+          className={singleLinkOnly ? undefined : 'mt-1'}
+        />
       ))}
     </div>
   );
