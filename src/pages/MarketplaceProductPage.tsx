@@ -185,7 +185,7 @@ export default function MarketplaceProductPage() {
   }
 
   return (
-    <>
+    <div className="marketplace-neutral">
       <ProductDetail
         product={product}
         onClose={goBack}
@@ -216,6 +216,6 @@ export default function MarketplaceProductPage() {
           void refreshCart();
         }}
       />
-    </>
+    </div>
   );
 }
