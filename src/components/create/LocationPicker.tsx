@@ -1,16 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
+  Banknote,
   Check,
+  CircleParking,
+  Coffee,
   Crosshair,
+  Fuel,
+  Landmark,
   Loader2,
   LocateFixed,
   MapPinned,
   MapPin,
+  Navigation,
+  Pill,
   Radio,
   Search,
+  Store,
+  UtensilsCrossed,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -25,6 +35,7 @@ import {
 } from '@/lib/mapPlaces';
 import type { PostLocationInput } from '@/lib/postMeta';
 import { reverseGeocode, type ResolvedAddress } from '@/lib/reverseGeocode';
+import { UI_LAYER } from '@/lib/uiLayers';
 
 interface LocationPickerProps {
   open: boolean;
@@ -42,7 +53,7 @@ const PIN_ICON = L.divIcon({
   className: 'alsamos-map-pin',
   html: [
     '<span style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;transform:translate(-50%,-100%)">',
-    '<svg viewBox="0 0 24 24" width="34" height="34" fill="#ef4444" stroke="#ffffff" stroke-width="1.5">',
+    '<svg viewBox="0 0 24 24" width="34" height="34" fill="#2563eb" stroke="#ffffff" stroke-width="1.6" style="filter:drop-shadow(0 4px 7px rgba(15,23,42,.28))">',
     '<path d="M12 2c-3.9 0-7 3.1-7 7 0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7z"/>',
     '<circle cx="12" cy="9" r="2.4" fill="#ffffff" stroke="none"/>',
     '</svg></span>',
@@ -62,6 +73,31 @@ const QUICK_CATEGORIES = PLACE_CATEGORIES.filter((category) =>
     category.id,
   ),
 );
+
+function categoryIcon(categoryId?: PlaceCategoryId | null) {
+  switch (categoryId) {
+    case 'restaurant':
+      return UtensilsCrossed;
+    case 'cafe':
+      return Coffee;
+    case 'fuel':
+      return Fuel;
+    case 'pharmacy':
+      return Pill;
+    case 'market':
+    case 'supermarket':
+      return Store;
+    case 'mosque':
+      return Landmark;
+    case 'parking':
+      return CircleParking;
+    case 'atm':
+    case 'bank':
+      return Banknote;
+    default:
+      return MapPin;
+  }
+}
 
 function MapClickHandler({
   enabled,
@@ -179,6 +215,23 @@ export function LocationPicker({
   useEffect(() => {
     if (open && !myCoords) locateMe();
   }, [locateMe, myCoords, open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [onClose, open]);
 
   useEffect(() => {
     if (!open || mode !== 'place' || !myCoords) {
@@ -473,312 +526,407 @@ export function LocationPicker({
 
   if (!open) return null;
 
-  return (
-    <div className="fixed inset-0 z-[60] flex h-[100dvh] min-h-0 flex-col bg-background">
-      <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-3">
-        <h2 className="text-base font-semibold">Joylashuv</h2>
+  const picker = (
+    <div
+      className={cn(
+        'fixed inset-0 flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-background',
+        UI_LAYER.immersive,
+      )}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Joylashuvni tanlash"
+    >
+      <header className="flex shrink-0 items-center justify-between border-b border-border/60 bg-background/95 px-4 py-3 backdrop-blur-xl sm:px-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
+            <MapPinned className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="truncate text-[15px] font-semibold tracking-[-0.01em] sm:text-base">
+              Joylashuvni tanlang
+            </h2>
+            <p className="mt-0.5 hidden text-[11px] text-muted-foreground sm:block">
+              Joy, aniq nuqta yoki jonli lokatsiyani postga qo‘shing
+            </p>
+          </div>
+        </div>
+
         <button
           type="button"
           onClick={onClose}
           aria-label="Yopish"
-          className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted"
+          title="Yopish (Esc)"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/60 bg-card text-muted-foreground shadow-sm transition hover:bg-muted hover:text-foreground active:scale-95"
         >
-          <X className="h-5 w-5" />
+          <X className="h-[18px] w-[18px]" />
         </button>
+      </header>
+
+      <div className="shrink-0 border-b border-border/50 bg-background/95 px-3 py-2.5 sm:px-5">
+        <div className="mx-auto grid max-w-5xl grid-cols-3 gap-1.5 rounded-2xl border border-border/50 bg-muted/35 p-1.5">
+          {([
+            ['place', 'Joy', 'Yaqin joylar', MapPin],
+            ['pin', 'Aniq pin', 'Xaritadan belgilang', MapPinned],
+            ['live', 'Jonli', 'Real vaqt', Radio],
+          ] as const).map(([id, label, hint, Icon]) => {
+            const active = mode === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  setMode(id);
+                  setSelectedPlace(null);
+                  setPin(null);
+                  setPinLabel(null);
+                }}
+                className={cn(
+                  'flex min-w-0 items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-left transition-all duration-200 sm:px-3',
+                  active
+                    ? 'bg-background text-foreground shadow-sm ring-1 ring-border/60'
+                    : 'text-muted-foreground hover:bg-background/55 hover:text-foreground',
+                )}
+              >
+                <span
+                  className={cn(
+                    'flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors',
+                    active
+                      ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                      : 'bg-background/70 text-muted-foreground',
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-xs font-semibold sm:text-[13px]">{label}</span>
+                  <span className="hidden truncate text-[10px] text-muted-foreground md:block">{hint}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      <div className="grid shrink-0 grid-cols-3 gap-2 px-4 py-3">
-        {([
-          ['place', 'Joy', MapPin],
-          ['pin', 'Aniq pin', MapPinned],
-          ['live', 'Jonli', Radio],
-        ] as const).map(([id, label, Icon]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => {
-              setMode(id);
-              setSelectedPlace(null);
-              setPin(null);
-              setPinLabel(null);
-            }}
-            className={cn(
-              'flex items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-xs font-medium transition',
-              mode === id
-                ? 'border-foreground/25 bg-muted text-foreground'
-                : 'border-border/60 text-muted-foreground hover:bg-muted',
+      <div className="flex min-h-0 flex-1 flex-col bg-muted/[0.14]">
+        <div className="relative mx-3 mt-3 h-[31dvh] min-h-[220px] shrink-0 overflow-hidden rounded-[24px] border border-border/60 bg-muted shadow-sm sm:mx-5 sm:h-[34dvh]">
+          <MapContainer
+            center={[center.latitude, center.longitude]}
+            zoom={15}
+            scrollWheelZoom
+            className="h-full w-full"
+            attributionControl={false}
+          >
+            <TileLayer url={TILE_URL} maxZoom={19} />
+            <MapCenterSync latitude={center.latitude} longitude={center.longitude} />
+            <MapClickHandler enabled={mode !== 'live'} onPick={handleMapPick} />
+            {mode === 'place' && selectedPlace && (
+              <Marker
+                position={[selectedPlace.latitude, selectedPlace.longitude]}
+                icon={PIN_ICON}
+              />
             )}
-          >
-            <Icon className="h-4 w-4" />
-            {label}
-          </button>
-        ))}
-      </div>
+            {mode === 'pin' && pin && (
+              <Marker position={[pin.latitude, pin.longitude]} icon={PIN_ICON} />
+            )}
+            {mode === 'live' && myCoords && (
+              <Marker position={[myCoords.latitude, myCoords.longitude]} icon={PIN_ICON} />
+            )}
+          </MapContainer>
 
-      <div className="relative h-[38dvh] min-h-[220px] shrink-0 overflow-hidden border-y border-border/60">
-        <MapContainer
-          center={[center.latitude, center.longitude]}
-          zoom={15}
-          scrollWheelZoom
-          className="h-full w-full"
-          attributionControl={false}
-        >
-          <TileLayer url={TILE_URL} maxZoom={19} />
-          <MapCenterSync latitude={center.latitude} longitude={center.longitude} />
-          <MapClickHandler enabled={mode !== 'live'} onPick={handleMapPick} />
-          {mode === 'place' && selectedPlace && (
-            <Marker
-              position={[selectedPlace.latitude, selectedPlace.longitude]}
-              icon={PIN_ICON}
-            />
-          )}
-          {mode === 'pin' && pin && <Marker position={[pin.latitude, pin.longitude]} icon={PIN_ICON} />}
-          {mode === 'live' && myCoords && (
-            <Marker position={[myCoords.latitude, myCoords.longitude]} icon={PIN_ICON} />
-          )}
-        </MapContainer>
-
-        <button
-          type="button"
-          onClick={locateMe}
-          aria-label="Mening joylashuvim"
-          className="absolute bottom-3 right-3 z-[500] flex h-10 w-10 items-center justify-center rounded-full bg-background/95 shadow-lg"
-        >
-          {isLocating ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Crosshair className="h-4 w-4" />
-          )}
-        </button>
-
-        {mode !== 'live' && (
-          <p className="absolute left-3 top-3 z-[500] rounded-full bg-background/90 px-2.5 py-1 text-[11px] text-muted-foreground shadow">
-            {mode === 'place' ? 'Joyni bosib tanlang' : 'Aniq nuqtani belgilang'}
-          </p>
-        )}
-      </div>
-
-      {selectionLabel && (
-        <div className="mx-4 mt-3 flex shrink-0 items-center gap-3 rounded-xl border border-primary/35 bg-primary/5 p-3">
-          {mode === 'place' ? (
-            <MapPin className="h-5 w-5 shrink-0 text-primary" />
-          ) : (
-            <LocateFixed className="h-5 w-5 shrink-0 text-primary" />
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{selectionLabel.title}</p>
-            <p className="truncate text-xs text-muted-foreground">{selectionLabel.subtitle}</p>
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-[500] flex items-start justify-between gap-3 p-3">
+            {mode !== 'live' ? (
+              <div className="flex items-center gap-2 rounded-full border border-white/50 bg-background/90 px-3 py-1.5 text-[11px] font-medium text-foreground shadow-lg backdrop-blur-xl">
+                <MapPin className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                {mode === 'place' ? 'Xaritadan joyni tanlang' : 'Aniq nuqtani belgilang'}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 rounded-full border border-white/50 bg-background/90 px-3 py-1.5 text-[11px] font-medium text-foreground shadow-lg backdrop-blur-xl">
+                <Radio className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                Jonli joylashuv
+              </div>
+            )}
           </div>
+
           <button
             type="button"
-            onClick={handleConfirmMapSelection}
-            disabled={isResolvingPin || (mode === 'place' && !selectedPlace)}
-            className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+            onClick={locateMe}
+            aria-label="Mening joylashuvim"
+            title="Mening joylashuvim"
+            className="absolute bottom-3 right-3 z-[500] flex h-11 w-11 items-center justify-center rounded-2xl border border-border/60 bg-background/95 text-foreground shadow-xl backdrop-blur-xl transition hover:bg-background active:scale-95"
           >
-            <Check className="h-4 w-4" />
-            Tanlash
+            {isLocating ? (
+              <Loader2 className="h-[18px] w-[18px] animate-spin text-blue-600 dark:text-blue-400" />
+            ) : (
+              <Crosshair className="h-[18px] w-[18px]" />
+            )}
           </button>
         </div>
-      )}
 
-      {locationError && <p className="shrink-0 px-4 pt-3 text-xs text-destructive">{locationError}</p>}
+        {selectionLabel && (
+          <div className="mx-3 mt-3 flex shrink-0 items-center gap-3 rounded-2xl border border-blue-500/20 bg-blue-500/[0.055] p-3 shadow-sm sm:mx-5">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
+              {mode === 'place' ? (
+                <MapPin className="h-[18px] w-[18px]" />
+              ) : (
+                <LocateFixed className="h-[18px] w-[18px]" />
+              )}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">{selectionLabel.title}</p>
+              <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                {selectionLabel.subtitle}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleConfirmMapSelection}
+              disabled={isResolvingPin || (mode === 'place' && !selectedPlace)}
+              className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-foreground px-3.5 text-xs font-semibold text-background shadow-sm transition hover:opacity-90 active:scale-[0.98] disabled:opacity-50"
+            >
+              <Check className="h-4 w-4" />
+              Tanlash
+            </button>
+          </div>
+        )}
 
-      {mode === 'place' ? (
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="shrink-0 space-y-3 px-4 pt-3">
-            <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/40 px-3">
-              <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Joy nomini qidirish..."
-                className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-              />
-              {isSearching && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-              {query && !isSearching && (
-                <button type="button" onClick={() => setQuery('')} aria-label="Tozalash">
-                  <X className="h-4 w-4 text-muted-foreground" />
-                </button>
+        {locationError && (
+          <div className="mx-3 mt-3 rounded-xl border border-destructive/20 bg-destructive/[0.055] px-3 py-2 text-xs text-destructive sm:mx-5">
+            {locationError}
+          </div>
+        )}
+
+        {mode === 'place' ? (
+          <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col">
+            <div className="shrink-0 space-y-3 px-3 pt-3 sm:px-5">
+              <div className="flex h-12 items-center gap-2.5 rounded-2xl border border-border/60 bg-card px-3.5 shadow-sm">
+                <Search className="h-[18px] w-[18px] shrink-0 text-muted-foreground" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Joy nomi yoki manzilni qidiring"
+                  className="h-full w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                />
+                {isSearching && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                {query && !isSearching && (
+                  <button
+                    type="button"
+                    onClick={() => setQuery('')}
+                    aria-label="Qidiruvni tozalash"
+                    className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              {query.trim().length < 2 && (
+                <div className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 scrollbar-hidden sm:-mx-5 sm:px-5">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCategory(null)}
+                    className={cn(
+                      'flex h-9 shrink-0 items-center gap-2 rounded-full border px-3 text-xs font-medium transition',
+                      selectedCategory === null
+                        ? 'border-blue-500/25 bg-blue-500/[0.08] text-blue-700 dark:text-blue-300'
+                        : 'border-border/60 bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                    )}
+                  >
+                    <Navigation className="h-3.5 w-3.5" />
+                    Yaqin
+                  </button>
+
+                  {QUICK_CATEGORIES.map((category) => {
+                    const CategoryIcon = categoryIcon(category.id);
+                    const active = selectedCategory === category.id;
+                    return (
+                      <button
+                        key={category.id}
+                        type="button"
+                        onClick={() => setSelectedCategory(category.id)}
+                        className={cn(
+                          'flex h-9 shrink-0 items-center gap-2 rounded-full border px-3 text-xs font-medium transition',
+                          active
+                            ? 'border-blue-500/25 bg-blue-500/[0.08] text-blue-700 dark:text-blue-300'
+                            : 'border-border/60 bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                        )}
+                      >
+                        <CategoryIcon className="h-3.5 w-3.5" />
+                        {category.label}
+                      </button>
+                    );
+                  })}
+                </div>
               )}
             </div>
 
             {query.trim().length < 2 && (
-              <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 scrollbar-hidden">
+              <div className="px-3 pt-3 sm:px-5">
                 <button
                   type="button"
-                  onClick={() => setSelectedCategory(null)}
-                  className={cn(
-                    'shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium',
-                    selectedCategory === null
-                      ? 'border-foreground/25 bg-muted text-foreground'
-                      : 'border-border/60 text-muted-foreground',
-                  )}
+                  onClick={handleSelectCurrentLocation}
+                  disabled={isLocating || isResolvingCurrent}
+                  className="group flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-card px-3.5 py-3 text-left shadow-sm transition hover:border-border hover:bg-muted/35 disabled:cursor-wait disabled:opacity-70"
                 >
-                  Yaqin
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                    {isLocating || isResolvingCurrent ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <LocateFixed className="h-4 w-4" />
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-foreground">
+                      {currentPlace?.name ??
+                        currentAddress?.short ??
+                        (myCoords ? 'Joy aniqlanmoqda…' : 'Joriy joylashuv')}
+                    </span>
+                    <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                      {currentPlace?.address ??
+                        currentAddress?.full ??
+                        (myCoords
+                          ? myCoords.latitude.toFixed(5) + ', ' + myCoords.longitude.toFixed(5)
+                          : 'Qurilmaning hozirgi joyini aniqlash')}
+                    </span>
+                  </span>
+                  <span className="shrink-0 rounded-lg bg-blue-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-blue-700 transition group-hover:bg-blue-500/15 dark:text-blue-300">
+                    Tanlash
+                  </span>
                 </button>
-                {QUICK_CATEGORIES.map((category) => (
+              </div>
+            )}
+
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 [-webkit-overflow-scrolling:touch] sm:px-5">
+              {(isLoadingNearby || isSearching) && list.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-2 py-10 text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span className="text-xs">Joylar yuklanmoqda…</span>
+                </div>
+              ) : list.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-border/70 bg-card/50 px-5 py-8 text-center">
+                  <MapPin className="mx-auto h-5 w-5 text-muted-foreground" />
+                  <p className="mt-2 text-sm font-medium text-foreground">
+                    {query.trim().length >= 2 ? 'Mos joy topilmadi' : 'Yaqin joy topilmadi'}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {query.trim().length >= 2
+                      ? 'Boshqa nom bilan qidiring yoki xaritadan belgilang.'
+                      : myCoords
+                        ? 'Xaritadan kerakli joyni tanlashingiz mumkin.'
+                        : 'Yaqin joylar uchun joylashuvga ruxsat bering.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
+                  <ul className="divide-y divide-border/50">
+                    {list.map((place) => {
+                      const PlaceIcon = categoryIcon(place.categoryId);
+                      return (
+                        <li key={place.id}>
+                          <button
+                            type="button"
+                            onClick={() => handleSelectPlace(place)}
+                            className="group flex w-full items-center gap-3 px-3.5 py-3 text-left transition hover:bg-muted/45"
+                          >
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted/70 text-muted-foreground transition group-hover:bg-blue-500/10 group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                              <PlaceIcon className="h-4 w-4" />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-semibold">{place.name}</span>
+                              <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                                {[place.categoryLabel, place.address].filter(Boolean).join(' · ')}
+                              </span>
+                            </span>
+                            {place.distanceM != null && (
+                              <span className="shrink-0 rounded-full bg-muted/70 px-2 py-1 text-[10px] font-medium tabular-nums text-muted-foreground">
+                                {formatDistance(place.distanceM)}
+                              </span>
+                            )}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : mode === 'pin' ? (
+          <div className="mx-auto min-h-0 w-full max-w-3xl flex-1 overflow-y-auto px-3 py-4 sm:px-5">
+            <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                  <MapPinned className="h-4 w-4" />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold">Aniq nuqtani belgilang</p>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    Xaritada istalgan nuqtani bosing. Post yaqin joy nomiga emas, aynan siz tanlagan koordinataga bog‘lanadi.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="mx-auto min-h-0 w-full max-w-3xl flex-1 overflow-y-auto px-3 py-4 sm:px-5">
+            <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm sm:p-5">
+              <div className="flex items-start gap-3">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                  <Radio className="h-5 w-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">Jonli joylashuv</p>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    Post yaratilgach, tanlangan muddat davomida qurilma koordinatasi yangilanib boradi.
+                  </p>
+                  {myCoords && (
+                    <p className="mt-2 text-[11px] tabular-nums text-muted-foreground">
+                      {myCoords.latitude.toFixed(5)}, {myCoords.longitude.toFixed(5)}
+                      {accuracy ? ' · ±' + Math.round(accuracy) + ' m' : ''}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <p className="mt-5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                Ulashish muddati
+              </p>
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {LIVE_DURATIONS.map((duration) => (
                   <button
-                    key={category.id}
+                    key={duration.minutes}
                     type="button"
-                    onClick={() => setSelectedCategory(category.id)}
+                    onClick={() => setLiveMinutes(duration.minutes)}
                     className={cn(
-                      'shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium',
-                      selectedCategory === category.id
-                        ? 'border-foreground/25 bg-muted text-foreground'
-                        : 'border-border/60 text-muted-foreground',
+                      'rounded-xl border px-2 py-2.5 text-xs font-semibold transition',
+                      liveMinutes === duration.minutes
+                        ? 'border-blue-500/25 bg-blue-500/[0.08] text-blue-700 dark:text-blue-300'
+                        : 'border-border/60 bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground',
                     )}
                   >
-                    {category.emoji} {category.label}
+                    {duration.label}
                   </button>
                 ))}
               </div>
-            )}
-          </div>
 
-          {query.trim().length < 2 && (
-            <div className="px-4 pt-3">
               <button
                 type="button"
-                onClick={handleSelectCurrentLocation}
-                disabled={isLocating || isResolvingCurrent}
-                className="flex w-full items-center gap-3 rounded-2xl border border-border/70 bg-card px-3 py-3 text-left shadow-sm transition hover:bg-muted/40 disabled:cursor-wait disabled:opacity-70"
+                onClick={handleShareLive}
+                disabled={isLocating}
+                className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-foreground text-sm font-semibold text-background shadow-sm transition hover:opacity-90 active:scale-[0.995] disabled:opacity-60"
               >
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">
-                  {isLocating || isResolvingCurrent ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                  ) : (
-                    <LocateFixed className="h-4 w-4" />
-                  )}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-foreground">
-                    {currentPlace?.name ??
-                      currentAddress?.short ??
-                      (myCoords ? 'Joy aniqlanmoqda…' : 'Joriy joylashuv')}
-                  </span>
-                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                    {currentPlace?.address ??
-                      currentAddress?.full ??
-                      (myCoords
-                        ? myCoords.latitude.toFixed(5) + ', ' + myCoords.longitude.toFixed(5)
-                        : 'Qurilmaning hozirgi joyini aniqlash')}
-                  </span>
-                </span>
-                <span className="shrink-0 text-xs font-semibold text-link">
-                  Tanlash
-                </span>
+                {isLocating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Radio className="h-4 w-4" />
+                )}
+                {myCoords ? 'Jonli joylashuvni tanlash' : 'Joylashuvni aniqlash'}
               </button>
             </div>
-          )}
-
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 [-webkit-overflow-scrolling:touch]">
-            {(isLoadingNearby || isSearching) && list.length === 0 ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              </div>
-            ) : list.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                {query.trim().length >= 2
-                  ? 'Mos joy topilmadi'
-                  : myCoords
-                    ? 'Yaqin joy topilmadi. Xaritadan tanlang.'
-                    : 'Yaqin joylar uchun joylashuvga ruxsat bering.'}
-              </p>
-            ) : (
-              <ul className="space-y-1">
-                {list.map((place) => (
-                  <li key={place.id}>
-                    <button
-                      type="button"
-                      onClick={() => handleSelectPlace(place)}
-                      className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left transition hover:bg-muted"
-                    >
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                        <MapPin className="h-4 w-4" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium">{place.name}</span>
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {[place.categoryLabel, place.address].filter(Boolean).join(' · ')}
-                        </span>
-                      </span>
-                      {place.distanceM != null && (
-                        <span className="shrink-0 text-xs text-muted-foreground">
-                          {formatDistance(place.distanceM)}
-                        </span>
-                      )}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
-        </div>
-      ) : mode === 'pin' ? (
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-          <div className="rounded-2xl border border-border/60 p-4 text-sm text-muted-foreground">
-            Xaritada istalgan nuqtani bosing. Bu rejim yaqin POI nomiga bog‘lanmaydi —
-            post aynan siz belgilagan koordinatani saqlaydi.
-          </div>
-        </div>
-      ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-          <div className="rounded-2xl border border-border/60 p-4">
-            <div className="flex items-start gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                <Radio className="h-5 w-5" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold">Jonli joylashuv</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Post yaratilgach, belgilangan muddat davomida koordinata yangilanib boradi.
-                </p>
-                {myCoords && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {myCoords.latitude.toFixed(5)}, {myCoords.longitude.toFixed(5)}
-                    {accuracy ? ' · ±' + Math.round(accuracy) + ' m' : ''}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Muddat
-            </p>
-            <div className="mt-2 grid grid-cols-3 gap-2">
-              {LIVE_DURATIONS.map((duration) => (
-                <button
-                  key={duration.minutes}
-                  type="button"
-                  onClick={() => setLiveMinutes(duration.minutes)}
-                  className={cn(
-                    'rounded-xl border px-2 py-2 text-xs font-medium transition',
-                    liveMinutes === duration.minutes
-                      ? 'border-foreground/25 bg-muted text-foreground'
-                      : 'border-border/60 text-muted-foreground',
-                  )}
-                >
-                  {duration.label}
-                </button>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              onClick={handleShareLive}
-              disabled={isLocating}
-              className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-primary-foreground disabled:opacity-60"
-            >
-              {isLocating ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Radio className="h-4 w-4" />
-              )}
-              {myCoords ? 'Jonli ulashishni tanlash' : 'Joylashuvni aniqlash'}
-            </button>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
+
+  return createPortal(picker, document.body);
 }
