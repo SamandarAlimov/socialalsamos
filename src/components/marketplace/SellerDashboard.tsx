@@ -26,7 +26,7 @@ interface SellerDashboardProps {
 }
 
 const chartConfig = {
-  revenue: { label: 'Tushum', color: 'hsl(var(--primary))' },
+  revenue: { label: 'Tushum', color: 'hsl(var(--foreground))' },
   orders: { label: 'Buyurtmalar', color: 'hsl(var(--chart-2))' },
 };
 
@@ -152,11 +152,11 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+        <Card className="bg-gradient-to-br from-foreground/5 to-foreground/10 border-foreground/20">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                <DollarSign className="h-5 w-5 text-primary" />
+              <div className="h-10 w-10 rounded-xl bg-foreground/10 flex items-center justify-center">
+                <DollarSign className="h-5 w-5 text-foreground" />
               </div>
               {stats.totalRevenue > 0 && (
                 <div className="flex items-center gap-1 text-xs text-green-600">
@@ -184,7 +184,7 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-primary" />
+              <TrendingUp className="h-4 w-4 text-foreground" />
               Tushum dinamikasi
             </CardTitle>
           </CardHeader>
@@ -193,8 +193,8 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
               <AreaChart data={revenueData}>
                 <defs>
                   <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                    <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    <stop offset="0%" stopColor="hsl(var(--foreground))" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="hsl(var(--foreground))" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -202,7 +202,7 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
                 <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false}
                   tickFormatter={value => formatPriceCompact(Number(value))} />
                 <ChartTooltip content={<ChartTooltipContent />} />
-                <Area type="monotone" dataKey="revenue" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#revenueGradient)" />
+                <Area type="monotone" dataKey="revenue" stroke="hsl(var(--foreground))" strokeWidth={2} fill="url(#revenueGradient)" />
               </AreaChart>
             </ChartContainer>
           </CardContent>
@@ -350,11 +350,11 @@ export function SellerDashboard({ onClose }: SellerDashboardProps) {
                           {order.shipping_address && (
                             <div className="p-2.5 rounded-lg bg-muted/30 text-xs text-muted-foreground space-y-1">
                               <p className="flex items-center gap-1.5">
-                                <MapPin className="h-3.5 w-3.5 text-primary" />
+                                <MapPin className="h-3.5 w-3.5 text-foreground" />
                                 {order.shipping_address.street}, {order.shipping_address.city}
                               </p>
                               <p className="flex items-center gap-1.5">
-                                <Phone className="h-3.5 w-3.5 text-primary" />
+                                <Phone className="h-3.5 w-3.5 text-foreground" />
                                 {order.shipping_address.full_name} • {order.shipping_address.phone}
                               </p>
                             </div>
