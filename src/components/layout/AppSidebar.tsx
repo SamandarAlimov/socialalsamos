@@ -75,6 +75,11 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
   const { unreadCount: messagesUnreadCount } = useUnreadMessages(handleNewMessage);
   const getBadgeCount = (badgeKey?: 'messages') => badgeKey === 'messages' ? messagesUnreadCount : 0;
 
+  const isNavItemActive = (path?: string) => {
+    if (!path) return false;
+    return location.pathname === path || location.pathname.startsWith(path + '/');
+  };
+
   return (
     <aside className={cn(
       "h-screen min-h-0 sticky top-0 bg-sidebar border-r border-sidebar-border flex-col transition-all duration-300 z-50 overflow-visible",
@@ -88,7 +93,7 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
 
       <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-3 [scrollbar-gutter:stable] [scrollbar-width:thin]">
         {navItems.map((item) => {
-          const isActive = item.path ? location.pathname === item.path : false;
+          const isActive = isNavItemActive(item.path);
           const badgeCount = getBadgeCount(item.badgeKey);
           return (
             <NavLink key={item.path} to={item.path!} className={cn(
@@ -115,7 +120,7 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
 
       <div className="shrink-0 p-3 border-t border-sidebar-border space-y-1">
         {bottomItems.map((item) => {
-          const isActive = location.pathname === item.path;
+          const isActive = isNavItemActive(item.path);
           return (
             <div key={item.path} className="flex items-center gap-1">
               <NavLink to={item.path} className={cn("relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group flex-1", isActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE)}>
