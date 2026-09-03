@@ -89,7 +89,10 @@ export function MapDestinationPreview({
   return (
     <div
       ref={rootRef}
-      className={cn('relative h-full w-full overflow-hidden bg-muted', className)}
+      className={cn(
+        'relative isolate h-full w-full overflow-hidden bg-muted',
+        className,
+      )}
       aria-label={title ? `${title} xarita preview` : 'Joylashuv xarita preview'}
     >
       {shouldRenderMap ? (

@@ -210,7 +210,7 @@ export function PostActionsMenu({
         </DropdownMenuTrigger>
         <DropdownMenuContent 
           align="end" 
-          className="w-56 bg-popover border border-border shadow-lg z-50"
+          className="w-56 border border-border bg-popover shadow-lg"
         >
           {isOwner && (
             <>
