@@ -34,6 +34,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { uploadMedia } from '@/lib/mediaUpload';
+import { db } from '@/lib/db';
 
 type ChatType = 'group' | 'channel';
 type Step = 'select-type' | 'select-users' | 'details' | 'admin-settings';
@@ -236,6 +237,34 @@ export function CreateGroupChannelDialog({
         throw partError;
       }
 
+      // Admin roli faqat badge emas: granular huquqlar ham yaratiladi.
+      // Keyin ularni premium boshqaruv oynasida alohida sozlash mumkin.
+      const initialAdmins = uniqueMembers.filter((id) => adminUsers.includes(id));
+      if (initialAdmins.length > 0) {
+        const { error: adminRightsError } = await db.from('conversation_admin_rights').insert(
+          initialAdmins.map((id) => ({
+            conversation_id: newConv!.id,
+            user_id: id,
+            custom_title: null,
+            can_change_info: true,
+            can_post_messages: chatType === 'channel',
+            can_edit_messages: true,
+            can_delete_messages: true,
+            can_restrict_members: true,
+            can_invite_users: true,
+            can_pin_messages: true,
+            can_manage_video_chats: chatType === 'group',
+            can_manage_topics: chatType === 'group',
+            can_promote_members: false,
+            is_anonymous: false,
+          }))
+        );
+
+        if (adminRightsError) {
+          console.warn('Initial admin rights were not created:', adminRightsError);
+        }
+      }
+
       toast({
         title: `${typeLabel} yaratildi`,
         description:
@@ -266,14 +295,14 @@ export function CreateGroupChannelDialog({
       icon: Users,
       label: 'Yangi guruh',
       description: "A'zolar bilan birga yozishish, adminlar va rollar",
-      color: 'bg-blue-500',
+      color: 'bg-foreground',
     },
     {
       id: 'channel' as ChatType,
       icon: Megaphone,
       label: 'Yangi kanal',
       description: "Cheksiz obunachilarga e'lon tarqatish",
-      color: 'bg-violet-500',
+      color: 'bg-foreground',
     },
   ];
 
@@ -326,7 +355,7 @@ export function CreateGroupChannelDialog({
                     type.color
                   )}
                 >
-                  <type.icon className="h-5 w-5 text-white sm:h-6 sm:w-6" />
+                  <type.icon className="h-5 w-5 text-background sm:h-6 sm:w-6" />
                 </div>
                 <div className="min-w-0">
                   <p className="font-medium">{type.label}</p>
@@ -568,7 +597,7 @@ export function CreateGroupChannelDialog({
                       key={userId}
                       className={cn(
                         'tg-transition flex items-center justify-between gap-2 rounded-xl p-3',
-                        isAdmin ? 'border border-blue-500/20 bg-blue-500/10' : 'bg-muted/50'
+                        isAdmin ? 'border border-foreground/15 bg-muted' : 'bg-muted/50'
                       )}
                     >
                       <div className="flex min-w-0 items-center gap-3">
