@@ -11,6 +11,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { UI_LAYER } from '@/lib/uiLayers';
 import {
   Select,
   SelectContent,
@@ -78,7 +79,7 @@ export function AddToHighlightDialog({ open, onOpenChange, story }: AddToHighlig
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="z-[110]">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Add to Highlight</DialogTitle>
         </DialogHeader>
@@ -118,7 +119,7 @@ export function AddToHighlightDialog({ open, onOpenChange, story }: AddToHighlig
               <SelectTrigger>
                 <SelectValue placeholder="Select a highlight" />
               </SelectTrigger>
-              <SelectContent className="z-[120]">
+              <SelectContent className={UI_LAYER.modalPopover}>
                 {highlights.map((highlight) => (
                   <SelectItem key={highlight.id} value={highlight.id}>
                     <div className="flex items-center gap-2">
