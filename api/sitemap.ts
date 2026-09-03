@@ -63,8 +63,7 @@ export default async function handler(req: any, res: any) {
 
   if (type === 'static') {
     const routes = [
-      '/', '/home', '/discover', '/search', '/videos', '/marketplace', '/channels',
-      '/map', '/mini-apps', '/help', '/legal/privacy', '/legal/terms'
+      '/', '/help', '/legal/privacy', '/legal/terms'
     ];
     const body = '<?xml version="1.0" encoding="UTF-8"?>\n' +
       '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
