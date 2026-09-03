@@ -12,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { UI_LAYER } from '@/lib/uiLayers';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { FILTERS } from './filters/FilterData';
 
@@ -457,7 +458,7 @@ export function CameraVideoRecorder({
 
   if (capturedPhoto || recordedUrl) {
     return (
-      <div className="fixed inset-0 z-[9999] flex flex-col bg-background safe-area-inset">
+      <div className={cn('fixed inset-0 flex flex-col bg-background safe-area-inset', UI_LAYER.immersive)}>
         <canvas ref={canvasRef} className="hidden" />
 
         <div className="flex min-h-0 flex-1 items-center justify-center bg-black p-3">
@@ -529,7 +530,7 @@ export function CameraVideoRecorder({
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col overflow-hidden bg-black safe-area-inset">
+    <div className={cn('fixed inset-0 flex flex-col overflow-hidden bg-black safe-area-inset', UI_LAYER.immersive)}>
       <canvas ref={canvasRef} className="hidden" />
 
       <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between p-4 pt-safe">
