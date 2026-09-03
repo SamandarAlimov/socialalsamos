@@ -192,8 +192,8 @@ export function GlobalSearchResults({ query, locale = 'uz' }: { query: string; l
               className={cn(
                 'flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium whitespace-nowrap transition-all border',
                 active
-                  ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                  : 'bg-muted/40 text-muted-foreground border-border/30 hover:bg-muted/70',
+                  ? 'bg-foreground text-background border-foreground shadow-sm'
+                  : 'bg-background text-muted-foreground border-border/50 hover:bg-muted/60 hover:text-foreground',
               )}
             >
               <Icon className="h-3.5 w-3.5" />
@@ -231,9 +231,9 @@ export function GlobalSearchResults({ query, locale = 'uz' }: { query: string; l
       )}
 
       {!loading && summary && items.length > 0 && category === 'all' && (
-        <div className="rounded-2xl border border-primary/10 bg-primary/[0.035] p-4">
+        <div className="rounded-2xl border border-border/40 bg-muted/20 p-4">
           <div className="mb-2 flex items-center gap-2">
-            <Globe className="h-4 w-4 text-primary" />
+            <Globe className="h-4 w-4 text-foreground" />
             <span className="text-xs font-semibold text-foreground">Internetdan qisqa ko'rinish</span>
           </div>
           <p className="line-clamp-5 whitespace-pre-wrap text-[13px] leading-relaxed text-muted-foreground">
