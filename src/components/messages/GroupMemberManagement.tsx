@@ -438,6 +438,12 @@ export function GroupMemberManagement({
   }, [members, searchQuery, tab]);
 
   const adminCount = members.filter((member) => member.role === 'owner' || member.role === 'admin').length;
+  const myMembership = members.find((member) => member.user_id === user?.id);
+  const myRights = user?.id ? adminRights.get(user.id) : undefined;
+  const isOwner = myMembership?.role === 'owner';
+  const canInvite = isOwner || Boolean(myRights?.can_invite_users);
+  const canRestrict = isOwner || Boolean(myRights?.can_restrict_members);
+  const canPromote = isOwner || Boolean(myRights?.can_promote_members);
 
   return (
     <>
@@ -491,7 +497,7 @@ export function GroupMemberManagement({
                   className="h-10 rounded-xl border-0 bg-muted/60 pl-9 shadow-none"
                 />
               </div>
-              {isAdmin && tab === 'members' && (
+              {isAdmin && canInvite && tab === 'members' && (
                 <Button className="h-10 rounded-xl px-3" onClick={() => setAddOpen(true)}>
                   <UserPlus className="mr-2 h-4 w-4" />
                   <span className="hidden sm:inline">Qo‘shish</span>
@@ -525,7 +531,7 @@ export function GroupMemberManagement({
                           <p className="truncate text-sm font-medium">{row.profile?.display_name || row.profile?.username || 'Foydalanuvchi'}</p>
                           <p className="truncate text-xs text-muted-foreground">{row.is_banned ? 'Bloklangan' : 'Cheklangan'}{row.reason ? ` · ${row.reason}` : ''}</p>
                         </div>
-                        {isAdmin && (
+                        {isAdmin && canRestrict && (
                           <Button variant="outline" size="sm" className="rounded-lg" onClick={() => unban(row)}>
                             Tiklash
                           </Button>
@@ -570,7 +576,7 @@ export function GroupMemberManagement({
                           <Badge variant="outline" className="rounded-lg font-medium">Admin</Badge>
                         ) : null}
 
-                        {isAdmin && !owner && !me && (
+                        {isAdmin && (canPromote || canRestrict) && !owner && !me && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full">
@@ -578,25 +584,33 @@ export function GroupMemberManagement({
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-56 rounded-xl">
-                              <DropdownMenuItem onClick={() => openRights(member)}>
-                                <ShieldCheck className="mr-2 h-4 w-4" />
-                                {admin ? 'Admin huquqlari' : 'Admin qilish'}
-                              </DropdownMenuItem>
-                              {admin && (
-                                <DropdownMenuItem onClick={() => removeAdmin(member)}>
-                                  <UserMinus className="mr-2 h-4 w-4" />
-                                  Adminlikdan olish
-                                </DropdownMenuItem>
+                              {canPromote && (
+                                <>
+                                  <DropdownMenuItem onClick={() => openRights(member)}>
+                                    <ShieldCheck className="mr-2 h-4 w-4" />
+                                    {admin ? 'Admin huquqlari' : 'Admin qilish'}
+                                  </DropdownMenuItem>
+                                  {admin && (
+                                    <DropdownMenuItem onClick={() => removeAdmin(member)}>
+                                      <UserMinus className="mr-2 h-4 w-4" />
+                                      Adminlikdan olish
+                                    </DropdownMenuItem>
+                                  )}
+                                </>
                               )}
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => setPendingRemove(member)}>
-                                <UserMinus className="mr-2 h-4 w-4" />
-                                {isChannel ? 'Kanaldan olib tashlash' : 'Guruhdan olib tashlash'}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="text-destructive" onClick={() => setPendingBan(member)}>
-                                <Ban className="mr-2 h-4 w-4" />
-                                Bloklash
-                              </DropdownMenuItem>
+                              {canPromote && canRestrict && <DropdownMenuSeparator />}
+                              {canRestrict && (
+                                <>
+                                  <DropdownMenuItem onClick={() => setPendingRemove(member)}>
+                                    <UserMinus className="mr-2 h-4 w-4" />
+                                    {isChannel ? 'Kanaldan olib tashlash' : 'Guruhdan olib tashlash'}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem className="text-destructive" onClick={() => setPendingBan(member)}>
+                                    <Ban className="mr-2 h-4 w-4" />
+                                    Bloklash
+                                  </DropdownMenuItem>
+                                </>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         )}
