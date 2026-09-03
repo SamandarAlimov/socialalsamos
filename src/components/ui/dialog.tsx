@@ -4,7 +4,6 @@ import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { UI_LAYER } from "@/lib/uiLayers";
-import { usePlatformScrollLock } from "@/hooks/usePlatformScrollLock";
 
 /**
  * Global modal stack:
@@ -13,38 +12,7 @@ import { usePlatformScrollLock } from "@/hooks/usePlatformScrollLock";
  * AppLayout collapse control z-[1300], xarita/create chrome ham shu diapazonda.
  * Modal backdrop ularning barchasini hira qiladi, content esa backdropdan yuqori.
  */
-type DialogProps = React.ComponentProps<typeof DialogPrimitive.Root>;
-
-const Dialog = ({
-  open,
-  defaultOpen,
-  onOpenChange,
-  modal = true,
-  ...props
-}: DialogProps) => {
-  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(Boolean(defaultOpen));
-  const resolvedOpen = open ?? uncontrolledOpen;
-
-  usePlatformScrollLock(modal && resolvedOpen);
-
-  const handleOpenChange = React.useCallback(
-    (nextOpen: boolean) => {
-      if (open === undefined) setUncontrolledOpen(nextOpen);
-      onOpenChange?.(nextOpen);
-    },
-    [onOpenChange, open],
-  );
-
-  return (
-    <DialogPrimitive.Root
-      {...props}
-      open={open}
-      defaultOpen={defaultOpen}
-      onOpenChange={handleOpenChange}
-      modal={modal}
-    />
-  );
-};
+const Dialog = DialogPrimitive.Root;
 
 const DialogTrigger = DialogPrimitive.Trigger;
 
@@ -55,30 +23,14 @@ const DialogClose = DialogPrimitive.Close;
 const DialogOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
->(({ className, onTouchStart, onTouchMove, onTouchEnd, onTouchCancel, ...props }, ref) => (
+>(({ className, ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 touch-none overscroll-none bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "fixed inset-0 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       UI_LAYER.modalOverlay,
       className,
     )}
-    onTouchStart={(event) => {
-      onTouchStart?.(event);
-      event.stopPropagation();
-    }}
-    onTouchMove={(event) => {
-      onTouchMove?.(event);
-      event.stopPropagation();
-    }}
-    onTouchEnd={(event) => {
-      onTouchEnd?.(event);
-      event.stopPropagation();
-    }}
-    onTouchCancel={(event) => {
-      onTouchCancel?.(event);
-      event.stopPropagation();
-    }}
     {...props}
   />
 ));
@@ -87,36 +39,16 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, onTouchStart, onTouchMove, onTouchEnd, onTouchCancel, onWheel, ...props }, ref) => (
+>(({ className, children, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overscroll-contain border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+        "fixed left-[50%] top-[50%] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
         UI_LAYER.modalContent,
         className,
       )}
-      onTouchStart={(event) => {
-        onTouchStart?.(event);
-        event.stopPropagation();
-      }}
-      onTouchMove={(event) => {
-        onTouchMove?.(event);
-        event.stopPropagation();
-      }}
-      onTouchEnd={(event) => {
-        onTouchEnd?.(event);
-        event.stopPropagation();
-      }}
-      onTouchCancel={(event) => {
-        onTouchCancel?.(event);
-        event.stopPropagation();
-      }}
-      onWheel={(event) => {
-        onWheel?.(event);
-        event.stopPropagation();
-      }}
       {...props}
     >
       {children}
