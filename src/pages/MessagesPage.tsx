@@ -2131,13 +2131,17 @@ export default function MessagesPage() {
                   onSearch={() => setShowMessageSearch(true)}
                   onViewInfo={() => {}}
                   onManageMembers={
-                    selectedConversation.type === 'group'
+                    selectedConversation.type === 'group' || selectedConversation.type === 'channel'
                       ? () => setShowMemberManagement(true)
                       : undefined
                   }
                   onViewScheduled={() => setShowScheduledMessages(true)}
                   scheduledCount={scheduledMessages.length}
-                  isAdmin={selectedConversation.owner_id === user?.id}
+                  isAdmin={
+                    selectedConversation.owner_id === user?.id ||
+                    selectedConversation.my_role === 'owner' ||
+                    selectedConversation.my_role === 'admin'
+                  }
                 />
               </div>
               <MiniAudioPlayer />
@@ -2601,15 +2605,21 @@ export default function MessagesPage() {
         availableDates={availableDates}
         onSelectDate={handleJumpToDate}
       />
-      {selectedConversation && selectedConversation.type === 'group' && (
-        <GroupMemberManagement
-          open={showMemberManagement}
-          onOpenChange={setShowMemberManagement}
-          conversationId={selectedConversation.id}
-          conversationName={selectedConversation.name || undefined}
-          isAdmin={selectedConversation.owner_id === user?.id}
-        />
-      )}
+      {selectedConversation &&
+        (selectedConversation.type === 'group' || selectedConversation.type === 'channel') && (
+          <GroupMemberManagement
+            open={showMemberManagement}
+            onOpenChange={setShowMemberManagement}
+            conversationId={selectedConversation.id}
+            conversationName={selectedConversation.name || undefined}
+            conversationType={selectedConversation.type}
+            isAdmin={
+              selectedConversation.owner_id === user?.id ||
+              selectedConversation.my_role === 'owner' ||
+              selectedConversation.my_role === 'admin'
+            }
+          />
+        )}
       <ScheduledMessagesSheet
         open={showScheduledMessages}
         onOpenChange={setShowScheduledMessages}
