@@ -138,7 +138,9 @@ export function AudioFilePlayer({ url, name, isMine, senderName }: AudioFilePlay
     <div
       className={cn(
         'flex min-w-[260px] max-w-[340px] items-center gap-3 rounded-2xl p-2.5',
-        isMine ? 'bg-bubble-own-foreground/10' : 'bg-muted/50 border border-border/50'
+        isMine
+          ? 'bg-emerald-500/[0.07] border border-emerald-600/10'
+          : 'bg-sky-500/[0.055] border border-sky-500/15'
       )}
     >
       {/* Play / Pause (Telegramdek yumaloq tugma) */}
@@ -150,8 +152,8 @@ export function AudioFilePlayer({ url, name, isMine, senderName }: AudioFilePlay
         className={cn(
           'relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition-colors',
           isMine
-            ? 'bg-bubble-own-foreground/10 text-bubble-own-foreground hover:bg-bubble-own-foreground/15'
-            : 'bg-muted text-foreground hover:bg-muted/70',
+            ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-700/15 hover:bg-emerald-600'
+            : 'bg-sky-500 text-white shadow-sm shadow-sky-700/15 hover:bg-sky-600',
           isLoading && 'opacity-50'
         )}
       >
@@ -177,7 +179,9 @@ export function AudioFilePlayer({ url, name, isMine, senderName }: AudioFilePlay
         <p
           className={cn(
             'flex items-center gap-1 truncate text-[11px]',
-            isMine ? 'text-bubble-own-foreground/65' : 'text-muted-foreground'
+            isMine
+              ? 'text-emerald-700/85 dark:text-emerald-300'
+              : 'text-sky-600/85 dark:text-sky-400'
           )}
         >
           <Music2 className="h-3 w-3 shrink-0" />
@@ -204,11 +208,11 @@ export function AudioFilePlayer({ url, name, isMine, senderName }: AudioFilePlay
                   'w-[3px] rounded-full transition-colors duration-100',
                   isFilled
                     ? isMine
-                      ? 'bg-bubble-own-accent'
-                      : 'bg-foreground/80'
+                      ? 'bg-emerald-600 dark:bg-emerald-400'
+                      : 'bg-sky-500 dark:bg-sky-400'
                     : isMine
-                      ? 'bg-bubble-own-foreground/20'
-                      : 'bg-muted-foreground/30'
+                      ? 'bg-emerald-500/30 dark:bg-emerald-400/30'
+                      : 'bg-sky-500/25 dark:bg-sky-400/30'
                 )}
                 style={{ height: `${height}%`, minHeight: '4px' }}
               />
@@ -220,7 +224,9 @@ export function AudioFilePlayer({ url, name, isMine, senderName }: AudioFilePlay
           <span
             className={cn(
               'text-[10px] font-medium tabular-nums',
-              isMine ? 'text-bubble-own-foreground/65' : 'text-muted-foreground'
+              isMine
+              ? 'text-emerald-700/85 dark:text-emerald-300'
+              : 'text-sky-600/85 dark:text-sky-400'
             )}
           >
             {formatTime(displayCurrentTime)}
@@ -228,7 +234,9 @@ export function AudioFilePlayer({ url, name, isMine, senderName }: AudioFilePlay
           <span
             className={cn(
               'text-[10px] font-medium tabular-nums',
-              isMine ? 'text-bubble-own-foreground/65' : 'text-muted-foreground'
+              isMine
+              ? 'text-emerald-700/85 dark:text-emerald-300'
+              : 'text-sky-600/85 dark:text-sky-400'
             )}
           >
             {formatTime(displayDuration)}
@@ -245,8 +253,8 @@ export function AudioFilePlayer({ url, name, isMine, senderName }: AudioFilePlay
         className={cn(
           'flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors',
           isMine
-            ? 'text-bubble-own-foreground/65 hover:bg-bubble-own-foreground/10 hover:text-bubble-own-foreground'
-            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            ? 'text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300'
+            : 'text-sky-600 hover:bg-sky-500/10 hover:text-sky-700 dark:text-sky-400'
         )}
         onClick={(e) => e.stopPropagation()}
       >
