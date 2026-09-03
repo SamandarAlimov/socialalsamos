@@ -88,22 +88,24 @@ export function useVideoPosts() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const { user } = useAuth();
+  const userId = user?.id ?? null;
 
   /** Keyset pagination kursori: oxirgi yuklangan videoning created_at qiymati. */
   const cursorRef = useRef<string | null>(null);
   const loadingMoreRef = useRef(false);
+  const hasLoadedOnceRef = useRef(false);
 
   /** Like / bookmark holatini bir sahifa uchun to'ldiradi. */
   const attachUserState = useCallback(
     async (rows: VideoPost[]): Promise<VideoPost[]> => {
-      if (!user || rows.length === 0) return rows;
+      if (!userId || rows.length === 0) return rows;
 
       const postIds = rows.map((post) => post.id);
 
       const { data: likesData } = await supabase
         .from('post_likes')
         .select('post_id')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .in('post_id', postIds);
 
       const likedPostIds = new Set(likesData?.map((l) => l.post_id) || []);
@@ -112,7 +114,7 @@ export function useVideoPosts() {
         new Set(
           rows
             .map((post) => post.user_id)
-            .filter((creatorId) => creatorId && creatorId !== user.id),
+            .filter((creatorId) => creatorId && creatorId !== userId),
         ),
       );
 
@@ -121,7 +123,7 @@ export function useVideoPosts() {
         const { data: followingData, error: followingError } = await supabase
           .from('follows')
           .select('following_id')
-          .eq('follower_id', user.id)
+          .eq('follower_id', userId)
           .in('following_id', creatorIds);
 
         if (followingError) {
@@ -140,7 +142,7 @@ export function useVideoPosts() {
         const { data: bookmarksData, error: bookmarksError } = await db
           .from('post_bookmarks')
           .select('post_id')
-          .eq('user_id', user.id)
+          .eq('user_id', userId)
           .in('post_id', postIds);
 
         if (!bookmarksError) {
@@ -157,10 +159,10 @@ export function useVideoPosts() {
         is_liked: likedPostIds.has(post.id),
         is_bookmarked: bookmarkedPostIds.has(post.id),
         is_following:
-          post.user_id === user.id ? false : followingIds.has(post.user_id),
+          post.user_id === userId ? false : followingIds.has(post.user_id),
       }));
     },
-    [user],
+    [userId],
   );
 
   /** Bitta sahifani oladi. `before` - kursor (undan eskirog'i olinadi). */
@@ -192,7 +194,9 @@ export function useVideoPosts() {
   }, []);
 
   const fetchVideos = useCallback(async () => {
-    setIsLoading(true);
+    // Faqat birinchi bootstrapda skeleton ko'rsatamiz. Auth token refresh,
+    // manual refresh yoki background reconciliation player DOMini unmount qilmaydi.
+    if (!hasLoadedOnceRef.current) setIsLoading(true);
     cursorRef.current = null;
 
     try {
@@ -243,6 +247,7 @@ export function useVideoPosts() {
     } catch (error) {
       console.error('Error fetching videos:', error);
     } finally {
+      hasLoadedOnceRef.current = true;
       setIsLoading(false);
     }
   }, [fetchPage, attachUserState]);
@@ -281,7 +286,7 @@ export function useVideoPosts() {
   }, [hasMore, fetchPage, attachUserState]);
 
   const likeVideo = useCallback(async (postId: string) => {
-    if (!user) return;
+    if (!userId) return;
 
     const video = videos.find(v => v.id === postId);
     if (!video) return;
@@ -292,7 +297,7 @@ export function useVideoPosts() {
           .from('post_likes')
           .delete()
           .eq('post_id', postId)
-          .eq('user_id', user.id);
+          .eq('user_id', userId);
 
         setVideos(prev => prev.map(v => 
           v.id === postId 
@@ -302,7 +307,7 @@ export function useVideoPosts() {
       } else {
         await supabase
           .from('post_likes')
-          .insert({ post_id: postId, user_id: user.id });
+          .insert({ post_id: postId, user_id: userId });
 
         setVideos(prev => prev.map(v => 
           v.id === postId 
@@ -313,10 +318,10 @@ export function useVideoPosts() {
     } catch (error) {
       console.error('Error toggling like:', error);
     }
-  }, [user, videos]);
+  }, [userId, videos]);
 
   const toggleFollow = useCallback(async (targetUserId: string) => {
-    if (!user || !targetUserId || targetUserId === user.id) return;
+    if (!user || !targetUserId || targetUserId === userId) return;
 
     const targetVideo = videos.find((video) => video.user_id === targetUserId);
     const wasFollowing = Boolean(targetVideo?.is_following);
@@ -334,13 +339,13 @@ export function useVideoPosts() {
         const { error } = await supabase
           .from('follows')
           .delete()
-          .eq('follower_id', user.id)
+          .eq('follower_id', userId)
           .eq('following_id', targetUserId);
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from('follows')
-          .insert({ follower_id: user.id, following_id: targetUserId });
+          .insert({ follower_id: userId, following_id: targetUserId });
         if (error) throw error;
       }
     } catch (error) {
@@ -353,7 +358,7 @@ export function useVideoPosts() {
         ),
       );
     }
-  }, [user, videos]);
+  }, [userId, videos]);
 
   const toggleBookmark = useCallback(async (postId: string) => {
     const video = videos.find(v => v.id === postId);
@@ -368,7 +373,7 @@ export function useVideoPosts() {
         : v
     ));
 
-    if (!user) return;
+    if (!userId) return;
 
     try {
       if (wasBookmarked) {
@@ -376,12 +381,12 @@ export function useVideoPosts() {
           .from('post_bookmarks')
           .delete()
           .eq('post_id', postId)
-          .eq('user_id', user.id);
+          .eq('user_id', userId);
         if (error) throw error;
       } else {
         const { error } = await db
           .from('post_bookmarks')
-          .insert({ post_id: postId, user_id: user.id });
+          .insert({ post_id: postId, user_id: userId });
         if (error) throw error;
       }
     } catch (error) {
@@ -389,7 +394,7 @@ export function useVideoPosts() {
       // lekin holatni ham yolg'on ko'rsatmaslik uchun konsolga yozamiz.
       console.warn('Bookmark saqlanmadi:', error);
     }
-  }, [user, videos]);
+  }, [userId, videos]);
 
   const refresh = useCallback(() => {
     setHasMore(true);
@@ -440,7 +445,7 @@ export function useVideoPosts() {
 
           const data = (rows ?? [])[0] as unknown as VideoPost | undefined;
 
-          if (data && data.user_id !== user?.id) {
+          if (data && data.user_id !== userId) {
             setVideos(prev => (prev.some(v => v.id === data.id) ? prev : [data, ...prev]));
           }
         }
@@ -465,13 +470,13 @@ export function useVideoPosts() {
               return {
                 ...v,
                 likes_count: v.likes_count + 1,
-                is_liked: newData?.user_id === user?.id ? true : v.is_liked
+                is_liked: newData?.user_id === userId ? true : v.is_liked
               };
             } else if (payload.eventType === 'DELETE') {
               return {
                 ...v,
                 likes_count: Math.max(0, v.likes_count - 1),
-                is_liked: oldData?.user_id === user?.id ? false : v.is_liked
+                is_liked: oldData?.user_id === userId ? false : v.is_liked
               };
             }
             return v;
@@ -484,10 +489,10 @@ export function useVideoPosts() {
           event: '*',
           schema: 'public',
           table: 'follows',
-          ...(user?.id ? { filter: `follower_id=eq.${user.id}` } : {}),
+          ...(userId ? { filter: `follower_id=eq.${userId}` } : {}),
         },
         (payload) => {
-          if (!user?.id) return;
+          if (!userId) return;
 
           const inserted = payload.new as {
             follower_id?: string;
@@ -499,7 +504,7 @@ export function useVideoPosts() {
           } | null;
           const row = inserted?.following_id ? inserted : removed;
 
-          if (!row?.following_id || row.follower_id !== user.id) return;
+          if (!row?.following_id || row.follower_id !== userId) return;
 
           const isFollowing = payload.eventType === 'INSERT';
           setVideos((previous) =>
@@ -564,7 +569,7 @@ export function useVideoPosts() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id, videos.length]);
+  }, [userId, videos.length]);
 
   return {
     videos,

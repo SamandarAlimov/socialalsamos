@@ -59,13 +59,14 @@ function isMissingRpc(error: unknown): boolean {
 
 export function usePostViews() {
   const { user } = useAuth();
+  const userId = user?.id ?? null;
 
   const recordView = useCallback(
     async (postId: string) => {
-      if (!user || !postId) return;
+      if (!userId || !postId) return;
       if (viewTrackingDisabled || readStructuredPostSchemaCapability() === 'missing') return;
 
-      const key = user.id + ':' + postId;
+      const key = userId + ':' + postId;
       if (recorded.has(key)) return;
 
       // Birinchi noma'lum capability probe davom etayotgan bo'lsa, qolgan
@@ -103,7 +104,7 @@ export function usePostViews() {
 
         const { error: upsertError } = await supabase
           .from('post_views')
-          .upsert({ post_id: postId, user_id: user.id }, { onConflict: 'post_id,user_id' });
+          .upsert({ post_id: postId, user_id: userId }, { onConflict: 'post_id,user_id' });
 
         if (upsertError && isBlockedError(upsertError)) {
           viewTrackingDisabled = true;
@@ -114,7 +115,7 @@ export function usePostViews() {
         if (ownsCapabilityProbe) capabilityProbeInFlight = false;
       }
     },
-    [user],
+    [userId],
   );
 
   return { recordView };

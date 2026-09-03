@@ -11,7 +11,7 @@ import {
   PictureInPicture2,
   Play,
   Send,
-  ThumbsUp,
+  Heart,
   Volume2,
   VolumeX,
 } from 'lucide-react';
@@ -425,7 +425,7 @@ export function VideoWatchPanel({
   const isOwnVideo = Boolean(currentUserId && video.user_id === currentUserId);
 
   const glassAction =
-    'pointer-events-auto inline-flex h-9 items-center gap-2 rounded-full border border-white/15 bg-black/35 px-3 text-xs font-semibold text-white shadow-lg backdrop-blur-xl transition hover:bg-white/15 active:scale-[0.97]';
+    'inline-flex h-10 items-center gap-2 rounded-full border border-white/15 bg-black/35 px-3.5 text-xs font-semibold text-white shadow-lg backdrop-blur-xl transition hover:border-white/25 hover:bg-white/15 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/55';
 
   const upNextList = (
     <div className="min-h-full bg-background pb-[calc(env(safe-area-inset-bottom,0px)+24px)] text-foreground">
@@ -457,14 +457,24 @@ export function VideoWatchPanel({
   );
 
   const authorOverlay = (
-    <div className="pointer-events-none absolute inset-x-0 bottom-[72px] z-20 hidden items-end justify-between gap-4 px-5 lg:flex">
+    <div
+      className={cn(
+        'absolute inset-x-0 bottom-[86px] z-40 hidden items-end justify-between gap-4 px-5 transition-[opacity,transform] duration-200 lg:flex',
+        showControls
+          ? 'pointer-events-auto translate-y-0 opacity-100'
+          : 'pointer-events-none translate-y-2 opacity-0',
+      )}
+      aria-hidden={!showControls}
+    >
       <div className="min-w-0 max-w-[min(680px,70%)]">
         <div className="mb-2 flex items-center gap-2.5">
           <button
             type="button"
-            className="pointer-events-auto"
+            className=""
+            onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();
+              revealControls();
               onOpenProfile(video);
             }}
           >
@@ -478,9 +488,11 @@ export function VideoWatchPanel({
 
           <button
             type="button"
-            className="pointer-events-auto flex min-w-0 items-center gap-1.5 text-left"
+            className="flex min-w-0 items-center gap-1.5 text-left"
+            onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();
+              revealControls();
               onOpenProfile(video);
             }}
           >
@@ -493,13 +505,15 @@ export function VideoWatchPanel({
           {!isOwnVideo && (
             <button
               type="button"
+              onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.stopPropagation();
+                revealControls();
                 onFollow(video.user_id);
                 lightTap();
               }}
               className={cn(
-                'pointer-events-auto h-8 rounded-full border px-3 text-xs font-semibold backdrop-blur-xl transition active:scale-95',
+                'h-8 rounded-full border px-3 text-xs font-semibold backdrop-blur-xl transition active:scale-95',
                 video.is_following
                   ? 'border-white/20 bg-white/12 text-white hover:bg-white/18'
                   : 'border-white/80 bg-white text-black hover:bg-white/90',
@@ -519,27 +533,36 @@ export function VideoWatchPanel({
         </p>
       </div>
 
-      <div className="pointer-events-auto flex shrink-0 flex-wrap justify-end gap-2">
+      <div className="flex shrink-0 flex-wrap justify-end gap-2">
         <button
           type="button"
           className={cn(
             glassAction,
             video.is_liked && 'border-red-400/30 bg-red-500/20 text-red-100',
           )}
+          onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
+            revealControls();
             onLike(video.id);
             mediumTap();
           }}
         >
-          <ThumbsUp className={cn('h-4 w-4', video.is_liked && 'fill-current')} />
+          <Heart
+            className={cn(
+              'h-4.5 w-4.5',
+              video.is_liked && 'fill-red-500 text-red-500',
+            )}
+          />
           {formatCompactNumber(video.likes_count || 0)}
         </button>
         <button
           type="button"
           className={glassAction}
+          onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
+            revealControls();
             onComments(video);
           }}
         >
@@ -549,8 +572,10 @@ export function VideoWatchPanel({
         <button
           type="button"
           className={glassAction}
+          onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
+            revealControls();
             onShare(video);
           }}
         >
@@ -563,8 +588,10 @@ export function VideoWatchPanel({
             glassAction,
             video.is_bookmarked && 'border-primary/40 bg-primary/20',
           )}
+          onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
+            revealControls();
             onBookmark(video.id);
             lightTap();
           }}
@@ -597,13 +624,32 @@ export function VideoWatchPanel({
           aria-keyshortcuts="Space K J L M F I ArrowLeft ArrowRight ArrowUp ArrowDown Home End Shift+N Shift+P"
           onPointerMove={revealControls}
           onPointerDown={(event) => {
+            const target =
+              event.target instanceof HTMLElement ? event.target : null;
+            if (
+              target?.closest(
+                'button, a, input, textarea, select, [role="slider"], [data-video-interactive="true"]',
+              )
+            ) {
+              revealControls();
+              return;
+            }
             if (event.pointerType === 'mouse' && event.button !== 0) return;
             startHold();
           }}
           onPointerUp={endHold}
           onPointerCancel={endHold}
           onPointerLeave={endHold}
-          onClick={() => {
+          onClick={(event) => {
+            const target =
+              event.target instanceof HTMLElement ? event.target : null;
+            if (
+              target?.closest(
+                'button, a, input, textarea, select, [role="slider"], [data-video-interactive="true"]',
+              )
+            ) {
+              return;
+            }
             if (justHeldRef.current) {
               justHeldRef.current = false;
               return;
@@ -683,14 +729,17 @@ export function VideoWatchPanel({
 
           <div
             className={cn(
-              'pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-between bg-gradient-to-b from-black/70 via-black/15 to-transparent p-3 transition-opacity',
+              'pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-between bg-gradient-to-b from-black/70 via-black/15 to-transparent p-3 transition-opacity duration-200',
               showControls ? 'opacity-100' : 'opacity-0',
             )}
           >
             <Button
               variant="ghost"
               size="icon"
-              className="pointer-events-auto h-10 w-10 rounded-full border border-white/10 bg-black/25 text-white backdrop-blur-xl hover:bg-white/15"
+              className={cn(
+                'h-10 w-10 rounded-full border border-white/10 bg-black/25 text-white backdrop-blur-xl hover:bg-white/15',
+                showControls ? 'pointer-events-auto' : 'pointer-events-none',
+              )}
               onClick={(event) => {
                 event.stopPropagation();
                 onClose();
@@ -700,7 +749,12 @@ export function VideoWatchPanel({
               <ArrowLeft className="h-5 w-5" />
             </Button>
 
-            <div className="pointer-events-auto flex items-center gap-2">
+            <div
+              className={cn(
+                'flex items-center gap-2',
+                showControls ? 'pointer-events-auto' : 'pointer-events-none',
+              )}
+            >
               <Button
                 variant="ghost"
                 size="sm"
@@ -765,8 +819,10 @@ export function VideoWatchPanel({
 
           <div
             className={cn(
-              'absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-3 pb-2 pt-10 transition-opacity lg:px-5 lg:pb-3 lg:pt-12',
-              showControls ? 'opacity-100' : 'opacity-0',
+              'absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-3 pb-2 pt-10 transition-opacity duration-200 lg:px-5 lg:pb-3 lg:pt-12',
+              showControls
+                ? 'pointer-events-auto opacity-100'
+                : 'pointer-events-none opacity-0',
             )}
             onClick={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
@@ -919,7 +975,12 @@ export function VideoWatchPanel({
                     video.is_liked && 'bg-primary/15 text-primary',
                   )}
                 >
-                  <ThumbsUp className={cn('h-4 w-4', video.is_liked && 'fill-current')} />
+                  <Heart
+                    className={cn(
+                      'h-4 w-4',
+                      video.is_liked && 'fill-red-500 text-red-500',
+                    )}
+                  />
                   {formatCompactNumber(video.likes_count || 0)}
                 </button>
                 <button
