@@ -215,7 +215,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $video_rank_watch$
 begin
   if tg_op = 'DELETE' then
     perform public.recalculate_video_recommendation_rank(old.post_id);
@@ -225,7 +225,7 @@ begin
   perform public.recalculate_video_recommendation_rank(new.post_id);
   return new;
 end;
-$;
+$video_rank_watch$;
 
 drop trigger if exists video_watch_refresh_recommendation_rank
   on public.video_watch_sessions;
