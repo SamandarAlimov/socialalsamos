@@ -15,6 +15,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import type { AIMessage } from './types';
 import { AIToolTimeline } from './AIToolTimeline';
@@ -84,18 +85,67 @@ function CodeBlock({ className, children }: { className?: string; children: Reac
 }
 
 function ImageCard({ url, id }: { url: string; id: string }) {
+  const [previewOpen, setPreviewOpen] = useState(false);
+
   return (
-    <div className="relative mt-3 w-full max-w-xl overflow-hidden rounded-2xl border border-border/50 bg-muted/20">
-      <img src={url} alt="AI yaratgan rasm" className="block h-auto max-h-[70vh] w-full object-contain" loading="lazy" />
-      <div className="absolute right-2 top-2 flex gap-1">
-        <Button size="icon" variant="secondary" className="h-8 w-8 rounded-lg bg-background/85 backdrop-blur" onClick={() => window.open(url, '_blank')} aria-label="To‘liq ko‘rish">
-          <Maximize2 className="h-3.5 w-3.5" />
-        </Button>
-        <Button size="icon" variant="secondary" className="h-8 w-8 rounded-lg bg-background/85 backdrop-blur" asChild aria-label="Yuklab olish">
-          <a href={url} download={`alsamos-ai-${id}.png`}><Download className="h-3.5 w-3.5" /></a>
-        </Button>
+    <>
+      <div className="relative mt-3 w-full max-w-xl overflow-hidden rounded-2xl border border-border/50 bg-muted/20">
+        <button
+          type="button"
+          onClick={() => setPreviewOpen(true)}
+          className="block w-full cursor-zoom-in bg-transparent p-0 text-left"
+          aria-label="Rasmni katta ko‘rish"
+        >
+          <img
+            src={url}
+            alt="AI yaratgan rasm"
+            className="block h-auto max-h-[70vh] w-full object-contain"
+            loading="lazy"
+          />
+        </button>
+        <div className="absolute right-2 top-2 flex gap-1">
+          <Button
+            size="icon"
+            variant="secondary"
+            className="h-8 w-8 rounded-lg bg-background/85 backdrop-blur"
+            onClick={() => setPreviewOpen(true)}
+            aria-label="To‘liq ko‘rish"
+          >
+            <Maximize2 className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            size="icon"
+            variant="secondary"
+            className="h-8 w-8 rounded-lg bg-background/85 backdrop-blur"
+            asChild
+            aria-label="Yuklab olish"
+          >
+            <a href={url} download={`alsamos-ai-${id}.png`}>
+              <Download className="h-3.5 w-3.5" />
+            </a>
+          </Button>
+        </div>
       </div>
-    </div>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="h-[94vh] w-[96vw] max-w-[96vw] place-items-center gap-0 overflow-hidden border-white/10 bg-black/95 p-3 text-white shadow-2xl sm:rounded-2xl">
+          <DialogTitle className="sr-only">AI yaratgan rasm</DialogTitle>
+          <img
+            src={url}
+            alt="AI yaratgan rasm — to‘liq ko‘rinish"
+            className="max-h-[88vh] max-w-[92vw] select-none object-contain"
+          />
+          <div className="absolute bottom-4 right-4">
+            <Button size="sm" variant="secondary" asChild className="gap-2 bg-white/90 text-black hover:bg-white">
+              <a href={url} download={`alsamos-ai-${id}.png`}>
+                <Download className="h-4 w-4" />
+                Yuklab olish
+              </a>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
