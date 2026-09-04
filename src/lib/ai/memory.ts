@@ -1,16 +1,12 @@
-// Uzoq muddatli xotira (Claude/ChatGPT'dagi "Memory" kabi).
+// Long-term AI memory.
 //
-// MAQSAD: bitta suhbatda aytilgan muhim ma'lumot boshqa suhbatlarda ham eslansin.
-// Saqlash: birinchi navbatda brauzerda (localStorage) — deploy talab qilmaydi.
-// Imkon bo'lsa `ai_memories` jadvaliga ham yoziladi (RLS: auth.uid() = user_id),
-// shunda xotira boshqa qurilmalarda ham ishlaydi.
-
-import { supabase } from '@/integrations/supabase/client';
-import { db } from '@/lib/db';
+// Production must keep working even when optional Supabase AI migrations are
+// not deployed. Memory therefore uses durable browser storage as the primary
+// store and never probes a table that may not exist. This removes repeated
+// PostgREST 404s while preserving cross-chat memory on the current device.
 
 const KEY = 'alsamos.ai.memory';
 const MAX_ITEMS = 200;
-let remoteMemoryUnavailable = false;
 
 export type MemoryKind = 'fact' | 'preference' | 'project' | 'person' | 'task';
 
@@ -35,24 +31,12 @@ const write = (items: MemoryItem[]) => {
   try {
     localStorage.setItem(KEY, JSON.stringify(items.slice(-MAX_ITEMS)));
   } catch {
-    /* e'tiborsiz */
+    // Storage can be unavailable in restricted/private browser contexts.
   }
-};
-
-const isMissingMemorySchema = (error: any): boolean => {
-  const message = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
-  return (
-    error?.status === 404 ||
-    error?.code === '42P01' ||
-    error?.code === 'PGRST205' ||
-    message.includes('ai_memories') ||
-    message.includes('schema cache')
-  );
 };
 
 export const listMemories = (): MemoryItem[] => read();
 
-/** Bir xil ma'noli yozuvlarni takrorlamaslik uchun oddiy solishtirish. */
 const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
 
 export function addMemory(
@@ -64,7 +48,7 @@ export function addMemory(
   if (clean.length < 3) return null;
 
   const items = read();
-  if (items.some((m) => normalize(m.text) === normalize(clean))) return null;
+  if (items.some((memory) => normalize(memory.text) === normalize(clean))) return null;
 
   const item: MemoryItem = {
     id: crypto.randomUUID(),
@@ -74,85 +58,21 @@ export function addMemory(
     source,
   };
   write([...items, item]);
-  void persistRemote(item);
   return item;
 }
 
 export function removeMemory(id: string) {
-  write(read().filter((m) => m.id !== id));
-  if (remoteMemoryUnavailable) return;
-  void (async () => {
-    try {
-      const { error } = await db.from('ai_memories').delete().eq('id', id);
-      if (error && isMissingMemorySchema(error)) remoteMemoryUnavailable = true;
-    } catch {
-      /* jadval bo'lmasligi mumkin */
-    }
-  })();
+  write(read().filter((memory) => memory.id !== id));
 }
 
 export function clearMemories() {
   write([]);
 }
 
-async function persistRemote(item: MemoryItem) {
-  if (remoteMemoryUnavailable) return;
-  try {
-    const { data } = await supabase.auth.getUser();
-    const userId = data.user?.id;
-    if (!userId) return;
-    const { error } = await db.from('ai_memories').insert({
-      id: item.id,
-      user_id: userId,
-      content: item.text,
-      kind: item.kind,
-    } as any);
-    if (error && isMissingMemorySchema(error)) remoteMemoryUnavailable = true;
-  } catch {
-    // Jadval hali migratsiya qilinmagan bo'lishi mumkin — mahalliy xotira yetarli.
-  }
-}
-
-/** Serverdagi xotirani mahalliy ro'yxat bilan birlashtiradi (kirishda chaqiriladi). */
+/** Kept async for API compatibility with the AI page. */
 export async function syncMemories(): Promise<MemoryItem[]> {
-  if (remoteMemoryUnavailable) return read();
-  try {
-    const { data: auth } = await supabase.auth.getUser();
-    const userId = auth.user?.id;
-    if (!userId) return read();
-
-    const { data, error } = await db
-      .from('ai_memories')
-      .select('id, content, kind, created_at')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: true })
-      .limit(MAX_ITEMS);
-    if (error || !data) {
-      if (error && isMissingMemorySchema(error)) remoteMemoryUnavailable = true;
-      return read();
-    }
-
-    const remote: MemoryItem[] = (data as any[]).map((row) => ({
-      id: String(row.id),
-      text: String(row.content ?? ''),
-      kind: (row.kind as MemoryKind) ?? 'fact',
-      createdAt: String(row.created_at ?? new Date().toISOString()),
-    }));
-
-    const merged = [...remote];
-    for (const local of read()) {
-      if (!merged.some((m) => normalize(m.text) === normalize(local.text))) merged.push(local);
-    }
-    write(merged);
-    return merged;
-  } catch {
-    return read();
-  }
+  return read();
 }
-
-/* ------------------------------------------------------------------ *
- * Avtomatik eslab qolish
- * ------------------------------------------------------------------ */
 
 const EXPLICIT_RE =
   /(eslab qol|esingda tut|yodda tut|remember this|remember that|запомни|不要忘记)/i;
@@ -171,10 +91,6 @@ const PREFERENCE_RE = [
   /\b(javoblarni|kodni|matnni)\s+[^.\n]{5,120}(yoz|ber|qil)\w*/i,
 ];
 
-/**
- * Foydalanuvchi xabaridan eslab qolishga arziydigan ma'lumotni ajratadi.
- * Ehtiyotkor: faqat aniq signal bo'lgandagina yozadi (shovqin bo'lmasligi uchun).
- */
 export function captureMemories(userText: string, conversationTitle?: string): MemoryItem[] {
   const saved: MemoryItem[] = [];
   if (!userText) return saved;
@@ -184,40 +100,36 @@ export function captureMemories(userText: string, conversationTitle?: string): M
     if (item) saved.push(item);
   };
 
-  // 1) Foydalanuvchi ochiq "eslab qol" desa — butun jumlani saqlaymiz.
   if (EXPLICIT_RE.test(userText)) {
     const sentence =
       userText
         .split(/[.\n]/)
-        .find((s) => EXPLICIT_RE.test(s))
+        .find((part) => EXPLICIT_RE.test(part))
         ?.replace(EXPLICIT_RE, '')
         .replace(/^[\s:,—-]+/, '')
         .trim() || userText.trim();
     if (sentence.length > 2) add(sentence, 'fact');
   }
 
-  // 2) O'zi haqidagi barqaror faktlar.
-  for (const re of SELF_FACT_RE) {
-    const match = re.exec(userText);
+  for (const expression of SELF_FACT_RE) {
+    const match = expression.exec(userText);
     if (match) add(match[0].trim(), 'person');
   }
 
-  // 3) Uslub/afzallik ko'rsatmalari.
-  for (const re of PREFERENCE_RE) {
-    const match = re.exec(userText);
+  for (const expression of PREFERENCE_RE) {
+    const match = expression.exec(userText);
     if (match) add(match[0].trim(), 'preference');
   }
 
   return saved;
 }
 
-/** Xotirani model uchun matn blokiga aylantiradi. */
 export function memoryBlock(items: MemoryItem[] = listMemories()): string {
   if (items.length === 0) return '';
-  const lines = items.slice(-60).map((m) => `- (${m.kind}) ${m.text}`);
+  const lines = items.slice(-60).map((memory) => `- (${memory.kind}) ${memory.text}`);
   return [
     'UZOQ MUDDATLI XOTIRA (foydalanuvchi haqida oldingi suhbatlardan bilganlaring):',
     ...lines,
-    'Bu ma\u02bclumotlarni tabiiy ishlat; "xotiram yo\u02bbq" dema. Yangi muhim fakt bilsang, javob oxirida qisqa eslatib qo\u02bby.',
+    'Bu ma’lumotlarni tabiiy ishlat; yangi muhim faktni faqat foydalanuvchi aniq aytsa eslab qol.',
   ].join('\n');
 }
