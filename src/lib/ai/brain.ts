@@ -6,7 +6,7 @@ import type { AIConversation, AIProject } from '@/components/ai/types';
 import { memoryBlock, listMemories, type MemoryItem } from './memory';
 import { matchSkills, skillBlock } from './skills';
 import { hasGithubToken } from './githubConnector';
-import { readActiveLocalProject } from './projectsStore';
+import { projectForConversation, readActiveLocalProject } from './projectsStore';
 
 export const MASTER_PROMPT = `Sen — Alsamos AI. Sen umumiy maqsadli, professional darajadagi AI yordamchisan va Alsamos ichida foydalanuvchining vazifasini imkon qadar oxirigacha bajarasan.
 
@@ -83,15 +83,18 @@ export function projectBlock(
   project: AIProject | null | undefined,
   conversations: AIConversation[] = [],
   currentId?: string | null,
+  localUserId?: string,
 ): string {
   if (!project) return '';
+
   const projectChats = conversations
-    .filter(
-      (conversation) =>
-        conversation.projectId === project.id &&
-        conversation.id !== currentId &&
-        conversation.messages.length > 0,
-    )
+    .filter((conversation) => {
+      if (conversation.id === currentId || conversation.messages.length === 0) return false;
+      if (conversation.projectId === project.id) return true;
+      return Boolean(
+        localUserId && projectForConversation(localUserId, conversation.id) === project.id,
+      );
+    })
     .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
     .slice(0, 8);
 
@@ -129,13 +132,20 @@ function environmentBlock(): string {
 export function buildBrainContext(input: BrainInput): string {
   const memories = input.memories ?? listMemories();
   const skills = matchSkills(input.userText);
-  const localProject = readActiveLocalProject()?.project || null;
-  const effectiveProject = input.activeProject || localProject;
+  const localActive = readActiveLocalProject();
+  const effectiveProject = input.activeProject || localActive?.project || null;
+  const localUserId =
+    localActive && effectiveProject?.id === localActive.project.id ? localActive.userId : undefined;
 
   return [
     MASTER_PROMPT,
     environmentBlock(),
-    projectBlock(effectiveProject, input.conversations, input.currentConversationId),
+    projectBlock(
+      effectiveProject,
+      input.conversations,
+      input.currentConversationId,
+      localUserId,
+    ),
     memoryBlock(memories),
     crossChatBlock(input.conversations, input.currentConversationId),
     skillBlock(skills),
