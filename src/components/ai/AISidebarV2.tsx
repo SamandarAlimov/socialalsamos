@@ -1,12 +1,8 @@
 import { useMemo, useState } from 'react';
 import {
-  Archive,
   ChevronDown,
   ChevronLeft,
-  ChevronRight,
   FileCode2,
-  FolderInput,
-  FolderKanban,
   Github,
   History,
   MessageSquare,
@@ -19,7 +15,6 @@ import {
   Plus,
   Search,
   Trash2,
-  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,13 +24,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import type { AIConversation, AIProject } from './types';
-import { AIProjectDialog } from './AIProjectDialog';
 
 interface Props {
   conversations: AIConversation[];
@@ -68,15 +61,23 @@ function groupByDate(items: AIConversation[]): Group[] {
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const day = 86400000;
-  const buckets: Record<string, AIConversation[]> = { today: [], yesterday: [], week: [], month: [], older: [] };
-  items.forEach((conversation) => {
+  const buckets: Record<string, AIConversation[]> = {
+    today: [],
+    yesterday: [],
+    week: [],
+    month: [],
+    older: [],
+  };
+
+  for (const conversation of items) {
     const timestamp = conversation.updatedAt.getTime();
     if (timestamp >= startOfToday) buckets.today.push(conversation);
     else if (timestamp >= startOfToday - day) buckets.yesterday.push(conversation);
     else if (timestamp >= startOfToday - 7 * day) buckets.week.push(conversation);
     else if (timestamp >= startOfToday - 30 * day) buckets.month.push(conversation);
     else buckets.older.push(conversation);
-  });
+  }
+
   return [
     { key: 'today', label: 'Bugun', items: buckets.today },
     { key: 'yesterday', label: 'Kecha', items: buckets.yesterday },
@@ -101,35 +102,21 @@ export function AISidebar({
   onOpenConnectors,
   onOpenGithub,
   artifactCount = 0,
-  projects = [],
-  activeProjectId = null,
-  onSelectProject,
-  onCreateProject,
-  onUpdateProject,
-  onDeleteProject,
-  onMoveConversation,
 }: Props) {
   const [query, setQuery] = useState('');
   const [recentsOpen, setRecentsOpen] = useState(true);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
-  const [projectDialogOpen, setProjectDialogOpen] = useState(false);
-  const [editingProject, setEditingProject] = useState<AIProject | null>(null);
-
-  const activeProject = projects.find((project) => project.id === activeProjectId) ?? null;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const projectScoped = activeProjectId
-      ? conversations.filter((conversation) => conversation.projectId === activeProjectId)
-      : conversations;
-    if (!q) return projectScoped;
-    return projectScoped.filter(
+    if (!q) return conversations;
+    return conversations.filter(
       (conversation) =>
         conversation.title.toLowerCase().includes(q) ||
         conversation.messages.some((message) => message.content.toLowerCase().includes(q)),
     );
-  }, [activeProjectId, conversations, query]);
+  }, [conversations, query]);
 
   const pinned = filtered.filter((conversation) => conversation.pinned);
   const groups = groupByDate(filtered.filter((conversation) => !conversation.pinned));
@@ -141,16 +128,6 @@ export function AISidebar({
     if (!hit) return null;
     const index = hit.content.toLowerCase().indexOf(q);
     return `…${hit.content.slice(Math.max(0, index - 24), index + 56).trim()}…`;
-  };
-
-  const openCreateProject = () => {
-    setEditingProject(null);
-    setProjectDialogOpen(true);
-  };
-
-  const openEditProject = (project: AIProject) => {
-    setEditingProject(project);
-    setProjectDialogOpen(true);
   };
 
   const renderConversation = (conversation: AIConversation) => (
@@ -215,7 +192,7 @@ export function AISidebar({
             <MoreHorizontal className="h-3.5 w-3.5" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-52">
+        <DropdownMenuContent align="end" className="min-w-48">
           <DropdownMenuItem
             className="text-xs"
             onClick={(event) => {
@@ -226,7 +203,6 @@ export function AISidebar({
           >
             <Pencil className="mr-2 h-3.5 w-3.5" /> Nomini o‘zgartirish
           </DropdownMenuItem>
-
           <DropdownMenuItem
             className="text-xs"
             onClick={(event) => {
@@ -240,38 +216,6 @@ export function AISidebar({
               <><Pin className="mr-2 h-3.5 w-3.5" /> Mahkamlash</>
             )}
           </DropdownMenuItem>
-
-          {onMoveConversation && projects.length > 0 && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-[10px] font-medium text-muted-foreground">Loyihaga ko‘chirish</DropdownMenuLabel>
-              {projects.map((project) => (
-                <DropdownMenuItem
-                  key={project.id}
-                  className="text-xs"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void onMoveConversation(conversation.id, project.id);
-                  }}
-                >
-                  <FolderInput className="mr-2 h-3.5 w-3.5" />
-                  <span className="truncate">{project.name}</span>
-                </DropdownMenuItem>
-              ))}
-              {conversation.projectId && (
-                <DropdownMenuItem
-                  className="text-xs"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void onMoveConversation(conversation.id, null);
-                  }}
-                >
-                  <Archive className="mr-2 h-3.5 w-3.5" /> Loyihadan chiqarish
-                </DropdownMenuItem>
-              )}
-            </>
-          )}
-
           <DropdownMenuSeparator />
           <DropdownMenuItem
             className="text-xs text-destructive"
@@ -289,16 +233,6 @@ export function AISidebar({
 
   return (
     <div className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-background">
-      <AIProjectDialog
-        open={projectDialogOpen}
-        onOpenChange={setProjectDialogOpen}
-        project={editingProject}
-        onSave={async (value) => {
-          if (editingProject && onUpdateProject) await onUpdateProject(editingProject.id, value);
-          else if (onCreateProject) await onCreateProject(value);
-        }}
-      />
-
       <div className="space-y-3 p-3">
         <div className="flex items-center justify-between">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -345,163 +279,72 @@ export function AISidebar({
           </button>
         </nav>
 
-        <div className="border-t border-border/50 pt-3">
-          <div className="mb-1 flex items-center justify-between px-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Loyihalar</span>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-6 w-6 rounded-md"
-              onClick={openCreateProject}
-              aria-label="Yangi loyiha"
-              disabled={!onCreateProject}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => onSelectProject?.(null)}
-            className={cn(
-              'mb-0.5 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[12px] transition-colors hover:bg-muted/60',
-              !activeProjectId && 'bg-muted font-medium',
-            )}
-          >
-            <History className="h-3.5 w-3.5 text-muted-foreground" /> Barcha suhbatlar
-          </button>
-
-          {projects.map((project) => (
-            <div
-              key={project.id}
-              className={cn(
-                'group/project flex items-center rounded-xl transition-colors hover:bg-muted/60',
-                activeProjectId === project.id && 'bg-muted',
-              )}
-            >
-              <button
-                type="button"
-                onClick={() => onSelectProject?.(project.id)}
-                className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-left text-[12px]"
-              >
-                <FolderKanban className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <span className="truncate">{project.name}</span>
-                <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
-                  {conversations.filter((conversation) => conversation.projectId === project.id).length || ''}
-                </span>
-              </button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="mr-1 h-6 w-6 rounded-md opacity-0 group-hover/project:opacity-100 focus:opacity-100"
-                    aria-label="Loyiha amallari"
-                  >
-                    <MoreHorizontal className="h-3.5 w-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem className="text-xs" onClick={() => openEditProject(project)}>
-                    <Pencil className="mr-2 h-3.5 w-3.5" /> Ko‘rsatmalarni tahrirlash
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="text-xs text-destructive"
-                    onClick={() => {
-                      if (window.confirm(`“${project.name}” loyihasini o‘chirasizmi? Suhbatlar saqlanib qoladi.`)) {
-                        void onDeleteProject?.(project.id);
-                      }
-                    }}
-                  >
-                    <Trash2 className="mr-2 h-3.5 w-3.5" /> Loyihani o‘chirish
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          ))}
-        </div>
-
-        {activeProject && (
-          <div className="rounded-xl border border-border/60 bg-muted/25 px-3 py-2">
-            <p className="truncate text-xs font-medium">{activeProject.name}</p>
-            <p className="mt-0.5 line-clamp-2 text-[10px] leading-relaxed text-muted-foreground">
-              {activeProject.instructions || 'Bu loyiha uchun ko‘rsatma hali yozilmagan.'}
-            </p>
-          </div>
-        )}
-
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <div className="relative border-t border-border/50 pt-3">
+          <Search className="absolute left-3 top-[26px] h-3.5 w-3.5 text-muted-foreground" />
           <Input
+            type="text"
+            name="alsamos-ai-conversation-filter"
+            inputMode="search"
+            role="searchbox"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-1p-ignore="true"
+            data-lpignore="true"
+            data-form-type="other"
+            aria-label="Suhbatlarda qidirish"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => event.key === 'Escape' && setQuery('')}
-            placeholder={activeProject ? 'Loyihada qidirish…' : 'Suhbatlarda qidirish…'}
-            autoComplete="off"
-            className={cn('h-9 rounded-xl border-border/50 bg-muted/35 pl-9 text-xs', query && 'pr-8')}
+            placeholder="Suhbatlarni qidirish"
+            className="h-8 rounded-xl pl-8 text-xs"
           />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground"
-              aria-label="Qidiruvni tozalash"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          )}
         </div>
       </div>
 
-      <ScrollArea className="min-h-0 w-full min-w-0 flex-1 px-2 [&_[data-radix-scroll-area-viewport]>div]:!block [&_[data-radix-scroll-area-viewport]>div]:!w-full">
-        <div className="w-full min-w-0 space-y-3 overflow-hidden pb-4">
-          {loading ? (
-            <div className="space-y-2 px-1">
-              {Array.from({ length: 6 }).map((_, index) => (
-                <div key={index} className="flex items-center gap-2.5 px-1.5 py-2">
-                  <Skeleton className="h-7 w-7 rounded-lg" />
-                  <Skeleton className="h-3.5 flex-1 rounded" />
+      <ScrollArea className="min-h-0 flex-1 px-3 pb-3">
+        {loading ? (
+          <div className="space-y-2 px-1 pt-1">
+            {Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-10 w-full rounded-xl" />)}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="px-4 py-10 text-center text-xs text-muted-foreground">
+            {query ? 'Natija topilmadi' : 'Hozircha suhbat yo‘q'}
+          </div>
+        ) : (
+          <div className="space-y-3 pb-3">
+            {pinned.length > 0 && (
+              <section>
+                <div className="mb-1 flex items-center gap-1.5 px-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <Pin className="h-3 w-3" /> Mahkamlangan
                 </div>
-              ))}
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="px-6 py-12 text-center text-muted-foreground">
-              <History className="mx-auto mb-3 h-7 w-7 opacity-40" />
-              <p className="text-xs">
-                {query ? 'Natija topilmadi' : activeProject ? 'Bu loyihada hali suhbat yo‘q' : 'Hali suhbatlar yo‘q'}
-              </p>
-            </div>
-          ) : (
-            <>
-              {pinned.length > 0 && (
-                <div>
-                  <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Mahkamlangan</p>
-                  <div className="space-y-0.5">{pinned.map(renderConversation)}</div>
+                <div className="space-y-0.5">{pinned.map(renderConversation)}</div>
+              </section>
+            )}
+
+            <section>
+              <button
+                type="button"
+                onClick={() => setRecentsOpen((value) => !value)}
+                className="mb-1 flex w-full items-center gap-1.5 px-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+              >
+                <History className="h-3 w-3" /> Suhbatlar
+                <ChevronDown className={cn('ml-auto h-3 w-3 transition-transform', !recentsOpen && '-rotate-90')} />
+              </button>
+              {recentsOpen && (
+                <div className="space-y-2">
+                  {groups.map((group) => (
+                    <div key={group.key}>
+                      <p className="mb-0.5 px-2 text-[10px] text-muted-foreground">{group.label}</p>
+                      <div className="space-y-0.5">{group.items.map(renderConversation)}</div>
+                    </div>
+                  ))}
                 </div>
               )}
-
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setRecentsOpen((value) => !value)}
-                  className="flex w-full items-center gap-1 px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground"
-                >
-                  {recentsOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                  So‘nggilar
-                </button>
-                {recentsOpen && groups.map((group) => (
-                  <div key={group.key} className="mb-2">
-                    <p className="px-2.5 py-1 text-[10px] text-muted-foreground/70">{group.label}</p>
-                    <div className="space-y-0.5">{group.items.map(renderConversation)}</div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+            </section>
+          </div>
+        )}
       </ScrollArea>
-
-      {/* Intentionally no profile/settings footer here. Global app navigation already owns it. */}
     </div>
   );
 }
