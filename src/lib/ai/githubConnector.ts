@@ -125,7 +125,9 @@ async function call<T>(payload: Record<string, unknown>): Promise<T> {
     throw new GithubConnectorUnavailableError(NOT_DEPLOYED_MESSAGE);
   }
 
-  if (res.status === 404 || res.status === 501 || res.status === 502 || res.status === 503) {
+  // 5xx ham server yo'li ishlamayotganini anglatadi. Bunday paytda foydalanuvchini
+  // to'xtatmaymiz — xavfsiz direct GitHub API fallback darhol ishlaydi.
+  if (res.status === 404 || res.status >= 500) {
     throw new GithubConnectorUnavailableError(NOT_DEPLOYED_MESSAGE);
   }
 
