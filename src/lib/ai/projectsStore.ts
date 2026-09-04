@@ -1,6 +1,7 @@
 import type { AIProject } from '@/components/ai/types';
 
 const PROJECTS_VERSION = 1;
+const ACTIVE_PROJECT_KEY = `alsamos.ai.active-project.v${PROJECTS_VERSION}`;
 
 const projectsKey = (userId: string) => `alsamos.ai.projects.v${PROJECTS_VERSION}:${userId}`;
 const conversationMapKey = (userId: string) => `alsamos.ai.project-conversations.v${PROJECTS_VERSION}:${userId}`;
@@ -11,6 +12,11 @@ type StoredProject = {
   instructions: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type ActiveLocalProject = {
+  userId: string;
+  project: AIProject;
 };
 
 function safeParse<T>(value: string | null, fallback: T): T {
@@ -95,6 +101,11 @@ export function updateLocalProject(
     return updated;
   });
   saveLocalProjects(userId, next);
+
+  const active = readActiveLocalProject();
+  if (updated && active?.userId === userId && active.project.id === projectId) {
+    writeActiveProject(userId, updated);
+  }
   return updated;
 }
 
@@ -113,6 +124,9 @@ export function deleteLocalProject(userId: string, projectId: string) {
     }
   }
   if (changed) writeConversationProjectMap(userId, mapping);
+
+  const active = readActiveLocalProject();
+  if (active?.userId === userId && active.project.id === projectId) clearActiveLocalProject();
 }
 
 export function readConversationProjectMap(userId: string): Record<string, string> {
@@ -157,4 +171,46 @@ export function countConversationsByProject(
     counts[projectId] = (counts[projectId] || 0) + 1;
   }
   return counts;
+}
+
+function writeActiveProject(userId: string, project: AIProject) {
+  try {
+    localStorage.setItem(
+      ACTIVE_PROJECT_KEY,
+      JSON.stringify({ userId, project: toStored(project) }),
+    );
+  } catch {
+    // ignore storage failures
+  }
+}
+
+export function setActiveLocalProject(userId: string, projectId: string): AIProject | null {
+  const project = listLocalProjects(userId).find((item) => item.id === projectId) || null;
+  if (!project) {
+    clearActiveLocalProject();
+    return null;
+  }
+  writeActiveProject(userId, project);
+  return project;
+}
+
+export function readActiveLocalProject(): ActiveLocalProject | null {
+  try {
+    const raw = safeParse<{ userId?: string; project?: StoredProject } | null>(
+      localStorage.getItem(ACTIVE_PROJECT_KEY),
+      null,
+    );
+    if (!raw?.userId || !raw.project?.id) return null;
+    return { userId: raw.userId, project: toProject(raw.project) };
+  } catch {
+    return null;
+  }
+}
+
+export function clearActiveLocalProject() {
+  try {
+    localStorage.removeItem(ACTIVE_PROJECT_KEY);
+  } catch {
+    // ignore storage failures
+  }
 }
