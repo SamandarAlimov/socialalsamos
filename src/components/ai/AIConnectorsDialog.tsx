@@ -13,18 +13,14 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { db } from '@/lib/db';
-
-export type ConnectorRow = {
-  id: string;
-  name: string;
-  kind: string;
-  base_url: string;
-  auth_type: string | null;
-  description: string | null;
-  enabled: boolean;
-  last_error: string | null;
-};
+import {
+  listMcpServers,
+  refreshMcpTools,
+  removeMcpServer,
+  saveMcpServer,
+  testMcpServer,
+  type McpServer,
+} from '@/lib/ai/mcpClient';
 
 interface AIConnectorsDialogProps {
   open: boolean;
@@ -33,7 +29,11 @@ interface AIConnectorsDialogProps {
   onChanged?: () => void;
 }
 
-/** MCP pluginlarini (konnektorlarni) qo'shish/boshqarish oynasi. */
+/**
+ * MCP konnektorlarini brauzerning o'zida boshqaradi.
+ * Bu oqim Supabase'dagi ai_connectors jadvaliga bog'liq emas, shuning uchun
+ * production migration kechiksa ham foydalanuvchining konnektorlari ishlaydi.
+ */
 export function AIConnectorsDialog({
   open,
   onOpenChange,
@@ -41,30 +41,21 @@ export function AIConnectorsDialog({
   onChanged,
 }: AIConnectorsDialogProps) {
   const { toast } = useToast();
-  const [rows, setRows] = useState<ConnectorRow[]>([]);
+  const [rows, setRows] = useState<McpServer[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
   const [token, setToken] = useState('');
 
-  const load = useCallback(async () => {
-    if (!userId) return;
+  const load = useCallback(() => {
     setLoading(true);
-    const { data, error } = await db
-      .from('ai_connectors')
-      .select('id, name, kind, base_url, auth_type, description, enabled, last_error')
-      .order('created_at', { ascending: false });
-    if (error) {
-      toast({ title: "Konnektorlarni yuklab bo'lmadi", description: error.message, variant: 'destructive' });
-    } else {
-      setRows((data ?? []) as ConnectorRow[]);
-    }
+    setRows(listMcpServers().sort((a, b) => b.addedAt - a.addedAt));
     setLoading(false);
-  }, [userId, toast]);
+  }, []);
 
   useEffect(() => {
-    if (open) void load();
+    if (open) load();
   }, [open, load]);
 
   const add = async () => {
@@ -72,62 +63,78 @@ export function AIConnectorsDialog({
       toast({ title: 'Tizimga kirish kerak', variant: 'destructive' });
       return;
     }
+
     const trimmedName = name.trim();
     const trimmedUrl = url.trim();
-    if (!trimmedName || !/^https:\/\//i.test(trimmedUrl)) {
+    if (!trimmedName || !/^https?:\/\//i.test(trimmedUrl)) {
       toast({
         title: "Ma'lumot to'liq emas",
-        description: 'Nom va https:// bilan boshlanadigan MCP server manzili kerak.',
+        description: 'Nom va http:// yoki https:// bilan boshlanadigan MCP server manzili kerak.',
         variant: 'destructive',
       });
       return;
     }
 
     setSaving(true);
-    const { error } = await db.from('ai_connectors').insert({
-      user_id: userId,
-      name: trimmedName,
-      kind: 'mcp',
-      base_url: trimmedUrl,
-      auth_type: token.trim() ? 'bearer' : 'none',
-      auth_token: token.trim() || null,
-      enabled: true,
+    try {
+      const checked = await testMcpServer(trimmedUrl, token.trim() || undefined);
+      const saved = saveMcpServer({
+        name: trimmedName || checked.serverName,
+        url: trimmedUrl,
+        token: token.trim() || undefined,
+        enabled: true,
+      });
+
+      // Vositalarni keshga yozamiz, shunda AI shu zahoti ularni ko'ra oladi.
+      await refreshMcpTools(saved);
+
+      setName('');
+      setUrl('');
+      setToken('');
+      load();
+      onChanged?.();
+      toast({
+        title: "Konnektor qo'shildi",
+        description: `${trimmedName} ulandi. ${checked.tools.length} ta vosita topildi.`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Ulanmadi',
+        description: error instanceof Error ? error.message : 'MCP serverga ulanib bo‘lmadi.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggle = (row: McpServer) => {
+    saveMcpServer({
+      id: row.id,
+      name: row.name,
+      url: row.url,
+      token: row.token,
+      enabled: !row.enabled,
     });
-    setSaving(false);
-
-    if (error) {
-      toast({ title: "Qo'shilmadi", description: error.message, variant: 'destructive' });
-      return;
-    }
-    setName('');
-    setUrl('');
-    setToken('');
-    toast({ title: "Konnektor qo'shildi", description: `${trimmedName} endi AI uchun mavjud.` });
-    await load();
+    load();
     onChanged?.();
   };
 
-  const toggle = async (row: ConnectorRow) => {
-    const { error } = await db
-      .from('ai_connectors')
-      .update({ enabled: !row.enabled })
-      .eq('id', row.id);
-    if (error) {
-      toast({ title: "O'zgartirilmadi", description: error.message, variant: 'destructive' });
-      return;
-    }
-    await load();
+  const remove = (row: McpServer) => {
+    removeMcpServer(row.id);
+    load();
     onChanged?.();
   };
 
-  const remove = async (row: ConnectorRow) => {
-    const { error } = await db.from('ai_connectors').delete().eq('id', row.id);
-    if (error) {
-      toast({ title: "O'chirilmadi", description: error.message, variant: 'destructive' });
-      return;
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const enabled = listMcpServers().filter((server) => server.enabled);
+      await Promise.allSettled(enabled.map((server) => refreshMcpTools(server)));
+      load();
+    } finally {
+      setLoading(false);
     }
-    await load();
-    onChanged?.();
   };
 
   return (
@@ -164,6 +171,10 @@ export function AIConnectorsDialog({
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://mcp.example.com/mcp"
+              inputMode="url"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               className="h-9 font-mono text-xs"
             />
           </div>
@@ -190,7 +201,7 @@ export function AIConnectorsDialog({
 
         <div className="flex items-center justify-between">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ulangan konnektorlar</p>
-          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => void load()} aria-label="Yangilash">
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => void refresh()} aria-label="Yangilash">
             <RefreshCw className={loading ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'} />
           </Button>
         </div>
@@ -207,15 +218,14 @@ export function AIConnectorsDialog({
                 <Wrench className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{row.name}</p>
-                  <p className="truncate font-mono text-[10px] text-muted-foreground">{row.base_url}</p>
-                  {row.last_error && <p className="truncate text-[10px] text-destructive">{row.last_error}</p>}
+                  <p className="truncate font-mono text-[10px] text-muted-foreground">{row.url}</p>
                 </div>
-                <Switch checked={row.enabled} onCheckedChange={() => void toggle(row)} aria-label={`${row.name} yoqish`} />
+                <Switch checked={row.enabled} onCheckedChange={() => toggle(row)} aria-label={`${row.name} yoqish`} />
                 <Button
                   size="icon"
                   variant="ghost"
                   className="h-7 w-7 text-destructive"
-                  onClick={() => void remove(row)}
+                  onClick={() => remove(row)}
                   aria-label={`${row.name} o'chirish`}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
