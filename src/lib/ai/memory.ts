@@ -10,6 +10,7 @@ import { db } from '@/lib/db';
 
 const KEY = 'alsamos.ai.memory';
 const MAX_ITEMS = 200;
+let remoteMemoryUnavailable = false;
 
 export type MemoryKind = 'fact' | 'preference' | 'project' | 'person' | 'task';
 
@@ -36,6 +37,17 @@ const write = (items: MemoryItem[]) => {
   } catch {
     /* e'tiborsiz */
   }
+};
+
+const isMissingMemorySchema = (error: any): boolean => {
+  const message = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
+  return (
+    error?.status === 404 ||
+    error?.code === '42P01' ||
+    error?.code === 'PGRST205' ||
+    message.includes('ai_memories') ||
+    message.includes('schema cache')
+  );
 };
 
 export const listMemories = (): MemoryItem[] => read();
@@ -68,9 +80,11 @@ export function addMemory(
 
 export function removeMemory(id: string) {
   write(read().filter((m) => m.id !== id));
+  if (remoteMemoryUnavailable) return;
   void (async () => {
     try {
-      await db.from('ai_memories').delete().eq('id', id);
+      const { error } = await db.from('ai_memories').delete().eq('id', id);
+      if (error && isMissingMemorySchema(error)) remoteMemoryUnavailable = true;
     } catch {
       /* jadval bo'lmasligi mumkin */
     }
@@ -82,16 +96,18 @@ export function clearMemories() {
 }
 
 async function persistRemote(item: MemoryItem) {
+  if (remoteMemoryUnavailable) return;
   try {
     const { data } = await supabase.auth.getUser();
     const userId = data.user?.id;
     if (!userId) return;
-    await db.from('ai_memories').insert({
+    const { error } = await db.from('ai_memories').insert({
       id: item.id,
       user_id: userId,
       content: item.text,
       kind: item.kind,
     } as any);
+    if (error && isMissingMemorySchema(error)) remoteMemoryUnavailable = true;
   } catch {
     // Jadval hali migratsiya qilinmagan bo'lishi mumkin — mahalliy xotira yetarli.
   }
@@ -99,6 +115,7 @@ async function persistRemote(item: MemoryItem) {
 
 /** Serverdagi xotirani mahalliy ro'yxat bilan birlashtiradi (kirishda chaqiriladi). */
 export async function syncMemories(): Promise<MemoryItem[]> {
+  if (remoteMemoryUnavailable) return read();
   try {
     const { data: auth } = await supabase.auth.getUser();
     const userId = auth.user?.id;
@@ -110,7 +127,10 @@ export async function syncMemories(): Promise<MemoryItem[]> {
       .eq('user_id', userId)
       .order('created_at', { ascending: true })
       .limit(MAX_ITEMS);
-    if (error || !data) return read();
+    if (error || !data) {
+      if (error && isMissingMemorySchema(error)) remoteMemoryUnavailable = true;
+      return read();
+    }
 
     const remote: MemoryItem[] = (data as any[]).map((row) => ({
       id: String(row.id),
