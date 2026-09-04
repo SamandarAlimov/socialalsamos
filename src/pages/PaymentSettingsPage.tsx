@@ -2,19 +2,13 @@ import { useMemo, useState } from 'react';
 import {
   ArrowDownLeft,
   ArrowUpRight,
-  CheckCircle2,
   Clock3,
   Copy,
   History,
   Loader2,
-  MessageCircle,
   RefreshCw,
   ShieldCheck,
-  ShoppingBag,
-  Car,
-  WalletCards,
 } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { WalletCard } from '@/components/payment/WalletCard';
@@ -42,9 +36,10 @@ function transactionLabel(item: WalletLedgerEntry) {
     case 'refund':
       return 'Pul qaytarildi';
     case 'topup':
+    case 'provider_topup':
       return 'Hisob to‘ldirildi';
     default:
-      return item.description || 'Hamyon operatsiyasi';
+      return item.description || 'To‘lov';
   }
 }
 
@@ -68,8 +63,10 @@ function ActivityRow({ item }: { item: WalletLedgerEntry }) {
     <div className="flex items-center gap-3 border-b border-border/60 px-3 py-3 last:border-b-0 sm:px-4">
       <div
         className={cn(
-          'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
-          incoming ? 'bg-muted text-foreground' : 'bg-foreground text-background'
+          'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border',
+          incoming
+            ? 'border-border/70 bg-background text-foreground'
+            : 'border-foreground bg-foreground text-background'
         )}
       >
         {incoming ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
@@ -99,7 +96,6 @@ export default function PaymentSettingsPage() {
     pendingTopUps,
     isLoading,
     isRefreshing,
-    error,
     refresh,
     cancelTopUp,
   } = useWallet();
@@ -121,13 +117,10 @@ export default function PaymentSettingsPage() {
   }
 
   return (
-    <div className="mx-auto min-h-screen max-w-3xl bg-background pb-24 md:pb-8">
+    <div className="mx-auto min-h-full max-w-3xl bg-background pb-24 md:pb-8">
       <div className="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-xl">
         <div className="flex items-center justify-between px-4 py-3 sm:px-5">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">To‘lov</h1>
-            <p className="text-xs text-muted-foreground">Alsamos ichki hisob va tranzaksiyalar</p>
-          </div>
+          <h1 className="text-xl font-bold tracking-tight">To‘lov</h1>
           <Button
             variant="ghost"
             size="icon"
@@ -166,17 +159,11 @@ export default function PaymentSettingsPage() {
         </div>
       </div>
 
-      {error && (
-        <div className="mx-4 mt-4 rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-2.5 text-sm text-destructive sm:mx-5">
-          {error}
-        </div>
-      )}
-
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsContent value="main" className="mt-0 space-y-5 px-4 py-5 sm:px-5">
           <WalletCard
             balance={wallet?.balance || 0}
-            currency={wallet?.currency || 'USD'}
+            currency={wallet?.currency || 'UZS'}
             accountNumber={wallet?.account_number}
             status={wallet?.status}
             onAddMoney={() => setShowTopUp(true)}
@@ -187,78 +174,30 @@ export default function PaymentSettingsPage() {
             <button
               type="button"
               onClick={() => setShowTransfer(true)}
-              className="rounded-2xl border border-border/70 bg-card p-4 text-left transition hover:bg-muted/40"
+              className="rounded-2xl border border-border/70 bg-card p-4 text-left shadow-sm transition hover:bg-muted/35"
             >
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-foreground text-background">
                 <ArrowUpRight className="h-4 w-4" />
               </span>
               <p className="mt-3 text-sm font-semibold">Pul yuborish</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                @username yoki ALS hisob raqamiga.
-              </p>
+              <p className="mt-1 text-xs text-muted-foreground">@username yoki ALS hisob raqamiga</p>
             </button>
 
             <button
               type="button"
               onClick={() => setShowTopUp(true)}
-              className="rounded-2xl border border-border/70 bg-card p-4 text-left transition hover:bg-muted/40"
+              className="rounded-2xl border border-border/70 bg-card p-4 text-left shadow-sm transition hover:bg-muted/35"
             >
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/70 bg-background">
                 <ArrowDownLeft className="h-4 w-4" />
               </span>
               <p className="mt-3 text-sm font-semibold">Hisobni to‘ldirish</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Bank, P2P karta yoki kassa orqali.
-              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Payme, bank yoki P2P orqali</p>
             </button>
           </div>
 
-          <section className="overflow-hidden rounded-2xl border border-border/70 bg-card">
-            <div className="border-b border-border/60 px-4 py-3">
-              <h2 className="text-sm font-semibold">Platforma bo‘ylab</h2>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Bitta Alsamos hisobi turli servislar uchun yagona ledger bo‘lib ishlaydi.
-              </p>
-            </div>
-
-            <div className="grid divide-y divide-border/60 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-              <div className="p-4">
-                <ShoppingBag className="h-4 w-4 text-muted-foreground" />
-                <p className="mt-2 text-sm font-medium">Marketplace</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Xarid vaqtida debit, yetkazilganda sotuvchiga settlement.
-                </p>
-                <p className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Faol
-                </p>
-              </div>
-
-              <div className="p-4">
-                <MessageCircle className="h-4 w-4 text-muted-foreground" />
-                <p className="mt-2 text-sm font-medium">Messages</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Private chat ichida foydalanuvchiga to‘g‘ridan-to‘g‘ri pul yuborish.
-                </p>
-                <p className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Faol
-                </p>
-              </div>
-
-              <div className="p-4">
-                <Car className="h-4 w-4 text-muted-foreground" />
-                <p className="mt-2 text-sm font-medium">Taxi / Map</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Wallet rail tayyor; charge faqat native booking tasdiqlanganda ishlatiladi.
-                </p>
-                <p className="mt-2 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                  <Clock3 className="h-3.5 w-3.5" /> Provider booking kerak
-                </p>
-              </div>
-            </div>
-          </section>
-
           {pendingTopUps.length > 0 && (
-            <section className="overflow-hidden rounded-2xl border border-border/70 bg-card">
+            <section className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
               <div className="border-b border-border/60 px-4 py-3">
                 <h2 className="text-sm font-semibold">Kutilayotgan to‘ldirishlar</h2>
               </div>
@@ -299,14 +238,16 @@ export default function PaymentSettingsPage() {
             </section>
           )}
 
-          <section className="overflow-hidden rounded-2xl border border-border/70 bg-card">
+          <section className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
             <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
-              <div>
-                <h2 className="text-sm font-semibold">So‘nggi operatsiyalar</h2>
-                <p className="mt-0.5 text-xs text-muted-foreground">Yagona immutable ledger.</p>
-              </div>
+              <h2 className="text-sm font-semibold">So‘nggi operatsiyalar</h2>
               {ledger.length > 6 && (
-                <Button variant="ghost" size="sm" className="h-8 rounded-lg text-xs" onClick={() => setActiveTab('history')}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 rounded-lg text-xs"
+                  onClick={() => setActiveTab('history')}
+                >
                   Barchasi
                 </Button>
               )}
@@ -315,7 +256,7 @@ export default function PaymentSettingsPage() {
               recent.map((item) => <ActivityRow key={item.id} item={item} />)
             ) : (
               <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-                Hali tranzaksiya yo‘q.
+                Hali tranzaksiya yo‘q
               </div>
             )}
           </section>
@@ -335,13 +276,13 @@ export default function PaymentSettingsPage() {
               ['outgoing', outgoing],
             ].map(([key, items]) => (
               <TabsContent key={key as string} value={key as string} className="mt-4">
-                <div className="overflow-hidden rounded-2xl border border-border/70 bg-card">
+                <div className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
                   {(items as WalletLedgerEntry[]).length > 0 ? (
                     (items as WalletLedgerEntry[]).map((item) => <ActivityRow key={item.id} item={item} />)
                   ) : (
                     <div className="px-4 py-12 text-center">
                       <History className="mx-auto h-8 w-8 text-muted-foreground/40" />
-                      <p className="mt-3 text-sm text-muted-foreground">Operatsiyalar yo‘q.</p>
+                      <p className="mt-3 text-sm text-muted-foreground">Operatsiyalar yo‘q</p>
                     </div>
                   )}
                 </div>
@@ -350,18 +291,16 @@ export default function PaymentSettingsPage() {
           </Tabs>
         </TabsContent>
 
-        <TabsContent value="account" className="mt-0 space-y-4 px-4 py-5 sm:px-5">
-          <section className="overflow-hidden rounded-2xl border border-border/70 bg-card">
+        <TabsContent value="account" className="mt-0 px-4 py-5 sm:px-5">
+          <section className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
             <div className="border-b border-border/60 px-4 py-3">
               <h2 className="text-sm font-semibold">Alsamos hisob raqami</h2>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Har bir platforma akkauntiga ro‘yxatdan o‘tishi bilan avtomatik beriladi.
-              </p>
             </div>
 
             <div className="p-4">
               <button
                 type="button"
+                disabled={!wallet?.account_number}
                 onClick={async () => {
                   if (!wallet?.account_number) return;
                   try {
@@ -371,44 +310,34 @@ export default function PaymentSettingsPage() {
                     toast.error('Nusxa olib bo‘lmadi');
                   }
                 }}
-                className="flex w-full items-center justify-between gap-3 rounded-xl bg-muted/40 px-4 py-3 text-left"
+                className={cn(
+                  'flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition',
+                  wallet?.account_number
+                    ? 'border-border/70 bg-background hover:bg-muted/40'
+                    : 'cursor-default border-border/50 bg-muted/40'
+                )}
               >
                 <span className="min-w-0">
                   <span className="block text-xs text-muted-foreground">Hisob</span>
                   <span className="mt-0.5 block truncate font-mono text-sm font-semibold tracking-wide">
-                    {formatWalletAccount(wallet?.account_number)}
+                    {wallet?.account_number ? formatWalletAccount(wallet.account_number) : 'Yaratilmoqda...'}
                   </span>
                 </span>
-                <Copy className="h-4 w-4 shrink-0 text-muted-foreground" />
+                {wallet?.account_number && <Copy className="h-4 w-4 shrink-0 text-muted-foreground" />}
               </button>
 
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <div className="rounded-xl border border-border/60 p-3">
+                <div className="rounded-xl border border-border/60 bg-background p-3">
                   <p className="text-xs text-muted-foreground">Valyuta</p>
                   <p className="mt-1 text-sm font-semibold">{wallet?.currency || '—'}</p>
                 </div>
-                <div className="rounded-xl border border-border/60 p-3">
+                <div className="rounded-xl border border-border/60 bg-background p-3">
                   <p className="text-xs text-muted-foreground">Holat</p>
                   <p className="mt-1 inline-flex items-center gap-1.5 text-sm font-semibold">
                     <ShieldCheck className="h-3.5 w-3.5" />
                     {wallet?.status === 'active' ? 'Faol' : wallet?.status || '—'}
                   </p>
                 </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-border/70 bg-card p-4">
-            <div className="flex items-start gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted">
-                <WalletCards className="h-4 w-4" />
-              </span>
-              <div>
-                <p className="text-sm font-semibold">Server-authoritative balans</p>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  Client balansni to‘g‘ridan-to‘g‘ri o‘zgartira olmaydi. P2P transfer,
-                  marketplace debit/refund va seller settlement database transaction va row-lock orqali bajariladi.
-                </p>
               </div>
             </div>
           </section>
