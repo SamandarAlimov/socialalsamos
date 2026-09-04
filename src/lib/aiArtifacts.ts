@@ -3,7 +3,7 @@ import type { AIMessage } from '@/components/ai/types';
 export type AIArtifact = {
   id: string;
   messageId: string;
-  kind: 'code' | 'image' | 'document';
+  kind: 'code' | 'image' | 'video' | 'document';
   title: string;
   language?: string;
   content: string;
@@ -31,21 +31,26 @@ const EXT_BY_LANG: Record<string, string> = {
   csv: 'csv',
   yaml: 'yml',
   yml: 'yml',
+  svg: 'svg',
 };
 
 export function extensionFor(a: AIArtifact): string {
+  if (a.kind === 'image') return 'png';
+  if (a.kind === 'video') return 'mp4';
   if (a.kind === 'document') return EXT_BY_LANG[(a.language || '').toLowerCase()] || 'md';
   return EXT_BY_LANG[(a.language || '').toLowerCase()] || 'txt';
 }
 
 const CODE_BLOCK = /```([\w+-]+)?\n([\s\S]*?)```/g;
-
-/** Kod bloki artefakt bo'lishi uchun minimal qator soni. */
-const MIN_CODE_LINES = 16;
-
-/** Hujjat sifatida ochiladigan bloklar (kod emas, lekin fayl bo'la oladi). */
 const DOC_LANGS = new Set(['markdown', 'md', 'csv', 'html']);
-const MIN_DOC_LINES = 12;
+const MIN_CODE_LINES = 8;
+const MIN_DOC_LINES = 6;
+
+const CODE_INTENT =
+  /(?:^|\s)(?:\/code|\/run)\b|\b(kod|code|script|skript|function|funksiya|component|komponent|fayl|file|migration|migratsiya|sql|api|endpoint|class|module|modul)\b.{0,90}\b(yoz|yarat|qil|tayyorla|build|create|write|generate|implement|make|создай|напиши|сделай)\b|\b(yoz|yarat|qil|tayyorla|build|create|write|generate|implement|make|создай|напиши|сделай)\b.{0,90}\b(kod|code|script|skript|function|funksiya|component|komponent|fayl|file|migration|migratsiya|sql|api|endpoint|class|module|modul)\b/i;
+
+const DOC_INTENT =
+  /(?:^|\s)(?:\/document|\/doc)\b|\b(hujjat|document|hisobot|report|shablon|template|csv|markdown|md|html fayl|reja hujjati|brief|spec|spetsifikatsiya|taqdimot|presentation)\b.{0,90}\b(yoz|yarat|tayyorla|qil|create|write|generate|make|создай|напиши|сделай)\b|\b(yoz|yarat|tayyorla|qil|create|write|generate|make|создай|напиши|сделай)\b.{0,90}\b(hujjat|document|hisobot|report|shablon|template|csv|markdown|brief|spec|spetsifikatsiya|taqdimot|presentation)\b/i;
 
 const titleFromContent = (text: string, fallback: string): string => {
   const heading = text.split('\n').find((line) => /^#{1,3}\s+\S/.test(line.trim()));
@@ -54,40 +59,71 @@ const titleFromContent = (text: string, fallback: string): string => {
   return (first || fallback).replace(/^#+\s*/, '').slice(0, 60);
 };
 
+function previousUserText(messages: AIMessage[], index: number): string {
+  for (let i = index - 1; i >= 0; i -= 1) {
+    if (messages[i].role === 'user') return messages[i].content || '';
+  }
+  return '';
+}
+
+function toolUsed(msg: AIMessage, name: string): boolean {
+  return Boolean(msg.tools?.some((tool) => tool.name === name && tool.status === 'done'));
+}
+
 /**
- * Artefakt — bu ALOHIDA fayl sifatida ma'noga ega natija: kod fayli, yaratilgan
- * rasm yoki hujjat bloki.
- *
- * MUHIM: oddiy chat javobi (uzun bo'lsa ham) artefakt EMAS. Ilgari 1200 belgidan
- * uzun har qanday matn "hujjat" deb olinardi — shu sababli deyarli har bir javob
- * artefaktlar panelida ko'rinib ketardi. Endi faqat aniq belgilangan natijalar
- * artefakt bo'ladi.
+ * Artifact = user asked for a reusable deliverable, not merely a long answer.
+ * Explanatory prose, ordinary plans, and code snippets inside an explanation do
+ * not automatically populate the artifact shelf.
  */
 export function extractArtifacts(messages: AIMessage[]): AIArtifact[] {
   const out: AIArtifact[] = [];
 
-  for (const msg of messages) {
-    if (msg.role !== 'assistant' || msg.error) continue;
+  messages.forEach((msg, messageIndex) => {
+    if (msg.role !== 'assistant' || msg.error) return;
+    const userText = previousUserText(messages, messageIndex);
 
-    // 1) Yaratilgan rasmlar — doim artefakt.
-    const single = (msg as { imageUrl?: string }).imageUrl;
+    const singleImage = msg.imageUrl;
     const imageUrls = [
-      ...(single ? [single] : []),
-      ...((msg.images as string[] | undefined) ?? []),
-    ].filter((url, index, all) => url && all.indexOf(url) === index);
+      ...(singleImage ? [singleImage] : []),
+      ...(msg.images ?? []),
+    ].filter((url, index, all) => Boolean(url) && all.indexOf(url) === index);
 
-    imageUrls.forEach((url, index) => {
-      out.push({
-        id: `${msg.id}:image:${index}`,
-        messageId: msg.id,
-        kind: 'image',
-        title: imageUrls.length > 1 ? `Yaratilgan rasm ${index + 1}` : 'Yaratilgan rasm',
-        content: url,
-        createdAt: msg.timestamp,
+    if (imageUrls.length > 0 || toolUsed(msg, 'generate_image')) {
+      imageUrls.forEach((url, index) => {
+        out.push({
+          id: `${msg.id}:image:${index}`,
+          messageId: msg.id,
+          kind: 'image',
+          title: imageUrls.length > 1 ? `Yaratilgan rasm ${index + 1}` : 'Yaratilgan rasm',
+          content: url,
+          createdAt: msg.timestamp,
+        });
       });
-    });
+    }
 
-    // 2) Kod va hujjat bloklari — faqat yetarlicha katta bo'lsa.
+    const singleVideo = msg.videoUrl;
+    const videoUrls = [
+      ...(singleVideo ? [singleVideo] : []),
+      ...(msg.videos ?? []),
+    ].filter((url, index, all) => Boolean(url) && all.indexOf(url) === index);
+
+    if (videoUrls.length > 0 || toolUsed(msg, 'generate_video')) {
+      videoUrls.forEach((url, index) => {
+        out.push({
+          id: `${msg.id}:video:${index}`,
+          messageId: msg.id,
+          kind: 'video',
+          title: videoUrls.length > 1 ? `Yaratilgan video ${index + 1}` : 'Yaratilgan video',
+          content: url,
+          createdAt: msg.timestamp,
+        });
+      });
+    }
+
+    const wantsCode = CODE_INTENT.test(userText);
+    const wantsDocument = DOC_INTENT.test(userText);
+    if (!wantsCode && !wantsDocument) return;
+
     let match: RegExpExecArray | null;
     let index = 0;
     CODE_BLOCK.lastIndex = 0;
@@ -98,7 +134,7 @@ export function extractArtifacts(messages: AIMessage[]): AIArtifact[] {
       const lines = body.split('\n').length;
 
       if (DOC_LANGS.has(language)) {
-        if (lines < MIN_DOC_LINES) continue;
+        if (!wantsDocument || lines < MIN_DOC_LINES) continue;
         out.push({
           id: `${msg.id}:doc:${index}`,
           messageId: msg.id,
@@ -112,7 +148,7 @@ export function extractArtifacts(messages: AIMessage[]): AIArtifact[] {
         continue;
       }
 
-      if (lines < MIN_CODE_LINES) continue;
+      if (!wantsCode || lines < MIN_CODE_LINES) continue;
       out.push({
         id: `${msg.id}:code:${index}`,
         messageId: msg.id,
@@ -124,7 +160,7 @@ export function extractArtifacts(messages: AIMessage[]): AIArtifact[] {
       });
       index += 1;
     }
-  }
+  });
 
   return out;
 }
