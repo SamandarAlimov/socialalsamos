@@ -159,7 +159,17 @@ jobs:
         shell: bash
         run: supabase functions deploy web-crawler --project-ref "$PROJECT_REF" --no-verify-jwt
 
-      - name: Deploy AI assistant
+      - name: Deploy AI assistant fallback
         if: steps.gate.outputs.enabled == 'true'
         shell: bash
         run: supabase functions deploy ai-assistant --project-ref "$PROJECT_REF" --no-verify-jwt
+
+      - name: Deploy AI code sandbox
+        if: steps.gate.outputs.enabled == 'true'
+        shell: bash
+        run: supabase functions deploy code-sandbox --project-ref "$PROJECT_REF" --no-verify-jwt
+
+      - name: Deploy full AI agent
+        if: steps.gate.outputs.enabled == 'true'
+        shell: bash
+        run: supabase functions deploy ai-agent --project-ref "$PROJECT_REF" --no-verify-jwt
