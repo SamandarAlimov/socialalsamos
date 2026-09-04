@@ -173,3 +173,8 @@ jobs:
         if: steps.gate.outputs.enabled == 'true'
         shell: bash
         run: supabase functions deploy ai-agent --project-ref "$PROJECT_REF" --no-verify-jwt
+
+      - name: Deploy GitHub connector
+        if: steps.gate.outputs.enabled == 'true'
+        shell: bash
+        run: supabase functions deploy github-connector --project-ref "$PROJECT_REF" --no-verify-jwt
