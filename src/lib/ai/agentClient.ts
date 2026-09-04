@@ -107,13 +107,47 @@ async function streamFromAgent(options: StreamAgentOptions): Promise<void> {
     throw new Error(message);
   }
 
+  let sawText = false;
+  let sawSuccessfulMedia = false;
+  let lastToolFailure: string | null = null;
+
   await readSse(res.body, (raw) => {
     try {
-      onEvent(JSON.parse(raw) as AgentEvent);
-    } catch {
-      // yarim kelgan bo'lak — e'tiborsiz
+      const event = JSON.parse(raw) as AgentEvent;
+
+      if (event.type === 'delta' && event.text.trim()) {
+        sawText = true;
+      }
+
+      if (event.type === 'tool_result') {
+        if (!event.ok) {
+          const summary = event.summary?.trim();
+          lastToolFailure = summary
+            ? `${event.name === 'generate_video' ? 'Video yaratilmadi' : 'Vosita bajarilmadi'}: ${summary}`
+            : `${event.name} bajarilmadi.`;
+        } else {
+          const data = event.data as Record<string, unknown> | null;
+          if (typeof data?.imageUrl === 'string' || typeof data?.videoUrl === 'string') {
+            sawSuccessfulMedia = true;
+          }
+        }
+      }
+
+      onEvent(event);
+    } catch (error) {
+      // `onEvent` error hodisasini tashlashi mumkin; uni JSON parse xatosi deb
+      // yutib yubormaymiz. Faqat haqiqiy parse xatosi e'tiborsiz qoldiriladi.
+      if (error instanceof SyntaxError) return;
+      throw error;
     }
   });
+
+  // Ba'zi model/provider kombinatsiyalarida tool xatosidan keyin yakuniy matn
+  // umuman kelmasligi mumkin. Oldin UI buni "Javob bo'sh qaytdi" deb yashirardi.
+  // Endi aynan qaysi vosita va nima sabab yiqilganini ko'rsatamiz.
+  if (!sawText && !sawSuccessfulMedia && lastToolFailure) {
+    onEvent({ type: 'error', message: lastToolFailure });
+  }
 }
 
 /** Zaxira yo'l — allaqachon deploy qilingan `ai-assistant` (oddiy chat oqimi). */
@@ -189,6 +223,8 @@ async function streamFromOracleAgent(options: StreamAgentOptions): Promise<void>
   }
 
   let streamedText = '';
+  let lastToolFailure: string | null = null;
+  let sawSuccessfulMedia = false;
   const oracleToolIds = new Map<string, string>();
   onEvent({ type: 'meta', model, task: mode, language: 'uz', tools: toolGroups });
 
@@ -232,13 +268,27 @@ async function streamFromOracleAgent(options: StreamAgentOptions): Promise<void>
         } else if (event.phase === 'result') {
           const id = oracleToolIds.get(name) ?? crypto.randomUUID();
           oracleToolIds.delete(name);
+          const data = (event.data ?? null) as Record<string, unknown> | null;
+          const ok = Boolean(event.ok);
+          const summary =
+            typeof event.summary === 'string'
+              ? event.summary
+              : typeof data?.error === 'string'
+                ? String(data.error)
+                : JSON.stringify(event.data ?? {}).slice(0, 600);
+
+          if (!ok) lastToolFailure = `${name === 'generate_video' ? 'Video yaratilmadi' : 'Vosita bajarilmadi'}: ${summary}`;
+          if (ok && (typeof data?.videoUrl === 'string' || typeof data?.imageUrl === 'string')) {
+            sawSuccessfulMedia = true;
+          }
+
           onEvent({
             type: 'tool_result',
             id,
             name,
-            ok: Boolean(event.ok),
-            summary: JSON.stringify(event.data ?? {}).slice(0, 600),
-            data: (event.data ?? null) as Record<string, unknown> | null,
+            ok,
+            summary,
+            data,
           });
         }
         break;
@@ -249,7 +299,10 @@ async function streamFromOracleAgent(options: StreamAgentOptions): Promise<void>
         break;
       case 'final': {
         const output = String(event.output ?? '');
-        if (output && !streamedText) onEvent({ type: 'delta', text: output });
+        if (output && !streamedText) {
+          streamedText += output;
+          onEvent({ type: 'delta', text: output });
+        }
         break;
       }
       case 'error':
@@ -258,6 +311,10 @@ async function streamFromOracleAgent(options: StreamAgentOptions): Promise<void>
         break;
     }
   });
+
+  if (!streamedText && !sawSuccessfulMedia && lastToolFailure) {
+    onEvent({ type: 'error', message: lastToolFailure });
+  }
 }
 
 /** Agentni ishga tushiradi va hodisalarni real vaqtda uzatadi. */
