@@ -3,7 +3,7 @@ import {
   ChevronDown,
   ChevronLeft,
   FileCode2,
-  Github,
+  FolderKanban,
   History,
   MessageSquare,
   MoreHorizontal,
@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import type { AIConversation, AIProject } from './types';
+import { AIProjectDialog } from './AIProjectDialog';
 
 interface Props {
   conversations: AIConversation[];
@@ -100,26 +101,44 @@ export function AISidebar({
   onClose,
   onOpenArtifacts,
   onOpenConnectors,
-  onOpenGithub,
   artifactCount = 0,
+  projects = [],
+  activeProjectId = null,
+  onSelectProject,
+  onCreateProject,
+  onUpdateProject,
+  onDeleteProject,
+  onMoveConversation,
 }: Props) {
   const [query, setQuery] = useState('');
   const [recentsOpen, setRecentsOpen] = useState(true);
+  const [projectsOpen, setProjectsOpen] = useState(true);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [projectDialogOpen, setProjectDialogOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<AIProject | null>(null);
+
+  const scopedConversations = useMemo(
+    () =>
+      activeProjectId
+        ? conversations.filter((conversation) => conversation.projectId === activeProjectId)
+        : conversations,
+    [activeProjectId, conversations],
+  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return conversations;
-    return conversations.filter(
+    if (!q) return scopedConversations;
+    return scopedConversations.filter(
       (conversation) =>
         conversation.title.toLowerCase().includes(q) ||
         conversation.messages.some((message) => message.content.toLowerCase().includes(q)),
     );
-  }, [conversations, query]);
+  }, [query, scopedConversations]);
 
   const pinned = filtered.filter((conversation) => conversation.pinned);
   const groups = groupByDate(filtered.filter((conversation) => !conversation.pinned));
+  const activeProject = projects.find((project) => project.id === activeProjectId) ?? null;
 
   const snippetFor = (conversation: AIConversation) => {
     const q = query.trim().toLowerCase();
@@ -130,6 +149,12 @@ export function AISidebar({
     return `…${hit.content.slice(Math.max(0, index - 24), index + 56).trim()}…`;
   };
 
+  const openCreateProject = () => {
+    if (!onCreateProject) return;
+    setEditingProject(null);
+    setProjectDialogOpen(true);
+  };
+
   const renderConversation = (conversation: AIConversation) => (
     <div
       key={conversation.id}
@@ -138,7 +163,7 @@ export function AISidebar({
       onClick={() => onSelect(conversation)}
       onKeyDown={(event) => event.key === 'Enter' && onSelect(conversation)}
       className={cn(
-        'group flex w-full min-w-0 items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-colors',
+        'group flex w-full min-w-0 items-center gap-2 rounded-xl px-2 py-2 text-left transition-colors',
         'hover:bg-muted/70',
         activeId === conversation.id && 'bg-muted',
       )}
@@ -147,7 +172,7 @@ export function AISidebar({
         {conversation.pinned ? <Pin className="h-3.5 w-3.5" /> : <MessageSquare className="h-3.5 w-3.5" />}
       </span>
 
-      <div className="min-w-0 flex-1 overflow-hidden">
+      <div className="min-w-0 flex-1 overflow-hidden pr-0.5">
         {renamingId === conversation.id ? (
           <Input
             autoFocus
@@ -170,7 +195,7 @@ export function AISidebar({
           />
         ) : (
           <>
-            <p className="truncate text-[13px] font-medium leading-tight" title={conversation.title}>
+            <p className="block w-full truncate text-[13px] font-medium leading-tight" title={conversation.title}>
               {conversation.title}
             </p>
             {snippetFor(conversation) && (
@@ -185,14 +210,14 @@ export function AISidebar({
           <Button
             size="icon"
             variant="ghost"
-            className="h-6 w-6 shrink-0 rounded-md opacity-0 group-hover:opacity-100 focus:opacity-100"
+            className="h-7 w-7 shrink-0 rounded-lg text-muted-foreground opacity-55 transition-opacity hover:opacity-100 focus:opacity-100 group-hover:opacity-100"
             onClick={(event) => event.stopPropagation()}
             aria-label="Suhbat amallari"
           >
-            <MoreHorizontal className="h-3.5 w-3.5" />
+            <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-48">
+        <DropdownMenuContent align="end" className="min-w-52">
           <DropdownMenuItem
             className="text-xs"
             onClick={(event) => {
@@ -216,6 +241,35 @@ export function AISidebar({
               <><Pin className="mr-2 h-3.5 w-3.5" /> Mahkamlash</>
             )}
           </DropdownMenuItem>
+
+          {onMoveConversation && projects.length > 0 && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-xs"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void onMoveConversation(conversation.id, null);
+                }}
+              >
+                <MessageSquare className="mr-2 h-3.5 w-3.5" /> Umumiy suhbatlarga
+              </DropdownMenuItem>
+              {projects.slice(0, 8).map((project) => (
+                <DropdownMenuItem
+                  key={project.id}
+                  className="text-xs"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void onMoveConversation(conversation.id, project.id);
+                  }}
+                >
+                  <FolderKanban className="mr-2 h-3.5 w-3.5" />
+                  <span className="max-w-36 truncate">{project.name}</span>
+                </DropdownMenuItem>
+              ))}
+            </>
+          )}
+
           <DropdownMenuSeparator />
           <DropdownMenuItem
             className="text-xs text-destructive"
@@ -233,7 +287,7 @@ export function AISidebar({
 
   return (
     <div className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-background">
-      <div className="space-y-3 p-3">
+      <div className="space-y-2.5 p-3 pb-2">
         <div className="flex items-center justify-between">
           <div className="flex min-w-0 items-center gap-2.5">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-muted/50">
@@ -254,6 +308,118 @@ export function AISidebar({
         </Button>
 
         <nav className="space-y-0.5">
+          <div className="rounded-xl">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setProjectsOpen((value) => !value)}
+                className={cn(
+                  'flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium transition-colors hover:bg-muted/60',
+                  activeProjectId && 'bg-muted/45',
+                )}
+              >
+                <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate">Loyihalar</span>
+                {projects.length > 0 && <span className="text-[10px] text-muted-foreground">{projects.length}</span>}
+                <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', !projectsOpen && '-rotate-90')} />
+              </button>
+              {onCreateProject && (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0 rounded-lg"
+                  onClick={openCreateProject}
+                  aria-label="Yangi loyiha"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+
+            {projectsOpen && (
+              <div className="ml-3 mt-1 space-y-0.5 border-l border-border/55 pl-2">
+                <button
+                  type="button"
+                  onClick={() => onSelectProject?.(null)}
+                  className={cn(
+                    'flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/55 hover:text-foreground',
+                    !activeProjectId && 'bg-muted/45 text-foreground',
+                  )}
+                >
+                  <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">Barcha suhbatlar</span>
+                </button>
+
+                {projects.map((project) => (
+                  <div
+                    key={project.id}
+                    className={cn(
+                      'group/project flex min-w-0 items-center rounded-lg transition-colors hover:bg-muted/55',
+                      activeProjectId === project.id && 'bg-muted/55',
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onSelectProject?.(project.id)}
+                      className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-xs"
+                    >
+                      <FolderKanban className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate font-medium">{project.name}</span>
+                    </button>
+
+                    {(onUpdateProject || onDeleteProject) && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="mr-0.5 h-6 w-6 shrink-0 rounded-md text-muted-foreground opacity-50 hover:opacity-100 group-hover/project:opacity-100"
+                            aria-label="Loyiha amallari"
+                          >
+                            <MoreHorizontal className="h-3.5 w-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="min-w-44">
+                          {onUpdateProject && (
+                            <DropdownMenuItem
+                              className="text-xs"
+                              onClick={() => {
+                                setEditingProject(project);
+                                setProjectDialogOpen(true);
+                              }}
+                            >
+                              <Pencil className="mr-2 h-3.5 w-3.5" /> Tahrirlash
+                            </DropdownMenuItem>
+                          )}
+                          {onDeleteProject && (
+                            <DropdownMenuItem
+                              className="text-xs text-destructive"
+                              onClick={() => void onDeleteProject(project.id)}
+                            >
+                              <Trash2 className="mr-2 h-3.5 w-3.5" /> O‘chirish
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </div>
+                ))}
+
+                {projects.length === 0 && (
+                  <button
+                    type="button"
+                    onClick={openCreateProject}
+                    disabled={!onCreateProject}
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[11px] text-muted-foreground hover:bg-muted/45 disabled:cursor-default disabled:hover:bg-transparent"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Birinchi loyihani yarating
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
           <button
             type="button"
             onClick={() => onOpenArtifacts?.()}
@@ -268,14 +434,8 @@ export function AISidebar({
             onClick={() => onOpenConnectors?.()}
             className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium text-foreground/80 hover:bg-muted/60"
           >
-            <Plug className="h-4 w-4 text-muted-foreground" /> Konnektorlar
-          </button>
-          <button
-            type="button"
-            onClick={() => onOpenGithub?.()}
-            className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium text-foreground/80 hover:bg-muted/60"
-          >
-            <Github className="h-4 w-4 text-muted-foreground" /> GitHub
+            <Plug className="h-4 w-4 text-muted-foreground" />
+            <span className="flex-1">Konnektorlar</span>
           </button>
         </nav>
 
@@ -296,7 +456,7 @@ export function AISidebar({
             aria-label="Suhbatlarda qidirish"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Suhbatlarni qidirish"
+            placeholder={activeProject ? `${activeProject.name} ichida qidirish` : 'Suhbatlarni qidirish'}
             className="h-8 rounded-xl pl-8 text-xs"
           />
         </div>
@@ -309,7 +469,11 @@ export function AISidebar({
           </div>
         ) : filtered.length === 0 ? (
           <div className="px-4 py-10 text-center text-xs text-muted-foreground">
-            {query ? 'Natija topilmadi' : 'Hozircha suhbat yo‘q'}
+            {query
+              ? 'Natija topilmadi'
+              : activeProject
+                ? 'Bu loyihada hali suhbat yo‘q. Yangi suhbat boshlang.'
+                : 'Hozircha suhbat yo‘q'}
           </div>
         ) : (
           <div className="space-y-3 pb-3">
@@ -328,7 +492,7 @@ export function AISidebar({
                 onClick={() => setRecentsOpen((value) => !value)}
                 className="mb-1 flex w-full items-center gap-1.5 px-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
               >
-                <History className="h-3 w-3" /> Suhbatlar
+                <History className="h-3 w-3" /> {activeProject ? activeProject.name : 'Suhbatlar'}
                 <ChevronDown className={cn('ml-auto h-3 w-3 transition-transform', !recentsOpen && '-rotate-90')} />
               </button>
               {recentsOpen && (
@@ -345,6 +509,20 @@ export function AISidebar({
           </div>
         )}
       </ScrollArea>
+
+      <AIProjectDialog
+        open={projectDialogOpen}
+        onOpenChange={setProjectDialogOpen}
+        project={editingProject}
+        onSave={async (value) => {
+          if (editingProject && onUpdateProject) {
+            await onUpdateProject(editingProject.id, value);
+          } else if (onCreateProject) {
+            await onCreateProject(value);
+          }
+          setEditingProject(null);
+        }}
+      />
     </div>
   );
 }
