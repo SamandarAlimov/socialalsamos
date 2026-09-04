@@ -60,9 +60,8 @@ export function AppLayout() {
 
   const immersiveMobile = isCreatePage || isMapPage;
   // Balandligi ekranga qat'iy teng bo'lishi kerak bo'lgan sahifalar.
-  // Messages va Videos o'zining ichki canonical scroll containeriga ega.
-  // Ularning tashqarisida AppLayout yana scroll qilsa mobile browserda
-  // nested-scroller gesture lock paydo bo'lishi mumkin.
+  // Messages, Videos va AI o'zining ichki canonical scroll containeriga ega.
+  // Ularning tashqarisida AppLayout yana scroll qilmaydi.
   const fullHeightPage =
     isCreatePage || isMapPage || isAiPage || isMessagesPage || isVideosPage;
 
@@ -73,12 +72,7 @@ export function AppLayout() {
   if (!isAuthenticated) return <Navigate to="/" replace />;
 
   return (
-    <div
-      className={cn(
-        'flex w-full bg-background',
-        fullHeightPage ? 'h-[100dvh] min-h-0 overflow-hidden' : 'min-h-screen',
-      )}
-    >
+    <div className="flex h-[100dvh] min-h-0 w-full overflow-hidden bg-background">
       <AppSidebar collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
 
       {/*
@@ -110,15 +104,17 @@ export function AppLayout() {
       <main
         data-platform-scroll-root={fullHeightPage ? undefined : 'true'}
         className={cn(
-        'flex-1 md:ml-0 md:pt-0 md:pb-0',
-        fullHeightPage
-          ? 'h-full min-h-0 overflow-hidden p-0'
-          : 'alsamos-scrollbar overflow-auto overscroll-y-contain',
-        hideHeaderOnPages ? 'pt-0' : 'pt-14',
-        immersiveMobile ? 'pb-0' : 'pb-20',
-        // AI sahifasida mobil pastki navbar joyi kerak, desktopda esa umuman kerak emas.
-        isAiPage && 'pb-16 md:pb-0'
-      )}
+          // App shell is always viewport-bounded. Standard pages scroll here;
+          // fullscreen pages deliberately hand scrolling to their own inner root.
+          'min-h-0 min-w-0 flex-1 md:ml-0 md:pt-0 md:pb-0',
+          fullHeightPage
+            ? 'h-full overflow-hidden p-0'
+            : 'h-full overflow-x-hidden overflow-y-auto overscroll-y-contain alsamos-scrollbar [-webkit-overflow-scrolling:touch]',
+          hideHeaderOnPages ? 'pt-0' : 'pt-14',
+          immersiveMobile ? 'pb-0' : 'pb-20',
+          // AI sahifasida mobil pastki navbar joyi kerak, desktopda esa umuman kerak emas.
+          isAiPage && 'pb-16 md:pb-0'
+        )}
       >
         <Outlet />
       </main>
