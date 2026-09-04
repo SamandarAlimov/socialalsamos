@@ -26,7 +26,7 @@ export function AIModelPicker({
   disabled,
   className,
 }: AIModelPickerProps) {
-  const current = MODEL_OPTIONS.find((m) => m.id === value) ?? MODEL_OPTIONS[0];
+  const current = MODEL_OPTIONS.find((option) => option.id === value) ?? MODEL_OPTIONS[0];
 
   return (
     <DropdownMenu>
@@ -35,20 +35,18 @@ export function AIModelPicker({
           variant="ghost"
           size="sm"
           className={cn(
-            'h-8 gap-1.5 rounded-full border border-border/60 px-3 text-xs font-medium',
+            'h-8 gap-1.5 rounded-full border border-border/60 bg-background px-2.5 text-xs font-medium',
             className,
           )}
           aria-label="AI modelini tanlash"
         >
-          <Sparkles className="h-3.5 w-3.5 text-alsamos-orange" />
+          <Sparkles className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
           <span>{current.label}</span>
           <ChevronDown className="h-3.5 w-3.5 opacity-60" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-72">
-        <DropdownMenuLabel className="text-xs text-muted-foreground">
-          Model tanlovi
-        </DropdownMenuLabel>
+        <DropdownMenuLabel className="text-xs text-muted-foreground">Model tanlovi</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {MODEL_OPTIONS.map((option) => (
           <DropdownMenuItem
@@ -59,14 +57,14 @@ export function AIModelPicker({
             <Check
               className={cn(
                 'mt-0.5 h-4 w-4 shrink-0',
-                option.id === value ? 'opacity-100 text-alsamos-orange' : 'opacity-0',
+                option.id === value ? 'text-emerald-500 opacity-100' : 'opacity-0',
               )}
             />
-            <span className="flex-1">
+            <span className="min-w-0 flex-1">
               <span className="flex items-center gap-2 text-sm font-medium">
                 {option.label}
                 {option.badge && (
-                  <span className="rounded-full bg-alsamos-orange/10 px-1.5 py-0.5 text-[10px] font-semibold text-alsamos-orange">
+                  <span className="rounded-full bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600 dark:text-blue-400">
                     {option.badge}
                   </span>
                 )}
