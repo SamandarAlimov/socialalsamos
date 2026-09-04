@@ -1,0 +1,195 @@
+/*
+ * Alsamos video watch — mobile interaction surface
+ *
+ * The watch player keeps its media controls, but the information/actions below
+ * the player intentionally use Alsamos' neutral white/black/gray design language
+ * instead of a row of YouTube-like pill buttons.
+ *
+ * The aria-keyshortcuts attribute belongs to VideoWatchPanel's player and gives
+ * us a stable scope without touching generic buttons elsewhere on the platform.
+ */
+@media (max-width: 1023px) {
+  [aria-keyshortcuts*="Space K J L"] + div > div:first-child {
+    padding: 16px 16px 0;
+  }
+
+  [aria-keyshortcuts*="Space K J L"] + div > div:first-child > h1 {
+    font-size: 1rem;
+    line-height: 1.35;
+    letter-spacing: -0.012em;
+  }
+
+  [aria-keyshortcuts*="Space K J L"] + div > div:first-child > h1 + p {
+    margin-top: 5px;
+    font-size: 0.75rem;
+    color: hsl(var(--muted-foreground));
+  }
+
+  /* Creator identity becomes one compact Alsamos profile strip. */
+  [aria-keyshortcuts*="Space K J L"] + div
+    > div:first-child
+    > div[class~="mt-3"][class~="flex"][class~="items-center"][class~="gap-2.5"] {
+    margin-top: 14px;
+    min-height: 58px;
+    gap: 10px;
+    padding: 8px 9px 8px 10px;
+    border: 1px solid hsl(var(--border) / 0.72);
+    border-radius: 16px;
+    background: hsl(var(--card));
+    box-shadow: 0 1px 0 hsl(var(--foreground) / 0.025);
+  }
+
+  [aria-keyshortcuts*="Space K J L"] + div
+    > div:first-child
+    > div[class~="mt-3"][class~="flex"][class~="items-center"][class~="gap-2.5"]
+    > button:first-child {
+    min-height: 40px;
+    border-radius: 12px;
+    padding: 2px 4px 2px 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  [aria-keyshortcuts*="Space K J L"] + div
+    > div:first-child
+    > div[class~="mt-3"][class~="flex"][class~="items-center"][class~="gap-2.5"]
+    > button:last-child:not(:first-child) {
+    height: 40px !important;
+    min-width: 92px;
+    border-radius: 12px !important;
+    padding-inline: 14px !important;
+    font-size: 0.75rem !important;
+    letter-spacing: -0.005em;
+    box-shadow: none !important;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Description stays secondary and does not compete with actions. */
+  [aria-keyshortcuts*="Space K J L"] + div
+    > div:first-child
+    > button[class~="mt-3"][class~="w-full"][class*="bg-muted"] {
+    margin-top: 12px;
+    border: 1px solid hsl(var(--border) / 0.62);
+    border-radius: 14px !important;
+    background: hsl(var(--muted) / 0.34) !important;
+    padding: 11px 12px !important;
+  }
+
+  /*
+   * One segmented interaction dock replaces four separate rounded pills.
+   * It is easier to scan, uses less horizontal space, and has an Alsamos-owned
+   * visual rhythm while preserving 44px+ touch targets.
+   */
+  [aria-keyshortcuts*="Space K J L"] + div
+    > div:first-child
+    > div[class~="mt-3"][class~="flex"][class~="gap-2"][class~="overflow-x-auto"] {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0 !important;
+    margin-top: 12px;
+    padding-bottom: 0 !important;
+    overflow: hidden !important;
+    border: 1px solid hsl(var(--border) / 0.72);
+    border-radius: 16px;
+    background: hsl(var(--card));
+    box-shadow: 0 1px 0 hsl(var(--foreground) / 0.025);
+  }
+
+  [aria-keyshortcuts*="Space K J L"] + div
+    > div:first-child
+    > div[class~="mt-3"][class~="flex"][class~="gap-2"][class~="overflow-x-auto"]
+    > button {
+    position: relative;
+    display: flex !important;
+    min-width: 0 !important;
+    min-height: 62px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px !important;
+    padding: 7px 4px !important;
+    border: 0 !important;
+    border-right: 1px solid hsl(var(--border) / 0.58) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: hsl(var(--foreground)) !important;
+    font-size: 0.68rem !important;
+    font-weight: 650 !important;
+    line-height: 1;
+    box-shadow: none !important;
+    transition:
+      background-color 140ms ease,
+      color 140ms ease,
+      transform 100ms ease;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  [aria-keyshortcuts*="Space K J L"] + div
+    > div:first-child
+    > div[class~="mt-3"][class~="flex"][class~="gap-2"][class~="overflow-x-auto"]
+    > button:last-child {
+    border-right: 0 !important;
+  }
+
+  [aria-keyshortcuts*="Space K J L"] + div
+    > div:first-child
+    > div[class~="mt-3"][class~="flex"][class~="gap-2"][class~="overflow-x-auto"]
+    > button:hover {
+    background: hsl(var(--muted) / 0.52) !important;
+  }
+
+  [aria-keyshortcuts*="Space K J L"] + div
+    > div:first-child
+    > div[class~="mt-3"][class~="flex"][class~="gap-2"][class~="overflow-x-auto"]
+    > button:active {
+    transform: scale(0.97);
+  }
+
+  [aria-keyshortcuts*="Space K J L"] + div
+    > div:first-child
+    > div[class~="mt-3"][class~="flex"][class~="gap-2"][class~="overflow-x-auto"]
+    > button svg {
+    width: 19px !important;
+    height: 19px !important;
+    color: currentColor !important;
+    fill: none !important;
+    stroke-width: 1.8;
+  }
+
+  /* Liked/saved is monochrome: no brand-orange or unrelated red accent. */
+  [aria-keyshortcuts*="Space K J L"] + div
+    > div:first-child
+    > div[class~="mt-3"][class~="flex"][class~="gap-2"][class~="overflow-x-auto"]
+    > button[class*="bg-primary/15"] {
+    background: hsl(var(--foreground)) !important;
+    color: hsl(var(--background)) !important;
+  }
+
+  [aria-keyshortcuts*="Space K J L"] + div
+    > div:first-child
+    > div[class~="mt-3"][class~="flex"][class~="gap-2"][class~="overflow-x-auto"]
+    > button[class*="bg-primary/15"] svg {
+    color: currentColor !important;
+    fill: currentColor !important;
+  }
+
+  /* "Keyingi videolar" becomes content continuation, not a sticky clone bar. */
+  [aria-keyshortcuts*="Space K J L"] + div > div:nth-child(2) {
+    min-height: auto;
+    margin-top: 18px;
+    border-top: 1px solid hsl(var(--border) / 0.72);
+  }
+
+  [aria-keyshortcuts*="Space K J L"] + div > div:nth-child(2) > div:first-child {
+    position: static !important;
+    padding: 16px 16px 12px !important;
+    border-bottom: 0 !important;
+    background: hsl(var(--background)) !important;
+    backdrop-filter: none !important;
+  }
+
+  [aria-keyshortcuts*="Space K J L"] + div > div:nth-child(2) > div:first-child h2 {
+    font-size: 0.95rem;
+    letter-spacing: -0.01em;
+  }
+}
