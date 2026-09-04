@@ -11,7 +11,6 @@ export interface NotificationActor {
   username: string | null;
   display_name: string | null;
   avatar_url: string | null;
-  /** Tasdiqlangan foydalanuvchi nishoni ro'yxatda ham ko'rinishi uchun. */
   is_verified?: boolean | null;
 }
 
@@ -91,10 +90,11 @@ function resolvePostId(data: Record<string, unknown> | null | undefined): string
 }
 
 /**
- * Bildirishnomalarni aktyor profili va post rasmi bilan boyitadi.
- * Profil/post so'rovlari alohida yuboriladi — biri xato bersa ham
- * bildirishnomalar ro'yxati baribir ko'rsatiladi (embed bilan bog'liq
- * PGRST200/PGRST201 xatolaridan himoya).
+ * Notificationning o'zi source-of-truth hisoblanadi. Actor/post/comment lookup
+ * faqat UI ni boyitish uchun ishlatiladi. Muhim: post SELECT RLS sabab qatorni
+ * qaytarmasa, notificationni "o'chirilgan post" deb taxmin qilib yashirmaymiz
+ * va bazadan o'chirmaymiz. Aks holda vaqtinchalik visibility/RLS muammosi
+ * foydalanuvchining notification tarixini qaytarib bo'lmaydigan tarzda o'chirar edi.
  */
 async function enrichNotifications(rows: RawNotificationRow[]): Promise<Notification[]> {
   const actorIds = new Set<string>();
@@ -109,9 +109,11 @@ async function enrichNotifications(rows: RawNotificationRow[]): Promise<Notifica
       typeof data.comment_id === 'string' && data.comment_id.length > 0
         ? data.comment_id
         : undefined;
+
     if (actorId) actorIds.add(actorId);
     if (postId) postIds.add(postId);
     if (commentId) commentIds.add(commentId);
+
     return { row, data, actorId, postId, commentId };
   });
 
@@ -123,7 +125,10 @@ async function enrichNotifications(rows: RawNotificationRow[]): Promise<Notifica
           .in('id', Array.from(actorIds))
       : Promise.resolve({ data: [], error: null } as const),
     postIds.size > 0
-      ? supabase.from('posts').select('id, media_urls, media_type').in('id', Array.from(postIds))
+      ? supabase
+          .from('posts')
+          .select('id, media_urls, media_type')
+          .in('id', Array.from(postIds))
       : Promise.resolve({ data: [], error: null } as const),
     commentIds.size > 0
       ? supabase
@@ -144,10 +149,14 @@ async function enrichNotifications(rows: RawNotificationRow[]): Promise<Notifica
   }
 
   const profileMap = new Map<string, NotificationActor>(
-    ((profilesResult.data as NotificationActor[] | null) || []).map((p) => [p.id, p]),
+    ((profilesResult.data as NotificationActor[] | null) || []).map((profile) => [
+      profile.id,
+      profile,
+    ]),
   );
+
   const postMap = new Map<string, NotificationPost>(
-    ((postsResult.data as NotificationPost[] | null) || []).map((p) => [p.id, p]),
+    ((postsResult.data as NotificationPost[] | null) || []).map((post) => [post.id, post]),
   );
 
   const postsMissingPreview = Array.from(postMap.values())
@@ -155,17 +164,21 @@ async function enrichNotifications(rows: RawNotificationRow[]): Promise<Notifica
     .map((post) => post.id);
 
   if (postsMissingPreview.length > 0) {
-    const previewMap = await getStructuredPostMediaPreviewMap(postsMissingPreview);
-    previewMap.forEach((preview, postId) => {
-      const post = postMap.get(postId);
-      if (!post || post.media_urls?.some(Boolean)) return;
-      postMap.set(postId, {
-        ...post,
-        media_urls: [preview.url],
-        media_type: preview.mediaType,
-        preview_poster: preview.poster,
+    try {
+      const previewMap = await getStructuredPostMediaPreviewMap(postsMissingPreview);
+      previewMap.forEach((preview, postId) => {
+        const post = postMap.get(postId);
+        if (!post || post.media_urls?.some(Boolean)) return;
+        postMap.set(postId, {
+          ...post,
+          media_urls: [preview.url],
+          media_type: preview.mediaType,
+          preview_poster: preview.poster,
+        });
       });
-    });
+    } catch (error) {
+      console.warn('Bildirishnoma media previewlarini yuklab bo‘lmadi:', error);
+    }
   }
 
   const commentMap = new Map<string, NotificationComment>(
@@ -175,45 +188,14 @@ async function enrichNotifications(rows: RawNotificationRow[]): Promise<Notifica
     ]),
   );
 
-  // Post lookup muvaffaqiyatli bo'lsa, mavjud bo'lmagan postga tegishli
-  // notificationni umuman UI'ga bermaymiz. Lookupning o'zi xato qilsa esa
-  // vaqtinchalik tarmoq/RLS muammosi sabab notificationni yashirmaymiz.
-  return normalized
-    .filter(({ postId }) => !postId || Boolean(postsResult.error) || postMap.has(postId))
-    .map(({ row, data, actorId, postId, commentId }) => ({
-      ...row,
-      data,
-      type: row.type as NotificationType,
-      actor: actorId ? profileMap.get(actorId) : undefined,
-      post: postId ? postMap.get(postId) : undefined,
-      comment: commentId ? commentMap.get(commentId) : undefined,
-    }));
-}
-
-function stalePostNotificationIds(
-  rows: RawNotificationRow[],
-  enriched: Notification[],
-): string[] {
-  const visibleIds = new Set(enriched.map((item) => item.id));
-  return rows
-    .filter((row) => {
-      const data = (row.data ?? {}) as Record<string, unknown>;
-      return Boolean(resolvePostId(data)) && !visibleIds.has(row.id);
-    })
-    .map((row) => row.id);
-}
-
-async function cleanupStaleNotifications(userId: string, ids: string[]) {
-  if (ids.length === 0) return;
-  const { error } = await supabase
-    .from('notifications')
-    .delete()
-    .eq('user_id', userId)
-    .in('id', ids);
-
-  if (error) {
-    console.warn('O‘chirilgan post bildirishnomalarini tozalab bo‘lmadi:', error);
-  }
+  return normalized.map(({ row, data, actorId, postId, commentId }) => ({
+    ...row,
+    data,
+    type: row.type as NotificationType,
+    actor: actorId ? profileMap.get(actorId) : undefined,
+    post: postId ? postMap.get(postId) : undefined,
+    comment: commentId ? commentMap.get(commentId) : undefined,
+  }));
 }
 
 function dedupe(items: Notification[]): Notification[] {
@@ -234,60 +216,31 @@ export function useNotifications() {
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Kechikkan javob yangi javobning ustiga yozib yubormasligi uchun.
   const requestIdRef = useRef(0);
   const loadedCountRef = useRef(0);
 
+  /**
+   * Unread count notification jadvalidan olinadi. Post enrichment natijasi bu
+   * songa ta'sir qilmaydi: RLS sabab post preview ko'rinmasligi notificationning
+   * o'zi yo'q degani emas.
+   */
   const refreshUnreadCount = useCallback(async (userId: string) => {
-    const { data, error: unreadError } = await supabase
+    const { count, error: unreadError } = await supabase
       .from('notifications')
-      .select('id, data')
+      .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
       .eq('is_read', false);
 
-    if (unreadError) return;
-
-    const rows = (data || []) as Array<{ id: string; data: unknown }>;
-    const postIds = Array.from(
-      new Set(
-        rows
-          .map((row) => resolvePostId((row.data ?? {}) as Record<string, unknown>))
-          .filter((value): value is string => Boolean(value)),
-      ),
-    );
-
-    if (postIds.length === 0) {
-      setUnreadCount(rows.length);
+    if (unreadError) {
+      console.warn('O‘qilmagan bildirishnomalar sonini yuklab bo‘lmadi:', unreadError);
       return;
     }
 
-    const { data: existingPosts, error: postsError } = await supabase
-      .from('posts')
-      .select('id')
-      .in('id', postIds);
-
-    if (postsError) {
-      setUnreadCount(rows.length);
-      return;
-    }
-
-    const existingIds = new Set((existingPosts || []).map((post) => post.id));
-    const staleIds: string[] = [];
-    let validUnread = 0;
-
-    rows.forEach((row) => {
-      const postId = resolvePostId((row.data ?? {}) as Record<string, unknown>);
-      if (!postId || existingIds.has(postId)) validUnread += 1;
-      else staleIds.push(row.id);
-    });
-
-    setUnreadCount(validUnread);
-    if (staleIds.length > 0) void cleanupStaleNotifications(userId, staleIds);
+    setUnreadCount(count ?? 0);
   }, []);
 
   const fetchNotifications = useCallback(async () => {
     if (!user) {
-      // Login qilinmagan bo'lsa ham skeleton abadiy aylanib turmasin.
       setNotifications([]);
       setUnreadCount(0);
       setHasMore(false);
@@ -297,7 +250,6 @@ export function useNotifications() {
     }
 
     const requestId = ++requestIdRef.current;
-    // Refresh paytida allaqachon yuklangan sahifalar saqlanib qolsin.
     const limit = Math.max(NOTIFICATION_PAGE_SIZE, loadedCountRef.current);
 
     try {
@@ -318,11 +270,9 @@ export function useNotifications() {
 
       const rows = (data || []) as RawNotificationRow[];
       const enriched = dedupe(await enrichNotifications(rows));
-      const staleIds = stalePostNotificationIds(rows, enriched);
 
       if (requestId !== requestIdRef.current) return;
 
-      if (staleIds.length > 0) void cleanupStaleNotifications(user.id, staleIds);
       loadedCountRef.current = enriched.length;
       setNotifications(enriched);
       setHasMore(rows.length === limit);
@@ -333,9 +283,7 @@ export function useNotifications() {
       console.error('Bildirishnomalarni yuklash xatosi:', err);
       setError('Bildirishnomalarni yuklab bo‘lmadi');
     } finally {
-      if (requestId === requestIdRef.current) {
-        setLoading(false);
-      }
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   }, [refreshUnreadCount, user]);
 
@@ -360,15 +308,16 @@ export function useNotifications() {
 
       const rows = (data || []) as RawNotificationRow[];
       const enriched = await enrichNotifications(rows);
-      const staleIds = stalePostNotificationIds(rows, enriched);
-      if (staleIds.length > 0) void cleanupStaleNotifications(user.id, staleIds);
 
-      setNotifications((prev) => {
-        const merged = dedupe([...prev, ...enriched]);
+      setNotifications((previous) => {
+        const merged = dedupe([...previous, ...enriched]);
         loadedCountRef.current = merged.length;
         return merged;
       });
       setHasMore(rows.length === NOTIFICATION_PAGE_SIZE);
+    } catch (err) {
+      console.error('Qo‘shimcha bildirishnomalarni yuklash xatosi:', err);
+      setError('Qo‘shimcha bildirishnomalarni yuklab bo‘lmadi');
     } finally {
       setIsLoadingMore(false);
     }
@@ -378,15 +327,16 @@ export function useNotifications() {
     if (!user) return;
 
     let wasUnread = false;
-    setNotifications((prev) =>
-      prev.map((n) => {
-        if (n.id !== notificationId) return n;
-        if (!n.is_read) wasUnread = true;
-        return { ...n, is_read: true };
+    setNotifications((previous) =>
+      previous.map((notification) => {
+        if (notification.id !== notificationId) return notification;
+        if (!notification.is_read) wasUnread = true;
+        return { ...notification, is_read: true };
       }),
     );
+
     if (!wasUnread) return;
-    setUnreadCount((prev) => Math.max(0, prev - 1));
+    setUnreadCount((previous) => Math.max(0, previous - 1));
 
     const { error: updateError } = await supabase
       .from('notifications')
@@ -396,11 +346,14 @@ export function useNotifications() {
 
     if (updateError) {
       console.error('Bildirishnomani o‘qilgan deb belgilash xatosi:', updateError);
-      // Optimistik o'zgarishni qaytaramiz.
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notificationId ? { ...n, is_read: false } : n)),
+      setNotifications((previous) =>
+        previous.map((notification) =>
+          notification.id === notificationId
+            ? { ...notification, is_read: false }
+            : notification,
+        ),
       );
-      setUnreadCount((prev) => prev + 1);
+      setUnreadCount((previous) => previous + 1);
     }
   }, [user]);
 
@@ -409,7 +362,9 @@ export function useNotifications() {
 
     const snapshot = notifications;
     const previousUnread = unreadCount;
-    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    setNotifications((previous) =>
+      previous.map((notification) => ({ ...notification, is_read: true })),
+    );
     setUnreadCount(0);
 
     const { error: updateError } = await supabase
@@ -430,14 +385,15 @@ export function useNotifications() {
     if (!user) return;
 
     let removed: Notification | undefined;
-    setNotifications((prev) => {
-      removed = prev.find((n) => n.id === notificationId);
-      const next = prev.filter((n) => n.id !== notificationId);
+    setNotifications((previous) => {
+      removed = previous.find((notification) => notification.id === notificationId);
+      const next = previous.filter((notification) => notification.id !== notificationId);
       loadedCountRef.current = next.length;
       return next;
     });
+
     if (removed && !removed.is_read) {
-      setUnreadCount((prev) => Math.max(0, prev - 1));
+      setUnreadCount((previous) => Math.max(0, previous - 1));
     }
 
     const { error: deleteError } = await supabase
@@ -450,12 +406,13 @@ export function useNotifications() {
       console.error('Bildirishnomani o‘chirish xatosi:', deleteError);
       if (removed) {
         const restored = removed;
-        setNotifications((prev) =>
-          dedupe([...prev, restored]).sort(
-            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        setNotifications((previous) =>
+          dedupe([...previous, restored]).sort(
+            (a, b) =>
+              new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
           ),
         );
-        if (!restored.is_read) setUnreadCount((prev) => prev + 1);
+        if (!restored.is_read) setUnreadCount((previous) => previous + 1);
       }
       throw deleteError;
     }
@@ -482,9 +439,6 @@ export function useNotifications() {
     void fetchNotifications();
   }, [fetchNotifications]);
 
-  // Real-time: INSERT bo'lganda qayta yuklaymiz (aktyor/post ma'lumoti kerak).
-  // MUHIM: `notifications` ni dependency qilib qo'ymaymiz, aks holda kanal
-  // har bir state o'zgarishida qayta yaratiladi va handlerlar ikki marta ishlaydi.
   useEffect(() => {
     if (!user) return;
 
@@ -512,13 +466,17 @@ export function useNotifications() {
         },
         (payload) => {
           const updated = payload.new as { id: string; is_read: boolean };
-          setNotifications((prev) => {
-            const target = prev.find((n) => n.id === updated.id);
+          setNotifications((previous) => {
+            const target = previous.find((notification) => notification.id === updated.id);
             if (target && target.is_read !== updated.is_read) {
-              setUnreadCount((c) => (updated.is_read ? Math.max(0, c - 1) : c + 1));
+              setUnreadCount((count) =>
+                updated.is_read ? Math.max(0, count - 1) : count + 1,
+              );
             }
-            return prev.map((n) =>
-              n.id === updated.id ? { ...n, is_read: updated.is_read } : n,
+            return previous.map((notification) =>
+              notification.id === updated.id
+                ? { ...notification, is_read: updated.is_read }
+                : notification,
             );
           });
         },
@@ -533,8 +491,12 @@ export function useNotifications() {
         },
         (payload) => {
           const deleted = payload.old as { id: string };
-          setNotifications((prev) => {
-            const next = prev.filter((n) => n.id !== deleted.id);
+          setNotifications((previous) => {
+            const removed = previous.find((notification) => notification.id === deleted.id);
+            if (removed && !removed.is_read) {
+              setUnreadCount((count) => Math.max(0, count - 1));
+            }
+            const next = previous.filter((notification) => notification.id !== deleted.id);
             loadedCountRef.current = next.length;
             return next;
           });
