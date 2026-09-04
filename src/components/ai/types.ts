@@ -20,6 +20,7 @@ export type AIAttachmentMeta = {
   url: string;
   name: string;
   type: string;
+  size?: number;
 };
 
 export interface AIMessage {
@@ -28,6 +29,8 @@ export interface AIMessage {
   content: string;
   imageUrl?: string;
   images?: string[];
+  videoUrl?: string;
+  videos?: string[];
   error?: boolean;
   timestamp: Date;
   model?: string;
@@ -38,12 +41,21 @@ export interface AIMessage {
   notice?: string;
 }
 
+export interface AIProject {
+  id: string;
+  name: string;
+  instructions: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface AIConversation {
   id: string;
   title: string;
   messages: AIMessage[];
   updatedAt: Date;
   pinned?: boolean;
+  projectId?: string | null;
 }
 
 export interface AISettings {
