@@ -7,35 +7,64 @@ create table if not exists public.ai_memories (
   user_id uuid not null references auth.users(id) on delete cascade,
   content text,
   kind text not null default 'fact',
+  "key" text,
+  "value" text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 alter table public.ai_memories add column if not exists content text;
 alter table public.ai_memories add column if not exists kind text not null default 'fact';
+alter table public.ai_memories add column if not exists "key" text;
+alter table public.ai_memories add column if not exists "value" text;
 alter table public.ai_memories add column if not exists created_at timestamptz not null default now();
 alter table public.ai_memories add column if not exists updated_at timestamptz not null default now();
 
--- Migrate legacy key/value memories when those columns are present.
-do $$
+-- Keep both the older agent key/value contract and the newer UI content/kind
+-- contract alive during the rollout. Either side can write; the other side can
+-- immediately read the same memory.
+create or replace function public.sync_ai_memory_shapes()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
 begin
-  if exists (
-    select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'ai_memories' and column_name = 'key'
-  ) and exists (
-    select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'ai_memories' and column_name = 'value'
-  ) then
-    execute $sql$
-      update public.ai_memories
-      set content = coalesce(nullif(content, ''), concat_ws(': ', nullif("key", ''), nullif("value", '')))
-      where content is null or content = ''
-    $sql$;
+  if (new.content is null or btrim(new.content) = '') and new."value" is not null then
+    new.content := concat_ws(': ', nullif(btrim(coalesce(new."key", '')), ''), btrim(new."value"));
   end if;
-end $$;
+
+  if (new."value" is null or btrim(new."value") = '') and new.content is not null then
+    new."value" := new.content;
+  end if;
+
+  if (new."key" is null or btrim(new."key") = '') and new.content is not null then
+    new."key" := left(coalesce(nullif(new.kind, ''), 'memory') || '-' || md5(lower(btrim(new.content))), 80);
+  end if;
+
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+drop trigger if exists sync_ai_memory_shapes_trigger on public.ai_memories;
+create trigger sync_ai_memory_shapes_trigger
+before insert or update on public.ai_memories
+for each row execute function public.sync_ai_memory_shapes();
+
+update public.ai_memories
+set
+  content = coalesce(nullif(content, ''), concat_ws(': ', nullif("key", ''), nullif("value", ''))),
+  "value" = coalesce(nullif("value", ''), content),
+  "key" = coalesce(
+    nullif("key", ''),
+    left(coalesce(nullif(kind, ''), 'memory') || '-' || md5(lower(btrim(coalesce(content, "value", 'memory')))), 80)
+  );
 
 create index if not exists ai_memories_user_created_idx
   on public.ai_memories (user_id, created_at desc);
+create unique index if not exists ai_memories_user_key_idx
+  on public.ai_memories (user_id, "key")
+  where "key" is not null;
 
 alter table public.ai_memories enable row level security;
 
