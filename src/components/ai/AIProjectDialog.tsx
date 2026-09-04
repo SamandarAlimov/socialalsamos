@@ -87,7 +87,11 @@ export function AIProjectDialog({ open, onOpenChange, project, onSave }: Props) 
 
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>Bekor qilish</Button>
-          <Button onClick={submit} disabled={!name.trim() || saving}>
+          <Button
+            onClick={submit}
+            disabled={!name.trim() || saving}
+            className="bg-foreground text-background hover:bg-foreground/90"
+          >
             {saving ? 'Saqlanmoqda…' : project ? 'Saqlash' : 'Loyiha yaratish'}
           </Button>
         </DialogFooter>
