@@ -44,6 +44,7 @@ import AdminPage from "./pages/AdminPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import StoryArchivePage from "./pages/StoryArchivePage";
 import AIPage from "./pages/AIPage";
+import ProjectsPage from "./pages/ProjectsPage";
 import OAuthConsent from "./pages/OAuthConsent";
 import ActivityPage from "./pages/ActivityPage";
 import AdsPage from "./pages/AdsPage";
@@ -69,7 +70,6 @@ function FullscreenSpinner() {
   );
 }
 
-// Protected route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
 
@@ -78,7 +78,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return isAuthenticated ? <>{children}</> : <Navigate to="/" replace />;
 }
 
-// Auth route - redirects to home (or ?next) if already logged in
 function AuthRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
   const [searchParams] = useSearchParams();
@@ -93,14 +92,8 @@ function AuthRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-/**
- * Post uchun doimiy havola: /post/:postId.
- * Ilgari bunday marshrut yo'q edi va ulashilgan havola 404 sahifasiga tushardi.
- * Lentadagi post oynasi `?post=` parametrini qo'llab-quvvatlaydi.
- */
 function PostPermalink() {
   const { postId } = useParams<{ postId: string }>();
-
   return <Navigate to={postId ? '/home?post=' + encodeURIComponent(postId) : '/home'} replace />;
 }
 
@@ -125,14 +118,12 @@ function AppRoutes() {
     <>
       <RouteSEO />
       <Routes>
-      {/* Auth - First screen before login */}
       <Route path="/" element={
         <AuthRoute>
           <AuthPage />
         </AuthRoute>
       } />
 
-      {/* Legacy public URLs: keep old indexed/bookmarked links alive. */}
       <Route path="/terms" element={<Navigate to="/legal/terms" replace />} />
       <Route path="/terms-of-service" element={<Navigate to="/legal/terms" replace />} />
       <Route path="/privacy" element={<Navigate to="/legal/privacy" replace />} />
@@ -140,19 +131,15 @@ function AppRoutes() {
       <Route path="/help-center" element={<Navigate to="/help" replace />} />
       <Route path="/auth" element={<Navigate to="/" replace />} />
 
-      {/* Password recovery (public) */}
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-      {/* Legal & support (public) */}
       <Route path="/legal/privacy" element={<PrivacyPage />} />
       <Route path="/legal/terms" element={<TermsPage />} />
       <Route path="/help" element={<HelpCenterPage />} />
 
-      {/* OAuth consent page (public — handles its own auth check) */}
       <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
 
-      {/* Protected App Routes */}
       <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
         <Route path="/home" element={<HomePage />} />
         <Route path="/post/:postId" element={<PostPermalink />} />
@@ -169,13 +156,8 @@ function AppRoutes() {
         <Route path="/marketplace/product/:productId" element={<MarketplaceProductPage />} />
         <Route path="/map" element={<MapPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
-        {/* DB foundation tayyor bo'lsa modular, aks holda deployment-safe legacy fallback. */}
         <Route path="/create" element={<CreateEntryPage />} />
-        {/* Eski test URL lar buzilmasin; canonical yo'l /create. */}
         <Route path="/compose" element={<Navigate to="/create" replace />} />
-        {/* Stiker paketlari: o'z paketi va havola orqali kelgan paket.
-            Diqqat: "moderation" marshruti ":slug" dan OLDIN turishi shart,
-            aks holda slug marshruti uni yutib yuboradi. */}
         <Route path="/stickers" element={<StickerPacksPage />} />
         <Route path="/stickers/moderation" element={<StickerModerationPage />} />
         <Route path="/stickers/:slug" element={<StickerPacksPage />} />
@@ -188,11 +170,11 @@ function AppRoutes() {
         <Route path="/payment" element={<PaymentSettingsPage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/story-archive" element={<StoryArchivePage />} />
+        <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/ai" element={<AIPage />} />
         <Route path="/activity" element={<ActivityPage />} />
         <Route path="/ads" element={<AdsPage />} />
         <Route path="/channels" element={<ChannelsPage />} />
-        {/* Mini Apps: aniq yo'llar katalogdan OLDIN turishi shart. */}
         <Route path="/mini-apps/moderation" element={<MiniAppsModerationPage />} />
         <Route path="/mini-apps/publisher" element={<PublisherOnboardingPage />} />
         <Route path="/mini-apps/new" element={<MiniAppSubmitPage />} />
@@ -200,14 +182,12 @@ function AppRoutes() {
         <Route path="/mini-apps" element={<MiniAppsPage />} />
       </Route>
 
-      {/* 404 */}
       <Route path="*" element={<NotFound />} />
       </Routes>
     </>
   );
 }
 
-// Wrapper component that provides GlobalCallProvider inside BrowserRouter
 function AppWithGlobalCall() {
   const { isAuthenticated } = useAuth();
 
@@ -220,7 +200,6 @@ function AppWithGlobalCall() {
           <OnlinePresenceProvider>
             <GlobalCallProvider>
               <ChatAccentProvider />
-              {/* Tanlangan chat fonini chat oynasiga qo'llaydi */}
               <ChatWallpaperProvider />
               <AppRoutes />
             </GlobalCallProvider>
