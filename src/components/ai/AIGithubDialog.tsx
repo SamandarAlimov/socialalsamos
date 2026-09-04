@@ -114,7 +114,9 @@ export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialo
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Github className="h-4 w-4" />
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg border bg-muted/40">
+              <Github className="h-4 w-4" />
+            </span>
             GitHub
           </DialogTitle>
           <DialogDescription>
@@ -124,8 +126,8 @@ export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialo
 
         {connected ? (
           <div className="space-y-3">
-            <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/40 p-3">
-              <ShieldCheck className="h-4 w-4 text-alsamos-orange" />
+            <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/30 p-3">
+              <ShieldCheck className="h-4 w-4 text-emerald-500" />
               <span className="text-sm">Ulangan{login ? `: @${login}` : ''}</span>
               <div className="flex-1" />
               <Button size="sm" variant="ghost" onClick={handleDisconnect} disabled={loading}>
@@ -149,7 +151,7 @@ export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialo
                     onPickRepo?.(repo);
                     onOpenChange(false);
                   }}
-                  className="flex w-full flex-col rounded-lg px-3 py-2 text-left hover:bg-muted/60"
+                  className="flex w-full flex-col rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/60"
                 >
                   <span className="text-sm font-medium">{repo.fullName}</span>
                   {repo.description && (
@@ -162,9 +164,6 @@ export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialo
             </div>
           </div>
         ) : (
-          // MUHIM: maydon HECH QACHON type="password" bo'lmaydi — aks holda Chrome uni login
-          // formasi deb o'ylab, yon paneldagi qidiruvga emailni avto-to'ldirib yuboradi.
-          // Yashirish CSS orqali (-webkit-text-security) amalga oshiriladi.
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label htmlFor="alsamos-github-pat">Access token</Label>
@@ -208,7 +207,11 @@ export function AIGithubDialog({ open, onOpenChange, onPickRepo }: AIGithubDialo
                 Ruxsatlar: Metadata (Read), Contents, Issues, Pull requests.
               </p>
             </div>
-            <Button onClick={handleConnect} disabled={loading || !token.trim()} className="w-full">
+            <Button
+              onClick={handleConnect}
+              disabled={loading || !token.trim()}
+              className="w-full bg-foreground text-background hover:bg-foreground/90"
+            >
               {loading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
