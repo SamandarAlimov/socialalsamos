@@ -1,0 +1,24 @@
+name: One-shot Post Visibility Repair
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "api/repair-post-visibility.ts"
+      - ".github/workflows/invoke-post-repair.yml"
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Repair legacy post visibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          TMP="$(mktemp)"
+          STATUS="$(curl --silent --show-error --max-time 30 -o "$TMP" -w '%{http_code}' https://www.alsamos.com/api/repair-post-visibility)"
+          echo "HTTP $STATUS"
+          cat "$TMP"
+          echo
+          test "$STATUS" = "200"
