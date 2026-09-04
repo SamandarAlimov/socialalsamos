@@ -111,6 +111,18 @@ function projectFromRow(row: any): AIProject {
   };
 }
 
+function isProjectSchemaError(error: any): boolean {
+  const message = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
+  return (
+    message.includes('ai_projects') ||
+    message.includes('project_id') ||
+    message.includes('schema cache') ||
+    error?.code === '42P01' ||
+    error?.code === '42703' ||
+    error?.code === 'PGRST204'
+  );
+}
+
 export default function AIPageV2() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
@@ -125,6 +137,7 @@ export default function AIPageV2() {
   const [statusLabel, setStatusLabel] = useState("O'ylayapman…");
   const [conversations, setConversations] = useState<AIConversation[]>([]);
   const [projects, setProjects] = useState<AIProject[]>([]);
+  const [projectsAvailable, setProjectsAvailable] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
@@ -191,6 +204,12 @@ export default function AIPageV2() {
         db.from('ai_projects').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }),
       ]);
 
+      const projectSchemaReady = !projectResult.error;
+      setProjectsAvailable(projectSchemaReady);
+      if (!projectSchemaReady) {
+        setActiveProjectId(null);
+      }
+
       const pins = readMap(PIN_KEY);
       const loadedConversations: AIConversation[] = ((conversationResult.data as any[]) || []).map((row) => {
         const revived = reviveMessages(row.messages || []);
@@ -200,14 +219,12 @@ export default function AIPageV2() {
           messages: revived,
           updatedAt: new Date(row.updated_at || Date.now()),
           pinned: Boolean(pins[row.id]),
-          projectId: row.project_id ? String(row.project_id) : null,
+          projectId: projectSchemaReady && row.project_id ? String(row.project_id) : null,
         };
       });
 
       setConversations(loadedConversations);
-      if (!projectResult.error) {
-        setProjects(((projectResult.data as any[]) || []).map(projectFromRow));
-      }
+      setProjects(projectSchemaReady ? ((projectResult.data as any[]) || []).map(projectFromRow) : []);
       setHistoryLoading(false);
     };
 
@@ -217,16 +234,37 @@ export default function AIPageV2() {
   const saveConversation = async (newMessages: AIMessage[]): Promise<string | null> => {
     if (!user) return currentConversationId;
 
+    const updatedAt = new Date().toISOString();
+    const baseUpdate = {
+      messages: newMessages as any,
+      updated_at: updatedAt,
+    };
+
     if (currentConversationId) {
-      await db
+      const updatePayload = projectsAvailable
+        ? { ...baseUpdate, project_id: activeProjectId }
+        : baseUpdate;
+      let result = await db
         .from('ai_conversations')
-        .update({
-          messages: newMessages as any,
-          project_id: activeProjectId,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updatePayload)
         .eq('id', currentConversationId)
         .eq('user_id', user.id);
+
+      if (result.error && projectsAvailable && isProjectSchemaError(result.error)) {
+        setProjectsAvailable(false);
+        setProjects([]);
+        setActiveProjectId(null);
+        result = await db
+          .from('ai_conversations')
+          .update(baseUpdate)
+          .eq('id', currentConversationId)
+          .eq('user_id', user.id);
+      }
+
+      if (result.error) {
+        console.error('AI conversation update failed:', result.error);
+        return currentConversationId;
+      }
 
       setConversations((previous) =>
         previous.map((conversation) =>
@@ -234,9 +272,9 @@ export default function AIPageV2() {
             ? {
                 ...conversation,
                 messages: newMessages,
-                projectId: activeProjectId,
+                projectId: projectsAvailable ? activeProjectId : null,
                 title: deriveTitle(newMessages, conversation.id),
-                updatedAt: new Date(),
+                updatedAt: new Date(updatedAt),
               }
             : conversation,
         ),
@@ -244,18 +282,37 @@ export default function AIPageV2() {
       return currentConversationId;
     }
 
-    const { data, error } = await db
+    const baseInsert = {
+      user_id: user.id,
+      messages: newMessages as any,
+      context: 'chat',
+    };
+    const insertPayload = projectsAvailable
+      ? { ...baseInsert, project_id: activeProjectId }
+      : baseInsert;
+
+    let insertResult = await db
       .from('ai_conversations')
-      .insert({
-        user_id: user.id,
-        messages: newMessages as any,
-        context: 'chat',
-        project_id: activeProjectId,
-      })
+      .insert(insertPayload)
       .select('*')
       .single();
 
-    if (error || !data) return null;
+    if (insertResult.error && projectsAvailable && isProjectSchemaError(insertResult.error)) {
+      setProjectsAvailable(false);
+      setProjects([]);
+      setActiveProjectId(null);
+      insertResult = await db
+        .from('ai_conversations')
+        .insert(baseInsert)
+        .select('*')
+        .single();
+    }
+
+    const { data, error } = insertResult;
+    if (error || !data) {
+      console.error('AI conversation insert failed:', error);
+      return null;
+    }
     const id = String((data as any).id);
     setCurrentConversationId(id);
     setConversations((previous) => [
@@ -264,7 +321,7 @@ export default function AIPageV2() {
         title: deriveTitle(newMessages, id),
         messages: newMessages,
         updatedAt: new Date(),
-        projectId: activeProjectId,
+        projectId: projectsAvailable ? activeProjectId : null,
       },
       ...previous,
     ]);
@@ -323,7 +380,17 @@ export default function AIPageV2() {
             .select('status, output_url, error')
             .eq('id', jobId)
             .maybeSingle();
-          if (!error && data) {
+
+          if (error) {
+            if (attempt === 0) {
+              sonnerToast.error('Video holatini kuzatib bo‘lmadi', {
+                description: 'AI media backend yangilanishi hali production bazaga qo‘llanmagan bo‘lishi mumkin.',
+              });
+            }
+            return;
+          }
+
+          if (data) {
             const row = data as any;
             if (row.status === 'done' && row.output_url) {
               await patchConversationVideo(conversationId, assistantId, String(row.output_url));
@@ -385,24 +452,25 @@ export default function AIPageV2() {
       abortRef.current?.abort();
       setMessages([]);
       setCurrentConversationId(null);
-      setActiveProjectId(projectId);
+      setActiveProjectId(projectsAvailable ? projectId : null);
       setInput('');
       setAttachments([]);
       setForwardedPost(null);
       if (isMobile) setSidebarOpen(false);
     },
-    [activeProjectId, isMobile],
+    [activeProjectId, isMobile, projectsAvailable],
   );
 
   const selectConversation = (conversation: AIConversation) => {
     abortRef.current?.abort();
     setMessages(conversation.messages);
     setCurrentConversationId(conversation.id);
-    setActiveProjectId(conversation.projectId || null);
+    setActiveProjectId(projectsAvailable ? conversation.projectId || null : null);
     if (isMobile) setSidebarOpen(false);
   };
 
   const selectProject = (projectId: string | null) => {
+    if (!projectsAvailable) return;
     abortRef.current?.abort();
     setActiveProjectId(projectId);
     setMessages([]);
@@ -439,14 +507,23 @@ export default function AIPageV2() {
     );
   };
 
+  const requireProjects = () => {
+    if (projectsAvailable) return true;
+    sonnerToast.info('Loyihalar backend yangilanishini kutmoqda', {
+      description: 'Oddiy AI chat ishlashda davom etadi. Production migratsiyasi qo‘llangach loyihalar avtomatik faollashadi.',
+    });
+    return false;
+  };
+
   const createProject = async (value: { name: string; instructions: string }) => {
-    if (!user) return;
+    if (!user || !requireProjects()) return;
     const { data, error } = await db
       .from('ai_projects')
       .insert({ user_id: user.id, name: value.name, instructions: value.instructions })
       .select('*')
       .single();
     if (error || !data) {
+      if (isProjectSchemaError(error)) setProjectsAvailable(false);
       sonnerToast.error('Loyiha yaratilmadi', { description: error?.message || 'Ma’lumotlar bazasi tayyor emas.' });
       return;
     }
@@ -456,7 +533,7 @@ export default function AIPageV2() {
   };
 
   const updateProject = async (projectId: string, value: { name: string; instructions: string }) => {
-    if (!user) return;
+    if (!user || !requireProjects()) return;
     const now = new Date().toISOString();
     const { error } = await db
       .from('ai_projects')
@@ -464,6 +541,7 @@ export default function AIPageV2() {
       .eq('id', projectId)
       .eq('user_id', user.id);
     if (error) {
+      if (isProjectSchemaError(error)) setProjectsAvailable(false);
       sonnerToast.error('Loyiha saqlanmadi', { description: error.message });
       return;
     }
@@ -477,9 +555,10 @@ export default function AIPageV2() {
   };
 
   const deleteProject = async (projectId: string) => {
-    if (!user) return;
+    if (!user || !requireProjects()) return;
     const { error } = await db.from('ai_projects').delete().eq('id', projectId).eq('user_id', user.id);
     if (error) {
+      if (isProjectSchemaError(error)) setProjectsAvailable(false);
       sonnerToast.error('Loyiha o‘chirilmadi', { description: error.message });
       return;
     }
@@ -493,13 +572,14 @@ export default function AIPageV2() {
   };
 
   const moveConversation = async (conversationId: string, projectId: string | null) => {
-    if (!user) return;
+    if (!user || !requireProjects()) return;
     const { error } = await db
       .from('ai_conversations')
       .update({ project_id: projectId, updated_at: new Date().toISOString() })
       .eq('id', conversationId)
       .eq('user_id', user.id);
     if (error) {
+      if (isProjectSchemaError(error)) setProjectsAvailable(false);
       sonnerToast.error('Suhbat ko‘chirilmadi', { description: error.message });
       return;
     }
@@ -969,13 +1049,13 @@ export default function AIPageV2() {
                 onOpenConnectors={() => setConnectorsOpen(true)}
                 onOpenGithub={() => setGithubOpen(true)}
                 artifactCount={artifacts.length}
-                projects={projects}
-                activeProjectId={activeProjectId}
-                onSelectProject={selectProject}
-                onCreateProject={createProject}
-                onUpdateProject={updateProject}
-                onDeleteProject={deleteProject}
-                onMoveConversation={moveConversation}
+                projects={projectsAvailable ? projects : []}
+                activeProjectId={projectsAvailable ? activeProjectId : null}
+                onSelectProject={projectsAvailable ? selectProject : undefined}
+                onCreateProject={projectsAvailable ? createProject : undefined}
+                onUpdateProject={projectsAvailable ? updateProject : undefined}
+                onDeleteProject={projectsAvailable ? deleteProject : undefined}
+                onMoveConversation={projectsAvailable ? moveConversation : undefined}
               />
             </motion.aside>
           </>
