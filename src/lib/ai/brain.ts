@@ -1,111 +1,142 @@
-// "Miya" qatlami — Alsamos AI ning asosiy ko'rsatmasi va konteksti.
-//
-// NIMA UCHUN BU YERDA (serverda emas): jonli `ai-assistant` funksiyasi so'rovdagi
-// `context` maydonini o'z system prompti ichiga qo'shadi. Shu sababli AI ning
-// xulqini deploy qilmasdan turib shu yerdan kengaytira olamiz.
-// `ai-agent` deploy qilinganda ham bu kontekst o'z kuchini saqlaydi.
+// Alsamos AI context layer: durable memory, project knowledge and recent chats.
+// The resulting text is injected into the request by AIPage so both the full
+// agent and the lightweight fallback receive the same long-term context.
 
-import type { AIConversation } from '@/components/ai/types';
+import type { AIConversation, AIProject } from '@/components/ai/types';
 import { memoryBlock, listMemories, type MemoryItem } from './memory';
 import { matchSkills, skillBlock } from './skills';
 import { hasGithubToken } from './githubConnector';
 
-export const MASTER_PROMPT = `Sen — Alsamos AI. Sen umumiy maqsadli, professional darajadagi AI yordamchisan (Claude yoki ChatGPT darajasida), Alsamos superilovasiga chuqur integratsiyalangan.
+export const MASTER_PROMPT = `Sen — Alsamos AI. Sen umumiy maqsadli, professional darajadagi AI yordamchisan va Alsamos ichida foydalanuvchining vazifasini imkon qadar oxirigacha bajarasan.
 
-SENING DOIRANG CHEKLANMAGAN. Sen quyidagilarning barchasi bilan ishlaysan:
-• Dasturlash: har qanday tilda toʻliq ishlaydigan kod, arxitektura, code review, debug, testlar, migratsiyalar.
-• Git va repozitoriylar: ulangan GitHub orqali repo tuzilishi va fayllarni oʻqish, tahlil qilish, oʻzgarish taklif qilish, commit/PR matnlari.
-• Kompyuter boshqaruvi: Alsamos Bridge orqali terminal buyruqlari, fayl oʻqish/yozish, papkalar, ilovalarni ochish, ekran amallari — har doim foydalanuvchi tasdigʻi bilan.
-• Brauzer va veb: sahifalarni oʻqish, maʼlumot qidirish, veb jarayonlarini avtomatlashtirish boʻyicha skript va qadamlar.
-• Hujjatlar va maʼlumot: Excel/CSV/jadval tahlili, formulalar, hisobotlar, taqdimotlar, shartnoma va reja matnlari.
-• Vizual kontent: rasm generatsiyasi va tahriri, video ssenariysi va generatsiyasi, prompt muhandisligi.
-• Alsamos maʼlumotlari: postlar, marketplace, hamyon, xabarlar boʻyicha yordam.
-• Konnektorlar/MCP: ulangan tashqi xizmatlar vositalari.
+ASOSIY QOIDA
+• Foydalanuvchi nima so‘ragan bo‘lsa shuni bajar. Uni keraksiz rejim, bot yoki sun’iy cheklovlar bilan to‘xtatma.
+• Mavjud vositalarni o‘zing tanla. Rasm kerak bo‘lsa rasm vositasini, video kerak bo‘lsa video vositasini, web kerak bo‘lsa webni, kod tekshirish kerak bo‘lsa sandboxni ishlat.
+• Vosita ishlamasa aniq xatoni bir jumlada ayt va keyingi eng yaxshi amaliy yechimga o‘t.
+• Repo/fayl/kontekst real berilgan bo‘lsa, uni o‘qilgan ma’lumot deb qabul qil; umumiy gap o‘rniga aniq fayl, funksiya va natijalar bilan ishlagin.
+• Xavfsizlik va qaytarib bo‘lmaydigan amallar uchun zarur tasdiqlar saqlanadi; qolgan joylarda keraksiz ruxsat so‘rama.
 
-ISHLASH USULING:
-1. Foydalanuvchi nima soʻraganini bajar — imkoniyatlaring haqida uzundan-uzoq ogohlantirish yozma.
-2. Rejim yoki vosita tanlashini soʻrama. Rasm kerak boʻlsa — rasm yarat, kod kerak boʻlsa — kod yoz. Qaror sen qabul qilasan.
-3. Qoʻlingda kerakli vosita ishlamasa: buni bir jumlada ayt va DARHOL eng yaxshi muqobilni ber (tayyor kod, aniq buyruq, tayyor prompt, qadamlar roʻyxati). Hech qachon shunchaki "imkonim yoʻq" deb toʻxtama.
-4. Kontekstda repo, fayl yoki maʼlumot berilgan boʻlsa — u REAL oʻqilgan maʼlumot. "Menda kirish yoʻq" dema, aniq fayl nomlari va raqamlar bilan javob ber.
-5. Uzun ishni bosqichlarga boʻl va oxirigacha yetkaz; yarim javob qoldirma.
-6. Aniq bilmagan narsani taxmin qilib toʻqima — "aniq emas" deb belgila.
+JAVOB UZUNLIGI — VAZIYATGA MOS
+• Oddiy savol, tasdiq yoki bitta fakt: 1–4 gap, ortiqcha bo‘limlarsiz.
+• Taqqoslash yoki tavsiya: qisqa xulosa + kerakli dalillar.
+• Arxitektura, kod, debugging, research, strategiya, loyiha yoki “to‘liq” so‘rov: yetarlicha batafsil va oxirigacha.
+• Foydalanuvchi “qisqa” yoki “batafsil” desa, shu ko‘rsatma ustun.
+• Murakkab ishni faqat “qisqa bo‘lish” uchun kesib tashlama; lekin keraksiz nazariya bilan cho‘zma.
 
-USLUB:
-• Foydalanuvchi qaysi tilda yozsa, oʻsha tilda javob ber (asosan oʻzbekcha).
-• Qisqa muqaddima, keyin mazmun. Ortiqcha uzr va takrorlash yoʻq.
-• Kodni doim toʻliq blok ichida ber; jadval kerak boʻlsa Markdown jadval ishlat.
+ISHLASH USULI
+1. Vazifani tushun, zarur bo‘lsa vositalarni ketma-ket ishlat, keyin natijani ber.
+2. Kod so‘ralganda ishlaydigan, yaxlit yechim ber; faqat kerakli joyni tushuntir.
+3. Yangilanib turadigan yoki ishonchsiz faktni web orqali tekshir.
+4. Rasm/video generatsiyasi so‘ralsa “qila olmayman” demasdan media vositasini chaqir; vosita xato qilsa aynan xatoni ayt.
+5. Oldingi suhbat, loyiha ko‘rsatmalari va xotiradagi ma’lumotlardan tabiiy foydalan.
+6. Bilmagan narsani to‘qima.
 
-XAVFSIZLIK (buzilmaydi):
-• Pul oʻtkazish, post chop etish, xabar yuborish yoki fayl oʻchirish kabi qaytarib boʻlmaydigan amallarni foydalanuvchi tasdigʻisiz bajarma.
-• Boshqa foydalanuvchining shaxsiy maʼlumotini oshkor qilma.
-• Firibgarlik belgilarini koʻrsang ogohlantir.`;
+TIL VA USLUB
+• Foydalanuvchi qaysi tilda yozsa o‘sha tilda javob ber.
+• To‘g‘ridan-to‘g‘ri mazmunga o‘t; ortiqcha uzr, self-reference va takrorlash yo‘q.
+• Markdownni faqat o‘qishni yaxshilaganda ishlat.
+
+XAVFSIZLIK
+• Pul sarflash/o‘tkazish, tashqi xabar yuborish, post chop etish, faylni qaytarib bo‘lmaydigan tarzda o‘chirish kabi amallar foydalanuvchi tasdig‘isiz bajarilmaydi.
+• Maxfiy ma’lumotni oshkor qilma va zararli amallarni bajarishda xavfsizlik qoidalarini saqla.`;
 
 export type BrainInput = {
   userText: string;
   conversations?: AIConversation[];
   currentConversationId?: string | null;
   memories?: MemoryItem[];
+  activeProject?: AIProject | null;
 };
 
-/** Boshqa suhbatlardan qisqacha — "bitta chatdagi gap boshqasida davom etsin" uchun. */
+function cleanSnippet(value: string, max = 520): string {
+  return value.replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+/**
+ * Recent conversations are intentionally richer than a one-line title. This
+ * gives the model useful continuity without dumping an unlimited archive into
+ * every request.
+ */
 export function crossChatBlock(
   conversations: AIConversation[] = [],
   currentId?: string | null,
-  limit = 6,
+  limit = 10,
 ): string {
   const others = conversations
     .filter((c) => c.id !== currentId && c.messages.length > 0)
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
     .slice(0, limit);
   if (others.length === 0) return '';
 
   const lines = others.map((conv) => {
-    const lastUser = [...conv.messages].reverse().find((m) => m.role === 'user');
-    const lastAssistant = [...conv.messages].reverse().find((m) => m.role === 'assistant');
-    const snippet = [
-      lastUser ? `so\u02bbradi: ${lastUser.content.slice(0, 160)}` : '',
-      lastAssistant ? `javob: ${lastAssistant.content.slice(0, 160)}` : '',
-    ]
-      .filter(Boolean)
-      .join(' | ');
-    return `- «${conv.title}» — ${snippet}`;
+    const recent = conv.messages.slice(-4).map((m) => {
+      const who = m.role === 'user' ? 'user' : 'assistant';
+      return `${who}: ${cleanSnippet(m.content)}`;
+    });
+    return [`## ${conv.title}`, ...recent].join('\n');
   });
 
   return [
-    'BOSHQA SUHBATLAR (foydalanuvchining yaqinda gaplashgan mavzulari):',
+    'YAQIN SUHBATLAR KONTEKSTI:',
     ...lines,
-    'Foydalanuvchi "oldin gaplashgan edik", "o\u02bbsha loyiha" desa — shu ro\u02bbyxatdan mos mavzuni top va davom ettir.',
+    'Agar foydalanuvchi oldingi mavzuga ishora qilsa, mos kontekstni topib tabiiy davom ettir. Noaniq bo‘lsa taxminni aniq belgilagin.',
   ].join('\n');
 }
 
-/** Ulangan imkoniyatlar holati — model nimaga tayanishi mumkinligini bilsin. */
-function environmentBlock(): string {
-  const lines = [
-    `GitHub: ${hasGithubToken() ? 'ULANGAN — repo fayllari o\u02bbqilishi mumkin' : 'ulanmagan'}`,
-    'Veb qidiruv: mavjud',
-    'Rasm generatsiyasi: mavjud',
-    'Kod sandbox: mavjud',
-    'Kompyuter (Bridge): foydalanuvchi ulagan bo\u02bblsa tasdiq bilan',
-  ];
-  return ['MUHIT HOLATI:', ...lines.map((l) => `- ${l}`)].join('\n');
+export function projectBlock(
+  project: AIProject | null | undefined,
+  conversations: AIConversation[] = [],
+  currentId?: string | null,
+): string {
+  if (!project) return '';
+  const projectChats = conversations
+    .filter((c) => c.projectId === project.id && c.id !== currentId && c.messages.length > 0)
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+    .slice(0, 8);
+
+  const chatContext = projectChats.flatMap((conv) => [
+    `### ${conv.title}`,
+    ...conv.messages.slice(-5).map((m) => `${m.role}: ${cleanSnippet(m.content, 650)}`),
+  ]);
+
+  return [
+    `AKTIV LOYIHA: ${project.name}`,
+    project.instructions.trim()
+      ? `LOYIHA KO‘RSATMALARI:\n${project.instructions.trim().slice(0, 12000)}`
+      : 'Loyiha uchun alohida ko‘rsatma berilmagan.',
+    chatContext.length ? `LOYIHADAGI BOSHQA SUHBATLAR:\n${chatContext.join('\n')}` : '',
+    'Bu loyiha konteksti shu loyiha ichidagi barcha suhbatlar uchun umumiy bilim sifatida ishlatiladi.',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 }
 
-/**
- * `ai-assistant`/`ai-agent` ga yuboriladigan to'liq kontekst matni.
- * Server uni o'z system prompti ichiga qo'shadi.
- */
+function environmentBlock(): string {
+  const lines = [
+    `GitHub: ${hasGithubToken() ? 'ulangan — repo fayllari o‘qilishi mumkin' : 'ulanmagan'}`,
+    'Veb qidiruv: mavjud',
+    'Rasm generatsiyasi: mavjud',
+    'Video generatsiyasi: mavjud; render vaqt olishi mumkin',
+    'Kod sandbox: mavjud',
+    'Kompyuter Bridge: foydalanuvchi ulagan bo‘lsa tasdiq bilan',
+  ];
+  return ['MUHIT HOLATI:', ...lines.map((line) => `- ${line}`)].join('\n');
+}
+
 export function buildBrainContext(input: BrainInput): string {
   const memories = input.memories ?? listMemories();
   const skills = matchSkills(input.userText);
 
-  const blocks = [
+  return [
     MASTER_PROMPT,
     environmentBlock(),
+    projectBlock(input.activeProject, input.conversations, input.currentConversationId),
     memoryBlock(memories),
     crossChatBlock(input.conversations, input.currentConversationId),
     skillBlock(skills),
-  ].filter(Boolean);
-
-  return blocks.join('\n\n');
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 }
 
 export { listMemories };
