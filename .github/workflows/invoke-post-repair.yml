@@ -16,6 +16,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          echo "Running idempotent production visibility repair..."
           TMP="$(mktemp)"
           STATUS="$(curl --silent --show-error --max-time 30 -o "$TMP" -w '%{http_code}' https://www.alsamos.com/api/repair-post-visibility)"
           echo "HTTP $STATUS"
