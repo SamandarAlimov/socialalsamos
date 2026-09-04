@@ -75,8 +75,21 @@ export function AISidebar(props: Props) {
     const next = new URLSearchParams(location.search);
     if (projectId) next.set('project', projectId);
     else next.delete('project');
-    navigate(`${location.pathname}${next.size ? `?${next.toString()}` : ''}`, { replace: true });
-    props.onNew();
+    const query = next.toString();
+    navigate(`${location.pathname}${query ? `?${query}` : ''}`, { replace: true });
+
+    // Claude-like behavior: selecting a project keeps the AI workspace open
+    // and immediately opens its most recent conversation. Only a brand-new
+    // project starts with an empty composer.
+    if (projectId) {
+      const latest = conversations
+        .filter((conversation) => conversation.projectId === projectId)
+        .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
+      if (latest) props.onSelect(latest);
+      else props.onNew();
+    } else {
+      props.onNew();
+    }
     refreshLocalProjects();
   };
 
