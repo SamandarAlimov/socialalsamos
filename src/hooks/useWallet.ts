@@ -72,8 +72,32 @@ function toNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function rawError(error: unknown) {
+  return String(
+    (error as any)?.message ||
+      (error as any)?.details ||
+      (error as any)?.hint ||
+      error ||
+      ''
+  );
+}
+
+function isCompatibilityError(error: unknown) {
+  const raw = rawError(error).toLowerCase();
+  const code = String((error as any)?.code || '').toUpperCase();
+  return (
+    code === 'PGRST202' ||
+    code === '42P01' ||
+    code === '42703' ||
+    code === '42883' ||
+    raw.includes('does not exist') ||
+    raw.includes('could not find the function') ||
+    raw.includes('schema cache')
+  );
+}
+
 function walletError(error: unknown): string {
-  const raw = String((error as any)?.message || error || '');
+  const raw = rawError(error);
   if (raw.includes('insufficient_balance')) return 'Hisobda mablag‘ yetarli emas.';
   if (raw.includes('recipient_not_found')) return 'Qabul qiluvchi topilmadi.';
   if (raw.includes('cannot_transfer_to_self')) return 'O‘zingizga pul yubora olmaysiz.';
@@ -82,7 +106,8 @@ function walletError(error: unknown): string {
   if (raw.includes('private_conversation_required')) return 'Pul faqat shaxsiy chat orqali yuboriladi.';
   if (raw.includes('amount_too_large')) return 'Kiritilgan summa ruxsat etilgan chegaradan katta.';
   if (raw.includes('too_many_pending_topups')) return 'Avvalgi to‘ldirish so‘rovlaringiz ko‘rib chiqilmoqda.';
-  return 'Amal bajarilmadi. Qayta urinib ko‘ring.';
+  if (raw.includes('provider_requires_uzs_wallet')) return 'Bu to‘lov usuli UZS hisobini talab qiladi.';
+  return 'Amalni hozir bajarib bo‘lmadi.';
 }
 
 export function formatWalletAccount(value?: string | null) {
@@ -102,6 +127,20 @@ export function formatWalletMoney(amount: number, currency: string) {
   }).format(amount);
 }
 
+function normalizeWallet(row: any, userId: string): WalletInfo {
+  return {
+    id: String(row?.id || ''),
+    user_id: String(row?.user_id || userId),
+    account_number: String(row?.account_number || ''),
+    balance: toNumber(row?.balance),
+    currency: String(row?.currency || 'UZS'),
+    status: (row?.status || 'active') as WalletInfo['status'],
+    last_activity_at: row?.last_activity_at ?? null,
+    created_at: String(row?.created_at || new Date().toISOString()),
+    updated_at: String(row?.updated_at || row?.created_at || new Date().toISOString()),
+  };
+}
+
 export function useWallet() {
   const { user } = useAuth();
   const [wallet, setWallet] = useState<WalletInfo | null>(null);
@@ -116,6 +155,7 @@ export function useWallet() {
       setWallet(null);
       setLedger([]);
       setTopUps([]);
+      setError(null);
       setIsLoading(false);
       return;
     }
@@ -125,21 +165,48 @@ export function useWallet() {
     setError(null);
 
     try {
-      const { data: walletRow, error: walletErr } = await db
-        .from('wallets')
-        .select('id, user_id, account_number, balance, currency, status, last_activity_at, created_at, updated_at')
-        .eq('user_id', user.id)
-        .single();
+      let walletRow: any = null;
 
-      if (walletErr) throw walletErr;
+      // New wallet backend: repairs historical accounts and provisions the
+      // current user in one server-side call. Missing RPC is treated as a
+      // backwards-compatible deployment state rather than a user-facing error.
+      const { data: ensuredWallet, error: ensureError } = await db.rpc('ensure_my_wallet');
+      if (!ensureError && ensuredWallet) {
+        walletRow = ensuredWallet;
+      } else if (ensureError && !isCompatibilityError(ensureError)) {
+        console.warn('Wallet provisioning RPC failed', ensureError);
+      }
 
-      const nextWallet: WalletInfo = {
-        ...walletRow,
-        balance: toNumber(walletRow.balance),
-      };
-      setWallet(nextWallet);
+      if (!walletRow) {
+        const fullWallet = await db
+          .from('wallets')
+          .select('id, user_id, account_number, balance, currency, status, last_activity_at, created_at, updated_at')
+          .eq('user_id', user.id)
+          .maybeSingle();
 
-      const [{ data: ledgerRows, error: ledgerErr }, { data: topupRows, error: topupErr }] = await Promise.all([
+        if (!fullWallet.error && fullWallet.data) {
+          walletRow = fullWallet.data;
+        } else if (fullWallet.error && isCompatibilityError(fullWallet.error)) {
+          // Old production schema fallback. This keeps balance/history pages
+          // usable while the account-number migration is rolling out.
+          const legacyWallet = await db
+            .from('wallets')
+            .select('id, user_id, balance, currency, created_at, updated_at')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          if (legacyWallet.error && !isCompatibilityError(legacyWallet.error)) {
+            throw legacyWallet.error;
+          }
+          walletRow = legacyWallet.data;
+        } else if (fullWallet.error) {
+          throw fullWallet.error;
+        }
+      }
+
+      setWallet(walletRow ? normalizeWallet(walletRow, user.id) : null);
+
+      const [ledgerResult, topupResult] = await Promise.all([
         db
           .from('wallet_ledger')
           .select('id, direction, amount, currency, kind, status, description, counterparty_user_id, transfer_id, context_type, context_id, balance_after, created_at')
@@ -154,8 +221,19 @@ export function useWallet() {
           .limit(20),
       ]);
 
-      if (ledgerErr) throw ledgerErr;
-      if (topupErr) throw topupErr;
+      const ledgerRows = ledgerResult.error && isCompatibilityError(ledgerResult.error)
+        ? []
+        : ledgerResult.data || [];
+      const topupRows = topupResult.error && isCompatibilityError(topupResult.error)
+        ? []
+        : topupResult.data || [];
+
+      if (ledgerResult.error && !isCompatibilityError(ledgerResult.error)) {
+        console.warn('Wallet ledger refresh failed', ledgerResult.error);
+      }
+      if (topupResult.error && !isCompatibilityError(topupResult.error)) {
+        console.warn('Wallet top-up refresh failed', topupResult.error);
+      }
 
       const counterpartyIds = Array.from(
         new Set(
@@ -194,7 +272,9 @@ export function useWallet() {
       );
     } catch (err) {
       console.error('Wallet refresh failed', err);
-      setError(walletError(err));
+      // Initial/automatic refresh must not display a scary global error banner.
+      // Action-specific failures are surfaced inside the relevant dialog.
+      if (!isCompatibilityError(err)) setError(walletError(err));
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
