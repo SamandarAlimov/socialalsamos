@@ -6,6 +6,7 @@ import type { AIConversation, AIProject } from '@/components/ai/types';
 import { memoryBlock, listMemories, type MemoryItem } from './memory';
 import { matchSkills, skillBlock } from './skills';
 import { hasGithubToken } from './githubConnector';
+import { readActiveLocalProject } from './projectsStore';
 
 export const MASTER_PROMPT = `Sen — Alsamos AI. Sen umumiy maqsadli, professional darajadagi AI yordamchisan va Alsamos ichida foydalanuvchining vazifasini imkon qadar oxirigacha bajarasan.
 
@@ -52,28 +53,23 @@ function cleanSnippet(value: string, max = 520): string {
   return value.replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
-/**
- * Recent conversations are intentionally richer than a one-line title. This
- * gives the model useful continuity without dumping an unlimited archive into
- * every request.
- */
 export function crossChatBlock(
   conversations: AIConversation[] = [],
   currentId?: string | null,
   limit = 10,
 ): string {
   const others = conversations
-    .filter((c) => c.id !== currentId && c.messages.length > 0)
+    .filter((conversation) => conversation.id !== currentId && conversation.messages.length > 0)
     .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
     .slice(0, limit);
   if (others.length === 0) return '';
 
-  const lines = others.map((conv) => {
-    const recent = conv.messages.slice(-4).map((m) => {
-      const who = m.role === 'user' ? 'user' : 'assistant';
-      return `${who}: ${cleanSnippet(m.content)}`;
+  const lines = others.map((conversation) => {
+    const recent = conversation.messages.slice(-4).map((message) => {
+      const who = message.role === 'user' ? 'user' : 'assistant';
+      return `${who}: ${cleanSnippet(message.content)}`;
     });
-    return [`## ${conv.title}`, ...recent].join('\n');
+    return [`## ${conversation.title}`, ...recent].join('\n');
   });
 
   return [
@@ -90,13 +86,20 @@ export function projectBlock(
 ): string {
   if (!project) return '';
   const projectChats = conversations
-    .filter((c) => c.projectId === project.id && c.id !== currentId && c.messages.length > 0)
+    .filter(
+      (conversation) =>
+        conversation.projectId === project.id &&
+        conversation.id !== currentId &&
+        conversation.messages.length > 0,
+    )
     .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
     .slice(0, 8);
 
-  const chatContext = projectChats.flatMap((conv) => [
-    `### ${conv.title}`,
-    ...conv.messages.slice(-5).map((m) => `${m.role}: ${cleanSnippet(m.content, 650)}`),
+  const chatContext = projectChats.flatMap((conversation) => [
+    `### ${conversation.title}`,
+    ...conversation.messages
+      .slice(-5)
+      .map((message) => `${message.role}: ${cleanSnippet(message.content, 650)}`),
   ]);
 
   return [
@@ -105,7 +108,7 @@ export function projectBlock(
       ? `LOYIHA KO‘RSATMALARI:\n${project.instructions.trim().slice(0, 12000)}`
       : 'Loyiha uchun alohida ko‘rsatma berilmagan.',
     chatContext.length ? `LOYIHADAGI BOSHQA SUHBATLAR:\n${chatContext.join('\n')}` : '',
-    'Bu loyiha konteksti shu loyiha ichidagi barcha suhbatlar uchun umumiy bilim sifatida ishlatiladi.',
+    'Bu loyiha konteksti shu loyiha ichidagi suhbat uchun umumiy bilim va ko‘rsatma sifatida ishlatiladi.',
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -126,11 +129,13 @@ function environmentBlock(): string {
 export function buildBrainContext(input: BrainInput): string {
   const memories = input.memories ?? listMemories();
   const skills = matchSkills(input.userText);
+  const localProject = readActiveLocalProject()?.project || null;
+  const effectiveProject = input.activeProject || localProject;
 
   return [
     MASTER_PROMPT,
     environmentBlock(),
-    projectBlock(input.activeProject, input.conversations, input.currentConversationId),
+    projectBlock(effectiveProject, input.conversations, input.currentConversationId),
     memoryBlock(memories),
     crossChatBlock(input.conversations, input.currentConversationId),
     skillBlock(skills),
