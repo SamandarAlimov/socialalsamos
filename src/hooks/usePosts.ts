@@ -117,7 +117,6 @@ function isSchemaCompatibilityError(error: unknown): boolean {
   );
 }
 
-
 const ATOMIC_PUBLISH_CAPABILITY_KEY = 'alsamos.create.atomic-publish-capability.v1';
 
 type AtomicPublishCapability = 'available' | 'missing' | null;
@@ -251,9 +250,15 @@ export function usePosts(
             }
 
             query = query.range(start, end);
+
+            // Legacy Alsamos rows could have visibility=NULL because the old
+            // column was nullable and clients were allowed to omit it. NULL
+            // historically meant the default public state. Keep those rows in
+            // the retrieval candidate set; the database RLS remains the final
+            // authority and still protects explicit friends/private posts.
             query = Array.isArray(visibility)
-              ? query.in('visibility', visibility)
-              : query.eq('visibility', visibility);
+              ? query.or('visibility.eq.public,visibility.eq.friends,visibility.is.null')
+              : query.or('visibility.eq.public,visibility.is.null');
 
             if (allowedUserIds) query = query.in('user_id', allowedUserIds);
 
@@ -747,8 +752,8 @@ export function usePosts(
           .eq('post_id', postId)
           .eq('user_id', user.id);
 
-        setPosts(prev => prev.map(p => 
-          p.id === postId 
+        setPosts(prev => prev.map(p =>
+          p.id === postId
             ? { ...p, is_liked: false, likes_count: p.likes_count - 1 }
             : p
         ));
@@ -757,8 +762,8 @@ export function usePosts(
           .from('post_likes')
           .insert({ post_id: postId, user_id: user.id });
 
-        setPosts(prev => prev.map(p => 
-          p.id === postId 
+        setPosts(prev => prev.map(p =>
+          p.id === postId
             ? { ...p, is_liked: true, likes_count: p.likes_count + 1 }
             : p
         ));
