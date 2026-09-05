@@ -44,7 +44,12 @@ export default function DiscoveryPage() {
   const isMobile = useIsMobile();
   const { triggerHaptic } = useHapticFeedback();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { ads: discoverAds, trackImpression, trackClick } = useActiveAds('feed', 1);
+  const {
+    ads: discoverAds,
+    trackImpression,
+    trackClick,
+    submitFeedback,
+  } = useActiveAds('discover', 3);
 
   const tabFromUrl = searchParams.get('tab');
   const activeTab: DiscoverTab = isDiscoverTab(tabFromUrl) ? tabFromUrl : 'foryou';
@@ -83,6 +88,7 @@ export default function DiscoveryPage() {
       variant="discover"
       onImpression={(id) => trackImpression(id, 'discover')}
       onClick={(id) => trackClick(id, 'discover')}
+      onFeedback={(id, feedback) => void submitFeedback(id, feedback, 'discover')}
     />
   ) : null;
 
