@@ -19,7 +19,10 @@ export interface VideoRecommendationProfile {
   creatorAffinity: ReadonlyMap<string, number>;
   topicAffinity: ReadonlyMap<string, number>;
   positivePostIds: ReadonlySet<string>;
+  /** Legacy positive-only preferences from ai_preferences. */
   explicitTopics: ReadonlySet<string>;
+  /** Canonical weighted preferences used by AI/Home/Videos. */
+  explicitTopicAffinity: ReadonlyMap<string, number>;
   globalScore: ReadonlyMap<string, number>;
   globalQuality: ReadonlyMap<string, number>;
 }
@@ -33,6 +36,7 @@ export const EMPTY_VIDEO_RECOMMENDATION_PROFILE: VideoRecommendationProfile = {
   topicAffinity: new Map<string, number>(),
   positivePostIds: new Set<string>(),
   explicitTopics: new Set<string>(),
+  explicitTopicAffinity: new Map<string, number>(),
   globalScore: new Map<string, number>(),
   globalQuality: new Map<string, number>(),
 };
@@ -66,6 +70,17 @@ function deterministicNoise(seed: string): number {
 function createdTimestamp(value: string, now: number): number {
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : now;
+}
+
+function normalizeTopicText(value: unknown) {
+  return String(value ?? '')
+    .normalize('NFKC')
+    .toLocaleLowerCase()
+    .replace(/^#/, '')
+    .replace(/[’‘`ʻ]/g, "'")
+    .replace(/[^\p{L}\p{N}_#'\s-]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 export function extractVideoTopics(
@@ -114,6 +129,42 @@ function topicSimilarity(
   return overlap / Math.sqrt(left.size * right.size);
 }
 
+function explicitPreferenceScore(
+  post: Pick<VideoRecommendationPost, 'content' | 'hashtags'>,
+  topics: ReadonlySet<string>,
+  weighted: ReadonlyMap<string, number>,
+): number {
+  let score = 0;
+  for (const topic of topics) {
+    if (weighted.has(topic)) score += (weighted.get(topic) ?? 0) * 2.2;
+  }
+
+  // Multi-word creator names and natural-language subjects cannot be represented
+  // by extractVideoTopics alone, so match them against normalized caption text.
+  const content = normalizeTopicText(post.content);
+  const tagSet = new Set(
+    (post.hashtags ?? []).map((tag) => normalizeTopicText(tag)).filter(Boolean),
+  );
+  let phraseMatches = 0;
+  for (const [rawTopic, rawWeight] of weighted) {
+    const topic = normalizeTopicText(rawTopic);
+    const weight = Math.max(-3, Math.min(3, Number(rawWeight) || 0));
+    if (!topic || !weight || topics.has(topic)) continue;
+
+    const phraseMatch = content.includes(topic) || tagSet.has(topic);
+    const tokens = topic.split(/\s+/).filter((token) => token.length >= 3);
+    const hits = tokens.filter((token) => content.includes(token) || tagSet.has(token)).length;
+    const ratio = tokens.length ? hits / tokens.length : 0;
+    if (!phraseMatch && ratio < (tokens.length >= 3 ? 0.67 : 1)) continue;
+
+    score += weight * 2.2 * (phraseMatch ? 1 : Math.max(0.55, ratio));
+    phraseMatches += 1;
+    if (phraseMatches >= 5) break;
+  }
+
+  return Math.max(-9, Math.min(9, score));
+}
+
 interface ScoredVideo<T> {
   post: T;
   score: number;
@@ -134,8 +185,6 @@ function rawVideoScore<T extends VideoRecommendationPost>(
     (now - createdTimestamp(post.created_at, now)) / 3_600_000,
   );
 
-  // Reels can resurface evergreen content, therefore freshness has both a
-  // short-term impulse and a long tail instead of a hard chronological cutoff.
   const freshness =
     3.4 * Math.exp(-ageHours / 120) +
     0.7 * Math.exp(-ageHours / 24 / 45);
@@ -157,8 +206,6 @@ function rawVideoScore<T extends VideoRecommendationPost>(
       ? Math.min(2.8, (strongActions / Math.sqrt(views + 28)) * 0.31)
       : Math.min(1.3, strongActions * 0.08);
 
-  // Server-computed global rank blends retention, completion, engagement and
-  // freshness. Values are normalized to 0..1 by the profile loader.
   const globalRank = (profile.globalScore.get(post.id) ?? 0) * 4.8;
   const globalQuality = (profile.globalQuality.get(post.id) ?? 0) * 2.4;
 
@@ -184,13 +231,18 @@ function rawVideoScore<T extends VideoRecommendationPost>(
     Math.min(4.5, signedLog(topicSignals) * 1.35),
   );
 
-  let explicitTopicBoost = 0;
+  let legacyExplicitBoost = 0;
   for (const topic of topics) {
-    if (profile.explicitTopics.has(topic)) explicitTopicBoost += 0.55;
+    if (profile.explicitTopics.has(topic)) legacyExplicitBoost += 0.55;
   }
-  explicitTopicBoost = Math.min(2.2, explicitTopicBoost);
+  legacyExplicitBoost = Math.min(2.2, legacyExplicitBoost);
 
-  // Watch page needs "what should I watch next?", not merely the global feed.
+  const explicitAffinity = explicitPreferenceScore(
+    post,
+    topics,
+    profile.explicitTopicAffinity,
+  );
+
   const contextualTopicBoost = topicSimilarity(topics, contextTopics) * 4.1;
   const contextualCreatorBoost =
     contextAuthorId && contextAuthorId === post.user_id ? 0.65 : 0;
@@ -232,7 +284,8 @@ function rawVideoScore<T extends VideoRecommendationPost>(
       followingBoost +
       creatorAffinity +
       topicAffinity +
-      explicitTopicBoost +
+      legacyExplicitBoost +
+      explicitAffinity +
       contextualTopicBoost +
       contextualCreatorBoost +
       exploration -
@@ -312,8 +365,6 @@ export function rankVideoRecommendations<T extends VideoRecommendationPost>(
         diversityPenalty += 9;
       }
 
-      // Controlled exploration: approximately every sixth slot gives a good
-      // unseen creator outside the follow graph a fair chance.
       const explorationSlot = selected.length > 0 && selected.length % 6 === 5;
       const discoveryBonus =
         explorationSlot &&
