@@ -99,6 +99,18 @@ function PostPermalink() {
   return <Navigate to={postId ? '/home?post=' + encodeURIComponent(postId) : '/home'} replace />;
 }
 
+/**
+ * Older profile cards shared posts as `/user/:username?post=<id>`, while the
+ * canonical post viewer lives under `/post/:id` -> `/home?post=<id>`. Resolve
+ * those already-circulating links instead of silently opening only the profile.
+ */
+function UserProfileRoute() {
+  const [searchParams] = useSearchParams();
+  const postId = searchParams.get('post');
+  if (postId) return <Navigate to={'/post/' + encodeURIComponent(postId)} replace />;
+  return <UserProfilePage />;
+}
+
 function ChannelPermalink() {
   const { channel } = useParams<{ channel: string }>();
   return <Navigate to={channel ? '/channels?channel=' + encodeURIComponent(channel) : '/channels'} replace />;
@@ -164,7 +176,7 @@ function AppRoutes() {
         <Route path="/stickers/moderation" element={<StickerModerationPage />} />
         <Route path="/stickers/:slug" element={<StickerPacksPage />} />
         <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/user/:username" element={<UserProfilePage />} />
+        <Route path="/user/:username" element={<UserProfileRoute />} />
         <Route path="/settings" element={<SettingsHubPage />} />
         <Route path="/settings/payment" element={<Navigate to="/payment" replace />} />
         <Route path="/settings/:section" element={<SettingsHubPage />} />
