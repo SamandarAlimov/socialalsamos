@@ -18,6 +18,7 @@ export function AppLayout() {
   const location = useLocation();
   const { startSession, trackPageChange } = useActivityTracking();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [messagesChatOpen, setMessagesChatOpen] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) trackPageChange(location.pathname);
@@ -51,19 +52,49 @@ export function AppLayout() {
   const isAiPage = location.pathname === '/ai';
 
   /**
-   * One mobile navigation contract for the whole authenticated app:
+   * Messages owns its own chat header and switches between a list and a detail
+   * view without changing the URL. Watch that page-owned back button so the
+   * global bottom navigation disappears only while an actual chat is open.
    *
-   * Primary tabs (/home, /messages, /videos, /profile)
-   *   -> branded header + bottom navbar.
-   * Hamburger/detail pages
-   *   -> premium back header + NO bottom navbar.
-   * Create
-   *   -> immersive full-screen flow with page-owned controls.
+   * This deliberately stays in the shell instead of coupling MessagesPage to a
+   * second navigation context. The selector is scoped to <main> and /messages;
+   * secondary AppLayout headers live outside <main>, so they cannot match it.
+   */
+  useEffect(() => {
+    if (!isMessagesPage || typeof document === 'undefined') {
+      setMessagesChatOpen(false);
+      return;
+    }
+
+    const sync = () => {
+      setMessagesChatOpen(Boolean(document.querySelector('main button[aria-label="Orqaga"]')));
+    };
+
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [isMessagesPage]);
+
+  /**
+   * Mobile navigation contract:
+   *
+   * - Home/Profile: global Alsamos header + bottom navbar.
+   * - Messages: page-owned header; bottom navbar only on the conversation list.
+   *   Opening a chat hides the bottom navbar because the chat becomes a focused
+   *   detail surface with its own back control and composer.
+   * - Videos: page-owned full-height video chrome + bottom navbar. The global
+   *   Alsamos header must never be injected here.
+   * - Hamburger/detail pages: premium back header, no bottom navbar.
+   * - Create: immersive full-screen page-owned flow.
    */
   const mobileChromeMode = getMobileChromeMode(location.pathname);
-  const hasMobileTopChrome = mobileChromeMode !== 'immersive';
-  const showPrimaryMobileChrome = mobileChromeMode === 'primary';
-  const showSecondaryMobileChrome = mobileChromeMode === 'secondary';
+  const showPrimaryMobileHeader =
+    mobileChromeMode === 'primary' && !isMessagesPage && !isVideosPage;
+  const showSecondaryMobileHeader = mobileChromeMode === 'secondary';
+  const showBottomNavbar =
+    mobileChromeMode === 'primary' && !(isMessagesPage && messagesChatOpen);
+  const hasMobileTopChrome = showPrimaryMobileHeader || showSecondaryMobileHeader;
 
   // Pages with their own canonical inner scroll container remain viewport-bound.
   const fullHeightPage =
@@ -103,8 +134,8 @@ export function AppLayout() {
         )}
       </button>}
 
-      {showPrimaryMobileChrome && <MobileHeader />}
-      {showSecondaryMobileChrome && <MobileBackHeader />}
+      {showPrimaryMobileHeader && <MobileHeader />}
+      {showSecondaryMobileHeader && <MobileBackHeader />}
 
       <main
         data-platform-scroll-root={fullHeightPage ? undefined : 'true'}
@@ -116,13 +147,13 @@ export function AppLayout() {
             ? 'h-full overflow-hidden p-0'
             : 'h-full overflow-x-hidden overflow-y-auto overscroll-y-contain alsamos-scrollbar [-webkit-overflow-scrolling:touch]',
           hasMobileTopChrome ? 'pt-14' : 'pt-0',
-          showPrimaryMobileChrome ? 'pb-20' : 'pb-0',
+          showBottomNavbar ? 'pb-20' : 'pb-0',
         )}
       >
         <Outlet />
       </main>
 
-      {showPrimaryMobileChrome && <BottomNavbar />}
+      {showBottomNavbar && <BottomNavbar />}
       <LocationPermissionDialog />
     </div>
   );
