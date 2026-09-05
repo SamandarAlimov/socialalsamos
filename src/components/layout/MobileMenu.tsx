@@ -10,12 +10,8 @@ import {
   Sparkles,
   LayoutGrid,
   Settings,
-  Shield,
-  Megaphone,
-  MessageSquareText,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useAdminAccess } from '@/hooks/useAdminAccess';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { MobileMenuDrawer, type MobileMenuNavItem } from "./MobileMenuDrawer";
@@ -25,10 +21,8 @@ const menuItems: MobileMenuNavItem[] = [
   { icon: ShoppingBag, label: 'Bozor', path: '/marketplace' },
   { icon: MapPin, label: 'Xarita', path: '/map' },
   { icon: Wallet, label: 'To‘lov', path: '/payment' },
-  { icon: Megaphone, label: 'Reklama markazi', path: '/ads' },
   { icon: Sparkles, label: 'AI yordamchi', path: '/ai' },
   { icon: LayoutGrid, label: 'Mini ilovalar', path: '/mini-apps' },
-  { icon: MessageSquareText, label: 'Feedback va yordam', path: '/feedback' },
   { icon: Settings, label: 'Sozlamalar', path: '/settings' },
 ];
 
@@ -40,7 +34,6 @@ export function MobileMenu({ className }: MobileMenuProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout } = useAuth();
-  const { isAdmin } = useAdminAccess();
   const [isOpen, setIsOpen] = useState(false);
 
   const handleNavigate = (path: string) => {
@@ -50,10 +43,6 @@ export function MobileMenu({ className }: MobileMenuProps) {
   };
 
   const activePath = useMemo(() => location.pathname, [location.pathname]);
-  const visibleItems = useMemo<MobileMenuNavItem[]>(
-    () => (isAdmin ? [...menuItems, { icon: Shield, label: 'Admin', path: '/admin' }] : menuItems),
-    [isAdmin],
-  );
 
   useEffect(() => {
     if (!isOpen) return;
@@ -87,7 +76,7 @@ export function MobileMenu({ className }: MobileMenuProps) {
               logout();
             }}
             activePath={activePath}
-            items={visibleItems}
+            items={menuItems}
           />,
           document.body
         )}
