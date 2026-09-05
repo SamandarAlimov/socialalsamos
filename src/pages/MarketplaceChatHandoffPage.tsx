@@ -7,11 +7,18 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useConversations } from '@/hooks/useMessages';
 import { fetchMarketplaceProductById } from '@/hooks/useMarketplace';
 import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/supabaseAny';
 import {
   buildMarketplaceProductMessage,
   isRecentMarketplaceProductMessage,
   type MarketplaceChatIntent,
 } from '@/lib/marketplaceChat';
+
+function safeQuantity(value: string | null, max: number) {
+  const parsed = Math.floor(Number(value));
+  const requested = Number.isFinite(parsed) ? Math.max(1, parsed) : 1;
+  return Math.min(Math.max(1, max), requested, 999);
+}
 
 export default function MarketplaceChatHandoffPage() {
   const { user } = useAuth();
@@ -26,6 +33,7 @@ export default function MarketplaceChatHandoffPage() {
 
     const sellerUserId = searchParams.get('user')?.trim() || '';
     const productId = searchParams.get('product')?.trim() || '';
+    const requestedVariantId = searchParams.get('variant')?.trim() || undefined;
     const intent: MarketplaceChatIntent = searchParams.get('intent') === 'offer' ? 'offer' : 'contact';
 
     if (!sellerUserId || !productId) {
@@ -55,8 +63,58 @@ export default function MarketplaceChatHandoffPage() {
           throw new Error('Mahsulot sotuvchisi mos kelmadi.');
         }
 
+        let selectedVariant: {
+          id: string;
+          sku: string | null;
+          options: Record<string, string>;
+          price: number | null;
+          quantity: number;
+          image_url: string | null;
+        } | null = null;
+
+        if (requestedVariantId) {
+          const { data: variant, error: variantError } = await db
+            .from('product_variants')
+            .select('id, sku, options, price, quantity, image_url, is_active')
+            .eq('id', requestedVariantId)
+            .eq('product_id', product.id)
+            .eq('is_active', true)
+            .maybeSingle();
+
+          if (variantError) throw new Error(`Variantni tekshirib bo‘lmadi: ${variantError.message}`);
+          if (!variant) throw new Error('Tanlangan rang/o‘lcham varianti endi mavjud emas.');
+          if (Number(variant.quantity ?? 0) <= 0) throw new Error('Tanlangan variant hozir sotuvda qolmagan.');
+
+          selectedVariant = {
+            id: String(variant.id),
+            sku: variant.sku ? String(variant.sku) : null,
+            options: (variant.options && typeof variant.options === 'object' ? variant.options : {}) as Record<string, string>,
+            price: variant.price == null ? null : Number(variant.price),
+            quantity: Number(variant.quantity ?? 0),
+            image_url: variant.image_url ? String(variant.image_url) : null,
+          };
+        }
+
+        const available = selectedVariant
+          ? selectedVariant.quantity
+          : Math.max(1, Number(product.quantity ?? 1));
+        const quantity = safeQuantity(searchParams.get('qty'), available);
+        const unitPrice = Number(selectedVariant?.price ?? product.price ?? 0);
         const productUrl = `${window.location.origin}/marketplace/product/${encodeURIComponent(product.id)}`;
-        const message = buildMarketplaceProductMessage(product, sellerUserId, productUrl, intent);
+        const message = buildMarketplaceProductMessage(
+          product,
+          sellerUserId,
+          productUrl,
+          intent,
+          {
+            variantId: selectedVariant?.id,
+            variantSku: selectedVariant?.sku || undefined,
+            options: selectedVariant?.options || {},
+            quantity,
+            unitPrice,
+            imageUrl: selectedVariant?.image_url || product.images?.[0]?.url || undefined,
+          },
+        );
 
         const { data: recentRows, error: recentError } = await supabase
           .from('messages')
@@ -72,7 +130,11 @@ export default function MarketplaceChatHandoffPage() {
 
         const alreadySent = isRecentMarketplaceProductMessage(
           (recentRows || []) as Array<{ metadata?: unknown; created_at?: string | null }>,
-          product.id,
+          {
+            productId: product.id,
+            variantId: selectedVariant?.id,
+            intent,
+          },
         );
 
         if (!alreadySent) {
@@ -80,8 +142,8 @@ export default function MarketplaceChatHandoffPage() {
             conversation_id: conversation.id,
             sender_id: user.id,
             content: message.content,
-            media_url: message.mediaUrl || null,
-            media_type: message.mediaType || null,
+            media_url: null,
+            media_type: null,
             metadata: message.metadata as any,
           });
 
@@ -150,7 +212,7 @@ export default function MarketplaceChatHandoffPage() {
         </div>
         <div>
           <p className="text-sm font-semibold text-foreground">Sotuvchi bilan suhbat ochilmoqda</p>
-          <p className="mt-1 text-xs">Mahsulot kartasi chatga xavfsiz tarzda biriktirilmoqda.</p>
+          <p className="mt-1 text-xs">Mahsulot, variant va miqdor konteksti chatga biriktirilmoqda.</p>
         </div>
       </div>
     </div>
