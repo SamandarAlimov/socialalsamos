@@ -24,10 +24,7 @@ import HomePage from "./pages/HomePage";
 import MessagesPage from "./pages/MessagesPage";
 import ProfilePage from "./pages/ProfilePage";
 import UserProfilePage from "./pages/UserProfilePage";
-import SettingsPage from "./pages/SettingsPage";
-import SecurityPage from "./pages/SecurityPage";
-import ChatWallpaperPage from "./pages/ChatWallpaperPage";
-import DataStoragePage from "./pages/DataStoragePage";
+import SettingsHubPage from "./pages/SettingsHubPage";
 import PaymentSettingsPage from "./pages/PaymentSettingsPage";
 import ComposePage from "./pages/ComposePage";
 import CreateEntryPage from "./pages/CreateEntryPage";
@@ -163,10 +160,8 @@ function AppRoutes() {
         <Route path="/stickers/:slug" element={<StickerPacksPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/user/:username" element={<UserProfilePage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/settings/security" element={<SecurityPage />} />
-        <Route path="/settings/chat-wallpaper" element={<ChatWallpaperPage />} />
-        <Route path="/settings/data" element={<DataStoragePage />} />
+        <Route path="/settings" element={<SettingsHubPage />} />
+        <Route path="/settings/:section" element={<SettingsHubPage />} />
         <Route path="/payment" element={<PaymentSettingsPage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/story-archive" element={<StoryArchivePage />} />
