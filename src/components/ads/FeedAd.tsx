@@ -4,6 +4,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { Ad } from '@/hooks/useAds';
+import {
+  recordFeedAdImpression,
+  registerFeedAdOpportunity,
+  snoozeFeedAds,
+} from '@/lib/adFrequencyPolicy';
 
 interface FeedAdProps {
   ad: Ad;
@@ -22,27 +27,41 @@ export function FeedAd({
 }: FeedAdProps) {
   const [isMuted, setIsMuted] = useState(true);
   const [dismissed, setDismissed] = useState(false);
+  const [frequencySuppressed, setFrequencySuppressed] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const impressionTimerRef = useRef<number | null>(null);
   const hasTrackedImpression = useRef(false);
+  const hasCheckedOpportunity = useRef(false);
 
   useEffect(() => {
     hasTrackedImpression.current = false;
+    hasCheckedOpportunity.current = false;
     setDismissed(false);
+    setFrequencySuppressed(false);
   }, [ad.id]);
 
   useEffect(() => {
     const node = containerRef.current;
-    if (!node || dismissed) return;
+    if (!node || dismissed || frequencySuppressed) return;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+          if (variant === 'feed' && !hasCheckedOpportunity.current) {
+            hasCheckedOpportunity.current = true;
+            if (!registerFeedAdOpportunity(ad.id)) {
+              setFrequencySuppressed(true);
+              videoRef.current?.pause();
+              return;
+            }
+          }
+
           if (!hasTrackedImpression.current && impressionTimerRef.current === null) {
             impressionTimerRef.current = window.setTimeout(() => {
               hasTrackedImpression.current = true;
               impressionTimerRef.current = null;
+              if (variant === 'feed') recordFeedAdImpression(ad.id);
               onImpression(ad.id);
             }, 800);
           }
@@ -69,7 +88,7 @@ export function FeedAd({
         impressionTimerRef.current = null;
       }
     };
-  }, [ad.id, dismissed, onImpression]);
+  }, [ad.id, dismissed, frequencySuppressed, onImpression, variant]);
 
   const openAd = () => {
     onClick(ad.id);
@@ -78,7 +97,12 @@ export function FeedAd({
     }
   };
 
-  if (dismissed) return null;
+  const hideAd = () => {
+    setDismissed(true);
+    if (variant === 'feed') snoozeFeedAds();
+  };
+
+  if (dismissed || frequencySuppressed) return null;
 
   const advertiser = ad.profile?.display_name || ad.profile?.username || ad.title;
   const handle = ad.profile?.username ? `@${ad.profile.username}` : 'Alsamos Ads';
@@ -127,7 +151,7 @@ export function FeedAd({
               </div>
               <button
                 type="button"
-                onClick={() => setDismissed(true)}
+                onClick={hideAd}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
                 aria-label="Reklamani yashirish"
               >
@@ -185,7 +209,7 @@ export function FeedAd({
           variant="ghost"
           size="icon"
           className="h-8 w-8 rounded-full text-muted-foreground"
-          onClick={() => setDismissed(true)}
+          onClick={hideAd}
           aria-label="Reklamani yashirish"
         >
           <X className="h-4 w-4" />

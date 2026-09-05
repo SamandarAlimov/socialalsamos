@@ -10,6 +10,7 @@ interface VideoSponsoredOverlayProps {
   onMuteToggle: () => void;
   onImpression: (adId: string) => void;
   onClick: (adId: string) => void;
+  onDismiss?: () => void;
   className?: string;
 }
 
@@ -20,6 +21,7 @@ export function VideoSponsoredOverlay({
   onMuteToggle,
   onImpression,
   onClick,
+  onDismiss,
   className,
 }: VideoSponsoredOverlayProps) {
   const [dismissed, setDismissed] = useState(false);
@@ -57,6 +59,11 @@ export function VideoSponsoredOverlay({
     if (ad.destination_url) {
       window.open(ad.destination_url, '_blank', 'noopener,noreferrer');
     }
+  };
+
+  const dismissAd = () => {
+    setDismissed(true);
+    onDismiss?.();
   };
 
   return (
@@ -115,7 +122,7 @@ export function VideoSponsoredOverlay({
       <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-3">
         <button
           type="button"
-          onClick={() => setDismissed(true)}
+          onClick={dismissAd}
           className="h-9 rounded-xl px-3 text-xs font-medium text-white/65 transition hover:bg-white/10 hover:text-white"
         >
           Yopish

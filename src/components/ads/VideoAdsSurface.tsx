@@ -1,13 +1,23 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useActiveAds } from '@/hooks/useAds';
+import { useEffect, useRef, useState } from 'react';
+import { useActiveAds, type Ad } from '@/hooks/useAds';
 import { VideoSponsoredOverlay } from './VideoSponsoredOverlay';
+import {
+  canShowVideoAd,
+  recordVideoAdImpression,
+  snoozeVideoAds,
+} from '@/lib/adFrequencyPolicy';
 
-const VIDEO_AD_INTERVAL = 7;
+type ActiveSlot = {
+  ad: Ad;
+  index: number;
+};
 
 export function VideoAdsSurface() {
   const { ads, trackImpression, trackClick } = useActiveAds('feed', 3);
   const [activeIndex, setActiveIndex] = useState(0);
   const [muted, setMuted] = useState(true);
+  const [slot, setSlot] = useState<ActiveSlot | null>(null);
+  const lastEvaluatedIndexRef = useRef(-1);
 
   useEffect(() => {
     let cleanupScroll: (() => void) | null = null;
@@ -40,25 +50,43 @@ export function VideoAdsSurface() {
     };
   }, []);
 
-  const ad = useMemo(() => {
-    if (!ads.length || activeIndex < VIDEO_AD_INTERVAL - 1) return null;
-    if ((activeIndex + 1) % VIDEO_AD_INTERVAL !== 0) return null;
-    const slot = Math.floor(activeIndex / VIDEO_AD_INTERVAL);
-    return ads[slot % ads.length] || null;
-  }, [activeIndex, ads]);
+  useEffect(() => {
+    if (slot && slot.index !== activeIndex) {
+      setSlot(null);
+    }
 
-  if (!ad) return null;
+    if (!ads.length || lastEvaluatedIndexRef.current === activeIndex) return;
+    lastEvaluatedIndexRef.current = activeIndex;
+
+    const candidate = ads[Math.abs(activeIndex) % ads.length];
+    if (!candidate || !canShowVideoAd(activeIndex, candidate.id)) return;
+
+    setSlot({ ad: candidate, index: activeIndex });
+  }, [activeIndex, ads, slot]);
+
+  if (!slot || slot.index !== activeIndex) return null;
+
+  const handleImpression = (adId: string) => {
+    recordVideoAdImpression(adId, slot.index);
+    trackImpression(adId, 'video');
+  };
+
+  const handleDismiss = () => {
+    snoozeVideoAds();
+    setSlot(null);
+  };
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[46] md:left-[72px]">
       <VideoSponsoredOverlay
-        key={`${ad.id}-${activeIndex}`}
-        ad={ad}
+        key={`${slot.ad.id}-${slot.index}`}
+        ad={slot.ad}
         active
         muted={muted}
         onMuteToggle={() => setMuted((value) => !value)}
-        onImpression={(id) => trackImpression(id, 'video')}
+        onImpression={handleImpression}
         onClick={(id) => trackClick(id, 'video')}
+        onDismiss={handleDismiss}
         className="pointer-events-auto"
       />
     </div>
