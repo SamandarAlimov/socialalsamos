@@ -26,7 +26,8 @@ The repository contains multiple platform upgrades that production may still be 
 - AI personalization / explicit recommendation interests;
 - Marketplace/commerce integrations;
 - Mini Apps platform migrations;
-- **`20260905183500_mini_app_wallet_settlement.sql`** — explicit Mini App payment intent + Wallet settlement.
+- **`20260905183500_mini_app_wallet_settlement.sql`** — explicit Mini App payment intent + Wallet settlement;
+- **`20260905185000_search_activity_events.sql`** — private append-only search activity ledger, real search frequency, clear-history RPC and AI/search insight support.
 
 Do not re-run already recorded migrations merely because they are listed here.
 
@@ -47,14 +48,27 @@ Do not rewrite these functions in Lovable. Deploy the GitHub source exactly.
 
 `ai-agent` must run with the repository's current first-party tools. The deployed version must recognize the user-scoped tools for:
 
-- own search insights/history;
+- own search insights based on the real append-only search activity ledger when available;
 - own payment / Wallet history;
+- own Marketplace orders and purchased line items;
+- own saved Map places and real stored coordinates;
 - reading recommendation preferences;
 - updating real Home/Videos recommendation preferences;
 - normal Alsamos tools such as posts/marketplace;
 - `run_code` through the real sandbox path.
 
-The AI must never receive a service-role key in the browser. User-private data must stay server-scoped.
+The AI must never receive a service-role key in the browser. User-private data must stay server-scoped. The service-role Edge Function must still explicitly scope every private query to the authenticated `userId`.
+
+### Search activity requirement
+
+After `20260905185000_search_activity_events.sql` is applied:
+
+1. Repeated searches for the same text must create separate `search_activity_events` rows even though the visible `search_history` list is de-duplicated.
+2. `my_search_insights` in the deployed `ai-agent` must prefer `search_activity_events` and only use legacy `search_history` as a compatibility fallback.
+3. AI must not call legacy recent-history counts "exact frequency" when the V2 event table is unavailable.
+4. `clear_my_search_history()` must delete both the visible recent history and private activity ledger for the authenticated user.
+5. Anonymous access to search activity/insight RPCs must be rejected.
+6. One user must never be able to read another user's search activity through RLS or RPCs.
 
 ### Mini App payment requirement
 
@@ -99,11 +113,13 @@ Verify:
 6. AI agent function responds and exposes its current tool list.
 7. AI `run_code` reaches the real sandbox function rather than returning a demo result.
 8. AI private data tools reject anonymous calls and scope authenticated calls to the current user.
-9. Home/Videos recommendation preference tables/RPC access do not error.
-10. Marketplace product/read APIs still work.
-11. Mini App init-data function works for an approved app with correct permissions.
-12. Mini App payment create -> cancel flow works without changing Wallet balance.
-13. Mini App payment confirmation path is present; do not perform a real-value payment merely for smoke testing unless a dedicated zero-risk test merchant/account already exists.
+9. AI can read the current user's search insights, Marketplace orders and saved Map places without accessing another user's records.
+10. Repeating one harmless search query twice increases its V2 search frequency twice; then clean up that test activity with `clear_my_search_history()` only if using a dedicated test account.
+11. Home/Videos recommendation preference tables/RPC access do not error.
+12. Marketplace product/read APIs still work.
+13. Mini App init-data function works for an approved app with correct permissions.
+14. Mini App payment create -> cancel flow works without changing Wallet balance.
+15. Mini App payment confirmation path is present; do not perform a real-value payment merely for smoke testing unless a dedicated zero-risk test merchant/account already exists.
 
 ## Final response format
 
