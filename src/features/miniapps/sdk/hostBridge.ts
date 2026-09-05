@@ -20,15 +20,39 @@ export type MiniAppBridgeRequest = {
   params?: Record<string, unknown>;
 };
 
+export type MiniAppPaymentRequest = {
+  paymentId: string;
+  appId: string;
+  appName: string;
+  amount: number;
+  currency: string;
+  description?: string | null;
+};
+
+export type MiniAppPaymentResolution = {
+  paymentId: string;
+  status: 'paid' | 'cancelled' | 'expired' | 'failed';
+  transferId?: string | null;
+  amount: number;
+  currency: string;
+  error?: string;
+};
+
 export type MiniAppBridgeHandlers = {
   onReady?: () => void;
   onClose?: () => void;
   onOpenLink?: (url: string) => void;
   onShare?: (payload: { url?: string; text?: string }) => void;
-  onPaymentRequested?: (paymentId: string, amount: number) => void;
+  /**
+   * IMPORTANT: requestPayment() does not resolve inside the iframe until this
+   * handler resolves. This is the explicit Alsamos confirmation boundary.
+   */
+  onPaymentRequested?: (
+    request: MiniAppPaymentRequest,
+  ) => Promise<MiniAppPaymentResolution> | MiniAppPaymentResolution;
 };
 
-const SDK_VERSION = '2.0.0';
+const SDK_VERSION = '2.1.0';
 
 function hasPermission(app: MiniApp, permission: MiniAppPermission): boolean {
   return app.permissions.includes(permission);
@@ -147,16 +171,42 @@ export function createMiniAppBridge(
 
         case 'requestPayment': {
           if (!hasPermission(app, 'payments')) throw new Error('PERMISSION_DENIED');
+          if (!handlers.onPaymentRequested) throw new Error('PAYMENT_CONFIRMATION_UNAVAILABLE');
+
           const amount = Number(params.amount ?? 0);
           if (!Number.isFinite(amount) || amount <= 0) throw new Error('INVALID_AMOUNT');
-          const paymentId = await createPayment(
-            app.id,
+          if (amount > 1_000_000_000) throw new Error('AMOUNT_TOO_LARGE');
+
+          const currency = String(params.currency ?? 'UZS').trim().toUpperCase();
+          if (!/^[A-Z0-9]{3,8}$/.test(currency)) throw new Error('INVALID_CURRENCY');
+          const description = params.description
+            ? String(params.description).trim().slice(0, 280) || null
+            : null;
+
+          // Creating an intent is NOT a charge. The Promise below stays pending
+          // until the Alsamos confirmation UI settles/cancels the intent.
+          const paymentId = await createPayment(app.id, amount, currency, description);
+          const resolution = await handlers.onPaymentRequested({
+            paymentId,
+            appId: app.id,
+            appName: app.name,
             amount,
-            String(params.currency ?? 'UZS'),
-            params.description ? String(params.description) : null,
-          );
-          handlers.onPaymentRequested?.(paymentId, amount);
-          respond(message.id, { paymentId, status: 'pending' });
+            currency,
+            description,
+          });
+
+          if (resolution.paymentId !== paymentId) {
+            throw new Error('PAYMENT_ID_MISMATCH');
+          }
+
+          respond(message.id, {
+            paymentId,
+            status: resolution.status,
+            amount: resolution.amount,
+            currency: resolution.currency,
+            transferId: resolution.transferId ?? null,
+            error: resolution.error ?? null,
+          });
           break;
         }
 
