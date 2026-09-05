@@ -14,6 +14,7 @@ import {
   type OpenPlan,
   type OpenStep,
 } from '../openStrategy';
+import { createMiniAppBridge } from '../sdk/hostBridge';
 import type { MiniApp, MiniAppErrorCode } from '../types';
 
 interface MiniAppViewerProps {
@@ -37,6 +38,7 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [failed, setFailed] = useState<MiniAppErrorCode | null>(null);
   const [rating, setRating] = useState(0);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const openedAt = useRef<number>(Date.now());
   const sessionId = useRef<string>(
@@ -63,6 +65,44 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
     window.open(url, '_blank', 'noopener,noreferrer');
   }, []);
 
+  const shareFromMiniApp = useCallback(
+    async (payload: { url?: string; text?: string }) => {
+      const url = payload.url?.trim();
+      const text = payload.text?.trim();
+      const sharePayload: ShareData = {
+        title: app.name,
+        ...(text ? { text } : {}),
+        ...(url ? { url } : {}),
+      };
+
+      try {
+        if (navigator.share && (text || url)) {
+          await navigator.share(sharePayload);
+        } else {
+          const fallback = [text, url].filter(Boolean).join('\n');
+          if (!fallback) throw new Error('SHARE_PAYLOAD_EMPTY');
+          await navigator.clipboard.writeText(fallback);
+          toast({ title: 'Nusxalandi', description: 'Mini app ulashish matni nusxalandi.' });
+        }
+
+        void trackMiniAppEvent(app.id, 'share', {
+          sessionId: sessionId.current,
+          hasUrl: Boolean(url),
+          hasText: Boolean(text),
+        });
+      } catch (error) {
+        // Native share oynasini foydalanuvchi yopsa bu xato sifatida ko'rsatilmaydi.
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        toast({
+          title: 'Ulashib bo‘lmadi',
+          description: error instanceof Error ? error.message : 'Ulashish vaqtida xatolik yuz berdi.',
+          variant: 'destructive',
+        });
+      }
+    },
+    [app.id, app.name, toast],
+  );
+
   // Ochilish telemetriyasi + yopilishda davomiylik (ranking shu eventlarga tayanadi).
   useEffect(() => {
     openedAt.current = Date.now();
@@ -83,6 +123,32 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
       openExternal(step.src);
     }
   }, [openExternal, step]);
+
+  // Embedded mini app'ni haqiqiy Alsamos SDK bilan bog'laymiz. Ilgari iframe
+  // ochilardi, lekin host bridge o'rnatilmagani uchun getInitData, close,
+  // share va requestPayment chaqiruvlari javobsiz qolardi.
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe || !step || !['embed', 'direct', 'proxy'].includes(step.kind)) return;
+
+    return createMiniAppBridge(iframe, app, {
+      onClose,
+      onShare: (payload) => {
+        void shareFromMiniApp(payload);
+      },
+      onPaymentRequested: (paymentId, amount) => {
+        void trackMiniAppEvent(app.id, 'payment', {
+          paymentId,
+          amount,
+          sessionId: sessionId.current,
+        });
+        toast({
+          title: 'To‘lov so‘rovi yaratildi',
+          description: 'To‘lov holati server tasdig‘idan keyin yangilanadi.',
+        });
+      },
+    });
+  }, [app, onClose, shareFromMiniApp, step, toast]);
 
   // Har bir iframe qadami uchun kutish vaqti; tugasa keyingi qadamga o‘tamiz.
   useEffect(() => {
@@ -238,6 +304,7 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
               </div>
             )}
             <iframe
+              ref={iframeRef}
               key={step.kind + ':' + step.src}
               src={step.src}
               title={app.name}
