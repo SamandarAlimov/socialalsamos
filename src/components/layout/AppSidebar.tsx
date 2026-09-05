@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UsersRound, Shield, Megaphone } from 'lucide-react';
+import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UsersRound, Shield, Megaphone, FlaskConical } from 'lucide-react';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAdminAccess } from '@/hooks/useAdminAccess';
@@ -21,6 +21,8 @@ interface NavItem {
   labelKey: string;
   path?: string;
   badgeKey?: 'messages';
+  exact?: boolean;
+  nested?: boolean;
 }
 
 const navItems: NavItem[] = [
@@ -32,7 +34,8 @@ const navItems: NavItem[] = [
   { icon: ShoppingBag, labelKey: 'nav.marketplace', path: '/marketplace' },
   { icon: Map, labelKey: 'nav.map', path: '/map' },
   { icon: Wallet, labelKey: 'nav.payment', path: '/payment' },
-  { icon: Megaphone, labelKey: 'Reklama', path: '/ads' },
+  { icon: Megaphone, labelKey: 'Reklama', path: '/ads', exact: true },
+  { icon: FlaskConical, labelKey: 'A/B testlar', path: '/ads/experiments', nested: true },
   { icon: Sparkles, labelKey: 'nav.ai', path: '/ai' },
   { icon: LayoutGrid, labelKey: 'nav.miniApps', path: '/mini-apps' },
   { icon: PlusSquare, labelKey: 'nav.create', path: '/create' },
@@ -70,8 +73,9 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
   const { unreadCount: messagesUnreadCount } = useUnreadMessages(handleNewMessage);
   const getBadgeCount = (badgeKey?: 'messages') => badgeKey === 'messages' ? messagesUnreadCount : 0;
 
-  const isNavItemActive = (path?: string) => {
+  const isNavItemActive = (path?: string, exact = false) => {
     if (!path) return false;
+    if (exact) return location.pathname === path;
     return location.pathname === path || location.pathname.startsWith(path + '/');
   };
 
@@ -93,11 +97,19 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
 
       <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-3 [scrollbar-gutter:stable] [scrollbar-width:thin]">
         {navItems.map((item) => {
-          const isActive = isNavItemActive(item.path);
+          const isActive = isNavItemActive(item.path, item.exact);
           const badgeCount = getBadgeCount(item.badgeKey);
           const label = item.labelKey.startsWith('nav.') ? t(item.labelKey) : item.labelKey;
           return (
-            <NavLink key={item.path} to={item.path!} className={cn(NAV_ITEM_BASE, isActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE)}>
+            <NavLink
+              key={item.path}
+              to={item.path!}
+              className={cn(
+                NAV_ITEM_BASE,
+                isActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE,
+                item.nested && !collapsed && 'ml-3 py-2 pl-3',
+              )}
+            >
               <div className="relative">
                 <item.icon className={cn('h-5 w-5 flex-shrink-0 transition-transform duration-200', !isActive && 'group-hover:scale-110')} strokeWidth={isActive ? 2.4 : 1.9} />
                 <AnimatePresence>
