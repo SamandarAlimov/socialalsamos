@@ -32,8 +32,6 @@ export function AppLayout() {
     if (isAuthenticated) void resumeMyLiveLocationSharing();
   }, [isAuthenticated]);
 
-  // Keep the global desktop/tablet collapse state in the layout, not inside a page.
-  // This makes the control a sibling of <main>, so page overflow/z-index cannot cover it.
   useEffect(() => {
     const check = () => {
       if (window.innerWidth < 1100) setSidebarCollapsed(true);
@@ -50,16 +48,8 @@ export function AppLayout() {
   const isMessagesPage = location.pathname === '/messages';
   const isVideosPage = location.pathname === '/videos';
   const isAiPage = location.pathname === '/ai';
+  const isAdminPage = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
 
-  /**
-   * Messages owns its own chat header and switches between a list and a detail
-   * view without changing the URL. Watch that page-owned back button so the
-   * global bottom navigation disappears only while an actual chat is open.
-   *
-   * This deliberately stays in the shell instead of coupling MessagesPage to a
-   * second navigation context. The selector is scoped to <main> and /messages;
-   * secondary AppLayout headers live outside <main>, so they cannot match it.
-   */
   useEffect(() => {
     if (!isMessagesPage || typeof document === 'undefined') {
       setMessagesChatOpen(false);
@@ -76,29 +66,16 @@ export function AppLayout() {
     return () => observer.disconnect();
   }, [isMessagesPage]);
 
-  /**
-   * Mobile navigation contract:
-   *
-   * - Home/Profile: global Alsamos header + bottom navbar.
-   * - Messages: page-owned header; bottom navbar only on the conversation list.
-   *   Opening a chat hides the bottom navbar because the chat becomes a focused
-   *   detail surface with its own back control and composer.
-   * - Videos: page-owned full-height video chrome + bottom navbar. The global
-   *   Alsamos header must never be injected here.
-   * - Hamburger/detail pages: premium back header, no bottom navbar.
-   * - Create: immersive full-screen page-owned flow.
-   */
   const mobileChromeMode = getMobileChromeMode(location.pathname);
   const showPrimaryMobileHeader =
-    mobileChromeMode === 'primary' && !isMessagesPage && !isVideosPage;
-  const showSecondaryMobileHeader = mobileChromeMode === 'secondary';
+    !isAdminPage && mobileChromeMode === 'primary' && !isMessagesPage && !isVideosPage;
+  const showSecondaryMobileHeader = !isAdminPage && mobileChromeMode === 'secondary';
   const showBottomNavbar =
-    mobileChromeMode === 'primary' && !(isMessagesPage && messagesChatOpen);
+    !isAdminPage && mobileChromeMode === 'primary' && !(isMessagesPage && messagesChatOpen);
   const hasMobileTopChrome = showPrimaryMobileHeader || showSecondaryMobileHeader;
 
-  // Pages with their own canonical inner scroll container remain viewport-bound.
   const fullHeightPage =
-    isCreatePage || isMapPage || isAiPage || isMessagesPage || isVideosPage;
+    isCreatePage || isMapPage || isAiPage || isMessagesPage || isVideosPage || isAdminPage;
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-background"><div className="flex flex-col items-center gap-4"><Loader2 className="h-10 w-10 animate-spin text-muted-foreground" /><p className="text-muted-foreground">Loading...</p></div></div>;
@@ -110,25 +87,16 @@ export function AppLayout() {
     <div
       className={cn(
         'flex h-[100dvh] min-h-0 w-full overflow-hidden bg-background',
-        // MessagesPage historically reserved 64px for BottomNavbar on the chat
-        // composer itself. Once the navbar is hidden in an opened mobile chat,
-        // remove only that stale reservation while preserving pb-safe for the
-        // iPhone home indicator / Android gesture inset.
         isMessagesPage &&
           messagesChatOpen &&
           '[&_.chat-shell>.pb-safe.mb-16]:!mb-0',
       )}
     >
-      <AppSidebar collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
+      {!isAdminPage && (
+        <AppSidebar collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
+      )}
 
-      {/*
-        Global collapse control sidebar ichida emas, layout overlay sifatida turadi.
-        U oddiy page chrome'dan yuqori, lekin modal backdropdan qat'iy past turishi
-        kerak. Aks holda dialog ochilganda collapse tugmasi hira qatlam ustiga chiqib
-        qoladi. left qiymati dividerning o'zi, translate esa tugmani aynan 50%
-        sidebar / 50% page qilib markazlaydi.
-      */}
-      {!hasPostPreview && <button
+      {!isAdminPage && !hasPostPreview && <button
         type="button"
         aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         onClick={() => setSidebarCollapsed((current) => !current)}
@@ -151,8 +119,6 @@ export function AppLayout() {
       <main
         data-platform-scroll-root={fullHeightPage ? undefined : 'true'}
         className={cn(
-          // App shell is always viewport-bounded. Standard pages scroll here;
-          // fullscreen pages deliberately hand scrolling to their own inner root.
           'min-h-0 min-w-0 flex-1 md:ml-0 md:pt-0 md:pb-0',
           fullHeightPage
             ? 'h-full overflow-hidden p-0'
@@ -165,7 +131,7 @@ export function AppLayout() {
       </main>
 
       {showBottomNavbar && <BottomNavbar />}
-      <LocationPermissionDialog />
+      {!isAdminPage && <LocationPermissionDialog />}
     </div>
   );
 }

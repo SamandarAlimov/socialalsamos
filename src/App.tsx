@@ -37,7 +37,7 @@ import SearchPage from "./pages/SearchPage";
 import WebViewerPage from "./pages/WebViewerPage";
 import MarketplacePage from "./pages/MarketplacePage";
 import MarketplaceProductPage from "./pages/MarketplaceProductPage";
-import AdminPage from "./pages/AdminPage";
+import AdminConsolePage from "./pages/AdminConsolePage";
 import NotificationsPage from "./pages/NotificationsPage";
 import StoryArchivePage from "./pages/StoryArchivePage";
 import AIPage from "./pages/AIPage";
@@ -163,7 +163,8 @@ function AppRoutes() {
         <Route path="/settings" element={<SettingsHubPage />} />
         <Route path="/settings/:section" element={<SettingsHubPage />} />
         <Route path="/payment" element={<PaymentSettingsPage />} />
-        <Route path="/admin" element={<AdminPage />} />
+        <Route path="/admin" element={<AdminConsolePage />} />
+        <Route path="/admin/:section" element={<AdminConsolePage />} />
         <Route path="/story-archive" element={<StoryArchivePage />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/ai" element={<AIPage />} />

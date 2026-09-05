@@ -1,0 +1,26 @@
+.admin-neutral {
+  /* Admin is an operational surface, not a brand showcase. Keep its entire
+     interactive system on the platform's white/black/gray palette. */
+  --primary: var(--foreground);
+  --primary-foreground: var(--background);
+  --ring: var(--muted-foreground);
+  --accent-brand: var(--foreground);
+  --link: var(--foreground);
+  --link-hover: var(--muted-foreground);
+  --chart-1: var(--foreground);
+  --chart-2: var(--muted-foreground);
+  --chart-3: var(--foreground);
+  --chart-4: var(--muted-foreground);
+  --chart-5: var(--foreground);
+}
+
+.admin-neutral ::selection {
+  background: hsl(var(--foreground) / 0.14);
+}
+
+.admin-neutral a,
+.admin-neutral button,
+.admin-neutral input,
+.admin-neutral textarea {
+  -webkit-tap-highlight-color: transparent;
+}
