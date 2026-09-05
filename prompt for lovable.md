@@ -18,9 +18,12 @@ Apply this SQL repair first if production still shows `post_views`,
 https://raw.githubusercontent.com/SamandarAlimov/socialalsamos/main/supabase/migrations/20260905214000_feed_runtime_repair.sql
 ```
 
-Apply this SQL repair if Home shows a failed black player for the old
-`Alsamos Corporation ijtimoiy...` video post or other old video posts with
-missing Supabase objects:
+The historical legacy-video migration below is now intentionally
+**non-destructive**. Before applying it, confirm the GitHub version contains no
+`DELETE`, no removal from `posts.media_urls`, and no `media_type` downgrade. It
+is a migration-history marker only; legacy media recovery is handled by the
+latest runtime code, which merges all historical media references and retries
+fallback candidates without deleting user data.
 
 ```text
 https://raw.githubusercontent.com/SamandarAlimov/socialalsamos/main/supabase/migrations/20260905224500_repair_broken_legacy_video_urls.sql
@@ -30,13 +33,34 @@ If production still shows `publish_post_draft`, wallet ledger/top-up, or story
 draft RPC/table 404 errors, continue applying every pending migration from
 GitHub in filename order. Do not hand-edit the SQL in Lovable.
 
-For media upload CORS errors, deploy the latest `main` frontend/serverless API
-files and set:
+### Dedicated media server — mandatory
+
+All **new** binary uploads, including Messages audio/video/voice notes,
+attachments, post media and story media, must go to the dedicated Alsamos media
+server. Supabase Storage is legacy-read compatibility only. Do not enable or
+reintroduce a silent Supabase upload fallback.
+
+Deploy the latest `main` frontend/serverless API files and configure:
 
 ```text
-VITE_MEDIA_ALLOW_SUPABASE_FALLBACK=true
 MEDIA_API_URL=https://api.alsamos.com
+VITE_MEDIA_API_URL=https://api.alsamos.com
+VITE_MEDIA_PUBLIC_BASE_URL=https://media.alsamos.com/media
+VITE_MEDIA_ALLOW_SUPABASE_FALLBACK=false
 ```
+
+Then verify the infrastructure behind `https://api.alsamos.com/api/media/presign`
+and `https://media.alsamos.com/media` is healthy. The same-origin frontend route
+`/api/media-presign` must return a successful upstream response for an
+authenticated upload. If it returns `530`, `502`, DNS, TLS or origin errors,
+report the exact infrastructure error and fix/deploy the existing media service;
+**do not** route the upload to Supabase Storage and do not rewrite application
+code in Lovable.
+
+For a Messages audio/video smoke test, confirm the resulting new media URL/key is
+from `media.alsamos.com` / the `alsamos-media` provider and that no new object is
+written to Supabase legacy buckets such as `media`, `media-private`,
+`message-attachments`, `chat-video` or `chat-audio` as a fallback.
 
 Lovable must not redesign or rewrite this feature. Codex already wrote the code.
 Use Lovable credits only to run/deploy the repository state and report exact
@@ -90,9 +114,10 @@ not say demo/mock/fallback.
 2. Read the repository's existing `supabase/migrations` and Supabase migration history first.
 3. Apply **only migrations that exist in GitHub and are not yet applied**, in filename order.
 4. Never reset the database, never drop production data, never recreate the project, never replace existing auth users, and never run destructive "clean start" operations.
-5. If one migration fails, stop at that migration and return the exact PostgreSQL error, filename and statement context. Do **not** invent a replacement migration.
-6. Do not edit SQL from Lovable. The source of truth is GitHub.
-7. Do not create demo/sample users, fake wallet balances, fake ads, fake marketplace orders, fake feedback cases or fake analytics.
+5. Never delete or rewrite a user's post/media metadata merely because a media URL returns 403/404 or playback fails. Preserve both `posts.media_urls` and `post_media` history.
+6. If one migration fails, stop at that migration and return the exact PostgreSQL error, filename and statement context. Do **not** invent a replacement migration.
+7. Do not edit SQL from Lovable. The source of truth is GitHub.
+8. Do not create demo/sample users, fake wallet balances, fake ads, fake marketplace orders, fake feedback cases or fake analytics.
 
 ## Migrations that are especially important to verify
 
@@ -175,7 +200,8 @@ Verify the production environment has the secrets actually referenced by the dep
 - AI provider key(s), e.g. `GEMINI_API_KEYS` and/or the configured Lovable AI fallback key;
 - Supabase URL/service-role values that Edge Functions receive through the platform environment;
 - Payme merchant secrets if Payme is intended to be live;
-- Mini Apps proxy/runtime origin/config if that deployment requires it.
+- Mini Apps proxy/runtime origin/config if that deployment requires it;
+- dedicated media service/MinIO credentials referenced by the existing media server runtime.
 
 If a secret is missing, do not fabricate a value. Report the exact environment variable name only.
 
@@ -200,6 +226,9 @@ Verify:
 13. Mini App init-data function works for an approved app with correct permissions.
 14. Mini App payment create -> cancel flow works without changing Wallet balance.
 15. Mini App payment confirmation path is present; do not perform a real-value payment merely for smoke testing unless a dedicated zero-risk test merchant/account already exists.
+16. An old Home post with a historical media URL remains in the feed even if its first media candidate fails; no post/media row is deleted.
+17. A new Messages audio/video upload uses the dedicated media server and does not create a Supabase Storage fallback object.
+18. `/api/media-presign` succeeds without 530/502/DNS/TLS errors; if it does not, report the media infrastructure blocker exactly and stop that upload test rather than falling back to Supabase.
 
 ## Final response format
 
@@ -209,8 +238,9 @@ Return only a concise deployment report containing:
 - migrations applied (filenames);
 - migrations already applied/skipped;
 - Edge Functions deployed;
+- media server health (`presign`, upload, public/private read) and whether any Supabase upload fallback occurred;
 - smoke tests passed/failed;
 - missing secret/config **names only**;
-- any exact blocker/error requiring a GitHub code change.
+- any exact blocker/error requiring a GitHub code change or media-server infrastructure change.
 
 Do not propose or generate new UI/code unless a concrete repository error is found. We will fix code in GitHub ourselves.

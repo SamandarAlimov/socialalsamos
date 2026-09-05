@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { db } from '@/lib/db';
 import type { MediaKind } from '@/lib/postComposer';
-import { resolveStorageUrl } from '@/lib/mediaUpload';
+import { resolveStorageUrlCandidates } from '@/lib/mediaUpload';
 import { inferStoredMediaKind } from '@/lib/mediaRecovery';
 import {
   ensureStructuredPostTable,
@@ -16,9 +16,11 @@ export interface PostMediaItem {
   position: number;
   kind: MediaKind;
   storage_url: string;
+  storage_candidates?: string[];
   storage_bucket: string | null;
   storage_key: string | null;
   thumbnail_url: string | null;
+  thumbnail_candidates?: string[];
   thumbnail_bucket: string | null;
   thumbnail_key: string | null;
   mime_type: string | null;
@@ -32,27 +34,27 @@ export interface PostMediaItem {
   edit_state: Record<string, unknown> | null;
 }
 
-async function resolvePostMediaUrl(
+async function resolvePostMediaCandidates(
   value: string,
   bucket: string | null,
   key: string | null,
   label: string,
-): Promise<string> {
+): Promise<string[]> {
   try {
-    return await resolveStorageUrl(value, bucket, key);
+    const candidates = await resolveStorageUrlCandidates(value, bucket, key);
+    return candidates.length > 0 ? candidates : [value];
   } catch (resolveError) {
     // Bitta private/legacy obyektni resolve qilishdagi xato butun postning
-    // media massivini yo'qotmasligi kerak. Raw URL hali ham ishlashi mumkin.
-    console.warn(`${label} resolve failed; raw URL ishlatiladi:`, resolveError);
-    return value;
+    // media massivini yo'qotmasligi kerak. Original reference saqlanadi.
+    console.warn(`${label} resolve failed; original reference saqlanadi:`, resolveError);
+    return [value];
   }
 }
 
 /**
- * Post fayllarini `post_media` jadvalidan o'qiydi.
- *
- * Eski kod faqat `posts.media_urls` massiviga tayanardi — unda fayl turi,
- * o'lchami, davomiyligi va tartibi yo'q edi.
+ * Post fayllarini `post_media` jadvalidan o'qiydi. Structured metadata eski
+ * `posts.media_urls` ma'lumotini almashtirmaydi; component darajasida ikkala
+ * manba logical position bo'yicha birlashtiriladi.
  */
 export function usePostMedia(postId: string | null, enabled = true) {
   const schemaEnabled = enabled;
@@ -96,27 +98,32 @@ export function usePostMedia(postId: string | null, enabled = true) {
 
       const rows = (data ?? []) as PostMediaItem[];
       const resolved = await Promise.all(
-        rows.map(async (item) => ({
-          ...item,
-          // 2026-09-03 legacy backfill ayrim media turlarini faqat
-          // posts.media_type bo'yicha yozgan. Fayl/MIME kuchliroq dalil bo'lsa
-          // runtime'da kind ni tuzatamiz; DB migration ham shu ma'lumotni repair qiladi.
-          kind: inferStoredMediaKind(item),
-          storage_url: await resolvePostMediaUrl(
+        rows.map(async (item) => {
+          const storageCandidates = await resolvePostMediaCandidates(
             item.storage_url,
             item.storage_bucket,
             item.storage_key,
             'Post media URL',
-          ),
-          thumbnail_url: item.thumbnail_url
-            ? await resolvePostMediaUrl(
+          );
+          const thumbnailCandidates = item.thumbnail_url
+            ? await resolvePostMediaCandidates(
                 item.thumbnail_url,
                 item.thumbnail_bucket,
                 item.thumbnail_key,
                 'Post thumbnail URL',
               )
-            : null,
-        })),
+            : [];
+
+          return {
+            ...item,
+            // Legacy backfill ayrim media turlarini noto'g'ri kind bilan yozgan.
+            kind: inferStoredMediaKind(item),
+            storage_url: storageCandidates[0] ?? item.storage_url,
+            storage_candidates: storageCandidates,
+            thumbnail_url: thumbnailCandidates[0] ?? item.thumbnail_url,
+            thumbnail_candidates: thumbnailCandidates,
+          };
+        }),
       );
 
       setMedia(resolved);
