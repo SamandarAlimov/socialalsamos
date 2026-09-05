@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { db } from '@/lib/db';
 import type { MediaKind } from '@/lib/postComposer';
 import { resolveStorageUrl } from '@/lib/mediaUpload';
+import { inferStoredMediaKind } from '@/lib/mediaRecovery';
 import {
   ensureStructuredPostTable,
   isMissingStructuredPostSchemaError,
@@ -29,6 +30,22 @@ export interface PostMediaItem {
   aspect_ratio: string | null;
   alt_text: string | null;
   edit_state: Record<string, unknown> | null;
+}
+
+async function resolvePostMediaUrl(
+  value: string,
+  bucket: string | null,
+  key: string | null,
+  label: string,
+): Promise<string> {
+  try {
+    return await resolveStorageUrl(value, bucket, key);
+  } catch (resolveError) {
+    // Bitta private/legacy obyektni resolve qilishdagi xato butun postning
+    // media massivini yo'qotmasligi kerak. Raw URL hali ham ishlashi mumkin.
+    console.warn(`${label} resolve failed; raw URL ishlatiladi:`, resolveError);
+    return value;
+  }
 }
 
 /**
@@ -77,20 +94,26 @@ export function usePostMedia(postId: string | null, enabled = true) {
       writeStructuredPostSchemaCapability('available');
       writeStructuredPostTableCapability('post_media', 'available');
 
-      const rows = ((data ?? []) as PostMediaItem[]);
+      const rows = (data ?? []) as PostMediaItem[];
       const resolved = await Promise.all(
         rows.map(async (item) => ({
           ...item,
-          storage_url: await resolveStorageUrl(
+          // 2026-09-03 legacy backfill ayrim media turlarini faqat
+          // posts.media_type bo'yicha yozgan. Fayl/MIME kuchliroq dalil bo'lsa
+          // runtime'da kind ni tuzatamiz; DB migration ham shu ma'lumotni repair qiladi.
+          kind: inferStoredMediaKind(item),
+          storage_url: await resolvePostMediaUrl(
             item.storage_url,
             item.storage_bucket,
             item.storage_key,
+            'Post media URL',
           ),
           thumbnail_url: item.thumbnail_url
-            ? await resolveStorageUrl(
+            ? await resolvePostMediaUrl(
                 item.thumbnail_url,
                 item.thumbnail_bucket,
                 item.thumbnail_key,
+                'Post thumbnail URL',
               )
             : null,
         })),

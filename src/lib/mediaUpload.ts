@@ -52,11 +52,11 @@ function safeDecodeUriComponent(value: string): string {
 /**
  * Eski post/xabarlarda to'liq Supabase Storage URL saqlangan bo'lishi mumkin.
  * Ayniqsa `/object/sign/...` URL lar muddati tugagach media 403/404 bo'lib
- * qoladi. URL ichidan bucket + object key ni qayta ajratib, joriy Supabase
- * client orqali yangi public/signed URL hosil qilish uchun parser.
+ * qoladi. URL ichidan bucket + object key ni qayta ajratish uchun parser.
  *
- * Host ataylab tekshirilmaydi: production loyiha yoki domen o'zgargan bo'lsa
- * ham object identifikatori (bucket/key) saqlanib qoladi.
+ * Muhim: parser hostni qabul qiladi, ammo resolver foreign/old project URL'ini
+ * avtomatik ravishda joriy projectga ko'chirmaydi. Aks holda boshqa projectda
+ * hanuz ishlayotgan public media joriy projectdagi yo'q obyektga almashtiriladi.
  */
 export function parseSupabaseStorageUrl(value?: string | null): ParsedSupabaseStorageUrl | null {
   if (!value || value.startsWith('storage://')) return null;
@@ -94,6 +94,26 @@ export function parseSupabaseStorageUrl(value?: string | null): ParsedSupabaseSt
   }
 }
 
+function currentSupabaseOrigin(): string | null {
+  try {
+    const raw = String(import.meta.env.VITE_SUPABASE_URL ?? '').trim();
+    return raw ? new URL(raw).origin : null;
+  } catch {
+    return null;
+  }
+}
+
+const CURRENT_SUPABASE_ORIGIN = currentSupabaseOrigin();
+
+function isCurrentSupabaseAbsoluteUrl(value: string): boolean {
+  if (!CURRENT_SUPABASE_ORIGIN) return false;
+  try {
+    return new URL(value).origin === CURRENT_SUPABASE_ORIGIN;
+  } catch {
+    return false;
+  }
+}
+
 function bucketForChatMediaType(mediaType?: string | null): string {
   if (mediaType === 'voice' || mediaType === 'audio') return 'chat-audio';
   if (mediaType === 'video' || mediaType === 'video_note') return 'chat-video';
@@ -109,6 +129,20 @@ export async function resolveStorageUrl(
 ): Promise<string> {
   const stableReference = parseStorageReference(value);
   const absoluteReference = parseSupabaseStorageUrl(value);
+  const hasExplicitObject = Boolean(bucket && key);
+
+  // Legacy public URL doimiy bo'lishi mumkin va boshqa Supabase projectga
+  // tegishli bo'lishi mumkin. Uni joriy project URL'iga majburan almashtirish
+  // media regressiyasiga olib keladi. Canonical bucket/key yoki storage:// bo'lsa
+  // esa obyekt joriy projectga tegishli ekani aniq.
+  if (!hasExplicitObject && !stableReference && absoluteReference) {
+    if (absoluteReference.access === 'public') return value;
+
+    // Foreign/old project signed URL uchun bizda signing kaliti yo'q. Raw URLni
+    // saqlab qolamiz; current project signed URL bo'lsa esa yangisini olamiz.
+    if (!isCurrentSupabaseAbsoluteUrl(value)) return value;
+  }
+
   const parsed =
     bucket && key
       ? { bucket, key }
@@ -116,9 +150,6 @@ export async function resolveStorageUrl(
 
   if (!parsed) return value;
 
-  // `media` canonical public bucket. Bundan tashqari eski URLning o'zi
-  // `/object/public/` bo'lgan bo'lsa, bucket nomi boshqa bo'lsa ham uni
-  // public sifatida qayta quramiz.
   const wasPublicAbsoluteUrl =
     absoluteReference?.access === 'public' &&
     absoluteReference.bucket === parsed.bucket &&
