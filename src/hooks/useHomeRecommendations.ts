@@ -42,7 +42,12 @@ function increment<K>(map: Map<K, number>, key: K, amount: number) {
   map.set(key, (map.get(key) ?? 0) + amount);
 }
 
-async function loadRecommendationProfile(
+/**
+ * Shared, cached interest graph used by both Home ranking and Ads Delivery.
+ * Keeping one source of behavioral affinity prevents the ads stack from
+ * inventing a second tracking profile and cuts duplicate database reads.
+ */
+export async function loadRecommendationProfileForUser(
   userId: string,
   force = false,
 ): Promise<HomeRecommendationProfile> {
@@ -91,13 +96,9 @@ async function loadRecommendationProfile(
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(SIGNAL_LIMIT),
-    // Video retention is a stronger signal than a plain view. Older production
-    // schemas may not have this table yet, so failure is intentionally isolated.
     db
       .from('video_watch_sessions')
-      .select(
-        'post_id, watched_seconds, duration_seconds, completed, created_at',
-      )
+      .select('post_id, watched_seconds, duration_seconds, completed, created_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(SIGNAL_LIMIT),
@@ -187,8 +188,6 @@ async function loadRecommendationProfile(
       .select('id, user_id, content, media_type, media_urls, hashtags, created_at')
       .in('id', interactedPostIds);
 
-    // Compatibility with older production schemas where hashtags column has
-    // not been migrated yet.
     if (metadataResult.error) {
       metadataResult = await db
         .from('posts')
@@ -276,7 +275,7 @@ export function useHomeRecommendations(posts: Post[]) {
     let active = true;
     setIsPersonalizing(true);
 
-    void loadRecommendationProfile(user.id)
+    void loadRecommendationProfileForUser(user.id)
       .then((next) => {
         if (active) setProfile(next);
       })
@@ -298,7 +297,7 @@ export function useHomeRecommendations(posts: Post[]) {
     profileCache.delete(user.id);
     setIsPersonalizing(true);
     try {
-      const next = await loadRecommendationProfile(user.id, true);
+      const next = await loadRecommendationProfileForUser(user.id, true);
       setProfile(next);
     } finally {
       setIsPersonalizing(false);
