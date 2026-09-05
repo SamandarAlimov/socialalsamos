@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowUpDown,
+  Cloud,
   FolderKanban,
+  HardDrive,
   Loader2,
   MessageSquare,
   MoreHorizontal,
@@ -33,53 +35,139 @@ import {
   updateLocalProject,
 } from '@/lib/ai/projectsStore';
 
+type ProjectBackendMode = 'database' | 'local';
+
+type ProjectRow = {
+  id: string;
+  name?: string | null;
+  instructions?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+function projectFromRow(row: ProjectRow): AIProject {
+  return {
+    id: String(row.id),
+    name: String(row.name || 'Loyiha'),
+    instructions: String(row.instructions || ''),
+    createdAt: new Date(row.created_at || Date.now()),
+    updatedAt: new Date(row.updated_at || Date.now()),
+  };
+}
+
+function isProjectSchemaError(error: any): boolean {
+  const message = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
+  return (
+    message.includes('ai_projects') ||
+    message.includes('project_id') ||
+    message.includes('optional ai schema') ||
+    message.includes('schema cache') ||
+    error?.code === '42P01' ||
+    error?.code === '42703' ||
+    error?.code === 'PGRST204' ||
+    error?.code === 'PGRST205'
+  );
+}
+
+function countDatabaseProjects(rows: Array<{ project_id?: string | null }>): Record<string, number> {
+  return rows.reduce<Record<string, number>>((result, row) => {
+    const projectId = row.project_id ? String(row.project_id) : null;
+    if (projectId) result[projectId] = (result[projectId] || 0) + 1;
+    return result;
+  }, {});
+}
+
 export default function ProjectsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [projects, setProjects] = useState<AIProject[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
+  const [backendMode, setBackendMode] = useState<ProjectBackendMode>('local');
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [sortNewest, setSortNewest] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<AIProject | null>(null);
 
+  const loadLocal = useCallback(async (userId: string) => {
+    setBackendMode('local');
+    setProjects(listLocalProjects(userId));
+
+    // ai_conversations itself is old/stable schema. Use its IDs to avoid
+    // counting mappings for chats that were already deleted remotely.
+    try {
+      const { data } = await db
+        .from('ai_conversations')
+        .select('id')
+        .eq('user_id', userId)
+        .limit(2000);
+      const ids = ((data as Array<{ id: string }> | null) || []).map((row) => String(row.id));
+      setCounts(countConversationsByProject(userId, ids));
+    } catch {
+      setCounts(countConversationsByProject(userId));
+    }
+  }, []);
+
   const load = useCallback(async () => {
     if (!user) {
       setProjects([]);
       setCounts({});
+      setBackendMode('local');
       setLoading(false);
       return;
     }
 
     setLoading(true);
-    const localProjects = listLocalProjects(user.id);
-    setProjects(localProjects);
-
-    // ai_conversations is part of the original, already-deployed AI schema.
-    // We only read IDs here. Project membership itself lives in a resilient
-    // client mapping until the optional ai_projects migration is deployed.
     try {
-      const { data } = await db
-        .from('ai_conversations')
-        .select('id')
+      const projectResult = await db
+        .from('ai_projects')
+        .select('*')
         .eq('user_id', user.id)
-        .limit(1000);
-      const ids = ((data as Array<{ id: string }> | null) || []).map((row) => String(row.id));
-      setCounts(countConversationsByProject(user.id, ids));
-    } catch {
-      setCounts(countConversationsByProject(user.id));
+        .order('updated_at', { ascending: false });
+
+      if (projectResult.error) {
+        if (!isProjectSchemaError(projectResult.error)) {
+          console.error('AI projects cloud load failed:', projectResult.error);
+        }
+        await loadLocal(user.id);
+        return;
+      }
+
+      setBackendMode('database');
+      setProjects(((projectResult.data as ProjectRow[] | null) || []).map(projectFromRow));
+
+      const conversationResult = await db
+        .from('ai_conversations')
+        .select('project_id')
+        .eq('user_id', user.id)
+        .limit(2000);
+
+      if (conversationResult.error && !isProjectSchemaError(conversationResult.error)) {
+        console.error('AI project conversation counts failed:', conversationResult.error);
+      }
+
+      setCounts(
+        conversationResult.error
+          ? {}
+          : countDatabaseProjects(
+              (conversationResult.data as Array<{ project_id?: string | null }> | null) || [],
+            ),
+      );
+    } catch (error) {
+      console.error('AI projects load failed:', error);
+      await loadLocal(user.id);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [loadLocal, user]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   useEffect(() => {
+    if (backendMode !== 'local') return;
     const onStorage = (event: StorageEvent) => {
       if (!user || !event.key?.startsWith('alsamos.ai.projects.')) return;
       setProjects(listLocalProjects(user.id));
@@ -87,7 +175,7 @@ export default function ProjectsPage() {
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
-  }, [user]);
+  }, [backendMode, user]);
 
   const filtered = useMemo(() => {
     const clean = query.trim().toLowerCase();
@@ -119,29 +207,105 @@ export default function ProjectsPage() {
   const save = async (value: { name: string; instructions: string }) => {
     if (!user) return;
 
-    if (editing) {
-      const updated = updateLocalProject(user.id, editing.id, value);
-      if (!updated) throw new Error('Loyiha topilmadi.');
+    if (backendMode === 'local') {
+      if (editing) {
+        const updated = updateLocalProject(user.id, editing.id, value);
+        if (!updated) throw new Error('Loyiha topilmadi.');
+        setProjects(listLocalProjects(user.id));
+        toast({ title: 'Loyiha yangilandi' });
+        return;
+      }
+
+      const created = createLocalProject(user.id, value);
       setProjects(listLocalProjects(user.id));
+      setCounts((previous) => ({ ...previous, [created.id]: 0 }));
+      toast({ title: 'Loyiha yaratildi' });
+      return;
+    }
+
+    if (editing) {
+      const now = new Date().toISOString();
+      const { data, error } = await db
+        .from('ai_projects')
+        .update({ name: value.name, instructions: value.instructions, updated_at: now })
+        .eq('id', editing.id)
+        .eq('user_id', user.id)
+        .select('*')
+        .single();
+
+      if (error || !data) {
+        toast({
+          title: 'Loyiha saqlanmadi',
+          description: error?.message || 'Bulutdagi loyiha yangilanmadi.',
+          variant: 'destructive',
+        });
+        throw error || new Error('Loyiha yangilanmadi');
+      }
+
+      const updated = projectFromRow(data as ProjectRow);
+      setProjects((previous) =>
+        previous.map((project) => (project.id === updated.id ? updated : project)),
+      );
       toast({ title: 'Loyiha yangilandi' });
       return;
     }
 
-    const created = createLocalProject(user.id, value);
-    setProjects(listLocalProjects(user.id));
+    const { data, error } = await db
+      .from('ai_projects')
+      .insert({ user_id: user.id, name: value.name, instructions: value.instructions })
+      .select('*')
+      .single();
+
+    if (error || !data) {
+      toast({
+        title: 'Loyiha yaratilmadi',
+        description: error?.message || 'Bulutdagi loyiha yaratilmadi.',
+        variant: 'destructive',
+      });
+      throw error || new Error('Loyiha yaratilmadi');
+    }
+
+    const created = projectFromRow(data as ProjectRow);
+    setProjects((previous) => [created, ...previous]);
     setCounts((previous) => ({ ...previous, [created.id]: 0 }));
     toast({ title: 'Loyiha yaratildi' });
   };
 
-  const remove = (project: AIProject) => {
+  const remove = async (project: AIProject) => {
     if (!user) return;
     const approved = window.confirm(
       `“${project.name}” loyihasini o‘chirasizmi? Suhbatlar o‘chmaydi, faqat loyihadan chiqariladi.`,
     );
     if (!approved) return;
 
-    deleteLocalProject(user.id, project.id);
-    setProjects(listLocalProjects(user.id));
+    if (backendMode === 'local') {
+      deleteLocalProject(user.id, project.id);
+      setProjects(listLocalProjects(user.id));
+      setCounts((previous) => {
+        const next = { ...previous };
+        delete next[project.id];
+        return next;
+      });
+      toast({ title: 'Loyiha o‘chirildi' });
+      return;
+    }
+
+    const { error } = await db
+      .from('ai_projects')
+      .delete()
+      .eq('id', project.id)
+      .eq('user_id', user.id);
+
+    if (error) {
+      toast({
+        title: 'Loyiha o‘chirilmadi',
+        description: error.message,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setProjects((previous) => previous.filter((item) => item.id !== project.id));
     setCounts((previous) => {
       const next = { ...previous };
       delete next[project.id];
@@ -169,6 +333,17 @@ export default function ProjectsPage() {
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             Bir mavzu yoki ish uchun doimiy AI kontekstini alohida saqlang.
           </p>
+          <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            {backendMode === 'database' ? (
+              <>
+                <Cloud className="h-3.5 w-3.5" /> Bulut bilan sinxron
+              </>
+            ) : (
+              <>
+                <HardDrive className="h-3.5 w-3.5" /> Shu qurilmada saqlanmoqda
+              </>
+            )}
+          </div>
         </div>
         <Button
           onClick={openCreate}
@@ -258,7 +433,10 @@ export default function ProjectsPage() {
                     <DropdownMenuItem onClick={() => openEdit(project)}>
                       <Pencil className="mr-2 h-4 w-4" /> Tahrirlash
                     </DropdownMenuItem>
-                    <DropdownMenuItem className="text-destructive" onClick={() => remove(project)}>
+                    <DropdownMenuItem
+                      className="text-destructive"
+                      onClick={() => void remove(project)}
+                    >
                       <Trash2 className="mr-2 h-4 w-4" /> O‘chirish
                     </DropdownMenuItem>
                   </DropdownMenuContent>
