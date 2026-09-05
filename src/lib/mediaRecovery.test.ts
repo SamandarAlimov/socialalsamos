@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { inferStoredMediaKind } from './mediaRecovery';
+import {
+  inferStoredMediaKind,
+  mergeMediaCandidateGroups,
+  uniqueMediaCandidates,
+} from './mediaRecovery';
 
 describe('inferStoredMediaKind', () => {
   it('repairs a legacy video row that was backfilled as image', () => {
@@ -38,5 +42,77 @@ describe('inferStoredMediaKind', () => {
         storage_url: 'https://media.example.com/object/opaque-id',
       }),
     ).toBe('video');
+  });
+});
+
+describe('legacy media candidate preservation', () => {
+  it('deduplicates candidates without changing fallback order', () => {
+    expect(
+      uniqueMediaCandidates([
+        'https://cdn.example.com/a.mp4',
+        'https://cdn.example.com/a.mp4',
+        null,
+        'https://legacy.example.com/a.mp4',
+      ]),
+    ).toEqual([
+      'https://cdn.example.com/a.mp4',
+      'https://legacy.example.com/a.mp4',
+    ]);
+  });
+
+  it('keeps legacy URL when a structured row exists at the same position', () => {
+    expect(
+      mergeMediaCandidateGroups(
+        [
+          {
+            position: 0,
+            kind: 'video',
+            urls: ['https://structured.example.com/broken.mp4'],
+          },
+        ],
+        [
+          {
+            position: 0,
+            kind: 'video',
+            urls: ['https://legacy.example.com/original.mp4'],
+          },
+        ],
+      ),
+    ).toEqual([
+      {
+        position: 0,
+        kind: 'video',
+        urls: [
+          'https://structured.example.com/broken.mp4',
+          'https://legacy.example.com/original.mp4',
+        ],
+      },
+    ]);
+  });
+
+  it('does not drop extra legacy-only media positions', () => {
+    expect(
+      mergeMediaCandidateGroups(
+        [{ position: 0, kind: 'image', urls: ['https://cdn.example.com/0.jpg'] }],
+        [
+          { position: 0, kind: 'image', urls: ['https://legacy.example.com/0.jpg'] },
+          { position: 1, kind: 'video', urls: ['https://legacy.example.com/1.mp4'] },
+        ],
+      ),
+    ).toEqual([
+      {
+        position: 0,
+        kind: 'image',
+        urls: [
+          'https://cdn.example.com/0.jpg',
+          'https://legacy.example.com/0.jpg',
+        ],
+      },
+      {
+        position: 1,
+        kind: 'video',
+        urls: ['https://legacy.example.com/1.mp4'],
+      },
+    ]);
   });
 });
