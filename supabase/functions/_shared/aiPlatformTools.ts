@@ -12,6 +12,8 @@ const num = (description: string) => ({ type: "number", description });
 export const PLATFORM_TOOL_NAMES = [
   "my_search_insights",
   "my_payment_history",
+  "my_marketplace_orders",
+  "my_saved_places",
   "get_recommendation_preferences",
   "update_recommendation_preferences",
 ] as const;
@@ -53,6 +55,43 @@ export const PLATFORM_TOOL_SPECS: Record<string, ToolSpec> = {
             description: "Ledger direction filter, default all.",
           },
           limit: num("Maximum matching ledger rows (1-100, default 40)."),
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  my_marketplace_orders: {
+    type: "function",
+    function: {
+      name: "my_marketplace_orders",
+      description:
+        "Read the signed-in user's own Alsamos Marketplace purchases/orders, including line items, seller, payment and delivery status. Use for questions like 'What did I buy last month?', 'Where is my order?', or 'How much did I spend on Marketplace?'. Read-only.",
+      parameters: {
+        type: "object",
+        properties: {
+          days: num("Lookback window in days (1-730, default 90)."),
+          from: str("Optional inclusive ISO date/time."),
+          to: str("Optional exclusive ISO date/time."),
+          status: str("Optional exact order status filter."),
+          limit: num("Maximum orders to return (1-50, default 20)."),
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  my_saved_places: {
+    type: "function",
+    function: {
+      name: "my_saved_places",
+      description:
+        "Read the signed-in user's own saved Alsamos Map places and coordinates. Use for questions like 'Which places did I save?', 'Show my favorite cafes', or when the user asks AI to reason about their own saved places. Read-only; never invent coordinates.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: str("Optional place name/address text filter."),
+          category: str("Optional category filter."),
+          favorites_only: { type: "boolean", description: "Return only favorite saved places." },
+          limit: num("Maximum saved places to return (1-50, default 20)."),
         },
         additionalProperties: false,
       },
@@ -412,6 +451,151 @@ async function myPaymentHistory(
   };
 }
 
+async function myMarketplaceOrders(
+  args: Record<string, unknown>,
+  ctx: ToolContext,
+): Promise<ToolOutcome> {
+  const denied = await requirePrivateAccess(ctx);
+  if (denied) return denied;
+
+  const limit = Math.round(clamp(args.limit, 1, 50, 20));
+  const from = parseDate(args.from) ?? new Date(Date.now() - Math.round(clamp(args.days, 1, 730, 90)) * 86_400_000).toISOString();
+  const to = parseDate(args.to);
+  const status = String(args.status ?? "").trim().slice(0, 60);
+
+  let query = ctx.admin
+    .from("orders")
+    .select(
+      "id, order_number, seller_id, status, payment_status, payment_method, subtotal, shipping_cost, total, currency, tracking_number, carrier, paid_at, shipped_at, delivered_at, cancelled_at, created_at",
+    )
+    .eq("buyer_id", ctx.userId!)
+    .gte("created_at", from)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (to) query = query.lt("created_at", to);
+  if (status) query = query.eq("status", status);
+
+  const ordersResult = await query;
+  if (ordersResult.error) return fail(ordersResult.error.message);
+  const orders = ordersResult.data ?? [];
+  if (!orders.length) {
+    return {
+      ok: true,
+      text: "Bu davr/filter bo‘yicha Marketplace buyurtmasi topilmadi.",
+      data: { marketplaceOrders: [], from, to },
+    };
+  }
+
+  const orderIds = orders.map((row) => String(row.id));
+  const sellerIds = [...new Set(orders.map((row) => row.seller_id).filter(Boolean))] as string[];
+
+  const [itemsResult, sellersResult] = await Promise.all([
+    ctx.admin
+      .from("order_items")
+      .select("id, order_id, product_id, title, quantity, price, total")
+      .in("order_id", orderIds),
+    sellerIds.length
+      ? ctx.admin
+          .from("sellers")
+          .select("id, user_id, business_name, is_verified")
+          .in("id", sellerIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (itemsResult.error) return fail(itemsResult.error.message);
+  if (sellersResult.error) return fail(sellersResult.error.message);
+
+  const itemsByOrder = new Map<string, unknown[]>();
+  for (const item of itemsResult.data ?? []) {
+    const key = String(item.order_id);
+    const list = itemsByOrder.get(key) ?? [];
+    list.push({
+      id: item.id,
+      product_id: item.product_id,
+      title: item.title,
+      quantity: Number(item.quantity ?? 0),
+      price: Number(item.price ?? 0),
+      total: Number(item.total ?? 0),
+    });
+    itemsByOrder.set(key, list);
+  }
+
+  const sellers = new Map<string, unknown>();
+  for (const seller of sellersResult.data ?? []) {
+    sellers.set(String(seller.id), {
+      id: seller.id,
+      user_id: seller.user_id,
+      business_name: seller.business_name,
+      is_verified: seller.is_verified,
+    });
+  }
+
+  const result = orders.map((order) => ({
+    ...order,
+    subtotal: Number(order.subtotal ?? 0),
+    shipping_cost: Number(order.shipping_cost ?? 0),
+    total: Number(order.total ?? 0),
+    seller: sellers.get(String(order.seller_id)) ?? null,
+    items: itemsByOrder.get(String(order.id)) ?? [],
+  }));
+
+  const completedSpend = result.reduce((sum, order) => {
+    const paid = order.payment_status === "paid" || Boolean(order.paid_at);
+    const cancelled = order.status === "cancelled" || Boolean(order.cancelled_at);
+    return paid && !cancelled ? sum + Number(order.total ?? 0) : sum;
+  }, 0);
+
+  return {
+    ok: true,
+    text: JSON.stringify({ from, to, completed_spend: completedSpend, orders: result }),
+    data: { marketplaceOrders: result, completedSpend, from, to },
+  };
+}
+
+async function mySavedPlaces(
+  args: Record<string, unknown>,
+  ctx: ToolContext,
+): Promise<ToolOutcome> {
+  const denied = await requirePrivateAccess(ctx);
+  if (denied) return denied;
+
+  const limit = Math.round(clamp(args.limit, 1, 50, 20));
+  const text = String(args.query ?? "").trim().replace(/[%,()]/g, " ").slice(0, 120);
+  const category = String(args.category ?? "").trim().slice(0, 80);
+  const favoritesOnly = args.favorites_only === true;
+
+  let query = ctx.admin
+    .from("saved_places")
+    .select(
+      "id, name, address, category, collection, latitude, longitude, is_favorite, note, notes, visited_at, created_at, updated_at",
+    )
+    .eq("user_id", ctx.userId!)
+    .order("updated_at", { ascending: false })
+    .limit(limit);
+  if (text) query = query.or(`name.ilike.%${text}%,address.ilike.%${text}%`);
+  if (category) query = query.ilike("category", category);
+  if (favoritesOnly) query = query.eq("is_favorite", true);
+
+  const result = await query;
+  if (result.error) return fail(result.error.message);
+
+  const places = (result.data ?? []).map((place) => ({
+    ...place,
+    latitude: Number(place.latitude),
+    longitude: Number(place.longitude),
+    map_path:
+      Number.isFinite(Number(place.latitude)) && Number.isFinite(Number(place.longitude))
+        ? `/map?destLat=${encodeURIComponent(String(place.latitude))}&destLng=${encodeURIComponent(String(place.longitude))}&destName=${encodeURIComponent(String(place.name || place.address || "Joy"))}`
+        : null,
+  }));
+
+  return {
+    ok: true,
+    text: places.length ? JSON.stringify(places) : "Mos saqlangan joy topilmadi.",
+    data: { savedPlaces: places },
+  };
+}
+
 async function getRecommendationPreferences(
   _args: Record<string, unknown>,
   ctx: ToolContext,
@@ -540,6 +724,8 @@ const EXECUTORS: Record<
 > = {
   my_search_insights: mySearchInsights,
   my_payment_history: myPaymentHistory,
+  my_marketplace_orders: myMarketplaceOrders,
+  my_saved_places: mySavedPlaces,
   get_recommendation_preferences: getRecommendationPreferences,
   update_recommendation_preferences: updateRecommendationPreferences,
 };
