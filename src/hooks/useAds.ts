@@ -42,6 +42,11 @@ export interface Ad {
   reach_count: number;
   created_at: string;
   updated_at: string;
+  ad_account_id?: string | null;
+  campaign_v2_id?: string | null;
+  ad_set_v2_id?: string | null;
+  creative_v2_id?: string | null;
+  delivery_item_v2_id?: string | null;
   profile?: {
     username: string | null;
     display_name: string | null;
@@ -69,6 +74,17 @@ export interface AdCreateInput {
   target_interests?: string[];
   start_date?: string;
   end_date?: string;
+}
+
+function isNewAdsBackendUnavailable(error: any) {
+  const code = String(error?.code || '');
+  const message = `${error?.message || ''} ${error?.details || ''}`.toLowerCase();
+  return (
+    code === 'PGRST202' ||
+    code === '42883' ||
+    message.includes('could not find the function') ||
+    message.includes('does not exist')
+  );
 }
 
 async function hydrateAdvertiserProfiles(items: Ad[]): Promise<Ad[]> {
@@ -108,14 +124,33 @@ function sourceAdType(placement: AdPlacement | 'both') {
   return placement === 'story' ? 'story' : 'feed';
 }
 
-/**
- * Fetches a ranked candidate pool for a real placement.
- *
- * Ads Delivery V2 RPC is preferred when the migration is available. Until the
- * production migration is deployed, the hook safely falls back to the legacy
- * ads table and applies local diversity/fatigue ranking. This keeps rollout
- * backwards compatible instead of making the UI depend on a migration flag.
- */
+async function fetchServerRankedAds(
+  placement: AdPlacement,
+  limit: number,
+  sessionId: string,
+  context: Record<string, unknown>,
+) {
+  const args = {
+    p_placement: placement,
+    p_limit: Math.max(limit * 3, limit),
+    p_session_id: sessionId,
+    p_context: context,
+  };
+
+  // V5 adds deterministic experiments on top of V4 pacing/integrity. Rollout
+  // remains backwards compatible while migrations are reaching production.
+  for (const rpcName of ['get_eligible_ads_v5', 'get_eligible_ads_v4', 'get_eligible_ads_v2']) {
+    const result = await (supabase as any).rpc(rpcName, args);
+    if (!result?.error && Array.isArray(result?.data)) return result.data as Ad[];
+    if (!isNewAdsBackendUnavailable(result?.error)) {
+      console.warn(`${rpcName} failed, trying compatibility path.`, result?.error);
+    }
+  }
+
+  return null;
+}
+
+/** Fetches a ranked candidate pool for a real placement. */
 export function useActiveAds(placement: AdPlacement | 'both' = 'feed', limit = 3) {
   const { user } = useAuth();
   const [ads, setAds] = useState<Ad[]>([]);
@@ -128,23 +163,16 @@ export function useActiveAds(placement: AdPlacement | 'both' = 'feed', limit = 3
     try {
       const sessionId = getAdSessionId();
       const context = getAdRequestContext();
+      const serverAds = await fetchServerRankedAds(effectivePlacement, limit, sessionId, context);
 
-      // New server-ranked path. Cast keeps generated Supabase types backwards
-      // compatible until the new RPC has been generated into database.types.ts.
-      const rpcResult = await (supabase as any).rpc('get_eligible_ads_v2', {
-        p_placement: effectivePlacement,
-        p_limit: Math.max(limit * 3, limit),
-        p_session_id: sessionId,
-        p_context: context,
-      });
-
-      if (!rpcResult?.error && Array.isArray(rpcResult?.data)) {
-        const ranked = rankAdCandidates((rpcResult.data || []) as Ad[]).slice(0, limit);
+      if (serverAds) {
+        // Server ranking is authoritative in V4/V5. Local ranking remains a
+        // final fatigue safety net and supports the legacy V2 response shape.
+        const ranked = rankAdCandidates(serverAds).slice(0, limit);
         setAds(await hydrateAdvertiserProfiles(ranked));
         return;
       }
 
-      // Compatibility fallback while Ads Delivery V2 is not deployed yet.
       let query = supabase
         .from('ads')
         .select('*')
@@ -176,25 +204,40 @@ export function useActiveAds(placement: AdPlacement | 'both' = 'feed', limit = 3
     void fetchAds();
   }, [fetchAds]);
 
-  const trackImpression = useCallback(async (adId: string, eventPlacement: AdPlacement = effectivePlacement) => {
+  const recordDeliveryEvent = useCallback(async (
+    adId: string,
+    eventType: 'impression' | 'click',
+    eventPlacement: AdPlacement,
+  ) => {
     const deviceType = /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
+    const args = {
+      p_ad_id: adId,
+      p_placement: eventPlacement,
+      p_event_type: eventType,
+      p_session_id: getAdSessionId(),
+      p_event_key: createAdEventKey(adId, eventPlacement, eventType),
+      p_slot_key: null,
+      p_device_type: deviceType,
+      p_score: null,
+      p_metadata: getAdRequestContext(),
+    };
+
+    const v4 = await (supabase as any).rpc('record_ad_delivery_event_v4', args);
+    if (!v4?.error) return { handled: true, accepted: v4?.data !== false, deviceType };
+
+    const v2 = await (supabase as any).rpc('record_ad_delivery_event_v2', args);
+    if (!v2?.error) return { handled: true, accepted: v2?.data !== false, deviceType };
+
+    return { handled: false, accepted: true, deviceType };
+  }, []);
+
+  const trackImpression = useCallback(async (adId: string, eventPlacement: AdPlacement = effectivePlacement) => {
     const ad = ads.find((item) => item.id === adId);
 
     try {
-      const result = await (supabase as any).rpc('record_ad_delivery_event_v2', {
-        p_ad_id: adId,
-        p_placement: eventPlacement,
-        p_event_type: 'impression',
-        p_session_id: getAdSessionId(),
-        p_event_key: createAdEventKey(adId, eventPlacement, 'impression'),
-        p_slot_key: null,
-        p_device_type: deviceType,
-        p_score: null,
-        p_metadata: getAdRequestContext(),
-      });
-
-      if (!result?.error) {
-        if (result?.data !== false) recordAdvertiserExposure(ad?.user_id);
+      const result = await recordDeliveryEvent(adId, 'impression', eventPlacement);
+      if (result.handled) {
+        if (result.accepted) recordAdvertiserExposure(ad?.user_id);
         return;
       }
 
@@ -202,15 +245,12 @@ export function useActiveAds(placement: AdPlacement | 'both' = 'feed', limit = 3
         ad_id: adId,
         user_id: user?.id || null,
         placement: eventPlacement,
-        device_type: deviceType,
+        device_type: result.deviceType,
       });
 
       if (user) {
         await supabase.from('ad_reach').upsert(
-          {
-            ad_id: adId,
-            user_id: user.id,
-          },
+          { ad_id: adId, user_id: user.id },
           { onConflict: 'ad_id,user_id' },
         );
       }
@@ -219,36 +259,23 @@ export function useActiveAds(placement: AdPlacement | 'both' = 'feed', limit = 3
     } catch (error) {
       console.error('Error tracking impression:', error);
     }
-  }, [ads, effectivePlacement, user]);
+  }, [ads, effectivePlacement, recordDeliveryEvent, user]);
 
   const trackClick = useCallback(async (adId: string, eventPlacement: AdPlacement = effectivePlacement) => {
-    const deviceType = /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
-
     try {
-      const result = await (supabase as any).rpc('record_ad_delivery_event_v2', {
-        p_ad_id: adId,
-        p_placement: eventPlacement,
-        p_event_type: 'click',
-        p_session_id: getAdSessionId(),
-        p_event_key: createAdEventKey(adId, eventPlacement, 'click'),
-        p_slot_key: null,
-        p_device_type: deviceType,
-        p_score: null,
-        p_metadata: getAdRequestContext(),
-      });
-
-      if (!result?.error) return;
+      const result = await recordDeliveryEvent(adId, 'click', eventPlacement);
+      if (result.handled) return;
 
       await supabase.from('ad_clicks').insert({
         ad_id: adId,
         user_id: user?.id || null,
         placement: eventPlacement,
-        device_type: deviceType,
+        device_type: result.deviceType,
       });
     } catch (error) {
       console.error('Error tracking click:', error);
     }
-  }, [effectivePlacement, user]);
+  }, [effectivePlacement, recordDeliveryEvent, user]);
 
   const submitFeedback = useCallback(async (
     adId: string,
@@ -266,16 +293,11 @@ export function useActiveAds(placement: AdPlacement | 'both' = 'feed', limit = 3
         p_ad_id: adId,
         p_placement: eventPlacement,
         p_feedback_type: feedback,
-        p_metadata: {
-          ...getAdRequestContext(),
-          ...metadata,
-        },
+        p_metadata: { ...getAdRequestContext(), ...metadata },
       });
 
       if (!result?.error) return;
 
-      // If the RPC is not deployed but the table already exists, preserve the
-      // feedback. If neither exists this remains a harmless local preference.
       await (supabase as any).from('ad_user_feedback').insert({
         user_id: user.id,
         ad_id: adId,
@@ -347,15 +369,11 @@ export function useUserAds() {
           table: 'ads',
           filter: `user_id=eq.${user.id}`,
         },
-        () => {
-          void fetchAds();
-        },
+        () => { void fetchAds(); },
       )
       .subscribe();
 
-    return () => {
-      void supabase.removeChannel(channel);
-    };
+    return () => { void supabase.removeChannel(channel); };
   }, [user, fetchAds]);
 
   const createAd = useCallback(async (input: AdCreateInput) => {
@@ -365,18 +383,27 @@ export function useUserAds() {
     }
 
     try {
+      const hierarchyResult = await (supabase as any).rpc('create_ad_campaign_v4', {
+        p_payload: input,
+      });
+
+      if (!hierarchyResult?.error && hierarchyResult?.data) {
+        toast.success('Kampaniya yaratildi. Moderatsiyadan so‘ng ishga tushadi.');
+        return hierarchyResult.data as Ad;
+      }
+
+      if (!isNewAdsBackendUnavailable(hierarchyResult?.error)) {
+        throw hierarchyResult?.error;
+      }
+
+      // Compatibility during staged database rollout only.
       const { data, error } = await supabase
         .from('ads')
-        .insert({
-          ...input,
-          user_id: user.id,
-          status: 'pending',
-        })
+        .insert({ ...input, user_id: user.id, status: 'pending' })
         .select()
         .single();
 
       if (error) throw error;
-
       toast.success('Reklama yaratildi. Moderatsiyadan so‘ng ishga tushadi.');
       return data as Ad;
     } catch (error) {
@@ -388,11 +415,7 @@ export function useUserAds() {
 
   const updateAd = useCallback(async (id: string, updates: Partial<AdCreateInput> | Partial<Pick<Ad, 'status'>>) => {
     try {
-      const { error } = await supabase
-        .from('ads')
-        .update(updates)
-        .eq('id', id);
-
+      const { error } = await supabase.from('ads').update(updates).eq('id', id);
       if (error) throw error;
       toast.success('Reklama yangilandi');
       return true;
@@ -403,13 +426,38 @@ export function useUserAds() {
     }
   }, []);
 
+  const setDeliveryStatus = useCallback(async (id: string, status: 'active' | 'paused') => {
+    try {
+      const result = await (supabase as any).rpc('set_ad_delivery_status_v4', {
+        p_ad_id: id,
+        p_status: status,
+      });
+
+      if (!result?.error) {
+        toast.success(status === 'paused' ? 'Reklama to‘xtatildi' : 'Reklama davom ettirildi');
+        return true;
+      }
+
+      if (!isNewAdsBackendUnavailable(result.error)) throw result.error;
+      return updateAd(id, { status });
+    } catch (error) {
+      console.error('Error changing ad delivery:', error);
+      toast.error('Reklama holatini o‘zgartirib bo‘lmadi');
+      return false;
+    }
+  }, [updateAd]);
+
   const deleteAd = useCallback(async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('ads')
-        .delete()
-        .eq('id', id);
+      const archive = await (supabase as any).rpc('archive_ad_delivery_v4', { p_ad_id: id });
+      if (!archive?.error) {
+        toast.success('Kampaniya arxivlandi');
+        return true;
+      }
 
+      if (!isNewAdsBackendUnavailable(archive.error)) throw archive.error;
+
+      const { error } = await supabase.from('ads').delete().eq('id', id);
       if (error) throw error;
       toast.success('Reklama o‘chirildi');
       return true;
@@ -420,8 +468,8 @@ export function useUserAds() {
     }
   }, []);
 
-  const pauseAd = useCallback((id: string) => updateAd(id, { status: 'paused' }), [updateAd]);
-  const resumeAd = useCallback((id: string) => updateAd(id, { status: 'active' }), [updateAd]);
+  const pauseAd = useCallback((id: string) => setDeliveryStatus(id, 'paused'), [setDeliveryStatus]);
+  const resumeAd = useCallback((id: string) => setDeliveryStatus(id, 'active'), [setDeliveryStatus]);
 
   return {
     ads,
@@ -471,6 +519,31 @@ export function useAdStats(adId: string) {
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
+      // Prefer long-lived rollups when available; fallback keeps older DBs live.
+      const rollup = await (supabase as any)
+        .from('ad_daily_metrics_v3')
+        .select('day, impressions, clicks')
+        .eq('ad_id', adId)
+        .gte('day', sevenDaysAgo.toISOString().split('T')[0]);
+
+      if (!rollup?.error && Array.isArray(rollup?.data)) {
+        const dailyMap = new Map<string, { impressions: number; clicks: number }>();
+        for (let i = 0; i < 7; i += 1) {
+          const date = new Date();
+          date.setDate(date.getDate() - i);
+          dailyMap.set(date.toISOString().split('T')[0], { impressions: 0, clicks: 0 });
+        }
+        for (const item of rollup.data) {
+          const bucket = dailyMap.get(item.day);
+          if (bucket) {
+            bucket.impressions += Number(item.impressions || 0);
+            bucket.clicks += Number(item.clicks || 0);
+          }
+        }
+        setDailyStats(Array.from(dailyMap.entries()).map(([date, data]) => ({ date, ...data })).reverse());
+        return;
+      }
+
       const { data: impressionsData } = await supabase
         .from('ad_impressions')
         .select('created_at')
@@ -484,7 +557,6 @@ export function useAdStats(adId: string) {
         .gte('created_at', sevenDaysAgo.toISOString());
 
       const dailyMap = new Map<string, { impressions: number; clicks: number }>();
-
       for (let i = 0; i < 7; i += 1) {
         const date = new Date();
         date.setDate(date.getDate() - i);
@@ -528,15 +600,11 @@ export function useAdStats(adId: string) {
           table: 'ads',
           filter: `id=eq.${adId}`,
         },
-        () => {
-          void fetchStats();
-        },
+        () => { void fetchStats(); },
       )
       .subscribe();
 
-    return () => {
-      void supabase.removeChannel(channel);
-    };
+    return () => { void supabase.removeChannel(channel); };
   }, [adId, fetchStats]);
 
   return { stats, dailyStats, isLoading, refetch: fetchStats };
