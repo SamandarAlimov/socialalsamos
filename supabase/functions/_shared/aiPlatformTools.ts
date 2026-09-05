@@ -22,7 +22,7 @@ export const PLATFORM_TOOL_SPECS: Record<string, ToolSpec> = {
     function: {
       name: "my_search_insights",
       description:
-        "Read the signed-in user's own Alsamos search history and summarize what they search most often. Use for questions like 'What do I search most?', 'What did I search last month?', or when the user asks about their own search activity. Never use it for another user.",
+        "Read the signed-in user's own Alsamos search activity and summarize what they search most often. Use for questions like 'What do I search most?', 'What did I search last month?', or when the user asks about their own search activity. Never use it for another user.",
       parameters: {
         type: "object",
         properties: {
@@ -129,6 +129,17 @@ function parseDate(value: unknown): string | null {
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
 }
 
+function isMissingRelation(error: { code?: string; message?: string } | null | undefined) {
+  if (!error) return false;
+  const text = `${error.code ?? ""} ${error.message ?? ""}`.toLowerCase();
+  return (
+    text.includes("42p01") ||
+    text.includes("pgrst") ||
+    text.includes("does not exist") ||
+    text.includes("schema cache")
+  );
+}
+
 async function personalizationAllowed(ctx: ToolContext): Promise<boolean> {
   if (!ctx.userId) return false;
 
@@ -173,6 +184,13 @@ async function requirePrivateAccess(ctx: ToolContext): Promise<ToolOutcome | nul
   }
 }
 
+type SearchActivityRow = {
+  query: string | null;
+  normalized_query?: string | null;
+  searched_at?: string | null;
+  created_at?: string | null;
+};
+
 async function mySearchInsights(
   args: Record<string, unknown>,
   ctx: ToolContext,
@@ -185,44 +203,81 @@ async function mySearchInsights(
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
   const contains = String(args.query_contains ?? "").trim().slice(0, 120);
 
-  let query = ctx.admin
-    .from("search_history")
-    .select("query, created_at")
+  // V2 is an append-only search-event ledger. Unlike `search_history`, which
+  // is a de-duplicated recent-list UX, it preserves every committed query, so
+  // "eng ko‘p nima qidirdim?" is based on actual frequency.
+  let activityQuery = ctx.admin
+    .from("search_activity_events")
+    .select("query, normalized_query, searched_at")
     .eq("user_id", ctx.userId!)
-    .gte("created_at", since)
-    .order("created_at", { ascending: false })
-    .limit(1500);
-  if (contains) query = query.ilike("query", `%${contains}%`);
+    .gte("searched_at", since)
+    .order("searched_at", { ascending: false })
+    .limit(5000);
+  if (contains) activityQuery = activityQuery.ilike("query", `%${contains}%`);
 
-  const { data, error } = await query;
-  if (error) return fail(error.message);
+  const activity = await activityQuery;
+  let rows: SearchActivityRow[] = [];
+  let source = "search_activity_events";
 
-  const rows = (data ?? []).filter((row) => typeof row.query === "string" && row.query.trim());
+  if (!activity.error) {
+    rows = (activity.data ?? []) as SearchActivityRow[];
+  } else if (isMissingRelation(activity.error)) {
+    // Backward-compatible while production migrations roll out. Legacy history
+    // can answer recency, but because it de-duplicates queries it must NOT be
+    // presented as exact historical frequency.
+    let legacyQuery = ctx.admin
+      .from("search_history")
+      .select("query, created_at")
+      .eq("user_id", ctx.userId!)
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(1500);
+    if (contains) legacyQuery = legacyQuery.ilike("query", `%${contains}%`);
+    const legacy = await legacyQuery;
+    if (legacy.error) return fail(legacy.error.message);
+    rows = (legacy.data ?? []) as SearchActivityRow[];
+    source = "search_history_legacy_recent_only";
+  } else {
+    return fail(activity.error.message);
+  }
+
+  const validRows = rows.filter((row) => typeof row.query === "string" && row.query.trim());
   const buckets = new Map<string, { query: string; count: number; last_searched_at: string }>();
-  for (const row of rows) {
+  for (const row of validRows) {
     const label = String(row.query).trim().replace(/\s+/g, " ");
-    const key = label.toLocaleLowerCase();
+    const key = String(row.normalized_query || label.toLocaleLowerCase());
+    const searchedAt = String(row.searched_at || row.created_at || "");
     const current = buckets.get(key);
     if (current) {
       current.count += 1;
-      if (String(row.created_at) > current.last_searched_at) current.last_searched_at = String(row.created_at);
+      if (searchedAt > current.last_searched_at) current.last_searched_at = searchedAt;
     } else {
-      buckets.set(key, { query: label, count: 1, last_searched_at: String(row.created_at) });
+      buckets.set(key, { query: label, count: 1, last_searched_at: searchedAt });
     }
   }
 
   const top = [...buckets.values()]
     .sort((a, b) => b.count - a.count || b.last_searched_at.localeCompare(a.last_searched_at))
     .slice(0, limit);
-  const recent = rows.slice(0, limit).map((row) => ({
+  const recent = validRows.slice(0, limit).map((row) => ({
     query: String(row.query),
-    created_at: row.created_at,
+    searched_at: row.searched_at || row.created_at,
   }));
 
-  const result = { days, total_searches: rows.length, unique_queries: buckets.size, top, recent };
+  const result = {
+    days,
+    total_searches: validRows.length,
+    unique_queries: buckets.size,
+    top,
+    recent,
+    source,
+    exact_frequency: source === "search_activity_events",
+  };
   return {
     ok: true,
-    text: rows.length ? JSON.stringify(result) : `Oxirgi ${days} kunda search tarixi topilmadi.`,
+    text: validRows.length
+      ? JSON.stringify(result)
+      : `Oxirgi ${days} kunda search tarixi topilmadi.`,
     data: { searchInsights: result },
   };
 }
