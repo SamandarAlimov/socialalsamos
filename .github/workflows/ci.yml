@@ -31,7 +31,7 @@ jobs:
         run: npm run test:messages
 
       - name: Media regression tests
-        run: npx vitest run src/lib/mediaRecovery.test.ts
+        run: npx vitest run src/lib/mediaRecovery.test.ts src/lib/mediaRefs.test.ts
 
       - name: Messages typecheck
         run: npm run typecheck:messages
