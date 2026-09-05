@@ -37,6 +37,7 @@ import SearchPage from "./pages/SearchPage";
 import WebViewerPage from "./pages/WebViewerPage";
 import MarketplacePage from "./pages/MarketplacePage";
 import MarketplaceProductPage from "./pages/MarketplaceProductPage";
+import MarketplaceChatHandoffPage from "./pages/MarketplaceChatHandoffPage";
 import AdminConsolePage from "./pages/AdminConsolePage";
 import AdminModerationHubPage from "./pages/AdminModerationHubPage";
 import AdminAdsReviewPage from "./pages/AdminAdsReviewPage";
@@ -167,6 +168,7 @@ function AppRoutes() {
         <Route path="/messages" element={<MessagesPage />} />
         <Route path="/join/:slug" element={<JoinInvitePage />} />
         <Route path="/marketplace" element={<MarketplacePage />} />
+        <Route path="/marketplace/chat" element={<MarketplaceChatHandoffPage />} />
         <Route path="/marketplace/product/:productId" element={<MarketplaceProductPage />} />
         <Route path="/map" element={<MapPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
