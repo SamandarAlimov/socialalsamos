@@ -18,6 +18,14 @@ Apply this SQL repair first if production still shows `post_views`,
 https://raw.githubusercontent.com/SamandarAlimov/socialalsamos/main/supabase/migrations/20260905214000_feed_runtime_repair.sql
 ```
 
+Apply this SQL repair if Home shows a failed black player for the old
+`Alsamos Corporation ijtimoiy...` video post or other old video posts with
+missing Supabase objects:
+
+```text
+https://raw.githubusercontent.com/SamandarAlimov/socialalsamos/main/supabase/migrations/20260905224500_repair_broken_legacy_video_urls.sql
+```
+
 If production still shows `publish_post_draft`, wallet ledger/top-up, or story
 draft RPC/table 404 errors, continue applying every pending migration from
 GitHub in filename order. Do not hand-edit the SQL in Lovable.

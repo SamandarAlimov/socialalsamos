@@ -26,6 +26,7 @@ export function PostMediaCarousel({
 }: PostMediaCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [ratios, setRatios] = useState<Record<number, number>>({});
+  const [failedIndexes, setFailedIndexes] = useState<Set<number>>(() => new Set());
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const swipeStartRef = useRef<{ x: number; y: number; at: number } | null>(null);
@@ -91,6 +92,20 @@ export function PostMediaCarousel({
   const isCurrentVideo = currentMedia ? isVideoAt(currentIndex) : false;
   const naturalRatio = ratios[currentIndex] ?? (isReel ? 9 / 16 : undefined);
 
+  useEffect(() => {
+    setFailedIndexes(new Set());
+    setCurrentIndex(0);
+  }, [mediaUrls.join('|')]);
+
+  useEffect(() => {
+    if (!failedIndexes.has(currentIndex)) return;
+
+    const nextIndex = mediaUrls.findIndex((_, index) => !failedIndexes.has(index));
+    if (nextIndex >= 0 && nextIndex !== currentIndex) {
+      setCurrentIndex(nextIndex);
+    }
+  }, [currentIndex, failedIndexes, mediaUrls]);
+
   // Chrome/Edge touchpad pinch is exposed as Ctrl+wheel. On a post image that
   // gesture should open the media viewer instead of zooming the whole website.
   useEffect(() => {
@@ -109,6 +124,8 @@ export function PostMediaCarousel({
   }, [currentIndex, currentMedia, isCurrentVideo, openImageViewer]);
 
   if (mediaUrls.length === 0) return null;
+
+  if (failedIndexes.size >= mediaUrls.length) return null;
 
   const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
     didSwipeRef.current = false;
@@ -218,6 +235,14 @@ export function PostMediaCarousel({
             muted={true}
             autoPlay={false}
             className="rounded-none w-full h-full"
+            onPlaybackError={() => {
+              setFailedIndexes((previous) => {
+                if (previous.has(currentIndex)) return previous;
+                const next = new Set(previous);
+                next.add(currentIndex);
+                return next;
+              });
+            }}
             onAspectRatio={(ratio) => {
               if (ratio > 0 && Number.isFinite(ratio)) {
                 setRatios((prev) => ({ ...prev, [currentIndex]: ratio }));

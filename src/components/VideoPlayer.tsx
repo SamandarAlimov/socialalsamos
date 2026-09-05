@@ -56,6 +56,7 @@ interface VideoPlayerProps {
   tracks?: VideoPlayerTrack[];
   title?: string;
   onEnded?: () => void;
+  onPlaybackError?: () => void;
   onAspectRatio?: (ratio: number) => void;
 }
 
@@ -96,6 +97,7 @@ export function VideoPlayer({
   tracks = [],
   title,
   onEnded,
+  onPlaybackError,
   onAspectRatio,
 }: VideoPlayerProps) {
   const playerId = useId();
@@ -709,6 +711,7 @@ export function VideoPlayer({
           setPlaybackError(true);
           setIsLoading(false);
           setIsPlaying(false);
+          onPlaybackError?.();
         }}
         onPlay={() => {
           setIsPlaying(true);
