@@ -1,0 +1,55 @@
+/*
+ * Alsamos touch interaction policy.
+ *
+ * Mobile browsers add native long-press selection, link/image callouts and
+ * tap highlights on top of the product UI.  That makes cards/buttons feel
+ * like a generic web page instead of an app.  The runtime marks touch-first
+ * devices with `data-touch-ui="true"`; only those devices get this policy.
+ *
+ * Inputs/editors stay native so typing, cursor movement and selection inside
+ * editable fields continue to work.  Any future surface that intentionally
+ * needs browser selection can opt in with `data-native-interaction="true"`
+ * or `data-allow-selection="true"`.
+ */
+html[data-touch-ui='true'] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html[data-touch-ui='true'] body,
+html[data-touch-ui='true'] #root,
+html[data-touch-ui='true'] #root * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+html[data-touch-ui='true'] input,
+html[data-touch-ui='true'] textarea,
+html[data-touch-ui='true'] select,
+html[data-touch-ui='true'] option,
+html[data-touch-ui='true'] [contenteditable='true'],
+html[data-touch-ui='true'] [contenteditable='plaintext-only'],
+html[data-touch-ui='true'] [data-native-interaction='true'],
+html[data-touch-ui='true'] [data-allow-selection='true'],
+html[data-touch-ui='true'] [data-native-interaction='true'] *,
+html[data-touch-ui='true'] [data-allow-selection='true'] * {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+/* Keep taps responsive while still allowing normal pan/zoom gestures. */
+html[data-touch-ui='true'] button,
+html[data-touch-ui='true'] a,
+html[data-touch-ui='true'] [role='button'],
+html[data-touch-ui='true'] [role='menuitem'],
+html[data-touch-ui='true'] [role='tab'] {
+  touch-action: manipulation;
+}
+
+/* Safari/Chrome must not start a ghost image/link drag during long press. */
+html[data-touch-ui='true'] img,
+html[data-touch-ui='true'] svg,
+html[data-touch-ui='true'] a {
+  -webkit-user-drag: none;
+}
