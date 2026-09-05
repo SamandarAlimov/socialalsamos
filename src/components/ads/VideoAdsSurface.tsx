@@ -6,6 +6,7 @@ import {
   recordVideoAdImpression,
   snoozeVideoAds,
 } from '@/lib/adFrequencyPolicy';
+import type { AdFeedbackType } from '@/lib/adDeliveryClient';
 
 type ActiveSlot = {
   ad: Ad;
@@ -15,7 +16,12 @@ type ActiveSlot = {
 const VIDEO_RETRY_ORGANIC_GAP = 6;
 
 export function VideoAdsSurface() {
-  const { ads, trackImpression, trackClick } = useActiveAds('feed', 3);
+  const {
+    ads,
+    trackImpression,
+    trackClick,
+    submitFeedback,
+  } = useActiveAds('video', 6);
   const [activeIndex, setActiveIndex] = useState(0);
   const [muted, setMuted] = useState(true);
   const [slot, setSlot] = useState<ActiveSlot | null>(null);
@@ -62,11 +68,13 @@ export function VideoAdsSurface() {
     lastEvaluatedIndexRef.current = activeIndex;
 
     // If somebody swipes past an ad before its impression threshold, do not
-    // chase them with the same ad on every following reel.
+    // chase them with another ad on every following reel.
     if (activeIndex - lastAttemptedIndexRef.current < VIDEO_RETRY_ORGANIC_GAP) return;
 
-    const candidate = ads[Math.abs(activeIndex) % ads.length];
-    if (!candidate || !canShowVideoAd(activeIndex, candidate.id)) return;
+    // Candidate pool is already ranked by the delivery layer. Pick the first
+    // candidate that also passes local real-time pacing/fatigue rules.
+    const candidate = ads.find((item) => canShowVideoAd(activeIndex, item.id));
+    if (!candidate) return;
 
     lastAttemptedIndexRef.current = activeIndex;
     setSlot({ ad: candidate, index: activeIndex });
@@ -76,12 +84,18 @@ export function VideoAdsSurface() {
 
   const handleImpression = (adId: string) => {
     recordVideoAdImpression(adId, slot.index);
-    trackImpression(adId, 'video');
+    void trackImpression(adId, 'video');
   };
 
   const handleDismiss = () => {
     snoozeVideoAds();
     setSlot(null);
+  };
+
+  const handleFeedback = (adId: string, feedback: AdFeedbackType) => {
+    snoozeVideoAds();
+    setSlot(null);
+    void submitFeedback(adId, feedback, 'video', { organic_index: activeIndex });
   };
 
   return (
@@ -93,8 +107,9 @@ export function VideoAdsSurface() {
         muted={muted}
         onMuteToggle={() => setMuted((value) => !value)}
         onImpression={handleImpression}
-        onClick={(id) => trackClick(id, 'video')}
+        onClick={(id) => void trackClick(id, 'video')}
         onDismiss={handleDismiss}
+        onFeedback={handleFeedback}
         className="pointer-events-auto"
       />
     </div>
