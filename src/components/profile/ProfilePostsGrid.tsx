@@ -4,39 +4,23 @@ import {
   ArrowDownWideNarrow,
   ArrowUpNarrowWide,
   BarChart3,
-  Bookmark,
   Check,
   Clock,
-  Copy,
   Eye,
   Grid3x3,
   Heart,
   Images,
   LayoutList,
   MessageCircle,
-  MoreHorizontal,
   Music2,
-  Pencil,
   Pin,
   Play,
-  Repeat2,
-  Share2,
   SlidersHorizontal,
-  Trash2,
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
-import { enUS, ru, uz } from 'date-fns/locale';
+import { format, formatDistanceToNow } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
+import { FeedPostCard, type FeedPostCardPost } from '@/components/posts/FeedPostCard';
 import { PostViewModal } from '@/components/PostViewModal';
-import { PostCollaboratorByline } from '@/components/PostCollaboratorByline';
-import { EditPostDialog } from '@/components/EditPostDialog';
-import { PostExtras } from '@/components/PostExtras';
-import { PostLikesDialog } from '@/components/PostLikesDialog';
-import { SharePostDialog } from '@/components/SharePostDialog';
-import { CommentsSection } from '@/components/CommentsSection';
-import { PostViewsDialog } from '@/components/PostViewsDialog';
-import { RepostButton } from '@/components/RepostButton';
-import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -46,18 +30,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
-import { PollDisplay, parsePollFromContent } from '@/components/PollDisplay';
-import { PostMusicCard } from '@/components/PostMusicCard';
-import { RichText } from '@/components/RichText';
+import { parsePollFromContent } from '@/components/PollDisplay';
 import { useToast } from '@/hooks/use-toast';
+import { useRealtimePostCounts } from '@/hooks/useRealtimePostCounts';
 import { db } from '@/lib/db';
 import {
   formatCompactCount,
   parseLocationFromContent,
   parseMusicFromContent,
-  resolvePostMusic,
 } from '@/lib/postMarkers';
 
 interface PostProfile {
@@ -103,7 +84,17 @@ interface ProfilePostsGridProps {
 type ViewMode = 'feed' | 'grid';
 type SortMode = 'newest' | 'oldest' | 'most_viewed' | 'least_viewed';
 
-const DATE_LOCALES = { uz, ru, en: enUS } as const;
+/** Home bilan aynan bir xil vaqt ko‘rinishi. */
+function formatFeedPostTime(dateString: string) {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+
+  if (diffInHours < 24) {
+    return formatDistanceToNow(date, { addSuffix: false }) + ' ago';
+  }
+  return format(date, 'MMM d');
+}
 
 function GridSkeleton() {
   return (
@@ -121,7 +112,7 @@ function GridSkeleton() {
 
 function FeedSkeleton() {
   return (
-    <div className="mx-auto max-w-[640px] space-y-4 md:space-y-6">
+    <div className="relative left-1/2 w-[calc(100vw-24px)] max-w-[640px] -translate-x-1/2 space-y-4 sm:left-auto sm:mx-auto sm:w-full sm:translate-x-0 md:space-y-6">
       {Array.from({ length: 3 }).map((_, idx) => (
         <div
           key={idx}
@@ -156,16 +147,12 @@ export function ProfilePostsGrid({
   onPin,
   isLoading = false,
 }: ProfilePostsGridProps) {
-  const { t, i18n } = useTranslation();
-  const { user } = useAuth();
+  const { t } = useTranslation();
+  const { user, profile: authProfile } = useAuth();
   const { toast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('feed');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  const [editPost, setEditPost] = useState<{ id: string; content: string | null } | null>(null);
-  const [openCommentsPostId, setOpenCommentsPostId] = useState<string | null>(null);
-  const [likesPostId, setLikesPostId] = useState<string | null>(null);
-  const [sharePostId, setSharePostId] = useState<string | null>(null);
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(
     () => new Set(posts.filter((post) => post.is_bookmarked).map((post) => post.id)),
   );
@@ -179,9 +166,6 @@ export function ProfilePostsGrid({
       return next;
     });
   }, [posts]);
-
-  const dateLocale =
-    DATE_LOCALES[(i18n.language?.split('-')[0] as keyof typeof DATE_LOCALES) || 'uz'] || uz;
 
   const sortLabels: Record<SortMode, string> = {
     newest: t('profile.sort.newest', { defaultValue: 'Yangidan eskiga' }),
@@ -203,7 +187,7 @@ export function ProfilePostsGrid({
     const time = (post: Post) => new Date(post.created_at).getTime();
 
     list.sort((a, b) => {
-      if (!!a.is_pinned !== !!b.is_pinned) return a.is_pinned ? -1 : 1;
+      if (Boolean(a.is_pinned) !== Boolean(b.is_pinned)) return a.is_pinned ? -1 : 1;
 
       switch (sortMode) {
         case 'oldest':
@@ -221,28 +205,8 @@ export function ProfilePostsGrid({
     return list;
   }, [posts, sortMode]);
 
-  const relativeTime = (value: string) => {
-    try {
-      return formatDistanceToNow(new Date(value), { addSuffix: true, locale: dateLocale });
-    } catch {
-      return '';
-    }
-  };
-
-  const openPost = (post: Post) => setSelectedPost(post);
-
-  const copyPostLink = async (postId: string) => {
-    try {
-      await navigator.clipboard.writeText(`${window.location.origin}/post/${postId}`);
-      toast({ title: t('post.share.copied', { defaultValue: 'Havola nusxalandi' }) });
-    } catch {
-      toast({
-        title: t('common.error', { defaultValue: 'Xatolik' }),
-        description: t('post.share.copyFailed', { defaultValue: 'Havolani nusxalab bo‘lmadi' }),
-        variant: 'destructive',
-      });
-    }
-  };
+  const postIds = useMemo(() => sortedPosts.map((post) => post.id), [sortedPosts]);
+  const { getPostCounts } = useRealtimePostCounts(postIds, user?.id || null);
 
   const toggleBookmark = async (postId: string) => {
     if (!user?.id) {
@@ -356,13 +320,13 @@ export function ProfilePostsGrid({
             const hasMedia = mediaUrls.length > 0;
             const isVideo = post.media_type === 'video';
             const isCarousel = mediaUrls.length > 1;
-            const isAudio = post.media_type === 'audio' || (!hasMedia && !!music);
+            const isAudio = post.media_type === 'audio' || (!hasMedia && Boolean(music));
 
             return (
               <button
                 key={post.id}
                 type="button"
-                onClick={() => openPost(post)}
+                onClick={() => setSelectedPost(post)}
                 className="group relative aspect-square overflow-hidden rounded-2xl border border-border/60 bg-muted text-left outline-none ring-ring/40 transition-[box-shadow,transform] hover:shadow-md focus-visible:ring-2"
               >
                 {hasMedia ? (
@@ -385,7 +349,8 @@ export function ProfilePostsGrid({
                         src={mediaUrls[0]}
                         alt=""
                         loading="lazy"
-                        className="relative h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.025]"
+                        draggable={false}
+                        className="relative h-full w-full select-none object-contain transition-transform duration-300 group-hover:scale-[1.025]"
                         onError={(event) => {
                           event.currentTarget.src = '/placeholder.svg';
                         }}
@@ -469,223 +434,44 @@ export function ProfilePostsGrid({
           })}
         </div>
       ) : (
-        <div className="mx-auto max-w-[640px] space-y-4 md:space-y-6">
+        <div className="relative left-1/2 w-[calc(100vw-24px)] max-w-[640px] -translate-x-1/2 space-y-4 sm:left-auto sm:mx-auto sm:w-full sm:translate-x-0 md:space-y-6">
           {sortedPosts.map((post) => {
-            const poll = parsePollFromContent(post.content || '');
-            const location = parseLocationFromContent(poll.cleanContent);
-            const music = parseMusicFromContent(location.cleanContent);
-            const resolvedMusic = resolvePostMusic({
-              contentMusic: music.music,
-              formattedContent: post.formatted_content,
-              mediaUrls: post.media_urls,
-              mediaType: post.media_type,
-            });
-            const hasStructuredPoll = Boolean(post.has_poll) || post.post_kind === 'poll';
-            const author = post.profile || profile;
-            const postUserId = post.user_id || post.profile?.id || profile.id || '';
+            const author = post.profile || {
+              ...profile,
+              is_verified:
+                profile.is_verified ?? (isOwnProfile ? Boolean(authProfile?.is_verified) : false),
+            };
+            const postUserId = post.user_id || post.profile?.id || (isOwnProfile ? user?.id : null) || '';
             const isBookmarked = bookmarkedIds.has(post.id);
-            const showComments = openCommentsPostId === post.id;
+            const canonicalPost: FeedPostCardPost = {
+              ...post,
+              user_id: postUserId,
+              media_urls: post.media_urls ?? [],
+              media_type: post.media_type ?? 'image',
+              shares_count: post.shares_count ?? 0,
+              views_count: post.views_count ?? 0,
+              is_bookmarked: isBookmarked,
+              profile: {
+                id: author.id || postUserId,
+                username: author.username,
+                display_name: author.display_name,
+                avatar_url: author.avatar_url,
+                is_verified: Boolean(author.is_verified),
+              },
+            };
 
             return (
-              <article
+              <FeedPostCard
                 key={post.id}
-                className="overflow-hidden rounded-2xl border border-border/70 bg-card/95 shadow-sm transition-[box-shadow,border-color] duration-200 hover:border-border hover:shadow-md md:rounded-3xl"
-              >
-                <div className="flex items-center justify-between p-4 md:p-5">
-                  <div className="flex min-w-0 items-center gap-2.5 md:gap-3">
-                    <Avatar className="h-10 w-10">
-                      <AvatarImage src={author.avatar_url || ''} />
-                      <AvatarFallback>
-                        {(author.display_name || author.username || 'U')[0].toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0">
-                      <div className="flex min-w-0 flex-wrap items-center gap-1">
-                        <span className="truncate text-sm font-semibold">
-                          {author.display_name || author.username || t('profile.user')}
-                        </span>
-                        {author.is_verified && <VerifiedBadge size="xs" />}
-                        <PostCollaboratorByline postId={post.id} isOwner={isOwnProfile} />
-                      </div>
-                      <p className="text-[11px] text-muted-foreground md:text-xs">
-                        @{author.username || 'user'} · {relativeTime(post.created_at)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-foreground md:h-9 md:w-9"
-                        aria-label={t('common.more', { defaultValue: 'Ko‘proq' })}
-                      >
-                        <MoreHorizontal className="h-4 w-4 md:h-5 md:w-5" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56">
-                      {isOwnProfile && (
-                        <>
-                          <DropdownMenuItem onClick={() => setEditPost({ id: post.id, content: post.content })}>
-                            <Pencil className="mr-2 h-4 w-4" />
-                            {t('post.edit', { defaultValue: 'Postni tahrirlash' })}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => void onPin(post.id)}>
-                            <Pin className="mr-2 h-4 w-4" />
-                            {post.is_pinned
-                              ? t('post.unpin', { defaultValue: 'Mahkamlashni bekor qilish' })
-                              : t('post.pin', { defaultValue: 'Profilga mahkamlash' })}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                        </>
-                      )}
-                      <DropdownMenuItem onClick={() => void copyPostLink(post.id)}>
-                        <Copy className="mr-2 h-4 w-4" />
-                        {t('post.copyLink', { defaultValue: 'Havolani nusxalash' })}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setSharePostId(post.id)}>
-                        <Share2 className="mr-2 h-4 w-4" />
-                        {t('common.share', { defaultValue: 'Ulashish' })}
-                      </DropdownMenuItem>
-                      {isOwnProfile && (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => void onDelete(post.id)}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            {t('post.delete', { defaultValue: 'O‘chirish' })}
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-
-                {music.cleanContent && (
-                  <div className="px-4 pb-3 md:px-5 md:pb-4">
-                    <RichText
-                      content={music.cleanContent}
-                      formattedContent={post.formatted_content}
-                      className="text-sm leading-relaxed"
-                    />
-                  </div>
-                )}
-
-                {resolvedMusic && (
-                  <div className="px-4 pb-3 md:px-5 md:pb-4">
-                    <PostMusicCard music={resolvedMusic} />
-                  </div>
-                )}
-
-                {poll.pollData && !hasStructuredPoll && (
-                  <div className="px-4 pb-3 md:px-5 md:pb-4">
-                    <PollDisplay postId={post.id} pollData={poll.pollData} />
-                  </div>
-                )}
-
-                <PostExtras
-                  postId={post.id}
-                  hasPoll={hasStructuredPoll}
-                  isOwner={isOwnProfile && postUserId === user?.id}
-                  legacyMediaUrls={post.media_urls}
-                  legacyMediaType={post.media_type}
-                  legacyLocation={location.location}
-                  legacyLocationLabel={location.labelOnly}
-                  className="px-4 pb-4 md:px-5"
-                />
-
-                <div className="flex items-center justify-between border-t border-border/70 p-4 md:px-5">
-                  <div className="flex items-center gap-3 md:gap-4">
-                    <div className="flex items-center gap-1.5 md:gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void onLike(post.id)}
-                        className={cn(
-                          'transition-colors touch-feedback',
-                          post.is_liked ? 'text-red-500' : 'text-muted-foreground hover:text-red-500',
-                        )}
-                        aria-label={t('post.like', { defaultValue: 'Yoqtirish' })}
-                      >
-                        <Heart className={cn('h-5 w-5', post.is_liked && 'fill-current')} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setLikesPostId(post.id)}
-                        className={cn(
-                          'text-xs font-medium hover:underline md:text-sm',
-                          post.is_liked ? 'text-red-500' : 'text-muted-foreground',
-                        )}
-                      >
-                        {formatCompactCount(post.likes_count)}
-                      </button>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setOpenCommentsPostId(showComments ? null : post.id)}
-                      className={cn(
-                        'flex items-center gap-1.5 transition-colors touch-feedback md:gap-2',
-                        showComments ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
-                      )}
-                    >
-                      <MessageCircle className={cn('h-5 w-5', showComments && 'fill-current')} />
-                      <span className="text-xs font-medium md:text-sm">
-                        {formatCompactCount(post.comments_count)}
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setSharePostId(post.id)}
-                      className="flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground touch-feedback md:gap-2"
-                    >
-                      <Share2 className="h-5 w-5" />
-                      <span className="text-xs font-medium md:text-sm">
-                        {formatCompactCount(post.shares_count)}
-                      </span>
-                    </button>
-
-                    {postUserId && (
-                      <RepostButton
-                        postId={post.id}
-                        postUserId={postUserId}
-                        initialCount={post.reposts_count || 0}
-                        size="sm"
-                      />
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <PostViewsDialog
-                      postId={post.id}
-                      viewsCount={post.views_count || 0}
-                      iconClassName="h-5 w-5"
-                      textClassName="text-xs md:text-sm"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => void toggleBookmark(post.id)}
-                      aria-pressed={isBookmarked}
-                      aria-label={
-                        isBookmarked
-                          ? t('post.unsave', { defaultValue: 'Saqlanganlardan olib tashlash' })
-                          : t('post.save', { defaultValue: 'Postni saqlash' })
-                      }
-                      className={cn(
-                        'transition-colors touch-feedback',
-                        isBookmarked ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
-                      )}
-                    >
-                      <Bookmark className={cn('h-5 w-5', isBookmarked && 'fill-current')} />
-                    </button>
-                  </div>
-                </div>
-
-                {showComments && <CommentsSection postId={post.id} />}
-              </article>
+                post={canonicalPost}
+                onLike={() => void onLike(post.id)}
+                formatTime={formatFeedPostTime}
+                realtimeCounts={getPostCounts(post.id)}
+                onDelete={() => void onDelete(post.id)}
+                onPin={() => void onPin(post.id)}
+                onBookmark={() => toggleBookmark(post.id)}
+                isOwner={isOwnProfile && postUserId === user?.id}
+              />
             );
           })}
         </div>
@@ -695,37 +481,10 @@ export function ProfilePostsGrid({
         <PostViewModal
           post={selectedPost}
           profile={selectedPost.profile || profile}
-          open={!!selectedPost}
+          open={Boolean(selectedPost)}
           onOpenChange={(open) => !open && setSelectedPost(null)}
           onLike={() => void onLike(selectedPost.id)}
           isOwnProfile={isOwnProfile}
-        />
-      )}
-
-      {likesPostId && (
-        <PostLikesDialog
-          postId={likesPostId}
-          open={!!likesPostId}
-          onOpenChange={(open) => !open && setLikesPostId(null)}
-          likesCount={posts.find((post) => post.id === likesPostId)?.likes_count || 0}
-        />
-      )}
-
-      {sharePostId && (
-        <SharePostDialog
-          open={!!sharePostId}
-          onOpenChange={(open) => !open && setSharePostId(null)}
-          postId={sharePostId}
-          postContent={posts.find((post) => post.id === sharePostId)?.content || undefined}
-        />
-      )}
-
-      {editPost && (
-        <EditPostDialog
-          postId={editPost.id}
-          open={!!editPost}
-          onOpenChange={(open) => !open && setEditPost(null)}
-          initialContent={editPost.content || ''}
         />
       )}
     </div>

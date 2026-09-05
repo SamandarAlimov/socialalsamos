@@ -20,14 +20,14 @@ import type { LegacyPostLocation, PostMusic } from '@/lib/postMarkers';
 
 interface PostExtrasProps {
   postId: string;
-  /** `posts.has_poll` — keraksiz so\u2018rovlarni oldini oladi. */
+  /** `posts.has_poll` — keraksiz so‘rovlarni oldini oladi. */
   hasPoll?: boolean;
-  /** Post egasi bo\u2018lsa live joylashuvni to\u2018xtatish tugmasi chiqadi. */
+  /** Post egasi bo‘lsa live joylashuvni to‘xtatish tugmasi chiqadi. */
   isOwner?: boolean;
   /**
    * Eski sxemadagi fayllar (`posts.media_urls`).
-   * `post_media` bo\u2018sh bo\u2018lganda faqat shu ishlatiladi — shu tariqa eski
-   * postlar ham ko\u2018rinadi, yangi postlar esa ikki marta chizilmaydi.
+   * `post_media` bo‘sh bo‘lganda faqat shu ishlatiladi — shu tariqa eski
+   * postlar ham ko‘rinadi, yangi postlar esa ikki marta chizilmaydi.
    */
   legacyMediaUrls?: string[] | null;
   legacyMediaType?: string | null;
@@ -35,7 +35,7 @@ interface PostExtrasProps {
   legacyLocation?: LegacyPostLocation | null;
   /** Koordinatasiz eski joylashuv (masalan "Joriy joylashuv") — nom bilan karta chiziladi. */
   legacyLocationLabel?: string | null;
-  /** `[MUSIC]{...}` markeridan olingan musiqa — `post_music` bo\u2018lmasa ishlatiladi. */
+  /** `[MUSIC]{...}` markeridan olingan musiqa — `post_music` bo‘lmasa ishlatiladi. */
   legacyMusic?: PostMusic | null;
   className?: string;
 }
@@ -56,7 +56,7 @@ function AudioCard({ item }: { item: PostMediaItem }) {
   );
 }
 
-/** Koordinatasi yo\u2018q eski joylashuv uchun karta (xarita rasmi bo\u2018lmaydi). */
+/** Koordinatasi yo‘q eski joylashuv uchun karta (xarita rasmi bo‘lmaydi). */
 function PlaceLabelCard({ label }: { label: string }) {
   return (
     <Link
@@ -78,12 +78,18 @@ function PlaceLabelCard({ label }: { label: string }) {
 }
 
 /**
- * Lentadagi post ostiga qo\u2018shiladigan strukturali kontent bloki:
- * fayllar galereyasi (har qanday tur), stikerlar, musiqa, so\u2018rovnoma va joylashuv.
+ * Lentadagi post ostiga qo‘shiladigan strukturali kontent bloki:
+ * fayllar galereyasi (har qanday tur), stikerlar, musiqa, so‘rovnoma va joylashuv.
  *
  * Bu blok postning matnidan mustaqil — shuning uchun eski postlar ham
- * buzilmaydi: `post_media` bo\u2018sh bo\u2018lsa eski `media_urls` ishlatiladi,
- * `post_music` bo\u2018sh bo\u2018lsa content markeridagi musiqa ko\u2018rsatiladi.
+ * buzilmaydi: `post_media` bo‘sh bo‘lsa eski `media_urls` ishlatiladi,
+ * `post_music` bo‘sh bo‘lsa content markeridagi musiqa ko‘rsatiladi.
+ *
+ * Home va Profile feed cardlari standart `px-4 md:px-5` ichki gutter bilan
+ * ishlaydi. Visual media shu gutterdan chiqib, cardning o‘z chap/o‘ng chetiga
+ * yetadi; audio/document/poll/location kabi matnli bloklar esa o‘qish uchun
+ * ichki paddingda qoladi. Bu Instagram uslubidagi media-first kompozitsiyani
+ * cardning premium border/radiusini saqlagan holda beradi.
  */
 export function PostExtras({
   postId,
@@ -130,7 +136,6 @@ export function PostExtras({
     };
   }, [legacyMediaUrls]);
 
-
   const fallbackLocation: PostLocation | null = legacyLocation
     ? {
         id: 'legacy-location:' + postId,
@@ -159,9 +164,9 @@ export function PostExtras({
   const labelOnlyLocation =
     !displayLocation && legacyLocationLabel ? legacyLocationLabel : null;
 
-  // Strukturali musiqa ustun; bo\u2018lmasa content markeridagi musiqa chiziladi.
-  // MUHIM: ilgari `playback_url` bo\u2018lmasa karta umuman chizilmasdi. Signed URL
-  // olinmagan holatlarda ham trekning o\u2018z `audio_url` i bilan ijro qilinadi.
+  // Strukturali musiqa ustun; bo‘lmasa content markeridagi musiqa chiziladi.
+  // MUHIM: ilgari `playback_url` bo‘lmasa karta umuman chizilmasdi. Signed URL
+  // olinmagan holatlarda ham trekning o‘z `audio_url` i bilan ijro qilinadi.
   const structuredAudioUrl = music?.playback_url ?? music?.track?.audio_url ?? null;
   const structuredMusic: PostMusic | null =
     music?.track && structuredAudioUrl
@@ -215,23 +220,36 @@ export function PostExtras({
     Boolean(hasPoll);
   if (!hasAnything) return null;
 
+  // HomePage va ProfilePostsGrid ikkalasi PostExtras'ga aynan shu standard
+  // gutterlarni beradi. Faqat shunday card konteksida visual media bleed qiladi;
+  // boshqa chaqiruvchilar bo'lsa ularning layouti o'zgarmaydi.
+  const hasStandardCardGutter =
+    Boolean(className?.split(/\s+/).includes('px-4')) &&
+    Boolean(className?.split(/\s+/).includes('md:px-5'));
+  const visualBleedClass = hasStandardCardGutter ? '-mx-4 md:-mx-5' : undefined;
+  const visualFrameClass = hasStandardCardGutter
+    ? 'overflow-hidden border-y border-border/60'
+    : 'overflow-hidden rounded-2xl border border-border/60';
+
   return (
     <div className={cn('space-y-3', className)}>
       {/* Legacy posts.media_urls ham unified media renderer orqali. */}
       {legacyItems.filter((item) => item.kind === 'image' || item.kind === 'video').length > 0 && (
-        <PostMediaCarousel
-          mediaUrls={legacyItems
-            .filter((item) => item.kind === 'image' || item.kind === 'video')
-            .map((item) => item.url)}
-          mediaType={
-            legacyItems.some((item) => item.kind === 'video')
-              ? 'mixed'
-              : legacyMediaType || 'image'
-          }
-          mediaKinds={legacyItems
-            .filter((item) => item.kind === 'image' || item.kind === 'video')
-            .map((item) => item.kind as 'image' | 'video')}
-        />
+        <div className={cn(visualBleedClass, hasStandardCardGutter && 'border-y border-border/60')}>
+          <PostMediaCarousel
+            mediaUrls={legacyItems
+              .filter((item) => item.kind === 'image' || item.kind === 'video')
+              .map((item) => item.url)}
+            mediaType={
+              legacyItems.some((item) => item.kind === 'video')
+                ? 'mixed'
+                : legacyMediaType || 'image'
+            }
+            mediaKinds={legacyItems
+              .filter((item) => item.kind === 'image' || item.kind === 'video')
+              .map((item) => item.kind as 'image' | 'video')}
+          />
+        </div>
       )}
 
       {legacyItems
@@ -263,7 +281,7 @@ export function PostExtras({
       {/* Structured rasm/video ham legacy media bilan bir xil premium frame.
           Bitta asosiy media ko'rinadi; ko'p media swipe/arrows/dots bilan almashadi. */}
       {visuals.length > 0 && (
-        <div className="overflow-hidden rounded-2xl border border-border/60">
+        <div className={cn(visualFrameClass, visualBleedClass)}>
           <PostMediaCarousel
             mediaUrls={visuals.map((item) => item.storage_url)}
             mediaType={visuals.some((item) => item.kind === 'video') ? 'mixed' : 'image'}
@@ -305,7 +323,7 @@ export function PostExtras({
         />
       )}
 
-      {/* So\u2018rovnoma */}
+      {/* So‘rovnoma */}
       {hasPoll && <PollCard postId={postId} />}
 
       {/* Joylashuv */}
@@ -316,7 +334,7 @@ export function PostExtras({
         />
       )}
 
-      {/* Koordinatasi yo\u2018q eski joylashuv */}
+      {/* Koordinatasi yo‘q eski joylashuv */}
       {labelOnlyLocation && <PlaceLabelCard label={labelOnlyLocation} />}
     </div>
   );
