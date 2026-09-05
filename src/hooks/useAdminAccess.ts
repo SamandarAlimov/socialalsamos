@@ -20,9 +20,6 @@ export function useAdminAccess() {
 
     setIsLoading(true);
     try {
-      // Prefer normalized RBAC. All calls are best-effort so deployments that
-      // have not received the RBAC migration yet keep working through legacy
-      // user_roles instead of locking founders out of the console.
       const [staffResult, assignmentResult, legacyResult] = await Promise.all([
         (supabase as any).rpc('is_admin_staff', { _user_id: user.id }),
         (supabase as any)
@@ -65,9 +62,6 @@ export function useAdminAccess() {
       setIsAdmin(staff);
     } catch (err) {
       console.error('Error checking admin status:', err);
-
-      // Last-resort compatibility query. This path matters during staged DB
-      // migrations and should disappear only after legacy user_roles retires.
       try {
         const { data } = await supabase
           .from('user_roles')
@@ -103,20 +97,32 @@ export function useAdminAccess() {
     return roles[0] || null;
   }, [roles]);
 
-  const grantAdminRole = useCallback(async (userId: string) => {
+  const grantRole = useCallback(async (userId: string, roleKey: string) => {
     if (!user || !isAdmin || !hasPermission('admin.roles.manage')) return { error: 'Not authorized' };
 
-    // New RBAC first. Founders/super admins can grant super_admin explicitly
-    // through the dedicated team UI later; this compatibility action grants a
-    // platform admin role without silently elevating beyond the caller's intent.
-    const v2 = await (supabase as any).rpc('grant_admin_role_v2', {
+    const result = await (supabase as any).rpc('grant_admin_role_v2', {
       p_target_user_id: userId,
-      p_role_key: 'super_admin',
+      p_role_key: roleKey,
     });
-    if (!v2?.error) {
-      await refreshAccess();
-      return { error: undefined };
-    }
+    if (result?.error) return { error: result.error.message || String(result.error) };
+    return { error: undefined };
+  }, [hasPermission, isAdmin, user]);
+
+  const revokeRole = useCallback(async (userId: string, roleKey: string) => {
+    if (!user || !isAdmin || !hasPermission('admin.roles.manage')) return { error: 'Not authorized' };
+
+    const result = await (supabase as any).rpc('revoke_admin_role_v2', {
+      p_target_user_id: userId,
+      p_role_key: roleKey,
+    });
+    if (result?.error) return { error: result.error.message || String(result.error) };
+    return { error: undefined };
+  }, [hasPermission, isAdmin, user]);
+
+  // Compatibility helpers used by the old Admin Team screen. They intentionally
+  // stay on legacy `admin` and never silently promote somebody to super_admin.
+  const grantAdminRole = useCallback(async (userId: string) => {
+    if (!user || !isAdmin || !hasPermission('admin.roles.manage')) return { error: 'Not authorized' };
 
     const { error } = await supabase
       .from('user_roles')
@@ -127,13 +133,11 @@ export function useAdminAccess() {
       });
 
     return { error: error?.message };
-  }, [hasPermission, isAdmin, refreshAccess, user]);
+  }, [hasPermission, isAdmin, user]);
 
   const revokeAdminRole = useCallback(async (userId: string) => {
     if (!user || !isAdmin || !hasPermission('admin.roles.manage')) return { error: 'Not authorized' };
 
-    // Existing team UI historically manages legacy admins. Keep that behavior
-    // as a fallback while role-specific revoke UI is introduced.
     const { error } = await supabase
       .from('user_roles')
       .delete()
@@ -151,6 +155,8 @@ export function useAdminAccess() {
     primaryRole,
     hasPermission,
     refreshAccess,
+    grantRole,
+    revokeRole,
     grantAdminRole,
     revokeAdminRole,
   };
