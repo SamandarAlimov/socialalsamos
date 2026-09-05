@@ -12,12 +12,15 @@ type ActiveSlot = {
   index: number;
 };
 
+const VIDEO_RETRY_ORGANIC_GAP = 6;
+
 export function VideoAdsSurface() {
   const { ads, trackImpression, trackClick } = useActiveAds('feed', 3);
   const [activeIndex, setActiveIndex] = useState(0);
   const [muted, setMuted] = useState(true);
   const [slot, setSlot] = useState<ActiveSlot | null>(null);
   const lastEvaluatedIndexRef = useRef(-1);
+  const lastAttemptedIndexRef = useRef(-100);
 
   useEffect(() => {
     let cleanupScroll: (() => void) | null = null;
@@ -58,9 +61,14 @@ export function VideoAdsSurface() {
     if (!ads.length || lastEvaluatedIndexRef.current === activeIndex) return;
     lastEvaluatedIndexRef.current = activeIndex;
 
+    // If somebody swipes past an ad before its impression threshold, do not
+    // chase them with the same ad on every following reel.
+    if (activeIndex - lastAttemptedIndexRef.current < VIDEO_RETRY_ORGANIC_GAP) return;
+
     const candidate = ads[Math.abs(activeIndex) % ads.length];
     if (!candidate || !canShowVideoAd(activeIndex, candidate.id)) return;
 
+    lastAttemptedIndexRef.current = activeIndex;
     setSlot({ ad: candidate, index: activeIndex });
   }, [activeIndex, ads, slot]);
 
