@@ -6,13 +6,14 @@ import {
   makeAlsamosMediaReference,
   parseAlsamosMediaReference,
 } from '@/lib/mediaRefs';
+import { uniqueMediaCandidates } from '@/lib/mediaRecovery';
 
 /**
  * Alsamos media arxitekturasi.
  *
- * Yangi fayllar Supabase Storage'ga emas, api.alsamos.com orqali katta
- * MinIO/S3 serveriga yuklanadi. Supabase faqat eski fayllarni o'qish va
- * favqulodda, ALOHIDA yoqiladigan fallback uchun qoladi.
+ * Yangi binary fayllar faqat api.alsamos.com orqali alohida MinIO/S3 media
+ * serveriga yoziladi. Supabase Storage bu modulda faqat tarixiy obyektlarni
+ * o'qish/sign qilish uchun qoladi; yangi upload uchun yashirin fallback yo'q.
  */
 
 /** Eski Supabase Storage bucketlari — faqat legacy compatibility uchun. */
@@ -26,8 +27,6 @@ const EXTERNAL_API = String(
 const EXTERNAL_MEDIA_PUBLIC_BASE = String(
   import.meta.env.VITE_MEDIA_PUBLIC_BASE_URL || 'https://media.alsamos.com/media',
 ).replace(/\/+$/, '');
-const ALLOW_SUPABASE_FALLBACK =
-  String(import.meta.env.VITE_MEDIA_ALLOW_SUPABASE_FALLBACK || '').toLowerCase() === 'true';
 
 function canUseSameOriginApiProxy(): boolean {
   if (typeof window === 'undefined') return false;
@@ -133,6 +132,10 @@ function isCurrentSupabaseAbsoluteUrl(value: string): boolean {
   }
 }
 
+function isBrowserMediaUrl(value: string): boolean {
+  return /^(https?:|blob:|data:)/i.test(value);
+}
+
 function bucketForChatMediaType(mediaType?: string | null): string {
   if (mediaType === 'voice' || mediaType === 'audio') return 'chat-audio';
   if (mediaType === 'video' || mediaType === 'video_note') return 'chat-video';
@@ -164,6 +167,20 @@ async function signExternalMediaKey(key: string): Promise<string> {
   const body = (await response.json()) as { url?: string };
   if (!body.url) throw new Error('Media server vaqtinchalik havola qaytarmadi');
   return body.url;
+}
+
+async function tryCreateSignedSupabaseUrl(
+  bucket: string,
+  key: string,
+  expiresIn: number,
+): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(key, expiresIn);
+    if (error || !data?.signedUrl) return null;
+    return data.signedUrl;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -228,6 +245,71 @@ export async function resolveStorageUrl(
   return data.signedUrl;
 }
 
+/**
+ * Bitta tarixiy media yozuvi uchun o'qish kandidatlarini qaytaradi. Muhim
+ * farq: public URL 404/403 bo'lishi obyekt o'chganini anglatmaydi — bucket
+ * keyinchalik private bo'lgan bo'lishi mumkin. Current Supabase projectdagi
+ * eski bucketlar uchun shu object key'ga yangi signed URL ham tayyorlanadi.
+ * Foreign project URL'lari esa o'zgartirilmaydi, chunki ularni sign qilish
+ * vakolati bu clientda yo'q.
+ */
+export async function resolveStorageUrlCandidates(
+  value: string,
+  bucket?: string | null,
+  key?: string | null,
+  expiresIn = 3600,
+): Promise<string[]> {
+  if (!value) return [];
+
+  if (isAlsamosPublicMediaUrl(value) || parseAlsamosMediaReference(value)) {
+    try {
+      return uniqueMediaCandidates([await resolveStorageUrl(value, bucket, key, expiresIn), value]);
+    } catch {
+      return isBrowserMediaUrl(value) ? [value] : [];
+    }
+  }
+
+  const stableReference = parseStorageReference(value);
+  const absoluteReference = parseSupabaseStorageUrl(value);
+  const hasExplicitObject = Boolean(bucket && key);
+  const parsed =
+    bucket && key
+      ? { bucket, key }
+      : stableReference ?? absoluteReference;
+
+  if (!parsed) return isBrowserMediaUrl(value) ? [value] : [];
+
+  const isForeignAbsolute =
+    Boolean(absoluteReference) &&
+    !hasExplicitObject &&
+    !stableReference &&
+    !isCurrentSupabaseAbsoluteUrl(value);
+  if (isForeignAbsolute) {
+    return isBrowserMediaUrl(value) ? [value] : [];
+  }
+
+  const raw = isBrowserMediaUrl(value) ? value : null;
+  const publicUrl = supabase.storage.from(parsed.bucket).getPublicUrl(parsed.key).data.publicUrl;
+
+  // Canonical public `media` bucket does not need a signing round-trip.
+  if (PUBLIC_BUCKETS.has(parsed.bucket) && !absoluteReference) {
+    return uniqueMediaCandidates([publicUrl, raw]);
+  }
+  if (PUBLIC_BUCKETS.has(parsed.bucket) && absoluteReference?.access === 'public') {
+    return uniqueMediaCandidates([raw, publicUrl]);
+  }
+
+  const signedUrl = await tryCreateSignedSupabaseUrl(parsed.bucket, parsed.key, expiresIn);
+
+  if (absoluteReference?.access === 'public') {
+    // Eski public bucket private'ga aylantirilgan bo'lsa fresh signed URL
+    // obyektni saqlab qoladi. Sign muvaffaqiyatsiz bo'lsa raw URL qoladi.
+    return uniqueMediaCandidates([signedUrl, raw, publicUrl]);
+  }
+
+  return uniqueMediaCandidates([signedUrl, raw, publicUrl]);
+}
+
 export interface ChatMediaSource {
   media_url?: string | null;
   media_type?: string | null;
@@ -255,9 +337,10 @@ export async function resolveChatMessageMediaUrl<T extends ChatMediaSource>(mess
         bucket === EXTERNAL_MEDIA_BUCKET
           ? makeAlsamosMediaReference(mediaPath)
           : makeStorageReference(bucket, mediaPath);
+      const candidates = await resolveStorageUrlCandidates(stable, bucket, mediaPath);
       return {
         ...message,
-        media_url: await resolveStorageUrl(stable, bucket, mediaPath),
+        media_url: candidates[0] ?? mediaUrl,
       };
     }
 
@@ -267,7 +350,8 @@ export async function resolveChatMessageMediaUrl<T extends ChatMediaSource>(mess
       parseSupabaseStorageUrl(mediaUrl) ||
       isAlsamosPublicMediaUrl(mediaUrl)
     ) {
-      return { ...message, media_url: await resolveStorageUrl(mediaUrl) };
+      const candidates = await resolveStorageUrlCandidates(mediaUrl);
+      return { ...message, media_url: candidates[0] ?? mediaUrl };
     }
   } catch (error) {
     console.warn('Chat media URL resolve failed:', error);
@@ -317,74 +401,6 @@ async function readError(response: Response, fallback: string): Promise<string> 
   }
 }
 
-/** Fayl nomini xavfsiz, ASCII ko'rinishga keltirish — faqat legacy fallback uchun. */
-function safeFileName(name: string): string {
-  const cleaned = name
-    .normalize('NFKD')
-    .replace(/[^a-zA-Z0-9._-]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^[-.]+|[-.]+$/g, '')
-    .toLowerCase();
-  return cleaned.slice(-80) || 'file';
-}
-
-function randomId(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID().slice(0, 8);
-  }
-  return Math.random().toString(36).slice(2, 10);
-}
-
-/**
- * Favqulodda Supabase fallback. Default holatda O'CHIQ — storage limitini
- * tasodifan to'ldirib yubormaslik uchun faqat env bilan ataylab yoqiladi.
- */
-async function uploadToStorage(
-  file: File | Blob,
-  userId: string,
-  filename: string,
-  contentType: string,
-  kind: string,
-  visibility: MediaVisibility,
-): Promise<MediaUploadResult> {
-  const key = `${userId}/${kind}/${Date.now()}-${randomId()}-${safeFileName(filename)}`;
-  const bucket = bucketForMediaVisibility(visibility);
-
-  const { error } = await supabase.storage.from(bucket).upload(key, file, {
-    contentType,
-    cacheControl: '3600',
-    upsert: false,
-  });
-
-  if (error) {
-    throw new Error(`Supabase fallback ham ishlamadi: ${error.message}`);
-  }
-
-  const storageUrl =
-    bucket === MEDIA_BUCKET
-      ? supabase.storage.from(bucket).getPublicUrl(key).data.publicUrl
-      : makeStorageReference(bucket, key);
-
-  let url = storageUrl;
-  if (bucket === PRIVATE_MEDIA_BUCKET) {
-    try {
-      url = await resolveStorageUrl(storageUrl, bucket, key);
-    } catch (signError) {
-      console.warn('Private Supabase preview URL olinmadi:', signError);
-    }
-  }
-
-  return {
-    url,
-    storageUrl,
-    key,
-    bucket,
-    type: contentType,
-    name: filename,
-    size: file.size,
-  };
-}
-
 type ExternalPresignResponse = {
   upload_url?: string;
   method?: string;
@@ -395,7 +411,7 @@ type ExternalPresignResponse = {
   visibility?: 'public' | 'private';
 };
 
-/** Asosiy yo'l: api.alsamos.com -> MinIO/S3 katta media serveri. */
+/** Asosiy va yagona yangi-upload yo'li: api.alsamos.com -> MinIO/S3. */
 async function uploadViaExternalApi(
   file: File | Blob,
   token: string,
@@ -473,13 +489,12 @@ export async function uploadMedia(
   const { data } = await supabase.auth.getSession();
   const session = data.session;
 
-  if (!session?.access_token || !session.user?.id) {
+  if (!session?.access_token) {
     throw new Error('Sessiya topilmadi - qaytadan tizimga kiring');
   }
 
   const filename = options.filename || (file instanceof File ? file.name : 'upload.bin');
   const contentType = file.type || 'application/octet-stream';
-  const kind = options.type || 'file';
   const visibility: MediaVisibility = options.visibility ?? 'public';
 
   try {
@@ -491,21 +506,9 @@ export async function uploadMedia(
       { ...options, visibility },
     );
   } catch (error) {
-    if (!ALLOW_SUPABASE_FALLBACK) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `Media serverga yuklab bo'lmadi. Supabase Storage fallback ataylab o'chirilgan: ${message}`,
-      );
-    }
-
-    console.warn('Media API ishlamadi; explicit Supabase fallback ishlatiladi:', error);
-    return uploadToStorage(
-      file,
-      session.user.id,
-      filename,
-      contentType,
-      kind,
-      visibility,
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Alsamos media serverga yuklab bo'lmadi. Fayl Supabase Storage'ga ko'chirilmadi: ${message}`,
     );
   }
 }
