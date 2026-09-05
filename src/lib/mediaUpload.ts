@@ -35,6 +35,65 @@ export function parseStorageReference(value?: string | null): { bucket: string; 
   return { bucket: raw.slice(0, slash), key: raw.slice(slash + 1) };
 }
 
+export interface ParsedSupabaseStorageUrl {
+  bucket: string;
+  key: string;
+  access: 'public' | 'signed' | 'authenticated';
+}
+
+function safeDecodeUriComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+/**
+ * Eski post/xabarlarda to'liq Supabase Storage URL saqlangan bo'lishi mumkin.
+ * Ayniqsa `/object/sign/...` URL lar muddati tugagach media 403/404 bo'lib
+ * qoladi. URL ichidan bucket + object key ni qayta ajratib, joriy Supabase
+ * client orqali yangi public/signed URL hosil qilish uchun parser.
+ *
+ * Host ataylab tekshirilmaydi: production loyiha yoki domen o'zgargan bo'lsa
+ * ham object identifikatori (bucket/key) saqlanib qoladi.
+ */
+export function parseSupabaseStorageUrl(value?: string | null): ParsedSupabaseStorageUrl | null {
+  if (!value || value.startsWith('storage://')) return null;
+
+  const markers: Array<{ marker: string; access: ParsedSupabaseStorageUrl['access'] }> = [
+    { marker: '/storage/v1/object/public/', access: 'public' },
+    { marker: '/storage/v1/object/sign/', access: 'signed' },
+    { marker: '/storage/v1/object/authenticated/', access: 'authenticated' },
+    { marker: '/storage/v1/render/image/public/', access: 'public' },
+    { marker: '/storage/v1/render/image/sign/', access: 'signed' },
+    { marker: '/storage/v1/render/image/authenticated/', access: 'authenticated' },
+    // Ba'zi eski SDK/proxy URL larida access segmenti bo'lmagan.
+    // Maxsus markerlar yuqorida tekshirilgani uchun bu faqat fallback.
+    { marker: '/storage/v1/object/', access: 'authenticated' },
+  ];
+
+  try {
+    const parsedUrl = new URL(value, 'https://alsamos.invalid');
+    const pathname = parsedUrl.pathname;
+    const matched = markers.find(({ marker }) => pathname.includes(marker));
+    if (!matched) return null;
+
+    const index = pathname.indexOf(matched.marker);
+    const raw = pathname.slice(index + matched.marker.length);
+    const slash = raw.indexOf('/');
+    if (slash <= 0 || slash === raw.length - 1) return null;
+
+    const bucket = safeDecodeUriComponent(raw.slice(0, slash));
+    const key = safeDecodeUriComponent(raw.slice(slash + 1));
+    if (!bucket || !key) return null;
+
+    return { bucket, key, access: matched.access };
+  } catch {
+    return null;
+  }
+}
+
 function bucketForChatMediaType(mediaType?: string | null): string {
   if (mediaType === 'voice' || mediaType === 'audio') return 'chat-audio';
   if (mediaType === 'video' || mediaType === 'video_note') return 'chat-video';
@@ -48,10 +107,24 @@ export async function resolveStorageUrl(
   key?: string | null,
   expiresIn = 3600,
 ): Promise<string> {
-  const parsed = bucket && key ? { bucket, key } : parseStorageReference(value);
+  const stableReference = parseStorageReference(value);
+  const absoluteReference = parseSupabaseStorageUrl(value);
+  const parsed =
+    bucket && key
+      ? { bucket, key }
+      : stableReference ?? absoluteReference;
+
   if (!parsed) return value;
 
-  if (PUBLIC_BUCKETS.has(parsed.bucket)) {
+  // `media` canonical public bucket. Bundan tashqari eski URLning o'zi
+  // `/object/public/` bo'lgan bo'lsa, bucket nomi boshqa bo'lsa ham uni
+  // public sifatida qayta quramiz.
+  const wasPublicAbsoluteUrl =
+    absoluteReference?.access === 'public' &&
+    absoluteReference.bucket === parsed.bucket &&
+    absoluteReference.key === parsed.key;
+
+  if (PUBLIC_BUCKETS.has(parsed.bucket) || wasPublicAbsoluteUrl) {
     return supabase.storage.from(parsed.bucket).getPublicUrl(parsed.key).data.publicUrl;
   }
 
@@ -98,7 +171,7 @@ export async function resolveChatMessageMediaUrl<T extends ChatMediaSource>(mess
       };
     }
 
-    if (parseStorageReference(mediaUrl)) {
+    if (parseStorageReference(mediaUrl) || parseSupabaseStorageUrl(mediaUrl)) {
       return { ...message, media_url: await resolveStorageUrl(mediaUrl) };
     }
   } catch (error) {
