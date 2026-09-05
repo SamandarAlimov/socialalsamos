@@ -86,10 +86,11 @@ export function SharedPostPreview({ postId, isMine }: SharedPostPreviewProps) {
   const mediaUrl = post.media_urls?.[0];
   const hasMedia = Boolean(mediaUrl);
   const isVideo = post.media_type === 'video' || post.media_type === 'reel';
+  const postPath = `/post/${encodeURIComponent(post.id)}`;
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    navigate(isVideo ? `/videos?v=${post.id}` : `/home?post=${post.id}`);
+    navigate(postPath);
   };
 
   return (
@@ -100,7 +101,7 @@ export function SharedPostPreview({ postId, isMine }: SharedPostPreviewProps) {
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          navigate(isVideo ? `/videos?v=${post.id}` : `/home?post=${post.id}`);
+          navigate(postPath);
         }
       }}
       className={cn(
