@@ -16,6 +16,7 @@ const recorded = new Set<string>();
 let viewTrackingDisabled = false;
 let rpcAvailable: boolean | null = null;
 let capabilityProbeInFlight = false;
+let tableFallbackAvailable: boolean | null = null;
 
 function errorText(error: unknown): string {
   const value = error as {
@@ -102,11 +103,19 @@ export function usePostViews() {
           }
         }
 
+        if (tableFallbackAvailable === false) return;
+
         const { error: upsertError } = await supabase
           .from('post_views')
           .upsert({ post_id: postId, user_id: userId }, { onConflict: 'post_id,user_id' });
 
-        if (upsertError && isBlockedError(upsertError)) {
+        if (!upsertError) {
+          tableFallbackAvailable = true;
+          return;
+        }
+
+        if (isBlockedError(upsertError) || isMissingRpc(upsertError)) {
+          tableFallbackAvailable = false;
           viewTrackingDisabled = true;
         }
       } catch {

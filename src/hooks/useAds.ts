@@ -87,6 +87,8 @@ function isNewAdsBackendUnavailable(error: any) {
   );
 }
 
+let serverRankedAdsAvailable: boolean | null = null;
+
 async function hydrateAdvertiserProfiles(items: Ad[]): Promise<Ad[]> {
   const userIds = Array.from(new Set(items.map((item) => item.user_id).filter(Boolean)));
   if (!userIds.length) return items;
@@ -130,6 +132,8 @@ async function fetchServerRankedAds(
   sessionId: string,
   context: Record<string, unknown>,
 ) {
+  if (serverRankedAdsAvailable === false) return null;
+
   const args = {
     p_placement: placement,
     p_limit: Math.max(limit * 3, limit),
@@ -141,12 +145,16 @@ async function fetchServerRankedAds(
   // remains backwards compatible while migrations are reaching production.
   for (const rpcName of ['get_eligible_ads_v5', 'get_eligible_ads_v4', 'get_eligible_ads_v2']) {
     const result = await (supabase as any).rpc(rpcName, args);
-    if (!result?.error && Array.isArray(result?.data)) return result.data as Ad[];
+    if (!result?.error && Array.isArray(result?.data)) {
+      serverRankedAdsAvailable = true;
+      return result.data as Ad[];
+    }
     if (!isNewAdsBackendUnavailable(result?.error)) {
       console.warn(`${rpcName} failed, trying compatibility path.`, result?.error);
     }
   }
 
+  serverRankedAdsAvailable = false;
   return null;
 }
 
