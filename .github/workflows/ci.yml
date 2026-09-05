@@ -33,6 +33,9 @@ jobs:
       - name: Media regression tests
         run: npx vitest run src/lib/mediaRecovery.test.ts src/lib/mediaRefs.test.ts
 
+      - name: AI routing regression tests
+        run: npx vitest run src/lib/ai/agentClient.test.ts
+
       - name: Messages typecheck
         run: npm run typecheck:messages
 
