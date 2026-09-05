@@ -27,6 +27,7 @@ import { useProductReviews } from '@/hooks/useProductReviews';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useToast } from '@/hooks/use-toast';
 import { conditionLabel, formatPrice, getDiscount } from '@/lib/marketplace';
+import { buildMarketplaceProductUrl, type MarketplaceChatIntent } from '@/lib/marketplaceChat';
 import { cn } from '@/lib/utils';
 import { marketplaceUz } from '@/i18n/marketplace';
 import { useMarketplaceDeliveryLocation } from '@/hooks/useMarketplaceDeliveryLocation';
@@ -37,17 +38,30 @@ import { useMarketplaceDeliveryLocation } from '@/hooks/useMarketplaceDeliveryLo
 const MIN_MEDIA_RATIO = 4 / 5;   // 0.80 — eng tik ruxsat etilgan ramka
 const MAX_MEDIA_RATIO = 16 / 9;  // 1.78 — eng keng ruxsat etilgan ramka
 
+export interface ProductMessageContext {
+  intent: MarketplaceChatIntent;
+  variantId?: string;
+  variantSku?: string;
+  options: Record<string, string>;
+  quantity: number;
+  unitPrice: number;
+  imageUrl?: string;
+  productUrl: string;
+}
+
 interface ProductDetailProps {
   product: Product | null;
   onClose: () => void;
   onSellerClick?: (sellerId: string) => void;
   onBuyNow?: (product: Product) => void | Promise<void>;
   onCartChange?: () => void;
-  onMessageSeller?: (sellerId: string) => void;
+  onMessageSeller?: (sellerId: string, context: ProductMessageContext) => void;
   onProductSelect?: (product: Product) => void;
   onOpenCart?: () => void;
   onBrowseMarketplace?: () => void;
   onBrowseCategory?: (slug: string) => void;
+  initialVariantId?: string | null;
+  initialQuantity?: number;
 }
 
 export function ProductDetail({
@@ -61,6 +75,8 @@ export function ProductDetail({
   onOpenCart,
   onBrowseMarketplace,
   onBrowseCategory,
+  initialVariantId,
+  initialQuantity = 1,
 }: ProductDetailProps) {
   const { triggerHaptic } = useHapticFeedback();
   const { toggleLike, registerView } = useProductActions();
@@ -167,12 +183,21 @@ export function ProductDetail({
   useEffect(() => {
     if (variants.length === 0) {
       setSelectedOptions({});
+      const baseStock = Math.max(1, Number(product?.quantity ?? 1));
+      setQuantity(Math.min(Math.max(1, Math.floor(initialQuantity || 1)), baseStock));
       return;
     }
-    setSelectedOptions({ ...variants[0].options });
-    setQuantity(1);
+
+    const preferred =
+      (initialVariantId ? variants.find(variant => variant.id === initialVariantId) : null) ??
+      variants[0];
+    if (!preferred) return;
+
+    setSelectedOptions({ ...preferred.options });
+    const preferredStock = Math.max(1, Number(preferred.quantity ?? 1));
+    setQuantity(Math.min(Math.max(1, Math.floor(initialQuantity || 1)), preferredStock));
     setCurrentImageIndex(0);
-  }, [product?.id, variants]);
+  }, [product?.id, product?.quantity, variants, initialVariantId, initialQuantity]);
 
   useEffect(() => {
     setQuantity(q => Math.min(q, Math.max(1, selectedStock)));
@@ -298,6 +323,35 @@ export function ProductDetail({
   const deliveryFrom = format(addDays(new Date(), minDeliveryDays), 'd MMM', { locale: uz });
   const deliveryTo = format(addDays(new Date(), maxDeliveryDays), 'd MMM', { locale: uz });
 
+  const currentSelectionUrl = () => {
+    if (typeof window === 'undefined') return `/marketplace/product/${product.id}`;
+    return buildMarketplaceProductUrl(
+      `${window.location.origin}/marketplace/product/${encodeURIComponent(product.id)}`,
+      {
+        variantId: selectedVariant?.id,
+        options: selectedOptions,
+        quantity,
+      },
+    );
+  };
+
+  const buildMessageContext = (intent: MarketplaceChatIntent): ProductMessageContext => ({
+    intent,
+    variantId: selectedVariant?.id,
+    variantSku: selectedVariant?.sku || undefined,
+    options: { ...selectedOptions },
+    quantity,
+    unitPrice: displayPrice,
+    imageUrl: selectedVariant?.image_url || product.images?.[0]?.url || undefined,
+    productUrl: currentSelectionUrl(),
+  });
+
+  const openSellerConversation = (intent: MarketplaceChatIntent) => {
+    if (!product.seller || !onMessageSeller) return;
+    triggerHaptic('medium');
+    onMessageSeller(product.seller.user_id, buildMessageContext(intent));
+  };
+
   const goPrev = () => {
     if (images.length < 2) return;
     triggerHaptic('light');
@@ -398,7 +452,7 @@ export function ProductDetail({
     const shareData = {
       title: product.title,
       text: `${product.title}${selectedVariant ? ` · ${Object.values(selectedVariant.options).join(' / ')}` : ''} — ${formatPrice(displayPrice, currency)}`,
-      url: typeof window !== 'undefined' ? window.location.href : '',
+      url: currentSelectionUrl(),
     };
     try {
       if (navigator.share) await navigator.share(shareData);
@@ -1036,7 +1090,7 @@ export function ProductDetail({
                       variant="outline"
                       className="h-11 max-w-md rounded-xl"
                       disabled={!product.seller || !onMessageSeller}
-                      onClick={() => product.seller && onMessageSeller?.(product.seller.user_id)}
+                      onClick={() => openSellerConversation('offer')}
                     >
                       <MessageCircle className="mr-2 h-4 w-4" /> {marketplaceUz.productDetail.makeOffer}
                     </Button>
@@ -1115,7 +1169,12 @@ export function ProductDetail({
                       </div>
                       <div className="flex gap-1.5">
                         {onMessageSeller && (
-                          <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl" onClick={() => onMessageSeller(product.seller!.user_id)}>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-9 w-9 rounded-xl"
+                            onClick={() => openSellerConversation('contact')}
+                          >
                             <MessageCircle className="h-4 w-4" />
                           </Button>
                         )}
@@ -1425,4 +1484,3 @@ function formatResponseTime(minutes: number) {
   const days = Math.max(1, Math.round(safe / (24 * 60)));
   return marketplaceUz.productDetail.respondsInDays(days);
 }
-
