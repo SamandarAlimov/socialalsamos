@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UsersRound, Shield, Megaphone, FlaskConical } from 'lucide-react';
+import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UsersRound, Shield, Megaphone, FlaskConical, ShieldAlert } from 'lucide-react';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAdminAccess } from '@/hooks/useAdminAccess';
@@ -81,8 +81,9 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
 
   const profileActive = isNavItemActive('/profile');
   const settingsActive = isNavItemActive('/settings');
-  const adminActive = isNavItemActive('/admin') && location.pathname !== '/admin/ads-review';
+  const adminActive = isNavItemActive('/admin') && !['/admin/ads-review', '/admin/ads-integrity'].includes(location.pathname);
   const adsReviewActive = isNavItemActive('/admin/ads-review');
+  const adsIntegrityActive = isNavItemActive('/admin/ads-integrity');
 
   return (
     <aside className={cn(
@@ -145,18 +146,32 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
               {!collapsed && <span className="text-sm">Admin</span>}
             </NavLink>
             {hasPermission('ads.review') && (
-              <NavLink
-                to="/admin/ads-review"
-                aria-label="Reklama moderatsiyasi"
-                className={cn(
-                  NAV_ITEM_BASE,
-                  adsReviewActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE,
-                  !collapsed && 'ml-3 pl-3',
-                )}
-              >
-                <Megaphone className="h-5 w-5 flex-shrink-0" strokeWidth={adsReviewActive ? 2.4 : 1.9} />
-                {!collapsed && <span className="text-sm">Ads Review</span>}
-              </NavLink>
+              <>
+                <NavLink
+                  to="/admin/ads-review"
+                  aria-label="Reklama moderatsiyasi"
+                  className={cn(
+                    NAV_ITEM_BASE,
+                    adsReviewActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE,
+                    !collapsed && 'ml-3 pl-3',
+                  )}
+                >
+                  <Megaphone className="h-5 w-5 flex-shrink-0" strokeWidth={adsReviewActive ? 2.4 : 1.9} />
+                  {!collapsed && <span className="text-sm">Ads Review</span>}
+                </NavLink>
+                <NavLink
+                  to="/admin/ads-integrity"
+                  aria-label="Reklama integrity"
+                  className={cn(
+                    NAV_ITEM_BASE,
+                    adsIntegrityActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE,
+                    !collapsed && 'ml-3 pl-3',
+                  )}
+                >
+                  <ShieldAlert className="h-5 w-5 flex-shrink-0" strokeWidth={adsIntegrityActive ? 2.4 : 1.9} />
+                  {!collapsed && <span className="text-sm">Ads Integrity</span>}
+                </NavLink>
+              </>
             )}
           </>
         )}
