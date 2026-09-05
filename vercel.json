@@ -87,7 +87,11 @@
       "destination": "/api/mini-app-proxy?__host=:host"
     },
     {
-      "source": "/((?!api/.*|mp/.*).*)",
+      "source": "/__media/:path*",
+      "destination": "https://media.alsamos.com/:path*"
+    },
+    {
+      "source": "/((?!api/.*|mp/.*|__media/.*).*)",
       "destination": "/index.html"
     }
   ],
