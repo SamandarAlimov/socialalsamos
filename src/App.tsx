@@ -38,6 +38,7 @@ import WebViewerPage from "./pages/WebViewerPage";
 import MarketplacePage from "./pages/MarketplacePage";
 import MarketplaceProductPage from "./pages/MarketplaceProductPage";
 import AdminConsolePage from "./pages/AdminConsolePage";
+import AdminModerationHubPage from "./pages/AdminModerationHubPage";
 import AdminAdsReviewPage from "./pages/AdminAdsReviewPage";
 import AdminAdsIntegrityPage from "./pages/AdminAdsIntegrityPage";
 import NotificationsPage from "./pages/NotificationsPage";
@@ -166,6 +167,7 @@ function AppRoutes() {
         <Route path="/settings/:section" element={<SettingsHubPage />} />
         <Route path="/payment" element={<PaymentSettingsPage />} />
         <Route path="/admin" element={<AdminConsolePage />} />
+        <Route path="/admin/moderation" element={<AdminModerationHubPage />} />
         <Route path="/admin/ads-review" element={<AdminAdsReviewPage />} />
         <Route path="/admin/ads-integrity" element={<AdminAdsIntegrityPage />} />
         <Route path="/admin/:section" element={<AdminConsolePage />} />
