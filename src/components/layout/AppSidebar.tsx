@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UsersRound, Shield } from 'lucide-react';
+import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UsersRound, Shield, Megaphone } from 'lucide-react';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAdminAccess } from '@/hooks/useAdminAccess';
@@ -32,6 +32,7 @@ const navItems: NavItem[] = [
   { icon: ShoppingBag, labelKey: 'nav.marketplace', path: '/marketplace' },
   { icon: Map, labelKey: 'nav.map', path: '/map' },
   { icon: Wallet, labelKey: 'nav.payment', path: '/payment' },
+  { icon: Megaphone, labelKey: 'Reklama', path: '/ads' },
   { icon: Sparkles, labelKey: 'nav.ai', path: '/ai' },
   { icon: LayoutGrid, labelKey: 'nav.miniApps', path: '/mini-apps' },
   { icon: PlusSquare, labelKey: 'nav.create', path: '/create' },
@@ -93,6 +94,7 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
         {navItems.map((item) => {
           const isActive = isNavItemActive(item.path);
           const badgeCount = getBadgeCount(item.badgeKey);
+          const label = item.labelKey.startsWith('nav.') ? t(item.labelKey) : item.labelKey;
           return (
             <NavLink key={item.path} to={item.path!} className={cn(NAV_ITEM_BASE, isActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE)}>
               <div className="relative">
@@ -105,7 +107,7 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
                   )}
                 </AnimatePresence>
               </div>
-              {!collapsed && <span className="text-sm">{t(item.labelKey)}</span>}
+              {!collapsed && <span className="text-sm">{label}</span>}
               <AnimatePresence>
                 {!collapsed && badgeCount > 0 && (
                   <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className={cn('ml-auto flex items-center justify-center min-w-[20px] h-5 text-xs font-semibold rounded-full px-1.5 shadow-sm', NAV_BADGE)}>

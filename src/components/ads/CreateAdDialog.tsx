@@ -1,26 +1,26 @@
-import { useState, useRef } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
+import { useMemo, useRef, useState } from 'react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Film,
+  Image as ImageIcon,
+  Loader2,
+  Megaphone,
+  Upload,
+  X,
+} from 'lucide-react';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-  FormDescription,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -28,566 +28,314 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, ImageIcon, Film, Target, DollarSign, Calendar, Loader2, X, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useUserAds, AdCreateInput } from '@/hooks/useAds';
-import { toast } from 'sonner';
 import { uploadMedia } from '@/lib/mediaUpload';
-
-const formSchema = z.object({
-  title: z.string().min(3, 'Kamida 3 ta belgi').max(100),
-  description: z.string().max(500).optional(),
-  destination_url: z.string().url('To\'g\'ri URL kiriting').optional().or(z.literal('')),
-  call_to_action: z.string().max(30).optional(),
-  ad_type: z.enum(['feed', 'story', 'both']),
-  budget: z.number().min(1, 'Kamida $1'),
-  daily_budget: z.number().optional(),
-  billing_type: z.enum(['cpm', 'cpc']),
-  target_gender: z.string().optional(),
-  target_age_min: z.number().min(13).max(100).optional(),
-  target_age_max: z.number().min(13).max(100).optional(),
-});
-
-type FormValues = z.infer<typeof formSchema>;
+import { useUserAds, type AdCreateInput } from '@/hooks/useAds';
+import { toast } from 'sonner';
 
 interface CreateAdDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-const CTA_OPTIONS = [
-  'Learn More',
-  'Shop Now', 
-  'Sign Up',
-  'Download',
-  'Get Offer',
-  'Book Now',
-  'Contact Us',
-  'Watch More',
-  'Apply Now',
-  'Get Started'
+type Step = 'creative' | 'audience' | 'budget';
+
+const STEPS: Array<{ id: Step; label: string }> = [
+  { id: 'creative', label: 'Kreativ' },
+  { id: 'audience', label: 'Auditoriya' },
+  { id: 'budget', label: 'Byudjet' },
 ];
+
+const CTA_OPTIONS = [
+  'Batafsil',
+  'Ko‘rish',
+  'Xarid qilish',
+  'Ro‘yxatdan o‘tish',
+  'Yuklab olish',
+  'Bog‘lanish',
+  'Kanalni ko‘rish',
+];
+
+function splitValues(value: string) {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
 
 export function CreateAdDialog({ open, onOpenChange }: CreateAdDialogProps) {
   const { createAd } = useUserAds();
-  const [step, setStep] = useState<'media' | 'details' | 'targeting' | 'budget'>('media');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [step, setStep] = useState<Step>('creative');
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+  const [mediaUrl, setMediaUrl] = useState('');
+  const [mediaPreview, setMediaPreview] = useState('');
   const [mediaType, setMediaType] = useState<'image' | 'video'>('image');
-  const [mediaPreview, setMediaPreview] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [destinationUrl, setDestinationUrl] = useState('');
+  const [cta, setCta] = useState('Batafsil');
+  const [adType, setAdType] = useState<'feed' | 'story' | 'both'>('feed');
+  const [billingType, setBillingType] = useState<'cpm' | 'cpc'>('cpm');
+  const [budget, setBudget] = useState('10');
+  const [dailyBudget, setDailyBudget] = useState('');
+  const [gender, setGender] = useState('all');
+  const [ageMin, setAgeMin] = useState('13');
+  const [ageMax, setAgeMax] = useState('65');
+  const [countries, setCountries] = useState('');
+  const [interests, setInterests] = useState('');
 
-  const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      title: '',
-      description: '',
-      destination_url: '',
-      call_to_action: 'Learn More',
-      ad_type: 'feed',
-      budget: 10,
-      billing_type: 'cpm',
-      target_gender: 'all',
+  const stepIndex = STEPS.findIndex((item) => item.id === step);
+  const numericBudget = Number(budget || 0);
+  const numericDailyBudget = Number(dailyBudget || 0);
+
+  const canContinue = useMemo(() => {
+    if (step === 'creative') {
+      if (!mediaUrl || title.trim().length < 3) return false;
+      if (destinationUrl.trim()) {
+        try {
+          new URL(destinationUrl.trim());
+        } catch {
+          return false;
+        }
+      }
+      return true;
     }
-  });
+    if (step === 'audience') {
+      const min = Number(ageMin || 13);
+      const max = Number(ageMax || 65);
+      return min >= 13 && max >= min && max <= 100;
+    }
+    return numericBudget >= 1 && (!dailyBudget || numericDailyBudget > 0);
+  }, [ageMax, ageMin, dailyBudget, destinationUrl, mediaUrl, numericBudget, numericDailyBudget, step, title]);
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const reset = () => {
+    setStep('creative');
+    setMediaUrl('');
+    setMediaPreview('');
+    setMediaType('image');
+    setTitle('');
+    setDescription('');
+    setDestinationUrl('');
+    setCta('Batafsil');
+    setAdType('feed');
+    setBillingType('cpm');
+    setBudget('10');
+    setDailyBudget('');
+    setGender('all');
+    setAgeMin('13');
+    setAgeMax('65');
+    setCountries('');
+    setInterests('');
+  };
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next && !isSubmitting && !isUploading) reset();
+    onOpenChange(next);
+  };
+
+  const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (!file) return;
 
-    const isVideo = file.type.startsWith('video/');
-    setMediaType(isVideo ? 'video' : 'image');
-
-    // Preview
-    const url = URL.createObjectURL(file);
-    setMediaPreview(url);
-
-    // Upload
+    const type: 'image' | 'video' = file.type.startsWith('video/') ? 'video' : 'image';
+    const preview = URL.createObjectURL(file);
+    setMediaType(type);
+    setMediaPreview(preview);
     setIsUploading(true);
+
     try {
       const uploaded = await uploadMedia(file, { type: 'post', visibility: 'public' });
       setMediaUrl(uploaded.url);
-      toast.success('Media yuklandi');
+      toast.success('Kreativ yuklandi');
     } catch (error) {
-      console.error('Upload error:', error);
-      toast.error('Yuklashda xatolik');
-      setMediaPreview(null);
+      console.error('Ad creative upload failed:', error);
+      setMediaPreview('');
+      setMediaUrl('');
+      toast.error('Kreativni yuklab bo‘lmadi');
     } finally {
       setIsUploading(false);
     }
   };
 
-  const onSubmit = async (values: FormValues) => {
-    if (!mediaUrl) {
-      toast.error('Media yuklang');
-      return;
-    }
+  const nextStep = () => {
+    if (!canContinue) return;
+    const next = STEPS[stepIndex + 1];
+    if (next) setStep(next.id);
+  };
 
+  const previousStep = () => {
+    const previous = STEPS[stepIndex - 1];
+    if (previous) setStep(previous.id);
+  };
+
+  const submit = async () => {
+    if (!canContinue || !mediaUrl || isSubmitting) return;
     setIsSubmitting(true);
-    try {
-      const adData: AdCreateInput = {
-        title: values.title,
-        description: values.description,
-        destination_url: values.destination_url,
-        call_to_action: values.call_to_action,
-        ad_type: values.ad_type,
-        budget: values.budget,
-        daily_budget: values.daily_budget,
-        billing_type: values.billing_type,
-        target_gender: values.target_gender,
-        target_age_min: values.target_age_min,
-        target_age_max: values.target_age_max,
-        media_url: mediaUrl,
-        media_type: mediaType,
-      };
 
-      const result = await createAd(adData);
-      if (result) {
-        onOpenChange(false);
-        form.reset();
-        setMediaUrl(null);
-        setMediaPreview(null);
-        setStep('media');
-      }
+    const payload: AdCreateInput = {
+      title: title.trim(),
+      description: description.trim() || undefined,
+      media_url: mediaUrl,
+      media_type: mediaType,
+      destination_url: destinationUrl.trim() || undefined,
+      call_to_action: cta,
+      ad_type: adType,
+      budget: numericBudget,
+      daily_budget: dailyBudget ? numericDailyBudget : undefined,
+      billing_type: billingType,
+      target_gender: gender,
+      target_age_min: Number(ageMin || 13),
+      target_age_max: Number(ageMax || 65),
+      target_countries: splitValues(countries),
+      target_interests: splitValues(interests),
+    };
+
+    try {
+      const created = await createAd(payload);
+      if (!created) return;
+      reset();
+      onOpenChange(false);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const canProceed = () => {
-    switch (step) {
-      case 'media': return !!mediaUrl;
-      case 'details': return form.getValues('title').length >= 3;
-      case 'targeting': return true;
-      case 'budget': return form.getValues('budget') >= 1;
-    }
-  };
-
-  const nextStep = () => {
-    const steps: typeof step[] = ['media', 'details', 'targeting', 'budget'];
-    const currentIndex = steps.indexOf(step);
-    if (currentIndex < steps.length - 1) {
-      setStep(steps[currentIndex + 1]);
-    }
-  };
-
-  const prevStep = () => {
-    const steps: typeof step[] = ['media', 'details', 'targeting', 'budget'];
-    const currentIndex = steps.indexOf(step);
-    if (currentIndex > 0) {
-      setStep(steps[currentIndex - 1]);
-    }
-  };
-
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] p-0 overflow-hidden">
-        <DialogHeader className="p-4 pb-0">
-          <DialogTitle className="flex items-center gap-2">
-            <Target className="h-5 w-5 text-primary" />
-            Reklama yaratish
-          </DialogTitle>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="max-h-[92dvh] max-w-2xl overflow-y-auto rounded-3xl border-border/70 p-0 sm:max-h-[88vh]">
+        <DialogHeader className="border-b border-border/60 px-5 py-5 sm:px-6">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-muted/35">
+              <Megaphone className="h-4 w-4" />
+            </span>
+            <div>
+              <DialogTitle className="text-lg">Yangi kampaniya</DialogTitle>
+              <DialogDescription className="mt-1">Kreativ, auditoriya va byudjetni uch bosqichda sozlang.</DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
-        {/* Step indicator */}
-        <div className="px-4 py-2">
-          <div className="flex gap-1">
-            {['media', 'details', 'targeting', 'budget'].map((s, i) => (
-              <div
-                key={s}
-                className={cn(
-                  "flex-1 h-1 rounded-full transition-colors",
-                  step === s ? "bg-primary" : 
-                  ['media', 'details', 'targeting', 'budget'].indexOf(step) > i 
-                    ? "bg-primary/50" 
-                    : "bg-muted"
-                )}
-              />
-            ))}
+        <div className="px-5 pt-5 sm:px-6">
+          <div className="grid grid-cols-3 gap-2 rounded-2xl bg-muted/45 p-1">
+            {STEPS.map((item, index) => {
+              const active = item.id === step;
+              const complete = index < stepIndex;
+              return (
+                <div
+                  key={item.id}
+                  className={cn(
+                    'flex items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-xs font-semibold',
+                    active ? 'bg-background text-foreground shadow-sm ring-1 ring-border/60' : 'text-muted-foreground',
+                  )}
+                >
+                  <span className={cn('flex h-5 w-5 items-center justify-center rounded-full border text-[10px]', complete && 'border-foreground bg-foreground text-background')}>
+                    {complete ? <Check className="h-3 w-3" /> : index + 1}
+                  </span>
+                  <span className="hidden sm:inline">{item.label}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        <ScrollArea className="max-h-[60vh]">
-          <Form {...form}>
-            <form className="p-4 space-y-4">
-              {/* Step 1: Media */}
-              {step === 'media' && (
-                <div className="space-y-4">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*,video/*"
-                    onChange={handleFileSelect}
-                    className="hidden"
-                  />
-
-                  {mediaPreview ? (
-                    <div className="relative aspect-video rounded-xl overflow-hidden bg-secondary">
-                      {mediaType === 'video' ? (
-                        <video
-                          src={mediaPreview}
-                          className="w-full h-full object-cover"
-                          controls
-                        />
-                      ) : (
-                        <img
-                          src={mediaPreview}
-                          alt="Preview"
-                          className="w-full h-full object-cover"
-                        />
-                      )}
-                      <Button
-                        variant="secondary"
-                        size="icon"
-                        className="absolute top-2 right-2"
-                        onClick={() => {
-                          setMediaPreview(null);
-                          setMediaUrl(null);
-                        }}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                      {isUploading && (
-                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                          <Loader2 className="h-8 w-8 animate-spin text-white" />
-                        </div>
-                      )}
-                    </div>
-                  ) : (
+        <div className="space-y-5 px-5 py-5 sm:px-6">
+          {step === 'creative' && (
+            <>
+              <div>
+                <Label>Kreativ *</Label>
+                <input ref={fileInputRef} type="file" accept="image/*,video/*" onChange={handleFile} className="hidden" />
+                {mediaPreview ? (
+                  <div className="relative mt-2 aspect-[16/10] overflow-hidden rounded-2xl bg-neutral-950">
+                    {mediaType === 'video' ? (
+                      <video src={mediaPreview} controls playsInline className="h-full w-full object-contain" />
+                    ) : (
+                      <img src={mediaPreview} alt="Reklama preview" className="h-full w-full object-contain" />
+                    )}
                     <button
                       type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="w-full aspect-video rounded-xl border-2 border-dashed border-border hover:border-primary transition-colors flex flex-col items-center justify-center gap-3"
+                      onClick={() => {
+                        setMediaPreview('');
+                        setMediaUrl('');
+                      }}
+                      className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur"
                     >
-                      <div className="flex gap-3">
-                        <div className="p-3 rounded-xl bg-secondary">
-                          <ImageIcon className="h-6 w-6 text-muted-foreground" />
-                        </div>
-                        <div className="p-3 rounded-xl bg-secondary">
-                          <Film className="h-6 w-6 text-muted-foreground" />
-                        </div>
-                      </div>
-                      <div className="text-center">
-                        <p className="font-medium">Rasm yoki video yuklang</p>
-                        <p className="text-sm text-muted-foreground">
-                          Drag & drop yoki bosing
-                        </p>
-                      </div>
+                      <X className="h-4 w-4" />
                     </button>
-                  )}
-
-                  <FormField
-                    control={form.control}
-                    name="ad_type"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Reklama joylashuvi</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="feed">📰 Feed</SelectItem>
-                            <SelectItem value="story">📸 Stories</SelectItem>
-                            <SelectItem value="both">✨ Hammasi</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              )}
-
-              {/* Step 2: Details */}
-              {step === 'details' && (
-                <div className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="title"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Sarlavha *</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Reklama sarlavhasi" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tavsif</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Qisqa tavsif..."
-                            className="resize-none"
-                            rows={3}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="destination_url"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Havola URL</FormLabel>
-                        <FormControl>
-                          <Input placeholder="https://example.com" {...field} />
-                        </FormControl>
-                        <FormDescription>
-                          Foydalanuvchi bosganida ochiladi
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="call_to_action"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Call to Action</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {CTA_OPTIONS.map(cta => (
-                              <SelectItem key={cta} value={cta}>{cta}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              )}
-
-              {/* Step 3: Targeting */}
-              {step === 'targeting' && (
-                <div className="space-y-4">
-                  <div className="p-4 rounded-xl bg-secondary/50 text-center">
-                    <Target className="h-8 w-8 mx-auto mb-2 text-primary" />
-                    <p className="font-medium">Auditoriya sozlamalari</p>
-                    <p className="text-sm text-muted-foreground">
-                      Reklamangiz kimga ko'rsatilishini tanlang
-                    </p>
+                    {isUploading && <div className="absolute inset-0 flex items-center justify-center bg-black/55"><Loader2 className="h-7 w-7 animate-spin text-white" /></div>}
                   </div>
-
-                  <FormField
-                    control={form.control}
-                    name="target_gender"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Jins</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="all">Hammasi</SelectItem>
-                            <SelectItem value="male">Erkaklar</SelectItem>
-                            <SelectItem value="female">Ayollar</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <FormField
-                      control={form.control}
-                      name="target_age_min"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Min yosh</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min={13}
-                              max={100}
-                              placeholder="13"
-                              {...field}
-                              onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
-                            />
-                          </FormControl>
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="target_age_max"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Max yosh</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min={13}
-                              max={100}
-                              placeholder="65"
-                              {...field}
-                              onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
-                            />
-                          </FormControl>
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Step 4: Budget */}
-              {step === 'budget' && (
-                <div className="space-y-4">
-                  <div className="p-4 rounded-xl bg-secondary/50 text-center">
-                    <DollarSign className="h-8 w-8 mx-auto mb-2 text-primary" />
-                    <p className="font-medium">Byudjet sozlamalari</p>
-                    <p className="text-sm text-muted-foreground">
-                      Qancha sarflashni xohlaysiz?
-                    </p>
-                  </div>
-
-                  <FormField
-                    control={form.control}
-                    name="billing_type"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>To'lov turi</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="cpm">CPM (1000 ta ko'rish)</SelectItem>
-                            <SelectItem value="cpc">CPC (Har bir bosish)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="budget"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Umumiy byudjet (USD)</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min={1}
-                            {...field}
-                            onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Minimum: $1
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="daily_budget"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Kunlik limit (ixtiyoriy)</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min={1}
-                            placeholder="Limit yo'q"
-                            {...field}
-                            onChange={e => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-
-                  {/* Summary */}
-                  <div className="p-4 rounded-xl bg-primary/10 space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">To'lov turi:</span>
-                      <span className="font-medium">
-                        {form.watch('billing_type') === 'cpm' ? 'CPM' : 'CPC'}
-                      </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="mt-2 flex aspect-[16/9] w-full flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-muted/15 transition hover:bg-muted/30"
+                  >
+                    <div className="flex gap-2">
+                      <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-background"><ImageIcon className="h-5 w-5" /></span>
+                      <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-background"><Film className="h-5 w-5" /></span>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Umumiy byudjet:</span>
-                      <span className="font-medium">${form.watch('budget')}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Taxminiy ko'rishlar:</span>
-                      <span className="font-medium">
-                        ~{Math.round(form.watch('budget') * 1000).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </form>
-          </Form>
-        </ScrollArea>
+                    <p className="mt-3 text-sm font-semibold">Rasm yoki video yuklang</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Media external Alsamos media serverga yuklanadi.</p>
+                    <span className="mt-3 inline-flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium"><Upload className="h-3.5 w-3.5" />Fayl tanlash</span>
+                  </button>
+                )}
+              </div>
 
-        {/* Navigation */}
-        <div className="p-4 border-t border-border flex gap-2">
-          {step !== 'media' && (
-            <Button variant="outline" onClick={prevStep} className="flex-1">
-              Orqaga
-            </Button>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="sm:col-span-2"><Label htmlFor="ad-title">Sarlavha *</Label><Input id="ad-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={100} className="mt-1.5" placeholder="Qisqa va aniq sarlavha" /></div>
+                <div className="sm:col-span-2"><Label htmlFor="ad-description">Tavsif</Label><Textarea id="ad-description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={500} className="mt-1.5 min-h-24 resize-none" placeholder="Foydalanuvchi uchun qiymatni tushuntiring" /></div>
+                <div><Label htmlFor="ad-url">Manzil URL</Label><Input id="ad-url" value={destinationUrl} onChange={(e) => setDestinationUrl(e.target.value)} className="mt-1.5" placeholder="https://..." inputMode="url" /></div>
+                <div><Label>CTA</Label><Select value={cta} onValueChange={setCta}><SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger><SelectContent>{CTA_OPTIONS.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></div>
+              </div>
+            </>
           )}
-          
-          {step === 'budget' ? (
-            <Button
-              onClick={form.handleSubmit(onSubmit)}
-              disabled={!canProceed() || isSubmitting}
-              className="flex-1"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Yaratilmoqda...
-                </>
-              ) : (
-                <>
-                  <Eye className="h-4 w-4 mr-2" />
-                  Reklamani yuborish
-                </>
-              )}
-            </Button>
+
+          {step === 'audience' && (
+            <>
+              <div className="rounded-2xl border border-border/70 bg-muted/15 p-4"><p className="text-sm font-semibold">Auditoriya</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Haddan tashqari tor targeting o‘rniga sifatli, yetarli reach beradigan segment tanlang.</p></div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div><Label>Jins</Label><Select value={gender} onValueChange={setGender}><SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Hammasi</SelectItem><SelectItem value="male">Erkaklar</SelectItem><SelectItem value="female">Ayollar</SelectItem></SelectContent></Select></div>
+                <div className="grid grid-cols-2 gap-2"><div><Label htmlFor="age-min">Min yosh</Label><Input id="age-min" type="number" min={13} max={100} value={ageMin} onChange={(e) => setAgeMin(e.target.value)} className="mt-1.5" /></div><div><Label htmlFor="age-max">Max yosh</Label><Input id="age-max" type="number" min={13} max={100} value={ageMax} onChange={(e) => setAgeMax(e.target.value)} className="mt-1.5" /></div></div>
+                <div className="sm:col-span-2"><Label htmlFor="countries">Davlatlar</Label><Input id="countries" value={countries} onChange={(e) => setCountries(e.target.value)} className="mt-1.5" placeholder="Uzbekistan, Kazakhstan — bo‘sh qoldirilsa global" /><p className="mt-1.5 text-[11px] text-muted-foreground">Vergul bilan ajrating.</p></div>
+                <div className="sm:col-span-2"><Label htmlFor="interests">Qiziqishlar</Label><Input id="interests" value={interests} onChange={(e) => setInterests(e.target.value)} className="mt-1.5" placeholder="technology, education, business" /><p className="mt-1.5 text-[11px] text-muted-foreground">Vergul bilan ajrating.</p></div>
+              </div>
+            </>
+          )}
+
+          {step === 'budget' && (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div><Label>Joylashuv</Label><Select value={adType} onValueChange={(value: 'feed' | 'story' | 'both') => setAdType(value)}><SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="feed">Home + Discover + Videos</SelectItem><SelectItem value="story">Stories</SelectItem><SelectItem value="both">Barcha mos joylashuvlar</SelectItem></SelectContent></Select></div>
+                <div><Label>Hisoblash</Label><Select value={billingType} onValueChange={(value: 'cpm' | 'cpc') => setBillingType(value)}><SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cpm">CPM — 1000 ko‘rsatish</SelectItem><SelectItem value="cpc">CPC — klik uchun</SelectItem></SelectContent></Select></div>
+                <div><Label htmlFor="budget">Umumiy byudjet (USD) *</Label><Input id="budget" type="number" min={1} step="0.01" value={budget} onChange={(e) => setBudget(e.target.value)} className="mt-1.5" /></div>
+                <div><Label htmlFor="daily-budget">Kunlik limit (USD)</Label><Input id="daily-budget" type="number" min={0.01} step="0.01" value={dailyBudget} onChange={(e) => setDailyBudget(e.target.value)} className="mt-1.5" placeholder="Ixtiyoriy" /></div>
+              </div>
+
+              <div className="rounded-2xl border border-border/70 bg-card p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Yakuniy tekshiruv</p>
+                <div className="mt-3 space-y-2 text-sm">
+                  <div className="flex justify-between gap-4"><span className="text-muted-foreground">Kampaniya</span><span className="truncate font-medium">{title || '—'}</span></div>
+                  <div className="flex justify-between gap-4"><span className="text-muted-foreground">Joylashuv</span><span className="font-medium">{adType === 'feed' ? 'Home / Discover / Videos' : adType === 'story' ? 'Stories' : 'Barchasi'}</span></div>
+                  <div className="flex justify-between gap-4"><span className="text-muted-foreground">Byudjet</span><span className="font-semibold tabular-nums">${numericBudget.toFixed(2)}</span></div>
+                  <div className="flex justify-between gap-4"><span className="text-muted-foreground">Moderatsiya</span><span className="font-medium">Yuborilgandan keyin tekshiriladi</span></div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 border-t border-border/60 px-5 py-4 sm:px-6">
+          {stepIndex > 0 ? (
+            <Button variant="ghost" onClick={previousStep} disabled={isSubmitting || isUploading} className="rounded-xl"><ArrowLeft className="mr-2 h-4 w-4" />Orqaga</Button>
           ) : (
-            <Button
-              onClick={nextStep}
-              disabled={!canProceed()}
-              className="flex-1"
-            >
-              Keyingi
-            </Button>
+            <Button variant="ghost" onClick={() => handleOpenChange(false)} disabled={isSubmitting || isUploading} className="rounded-xl">Bekor qilish</Button>
+          )}
+          <div className="flex-1" />
+          {step !== 'budget' ? (
+            <Button onClick={nextStep} disabled={!canContinue || isUploading} className="rounded-xl bg-foreground text-background hover:bg-foreground/90">Davom etish<ArrowRight className="ml-2 h-4 w-4" /></Button>
+          ) : (
+            <Button onClick={() => void submit()} disabled={!canContinue || isSubmitting} className="rounded-xl bg-foreground text-background hover:bg-foreground/90">{isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Megaphone className="mr-2 h-4 w-4" />}Moderatsiyaga yuborish</Button>
           )}
         </div>
       </DialogContent>

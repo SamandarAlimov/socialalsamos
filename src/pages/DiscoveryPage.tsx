@@ -10,6 +10,8 @@ import { PopularCreators } from '@/components/discovery/PopularCreators';
 import { TrendingHashtags } from '@/components/discovery/TrendingHashtags';
 import { TrendingPublicPosts } from '@/components/discovery/TrendingPublicPosts';
 import { TrendingVideos } from '@/components/discovery/TrendingVideos';
+import { FeedAd } from '@/components/ads/FeedAd';
+import { useActiveAds } from '@/hooks/useAds';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
@@ -42,12 +44,12 @@ export default function DiscoveryPage() {
   const isMobile = useIsMobile();
   const { triggerHaptic } = useHapticFeedback();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { ads: discoverAds, trackImpression, trackClick } = useActiveAds('feed', 1);
 
   const tabFromUrl = searchParams.get('tab');
   const activeTab: DiscoverTab = isDiscoverTab(tabFromUrl) ? tabFromUrl : 'foryou';
-
-  // Har bir refresh bo'limlarga uzatiladi va ular ma'lumotni qaytadan yuklaydi.
   const [refreshKey, setRefreshKey] = useState(0);
+  const sponsored = discoverAds[0] || null;
 
   const handleTabChange = useCallback(
     (value: string) => {
@@ -65,12 +67,8 @@ export default function DiscoveryPage() {
     [searchParams, setSearchParams, triggerHaptic],
   );
 
-  // Alohida "Yangilash" tugmasi yo'q: mobil qurilmada tepadan pastga surish,
-  // desktopda esa brauzer refresh yetarli. Har bir bo'limning o'z kichik
-  // yangilash tugmasi saqlanib qoladi.
   const handleRefresh = useCallback(async () => {
     setRefreshKey((key) => key + 1);
-    // Bo'limlar o'z ma'lumotini mustaqil yuklaydi; indikatorni qisqa ushlab turamiz.
     await new Promise((resolve) => setTimeout(resolve, 600));
   }, []);
 
@@ -79,20 +77,40 @@ export default function DiscoveryPage() {
     navigate('/search');
   }, [navigate, triggerHaptic]);
 
+  const sponsoredCard = sponsored ? (
+    <FeedAd
+      ad={sponsored}
+      variant="discover"
+      onImpression={(id) => trackImpression(id, 'discover')}
+      onClick={(id) => trackClick(id, 'discover')}
+    />
+  ) : null;
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'trending':
         return (
           <div className="space-y-8">
             <TrendingHashtags refreshKey={refreshKey} />
+            {sponsoredCard}
             <TrendingPublicPosts refreshKey={refreshKey} />
             <TrendingVideos refreshKey={refreshKey} />
           </div>
         );
       case 'creators':
-        return <PopularCreators refreshKey={refreshKey} />;
+        return (
+          <div className="space-y-8">
+            <PopularCreators refreshKey={refreshKey} />
+            {sponsoredCard}
+          </div>
+        );
       case 'videos':
-        return <TrendingVideos refreshKey={refreshKey} />;
+        return (
+          <div className="space-y-8">
+            <TrendingVideos refreshKey={refreshKey} />
+            {sponsoredCard}
+          </div>
+        );
       case 'foryou':
       default:
         return (
@@ -100,6 +118,7 @@ export default function DiscoveryPage() {
             <DiscoveryStoryBar refreshKey={refreshKey} />
             <CategoryFilterBar refreshKey={refreshKey} />
             <TrendingHashtags refreshKey={refreshKey} />
+            {sponsoredCard}
             <TrendingPublicPosts refreshKey={refreshKey} />
             <ForYouSection refreshKey={refreshKey} />
           </div>
@@ -109,13 +128,11 @@ export default function DiscoveryPage() {
 
   const content = (
     <div className="mx-auto w-full max-w-6xl px-4 pb-24 pt-4 md:pb-10">
-      {/* Sahifa sarlavha ikoni dekorativ — neytral rangda. */}
       <header className="mb-4 flex items-center gap-2">
         <Compass className="h-6 w-6 text-muted-foreground" />
         <h1 className="text-xl font-bold md:text-2xl">Discover</h1>
       </header>
 
-      {/* Qidiruv: ilgari readOnly input bo'lgani uchun klaviatura bilan ishlamasdi. */}
       <button
         type="button"
         onClick={openSearch}

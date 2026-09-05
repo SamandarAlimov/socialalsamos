@@ -31,6 +31,7 @@ export function getMobileBackFallback(pathname: string): string {
   const path = normalizePath(pathname);
 
   if (path.startsWith('/settings/')) return '/settings';
+  if (path.startsWith('/ads/')) return '/ads';
   if (path.startsWith('/marketplace/product/')) return '/marketplace';
   if (path.startsWith('/mini-apps/') && path !== '/mini-apps') return '/mini-apps';
   if (path.startsWith('/stickers/') && path !== '/stickers') return '/stickers';

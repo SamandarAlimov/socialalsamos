@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+
+export type AdPlacement = 'feed' | 'story' | 'video' | 'discover' | 'channel';
 
 export interface Ad {
   id: string;
@@ -60,15 +62,14 @@ export interface AdCreateInput {
   end_date?: string;
 }
 
-// Get random active ads for feed/story
-export function useActiveAds(type: 'feed' | 'story' | 'both' = 'feed', limit: number = 3) {
+export function useActiveAds(type: 'feed' | 'story' | 'both' = 'feed', limit = 3) {
   const { user } = useAuth();
   const [ads, setAds] = useState<Ad[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchAds = useCallback(async () => {
     try {
-      let query = supabase
+      const { data, error } = await supabase
         .from('ads')
         .select('*')
         .eq('status', 'active')
@@ -76,9 +77,7 @@ export function useActiveAds(type: 'feed' | 'story' | 'both' = 'feed', limit: nu
         .order('created_at', { ascending: false })
         .limit(limit);
 
-      const { data, error } = await query;
       if (error) throw error;
-      
       setAds((data || []) as Ad[]);
     } catch (error) {
       console.error('Error fetching ads:', error);
@@ -88,41 +87,43 @@ export function useActiveAds(type: 'feed' | 'story' | 'both' = 'feed', limit: nu
   }, [type, limit]);
 
   useEffect(() => {
-    fetchAds();
+    void fetchAds();
   }, [fetchAds]);
 
-  const trackImpression = useCallback(async (adId: string, placement: 'feed' | 'story') => {
+  const trackImpression = useCallback(async (adId: string, placement: AdPlacement) => {
     try {
       const deviceType = /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
-      
+
       await supabase.from('ad_impressions').insert({
         ad_id: adId,
         user_id: user?.id || null,
         placement,
-        device_type: deviceType
+        device_type: deviceType,
       });
 
-      // Track reach (unique user)
       if (user) {
-        await supabase.from('ad_reach').upsert({
-          ad_id: adId,
-          user_id: user.id
-        }, { onConflict: 'ad_id,user_id' });
+        await supabase.from('ad_reach').upsert(
+          {
+            ad_id: adId,
+            user_id: user.id,
+          },
+          { onConflict: 'ad_id,user_id' },
+        );
       }
     } catch (error) {
       console.error('Error tracking impression:', error);
     }
   }, [user]);
 
-  const trackClick = useCallback(async (adId: string, placement: 'feed' | 'story') => {
+  const trackClick = useCallback(async (adId: string, placement: AdPlacement) => {
     try {
       const deviceType = /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
-      
+
       await supabase.from('ad_clicks').insert({
         ad_id: adId,
         user_id: user?.id || null,
         placement,
-        device_type: deviceType
+        device_type: deviceType,
       });
     } catch (error) {
       console.error('Error tracking click:', error);
@@ -132,15 +133,18 @@ export function useActiveAds(type: 'feed' | 'story' | 'both' = 'feed', limit: nu
   return { ads, isLoading, refetch: fetchAds, trackImpression, trackClick };
 }
 
-// User's own ads management
 export function useUserAds() {
   const { user } = useAuth();
   const [ads, setAds] = useState<Ad[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchAds = useCallback(async () => {
-    if (!user) return;
-    
+    if (!user) {
+      setAds([]);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const { data, error } = await supabase
@@ -160,26 +164,33 @@ export function useUserAds() {
   }, [user]);
 
   useEffect(() => {
-    if (user) {
-      fetchAds();
+    if (!user) {
+      setAds([]);
+      setIsLoading(false);
+      return;
+    }
 
-      // Real-time updates
-      const channel = supabase
-        .channel(`user-ads-${user.id}`)
-        .on('postgres_changes', {
+    void fetchAds();
+
+    const channel = supabase
+      .channel(`user-ads-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
           event: '*',
           schema: 'public',
           table: 'ads',
-          filter: `user_id=eq.${user.id}`
-        }, () => {
-          fetchAds();
-        })
-        .subscribe();
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          void fetchAds();
+        },
+      )
+      .subscribe();
 
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
+    return () => {
+      void supabase.removeChannel(channel);
+    };
   }, [user, fetchAds]);
 
   const createAd = useCallback(async (input: AdCreateInput) => {
@@ -194,14 +205,14 @@ export function useUserAds() {
         .insert({
           ...input,
           user_id: user.id,
-          status: 'pending'
+          status: 'pending',
         })
         .select()
         .single();
 
       if (error) throw error;
-      
-      toast.success('Reklama yaratildi! Tekshirilmoqda...');
+
+      toast.success('Reklama yaratildi. Moderatsiyadan so‘ng ishga tushadi.');
       return data as Ad;
     } catch (error) {
       console.error('Error creating ad:', error);
@@ -210,7 +221,7 @@ export function useUserAds() {
     }
   }, [user]);
 
-  const updateAd = useCallback(async (id: string, updates: Partial<AdCreateInput>) => {
+  const updateAd = useCallback(async (id: string, updates: Partial<AdCreateInput> | Partial<Pick<Ad, 'status'>>) => {
     try {
       const { error } = await supabase
         .from('ads')
@@ -235,22 +246,17 @@ export function useUserAds() {
         .eq('id', id);
 
       if (error) throw error;
-      toast.success("Reklama o'chirildi");
+      toast.success('Reklama o‘chirildi');
       return true;
     } catch (error) {
       console.error('Error deleting ad:', error);
-      toast.error("Reklamani o'chirishda xatolik");
+      toast.error('Reklamani o‘chirishda xatolik');
       return false;
     }
   }, []);
 
-  const pauseAd = useCallback(async (id: string) => {
-    return updateAd(id, { status: 'paused' } as any);
-  }, [updateAd]);
-
-  const resumeAd = useCallback(async (id: string) => {
-    return updateAd(id, { status: 'active' } as any);
-  }, [updateAd]);
+  const pauseAd = useCallback((id: string) => updateAd(id, { status: 'paused' }), [updateAd]);
+  const resumeAd = useCallback((id: string) => updateAd(id, { status: 'active' }), [updateAd]);
 
   return {
     ads,
@@ -260,25 +266,23 @@ export function useUserAds() {
     updateAd,
     deleteAd,
     pauseAd,
-    resumeAd
+    resumeAd,
   };
 }
 
-// Ad statistics
 export function useAdStats(adId: string) {
   const [stats, setStats] = useState({
     impressions: 0,
     clicks: 0,
     reach: 0,
-    ctr: 0, // click-through rate
-    spent: 0
+    ctr: 0,
+    spent: 0,
   });
-  const [dailyStats, setDailyStats] = useState<{date: string; impressions: number; clicks: number}[]>([]);
+  const [dailyStats, setDailyStats] = useState<{ date: string; impressions: number; clicks: number }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchStats = useCallback(async () => {
     try {
-      // Get ad details
       const { data: ad, error: adError } = await supabase
         .from('ads')
         .select('impressions_count, clicks_count, reach_count, spent')
@@ -296,10 +300,9 @@ export function useAdStats(adId: string) {
         clicks,
         reach: ad.reach_count || 0,
         ctr: Math.round(ctr * 100) / 100,
-        spent: ad.spent || 0
+        spent: ad.spent || 0,
       });
 
-      // Get daily stats (last 7 days)
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
@@ -315,36 +318,31 @@ export function useAdStats(adId: string) {
         .eq('ad_id', adId)
         .gte('created_at', sevenDaysAgo.toISOString());
 
-      // Aggregate by date
       const dailyMap = new Map<string, { impressions: number; clicks: number }>();
-      
-      for (let i = 0; i < 7; i++) {
+
+      for (let i = 0; i < 7; i += 1) {
         const date = new Date();
         date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
-        dailyMap.set(dateStr, { impressions: 0, clicks: 0 });
+        dailyMap.set(date.toISOString().split('T')[0], { impressions: 0, clicks: 0 });
       }
 
-      impressionsData?.forEach(item => {
+      impressionsData?.forEach((item) => {
         const date = item.created_at.split('T')[0];
-        if (dailyMap.has(date)) {
-          dailyMap.get(date)!.impressions++;
-        }
+        const bucket = dailyMap.get(date);
+        if (bucket) bucket.impressions += 1;
       });
 
-      clicksData?.forEach(item => {
+      clicksData?.forEach((item) => {
         const date = item.created_at.split('T')[0];
-        if (dailyMap.has(date)) {
-          dailyMap.get(date)!.clicks++;
-        }
+        const bucket = dailyMap.get(date);
+        if (bucket) bucket.clicks += 1;
       });
 
       setDailyStats(
         Array.from(dailyMap.entries())
           .map(([date, data]) => ({ date, ...data }))
-          .reverse()
+          .reverse(),
       );
-
     } catch (error) {
       console.error('Error fetching ad stats:', error);
     } finally {
@@ -353,23 +351,26 @@ export function useAdStats(adId: string) {
   }, [adId]);
 
   useEffect(() => {
-    fetchStats();
+    void fetchStats();
 
-    // Real-time updates
     const channel = supabase
       .channel(`ad-stats-${adId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'ads',
-        filter: `id=eq.${adId}`
-      }, () => {
-        fetchStats();
-      })
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'ads',
+          filter: `id=eq.${adId}`,
+        },
+        () => {
+          void fetchStats();
+        },
+      )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      void supabase.removeChannel(channel);
     };
   }, [adId, fetchStats]);
 

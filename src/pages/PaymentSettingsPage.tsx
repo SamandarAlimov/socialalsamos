@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowDownLeft,
+  ArrowLeft,
   ArrowUpRight,
   Clock3,
   Copy,
   History,
   Loader2,
+  Megaphone,
   RefreshCw,
   ShieldCheck,
 } from 'lucide-react';
@@ -90,6 +93,8 @@ function ActivityRow({ item }: { item: WalletLedgerEntry }) {
 }
 
 export default function PaymentSettingsPage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const {
     wallet,
     ledger,
@@ -107,6 +112,11 @@ export default function PaymentSettingsPage() {
   const recent = ledger.slice(0, 6);
   const incoming = useMemo(() => ledger.filter((item) => item.direction === 'credit'), [ledger]);
   const outgoing = useMemo(() => ledger.filter((item) => item.direction === 'debit'), [ledger]);
+  const fromAds = searchParams.get('source') === 'ads';
+  const rawReturnTo = searchParams.get('returnTo');
+  const returnTo = rawReturnTo && rawReturnTo.startsWith('/') && !rawReturnTo.startsWith('//')
+    ? rawReturnTo
+    : '/ads/billing';
 
   if (isLoading) {
     return (
@@ -161,6 +171,30 @@ export default function PaymentSettingsPage() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsContent value="main" className="mt-0 space-y-5 px-4 py-5 sm:px-5">
+          {fromAds && (
+            <section className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm sm:p-5">
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/35">
+                  <Megaphone className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-sm font-semibold">Reklama hisobini to‘ldirish</h2>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    Ads Manager sizni shu umumiy To‘lov markaziga yubordi. Balansni to‘ldirgach kampaniya byudjetini Reklama markazida boshqarasiz.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2 border-t border-border/60 pt-4">
+                <Button variant="outline" className="rounded-xl" onClick={() => navigate(returnTo)}>
+                  <ArrowLeft className="mr-2 h-4 w-4" /> Ads Manager
+                </Button>
+                <Button className="rounded-xl bg-foreground text-background hover:bg-foreground/90" onClick={() => setShowTopUp(true)}>
+                  <ArrowDownLeft className="mr-2 h-4 w-4" /> Hisobni to‘ldirish
+                </Button>
+              </div>
+            </section>
+          )}
+
           <WalletCard
             balance={wallet?.balance || 0}
             currency={wallet?.currency || 'UZS'}

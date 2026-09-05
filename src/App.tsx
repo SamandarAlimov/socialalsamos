@@ -170,6 +170,7 @@ function AppRoutes() {
         <Route path="/ai" element={<AIPage />} />
         <Route path="/activity" element={<ActivityPage />} />
         <Route path="/ads" element={<AdsPage />} />
+        <Route path="/ads/:section" element={<AdsPage />} />
         <Route path="/channels" element={<ChannelsPage />} />
         <Route path="/mini-apps/moderation" element={<MiniAppsModerationPage />} />
         <Route path="/mini-apps/publisher" element={<PublisherOnboardingPage />} />

@@ -8,6 +8,7 @@ import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useActivityTracking } from '@/hooks/useActivityTracking';
 import { LocationPermissionDialog } from '@/components/LocationPermissionDialog';
+import { VideoAdsSurface } from '@/components/ads/VideoAdsSurface';
 import { cn } from '@/lib/utils';
 import { resumeMyLiveLocationSharing } from '@/lib/liveLocationSharing';
 import { getMobileChromeMode } from '@/lib/mobileRouteChrome';
@@ -130,6 +131,7 @@ export function AppLayout() {
         <Outlet />
       </main>
 
+      {isVideosPage && <VideoAdsSurface />}
       {showBottomNavbar && <BottomNavbar />}
       {!isAdminPage && <LocationPermissionDialog />}
     </div>
