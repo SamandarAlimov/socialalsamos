@@ -7,6 +7,7 @@ import { MobileBackHeader } from './MobileBackHeader';
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useActivityTracking } from '@/hooks/useActivityTracking';
+import { useAdRelevanceBootstrap } from '@/hooks/useAdRelevanceBootstrap';
 import { LocationPermissionDialog } from '@/components/LocationPermissionDialog';
 import { VideoAdsSurface } from '@/components/ads/VideoAdsSurface';
 import { cn } from '@/lib/utils';
@@ -20,6 +21,10 @@ export function AppLayout() {
   const { startSession, trackPageChange } = useActivityTracking();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [messagesChatOpen, setMessagesChatOpen] = useState(false);
+
+  // Shared Home + Ads relevance graph. This uses only first-party Alsamos
+  // behavior and stores a compact interest snapshot rather than raw history.
+  useAdRelevanceBootstrap();
 
   useEffect(() => {
     if (isAuthenticated) trackPageChange(location.pathname);
