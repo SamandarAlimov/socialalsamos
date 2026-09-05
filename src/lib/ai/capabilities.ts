@@ -46,7 +46,7 @@ export const TOOL_GROUPS: ToolGroup[] = [
   {
     id: "code",
     label: "Kod ijrosi",
-    description: "JavaScript kodini xavfsiz sandbox'da ishga tushirish va tekshirish",
+    description: "JavaScript, TypeScript va Python kodini izolyatsiyalangan server sandboxida ishga tushirish",
     icon: "terminal",
     defaultOn: true,
     tools: ["run_code"],
@@ -158,7 +158,7 @@ export const TOOL_LABELS: Record<string, string> = {
   generate_image: "Rasm yaratmoqda",
   generate_video: "Video tayyorlamoqda",
   media_job_status: "Media holatini tekshirmoqda",
-  run_code: "Kodni ishga tushirmoqda",
+  run_code: "Kodni izolyatsiyalangan serverda ishga tushirmoqda",
   search_posts: "Postlarni izlamoqda",
   search_marketplace: "Mahsulotlarni izlamoqda",
   remember: "Eslab qolmoqda",
