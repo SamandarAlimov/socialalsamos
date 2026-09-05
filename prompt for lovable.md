@@ -4,13 +4,31 @@
 >
 > We have a very limited credit budget. Perform this as **one coordinated deployment/smoke-test session**. Do not spend credits asking broad questions or generating alternative implementations.
 
-## Immediate Codex Branch To Deploy
+## Immediate Main Deploy / SQL Repair
 
-Use this GitHub branch as the source for the sandbox deployment:
+Use GitHub `main` as the source. Codex has already pushed the runtime repairs.
 
 - Repository: `SamandarAlimov/socialalsamos`
-- Branch: `codex/real-ai-sandbox`
-- Pull request: `https://github.com/SamandarAlimov/socialalsamos/pull/48`
+- Branch: `main`
+
+Apply this SQL repair first if production still shows `post_views`,
+`increment_post_views`, or `get_eligible_ads_*` 404/403 errors:
+
+```text
+https://raw.githubusercontent.com/SamandarAlimov/socialalsamos/main/supabase/migrations/20260905214000_feed_runtime_repair.sql
+```
+
+If production still shows `publish_post_draft`, wallet ledger/top-up, or story
+draft RPC/table 404 errors, continue applying every pending migration from
+GitHub in filename order. Do not hand-edit the SQL in Lovable.
+
+For media upload CORS errors, deploy the latest `main` frontend/serverless API
+files and set:
+
+```text
+VITE_MEDIA_ALLOW_SUPABASE_FALLBACK=true
+MEDIA_API_URL=https://api.alsamos.com
+```
 
 Lovable must not redesign or rewrite this feature. Codex already wrote the code.
 Use Lovable credits only to run/deploy the repository state and report exact

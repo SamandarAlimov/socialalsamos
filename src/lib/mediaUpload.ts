@@ -29,6 +29,23 @@ const EXTERNAL_MEDIA_PUBLIC_BASE = String(
 const ALLOW_SUPABASE_FALLBACK =
   String(import.meta.env.VITE_MEDIA_ALLOW_SUPABASE_FALLBACK || '').toLowerCase() === 'true';
 
+function canUseSameOriginApiProxy(): boolean {
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname.toLowerCase();
+  return (
+    host === 'alsamos.com' ||
+    host.endsWith('.alsamos.com') ||
+    host.endsWith('.vercel.app')
+  );
+}
+
+function mediaApiEndpoint(proxyPath: string, upstreamPath: string): string {
+  if (typeof window === 'undefined' || !canUseSameOriginApiProxy()) {
+    return `${EXTERNAL_API}${upstreamPath}`;
+  }
+  return proxyPath;
+}
+
 export type MediaVisibility = 'public' | 'friends' | 'private';
 
 export function bucketForMediaVisibility(visibility: MediaVisibility = 'public'): string {
@@ -132,7 +149,10 @@ async function getAccessToken(): Promise<string> {
 async function signExternalMediaKey(key: string): Promise<string> {
   const token = await getAccessToken();
   const response = await fetch(
-    `${EXTERNAL_API}/api/media/sign?key=${encodeURIComponent(key)}`,
+    mediaApiEndpoint(
+      `/api/media-sign?key=${encodeURIComponent(key)}`,
+      `/api/media/sign?key=${encodeURIComponent(key)}`,
+    ),
     {
       method: 'GET',
       headers: { Authorization: `Bearer ${token}` },
@@ -384,7 +404,7 @@ async function uploadViaExternalApi(
   options: MediaUploadOptions,
 ): Promise<MediaUploadResult> {
   const apiVisibility = options.visibility === 'public' || !options.visibility ? 'public' : 'private';
-  const presign = await fetch(`${EXTERNAL_API}/api/media/presign`, {
+  const presign = await fetch(mediaApiEndpoint('/api/media-presign', '/api/media/presign'), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
