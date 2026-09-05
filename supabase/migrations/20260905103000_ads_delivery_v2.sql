@@ -176,9 +176,8 @@ AS $$
   ),
   candidates AS (
     SELECT
-      a.*,
-      COALESCE(fc.impressions, 0) AS fatigue_count,
-      fc.last_impression_at,
+      a.id,
+      a.created_at,
       (
         (GREATEST(COALESCE(a.bid_amount, 0), 0.01) + 0.01)
         * (1 + LEAST(
@@ -278,9 +277,10 @@ AS $$
         )
       )
   )
-  SELECT (candidates).*::public.ads
-  FROM candidates
-  ORDER BY delivery_score DESC, created_at DESC
+  SELECT a.*
+  FROM candidates c
+  JOIN public.ads a ON a.id = c.id
+  ORDER BY c.delivery_score DESC, c.created_at DESC
   LIMIT GREATEST(1, LEAST(COALESCE(p_limit, 6), 20));
 $$;
 
