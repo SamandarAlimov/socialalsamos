@@ -1,12 +1,33 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUpRight, MoreHorizontal, Volume2, VolumeX, X } from 'lucide-react';
+import {
+  ArrowUpRight,
+  EyeOff,
+  Flag,
+  Info,
+  MoreHorizontal,
+  Repeat2,
+  Volume2,
+  VolumeX,
+  X,
+} from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import type { Ad } from '@/hooks/useAds';
+import type { AdFeedbackType } from '@/lib/adDeliveryClient';
 import {
+  recordDiscoverAdImpression,
   recordFeedAdImpression,
+  registerDiscoverAdOpportunity,
   registerFeedAdOpportunity,
+  snoozeDiscoverAds,
   snoozeFeedAds,
 } from '@/lib/adFrequencyPolicy';
 
@@ -14,6 +35,7 @@ interface FeedAdProps {
   ad: Ad;
   onImpression: (adId: string) => void;
   onClick: (adId: string) => void;
+  onFeedback?: (adId: string, feedback: AdFeedbackType) => void;
   variant?: 'feed' | 'discover';
   className?: string;
 }
@@ -22,12 +44,14 @@ export function FeedAd({
   ad,
   onImpression,
   onClick,
+  onFeedback,
   variant = 'feed',
   className,
 }: FeedAdProps) {
   const [isMuted, setIsMuted] = useState(true);
   const [dismissed, setDismissed] = useState(false);
   const [frequencySuppressed, setFrequencySuppressed] = useState(false);
+  const [showWhy, setShowWhy] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const impressionTimerRef = useRef<number | null>(null);
@@ -39,7 +63,20 @@ export function FeedAd({
     hasCheckedOpportunity.current = false;
     setDismissed(false);
     setFrequencySuppressed(false);
+    setShowWhy(false);
   }, [ad.id]);
+
+  // Discover has one contextual sponsored slot rather than many feed slots.
+  // If the session is still too young, re-evaluate quietly instead of hiding
+  // the slot forever for the rest of the visit.
+  useEffect(() => {
+    if (!frequencySuppressed || variant !== 'discover' || dismissed) return;
+    const timer = window.setTimeout(() => {
+      hasCheckedOpportunity.current = false;
+      setFrequencySuppressed(false);
+    }, 30_000);
+    return () => window.clearTimeout(timer);
+  }, [dismissed, frequencySuppressed, variant]);
 
   useEffect(() => {
     const node = containerRef.current;
@@ -48,9 +85,13 @@ export function FeedAd({
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
-          if (variant === 'feed' && !hasCheckedOpportunity.current) {
+          if (!hasCheckedOpportunity.current) {
             hasCheckedOpportunity.current = true;
-            if (!registerFeedAdOpportunity(ad.id)) {
+            const allowed = variant === 'discover'
+              ? registerDiscoverAdOpportunity(ad.id)
+              : registerFeedAdOpportunity(ad.id);
+
+            if (!allowed) {
               setFrequencySuppressed(true);
               videoRef.current?.pause();
               return;
@@ -61,9 +102,10 @@ export function FeedAd({
             impressionTimerRef.current = window.setTimeout(() => {
               hasTrackedImpression.current = true;
               impressionTimerRef.current = null;
-              if (variant === 'feed') recordFeedAdImpression(ad.id);
+              if (variant === 'discover') recordDiscoverAdImpression(ad.id);
+              else recordFeedAdImpression(ad.id);
               onImpression(ad.id);
-            }, 800);
+            }, variant === 'discover' ? 1000 : 800);
           }
 
           if (videoRef.current) {
@@ -97,10 +139,14 @@ export function FeedAd({
     }
   };
 
-  const hideAd = () => {
+  const applyFeedback = (feedback: AdFeedbackType) => {
     setDismissed(true);
-    if (variant === 'feed') snoozeFeedAds();
+    if (variant === 'discover') snoozeDiscoverAds();
+    else snoozeFeedAds();
+    onFeedback?.(ad.id, feedback);
   };
+
+  const hideAd = () => applyFeedback('hide');
 
   if (dismissed || frequencySuppressed) return null;
 
@@ -108,6 +154,47 @@ export function FeedAd({
   const handle = ad.profile?.username ? `@${ad.profile.username}` : 'Alsamos Ads';
   const initial = advertiser.trim().charAt(0).toUpperCase() || 'A';
   const isDiscover = variant === 'discover';
+
+  const feedbackMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" aria-label="Reklama menyusi">
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56 rounded-xl">
+        <DropdownMenuItem onClick={() => setShowWhy((value) => !value)} className="gap-2">
+          <Info className="h-4 w-4" />
+          Nega bu reklama?
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => applyFeedback('not_relevant')} className="gap-2">
+          <EyeOff className="h-4 w-4" />
+          Menga mos emas
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => applyFeedback('seen_too_often')} className="gap-2">
+          <Repeat2 className="h-4 w-4" />
+          Juda ko‘p ko‘ryapman
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={hideAd} className="gap-2">
+          <X className="h-4 w-4" />
+          Reklamani yashirish
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => applyFeedback('report')} className="gap-2 text-destructive focus:text-destructive">
+          <Flag className="h-4 w-4" />
+          Reklamani shikoyat qilish
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  const whyPanel = showWhy ? (
+    <div className="border-t border-border/60 bg-muted/25 px-4 py-3 text-xs leading-relaxed text-muted-foreground sm:px-5">
+      <span className="font-semibold text-foreground">Nega ko‘ryapsiz?</span>{' '}
+      Alsamos reklama yetkazib berish tizimi kampaniya mosligi, kontent sifati va reklama charchog‘ini birga hisoblaydi. Menyu orqali bergan fikringiz keyingi reklamalarni kamaytirish yoki yaxshilashga ishlatiladi.
+    </div>
+  ) : null;
 
   if (isDiscover) {
     return (
@@ -149,14 +236,17 @@ export function FeedAd({
                 <p className="truncate text-sm font-semibold">{advertiser}</p>
                 <p className="truncate text-xs text-muted-foreground">{handle} · Homiylik kontenti</p>
               </div>
-              <button
-                type="button"
-                onClick={hideAd}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                aria-label="Reklamani yashirish"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              <div className="flex shrink-0 items-center gap-1">
+                {feedbackMenu}
+                <button
+                  type="button"
+                  onClick={hideAd}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                  aria-label="Reklamani yashirish"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
 
             <h3 className="mt-3 line-clamp-2 text-base font-semibold leading-snug">{ad.title}</h3>
@@ -174,6 +264,7 @@ export function FeedAd({
             </button>
           </div>
         </div>
+        {whyPanel}
       </article>
     );
   }
@@ -202,9 +293,7 @@ export function FeedAd({
           <p className="truncate text-xs text-muted-foreground">{handle}</p>
         </div>
 
-        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" aria-label="Reklama menyusi">
-          <MoreHorizontal className="h-4 w-4" />
-        </Button>
+        {feedbackMenu}
         <Button
           variant="ghost"
           size="icon"
@@ -215,6 +304,8 @@ export function FeedAd({
           <X className="h-4 w-4" />
         </Button>
       </div>
+
+      {whyPanel}
 
       <button
         type="button"
