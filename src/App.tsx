@@ -21,6 +21,7 @@ import PrivacyPage from "./pages/legal/PrivacyPage";
 import TermsPage from "./pages/legal/TermsPage";
 import HelpCenterPage from "./pages/legal/HelpCenterPage";
 import HomePage from "./pages/HomePage";
+import PostPermalinkPage from "./pages/PostPermalinkPage";
 import MessagesPage from "./pages/MessagesPage";
 import ProfilePage from "./pages/ProfilePage";
 import UserProfilePage from "./pages/UserProfilePage";
@@ -95,15 +96,9 @@ function AuthRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function PostPermalink() {
-  const { postId } = useParams<{ postId: string }>();
-  return <Navigate to={postId ? '/home?post=' + encodeURIComponent(postId) : '/home'} replace />;
-}
-
 /**
- * Older profile cards shared posts as `/user/:username?post=<id>`, while the
- * canonical post viewer lives under `/post/:id` -> `/home?post=<id>`. Resolve
- * those already-circulating links instead of silently opening only the profile.
+ * Older profile cards shared posts as `/user/:username?post=<id>`.
+ * Resolve those already-circulating links to the canonical `/post/:id` route.
  */
 function UserProfileRoute() {
   const [searchParams] = useSearchParams();
@@ -157,7 +152,7 @@ function AppRoutes() {
 
       <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
         <Route path="/home" element={<HomePage />} />
-        <Route path="/post/:postId" element={<PostPermalink />} />
+        <Route path="/post/:postId" element={<PostPermalinkPage />} />
         <Route path="/channel/:channel" element={<ChannelPermalink />} />
         <Route path="/group/:group" element={<GroupPermalink />} />
         <Route path="/hashtag/:tag" element={<HashtagPermalink />} />
