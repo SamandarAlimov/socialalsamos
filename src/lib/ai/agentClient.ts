@@ -1,6 +1,7 @@
 // Alsamos AI agent klienti.
-// Asosiy yo'l Oracle/K3s serveridagi AI gateway + real Kubernetes sandbox.
-// Supabase Edge agent/assistant faqat zaxira compatibility yo'li bo'lib qoladi.
+// Kod/sandbox vazifalari Oracle/K3s serveridagi real izolyatsiyalangan agentga
+// yo'naltiriladi. Web/image/video/connector kabi boy vositalar server parity
+// tugamaguncha mavjud Supabase agent orqali ishlashda davom etadi.
 
 import { supabase } from '@/integrations/supabase/client';
 import type { AgentEvent, AIMode, ModelId, ToolGroupId } from './capabilities';
@@ -23,6 +24,30 @@ const AGENT_SERVER_BASE = (
 ).replace(/\/+$/, '');
 
 class AgentUnavailableError extends Error {}
+
+const SERVER_CODE_INTENT =
+  /\b(code|coding|debug|debugging|bug|python|javascript|typescript|node(?:js)?|react|sql|algorithm|compile|compiler|runtime|sandbox|execute|execution|terminal|script|function|regex|json|csv|calculate|calculation|formula|equation|math|mathematics|kod|dastur|dasturlash|xato|hisobla|hisoblash|formula|algoritm|ishga\s+tushir|tekshir|питон|код|отлад|ошибк|алгоритм|вычисл|запусти)\b/i;
+
+function latestUserMessage(messages: StreamAgentOptions['messages']): string {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === 'user') return messages[index].content;
+  }
+  return '';
+}
+
+/**
+ * Hozir server agenti professional darajada real `run_code` sandboxga ega.
+ * Qolgan boy tool'lar Edge agentda allaqachon mavjud. Shuning uchun faqat
+ * kod/hisoblash vazifalarini server-first qilamiz — boshqa AI funksiyalarini
+ * tasodifan regress qilmaymiz.
+ */
+export function shouldPreferServerAgent(
+  options: Pick<StreamAgentOptions, 'messages' | 'model' | 'toolGroups'>,
+): boolean {
+  if (!options.toolGroups.includes('code')) return false;
+  if (options.model === 'coding') return true;
+  return SERVER_CODE_INTENT.test(latestUserMessage(options.messages));
+}
 
 async function authHeaders(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession();
@@ -62,7 +87,7 @@ async function readSse(
   }
 }
 
-/** Supabase Edge'dagi eski to'liq agent — server ishlamasa zaxira. */
+/** Supabase Edge'dagi to'liq agent — web/image/video/connectors uchun parity manbai. */
 async function streamFromAgent(options: StreamAgentOptions): Promise<void> {
   const { messages, mode, model, toolGroups, conversationId, context, signal, onEvent } = options;
 
@@ -306,8 +331,7 @@ async function streamFromOracleAgent(options: StreamAgentOptions): Promise<void>
   }
 }
 
-/** Server birinchi; Edge funksiyalar faqat server vaqtincha yo'q bo'lsa. */
-export async function streamAgent(options: StreamAgentOptions): Promise<void> {
+async function streamServerThenEdge(options: StreamAgentOptions): Promise<void> {
   try {
     await streamFromOracleAgent(options);
     return;
@@ -321,6 +345,33 @@ export async function streamAgent(options: StreamAgentOptions): Promise<void> {
     if (!(edgeError instanceof AgentUnavailableError)) throw edgeError;
     await streamFromAssistant(options);
   }
+}
+
+async function streamEdgeThenServer(options: StreamAgentOptions): Promise<void> {
+  try {
+    await streamFromAgent(options);
+    return;
+  } catch (edgeError) {
+    if (!(edgeError instanceof AgentUnavailableError)) throw edgeError;
+  }
+
+  try {
+    await streamFromOracleAgent(options);
+  } catch (serverError) {
+    if (!(serverError instanceof AgentUnavailableError)) throw serverError;
+    await streamFromAssistant(options);
+  }
+}
+
+/**
+ * Kod vazifasi -> real server sandbox birinchi.
+ * Qolgan vazifalar -> rich-tool Edge agent birinchi, server esa resilient fallback.
+ */
+export async function streamAgent(options: StreamAgentOptions): Promise<void> {
+  if (shouldPreferServerAgent(options)) {
+    return streamServerThenEdge(options);
+  }
+  return streamEdgeThenServer(options);
 }
 
 export type SandboxRun = {
