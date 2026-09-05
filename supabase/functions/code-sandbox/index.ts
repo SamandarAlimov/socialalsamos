@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { guard, preflight, jsonResponse, guardError } from "../_shared/guard.ts";
-import { runJavaScript } from "../_shared/sandbox.ts";
+import { runSandboxCode } from "../_shared/sandbox.ts";
 
 const FUNCTION_NAME = "code-sandbox";
 const RATE_LIMIT = 200;
@@ -37,7 +37,11 @@ serve(async (req) => {
     }
 
     const timeoutMs = Math.min(Number(body?.timeoutMs) || 5000, MAX_TIMEOUT_MS);
-    const result = await runJavaScript(code, timeoutMs);
+    const result = await runSandboxCode(code, {
+      language: body?.language,
+      timeoutMs,
+      stdin: typeof body?.stdin === "string" ? body.stdin : "",
+    });
     return jsonResponse(req, result, 200);
   } catch (error) {
     console.error("code-sandbox error:", error);
