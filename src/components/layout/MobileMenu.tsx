@@ -10,8 +10,10 @@ import {
   Sparkles,
   LayoutGrid,
   Settings,
+  Shield,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAdminAccess } from '@/hooks/useAdminAccess';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { MobileMenuDrawer, type MobileMenuNavItem } from "./MobileMenuDrawer";
@@ -34,17 +36,20 @@ export function MobileMenu({ className }: MobileMenuProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const { isAdmin } = useAdminAccess();
   const [isOpen, setIsOpen] = useState(false);
 
   const handleNavigate = (path: string) => {
-    // Secondary pages remember which primary tab opened them. Their shared
-    // back header can then return to the exact source page instead of guessing.
     const mobileBackTarget = `${location.pathname}${location.search}`;
     navigate(path, { state: { mobileBackTarget } });
     setIsOpen(false);
   };
 
   const activePath = useMemo(() => location.pathname, [location.pathname]);
+  const visibleItems = useMemo<MobileMenuNavItem[]>(
+    () => (isAdmin ? [...menuItems, { icon: Shield, label: 'Admin', path: '/admin' }] : menuItems),
+    [isAdmin],
+  );
 
   useEffect(() => {
     if (!isOpen) return;
@@ -78,7 +83,7 @@ export function MobileMenu({ className }: MobileMenuProps) {
               logout();
             }}
             activePath={activePath}
-            items={menuItems}
+            items={visibleItems}
           />,
           document.body
         )}
