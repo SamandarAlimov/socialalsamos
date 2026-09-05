@@ -8,9 +8,21 @@ export function makeAlsamosMediaReference(key: string): string {
 }
 
 export function parseAlsamosMediaReference(value?: string | null): { key: string } | null {
-  if (!value?.startsWith(EXTERNAL_MEDIA_SCHEME)) return null;
-  const key = value.slice(EXTERNAL_MEDIA_SCHEME.length).replace(/^\/+/, '');
-  return key ? { key } : null;
+  if (!value) return null;
+
+  if (value.startsWith(EXTERNAL_MEDIA_SCHEME)) {
+    const key = value.slice(EXTERNAL_MEDIA_SCHEME.length).replace(/^\/+/, '');
+    return key ? { key } : null;
+  }
+
+  // Eski API private upload javobida public_url bo'lmagani uchun DBga ba'zan
+  // to'g'ridan-to'g'ri `private/...` object key yozilgan. Uni Supabase `media`
+  // bucketi deb noto'g'ri talqin qilmaymiz; server signer orqali ochamiz.
+  if (value.startsWith('private/')) {
+    return { key: value };
+  }
+
+  return null;
 }
 
 export function isAlsamosPublicMediaUrl(value?: string | null): boolean {
