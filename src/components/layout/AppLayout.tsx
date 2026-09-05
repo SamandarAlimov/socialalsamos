@@ -107,7 +107,18 @@ export function AppLayout() {
   if (!isAuthenticated) return <Navigate to="/" replace />;
 
   return (
-    <div className="flex h-[100dvh] min-h-0 w-full overflow-hidden bg-background">
+    <div
+      className={cn(
+        'flex h-[100dvh] min-h-0 w-full overflow-hidden bg-background',
+        // MessagesPage historically reserved 64px for BottomNavbar on the chat
+        // composer itself. Once the navbar is hidden in an opened mobile chat,
+        // remove only that stale reservation while preserving pb-safe for the
+        // iPhone home indicator / Android gesture inset.
+        isMessagesPage &&
+          messagesChatOpen &&
+          '[&_.chat-shell>.pb-safe.mb-16]:!mb-0',
+      )}
+    >
       <AppSidebar collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
 
       {/*
