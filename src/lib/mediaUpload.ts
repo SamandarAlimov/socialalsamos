@@ -1,21 +1,33 @@
 import { supabase } from '@/integrations/supabase/client';
+import {
+  EXTERNAL_MEDIA_BUCKET,
+  encodeMediaPath,
+  isAlsamosPublicMediaUrl,
+  makeAlsamosMediaReference,
+  parseAlsamosMediaReference,
+} from '@/lib/mediaRefs';
 
 /**
- * Fayl yuklash (avatar, post, story, chat fayllari).
+ * Alsamos media arxitekturasi.
  *
- * Asosiy yo'l - Supabase Storage: brauzer to'g'ridan to'g'ri Supabase'ga
- * yuklaydi, shuning uchun CORS preflight muammosi bo'lmaydi.
- *
- * Ixtiyoriy: agar `VITE_MEDIA_API_URL` o'rnatilgan bo'lsa (masalan
- * https://api.alsamos.com), avval o'sha presign API sinaladi va u
- * ishlamasa Storage'ga qaytiladi. Shu sababli tashqi API o'chib qolsa ham
- * platformada fayl yuklash to'xtab qolmaydi.
+ * Yangi fayllar Supabase Storage'ga emas, api.alsamos.com orqali katta
+ * MinIO/S3 serveriga yuklanadi. Supabase faqat eski fayllarni o'qish va
+ * favqulodda, ALOHIDA yoqiladigan fallback uchun qoladi.
  */
 
-/** Storage bucketlari. Eski public obyektlar `media`da qoladi. */
+/** Eski Supabase Storage bucketlari — faqat legacy compatibility uchun. */
 export const MEDIA_BUCKET = 'media';
 export const PRIVATE_MEDIA_BUCKET = 'media-private';
 const PUBLIC_BUCKETS = new Set([MEDIA_BUCKET]);
+
+const EXTERNAL_API = String(
+  import.meta.env.VITE_MEDIA_API_URL || 'https://api.alsamos.com',
+).replace(/\/+$/, '');
+const EXTERNAL_MEDIA_PUBLIC_BASE = String(
+  import.meta.env.VITE_MEDIA_PUBLIC_BASE_URL || 'https://media.alsamos.com/media',
+).replace(/\/+$/, '');
+const ALLOW_SUPABASE_FALLBACK =
+  String(import.meta.env.VITE_MEDIA_ALLOW_SUPABASE_FALLBACK || '').toLowerCase() === 'true';
 
 export type MediaVisibility = 'public' | 'friends' | 'private';
 
@@ -49,15 +61,7 @@ function safeDecodeUriComponent(value: string): string {
   }
 }
 
-/**
- * Eski post/xabarlarda to'liq Supabase Storage URL saqlangan bo'lishi mumkin.
- * Ayniqsa `/object/sign/...` URL lar muddati tugagach media 403/404 bo'lib
- * qoladi. URL ichidan bucket + object key ni qayta ajratish uchun parser.
- *
- * Muhim: parser hostni qabul qiladi, ammo resolver foreign/old project URL'ini
- * avtomatik ravishda joriy projectga ko'chirmaydi. Aks holda boshqa projectda
- * hanuz ishlayotgan public media joriy projectdagi yo'q obyektga almashtiriladi.
- */
+/** Eski Supabase URL'dan bucket/key ni ajratadi. */
 export function parseSupabaseStorageUrl(value?: string | null): ParsedSupabaseStorageUrl | null {
   if (!value || value.startsWith('storage://')) return null;
 
@@ -68,8 +72,6 @@ export function parseSupabaseStorageUrl(value?: string | null): ParsedSupabaseSt
     { marker: '/storage/v1/render/image/public/', access: 'public' },
     { marker: '/storage/v1/render/image/sign/', access: 'signed' },
     { marker: '/storage/v1/render/image/authenticated/', access: 'authenticated' },
-    // Ba'zi eski SDK/proxy URL larida access segmenti bo'lmagan.
-    // Maxsus markerlar yuqorida tekshirilgani uchun bu faqat fallback.
     { marker: '/storage/v1/object/', access: 'authenticated' },
   ];
 
@@ -120,26 +122,62 @@ function bucketForChatMediaType(mediaType?: string | null): string {
   return 'message-attachments';
 }
 
-/** Public URL yoki private signed URL ni ko‘rish vaqtida hosil qiladi. */
+async function getAccessToken(): Promise<string> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error('Sessiya topilmadi - qaytadan tizimga kiring');
+  return token;
+}
+
+async function signExternalMediaKey(key: string): Promise<string> {
+  const token = await getAccessToken();
+  const response = await fetch(
+    `${EXTERNAL_API}/api/media/sign?key=${encodeURIComponent(key)}`,
+    {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+  if (!response.ok) {
+    throw new Error(await readError(response, 'Maxfiy media havolasi olinmadi'));
+  }
+  const body = (await response.json()) as { url?: string };
+  if (!body.url) throw new Error('Media server vaqtinchalik havola qaytarmadi');
+  return body.url;
+}
+
+/**
+ * DB'dagi barqaror media reference'ni brauzer ochadigan URL'ga aylantiradi.
+ * Yangi Alsamos media server reference'lari birinchi o'rinda; eski Supabase
+ * reference'lari esa regressiyasiz o'qilishi uchun saqlangan.
+ */
 export async function resolveStorageUrl(
   value: string,
   bucket?: string | null,
   key?: string | null,
   expiresIn = 3600,
 ): Promise<string> {
+  if (isAlsamosPublicMediaUrl(value)) return value;
+
+  const externalReference = parseAlsamosMediaReference(value);
+  const externalKey =
+    bucket === EXTERNAL_MEDIA_BUCKET && key
+      ? key
+      : externalReference?.key ?? null;
+
+  if (externalKey) {
+    if (externalKey.startsWith('private/')) {
+      return signExternalMediaKey(externalKey);
+    }
+    return `${EXTERNAL_MEDIA_PUBLIC_BASE}/${encodeMediaPath(externalKey)}`;
+  }
+
   const stableReference = parseStorageReference(value);
   const absoluteReference = parseSupabaseStorageUrl(value);
   const hasExplicitObject = Boolean(bucket && key);
 
-  // Legacy public URL doimiy bo'lishi mumkin va boshqa Supabase projectga
-  // tegishli bo'lishi mumkin. Uni joriy project URL'iga majburan almashtirish
-  // media regressiyasiga olib keladi. Canonical bucket/key yoki storage:// bo'lsa
-  // esa obyekt joriy projectga tegishli ekani aniq.
   if (!hasExplicitObject && !stableReference && absoluteReference) {
     if (absoluteReference.access === 'public') return value;
-
-    // Foreign/old project signed URL uchun bizda signing kaliti yo'q. Raw URLni
-    // saqlab qolamiz; current project signed URL bo'lsa esa yangisini olamiz.
     if (!isCurrentSupabaseAbsoluteUrl(value)) return value;
   }
 
@@ -181,10 +219,7 @@ function stringMeta(metadata: Record<string, unknown> | null | undefined, key: s
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
-/**
- * Flutter stores stable Storage paths in message metadata and may leave an
- * expired signed URL in `media_url`. Resolve those paths again for web display.
- */
+/** Flutter/web xabarlardagi stable path/reference'larni real URL'ga resolve qiladi. */
 export async function resolveChatMessageMediaUrl<T extends ChatMediaSource>(message: T): Promise<T> {
   if (!message.media_url && !message.metadata) return message;
 
@@ -196,13 +231,22 @@ export async function resolveChatMessageMediaUrl<T extends ChatMediaSource>(mess
   try {
     if (mediaPath) {
       const bucket = mediaBucket || bucketForChatMediaType(message.media_type);
+      const stable =
+        bucket === EXTERNAL_MEDIA_BUCKET
+          ? makeAlsamosMediaReference(mediaPath)
+          : makeStorageReference(bucket, mediaPath);
       return {
         ...message,
-        media_url: await resolveStorageUrl(`storage://${bucket}/${mediaPath}`, bucket, mediaPath),
+        media_url: await resolveStorageUrl(stable, bucket, mediaPath),
       };
     }
 
-    if (parseStorageReference(mediaUrl) || parseSupabaseStorageUrl(mediaUrl)) {
+    if (
+      parseAlsamosMediaReference(mediaUrl) ||
+      parseStorageReference(mediaUrl) ||
+      parseSupabaseStorageUrl(mediaUrl) ||
+      isAlsamosPublicMediaUrl(mediaUrl)
+    ) {
       return { ...message, media_url: await resolveStorageUrl(mediaUrl) };
     }
   } catch (error) {
@@ -218,12 +262,10 @@ export async function resolveChatMessageMediaUrls<T extends ChatMediaSource>(
   return Promise.all(messages.map((message) => resolveChatMessageMediaUrl(message)));
 }
 
-const EXTERNAL_API = String(import.meta.env.VITE_MEDIA_API_URL ?? '').replace(/\/+$/, '');
-
 export interface MediaUploadResult {
   /** Joriy sessiyada preview uchun ochiladigan URL. */
   url: string;
-  /** DBga yoziladigan barqaror public URL yoki storage:// reference. */
+  /** DBga yoziladigan barqaror URL/reference. */
   storageUrl: string;
   key: string;
   bucket: string;
@@ -239,23 +281,23 @@ export interface MediaUploadOptions {
   visibility?: MediaVisibility;
 }
 
-/** Xatolik matnini foydalanuvchi tushunadigan holatga keltirish */
+/** Xatolik matnini foydalanuvchi tushunadigan holatga keltirish. */
 async function readError(response: Response, fallback: string): Promise<string> {
   try {
     const text = await response.text();
     if (!text) return `${fallback} (${response.status})`;
     try {
-      const json = JSON.parse(text) as { error?: string; message?: string };
-      return json.error || json.message || `${fallback} (${response.status})`;
+      const json = JSON.parse(text) as { error?: string; message?: string; detail?: string };
+      return json.error || json.message || json.detail || `${fallback} (${response.status})`;
     } catch {
-      return `${fallback} (${response.status}): ${text.slice(0, 140)}`;
+      return `${fallback} (${response.status}): ${text.slice(0, 180)}`;
     }
   } catch {
     return `${fallback} (${response.status})`;
   }
 }
 
-/** Fayl nomini xavfsiz, ASCII ko'rinishga keltirish (Storage kaliti uchun). */
+/** Fayl nomini xavfsiz, ASCII ko'rinishga keltirish — faqat legacy fallback uchun. */
 function safeFileName(name: string): string {
   const cleaned = name
     .normalize('NFKD')
@@ -273,7 +315,10 @@ function randomId(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
-/** Supabase Storage'ga to'g'ridan to'g'ri yuklash. */
+/**
+ * Favqulodda Supabase fallback. Default holatda O'CHIQ — storage limitini
+ * tasodifan to'ldirib yubormaslik uchun faqat env bilan ataylab yoqiladi.
+ */
 async function uploadToStorage(
   file: File | Blob,
   userId: string,
@@ -292,7 +337,7 @@ async function uploadToStorage(
   });
 
   if (error) {
-    throw new Error(`Faylni saqlash amalga oshmadi: ${error.message}`);
+    throw new Error(`Supabase fallback ham ishlamadi: ${error.message}`);
   }
 
   const storageUrl =
@@ -305,7 +350,7 @@ async function uploadToStorage(
     try {
       url = await resolveStorageUrl(storageUrl, bucket, key);
     } catch (signError) {
-      console.warn('Private preview URL olinmadi:', signError);
+      console.warn('Private Supabase preview URL olinmadi:', signError);
     }
   }
 
@@ -320,14 +365,25 @@ async function uploadToStorage(
   };
 }
 
-/** Tashqi presign API orqali yuklash (faqat VITE_MEDIA_API_URL bo'lsa). */
+type ExternalPresignResponse = {
+  upload_url?: string;
+  method?: string;
+  headers?: Record<string, string>;
+  public_url?: string;
+  key?: string;
+  bucket?: string;
+  visibility?: 'public' | 'private';
+};
+
+/** Asosiy yo'l: api.alsamos.com -> MinIO/S3 katta media serveri. */
 async function uploadViaExternalApi(
   file: File | Blob,
   token: string,
   filename: string,
   contentType: string,
-  options: MediaUploadOptions
+  options: MediaUploadOptions,
 ): Promise<MediaUploadResult> {
+  const apiVisibility = options.visibility === 'public' || !options.visibility ? 'public' : 'private';
   const presign = await fetch(`${EXTERNAL_API}/api/media/presign`, {
     method: 'POST',
     headers: {
@@ -339,32 +395,51 @@ async function uploadViaExternalApi(
       content_type: contentType,
       size: file.size,
       type: options.type || 'file',
-      visibility: options.visibility || 'public',
+      visibility: apiVisibility,
     }),
   });
 
   if (!presign.ok) {
-    throw new Error(await readError(presign, 'Yuklash uchun ruxsat olinmadi'));
+    throw new Error(await readError(presign, 'Media server yuklash ruxsatini bermadi'));
   }
 
-  const signed = await presign.json();
+  const signed = (await presign.json()) as ExternalPresignResponse;
+  if (!signed.upload_url || !signed.key) {
+    throw new Error('Media server noto\'liq presign javobi qaytardi');
+  }
+
+  const uploadHeaders: Record<string, string> = {
+    ...(signed.headers ?? { 'Content-Type': contentType }),
+  };
+  if (!uploadHeaders['Content-Type']) uploadHeaders['Content-Type'] = contentType;
+  if (apiVisibility === 'private') {
+    uploadHeaders['Cache-Control'] = 'private, no-store, max-age=0';
+  }
 
   const upload = await fetch(signed.upload_url, {
     method: signed.method || 'PUT',
-    headers: signed.headers || { 'Content-Type': contentType },
+    headers: uploadHeaders,
     body: file,
   });
 
   if (!upload.ok) {
-    throw new Error(await readError(upload, 'Faylni saqlash amalga oshmadi'));
+    throw new Error(await readError(upload, 'Media serverga fayl yozilmadi'));
   }
 
-  const externalUrl = signed.public_url || signed.key;
+  const storageUrl =
+    apiVisibility === 'public'
+      ? signed.public_url || `${EXTERNAL_MEDIA_PUBLIC_BASE}/${encodeMediaPath(signed.key)}`
+      : makeAlsamosMediaReference(signed.key);
+  const url =
+    apiVisibility === 'public'
+      ? storageUrl
+      : await signExternalMediaKey(signed.key);
+
   return {
-    url: externalUrl,
-    storageUrl: externalUrl,
+    url,
+    storageUrl,
     key: signed.key,
-    bucket: signed.bucket,
+    bucket: EXTERNAL_MEDIA_BUCKET,
     type: contentType,
     name: filename,
     size: file.size,
@@ -373,7 +448,7 @@ async function uploadViaExternalApi(
 
 export async function uploadMedia(
   file: File | Blob,
-  options: MediaUploadOptions = {}
+  options: MediaUploadOptions = {},
 ): Promise<MediaUploadResult> {
   const { data } = await supabase.auth.getSession();
   const session = data.session;
@@ -387,23 +462,30 @@ export async function uploadMedia(
   const kind = options.type || 'file';
   const visibility: MediaVisibility = options.visibility ?? 'public';
 
-  // 1) Tashqi API faqat PUBLIC fayllar uchun ishlatiladi.
-  // Private/friends obyektlar doimo RLS boshqaradigan Supabase bucketga ketadi.
-  if (EXTERNAL_API && visibility === 'public') {
-    try {
-      return await uploadViaExternalApi(
-        file,
-        session.access_token,
-        filename,
-        contentType,
-        options
+  try {
+    return await uploadViaExternalApi(
+      file,
+      session.access_token,
+      filename,
+      contentType,
+      { ...options, visibility },
+    );
+  } catch (error) {
+    if (!ALLOW_SUPABASE_FALLBACK) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Media serverga yuklab bo'lmadi. Supabase Storage fallback ataylab o'chirilgan: ${message}`,
       );
-    } catch (err) {
-      // Tashqi server o'chgan yoki CORS bermagan bo'lsa - Storage'ga o'tamiz.
-      console.warn('Tashqi media API ishlamadi, Supabase Storage ishlatiladi:', err);
     }
-  }
 
-  // 2) Asosiy yo'l: Supabase Storage.
-  return uploadToStorage(file, session.user.id, filename, contentType, kind, visibility);
+    console.warn('Media API ishlamadi; explicit Supabase fallback ishlatiladi:', error);
+    return uploadToStorage(
+      file,
+      session.user.id,
+      filename,
+      contentType,
+      kind,
+      visibility,
+    );
+  }
 }
