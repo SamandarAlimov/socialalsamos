@@ -4,6 +4,7 @@ import { Compass, Flame, Search, Sparkles, Users, Video } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { CategoryFilterBar } from '@/components/discovery/CategoryFilterBar';
+import { ContactDiscoveryCard } from '@/components/discovery/ContactDiscoveryCard';
 import { DiscoveryStoryBar } from '@/components/discovery/DiscoveryStoryBar';
 import { ForYouSection } from '@/components/discovery/ForYouSection';
 import { PopularCreators } from '@/components/discovery/PopularCreators';
@@ -143,7 +144,7 @@ export default function DiscoveryPage() {
         type="button"
         onClick={openSearch}
         className={cn(
-          'mb-5 flex w-full items-center gap-2 rounded-full border bg-secondary/60 px-4 py-2.5 text-left',
+          'mb-3 flex w-full items-center gap-2 rounded-full border bg-secondary/60 px-4 py-2.5 text-left',
           'text-sm text-muted-foreground transition-colors hover:bg-secondary',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         )}
@@ -152,6 +153,8 @@ export default function DiscoveryPage() {
         <Search className="h-4 w-4 shrink-0" />
         Odamlar, postlar va hashtaglarni qidirish
       </button>
+
+      <ContactDiscoveryCard />
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="mb-6 grid w-full grid-cols-4">
