@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowDownWideNarrow,
@@ -26,9 +26,17 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { enUS, ru, uz } from 'date-fns/locale';
+import { useAuth } from '@/contexts/AuthContext';
 import { PostViewModal } from '@/components/PostViewModal';
 import { PostCollaboratorByline } from '@/components/PostCollaboratorByline';
 import { EditPostDialog } from '@/components/EditPostDialog';
+import { PostExtras } from '@/components/PostExtras';
+import { PostLikesDialog } from '@/components/PostLikesDialog';
+import { SharePostDialog } from '@/components/SharePostDialog';
+import { CommentsSection } from '@/components/CommentsSection';
+import { PostViewsDialog } from '@/components/PostViewsDialog';
+import { RepostButton } from '@/components/RepostButton';
+import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -42,41 +50,52 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { PollDisplay, parsePollFromContent } from '@/components/PollDisplay';
 import { PostMusicCard } from '@/components/PostMusicCard';
-import { PostLocationCard } from '@/components/PostLocationCard';
 import { RichText } from '@/components/RichText';
 import { useToast } from '@/hooks/use-toast';
+import { db } from '@/lib/db';
 import {
   formatCompactCount,
-  legacyLocationToPostLocation,
   parseLocationFromContent,
   parseMusicFromContent,
+  resolvePostMusic,
 } from '@/lib/postMarkers';
+
+interface PostProfile {
+  id?: string | null;
+  username: string | null;
+  avatar_url: string | null;
+  display_name: string | null;
+  is_verified?: boolean | null;
+}
 
 interface Post {
   id: string;
+  user_id?: string | null;
   content: string | null;
   formatted_content?: unknown;
   media_urls: string[] | null;
   media_type: string | null;
   likes_count: number;
   comments_count: number;
+  shares_count?: number;
+  reposts_count?: number;
   views_count?: number;
   is_pinned?: boolean;
   is_liked?: boolean;
+  is_bookmarked?: boolean;
+  post_kind?: string | null;
+  has_poll?: boolean | null;
   created_at: string;
+  profile?: PostProfile | null;
 }
 
 interface ProfilePostsGridProps {
   posts: Post[];
   isOwnProfile: boolean;
-  profile: {
-    username: string | null;
-    avatar_url: string | null;
-    display_name: string | null;
-  };
-  onLike: (postId: string) => void;
-  onDelete: (postId: string) => void;
-  onPin: (postId: string) => void;
+  profile: PostProfile;
+  onLike: (postId: string) => void | Promise<void>;
+  onDelete: (postId: string) => void | Promise<void>;
+  onPin: (postId: string) => void | Promise<void>;
   /** Postlar hali yuklanayotgan bo'lsa premium skeleton ko'rsatiladi. */
   isLoading?: boolean;
 }
@@ -86,7 +105,6 @@ type SortMode = 'newest' | 'oldest' | 'most_viewed' | 'least_viewed';
 
 const DATE_LOCALES = { uz, ru, en: enUS } as const;
 
-/** Grid uchun yuklanish skeleti */
 function GridSkeleton() {
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -101,33 +119,28 @@ function GridSkeleton() {
   );
 }
 
-/** Feed uchun yuklanish skeleti */
 function FeedSkeleton() {
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
+    <div className="mx-auto max-w-[640px] space-y-4 md:space-y-6">
       {Array.from({ length: 3 }).map((_, idx) => (
         <div
           key={idx}
-          className="overflow-hidden rounded-2xl border border-border/60 bg-card"
+          className="overflow-hidden rounded-2xl border border-border/70 bg-card/95 md:rounded-3xl"
           style={{ animationDelay: `${idx * 90}ms` }}
         >
-          <div className="flex items-center gap-3 px-4 py-3">
+          <div className="flex items-center gap-3 p-4 md:p-5">
             <div className="h-10 w-10 animate-pulse rounded-full bg-muted" />
             <div className="flex-1 space-y-2">
               <div className="h-3 w-32 animate-pulse rounded-full bg-muted" />
-              <div className="h-2.5 w-20 animate-pulse rounded-full bg-muted" />
+              <div className="h-2.5 w-24 animate-pulse rounded-full bg-muted" />
             </div>
           </div>
-          <div className="space-y-2 px-4 pb-3">
+          <div className="space-y-2 px-4 pb-4 md:px-5">
             <div className="h-3 w-full animate-pulse rounded-full bg-muted" />
             <div className="h-3 w-4/5 animate-pulse rounded-full bg-muted" />
           </div>
           <div className="h-64 animate-pulse bg-muted" />
-          <div className="flex gap-3 border-t border-border/60 px-4 py-3">
-            <div className="h-7 w-16 animate-pulse rounded-full bg-muted" />
-            <div className="h-7 w-16 animate-pulse rounded-full bg-muted" />
-            <div className="h-7 w-10 animate-pulse rounded-full bg-muted" />
-          </div>
+          <div className="h-14 animate-pulse border-t border-border/70 bg-muted/20" />
         </div>
       ))}
     </div>
@@ -144,14 +157,28 @@ export function ProfilePostsGrid({
   isLoading = false,
 }: ProfilePostsGridProps) {
   const { t, i18n } = useTranslation();
+  const { user } = useAuth();
   const { toast } = useToast();
-  // Bir ustunli feed asosiy ko'rinish: postlarning nisbati juda xilma-xil,
-  // 3 ustunli katak ko'pini kesib yuboradi.
   const [viewMode, setViewMode] = useState<ViewMode>('feed');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  const [showPostModal, setShowPostModal] = useState(false);
   const [editPost, setEditPost] = useState<{ id: string; content: string | null } | null>(null);
+  const [openCommentsPostId, setOpenCommentsPostId] = useState<string | null>(null);
+  const [likesPostId, setLikesPostId] = useState<string | null>(null);
+  const [sharePostId, setSharePostId] = useState<string | null>(null);
+  const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(
+    () => new Set(posts.filter((post) => post.is_bookmarked).map((post) => post.id)),
+  );
+
+  useEffect(() => {
+    setBookmarkedIds((current) => {
+      const next = new Set(current);
+      posts.forEach((post) => {
+        if (post.is_bookmarked) next.add(post.id);
+      });
+      return next;
+    });
+  }, [posts]);
 
   const dateLocale =
     DATE_LOCALES[(i18n.language?.split('-')[0] as keyof typeof DATE_LOCALES) || 'uz'] || uz;
@@ -159,8 +186,8 @@ export function ProfilePostsGrid({
   const sortLabels: Record<SortMode, string> = {
     newest: t('profile.sort.newest', { defaultValue: 'Yangidan eskiga' }),
     oldest: t('profile.sort.oldest', { defaultValue: 'Eskidan yangiga' }),
-    most_viewed: t('profile.sort.mostViewed', { defaultValue: 'Ko\u2019p ko\u2019rilgan' }),
-    least_viewed: t('profile.sort.leastViewed', { defaultValue: 'Kam ko\u2019rilgan' }),
+    most_viewed: t('profile.sort.mostViewed', { defaultValue: 'Ko‘p ko‘rilgan' }),
+    least_viewed: t('profile.sort.leastViewed', { defaultValue: 'Kam ko‘rilgan' }),
   };
 
   const sortIcons: Record<SortMode, typeof Clock> = {
@@ -176,8 +203,6 @@ export function ProfilePostsGrid({
     const time = (post: Post) => new Date(post.created_at).getTime();
 
     list.sort((a, b) => {
-      // Mahkamlangan postlar boshqa professional platformalarda bo'lgani kabi
-      // doim yuqorida turadi.
       if (!!a.is_pinned !== !!b.is_pinned) return a.is_pinned ? -1 : 1;
 
       switch (sortMode) {
@@ -196,11 +221,6 @@ export function ProfilePostsGrid({
     return list;
   }, [posts, sortMode]);
 
-  const handlePostClick = (post: Post) => {
-    setSelectedPost(post);
-    setShowPostModal(true);
-  };
-
   const relativeTime = (value: string) => {
     try {
       return formatDistanceToNow(new Date(value), { addSuffix: true, locale: dateLocale });
@@ -209,17 +229,54 @@ export function ProfilePostsGrid({
     }
   };
 
-  const sharePost = async (postId: string) => {
-    const url = `${window.location.origin}/user/${profile.username ?? ''}?post=${postId}`;
+  const openPost = (post: Post) => setSelectedPost(post);
+
+  const copyPostLink = async (postId: string) => {
     try {
-      if (navigator.share) {
-        await navigator.share({ title: profile.display_name || profile.username || 'Alsamos', url });
-        return;
-      }
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(`${window.location.origin}/post/${postId}`);
       toast({ title: t('post.share.copied', { defaultValue: 'Havola nusxalandi' }) });
     } catch {
-      // foydalanuvchi bekor qildi
+      toast({
+        title: t('common.error', { defaultValue: 'Xatolik' }),
+        description: t('post.share.copyFailed', { defaultValue: 'Havolani nusxalab bo‘lmadi' }),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const toggleBookmark = async (postId: string) => {
+    if (!user?.id) {
+      toast({ title: t('auth.loginRequired', { defaultValue: 'Tizimga kirish kerak' }) });
+      return;
+    }
+
+    const isBookmarked = bookmarkedIds.has(postId);
+    setBookmarkedIds((current) => {
+      const next = new Set(current);
+      if (isBookmarked) next.delete(postId);
+      else next.add(postId);
+      return next;
+    });
+
+    try {
+      const result = isBookmarked
+        ? await db.from('bookmarks').delete().eq('post_id', postId).eq('user_id', user.id)
+        : await db.from('bookmarks').insert({ post_id: postId, user_id: user.id });
+
+      if (result.error) throw result.error;
+    } catch (error) {
+      setBookmarkedIds((current) => {
+        const next = new Set(current);
+        if (isBookmarked) next.add(postId);
+        else next.delete(postId);
+        return next;
+      });
+      console.error('Profile post bookmark failed', error);
+      toast({
+        title: t('common.error', { defaultValue: 'Xatolik' }),
+        description: t('post.saveFailed', { defaultValue: 'Postni saqlab bo‘lmadi' }),
+        variant: 'destructive',
+      });
     }
   };
 
@@ -244,7 +301,7 @@ export function ProfilePostsGrid({
               <DropdownMenuItem key={mode} onClick={() => setSortMode(mode)} className="gap-2">
                 <Icon className="h-4 w-4 text-muted-foreground" />
                 <span className="flex-1">{sortLabels[mode]}</span>
-                {sortMode === mode && <Check className="h-4 w-4 text-primary" />}
+                {sortMode === mode && <Check className="h-4 w-4" />}
               </DropdownMenuItem>
             );
           })}
@@ -283,9 +340,7 @@ export function ProfilePostsGrid({
     );
   }
 
-  if (posts.length === 0) {
-    return null;
-  }
+  if (posts.length === 0) return null;
 
   return (
     <div>
@@ -295,8 +350,7 @@ export function ProfilePostsGrid({
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {sortedPosts.map((post) => {
             const { pollData, cleanContent } = parsePollFromContent(post.content || '');
-            const { location: legacyLocation, cleanContent: locationCleanContent } =
-              parseLocationFromContent(cleanContent);
+            const { location, cleanContent: locationCleanContent } = parseLocationFromContent(cleanContent);
             const { music, cleanContent: textContent } = parseMusicFromContent(locationCleanContent);
             const mediaUrls = post.media_urls ?? [];
             const hasMedia = mediaUrls.length > 0;
@@ -308,21 +362,20 @@ export function ProfilePostsGrid({
               <button
                 key={post.id}
                 type="button"
-                onClick={() => handlePostClick(post)}
-                className="group relative aspect-square overflow-hidden rounded-2xl border border-border/60 bg-muted text-left outline-none ring-primary/40 transition-shadow focus-visible:ring-2"
+                onClick={() => openPost(post)}
+                className="group relative aspect-square overflow-hidden rounded-2xl border border-border/60 bg-muted text-left outline-none ring-ring/40 transition-[box-shadow,transform] hover:shadow-md focus-visible:ring-2"
               >
                 {hasMedia ? (
                   <>
-                    {/* Xiralashgan fon har qanday nisbatni saqlab qoladi. */}
                     <div
-                      className="absolute inset-0 scale-110 bg-cover bg-center opacity-60 blur-xl"
+                      className="absolute inset-0 scale-110 bg-cover bg-center opacity-55 blur-xl"
                       style={{ backgroundImage: `url(${mediaUrls[0]})` }}
                       aria-hidden="true"
                     />
                     {isVideo ? (
                       <video
                         src={mediaUrls[0]}
-                        className="relative h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.03]"
+                        className="relative h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.025]"
                         muted
                         playsInline
                         preload="metadata"
@@ -332,93 +385,74 @@ export function ProfilePostsGrid({
                         src={mediaUrls[0]}
                         alt=""
                         loading="lazy"
-                        className="relative h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.03]"
-                        onError={(e) => {
-                          e.currentTarget.src = '/placeholder.svg';
+                        className="relative h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.025]"
+                        onError={(event) => {
+                          event.currentTarget.src = '/placeholder.svg';
                         }}
                       />
                     )}
                   </>
                 ) : isAudio && music ? (
-                  <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-primary/20 via-primary/10 to-transparent p-3">
+                  <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-muted/60 p-3">
                     {music.coverUrl ? (
-                      <img
-                        src={music.coverUrl}
-                        alt=""
-                        loading="lazy"
-                        className="h-16 w-16 rounded-xl object-cover shadow-md"
-                      />
+                      <img src={music.coverUrl} alt="" className="h-16 w-16 rounded-xl object-cover shadow-sm" />
                     ) : (
-                      <Music2 className="h-7 w-7 text-primary" />
+                      <Music2 className="h-7 w-7" />
                     )}
                     <p className="line-clamp-2 text-center text-xs font-medium">{music.title}</p>
                     {music.artist && (
-                      <p className="line-clamp-1 text-center text-[11px] text-muted-foreground">
-                        {music.artist}
-                      </p>
+                      <p className="line-clamp-1 text-center text-[11px] text-muted-foreground">{music.artist}</p>
                     )}
                   </div>
-                ) : legacyLocation ? (
-                  <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-primary/15 to-primary/5 p-3">
+                ) : location ? (
+                  <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-muted/50 p-3">
                     <p className="line-clamp-2 text-center text-xs font-medium">
-                      {legacyLocation.label || legacyLocation.place?.name || 'Joylashuv'}
+                      {location.label || location.place?.name || 'Joylashuv'}
                     </p>
                     <p className="text-[11px] text-muted-foreground">
-                      {legacyLocation.latitude.toFixed(4)}, {legacyLocation.longitude.toFixed(4)}
+                      {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
                     </p>
                   </div>
                 ) : pollData ? (
-                  <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-primary/15 to-primary/5 p-3">
-                    <BarChart3 className="h-6 w-6 text-primary" />
-                    <p className="line-clamp-3 text-center text-xs text-muted-foreground">
-                      {pollData.question}
-                    </p>
+                  <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-muted/50 p-3">
+                    <BarChart3 className="h-6 w-6" />
+                    <p className="line-clamp-3 text-center text-xs text-muted-foreground">{pollData.question}</p>
                   </div>
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5 p-4">
-                    <p className="line-clamp-5 text-center text-sm text-foreground">
-                      {textContent || legacyLocation?.label || ''}
-                    </p>
+                  <div className="flex h-full w-full items-center justify-center bg-muted/40 p-4">
+                    <p className="line-clamp-5 text-center text-sm text-foreground">{textContent || ''}</p>
                   </div>
                 )}
 
-                {/* Chap yuqori: mahkamlangan belgisi */}
                 {post.is_pinned && (
-                  <span className="absolute left-2 top-2 rounded-full bg-primary p-1 text-primary-foreground shadow-sm">
+                  <span className="absolute left-2 top-2 rounded-full bg-black/60 p-1 text-white backdrop-blur">
                     <Pin className="h-3 w-3" />
                   </span>
                 )}
 
-                {/* O'ng yuqori: media turi belgilari (ustma-ust tushmaydi) */}
                 <div className="absolute right-2 top-2 flex items-center gap-1">
                   {isCarousel && (
-                    <span className="flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur">
+                    <span className="flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur">
                       <Images className="h-3 w-3" />
                       {mediaUrls.length}
                     </span>
                   )}
                   {isVideo && (
-                    <span className="rounded-full bg-black/55 p-1 text-white backdrop-blur">
+                    <span className="rounded-full bg-black/60 p-1 text-white backdrop-blur">
                       <Play className="h-3 w-3 fill-white" />
                     </span>
                   )}
                   {isAudio && (
-                    <span className="rounded-full bg-black/55 p-1 text-white backdrop-blur">
+                    <span className="rounded-full bg-black/60 p-1 text-white backdrop-blur">
                       <Music2 className="h-3 w-3" />
-                    </span>
-                  )}
-                  {!hasMedia && !isAudio && pollData && (
-                    <span className="rounded-full bg-black/55 p-1 text-white backdrop-blur">
-                      <BarChart3 className="h-3 w-3" />
                     </span>
                   )}
                 </div>
 
-                {/* Statistika overlay: hover/fokusda, mobil ekranda doim */}
                 <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100 max-sm:opacity-100" />
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center gap-3 px-3 pb-2.5 text-xs font-semibold text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100 max-sm:opacity-100">
                   <span className="flex items-center gap-1 tabular-nums">
-                    <Heart className={cn('h-4 w-4', post.is_liked && 'fill-current text-red-400')} />
+                    <Heart className={cn('h-4 w-4', post.is_liked && 'fill-current')} />
                     {formatCompactCount(post.likes_count)}
                   </span>
                   <span className="flex items-center gap-1 tabular-nums">
@@ -435,229 +469,222 @@ export function ProfilePostsGrid({
           })}
         </div>
       ) : (
-        <div className="mx-auto max-w-2xl space-y-5">
+        <div className="mx-auto max-w-[640px] space-y-4 md:space-y-6">
           {sortedPosts.map((post) => {
-            const { pollData, cleanContent } = parsePollFromContent(post.content || '');
-            const { location: legacyLocation, cleanContent: locationCleanContent } =
-              parseLocationFromContent(cleanContent);
-            const { music, cleanContent: textContent } = parseMusicFromContent(locationCleanContent);
-            const mediaUrls = post.media_urls ?? [];
-            const hasMedia = mediaUrls.length > 0;
-            const isVideo = post.media_type === 'video';
+            const poll = parsePollFromContent(post.content || '');
+            const location = parseLocationFromContent(poll.cleanContent);
+            const music = parseMusicFromContent(location.cleanContent);
+            const resolvedMusic = resolvePostMusic({
+              contentMusic: music.music,
+              formattedContent: post.formatted_content,
+              mediaUrls: post.media_urls,
+              mediaType: post.media_type,
+            });
+            const hasStructuredPoll = Boolean(post.has_poll) || post.post_kind === 'poll';
+            const author = post.profile || profile;
+            const postUserId = post.user_id || post.profile?.id || profile.id || '';
+            const isBookmarked = bookmarkedIds.has(post.id);
+            const showComments = openCommentsPostId === post.id;
 
             return (
               <article
                 key={post.id}
-                className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm transition-all hover:border-border hover:shadow-md"
+                className="overflow-hidden rounded-2xl border border-border/70 bg-card/95 shadow-sm transition-[box-shadow,border-color] duration-200 hover:border-border hover:shadow-md md:rounded-3xl"
               >
-                {/* Header */}
-                <div className="flex items-center justify-between gap-3 px-4 py-3">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <Avatar className="h-10 w-10 ring-2 ring-primary/15">
-                      <AvatarImage src={profile.avatar_url || ''} />
+                <div className="flex items-center justify-between p-4 md:p-5">
+                  <div className="flex min-w-0 items-center gap-2.5 md:gap-3">
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage src={author.avatar_url || ''} />
                       <AvatarFallback>
-                        {(profile.display_name || profile.username || 'U')[0].toUpperCase()}
+                        {(author.display_name || author.username || 'U')[0].toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold">
-                        {profile.display_name || profile.username}
-                        <PostCollaboratorByline
-                          postId={post.id}
-                          isOwner={isOwnProfile}
-                          className="ml-1 text-sm"
-                        />
-                      </p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {relativeTime(post.created_at)}
+                      <div className="flex min-w-0 flex-wrap items-center gap-1">
+                        <span className="truncate text-sm font-semibold">
+                          {author.display_name || author.username || t('profile.user')}
                         </span>
-                        {post.is_pinned && (
-                          <span className="flex items-center gap-1 text-primary">
-                            <Pin className="h-3 w-3" />
-                            {t('post.pinned', { defaultValue: 'Mahkamlangan' })}
-                          </span>
-                        )}
+                        {author.is_verified && <VerifiedBadge size="xs" />}
+                        <PostCollaboratorByline postId={post.id} isOwner={isOwnProfile} />
                       </div>
+                      <p className="text-[11px] text-muted-foreground md:text-xs">
+                        @{author.username || 'user'} · {relativeTime(post.created_at)}
+                      </p>
                     </div>
                   </div>
 
-                  {isOwnProfile && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-9 w-9 rounded-full"
-                          aria-label={t('common.more', { defaultValue: 'Ko\u2019proq' })}
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => setEditPost({ id: post.id, content: post.content })}
-                        >
-                          <Pencil className="mr-2 h-4 w-4" />
-                          {t('post.edit', { defaultValue: 'Postni tahrirlash' })}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onPin(post.id)}>
-                          <Pin className="mr-2 h-4 w-4" />
-                          {post.is_pinned
-                            ? t('post.unpin', { defaultValue: 'Mahkamlashni bekor qilish' })
-                            : t('post.pin', { defaultValue: 'Profilga mahkamlash' })}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => void sharePost(post.id)}>
-                          <Copy className="mr-2 h-4 w-4" />
-                          {t('post.copyLink', { defaultValue: 'Havolani nusxalash' })}
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => onDelete(post.id)}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          {t('post.delete', { defaultValue: 'O\u2019chirish' })}
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground md:h-9 md:w-9"
+                        aria-label={t('common.more', { defaultValue: 'Ko‘proq' })}
+                      >
+                        <MoreHorizontal className="h-4 w-4 md:h-5 md:w-5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      {isOwnProfile && (
+                        <>
+                          <DropdownMenuItem onClick={() => setEditPost({ id: post.id, content: post.content })}>
+                            <Pencil className="mr-2 h-4 w-4" />
+                            {t('post.edit', { defaultValue: 'Postni tahrirlash' })}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => void onPin(post.id)}>
+                            <Pin className="mr-2 h-4 w-4" />
+                            {post.is_pinned
+                              ? t('post.unpin', { defaultValue: 'Mahkamlashni bekor qilish' })
+                              : t('post.pin', { defaultValue: 'Profilga mahkamlash' })}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                        </>
+                      )}
+                      <DropdownMenuItem onClick={() => void copyPostLink(post.id)}>
+                        <Copy className="mr-2 h-4 w-4" />
+                        {t('post.copyLink', { defaultValue: 'Havolani nusxalash' })}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setSharePostId(post.id)}>
+                        <Share2 className="mr-2 h-4 w-4" />
+                        {t('common.share', { defaultValue: 'Ulashish' })}
+                      </DropdownMenuItem>
+                      {isOwnProfile && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => void onDelete(post.id)}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            {t('post.delete', { defaultValue: 'O‘chirish' })}
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
 
-                {/* Matn */}
-                {(textContent || post.formatted_content) && (
-                  <div className="px-4 pb-3">
+                {music.cleanContent && (
+                  <div className="px-4 pb-3 md:px-5 md:pb-4">
                     <RichText
-                      content={textContent}
+                      content={music.cleanContent}
                       formattedContent={post.formatted_content}
-                      className="text-[15px] leading-relaxed text-foreground"
+                      className="text-sm leading-relaxed"
                     />
                   </div>
                 )}
 
-                {/* Musiqa — avval bu yerda xom JSON chiqib ketardi */}
-                {music && (
-                  <div className="px-4 pb-3">
-                    <PostMusicCard music={music} />
+                {resolvedMusic && (
+                  <div className="px-4 pb-3 md:px-5 md:pb-4">
+                    <PostMusicCard music={resolvedMusic} />
                   </div>
                 )}
 
-                {/* So'rovnoma */}
-                {pollData && (
-                  <div className="px-4 pb-3">
-                    <PollDisplay postId={post.id} pollData={pollData} />
+                {poll.pollData && !hasStructuredPoll && (
+                  <div className="px-4 pb-3 md:px-5 md:pb-4">
+                    <PollDisplay postId={post.id} pollData={poll.pollData} />
                   </div>
                 )}
 
-                {legacyLocation && (
-                  <div className="px-4 pb-3">
-                    <PostLocationCard
-                      location={legacyLocationToPostLocation(post.id, legacyLocation)}
-                      isOwner={false}
-                    />
-                  </div>
-                )}
+                <PostExtras
+                  postId={post.id}
+                  hasPoll={hasStructuredPoll}
+                  isOwner={isOwnProfile && postUserId === user?.id}
+                  legacyMediaUrls={post.media_urls}
+                  legacyMediaType={post.media_type}
+                  legacyLocation={location.location}
+                  legacyLocationLabel={location.labelOnly}
+                  className="px-4 pb-4 md:px-5"
+                />
 
-                {/* Media: kesilmaydi, har qanday nisbat uchun xira fon */}
-                {hasMedia && (
-                  <button
-                    type="button"
-                    onClick={() => handlePostClick(post)}
-                    className="group/media relative block w-full overflow-hidden bg-black/90"
-                  >
-                    <div
-                      className="absolute inset-0 scale-110 bg-cover bg-center opacity-40 blur-2xl"
-                      style={{ backgroundImage: `url(${mediaUrls[0]})` }}
-                      aria-hidden="true"
-                    />
-                    {isVideo ? (
-                      <video
-                        src={mediaUrls[0]}
-                        controls
-                        playsInline
-                        preload="metadata"
-                        className="relative mx-auto max-h-[560px] w-auto max-w-full object-contain"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    ) : (
-                      <img
-                        src={mediaUrls[0]}
-                        alt=""
-                        loading="lazy"
-                        className="relative mx-auto max-h-[560px] w-auto max-w-full object-contain"
-                        onError={(e) => {
-                          e.currentTarget.src = '/placeholder.svg';
-                        }}
-                      />
-                    )}
+                <div className="flex items-center justify-between border-t border-border/70 p-4 md:px-5">
+                  <div className="flex items-center gap-3 md:gap-4">
+                    <div className="flex items-center gap-1.5 md:gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void onLike(post.id)}
+                        className={cn(
+                          'transition-colors touch-feedback',
+                          post.is_liked ? 'text-red-500' : 'text-muted-foreground hover:text-red-500',
+                        )}
+                        aria-label={t('post.like', { defaultValue: 'Yoqtirish' })}
+                      >
+                        <Heart className={cn('h-5 w-5', post.is_liked && 'fill-current')} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLikesPostId(post.id)}
+                        className={cn(
+                          'text-xs font-medium hover:underline md:text-sm',
+                          post.is_liked ? 'text-red-500' : 'text-muted-foreground',
+                        )}
+                      >
+                        {formatCompactCount(post.likes_count)}
+                      </button>
+                    </div>
 
-                    {mediaUrls.length > 1 && (
-                      <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-xs font-medium text-white backdrop-blur">
-                        <Images className="h-3.5 w-3.5" />
-                        1/{mediaUrls.length}
+                    <button
+                      type="button"
+                      onClick={() => setOpenCommentsPostId(showComments ? null : post.id)}
+                      className={cn(
+                        'flex items-center gap-1.5 transition-colors touch-feedback md:gap-2',
+                        showComments ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      <MessageCircle className={cn('h-5 w-5', showComments && 'fill-current')} />
+                      <span className="text-xs font-medium md:text-sm">
+                        {formatCompactCount(post.comments_count)}
                       </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSharePostId(post.id)}
+                      className="flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground touch-feedback md:gap-2"
+                    >
+                      <Share2 className="h-5 w-5" />
+                      <span className="text-xs font-medium md:text-sm">
+                        {formatCompactCount(post.shares_count)}
+                      </span>
+                    </button>
+
+                    {postUserId && (
+                      <RepostButton
+                        postId={post.id}
+                        postUserId={postUserId}
+                        initialCount={post.reposts_count || 0}
+                        size="sm"
+                      />
                     )}
-                  </button>
-                )}
+                  </div>
 
-                {/* Amallar */}
-                <div className="flex items-center gap-1 border-t border-border/60 px-2 py-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="gap-2 rounded-full transition-transform active:scale-90"
-                    onClick={() => onLike(post.id)}
-                    aria-label={t('post.like', { defaultValue: 'Yoqtirish' })}
-                  >
-                    <Heart
-                      className={cn('h-[18px] w-[18px]', post.is_liked && 'fill-red-500 text-red-500')}
+                  <div className="flex items-center gap-3">
+                    <PostViewsDialog
+                      postId={post.id}
+                      viewsCount={post.views_count || 0}
+                      iconClassName="h-5 w-5"
+                      textClassName="text-xs md:text-sm"
                     />
-                    <span className="text-sm tabular-nums">{formatCompactCount(post.likes_count)}</span>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="gap-2 rounded-full"
-                    onClick={() => handlePostClick(post)}
-                    aria-label={t('post.comment', { defaultValue: 'Izoh' })}
-                  >
-                    <MessageCircle className="h-[18px] w-[18px]" />
-                    <span className="text-sm tabular-nums">
-                      {formatCompactCount(post.comments_count)}
-                    </span>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="gap-2 rounded-full"
-                    aria-label={t('post.repost', { defaultValue: 'Repost' })}
-                  >
-                    <Repeat2 className="h-[18px] w-[18px]" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="gap-2 rounded-full"
-                    onClick={() => void sharePost(post.id)}
-                    aria-label={t('common.share', { defaultValue: 'Ulashish' })}
-                  >
-                    <Share2 className="h-[18px] w-[18px]" />
-                  </Button>
-
-                  <span className="ml-auto flex items-center gap-1 pr-2 text-xs tabular-nums text-muted-foreground">
-                    <Eye className="h-4 w-4" />
-                    {formatCompactCount(post.views_count)}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="rounded-full"
-                    aria-label={t('post.save', { defaultValue: 'Saqlash' })}
-                  >
-                    <Bookmark className="h-[18px] w-[18px]" />
-                  </Button>
+                    <button
+                      type="button"
+                      onClick={() => void toggleBookmark(post.id)}
+                      aria-pressed={isBookmarked}
+                      aria-label={
+                        isBookmarked
+                          ? t('post.unsave', { defaultValue: 'Saqlanganlardan olib tashlash' })
+                          : t('post.save', { defaultValue: 'Postni saqlash' })
+                      }
+                      className={cn(
+                        'transition-colors touch-feedback',
+                        isBookmarked ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      <Bookmark className={cn('h-5 w-5', isBookmarked && 'fill-current')} />
+                    </button>
+                  </div>
                 </div>
+
+                {showComments && <CommentsSection postId={post.id} />}
               </article>
             );
           })}
@@ -667,14 +694,29 @@ export function ProfilePostsGrid({
       {selectedPost && (
         <PostViewModal
           post={selectedPost}
-          profile={profile}
-          open={showPostModal}
-          onOpenChange={(open) => {
-            setShowPostModal(open);
-            if (!open) setSelectedPost(null);
-          }}
-          onLike={() => onLike(selectedPost.id)}
+          profile={selectedPost.profile || profile}
+          open={!!selectedPost}
+          onOpenChange={(open) => !open && setSelectedPost(null)}
+          onLike={() => void onLike(selectedPost.id)}
           isOwnProfile={isOwnProfile}
+        />
+      )}
+
+      {likesPostId && (
+        <PostLikesDialog
+          postId={likesPostId}
+          open={!!likesPostId}
+          onOpenChange={(open) => !open && setLikesPostId(null)}
+          likesCount={posts.find((post) => post.id === likesPostId)?.likes_count || 0}
+        />
+      )}
+
+      {sharePostId && (
+        <SharePostDialog
+          open={!!sharePostId}
+          onOpenChange={(open) => !open && setSharePostId(null)}
+          postId={sharePostId}
+          postContent={posts.find((post) => post.id === sharePostId)?.content || undefined}
         />
       )}
 
@@ -682,7 +724,7 @@ export function ProfilePostsGrid({
         <EditPostDialog
           postId={editPost.id}
           open={!!editPost}
-          onOpenChange={(o) => !o && setEditPost(null)}
+          onOpenChange={(open) => !open && setEditPost(null)}
           initialContent={editPost.content || ''}
         />
       )}
