@@ -32,6 +32,7 @@ export interface FeedPostCardPost {
   likes_count: number;
   comments_count: number;
   shares_count?: number;
+  reposts_count?: number;
   views_count?: number;
   is_pinned?: boolean;
   is_liked?: boolean;
@@ -62,6 +63,7 @@ interface FeedPostCardProps {
   formatTime: (date: string) => string;
   realtimeCounts: FeedPostCardCounts;
   onDelete?: () => void;
+  onPin?: () => void;
   onBookmark?: () => void | Promise<void>;
   onHide?: () => void | Promise<void>;
   isOwner?: boolean;
@@ -81,6 +83,7 @@ export function FeedPostCard({
   formatTime,
   realtimeCounts,
   onDelete,
+  onPin,
   onBookmark,
   onHide,
   isOwner,
@@ -209,6 +212,7 @@ export function FeedPostCard({
           onToggleBookmark={onBookmark}
           onHide={onHide}
           onDelete={onDelete}
+          onPin={onPin}
         />
       </div>
 
@@ -294,7 +298,7 @@ export function FeedPostCard({
           <RepostButton
             postId={post.id}
             postUserId={post.user_id}
-            initialCount={0}
+            initialCount={post.reposts_count ?? 0}
             size="sm"
           />
         </div>
