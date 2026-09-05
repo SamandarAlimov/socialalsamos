@@ -42,10 +42,19 @@ function increment<K>(map: Map<K, number>, key: K, amount: number) {
   map.set(key, (map.get(key) ?? 0) + amount);
 }
 
+function normalizeExplicitTopic(value: unknown) {
+  return String(value ?? '')
+    .normalize('NFKC')
+    .trim()
+    .replace(/^#/, '')
+    .replace(/\s+/g, ' ')
+    .toLocaleLowerCase()
+    .slice(0, 120);
+}
+
 /**
  * Shared, cached interest graph used by both Home ranking and Ads Delivery.
- * Keeping one source of behavioral affinity prevents the ads stack from
- * inventing a second tracking profile and cuts duplicate database reads.
+ * It blends behavioral affinity with explicit user-controlled preferences.
  */
 export async function loadRecommendationProfileForUser(
   userId: string,
@@ -102,6 +111,12 @@ export async function loadRecommendationProfileForUser(
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(SIGNAL_LIMIT),
+    db
+      .from('user_recommendation_interests')
+      .select('topic, weight, source, updated_at')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+      .limit(100),
   ]);
 
   const followingRows = settledRows(results[0]);
@@ -112,6 +127,7 @@ export async function loadRecommendationProfileForUser(
   const viewRows = settledRows(results[5]);
   const hiddenRows = settledRows(results[6]);
   const watchRows = settledRows(results[7]);
+  const explicitRows = settledRows(results[8]);
 
   const following = new Set(
     followingRows.map((row) => String(row.following_id)).filter(Boolean),
@@ -119,6 +135,14 @@ export async function loadRecommendationProfileForUser(
   const hiddenPosts = new Set(
     hiddenRows.map((row) => String(row.post_id)).filter(Boolean),
   );
+  const explicitTopicAffinity = new Map<string, number>();
+  for (const row of explicitRows) {
+    const topic = normalizeExplicitTopic(row.topic);
+    const weight = Math.max(-3, Math.min(3, Number(row.weight ?? 0)));
+    if (!topic || !Number.isFinite(weight) || weight === 0) continue;
+    explicitTopicAffinity.set(topic, weight);
+  }
+
   const positivePostIds = new Set<string>();
   const viewedAt = new Map<string, number>();
   const postWeights = new Map<string, number>();
@@ -248,6 +272,7 @@ export async function loadRecommendationProfileForUser(
     hashtagAffinity,
     mediaAffinity,
     positivePostIds,
+    explicitTopicAffinity,
   };
 
   profileCache.set(userId, {
