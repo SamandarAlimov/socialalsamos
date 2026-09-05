@@ -14,8 +14,17 @@ import {
   type OpenPlan,
   type OpenStep,
 } from '../openStrategy';
-import { createMiniAppBridge } from '../sdk/hostBridge';
+import {
+  createMiniAppBridge,
+  type MiniAppPaymentRequest,
+  type MiniAppPaymentResolution as BridgePaymentResolution,
+} from '../sdk/hostBridge';
 import type { MiniApp, MiniAppErrorCode } from '../types';
+import {
+  MiniAppPaymentConfirmDialog,
+  type MiniAppPaymentResolution,
+  type PendingMiniAppPayment,
+} from './MiniAppPaymentConfirmDialog';
 
 interface MiniAppViewerProps {
   app: MiniApp;
@@ -38,7 +47,9 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [failed, setFailed] = useState<MiniAppErrorCode | null>(null);
   const [rating, setRating] = useState(0);
+  const [pendingPayment, setPendingPayment] = useState<PendingMiniAppPayment | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const paymentResolverRef = useRef<((resolution: BridgePaymentResolution) => void) | null>(null);
 
   const openedAt = useRef<number>(Date.now());
   const sessionId = useRef<string>(
@@ -103,6 +114,60 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
     [app.id, app.name, toast],
   );
 
+  const requestPaymentConfirmation = useCallback(
+    (request: MiniAppPaymentRequest): Promise<BridgePaymentResolution> => {
+      if (paymentResolverRef.current) {
+        return Promise.resolve({
+          paymentId: request.paymentId,
+          status: 'failed',
+          amount: request.amount,
+          currency: request.currency,
+          error: 'PAYMENT_ALREADY_PENDING',
+        });
+      }
+
+      return new Promise<BridgePaymentResolution>((resolve) => {
+        paymentResolverRef.current = resolve;
+        setPendingPayment({
+          paymentId: request.paymentId,
+          appId: request.appId,
+          appName: request.appName,
+          amount: request.amount,
+          currency: request.currency,
+          description: request.description,
+        });
+      });
+    },
+    [],
+  );
+
+  const handlePaymentResolved = useCallback(
+    (resolution: MiniAppPaymentResolution) => {
+      const resolver = paymentResolverRef.current;
+      paymentResolverRef.current = null;
+      setPendingPayment(null);
+
+      void trackMiniAppEvent(app.id, 'payment', {
+        paymentId: resolution.paymentId,
+        amount: resolution.amount,
+        currency: resolution.currency,
+        status: resolution.status,
+        transferId: resolution.transferId ?? null,
+        sessionId: sessionId.current,
+      });
+
+      if (resolution.status === 'paid') {
+        toast({
+          title: 'To‘lov bajarildi',
+          description: 'Mini app to‘lovi Alsamos Wallet orqali tasdiqlandi.',
+        });
+      }
+
+      resolver?.(resolution);
+    },
+    [app.id, toast],
+  );
+
   // Ochilish telemetriyasi + yopilishda davomiylik (ranking shu eventlarga tayanadi).
   useEffect(() => {
     openedAt.current = Date.now();
@@ -124,9 +189,9 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
     }
   }, [openExternal, step]);
 
-  // Embedded mini app'ni haqiqiy Alsamos SDK bilan bog'laymiz. Ilgari iframe
-  // ochilardi, lekin host bridge o'rnatilmagani uchun getInitData, close,
-  // share va requestPayment chaqiruvlari javobsiz qolardi.
+  // Embedded mini app'ni haqiqiy Alsamos SDK bilan bog'laymiz. requestPayment
+  // endi faqat intent yaratib qo'ymaydi: iframe Promise'i foydalanuvchi Alsamos
+  // confirmation oynasida tasdiqlamaguncha resolve bo'lmaydi.
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe || !step || !['embed', 'direct', 'proxy'].includes(step.kind)) return;
@@ -136,19 +201,9 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
       onShare: (payload) => {
         void shareFromMiniApp(payload);
       },
-      onPaymentRequested: (paymentId, amount) => {
-        void trackMiniAppEvent(app.id, 'payment', {
-          paymentId,
-          amount,
-          sessionId: sessionId.current,
-        });
-        toast({
-          title: 'To‘lov so‘rovi yaratildi',
-          description: 'To‘lov holati server tasdig‘idan keyin yangilanadi.',
-        });
-      },
+      onPaymentRequested: requestPaymentConfirmation,
     });
-  }, [app, onClose, shareFromMiniApp, step, toast]);
+  }, [app, onClose, requestPaymentConfirmation, shareFromMiniApp, step]);
 
   // Har bir iframe qadami uchun kutish vaqti; tugasa keyingi qadamga o‘tamiz.
   useEffect(() => {
@@ -168,6 +223,13 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
   }, [app.id, frameLoaded, plan.steps.length, step, stepIndex]);
 
   const handleReload = () => {
+    if (pendingPayment) {
+      toast({
+        title: 'Avval to‘lovni yakunlang',
+        description: 'Tasdiqlash yoki bekor qilishdan keyin mini appni qayta yuklash mumkin.',
+      });
+      return;
+    }
     setStepIndex(0);
     setFrameLoaded(false);
     setFailed(null);
@@ -209,7 +271,7 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
   return (
     <div className={cn('fixed inset-0 flex flex-col bg-background', UI_LAYER.immersive)}>
       <header className="flex items-center gap-2 border-b px-3 py-2">
-        <Button size="icon" variant="ghost" onClick={onClose} aria-label="Yopish">
+        <Button size="icon" variant="ghost" onClick={onClose} aria-label="Yopish" disabled={Boolean(pendingPayment)}>
           <X className="h-5 w-5" />
         </Button>
 
@@ -338,6 +400,8 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
           </div>
         )}
       </div>
+
+      <MiniAppPaymentConfirmDialog payment={pendingPayment} onResolved={handlePaymentResolved} />
     </div>
   );
 }
