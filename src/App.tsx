@@ -38,6 +38,7 @@ import WebViewerPage from "./pages/WebViewerPage";
 import MarketplacePage from "./pages/MarketplacePage";
 import MarketplaceProductPage from "./pages/MarketplaceProductPage";
 import AdminConsolePage from "./pages/AdminConsolePage";
+import AdminAdsReviewPage from "./pages/AdminAdsReviewPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import StoryArchivePage from "./pages/StoryArchivePage";
 import AIPage from "./pages/AIPage";
@@ -164,6 +165,7 @@ function AppRoutes() {
         <Route path="/settings/:section" element={<SettingsHubPage />} />
         <Route path="/payment" element={<PaymentSettingsPage />} />
         <Route path="/admin" element={<AdminConsolePage />} />
+        <Route path="/admin/ads-review" element={<AdminAdsReviewPage />} />
         <Route path="/admin/:section" element={<AdminConsolePage />} />
         <Route path="/story-archive" element={<StoryArchivePage />} />
         <Route path="/projects" element={<ProjectsPage />} />
