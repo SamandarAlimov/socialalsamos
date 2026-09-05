@@ -52,7 +52,7 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, logout } = useAuth();
-  const { isAdmin } = useAdminAccess();
+  const { isAdmin, hasPermission } = useAdminAccess();
   const { t } = useTranslation();
   const [showSwitchAccount, setShowSwitchAccount] = useState(false);
 
@@ -77,7 +77,8 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
 
   const profileActive = isNavItemActive('/profile');
   const settingsActive = isNavItemActive('/settings');
-  const adminActive = isNavItemActive('/admin');
+  const adminActive = isNavItemActive('/admin') && location.pathname !== '/admin/ads-review';
+  const adsReviewActive = isNavItemActive('/admin/ads-review');
 
   return (
     <aside className={cn(
@@ -122,14 +123,30 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
 
       <div className="shrink-0 p-3 border-t border-sidebar-border space-y-1">
         {isAdmin && (
-          <NavLink
-            to="/admin"
-            aria-label="Admin"
-            className={cn(NAV_ITEM_BASE, adminActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE)}
-          >
-            <Shield className="h-5 w-5 flex-shrink-0" strokeWidth={adminActive ? 2.4 : 1.9} />
-            {!collapsed && <span className="text-sm">Admin</span>}
-          </NavLink>
+          <>
+            <NavLink
+              to="/admin"
+              aria-label="Admin"
+              className={cn(NAV_ITEM_BASE, adminActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE)}
+            >
+              <Shield className="h-5 w-5 flex-shrink-0" strokeWidth={adminActive ? 2.4 : 1.9} />
+              {!collapsed && <span className="text-sm">Admin</span>}
+            </NavLink>
+            {hasPermission('ads.review') && (
+              <NavLink
+                to="/admin/ads-review"
+                aria-label="Reklama moderatsiyasi"
+                className={cn(
+                  NAV_ITEM_BASE,
+                  adsReviewActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE,
+                  !collapsed && 'ml-3 pl-3',
+                )}
+              >
+                <Megaphone className="h-5 w-5 flex-shrink-0" strokeWidth={adsReviewActive ? 2.4 : 1.9} />
+                {!collapsed && <span className="text-sm">Ads Review</span>}
+              </NavLink>
+            )}
+          </>
         )}
 
         <NavLink
