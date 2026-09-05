@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { TelegramLinkPreview } from './TelegramLinkPreview';
+import { MarketplaceLinkPreview, isMarketplaceProductUrl } from './MarketplaceLinkPreview';
 import { MediaAlbum } from './MediaAlbum';
 import { FormattedBlocks } from '@/components/chat/FormattedBlocks';
 import { ArticleMessage } from '@/components/chat/ArticleMessage';
@@ -21,7 +22,8 @@ const URL_REGEX = /https?:\/\/[^\s<]+[^<.,:;"')\]\s]/g;
  * albom (bir nechta rasm/video) va "maqola" (article) xabarlari.
  *
  * Havolalar Telegramdek to'liq ko'rinadi (qisqartirilmaydi) va birinchi havola
- * uchun preview kartasi chiziladi.
+ * uchun preview kartasi chiziladi. Alsamos Marketplace havolalari generic web
+ * preview emas, real mahsulot/variant ma'lumotidan native product card oladi.
  */
 export function MessageContent({ content, isMine, className }: MessageContentProps) {
   const article = useMemo(() => parseArticlePayload(content), [content]);
@@ -70,15 +72,24 @@ export function MessageContent({ content, isMine, className }: MessageContentPro
 
       {/* Single-link messages keep the URL inside the preview so the bubble width
           follows the media instead of stretching across the chat. */}
-      {links.slice(0, 1).map((url, index) => (
-        <TelegramLinkPreview
-          key={index}
-          url={url}
-          isMine={isMine}
-          showUrl={singleLinkOnly}
-          className={singleLinkOnly ? undefined : 'mt-1'}
-        />
-      ))}
+      {links.slice(0, 1).map((url, index) =>
+        isMarketplaceProductUrl(url) ? (
+          <MarketplaceLinkPreview
+            key={index}
+            url={url}
+            isMine={isMine}
+            className={singleLinkOnly ? undefined : 'mt-1'}
+          />
+        ) : (
+          <TelegramLinkPreview
+            key={index}
+            url={url}
+            isMine={isMine}
+            showUrl={singleLinkOnly}
+            className={singleLinkOnly ? undefined : 'mt-1'}
+          />
+        ),
+      )}
     </div>
   );
 }
