@@ -1,0 +1,120 @@
+# Prompt for Lovable — Alsamos production sync
+
+> **Purpose:** Lovable must NOT write, redesign, replace, or refactor application code. All code, SQL, UI/UX and security logic are already maintained in this GitHub repository. Lovable is only used as the authorized Supabase/Lovable execution environment to apply the repository state to production.
+>
+> We have a very limited credit budget. Perform this as **one coordinated deployment/smoke-test session**. Do not spend credits asking broad questions or generating alternative implementations.
+
+## Repository / production rules
+
+1. Use the connected Alsamos production Supabase project.
+2. Read the repository's existing `supabase/migrations` and Supabase migration history first.
+3. Apply **only migrations that exist in GitHub and are not yet applied**, in filename order.
+4. Never reset the database, never drop production data, never recreate the project, never replace existing auth users, and never run destructive "clean start" operations.
+5. If one migration fails, stop at that migration and return the exact PostgreSQL error, filename and statement context. Do **not** invent a replacement migration.
+6. Do not edit SQL from Lovable. The source of truth is GitHub.
+7. Do not create demo/sample users, fake wallet balances, fake ads, fake marketplace orders, fake feedback cases or fake analytics.
+
+## Migrations that are especially important to verify
+
+The repository contains multiple platform upgrades that production may still be missing because GitHub deployment credentials were previously unavailable. Verify migration history and apply every pending file, including the current platform layers for:
+
+- scalable Admin RBAC / `super_admin` and granular permissions;
+- Trust & Safety / moderation, account restrictions and audit foundations;
+- Ads normalized campaign hierarchy, delivery, fraud/integrity, attribution and experiments;
+- Feedback & Support Center tables/RLS/RPC hardening;
+- Wallet / P2P ledger and transfer RPCs;
+- AI personalization / explicit recommendation interests;
+- Marketplace/commerce integrations;
+- Mini Apps platform migrations;
+- **`20260905183500_mini_app_wallet_settlement.sql`** — explicit Mini App payment intent + Wallet settlement.
+
+Do not re-run already recorded migrations merely because they are listed here.
+
+## Edge Functions / server functions
+
+After migrations are synchronized, deploy the repository versions of the functions that are newer than production. At minimum verify and deploy when changed:
+
+- `ai-agent`
+- `code-sandbox`
+- `mini-app-init-data`
+- any Mini Apps proxy/runtime function used by the current repository
+- `wallet-payme-create`
+- any payment/provider callback function required by the current Wallet implementation
+
+Do not rewrite these functions in Lovable. Deploy the GitHub source exactly.
+
+### AI requirement
+
+`ai-agent` must run with the repository's current first-party tools. The deployed version must recognize the user-scoped tools for:
+
+- own search insights/history;
+- own payment / Wallet history;
+- reading recommendation preferences;
+- updating real Home/Videos recommendation preferences;
+- normal Alsamos tools such as posts/marketplace;
+- `run_code` through the real sandbox path.
+
+The AI must never receive a service-role key in the browser. User-private data must stay server-scoped.
+
+### Mini App payment requirement
+
+After `20260905183500_mini_app_wallet_settlement.sql` is applied:
+
+1. `requestPayment()` may create a **pending** payment intent, but that alone must not debit the Wallet.
+2. Verify RPCs exist for:
+   - `mini_app_payment_create`
+   - `mini_app_payment_confirm`
+   - `mini_app_payment_cancel`
+3. Confirm only the authenticated payer can confirm/cancel their intent.
+4. Confirm the merchant is derived from the approved Mini App owner; the browser must not be able to substitute another recipient.
+5. Confirm settlement uses the canonical Wallet transfer/ledger logic and creates debit/credit ledger history.
+6. Confirm insufficient balance does not move money.
+7. Confirm cancelling an intent does not move money.
+8. Confirm a paid intent cannot be charged twice when the same confirmation is retried.
+
+## Secrets / configuration
+
+Do not print secret values back to chat/logs. Only report whether each required secret/config is present or missing.
+
+Verify the production environment has the secrets actually referenced by the deployed repository functions. Important examples may include:
+
+- AI provider key(s), e.g. `GEMINI_API_KEYS` and/or the configured Lovable AI fallback key;
+- Supabase URL/service-role values that Edge Functions receive through the platform environment;
+- Payme merchant secrets if Payme is intended to be live;
+- Mini Apps proxy/runtime origin/config if that deployment requires it.
+
+If a secret is missing, do not fabricate a value. Report the exact environment variable name only.
+
+## Smoke tests after deployment
+
+Run non-destructive smoke tests with an authenticated test/admin account already present in production. Do not create artificial production records beyond a temporary pending object that you immediately cancel when required by a test.
+
+Verify:
+
+1. Existing login still works.
+2. Admin access/RBAC queries do not error.
+3. `/feedback` backend can create/read the current user's case under RLS.
+4. Wallet can load and `ensure_my_wallet`/ledger calls do not error.
+5. P2P recipient lookup/transfer RPCs exist (do not transfer real money just for testing).
+6. AI agent function responds and exposes its current tool list.
+7. AI `run_code` reaches the real sandbox function rather than returning a demo result.
+8. AI private data tools reject anonymous calls and scope authenticated calls to the current user.
+9. Home/Videos recommendation preference tables/RPC access do not error.
+10. Marketplace product/read APIs still work.
+11. Mini App init-data function works for an approved app with correct permissions.
+12. Mini App payment create -> cancel flow works without changing Wallet balance.
+13. Mini App payment confirmation path is present; do not perform a real-value payment merely for smoke testing unless a dedicated zero-risk test merchant/account already exists.
+
+## Final response format
+
+Return only a concise deployment report containing:
+
+- production project identifier/name used;
+- migrations applied (filenames);
+- migrations already applied/skipped;
+- Edge Functions deployed;
+- smoke tests passed/failed;
+- missing secret/config **names only**;
+- any exact blocker/error requiring a GitHub code change.
+
+Do not propose or generate new UI/code unless a concrete repository error is found. We will fix code in GitHub ourselves.
