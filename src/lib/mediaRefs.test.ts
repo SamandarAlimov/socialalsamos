@@ -16,6 +16,13 @@ describe('Alsamos external media references', () => {
     expect(EXTERNAL_MEDIA_BUCKET).toBe('alsamos-media');
   });
 
+  it('recovers the raw private key shape used by the old API client', () => {
+    expect(parseAlsamosMediaReference('private/post/user-id/old-video.mp4')).toEqual({
+      key: 'private/post/user-id/old-video.mp4',
+    });
+    expect(parseAlsamosMediaReference('post/user-id/public.jpg')).toBeNull();
+  });
+
   it('recognizes only the canonical public media host', () => {
     expect(isAlsamosPublicMediaUrl('https://media.alsamos.com/media/post/u/a.jpg')).toBe(true);
     expect(isAlsamosPublicMediaUrl('https://example.com/media/post/u/a.jpg')).toBe(false);
