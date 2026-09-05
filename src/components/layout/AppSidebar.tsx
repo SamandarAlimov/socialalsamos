@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UsersRound, Shield, Megaphone, FlaskConical, ShieldAlert } from 'lucide-react';
+import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UsersRound, Shield, Megaphone, FlaskConical, ShieldAlert, MessageSquareText } from 'lucide-react';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAdminAccess } from '@/hooks/useAdminAccess';
@@ -81,9 +81,12 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
 
   const profileActive = isNavItemActive('/profile');
   const settingsActive = isNavItemActive('/settings');
-  const adminActive = isNavItemActive('/admin') && !['/admin/ads-review', '/admin/ads-integrity'].includes(location.pathname);
+  const feedbackActive = isNavItemActive('/feedback');
+  const adminStandalonePaths = ['/admin/ads-review', '/admin/ads-integrity', '/admin/feedback'];
+  const adminActive = isNavItemActive('/admin') && !adminStandalonePaths.includes(location.pathname);
   const adsReviewActive = isNavItemActive('/admin/ads-review');
   const adsIntegrityActive = isNavItemActive('/admin/ads-integrity');
+  const adminFeedbackActive = isNavItemActive('/admin/feedback');
 
   return (
     <aside className={cn(
@@ -145,6 +148,20 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
               <Shield className="h-5 w-5 flex-shrink-0" strokeWidth={adminActive ? 2.4 : 1.9} />
               {!collapsed && <span className="text-sm">Admin</span>}
             </NavLink>
+            {(hasPermission('feedback.view') || hasPermission('feedback.review')) && (
+              <NavLink
+                to="/admin/feedback"
+                aria-label="Feedback va Support"
+                className={cn(
+                  NAV_ITEM_BASE,
+                  adminFeedbackActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE,
+                  !collapsed && 'ml-3 pl-3',
+                )}
+              >
+                <MessageSquareText className="h-5 w-5 flex-shrink-0" strokeWidth={adminFeedbackActive ? 2.4 : 1.9} />
+                {!collapsed && <span className="text-sm">Feedback & Support</span>}
+              </NavLink>
+            )}
             {hasPermission('ads.review') && (
               <>
                 <NavLink
@@ -175,6 +192,15 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
             )}
           </>
         )}
+
+        <NavLink
+          to="/feedback"
+          aria-label="Feedback"
+          className={cn(NAV_ITEM_BASE, feedbackActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE)}
+        >
+          <MessageSquareText className="h-5 w-5 flex-shrink-0" strokeWidth={feedbackActive ? 2.4 : 1.9} />
+          {!collapsed && <span className="text-sm">Feedback</span>}
+        </NavLink>
 
         <NavLink
           to="/settings"

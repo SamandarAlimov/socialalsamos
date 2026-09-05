@@ -41,6 +41,8 @@ import AdminConsolePage from "./pages/AdminConsolePage";
 import AdminModerationHubPage from "./pages/AdminModerationHubPage";
 import AdminAdsReviewPage from "./pages/AdminAdsReviewPage";
 import AdminAdsIntegrityPage from "./pages/AdminAdsIntegrityPage";
+import AdminFeedbackPage from "./pages/AdminFeedbackPage";
+import FeedbackPage from "./pages/FeedbackPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import StoryArchivePage from "./pages/StoryArchivePage";
 import AIPage from "./pages/AIPage";
@@ -166,8 +168,10 @@ function AppRoutes() {
         <Route path="/settings" element={<SettingsHubPage />} />
         <Route path="/settings/:section" element={<SettingsHubPage />} />
         <Route path="/payment" element={<PaymentSettingsPage />} />
+        <Route path="/feedback" element={<FeedbackPage />} />
         <Route path="/admin" element={<AdminConsolePage />} />
         <Route path="/admin/moderation" element={<AdminModerationHubPage />} />
+        <Route path="/admin/feedback" element={<AdminFeedbackPage />} />
         <Route path="/admin/ads-review" element={<AdminAdsReviewPage />} />
         <Route path="/admin/ads-integrity" element={<AdminAdsIntegrityPage />} />
         <Route path="/admin/:section" element={<AdminConsolePage />} />

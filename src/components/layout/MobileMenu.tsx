@@ -12,6 +12,7 @@ import {
   Settings,
   Shield,
   Megaphone,
+  MessageSquareText,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAdminAccess } from '@/hooks/useAdminAccess';
@@ -27,6 +28,7 @@ const menuItems: MobileMenuNavItem[] = [
   { icon: Megaphone, label: 'Reklama markazi', path: '/ads' },
   { icon: Sparkles, label: 'AI yordamchi', path: '/ai' },
   { icon: LayoutGrid, label: 'Mini ilovalar', path: '/mini-apps' },
+  { icon: MessageSquareText, label: 'Feedback va yordam', path: '/feedback' },
   { icon: Settings, label: 'Sozlamalar', path: '/settings' },
 ];
 

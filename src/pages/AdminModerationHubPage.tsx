@@ -6,6 +6,7 @@ import {
   FileText,
   Loader2,
   Megaphone,
+  MessageSquareText,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
@@ -31,6 +32,7 @@ export default function AdminModerationHubPage() {
     { title: 'Post va izohlar', description: 'Platformadagi kontentni ko‘rish va kerak bo‘lsa olib tashlash.', icon: FileText, path: '/admin/content', enabled: true },
     { title: 'Foydalanuvchilar', description: 'Profil, verifikatsiya va umumiy hisob holatini tekshirish.', icon: Users, path: '/admin/users', enabled: true },
     { title: 'Verifikatsiya', description: 'Tasdiqlash arizalarini hujjatlar bilan birga ko‘rib chiqish.', icon: BadgeCheck, path: '/admin/verification', enabled: true },
+    { title: 'Feedback & Support', description: 'Bug, taklif, xavfsizlik va xizmat murojaatlarini triage qilib, foydalanuvchi bilan bitta case ichida ishlash.', icon: MessageSquareText, path: '/admin/feedback', enabled: hasPermission('feedback.view') || hasPermission('feedback.review'), badge: 'Support' },
     { title: 'Reklama moderatsiyasi', description: 'Creative, landing, advertiser va policy signallariga asoslangan Ads Review queue.', icon: Megaphone, path: '/admin/ads-review', enabled: hasPermission('ads.review'), badge: 'Ads Review' },
     { title: 'Ads Integrity', description: 'Invalid traffic, click burst, rapid duplicate va fraud signallarini tekshirish.', icon: ShieldAlert, path: '/admin/ads-integrity', enabled: hasPermission('ads.review'), badge: 'Risk' },
     { title: 'Mini ilovalar', description: 'Publisherlar yuborgan mini ilovalarni moderatsiya qilish.', icon: Sparkles, path: '/mini-apps/moderation', enabled: true },
@@ -46,7 +48,7 @@ export default function AdminModerationHubPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium text-muted-foreground">Alsamos Admin · Trust & Safety</p>
+            <p className="text-xs font-medium text-muted-foreground">Alsamos Admin · Trust, Safety & Support</p>
             <h1 className="truncate text-lg font-semibold">Moderatsiya markazi</h1>
           </div>
           <Badge variant="outline" className="hidden rounded-full font-normal sm:inline-flex">Permission-aware</Badge>
@@ -57,9 +59,9 @@ export default function AdminModerationHubPage() {
         <section className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-sm">
           <div className="max-w-3xl">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Control plane</p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight">Barcha moderation oqimlari bitta markazda</h2>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight">Moderatsiya va support oqimlari bitta markazda</h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Reklama review va invalid-traffic nazorati endi Admin Console ichidagi Moderatsiya bo‘limidan to‘g‘ridan-to‘g‘ri ochiladi. Ko‘rinadigan vositalar operator permissionlariga qarab filtrlab beriladi.
+              Feedback queue, reklama review va invalid-traffic nazorati Admin Console ichidan to‘g‘ridan-to‘g‘ri ochiladi. Ko‘rinadigan vositalar operator permissionlariga qarab filtrlab beriladi.
             </p>
           </div>
         </section>
