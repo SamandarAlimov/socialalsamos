@@ -161,6 +161,8 @@ export function AppLayout() {
           fullHeightPage
             ? 'h-full overflow-hidden p-0'
             : 'h-full overflow-x-hidden overflow-y-auto overscroll-y-contain alsamos-scrollbar [-webkit-overflow-scrolling:touch]',
+          isVideosPage &&
+            'bg-background [&>div]:!bg-background [&_.snap-start]:!bg-background dark:bg-black dark:[&>div]:!bg-black dark:[&_.snap-start]:!bg-black',
           hasMobileTopChrome ? 'pt-14' : 'pt-0',
           showBottomNavbar ? 'pb-20' : 'pb-0',
         )}
