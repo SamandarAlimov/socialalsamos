@@ -1,14 +1,6 @@
-// ai-agent yakuniy nuqtasi bilan ishlaydigan SSE klienti.
-// Kontrakt: docs/AI_PLATFORM_SPEC.md
-//
-// MUHIM: `ai-agent` funksiyasi Supabase'ga hali deploy qilinmagan bo'lsa,
-// brauzer "Failed to fetch" xatosini beradi. Shuning uchun bu klient avtomatik
-// ravishda allaqachon deploy qilingan `ai-assistant` funksiyasiga qaytadi
-// (fallback): chat doim ishlaydi, vositalar esa deploy'dan keyin qo'shiladi.
-//
-// `context` maydoni — "miya" kanali (src/lib/ai/brain.ts). Ikkala funksiya ham
-// uni o'z system prompti ichiga qo'shadi, shuning uchun AI ning imkoniyatlari,
-// xotirasi va skillari deploy talab qilmasdan kengaytiriladi.
+// Alsamos AI agent klienti.
+// Asosiy yo'l Oracle/K3s serveridagi AI gateway + real Kubernetes sandbox.
+// Supabase Edge agent/assistant faqat zaxira compatibility yo'li bo'lib qoladi.
 
 import { supabase } from '@/integrations/supabase/client';
 import type { AgentEvent, AIMode, ModelId, ToolGroupId } from './capabilities';
@@ -19,7 +11,6 @@ export type StreamAgentOptions = {
   model: ModelId;
   toolGroups: ToolGroupId[];
   conversationId?: string | null;
-  /** Qo'shimcha system konteksti: master prompt, xotira, skillar. */
   context?: string;
   signal?: AbortSignal;
   onEvent: (event: AgentEvent) => void;
@@ -28,10 +19,9 @@ export type StreamAgentOptions = {
 const FUNCTIONS_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 const AGENT_SERVER_BASE = (
   (import.meta.env.VITE_ALSAMOS_AGENT_SERVER_URL as string | undefined) ||
-  'https://ai.alsamos.com'
+  'https://api.alsamos.com/ai'
 ).replace(/\/+$/, '');
 
-/** Agent funksiyasi mavjud emasligini bildiradi (deploy qilinmagan yoki o'chirilgan). */
 class AgentUnavailableError extends Error {}
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -72,7 +62,7 @@ async function readSse(
   }
 }
 
-/** To'liq agent (vositalar bilan) — `ai-agent` funksiyasi. */
+/** Supabase Edge'dagi eski to'liq agent — server ishlamasa zaxira. */
 async function streamFromAgent(options: StreamAgentOptions): Promise<void> {
   const { messages, mode, model, toolGroups, conversationId, context, signal, onEvent } = options;
 
@@ -86,11 +76,9 @@ async function streamFromAgent(options: StreamAgentOptions): Promise<void> {
     });
   } catch (err) {
     if (signal?.aborted) throw err;
-    // Tarmoq xatosi / funksiya mavjud emas — fallback'ga o'tamiz.
     throw new AgentUnavailableError('ai-agent mavjud emas');
   }
 
-  // 404/501/502/503/504 — funksiya deploy qilinmagan yoki vaqtincha ishlamayapti.
   if ([404, 501, 502, 503, 504].includes(res.status)) {
     throw new AgentUnavailableError(`ai-agent HTTP ${res.status}`);
   }
@@ -115,9 +103,7 @@ async function streamFromAgent(options: StreamAgentOptions): Promise<void> {
     try {
       const event = JSON.parse(raw) as AgentEvent;
 
-      if (event.type === 'delta' && event.text.trim()) {
-        sawText = true;
-      }
+      if (event.type === 'delta' && event.text.trim()) sawText = true;
 
       if (event.type === 'tool_result') {
         if (!event.ok) {
@@ -135,29 +121,23 @@ async function streamFromAgent(options: StreamAgentOptions): Promise<void> {
 
       onEvent(event);
     } catch (error) {
-      // `onEvent` error hodisasini tashlashi mumkin; uni JSON parse xatosi deb
-      // yutib yubormaymiz. Faqat haqiqiy parse xatosi e'tiborsiz qoldiriladi.
       if (error instanceof SyntaxError) return;
       throw error;
     }
   });
 
-  // Ba'zi model/provider kombinatsiyalarida tool xatosidan keyin yakuniy matn
-  // umuman kelmasligi mumkin. Oldin UI buni "Javob bo'sh qaytdi" deb yashirardi.
-  // Endi aynan qaysi vosita va nima sabab yiqilganini ko'rsatamiz.
   if (!sawText && !sawSuccessfulMedia && lastToolFailure) {
     onEvent({ type: 'error', message: lastToolFailure });
   }
 }
 
-/** Zaxira yo'l — allaqachon deploy qilingan `ai-assistant` (oddiy chat oqimi). */
+/** Eng oxirgi zaxira — oddiy Supabase ai-assistant chat oqimi. */
 async function streamFromAssistant(options: StreamAgentOptions): Promise<void> {
   const { messages, context, signal, onEvent } = options;
 
   const res = await fetch(`${FUNCTIONS_BASE}/ai-assistant`, {
     method: 'POST',
     headers: await authHeaders(),
-    // `context` server system promptiga qo'shiladi — miya qatlami shu orqali ishlaydi.
     body: JSON.stringify({ messages, context }),
     signal,
   });
@@ -195,18 +175,24 @@ async function streamFromAssistant(options: StreamAgentOptions): Promise<void> {
   });
 }
 
-/** Oracle server fallback: adapts https://ai.alsamos.com/api/alsamos/agent to UI events. */
+/** Oracle/K3s server agenti: real server vositalari va Kubernetes sandbox. */
 async function streamFromOracleAgent(options: StreamAgentOptions): Promise<void> {
   const { messages, mode, model, toolGroups, conversationId, context, signal, onEvent } = options;
 
-  const res = await fetch(`${AGENT_SERVER_BASE}/api/alsamos/agent`, {
-    method: 'POST',
-    headers: await authHeaders(),
-    body: JSON.stringify({ messages, mode, model, toolGroups, conversationId, context }),
-    signal,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${AGENT_SERVER_BASE}/api/alsamos/agent`, {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: JSON.stringify({ messages, mode, model, toolGroups, conversationId, context }),
+      signal,
+    });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw new AgentUnavailableError('Alsamos server agentiga ulanib bo\'lmadi');
+  }
 
-  if ([401, 403, 404, 501, 502, 503, 504].includes(res.status)) {
+  if ([404, 501, 502, 503, 504].includes(res.status)) {
     throw new AgentUnavailableError(`oracle agent HTTP ${res.status}`);
   }
 
@@ -215,6 +201,7 @@ async function streamFromOracleAgent(options: StreamAgentOptions): Promise<void>
     try {
       const json = await res.json();
       if (json?.message) message = json.message;
+      else if (json?.detail) message = json.detail;
       else if (json?.error) message = json.error;
     } catch {
       // e'tiborsiz
@@ -257,7 +244,7 @@ async function streamFromOracleAgent(options: StreamAgentOptions): Promise<void>
       case 'tool': {
         const name = String(event.name ?? 'tool');
         if (event.phase === 'call') {
-          const id = crypto.randomUUID();
+          const id = String(event.id ?? crypto.randomUUID());
           oracleToolIds.set(name, id);
           onEvent({
             type: 'tool_call',
@@ -266,7 +253,7 @@ async function streamFromOracleAgent(options: StreamAgentOptions): Promise<void>
             args: (event.args ?? {}) as Record<string, unknown>,
           });
         } else if (event.phase === 'result') {
-          const id = oracleToolIds.get(name) ?? crypto.randomUUID();
+          const id = String(event.id ?? oracleToolIds.get(name) ?? crypto.randomUUID());
           oracleToolIds.delete(name);
           const data = (event.data ?? null) as Record<string, unknown> | null;
           const ok = Boolean(event.ok);
@@ -277,7 +264,9 @@ async function streamFromOracleAgent(options: StreamAgentOptions): Promise<void>
                 ? String(data.error)
                 : JSON.stringify(event.data ?? {}).slice(0, 600);
 
-          if (!ok) lastToolFailure = `${name === 'generate_video' ? 'Video yaratilmadi' : 'Vosita bajarilmadi'}: ${summary}`;
+          if (!ok) {
+            lastToolFailure = `${name === 'generate_video' ? 'Video yaratilmadi' : 'Vosita bajarilmadi'}: ${summary}`;
+          }
           if (ok && (typeof data?.videoUrl === 'string' || typeof data?.imageUrl === 'string')) {
             sawSuccessfulMedia = true;
           }
@@ -317,19 +306,20 @@ async function streamFromOracleAgent(options: StreamAgentOptions): Promise<void>
   }
 }
 
-/** Agentni ishga tushiradi va hodisalarni real vaqtda uzatadi. */
+/** Server birinchi; Edge funksiyalar faqat server vaqtincha yo'q bo'lsa. */
 export async function streamAgent(options: StreamAgentOptions): Promise<void> {
   try {
+    await streamFromOracleAgent(options);
+    return;
+  } catch (serverError) {
+    if (!(serverError instanceof AgentUnavailableError)) throw serverError;
+  }
+
+  try {
     await streamFromAgent(options);
-  } catch (err) {
-    if (!(err instanceof AgentUnavailableError)) throw err;
-    try {
-      await streamFromOracleAgent(options);
-    } catch (fallbackErr) {
-      if (!(fallbackErr instanceof AgentUnavailableError)) throw fallbackErr;
-      // Agent yo'q — oddiy chatga o'tamiz, foydalanuvchi hech narsa yo'qotmaydi.
-      await streamFromAssistant(options);
-    }
+  } catch (edgeError) {
+    if (!(edgeError instanceof AgentUnavailableError)) throw edgeError;
+    await streamFromAssistant(options);
   }
 }
 
@@ -340,17 +330,58 @@ export type SandboxRun = {
   error: string | null;
   durationMs: number;
   isolated: boolean;
+  runtime?: string;
+  language?: string;
 };
 
-/** Artifact panelidagi "Ishga tushirish" tugmasi uchun. */
-export async function runInSandbox(code: string, timeoutMs = 5000): Promise<SandboxRun> {
+async function sandboxError(response: Response): Promise<string> {
+  try {
+    const body = await response.json();
+    return body?.detail || body?.message || body?.error || `HTTP ${response.status}`;
+  } catch {
+    return `HTTP ${response.status}`;
+  }
+}
+
+/**
+ * Artifact panelidagi "Ishga tushirish" tugmasi.
+ * Birinchi yo'l — serverdagi network-isolated, non-root Kubernetes Job.
+ * Eski Edge sandbox faqat JavaScript uchun vaqtinchalik fallback.
+ */
+export async function runInSandbox(
+  code: string,
+  timeoutMs = 5000,
+  language: 'javascript' | 'typescript' | 'python' = 'javascript',
+): Promise<SandboxRun> {
+  try {
+    const response = await fetch(`${AGENT_SERVER_BASE}/v1/sandbox/run`, {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: JSON.stringify({ code, timeoutMs, language }),
+    });
+
+    if (response.ok) return (await response.json()) as SandboxRun;
+    if (![404, 501, 502, 503, 504].includes(response.status)) {
+      throw new Error(`Server sandbox xatosi: ${await sandboxError(response)}`);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Server sandbox xatosi:')) {
+      throw error;
+    }
+    // Server deployment o'tish davrida bo'lsa JS uchun eski Edge fallback qoladi.
+  }
+
+  if (language !== 'javascript') {
+    throw new Error('Server sandbox vaqtincha mavjud emas; TypeScript/Python Edge fallbackda bajarilmaydi.');
+  }
+
   const res = await fetch(`${FUNCTIONS_BASE}/code-sandbox`, {
     method: 'POST',
     headers: await authHeaders(),
     body: JSON.stringify({ code, timeoutMs }),
   });
   if (!res.ok) {
-    throw new Error(`Sandbox xatosi (HTTP ${res.status}). Funksiya deploy qilinganini tekshiring.`);
+    throw new Error(`Sandbox xatosi (HTTP ${res.status}). Server va Edge sandboxni tekshiring.`);
   }
   return (await res.json()) as SandboxRun;
 }
