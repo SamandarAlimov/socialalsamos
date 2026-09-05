@@ -4,8 +4,16 @@ import { resolveTouchAxis, type TouchAxis } from '@/lib/touchGesture';
 
 const SWIPE_THRESHOLD = 80;
 const SWIPE_VELOCITY_THRESHOLD = 0.3;
-// Define navigation order for swipe
+
+// Default mobile page navigation order.
 const NAVIGATION_ORDER = ['/home', '/messages', '/create', '/videos', '/profile'];
+
+// Product-level gestures that intentionally override the sequential order.
+// On Home, a left-to-right swipe opens creation, matching the camera/create
+// gesture users expect from modern social apps.
+const RIGHT_SWIPE_OVERRIDES: Record<string, string> = {
+  '/home': '/create',
+};
 
 /**
  * Mobile page navigation gesture.
@@ -29,6 +37,10 @@ export function useSwipeNavigation() {
 
   const getCurrentIndex = useCallback(() => {
     return NAVIGATION_ORDER.indexOf(location.pathname);
+  }, [location.pathname]);
+
+  const getRightSwipeDestination = useCallback(() => {
+    return RIGHT_SWIPE_OVERRIDES[location.pathname] ?? null;
   }, [location.pathname]);
 
   const resetGesture = useCallback(() => {
@@ -73,7 +85,7 @@ export function useSwipeNavigation() {
     if (intent.current !== 'horizontal') return;
 
     const currentIndex = getCurrentIndex();
-    const canSwipeRight = currentIndex > 0;
+    const canSwipeRight = Boolean(getRightSwipeDestination()) || currentIndex > 0;
     const canSwipeLeft =
       currentIndex < NAVIGATION_ORDER.length - 1 && currentIndex >= 0;
 
@@ -84,7 +96,7 @@ export function useSwipeNavigation() {
 
     offsetRef.current = nextOffset;
     setSwipeOffset(nextOffset);
-  }, [getCurrentIndex]);
+  }, [getCurrentIndex, getRightSwipeDestination]);
 
   const handleTouchEnd = useCallback(() => {
     const currentOffset = offsetRef.current;
@@ -98,19 +110,21 @@ export function useSwipeNavigation() {
         velocity > SWIPE_VELOCITY_THRESHOLD;
 
       if (shouldNavigate) {
-        if (currentOffset > 0 && currentIndex > 0) {
-          navigate(NAVIGATION_ORDER[currentIndex - 1]);
-        } else if (
-          currentOffset < 0 &&
-          currentIndex < NAVIGATION_ORDER.length - 1
-        ) {
+        if (currentOffset > 0) {
+          const overrideDestination = getRightSwipeDestination();
+          if (overrideDestination) {
+            navigate(overrideDestination);
+          } else if (currentIndex > 0) {
+            navigate(NAVIGATION_ORDER[currentIndex - 1]);
+          }
+        } else if (currentIndex < NAVIGATION_ORDER.length - 1) {
           navigate(NAVIGATION_ORDER[currentIndex + 1]);
         }
       }
     }
 
     resetGesture();
-  }, [getCurrentIndex, navigate, resetGesture]);
+  }, [getCurrentIndex, getRightSwipeDestination, navigate, resetGesture]);
 
   const handleTouchCancel = useCallback(() => {
     resetGesture();
