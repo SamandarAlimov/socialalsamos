@@ -2,6 +2,15 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import {
+  createAdEventKey,
+  getAdRequestContext,
+  getAdSessionId,
+  rankAdCandidates,
+  recordAdFeedbackLocal,
+  recordAdvertiserExposure,
+  type AdFeedbackType,
+} from '@/lib/adDeliveryClient';
 
 export type AdPlacement = 'feed' | 'story' | 'video' | 'discover' | 'channel';
 
@@ -62,42 +71,137 @@ export interface AdCreateInput {
   end_date?: string;
 }
 
-export function useActiveAds(type: 'feed' | 'story' | 'both' = 'feed', limit = 3) {
+async function hydrateAdvertiserProfiles(items: Ad[]): Promise<Ad[]> {
+  const userIds = Array.from(new Set(items.map((item) => item.user_id).filter(Boolean)));
+  if (!userIds.length) return items;
+
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, username, display_name, avatar_url, is_verified')
+      .in('id', userIds);
+
+    if (error || !data) return items;
+
+    const byId = new Map(
+      data.map((profile) => [
+        profile.id,
+        {
+          username: profile.username,
+          display_name: profile.display_name,
+          avatar_url: profile.avatar_url,
+          is_verified: Boolean(profile.is_verified),
+        },
+      ]),
+    );
+
+    return items.map((item) => ({
+      ...item,
+      profile: byId.get(item.user_id) || item.profile,
+    }));
+  } catch {
+    return items;
+  }
+}
+
+function sourceAdType(placement: AdPlacement | 'both') {
+  return placement === 'story' ? 'story' : 'feed';
+}
+
+/**
+ * Fetches a ranked candidate pool for a real placement.
+ *
+ * Ads Delivery V2 RPC is preferred when the migration is available. Until the
+ * production migration is deployed, the hook safely falls back to the legacy
+ * ads table and applies local diversity/fatigue ranking. This keeps rollout
+ * backwards compatible instead of making the UI depend on a migration flag.
+ */
+export function useActiveAds(placement: AdPlacement | 'both' = 'feed', limit = 3) {
   const { user } = useAuth();
   const [ads, setAds] = useState<Ad[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  const effectivePlacement: AdPlacement = placement === 'both' ? 'feed' : placement;
+
   const fetchAds = useCallback(async () => {
+    setIsLoading(true);
     try {
-      const { data, error } = await supabase
+      const sessionId = getAdSessionId();
+      const context = getAdRequestContext();
+
+      // New server-ranked path. Cast keeps generated Supabase types backwards
+      // compatible until the new RPC has been generated into database.types.ts.
+      const rpcResult = await (supabase as any).rpc('get_eligible_ads_v2', {
+        p_placement: effectivePlacement,
+        p_limit: Math.max(limit * 3, limit),
+        p_session_id: sessionId,
+        p_context: context,
+      });
+
+      if (!rpcResult?.error && Array.isArray(rpcResult?.data)) {
+        const ranked = rankAdCandidates((rpcResult.data || []) as Ad[]).slice(0, limit);
+        setAds(await hydrateAdvertiserProfiles(ranked));
+        return;
+      }
+
+      // Compatibility fallback while Ads Delivery V2 is not deployed yet.
+      let query = supabase
         .from('ads')
         .select('*')
         .eq('status', 'active')
-        .or(`ad_type.eq.${type},ad_type.eq.both`)
         .order('created_at', { ascending: false })
-        .limit(limit);
+        .limit(Math.max(limit * 4, 12));
 
+      if (placement === 'both') {
+        query = query.in('ad_type', ['feed', 'story', 'both']);
+      } else {
+        const type = sourceAdType(placement);
+        query = query.or(`ad_type.eq.${type},ad_type.eq.both`);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
-      setAds((data || []) as Ad[]);
+
+      const ranked = rankAdCandidates((data || []) as Ad[]).slice(0, limit);
+      setAds(await hydrateAdvertiserProfiles(ranked));
     } catch (error) {
       console.error('Error fetching ads:', error);
+      setAds([]);
     } finally {
       setIsLoading(false);
     }
-  }, [type, limit]);
+  }, [effectivePlacement, limit, placement]);
 
   useEffect(() => {
     void fetchAds();
   }, [fetchAds]);
 
-  const trackImpression = useCallback(async (adId: string, placement: AdPlacement) => {
+  const trackImpression = useCallback(async (adId: string, eventPlacement: AdPlacement = effectivePlacement) => {
+    const deviceType = /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
+    const ad = ads.find((item) => item.id === adId);
+
     try {
-      const deviceType = /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
+      const result = await (supabase as any).rpc('record_ad_delivery_event_v2', {
+        p_ad_id: adId,
+        p_placement: eventPlacement,
+        p_event_type: 'impression',
+        p_session_id: getAdSessionId(),
+        p_event_key: createAdEventKey(adId, eventPlacement, 'impression'),
+        p_slot_key: null,
+        p_device_type: deviceType,
+        p_score: null,
+        p_metadata: getAdRequestContext(),
+      });
+
+      if (!result?.error) {
+        if (result?.data !== false) recordAdvertiserExposure(ad?.user_id);
+        return;
+      }
 
       await supabase.from('ad_impressions').insert({
         ad_id: adId,
         user_id: user?.id || null,
-        placement,
+        placement: eventPlacement,
         device_type: deviceType,
       });
 
@@ -110,27 +214,88 @@ export function useActiveAds(type: 'feed' | 'story' | 'both' = 'feed', limit = 3
           { onConflict: 'ad_id,user_id' },
         );
       }
+
+      recordAdvertiserExposure(ad?.user_id);
     } catch (error) {
       console.error('Error tracking impression:', error);
     }
-  }, [user]);
+  }, [ads, effectivePlacement, user]);
 
-  const trackClick = useCallback(async (adId: string, placement: AdPlacement) => {
+  const trackClick = useCallback(async (adId: string, eventPlacement: AdPlacement = effectivePlacement) => {
+    const deviceType = /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
+
     try {
-      const deviceType = /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
+      const result = await (supabase as any).rpc('record_ad_delivery_event_v2', {
+        p_ad_id: adId,
+        p_placement: eventPlacement,
+        p_event_type: 'click',
+        p_session_id: getAdSessionId(),
+        p_event_key: createAdEventKey(adId, eventPlacement, 'click'),
+        p_slot_key: null,
+        p_device_type: deviceType,
+        p_score: null,
+        p_metadata: getAdRequestContext(),
+      });
+
+      if (!result?.error) return;
 
       await supabase.from('ad_clicks').insert({
         ad_id: adId,
         user_id: user?.id || null,
-        placement,
+        placement: eventPlacement,
         device_type: deviceType,
       });
     } catch (error) {
       console.error('Error tracking click:', error);
     }
-  }, [user]);
+  }, [effectivePlacement, user]);
 
-  return { ads, isLoading, refetch: fetchAds, trackImpression, trackClick };
+  const submitFeedback = useCallback(async (
+    adId: string,
+    feedback: AdFeedbackType,
+    eventPlacement: AdPlacement = effectivePlacement,
+    metadata: Record<string, unknown> = {},
+  ) => {
+    recordAdFeedbackLocal(adId, feedback);
+    setAds((current) => current.filter((item) => item.id !== adId));
+
+    if (!user) return;
+
+    try {
+      const result = await (supabase as any).rpc('submit_ad_feedback_v2', {
+        p_ad_id: adId,
+        p_placement: eventPlacement,
+        p_feedback_type: feedback,
+        p_metadata: {
+          ...getAdRequestContext(),
+          ...metadata,
+        },
+      });
+
+      if (!result?.error) return;
+
+      // If the RPC is not deployed but the table already exists, preserve the
+      // feedback. If neither exists this remains a harmless local preference.
+      await (supabase as any).from('ad_user_feedback').insert({
+        user_id: user.id,
+        ad_id: adId,
+        placement: eventPlacement,
+        feedback_type: feedback,
+        metadata,
+      });
+    } catch (error) {
+      console.warn('Ad feedback stored locally; server feedback unavailable.', error);
+    }
+  }, [effectivePlacement, user]);
+
+  return {
+    ads,
+    isLoading,
+    refetch: fetchAds,
+    trackImpression,
+    trackClick,
+    submitFeedback,
+  };
 }
 
 export function useUserAds() {
