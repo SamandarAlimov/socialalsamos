@@ -1,5 +1,5 @@
-const LOCAL_KEY = 'alsamos-ad-frequency-v2';
-const SESSION_KEY = 'alsamos-ad-session-v2';
+const LOCAL_KEY = 'alsamos-ad-frequency-v3';
+const SESSION_KEY = 'alsamos-ad-session-v3';
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 
 const FEED_FIRST_WAIT_MS = 45 * 1000;
@@ -10,6 +10,13 @@ const FEED_DAILY_CAP = 5;
 const FEED_SAME_AD_GAP_MS = 45 * 60 * 1000;
 const FEED_SAME_AD_DAILY_CAP = 2;
 
+const DISCOVER_FIRST_WAIT_MS = 90 * 1000;
+const DISCOVER_MIN_GAP_MS = 8 * 60 * 1000;
+const DISCOVER_HIDE_COOLDOWN_MS = 30 * 60 * 1000;
+const DISCOVER_SESSION_CAP = 1;
+const DISCOVER_DAILY_CAP = 2;
+const DISCOVER_SAME_AD_DAILY_CAP = 1;
+
 const VIDEO_FIRST_ORGANIC_COUNT = 12;
 const VIDEO_FIRST_WAIT_MS = 2 * 60 * 1000;
 const VIDEO_MIN_ORGANIC_GAP = 20;
@@ -19,6 +26,8 @@ const VIDEO_SESSION_CAP = 2;
 const VIDEO_DAILY_CAP = 3;
 const VIDEO_SAME_AD_DAILY_CAP = 1;
 
+type Surface = 'feed' | 'discover' | 'video';
+
 type Exposure = {
   count: number;
   lastAt: number;
@@ -27,10 +36,13 @@ type Exposure = {
 type PersistentState = {
   day: string;
   feedImpressions: number;
+  discoverImpressions: number;
   videoImpressions: number;
   lastFeedAt: number;
+  lastDiscoverAt: number;
   lastVideoAt: number;
   feedSnoozedUntil: number;
+  discoverSnoozedUntil: number;
   videoSnoozedUntil: number;
   exposures: Record<string, Exposure>;
 };
@@ -38,7 +50,9 @@ type PersistentState = {
 type SessionState = {
   startedAt: number;
   feedOpportunities: number;
+  discoverOpportunities: number;
   feedImpressions: number;
+  discoverImpressions: number;
   videoImpressions: number;
   lastVideoIndex: number;
 };
@@ -51,10 +65,13 @@ function emptyPersistent(now: number): PersistentState {
   return {
     day: dayKey(now),
     feedImpressions: 0,
+    discoverImpressions: 0,
     videoImpressions: 0,
     lastFeedAt: 0,
+    lastDiscoverAt: 0,
     lastVideoAt: 0,
     feedSnoozedUntil: 0,
+    discoverSnoozedUntil: 0,
     videoSnoozedUntil: 0,
     exposures: {},
   };
@@ -64,7 +81,9 @@ function emptySession(now: number): SessionState {
   return {
     startedAt: now,
     feedOpportunities: 0,
+    discoverOpportunities: 0,
     feedImpressions: 0,
+    discoverImpressions: 0,
     videoImpressions: 0,
     lastVideoIndex: -1,
   };
@@ -85,7 +104,7 @@ function writeJson(storage: Storage | undefined, key: string, value: unknown) {
   try {
     storage.setItem(key, JSON.stringify(value));
   } catch {
-    // Frequency capping is a UX enhancement; storage failures must never break ads rendering.
+    // Frequency capping is a UX enhancement; storage failures must never break rendering.
   }
 }
 
@@ -134,17 +153,17 @@ function saveSession(state: SessionState) {
   writeJson(getSessionStorage(), SESSION_KEY, state);
 }
 
-function exposureKey(surface: 'feed' | 'video', adId: string) {
+function exposureKey(surface: Surface, adId: string) {
   return `${surface}:${adId}`;
 }
 
-function exposureFor(state: PersistentState, surface: 'feed' | 'video', adId: string) {
+function exposureFor(state: PersistentState, surface: Surface, adId: string) {
   return state.exposures[exposureKey(surface, adId)] || { count: 0, lastAt: 0 };
 }
 
 function recordExposure(
   state: PersistentState,
-  surface: 'feed' | 'video',
+  surface: Surface,
   adId: string,
   now: number,
 ) {
@@ -200,9 +219,52 @@ export function snoozeFeedAds(now = Date.now()) {
 }
 
 /**
- * Reels/video ads are intentionally much sparser than a fixed 5-7 item cadence:
+ * Discover is a high-intent surface, so ad load is intentionally lower than
+ * Home: no immediate ad on entry, one impression per session, two per day.
+ */
+export function registerDiscoverAdOpportunity(adId: string, now = Date.now()) {
+  const session = loadSession(now);
+  session.discoverOpportunities += 1;
+  saveSession(session);
+
+  const persistent = loadPersistent(now);
+  const sameAd = exposureFor(persistent, 'discover', adId);
+
+  if (now - session.startedAt < DISCOVER_FIRST_WAIT_MS) return false;
+  if (session.discoverImpressions >= DISCOVER_SESSION_CAP) return false;
+  if (persistent.discoverImpressions >= DISCOVER_DAILY_CAP) return false;
+  if (persistent.discoverSnoozedUntil > now) return false;
+  if (persistent.lastDiscoverAt && now - persistent.lastDiscoverAt < DISCOVER_MIN_GAP_MS) return false;
+  if (sameAd.count >= DISCOVER_SAME_AD_DAILY_CAP) return false;
+
+  return true;
+}
+
+export function recordDiscoverAdImpression(adId: string, now = Date.now()) {
+  const session = loadSession(now);
+  session.discoverImpressions += 1;
+  saveSession(session);
+
+  const persistent = loadPersistent(now);
+  persistent.discoverImpressions += 1;
+  persistent.lastDiscoverAt = now;
+  recordExposure(persistent, 'discover', adId, now);
+  savePersistent(persistent);
+}
+
+export function snoozeDiscoverAds(now = Date.now()) {
+  const persistent = loadPersistent(now);
+  persistent.discoverSnoozedUntil = Math.max(
+    persistent.discoverSnoozedUntil,
+    now + DISCOVER_HIDE_COOLDOWN_MS,
+  );
+  savePersistent(persistent);
+}
+
+/**
+ * Reels/video ads are intentionally sparse:
  * - no ad before 12 organic reels and 2 minutes of session time;
- * - at least 20 organic reels AND 8 minutes between video ad impressions;
+ * - at least 20 organic reels AND 8 minutes between impressions;
  * - at most 2 per session, 3 per day;
  * - the same video ad is shown at most once per day;
  * - dismissing an ad creates a 30 minute quiet period.
