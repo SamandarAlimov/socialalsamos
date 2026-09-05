@@ -25,6 +25,7 @@ import PostPermalinkPage from "./pages/PostPermalinkPage";
 import MessagesPage from "./pages/MessagesPage";
 import ProfilePage from "./pages/ProfilePage";
 import UserProfilePage from "./pages/UserProfilePage";
+import SettingsLandingPage from "./pages/SettingsLandingPage";
 import SettingsHubPage from "./pages/SettingsHubPage";
 import PaymentSettingsPage from "./pages/PaymentSettingsPage";
 import ComposePage from "./pages/ComposePage";
@@ -179,7 +180,7 @@ function AppRoutes() {
         <Route path="/stickers/:slug" element={<StickerPacksPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/user/:username" element={<UserProfileRoute />} />
-        <Route path="/settings" element={<SettingsHubPage />} />
+        <Route path="/settings" element={<SettingsLandingPage />} />
         <Route path="/settings/payment" element={<Navigate to="/payment" replace />} />
         <Route path="/settings/:section" element={<SettingsHubPage />} />
         <Route path="/payment" element={<PaymentSettingsPage />} />

@@ -1,8 +1,7 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UsersRound, Shield, Megaphone, FlaskConical, ShieldAlert, MessageSquareText } from 'lucide-react';
+import { Home, Search, Video, MessageCircle, ShoppingBag, Map, PlusSquare, User, Settings, LogOut, Compass, Wallet, Sparkles, LayoutGrid, MoreHorizontal, Moon, Sun, UsersRound } from 'lucide-react';
 import { AlsamosLogo } from '@/components/AlsamosLogo';
 import { useAuth } from '@/contexts/AuthContext';
-import { useAdminAccess } from '@/hooks/useAdminAccess';
 import { cn } from '@/lib/utils';
 import { useState, useCallback, useEffect } from 'react';
 import { NotificationsDropdown } from '@/components/NotificationsDropdown';
@@ -21,8 +20,6 @@ interface NavItem {
   labelKey: string;
   path?: string;
   badgeKey?: 'messages';
-  exact?: boolean;
-  nested?: boolean;
 }
 
 const navItems: NavItem[] = [
@@ -34,8 +31,6 @@ const navItems: NavItem[] = [
   { icon: ShoppingBag, labelKey: 'nav.marketplace', path: '/marketplace' },
   { icon: Map, labelKey: 'nav.map', path: '/map' },
   { icon: Wallet, labelKey: 'nav.payment', path: '/payment' },
-  { icon: Megaphone, labelKey: 'Reklama', path: '/ads', exact: true },
-  { icon: FlaskConical, labelKey: 'A/B testlar', path: '/ads/experiments', nested: true },
   { icon: Sparkles, labelKey: 'nav.ai', path: '/ai' },
   { icon: LayoutGrid, labelKey: 'nav.miniApps', path: '/mini-apps' },
   { icon: PlusSquare, labelKey: 'nav.create', path: '/create' },
@@ -55,7 +50,6 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, logout } = useAuth();
-  const { isAdmin, hasPermission } = useAdminAccess();
   const { t } = useTranslation();
   const [showSwitchAccount, setShowSwitchAccount] = useState(false);
 
@@ -73,20 +67,12 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
   const { unreadCount: messagesUnreadCount } = useUnreadMessages(handleNewMessage);
   const getBadgeCount = (badgeKey?: 'messages') => badgeKey === 'messages' ? messagesUnreadCount : 0;
 
-  const isNavItemActive = (path?: string, exact = false) => {
+  const isNavItemActive = (path?: string) => {
     if (!path) return false;
-    if (exact) return location.pathname === path;
     return location.pathname === path || location.pathname.startsWith(path + '/');
   };
 
   const profileActive = isNavItemActive('/profile');
-  const settingsActive = isNavItemActive('/settings');
-  const feedbackActive = isNavItemActive('/feedback');
-  const adminStandalonePaths = ['/admin/ads-review', '/admin/ads-integrity', '/admin/feedback'];
-  const adminActive = isNavItemActive('/admin') && !adminStandalonePaths.includes(location.pathname);
-  const adsReviewActive = isNavItemActive('/admin/ads-review');
-  const adsIntegrityActive = isNavItemActive('/admin/ads-integrity');
-  const adminFeedbackActive = isNavItemActive('/admin/feedback');
 
   return (
     <aside className={cn(
@@ -101,33 +87,41 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
 
       <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-3 [scrollbar-gutter:stable] [scrollbar-width:thin]">
         {navItems.map((item) => {
-          const isActive = isNavItemActive(item.path, item.exact);
+          const isActive = isNavItemActive(item.path);
           const badgeCount = getBadgeCount(item.badgeKey);
-          const label = item.labelKey.startsWith('nav.') ? t(item.labelKey) : item.labelKey;
           return (
             <NavLink
               key={item.path}
               to={item.path!}
-              className={cn(
-                NAV_ITEM_BASE,
-                isActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE,
-                item.nested && !collapsed && 'ml-3 py-2 pl-3',
-              )}
+              className={cn(NAV_ITEM_BASE, isActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE)}
             >
               <div className="relative">
-                <item.icon className={cn('h-5 w-5 flex-shrink-0 transition-transform duration-200', !isActive && 'group-hover:scale-110')} strokeWidth={isActive ? 2.4 : 1.9} />
+                <item.icon
+                  className={cn('h-5 w-5 flex-shrink-0 transition-transform duration-200', !isActive && 'group-hover:scale-110')}
+                  strokeWidth={isActive ? 2.4 : 1.9}
+                />
                 <AnimatePresence>
                   {collapsed && badgeCount > 0 && (
-                    <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className={cn('absolute -top-2 -right-2 h-4 min-w-4 px-1 rounded-full text-[10px] font-bold flex items-center justify-center shadow-md', NAV_BADGE)}>
+                    <motion.span
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      exit={{ scale: 0 }}
+                      className={cn('absolute -top-2 -right-2 h-4 min-w-4 px-1 rounded-full text-[10px] font-bold flex items-center justify-center shadow-md', NAV_BADGE)}
+                    >
                       {badgeCount > 9 ? '9+' : badgeCount}
                     </motion.span>
                   )}
                 </AnimatePresence>
               </div>
-              {!collapsed && <span className="text-sm">{label}</span>}
+              {!collapsed && <span className="text-sm">{t(item.labelKey)}</span>}
               <AnimatePresence>
                 {!collapsed && badgeCount > 0 && (
-                  <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className={cn('ml-auto flex items-center justify-center min-w-[20px] h-5 text-xs font-semibold rounded-full px-1.5 shadow-sm', NAV_BADGE)}>
+                  <motion.span
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    exit={{ scale: 0 }}
+                    className={cn('ml-auto flex items-center justify-center min-w-[20px] h-5 text-xs font-semibold rounded-full px-1.5 shadow-sm', NAV_BADGE)}
+                  >
                     {badgeCount > 99 ? '99+' : badgeCount}
                   </motion.span>
                 )}
@@ -138,83 +132,13 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
       </nav>
 
       <div className="shrink-0 p-3 border-t border-sidebar-border space-y-1">
-        {isAdmin && (
-          <>
-            <NavLink
-              to="/admin"
-              aria-label="Admin"
-              className={cn(NAV_ITEM_BASE, adminActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE)}
-            >
-              <Shield className="h-5 w-5 flex-shrink-0" strokeWidth={adminActive ? 2.4 : 1.9} />
-              {!collapsed && <span className="text-sm">Admin</span>}
-            </NavLink>
-            {(hasPermission('feedback.view') || hasPermission('feedback.review')) && (
-              <NavLink
-                to="/admin/feedback"
-                aria-label="Feedback va Support"
-                className={cn(
-                  NAV_ITEM_BASE,
-                  adminFeedbackActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE,
-                  !collapsed && 'ml-3 pl-3',
-                )}
-              >
-                <MessageSquareText className="h-5 w-5 flex-shrink-0" strokeWidth={adminFeedbackActive ? 2.4 : 1.9} />
-                {!collapsed && <span className="text-sm">Feedback & Support</span>}
-              </NavLink>
-            )}
-            {hasPermission('ads.review') && (
-              <>
-                <NavLink
-                  to="/admin/ads-review"
-                  aria-label="Reklama moderatsiyasi"
-                  className={cn(
-                    NAV_ITEM_BASE,
-                    adsReviewActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE,
-                    !collapsed && 'ml-3 pl-3',
-                  )}
-                >
-                  <Megaphone className="h-5 w-5 flex-shrink-0" strokeWidth={adsReviewActive ? 2.4 : 1.9} />
-                  {!collapsed && <span className="text-sm">Ads Review</span>}
-                </NavLink>
-                <NavLink
-                  to="/admin/ads-integrity"
-                  aria-label="Reklama integrity"
-                  className={cn(
-                    NAV_ITEM_BASE,
-                    adsIntegrityActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE,
-                    !collapsed && 'ml-3 pl-3',
-                  )}
-                >
-                  <ShieldAlert className="h-5 w-5 flex-shrink-0" strokeWidth={adsIntegrityActive ? 2.4 : 1.9} />
-                  {!collapsed && <span className="text-sm">Ads Integrity</span>}
-                </NavLink>
-              </>
-            )}
-          </>
-        )}
-
-        <NavLink
-          to="/feedback"
-          aria-label="Feedback"
-          className={cn(NAV_ITEM_BASE, feedbackActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE)}
-        >
-          <MessageSquareText className="h-5 w-5 flex-shrink-0" strokeWidth={feedbackActive ? 2.4 : 1.9} />
-          {!collapsed && <span className="text-sm">Feedback</span>}
-        </NavLink>
-
-        <NavLink
-          to="/settings"
-          aria-label={t('nav.settings')}
-          className={cn(NAV_ITEM_BASE, settingsActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE)}
-        >
-          <Settings className="h-5 w-5 flex-shrink-0" strokeWidth={settingsActive ? 2.4 : 1.9} />
-          {!collapsed && <span className="text-sm">{t('nav.settings')}</span>}
-        </NavLink>
-
         <div className="flex items-center gap-1">
           <NavLink
             to="/profile"
-            className={cn('relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group flex-1', profileActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE)}
+            className={cn(
+              'relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group flex-1',
+              profileActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE,
+            )}
           >
             {profile?.avatar_url ? (
               <Avatar className={cn('h-5 w-5 flex-shrink-0', profileActive && 'ring-2 ring-foreground/20 ring-offset-1 ring-offset-sidebar')}>
@@ -235,14 +159,23 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" side="top" className="w-56">
-                <DropdownMenuItem onClick={() => navigate('/settings/profile')}><Settings className="h-4 w-4 mr-3" />Profil sozlamalari</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/settings')}>
+                  <Settings className="h-4 w-4 mr-3" />
+                  {t('nav.settings')}
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
                   {theme === 'dark' ? <Sun className="h-4 w-4 mr-3" /> : <Moon className="h-4 w-4 mr-3" />}
                   {theme === 'dark' ? 'Yorug‘ rejim' : 'Tungi rejim'}
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setShowSwitchAccount(true)}><UsersRound className="h-4 w-4 mr-3" />Hisobni almashtirish</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShowSwitchAccount(true)}>
+                  <UsersRound className="h-4 w-4 mr-3" />
+                  Hisobni almashtirish
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive"><LogOut className="h-4 w-4 mr-3" />{t('nav.logout')}</DropdownMenuItem>
+                <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive">
+                  <LogOut className="h-4 w-4 mr-3" />
+                  {t('nav.logout')}
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           )}
@@ -256,14 +189,23 @@ export function AppSidebar({ collapsed, onCollapsedChange }: AppSidebarProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="center" side="right" className="w-56">
-              <DropdownMenuItem onClick={() => navigate('/settings/profile')}><Settings className="h-4 w-4 mr-3" />Profil sozlamalari</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/settings')}>
+                <Settings className="h-4 w-4 mr-3" />
+                {t('nav.settings')}
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
                 {theme === 'dark' ? <Sun className="h-4 w-4 mr-3" /> : <Moon className="h-4 w-4 mr-3" />}
                 {theme === 'dark' ? 'Yorug‘ rejim' : 'Tungi rejim'}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowSwitchAccount(true)}><UsersRound className="h-4 w-4 mr-3" />Hisobni almashtirish</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowSwitchAccount(true)}>
+                <UsersRound className="h-4 w-4 mr-3" />
+                Hisobni almashtirish
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive"><LogOut className="h-4 w-4 mr-3" />{t('nav.logout')}</DropdownMenuItem>
+              <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive">
+                <LogOut className="h-4 w-4 mr-3" />
+                {t('nav.logout')}
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         )}
