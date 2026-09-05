@@ -15,7 +15,6 @@ type PermalinkPost = {
   media_type: string | null;
   likes_count: number;
   comments_count: number;
-  views_count?: number;
   is_pinned?: boolean;
   is_liked?: boolean;
   created_at: string;
@@ -58,14 +57,14 @@ export default function PostPermalinkPage() {
       setIsLoading(true);
       setNotFound(false);
 
+      // Keep the permalink independent from a named PostgREST relationship.
+      // Some older deployments did not expose posts_user_id_fkey in schema
+      // cache, so loading the post and author separately is more resilient.
       let result = await db
         .from('posts')
         .select(`
           id, user_id, content, formatted_content, media_urls, media_type,
-          likes_count, comments_count, views_count, is_pinned, created_at,
-          profile:profiles!posts_user_id_fkey (
-            username, display_name, avatar_url, is_verified
-          )
+          likes_count, comments_count, is_pinned, created_at
         `)
         .eq('id', postId)
         .maybeSingle();
@@ -75,10 +74,7 @@ export default function PostPermalinkPage() {
           .from('posts')
           .select(`
             id, user_id, content, media_urls, media_type,
-            likes_count, comments_count, views_count, is_pinned, created_at,
-            profile:profiles!posts_user_id_fkey (
-              username, display_name, avatar_url, is_verified
-            )
+            likes_count, comments_count, is_pinned, created_at
           `)
           .eq('id', postId)
           .maybeSingle();
@@ -98,22 +94,37 @@ export default function PostPermalinkPage() {
         return;
       }
 
-      let isLiked = false;
-      if (user?.id) {
-        const { data: like } = await db
-          .from('post_likes')
-          .select('post_id')
-          .eq('post_id', postId)
-          .eq('user_id', user.id)
-          .maybeSingle();
-        isLiked = Boolean(like);
-      }
+      const postRow = result.data as Omit<PermalinkPost, 'profile' | 'is_liked'>;
+
+      const [{ data: profile }, likeResult] = await Promise.all([
+        db
+          .from('profiles')
+          .select('username, display_name, avatar_url, is_verified')
+          .eq('id', postRow.user_id)
+          .maybeSingle(),
+        user?.id
+          ? db
+              .from('post_likes')
+              .select('post_id')
+              .eq('post_id', postId)
+              .eq('user_id', user.id)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
 
       if (cancelled) return;
 
+      if (!profile) {
+        setPost(null);
+        setNotFound(true);
+        setIsLoading(false);
+        return;
+      }
+
       setPost({
-        ...(result.data as PermalinkPost),
-        is_liked: isLiked,
+        ...postRow,
+        profile,
+        is_liked: Boolean(likeResult.data),
       });
       setIsLoading(false);
     }
