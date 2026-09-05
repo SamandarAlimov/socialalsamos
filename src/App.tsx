@@ -79,7 +79,12 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (isLoading) return <FullscreenSpinner />;
 
-  return isAuthenticated ? <>{children}</> : <Navigate to="/" replace />;
+  if (!isAuthenticated) {
+    const next = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    return <Navigate to={`/?next=${encodeURIComponent(next)}`} replace />;
+  }
+
+  return <>{children}</>;
 }
 
 function AuthRoute({ children }: { children: React.ReactNode }) {
