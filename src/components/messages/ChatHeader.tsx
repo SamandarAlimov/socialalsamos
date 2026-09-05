@@ -19,6 +19,7 @@ import {
   Ban,
   Flag,
   Settings2,
+  WalletCards,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -34,6 +35,7 @@ import { BlockConfirmDialog } from './BlockConfirmDialog';
 import { ReportDialog } from './ReportDialog';
 import { GroupChannelSettingsSheet } from './GroupChannelSettingsSheet';
 import { GoLiveButton } from '@/components/live/GoLiveButton';
+import { WalletTransferDialog } from '@/components/payment/WalletTransferDialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -132,6 +134,7 @@ export function ChatHeader({
   const [blockOpen, setBlockOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [paymentOpen, setPaymentOpen] = useState(false);
   const { blockedIds, refresh: refreshBlocks } = useBlockedUsers();
 
   const isChannel = conversation.type === 'channel';
@@ -148,6 +151,7 @@ export function ChatHeader({
   const realtimeIsOnline = otherUserId ? isUserOnline(otherUserId) : false;
   const realtimeLastSeen = conversation.other_participant?.last_seen || null;
   const isBlocked = otherUserId ? blockedIds.has(otherUserId) : false;
+  const canSendMoney = Boolean(otherUserId) && conversation.type === 'private' && !isSelfChat && !isBlocked;
 
   const memberIds = useConversationMembers(conversation.id, isGroupOrChannel);
   const memberCount = memberIds.length;
@@ -230,7 +234,7 @@ export function ChatHeader({
 
   const handleHeaderClick = () => {
     if (isGroupOrChannel) {
-setSettingsOpen(true);
+      setSettingsOpen(true);
       return;
     }
     onViewInfo?.();
@@ -320,6 +324,19 @@ setSettingsOpen(true);
         {/* Kanallar jonli eshittirish qiladi, 1:1 qo'ng'iroq ishlatmaydi */}
         {isChannel && isAdmin && <GoLiveButton />}
 
+        {canSendMoney && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setPaymentOpen(true)}
+            aria-label="Pul yuborish"
+            title="Pul yuborish"
+            className="h-9 w-9 rounded-full hover:bg-muted sm:h-10 sm:w-10"
+          >
+            <WalletCards className="h-[18px] w-[18px] text-muted-foreground sm:h-5 sm:w-5" />
+          </Button>
+        )}
+
         {!isSelfChat && !isChannel && (
           <>
             <Button
@@ -371,10 +388,23 @@ setSettingsOpen(true);
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 rounded-2xl">
-            {onViewInfo && !isGroupOrChannel && (
+            {profilePath ? (
+              <DropdownMenuItem asChild>
+                <Link to={profilePath}>
+                  <Info className="mr-2 h-4 w-4" />
+                  Ma'lumot
+                </Link>
+              </DropdownMenuItem>
+            ) : onViewInfo && !isGroupOrChannel ? (
               <DropdownMenuItem onClick={onViewInfo}>
                 <Info className="mr-2 h-4 w-4" />
                 Ma'lumot
+              </DropdownMenuItem>
+            ) : null}
+            {canSendMoney && (
+              <DropdownMenuItem onClick={() => setPaymentOpen(true)}>
+                <WalletCards className="mr-2 h-4 w-4" />
+                Pul yuborish
               </DropdownMenuItem>
             )}
             {onSearch && (
@@ -413,7 +443,7 @@ setSettingsOpen(true);
               <>
                 <DropdownMenuItem
                   onClick={() => {
-                            setSettingsOpen(true);
+                    setSettingsOpen(true);
                   }}
                 >
                   <Settings2 className="mr-2 h-4 w-4" />
@@ -467,6 +497,14 @@ setSettingsOpen(true);
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {canSendMoney && (
+        <WalletTransferDialog
+          open={paymentOpen}
+          onOpenChange={setPaymentOpen}
+          conversationId={conversation.id}
+        />
+      )}
 
       {isGroupOrChannel && (
         <GroupChannelSettingsSheet

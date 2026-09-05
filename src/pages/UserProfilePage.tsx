@@ -19,6 +19,7 @@ import {
   QrCode,
   Images,
   ImageIcon,
+  WalletCards,
 } from 'lucide-react';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { toast } from 'sonner';
@@ -40,6 +41,7 @@ import { toExternalUrl, stripProtocol } from '@/lib/urls';
 import { formatLocation } from '@/lib/locations';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PostViewModal } from '@/components/PostViewModal';
+import { WalletTransferDialog } from '@/components/payment/WalletTransferDialog';
 import { PROFILE_PUBLIC_COLUMNS } from '@/lib/profileFields';
 
 interface UserProfile {
@@ -70,6 +72,9 @@ export default function UserProfilePage() {
   const [loading, setLoading] = useState(true);
   const [followLoading, setFollowLoading] = useState(false);
   const [messageLoading, setMessageLoading] = useState(false);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [paymentConversationId, setPaymentConversationId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'posts' | 'videos' | 'reposts'>('posts');
   const [selectedRepostPost, setSelectedRepostPost] = useState<Repost['post'] | null>(null);
   const [showQrDialog, setShowQrDialog] = useState(false);
@@ -81,7 +86,13 @@ export default function UserProfilePage() {
   const { createPrivateConversation } = useConversations();
 
   const userId = profile?.id;
-  const { posts, isLoading: postsLoading, likePost } = useUserPosts(userId);
+  const {
+    posts,
+    isLoading: postsLoading,
+    likePost,
+    deletePost,
+    pinPost,
+  } = useUserPosts(userId);
   const { reposts, isLoading: repostsLoading } = useUserReposts(userId);
 
   const isOwnProfile = user?.id === userId;
@@ -135,6 +146,11 @@ export default function UserProfilePage() {
     fetchProfile();
   }, [fetchProfile]);
 
+  useEffect(() => {
+    setPaymentConversationId(null);
+    setPaymentOpen(false);
+  }, [userId]);
+
   const handleFollow = async () => {
     if (!user || !userId) return;
     setFollowLoading(true);
@@ -179,6 +195,27 @@ export default function UserProfilePage() {
       toast.error(t('profile.messageFailed'));
     } finally {
       setMessageLoading(false);
+    }
+  };
+
+  const handlePayment = async () => {
+    if (!userId || isOwnProfile) return;
+    setPaymentLoading(true);
+
+    try {
+      let conversationId = paymentConversationId;
+      if (!conversationId) {
+        const conversation = await createPrivateConversation(userId);
+        if (!conversation) throw new Error('Private conversation could not be created');
+        conversationId = conversation.id;
+        setPaymentConversationId(conversation.id);
+      }
+      setPaymentOpen(true);
+    } catch (error) {
+      console.error('Error preparing wallet transfer:', error);
+      toast.error('Pul o‘tkazmasini ochib bo‘lmadi');
+    } finally {
+      setPaymentLoading(false);
     }
   };
 
@@ -303,7 +340,7 @@ export default function UserProfilePage() {
                 </p>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {!isOwnProfile && (
                   <>
                     <Button
@@ -330,6 +367,14 @@ export default function UserProfilePage() {
                     >
                       <MessageCircle className="h-4 w-4 mr-2" />
                       {t('profile.message')}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handlePayment}
+                      disabled={paymentLoading}
+                    >
+                      <WalletCards className="h-4 w-4 mr-2" />
+                      Pul yuborish
                     </Button>
                   </>
                 )}
@@ -429,6 +474,14 @@ export default function UserProfilePage() {
           displayName={profile.display_name}
           avatarUrl={profile.avatar_url}
         />
+
+        {paymentConversationId && (
+          <WalletTransferDialog
+            open={paymentOpen}
+            onOpenChange={setPaymentOpen}
+            conversationId={paymentConversationId}
+          />
+        )}
 
         {/* Telegram uslubidagi ko'p profil rasmlari */}
         <ProfilePhotosDialog
@@ -585,8 +638,8 @@ export default function UserProfilePage() {
                 display_name: profile.display_name,
               }}
               onLike={likePost}
-              onDelete={() => {}}
-              onPin={() => {}}
+              onDelete={deletePost}
+              onPin={pinPost}
             />
           )}
         </div>

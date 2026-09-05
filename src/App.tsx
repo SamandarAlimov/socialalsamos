@@ -166,6 +166,7 @@ function AppRoutes() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/user/:username" element={<UserProfilePage />} />
         <Route path="/settings" element={<SettingsHubPage />} />
+        <Route path="/settings/payment" element={<Navigate to="/payment" replace />} />
         <Route path="/settings/:section" element={<SettingsHubPage />} />
         <Route path="/payment" element={<PaymentSettingsPage />} />
         <Route path="/feedback" element={<FeedbackPage />} />
