@@ -37,7 +37,10 @@ export function MobileMenu({ className }: MobileMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const handleNavigate = (path: string) => {
-    navigate(path);
+    // Secondary pages remember which primary tab opened them. Their shared
+    // back header can then return to the exact source page instead of guessing.
+    const mobileBackTarget = `${location.pathname}${location.search}`;
+    navigate(path, { state: { mobileBackTarget } });
     setIsOpen(false);
   };
 

@@ -3,12 +3,14 @@ import { Outlet, Navigate, useLocation } from 'react-router-dom';
 import { AppSidebar } from './AppSidebar';
 import { BottomNavbar } from './BottomNavbar';
 import { MobileHeader } from './MobileHeader';
+import { MobileBackHeader } from './MobileBackHeader';
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useActivityTracking } from '@/hooks/useActivityTracking';
 import { LocationPermissionDialog } from '@/components/LocationPermissionDialog';
 import { cn } from '@/lib/utils';
 import { resumeMyLiveLocationSharing } from '@/lib/liveLocationSharing';
+import { getMobileChromeMode } from '@/lib/mobileRouteChrome';
 import { UI_LAYER } from '@/lib/uiLayers';
 
 export function AppLayout() {
@@ -46,22 +48,24 @@ export function AppLayout() {
   const isCreatePage = location.pathname === '/create';
   const isMessagesPage = location.pathname === '/messages';
   const isVideosPage = location.pathname === '/videos';
-  // AI sahifasi ham to'liq ekranli: o'zining header va composer'i bor,
-  // shuning uchun layout padding qo'shmaydi (aks holda tagida oq joy qoladi).
   const isAiPage = location.pathname === '/ai';
 
-  const hideHeaderOnPages =
-    isMessagesPage ||
-    isMapPage ||
-    isVideosPage ||
-    isCreatePage ||
-    isAiPage ||
-    location.pathname.startsWith('/marketplace/product/');
+  /**
+   * One mobile navigation contract for the whole authenticated app:
+   *
+   * Primary tabs (/home, /messages, /videos, /profile)
+   *   -> branded header + bottom navbar.
+   * Hamburger/detail pages
+   *   -> premium back header + NO bottom navbar.
+   * Create
+   *   -> immersive full-screen flow with page-owned controls.
+   */
+  const mobileChromeMode = getMobileChromeMode(location.pathname);
+  const hasMobileTopChrome = mobileChromeMode !== 'immersive';
+  const showPrimaryMobileChrome = mobileChromeMode === 'primary';
+  const showSecondaryMobileChrome = mobileChromeMode === 'secondary';
 
-  const immersiveMobile = isCreatePage || isMapPage;
-  // Balandligi ekranga qat'iy teng bo'lishi kerak bo'lgan sahifalar.
-  // Messages, Videos va AI o'zining ichki canonical scroll containeriga ega.
-  // Ularning tashqarisida AppLayout yana scroll qilmaydi.
+  // Pages with their own canonical inner scroll container remain viewport-bound.
   const fullHeightPage =
     isCreatePage || isMapPage || isAiPage || isMessagesPage || isVideosPage;
 
@@ -99,7 +103,8 @@ export function AppLayout() {
         )}
       </button>}
 
-      {!hideHeaderOnPages && <MobileHeader />}
+      {showPrimaryMobileChrome && <MobileHeader />}
+      {showSecondaryMobileChrome && <MobileBackHeader />}
 
       <main
         data-platform-scroll-root={fullHeightPage ? undefined : 'true'}
@@ -110,16 +115,14 @@ export function AppLayout() {
           fullHeightPage
             ? 'h-full overflow-hidden p-0'
             : 'h-full overflow-x-hidden overflow-y-auto overscroll-y-contain alsamos-scrollbar [-webkit-overflow-scrolling:touch]',
-          hideHeaderOnPages ? 'pt-0' : 'pt-14',
-          immersiveMobile ? 'pb-0' : 'pb-20',
-          // AI sahifasida mobil pastki navbar joyi kerak, desktopda esa umuman kerak emas.
-          isAiPage && 'pb-16 md:pb-0'
+          hasMobileTopChrome ? 'pt-14' : 'pt-0',
+          showPrimaryMobileChrome ? 'pb-20' : 'pb-0',
         )}
       >
         <Outlet />
       </main>
 
-      {!immersiveMobile && <BottomNavbar />}
+      {showPrimaryMobileChrome && <BottomNavbar />}
       <LocationPermissionDialog />
     </div>
   );
