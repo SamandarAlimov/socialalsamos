@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Loader2, PackageSearch } from 'lucide-react';
+import { ArrowLeft, Loader2, MapPinned, Navigation, PackageSearch } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ProductDetail } from '@/components/marketplace/ProductDetail';
@@ -27,6 +27,30 @@ export default function MarketplaceProductPage() {
       : `/marketplace/product/${productId || ''}?${searchParams.toString()}`;
     return parseMarketplaceSelectionFromUrl(path);
   }, [productId, searchParams]);
+
+  const productMapTarget = useMemo(() => {
+    if (!product) return null;
+    const latitude = Number(product.latitude);
+    const longitude = Number(product.longitude);
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      Math.abs(latitude) > 90 ||
+      Math.abs(longitude) > 180 ||
+      (latitude === 0 && longitude === 0)
+    ) {
+      return null;
+    }
+
+    const params = new URLSearchParams({
+      destLat: String(latitude),
+      destLng: String(longitude),
+      destName: product.location?.trim() || product.title,
+      source: 'marketplace',
+      productId: product.id,
+    });
+    return `/map?${params.toString()}`;
+  }, [product]);
 
   useEffect(() => {
     if (!product) return;
@@ -233,6 +257,24 @@ export default function MarketplaceProductPage() {
           navigate(`/marketplace/product/${nextProduct.id}`);
         }}
       />
+
+      {productMapTarget && (
+        <div className="pointer-events-none fixed bottom-24 right-4 z-40 md:bottom-6 md:right-6">
+          <Button
+            type="button"
+            className="pointer-events-auto h-11 gap-2 rounded-full border border-border/60 bg-background/94 px-4 text-foreground shadow-xl backdrop-blur-xl hover:bg-muted"
+            variant="outline"
+            onClick={() => navigate(productMapTarget)}
+            aria-label="Mahsulot joylashuvini Alsamos Mapda ko‘rish"
+          >
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-foreground text-background">
+              <MapPinned className="h-3.5 w-3.5" />
+            </span>
+            <span className="hidden text-sm font-semibold sm:inline">Xaritada ko‘rish</span>
+            <Navigation className="h-3.5 w-3.5 text-muted-foreground" />
+          </Button>
+        </div>
+      )}
 
       <CartSheet open={showCart} onOpenChange={setShowCart} />
       <CheckoutSheet
