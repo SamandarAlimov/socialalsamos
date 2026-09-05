@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useCart, Product } from '@/hooks/useMarketplace';
 import db from '@/lib/supabaseAny';
+import { flushQueuedAdConversions, trackMarketplaceCheckout } from '@/lib/adConversion';
 
 export interface OrderItem {
   id: string;
@@ -232,9 +233,9 @@ const LIFECYCLE_MESSAGES: Record<string, string> = {
   not_authenticated: 'Iltimos, tizimga kiring',
   invalid_status: "Noto'g'ri holat",
   order_not_found: 'Buyurtma topilmadi',
-  not_authorized: 'Bu buyurtmani o\u2018zgartirishga ruxsatingiz yo\u2018q',
+  not_authorized: 'Bu buyurtmani o‘zgartirishga ruxsatingiz yo‘q',
   seller_only: 'Faqat sotuvchi bu amalni bajara oladi',
-  cancel_window_closed: 'Buyurtma yo\u2018lga chiqqan \u2014 bekor qilish uchun sotuvchiga murojaat qiling',
+  cancel_window_closed: 'Buyurtma yo‘lga chiqqan — bekor qilish uchun sotuvchiga murojaat qiling',
   status_unchanged: 'Buyurtma allaqachon shu holatda',
   order_finalized: 'Buyurtma yakunlangan',
   invalid_transition: "Bu holatga o'tish mumkin emas",
@@ -300,7 +301,7 @@ export function useOrderActions() {
       toast({
         title: STATUS_TOASTS[status],
         description: refunded > 0
-          ? 'Mablag\u2018 hamyoningizga qaytarildi'
+          ? 'Mablag‘ hamyoningizga qaytarildi'
           : undefined,
       });
 
@@ -351,8 +352,17 @@ const FAILURE_MESSAGES: Record<string, string> = {
 export function useCheckout() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { items: cartItems, total: cartTotal, refresh: refreshCart } = useCart();
+  const {
+    items: cartItems,
+    total: cartTotal,
+    currency: cartCurrency,
+    refresh: refreshCart,
+  } = useCart();
   const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    void flushQueuedAdConversions();
+  }, []);
 
   const placeOrder = async (
     shippingAddress: any,
@@ -375,7 +385,6 @@ export function useCheckout() {
         const code = extractCode(error.message);
         const friendly = FAILURE_MESSAGES[code] || error.message || 'Buyurtma amalga oshmadi';
         toast({ title: "To'lov amalga oshmadi", description: friendly, variant: 'destructive' });
-        // the raw code is returned so the UI can offer a targeted recovery action
         return { success: false, order_ids: [], payment_status: 'failed', total: 0, error: code || friendly };
       }
 
@@ -388,6 +397,25 @@ export function useCheckout() {
 
       await refreshCart();
 
+      const orderIds = payload.order_ids ?? [];
+      const total = Number(payload.total ?? 0);
+      if (orderIds.length > 0) {
+        // This is a funnel signal only. Real `purchase` attribution is emitted
+        // server-side when an order actually reaches payment_status='paid', so
+        // COD/pending orders are never falsely counted as purchases.
+        void trackMarketplaceCheckout(
+          orderIds.slice().sort().join('.'),
+          total,
+          cartCurrency || 'USD',
+          {
+            order_ids: orderIds,
+            payment_method: paymentMethod,
+            payment_status: payload.payment_status ?? 'pending',
+            item_count: cartItems.reduce((sum, item) => sum + item.quantity, 0),
+          },
+        );
+      }
+
       toast({
         title: payload.payment_status === 'paid' ? "To'lov muvaffaqiyatli!" : 'Buyurtma qabul qilindi',
         description:
@@ -398,9 +426,9 @@ export function useCheckout() {
 
       return {
         success: true,
-        order_ids: payload.order_ids ?? [],
+        order_ids: orderIds,
         payment_status: payload.payment_status ?? 'pending',
-        total: payload.total ?? 0,
+        total,
       };
     } catch (err: any) {
       const msg = err?.message || 'Kutilmagan xatolik';
