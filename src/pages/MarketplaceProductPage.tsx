@@ -1,16 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Loader2, PackageSearch } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ProductDetail } from '@/components/marketplace/ProductDetail';
 import { CartSheet } from '@/components/marketplace/CartSheet';
 import { CheckoutSheet } from '@/components/marketplace/CheckoutSheet';
 import { fetchMarketplaceProductById, Product, useCart } from '@/hooks/useMarketplace';
 import { marketplaceUz } from '@/i18n/marketplace';
+import { parseMarketplaceSelectionFromUrl } from '@/lib/marketplaceChat';
 
 export default function MarketplaceProductPage() {
   const { productId } = useParams<{ productId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { refresh: refreshCart } = useCart();
 
   const [product, setProduct] = useState<Product | null>(null);
@@ -18,6 +20,13 @@ export default function MarketplaceProductPage() {
   const [loadError, setLoadError] = useState(false);
   const [showCart, setShowCart] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
+
+  const sharedSelection = useMemo(() => {
+    const path = typeof window !== 'undefined'
+      ? window.location.href
+      : `/marketplace/product/${productId || ''}?${searchParams.toString()}`;
+    return parseMarketplaceSelectionFromUrl(path);
+  }, [productId, searchParams]);
 
   useEffect(() => {
     if (!product) return;
@@ -188,10 +197,11 @@ export default function MarketplaceProductPage() {
     <div className="marketplace-neutral">
       <ProductDetail
         product={product}
+        initialVariantId={sharedSelection.variantId}
+        initialQuantity={sharedSelection.quantity}
         onClose={goBack}
         onSellerClick={(sellerId) => navigate(`/marketplace?seller=${sellerId}`)}
-        onMessageSeller={() => {
-          const sellerUserId = product.seller?.user_id;
+        onMessageSeller={(sellerUserId, context) => {
           if (!sellerUserId) {
             navigate('/messages');
             return;
@@ -200,8 +210,15 @@ export default function MarketplaceProductPage() {
           const params = new URLSearchParams({
             user: sellerUserId,
             product: product.id,
-            intent: 'contact',
+            intent: context.intent,
+            qty: String(context.quantity),
           });
+          if (context.variantId) params.set('variant', context.variantId);
+          if (context.variantSku) params.set('sku', context.variantSku);
+          if (Object.keys(context.options).length > 0) {
+            params.set('opts', JSON.stringify(context.options));
+          }
+
           navigate(`/marketplace/chat?${params.toString()}`);
         }}
         onBuyNow={async () => {
