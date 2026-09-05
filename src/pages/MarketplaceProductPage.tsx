@@ -192,7 +192,17 @@ export default function MarketplaceProductPage() {
         onSellerClick={(sellerId) => navigate(`/marketplace?seller=${sellerId}`)}
         onMessageSeller={() => {
           const sellerUserId = product.seller?.user_id;
-          navigate(sellerUserId ? `/messages?user=${sellerUserId}` : '/messages');
+          if (!sellerUserId) {
+            navigate('/messages');
+            return;
+          }
+
+          const params = new URLSearchParams({
+            user: sellerUserId,
+            product: product.id,
+            intent: 'contact',
+          });
+          navigate(`/marketplace/chat?${params.toString()}`);
         }}
         onBuyNow={async () => {
           await refreshCart();
