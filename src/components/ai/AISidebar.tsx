@@ -14,14 +14,14 @@ import {
   updateLocalProject,
 } from '@/lib/ai/projectsStore';
 import { AISidebar as AISidebarV2 } from './AISidebarV2';
-import type { AIProject } from './types';
+import type { AIConversation, AIProject } from './types';
 
 type Props = ComponentProps<typeof AISidebarV2>;
 
 /**
  * AI sidebar owns the project navigation surface. Database-backed projects are
  * preferred when available; otherwise the existing local project store keeps
- * the feature fully usable without sending users to a separate /projects page.
+ * the feature fully usable without losing project context.
  */
 export function AISidebar(props: Props) {
   const { user } = useAuth();
@@ -39,6 +39,16 @@ export function AISidebar(props: Props) {
     setLocalProjects(listLocalProjects(user.id));
   };
 
+  const syncProjectQuery = (projectId: string | null) => {
+    const next = new URLSearchParams(location.search);
+    if (projectId) next.set('project', projectId);
+    else next.delete('project');
+    const query = next.toString();
+    const target = `${location.pathname}${query ? `?${query}` : ''}`;
+    const current = `${location.pathname}${location.search}`;
+    if (target !== current) navigate(target, { replace: true });
+  };
+
   useEffect(() => {
     if (!useLocalProjects) return;
     refreshLocalProjects();
@@ -49,6 +59,23 @@ export function AISidebar(props: Props) {
     const active = readActiveLocalProject();
     return active?.userId === user.id ? active.project.id : null;
   }, [localProjects, location.search, useLocalProjects, user?.id]);
+
+  // Database-backed project links (/ai?project=<id>) used to activate only the
+  // local fallback store. Apply the URL selection to the real AI project state
+  // as soon as the database project list is available.
+  useEffect(() => {
+    if (useLocalProjects || !props.onSelectProject) return;
+    const projectId = new URLSearchParams(location.search).get('project');
+    if (!projectId || projectId === props.activeProjectId) return;
+    if (!props.projects.some((project) => project.id === projectId)) return;
+    props.onSelectProject(projectId);
+  }, [
+    location.search,
+    props.activeProjectId,
+    props.onSelectProject,
+    props.projects,
+    useLocalProjects,
+  ]);
 
   // A newly created conversation inside a locally backed project is assigned
   // to that project as soon as its id exists. This keeps project history stable
@@ -72,11 +99,7 @@ export function AISidebar(props: Props) {
     if (projectId) setActiveLocalProject(user.id, projectId);
     else clearActiveLocalProject();
 
-    const next = new URLSearchParams(location.search);
-    if (projectId) next.set('project', projectId);
-    else next.delete('project');
-    const query = next.toString();
-    navigate(`${location.pathname}${query ? `?${query}` : ''}`, { replace: true });
+    syncProjectQuery(projectId);
 
     // Claude-like behavior: selecting a project keeps the AI workspace open
     // and immediately opens its most recent conversation. Only a brand-new
@@ -91,6 +114,26 @@ export function AISidebar(props: Props) {
       props.onNew();
     }
     refreshLocalProjects();
+  };
+
+  const selectBackendProject = (projectId: string | null) => {
+    syncProjectQuery(projectId);
+    props.onSelectProject?.(projectId);
+  };
+
+  const selectConversation = (conversation: AIConversation) => {
+    const projectId = conversation.projectId || null;
+
+    if (useLocalProjects && user?.id) {
+      const localProjectId = projectId || projectForConversation(user.id, conversation.id);
+      if (localProjectId) setActiveLocalProject(user.id, localProjectId);
+      else clearActiveLocalProject();
+      syncProjectQuery(localProjectId);
+    } else {
+      syncProjectQuery(projectId);
+    }
+
+    props.onSelect(conversation);
   };
 
   const createLocal = async (value: { name: string; instructions: string }) => {
@@ -114,6 +157,12 @@ export function AISidebar(props: Props) {
     if (wasActive) selectLocalProject(null);
   };
 
+  const deleteBackend = async (projectId: string) => {
+    await props.onDeleteProject?.(projectId);
+    const routeProjectId = new URLSearchParams(location.search).get('project');
+    if (routeProjectId === projectId) syncProjectQuery(null);
+  };
+
   const moveLocalConversation = async (conversationId: string, projectId: string | null) => {
     if (!user?.id) return;
     setConversationProject(user.id, conversationId, projectId);
@@ -124,15 +173,16 @@ export function AISidebar(props: Props) {
     <AISidebarV2
       {...props}
       conversations={conversations}
+      onSelect={selectConversation}
       // Focus/session refreshes may re-request history, but existing chat rows
       // should never flash back to skeletons when the user returns to the app.
       loading={props.loading && conversations.length === 0}
       projects={useLocalProjects ? localProjects : props.projects}
       activeProjectId={useLocalProjects ? localActiveProjectId : props.activeProjectId}
-      onSelectProject={useLocalProjects ? selectLocalProject : props.onSelectProject}
+      onSelectProject={useLocalProjects ? selectLocalProject : selectBackendProject}
       onCreateProject={useLocalProjects ? createLocal : props.onCreateProject}
       onUpdateProject={useLocalProjects ? updateLocal : props.onUpdateProject}
-      onDeleteProject={useLocalProjects ? deleteLocal : props.onDeleteProject}
+      onDeleteProject={useLocalProjects ? deleteLocal : deleteBackend}
       onMoveConversation={useLocalProjects ? moveLocalConversation : props.onMoveConversation}
     />
   );
