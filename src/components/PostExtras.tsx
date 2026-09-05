@@ -140,6 +140,7 @@ export function PostExtras({
     ? {
         id: 'legacy-location:' + postId,
         post_id: postId,
+        place_id: null,
         // Legacy fallback serverda realtime yangilanmaydi, shuning uchun static place sifatida ko'rsatiladi.
         mode: 'place',
         label: legacyLocation.label,
