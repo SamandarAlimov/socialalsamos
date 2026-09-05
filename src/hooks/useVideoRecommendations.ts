@@ -46,6 +46,16 @@ function increment<K>(map: Map<K, number>, key: K, amount: number) {
   map.set(key, (map.get(key) ?? 0) + amount);
 }
 
+function normalizeExplicitTopic(value: unknown) {
+  return String(value ?? '')
+    .normalize('NFKC')
+    .trim()
+    .replace(/^#/, '')
+    .replace(/\s+/g, ' ')
+    .toLocaleLowerCase()
+    .slice(0, 120);
+}
+
 function normalizeRanking(
   rows: AnyRow[],
   field: 'score' | 'quality_score',
@@ -151,11 +161,19 @@ async function loadVideoRecommendationProfile(
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(SIGNAL_LIMIT),
+    // Legacy positive-only preference source remains readable during migration.
     db
       .from('ai_preferences')
       .select('recommendation_topics')
       .eq('user_id', userId)
       .maybeSingle(),
+    // Canonical weighted source shared with Home and Alsamos AI.
+    db
+      .from('user_recommendation_interests')
+      .select('topic, weight, source, updated_at')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+      .limit(100),
     globalRankingPromise,
   ]);
 
@@ -168,7 +186,8 @@ async function loadVideoRecommendationProfile(
   const hiddenRows = settledRows(results[6]);
   const recommendationRows = settledRows(results[7]);
   const preferenceRow = settledData(results[8]);
-  const globalRows = settledRows(results[9]);
+  const weightedPreferenceRows = settledRows(results[9]);
+  const globalRows = settledRows(results[10]);
 
   const following = new Set(
     followingRows.map((row) => String(row.following_id)).filter(Boolean),
@@ -181,9 +200,16 @@ async function loadVideoRecommendationProfile(
       ? preferenceRow?.recommendation_topics
       : []
     )
-      .map((topic: unknown) => String(topic).trim().replace(/^#/, '').toLowerCase())
+      .map((topic: unknown) => normalizeExplicitTopic(topic))
       .filter(Boolean),
   );
+  const explicitTopicAffinity = new Map<string, number>();
+  for (const row of weightedPreferenceRows) {
+    const topic = normalizeExplicitTopic(row.topic);
+    const weight = Math.max(-3, Math.min(3, Number(row.weight ?? 0)));
+    if (!topic || !Number.isFinite(weight) || weight === 0) continue;
+    explicitTopicAffinity.set(topic, weight);
+  }
 
   const positivePostIds = new Set<string>();
   const seenAt = new Map<string, number>();
@@ -237,16 +263,11 @@ async function loadVideoRecommendationProfile(
     increment(postWeights, postId, decay(signal, occurredAt, 28));
     seenAt.set(postId, Math.max(seenAt.get(postId) ?? 0, occurredAt));
 
-    // Query is newest-first. Latest session best represents current taste.
     if (!retentionByPost.has(postId)) retentionByPost.set(postId, retention);
     if (row.completed || retention >= 0.78) positivePostIds.add(postId);
   }
 
-  // Canonical recommendation event stream is optional and schema-safe. Watch
-  // sessions remain the source of truth if this table is unavailable.
   for (const row of recommendationRows) {
-    // Video watch events mirror video_watch_sessions. Those sessions are the
-    // authoritative signal above, so do not double-count the same behavior.
     if (String(row.source ?? '') === 'videos') continue;
 
     const postId = String(row.post_id ?? '');
@@ -300,6 +321,7 @@ async function loadVideoRecommendationProfile(
     topicAffinity,
     positivePostIds,
     explicitTopics,
+    explicitTopicAffinity,
     globalScore: normalizeRanking(globalRows, 'score'),
     globalQuality: normalizeRanking(globalRows, 'quality_score'),
   };
@@ -414,6 +436,10 @@ export function useVideoRecommendations(candidates: VideoPost[]) {
     profileCache.delete(key);
     const next = await loadVideoRecommendationProfile(userId, true);
     setProfile(next);
+    // Explicit AI preference changes should affect the active Videos session,
+    // not only newly appended reels. Resetting order allows a deliberate
+    // refresh to re-rank the candidate pool without random reshuffles otherwise.
+    setFeedOrderIds([]);
   }, [userId]);
 
   return {
