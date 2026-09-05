@@ -38,6 +38,37 @@ export function AppLayout() {
     if (isAuthenticated) void resumeMyLiveLocationSharing();
   }, [isAuthenticated]);
 
+  // The authenticated shell has exactly one vertical scroll owner: <main>.
+  // Chrome/Windows can expose document scrolling after keyboard focus/scroll
+  // restoration even when the 100dvh app root itself is overflow-hidden. That
+  // produces two visible scrollbars (document + platform main). Lock the
+  // document while AppLayout is mounted and restore the previous styles when
+  // leaving the authenticated shell so public/auth pages keep native scrolling.
+  useEffect(() => {
+    if (!isAuthenticated || typeof document === 'undefined') return;
+
+    const html = document.documentElement;
+    const body = document.body;
+    const previous = {
+      htmlOverflow: html.style.overflow,
+      htmlOverscrollY: html.style.overscrollBehaviorY,
+      bodyOverflow: body.style.overflow,
+      bodyOverscrollY: body.style.overscrollBehaviorY,
+    };
+
+    html.style.overflow = 'hidden';
+    html.style.overscrollBehaviorY = 'none';
+    body.style.overflow = 'hidden';
+    body.style.overscrollBehaviorY = 'none';
+
+    return () => {
+      html.style.overflow = previous.htmlOverflow;
+      html.style.overscrollBehaviorY = previous.htmlOverscrollY;
+      body.style.overflow = previous.bodyOverflow;
+      body.style.overscrollBehaviorY = previous.bodyOverscrollY;
+    };
+  }, [isAuthenticated]);
+
   useEffect(() => {
     const check = () => {
       if (window.innerWidth < 1100) setSidebarCollapsed(true);
@@ -91,6 +122,7 @@ export function AppLayout() {
 
   return (
     <div
+      data-platform-shell="true"
       className={cn(
         'flex h-[100dvh] min-h-0 w-full overflow-hidden bg-background',
         isMessagesPage &&
