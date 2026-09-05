@@ -30,6 +30,11 @@ export interface HomeRecommendationProfile {
   hashtagAffinity: ReadonlyMap<string, number>;
   mediaAffinity: ReadonlyMap<RecommendationMediaBucket, number>;
   positivePostIds: ReadonlySet<string>;
+  /**
+   * Explicit user controls (including Alsamos AI requests). Unlike behavioral
+   * affinity these may be negative and multi-word, e.g. a creator's full name.
+   */
+  explicitTopicAffinity: ReadonlyMap<string, number>;
 }
 
 export const EMPTY_HOME_RECOMMENDATION_PROFILE: HomeRecommendationProfile = {
@@ -40,6 +45,7 @@ export const EMPTY_HOME_RECOMMENDATION_PROFILE: HomeRecommendationProfile = {
   hashtagAffinity: new Map<string, number>(),
   mediaAffinity: new Map<RecommendationMediaBucket, number>(),
   positivePostIds: new Set<string>(),
+  explicitTopicAffinity: new Map<string, number>(),
 };
 
 function finiteCount(value: unknown): number {
@@ -59,6 +65,55 @@ function deterministicNoise(seed: string): number {
     hash = Math.imul(hash, 16777619);
   }
   return ((hash >>> 0) % 10000) / 10000;
+}
+
+function normalizeTopicText(value: unknown) {
+  return String(value ?? '')
+    .normalize('NFKC')
+    .toLocaleLowerCase()
+    .replace(/^#/, '')
+    .replace(/[’‘`ʻ]/g, "'")
+    .replace(/[^\p{L}\p{N}_#'\s-]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function explicitPreferenceScore(
+  post: Pick<RecommendationPost, 'content' | 'hashtags'>,
+  preferences: ReadonlyMap<string, number>,
+): number {
+  if (preferences.size === 0) return 0;
+
+  const content = normalizeTopicText(post.content);
+  const tags = new Set(
+    recommendationHashtags(post).map((tag) => normalizeTopicText(tag)).filter(Boolean),
+  );
+  let score = 0;
+  let matches = 0;
+
+  for (const [rawTopic, rawWeight] of preferences) {
+    const topic = normalizeTopicText(rawTopic);
+    const weight = Math.max(-3, Math.min(3, Number(rawWeight) || 0));
+    if (!topic || !weight) continue;
+
+    // Phrase match handles creator names/topics from AI. Token overlap handles
+    // natural variants without making a single short word dominate the feed.
+    const phraseMatch = content.includes(topic) || tags.has(topic);
+    const tokens = topic.split(/\s+/).filter((token) => token.length >= 3);
+    const tokenHits = tokens.filter(
+      (token) => tags.has(token) || content.includes(token),
+    ).length;
+    const tokenRatio = tokens.length ? tokenHits / tokens.length : 0;
+    const matched = phraseMatch || tokenRatio >= (tokens.length >= 3 ? 0.67 : 1);
+    if (!matched) continue;
+
+    const confidence = phraseMatch ? 1 : Math.max(0.55, tokenRatio);
+    score += weight * 2.25 * confidence;
+    matches += 1;
+    if (matches >= 5) break;
+  }
+
+  return Math.max(-9, Math.min(9, score));
 }
 
 export function recommendationMediaBucket(
@@ -122,7 +177,6 @@ function rawRecommendationScore<T extends RecommendationPost>(
   const createdAt = safeCreatedAt(post.created_at, now);
   const ageHours = Math.max(0, (now - createdAt) / 3_600_000);
 
-  // Freshness decays smoothly instead of hard chronological ordering.
   const freshness = 4.8 * Math.exp(-ageHours / 60);
 
   const likes = finiteCount(post.likes_count);
@@ -139,11 +193,9 @@ function rawRecommendationScore<T extends RecommendationPost>(
     bookmarks * 3.5 +
     reposts * 3.8;
 
-  // Logarithmic social proof prevents large accounts from fully dominating.
   const socialProof =
     Math.log1p(strongActions) * 0.9 + Math.log1p(views) * 0.22;
 
-  // Quality/conversion signal: interactions relative to exposure.
   const conversion =
     views > 0
       ? Math.min(2.4, (strongActions / Math.sqrt(views + 24)) * 0.32)
@@ -164,6 +216,8 @@ function rawRecommendationScore<T extends RecommendationPost>(
     .reduce((sum, value) => sum + value, 0);
   const topicAffinity = Math.min(3.1, Math.log1p(topicRaw) * 1.05);
 
+  const explicitAffinity = explicitPreferenceScore(post, profile.explicitTopicAffinity);
+
   const media = recommendationMediaBucket(post);
   const mediaAffinity = Math.min(
     1.7,
@@ -181,15 +235,9 @@ function rawRecommendationScore<T extends RecommendationPost>(
     else if (seenAgeHours < 24 * 30) seenPenalty = 1.1;
   }
 
-  // Already-liked/saved/reposted posts may be resurfaced later, but not
-  // immediately crowd out unseen discovery.
   const positiveReplayPenalty = profile.positivePostIds.has(post.id) ? 0.7 : 0;
-
-  // Own posts remain visible but are not treated as recommendations.
   const ownPostPenalty = userId && post.user_id === userId ? 0.9 : 0;
 
-  // Deterministic daily exploration noise avoids frozen ordering without
-  // producing scroll-jumps on every render.
   const dayKey = new Date(now).toISOString().slice(0, 10);
   const exploration =
     deterministicNoise((userId ?? 'anonymous') + '|' + post.id + '|' + dayKey) *
@@ -206,6 +254,7 @@ function rawRecommendationScore<T extends RecommendationPost>(
       followingBoost +
       creatorAffinity +
       topicAffinity +
+      explicitAffinity +
       mediaAffinity +
       exploration -
       seenPenalty -
@@ -216,10 +265,8 @@ function rawRecommendationScore<T extends RecommendationPost>(
 
 /**
  * Multi-signal personalized ranking + diversity re-ranking.
- *
- * Retrieval is handled by usePosts('recommended'); this function ranks the
- * candidate pool using behavior signals and then applies MMR-like penalties so
- * one creator or one media type does not monopolize the Home feed.
+ * Retrieval is handled by usePosts('recommended'); this ranks the candidate
+ * pool and then applies MMR-like diversity penalties.
  */
 export function rankHomeRecommendations<T extends RecommendationPost>(
   posts: T[],
@@ -262,8 +309,6 @@ export function rankHomeRecommendations<T extends RecommendationPost>(
         Math.max(0, totalAuthorCount - 1) * 0.65 +
         Math.max(0, recentMediaCount - 2) * 0.75;
 
-      // Every fifth slot gets a modest exploration opportunity for a strong
-      // creator outside the follow graph, similar to discovery injection.
       const explorationSlot = selected.length > 0 && selected.length % 5 === 4;
       const discoveryBonus =
         explorationSlot &&
@@ -272,10 +317,8 @@ export function rankHomeRecommendations<T extends RecommendationPost>(
           ? 0.72
           : 0;
 
-      // Prefer unseen items when scores are otherwise close.
       const unseenBonus = candidate.seen ? 0 : 0.28;
 
-      // Prevent three consecutive posts by the same creator when alternatives exist.
       if (
         selected.length >= 2 &&
         selected[selected.length - 1]?.post.user_id === candidate.post.user_id &&
