@@ -4,6 +4,60 @@
 >
 > We have a very limited credit budget. Perform this as **one coordinated deployment/smoke-test session**. Do not spend credits asking broad questions or generating alternative implementations.
 
+## Immediate Codex Branch To Deploy
+
+Use this GitHub branch as the source for the sandbox deployment:
+
+- Repository: `SamandarAlimov/socialalsamos`
+- Branch: `codex/real-ai-sandbox`
+- Pull request: `https://github.com/SamandarAlimov/socialalsamos/pull/48`
+
+Lovable must not redesign or rewrite this feature. Codex already wrote the code.
+Use Lovable credits only to run/deploy the repository state and report exact
+errors if the deployment environment blocks something.
+
+### Real AI Sandbox Test Deployment
+
+Goal: make AI code execution real for testing now, even before production launch.
+
+Deploy these files exactly from the branch:
+
+- `supabase/functions/_shared/sandbox.ts`
+- `supabase/functions/_shared/aiTools.ts`
+- `supabase/functions/code-sandbox/index.ts`
+- `supabase/config.toml`
+- `sandbox/server/**`
+
+Set Supabase Edge Function secrets for testing:
+
+```text
+SANDBOX_API_URL=https://sandbox.alsamos.com
+SANDBOX_API_KEY=alsamos-dev-sandbox-change-before-production
+```
+
+If `sandbox.alsamos.com` is not configured in Lovable's environment yet, deploy
+the sandbox server from `sandbox/server` to any HTTPS-capable runtime Lovable can
+use for a Docker/Node service, then set `SANDBOX_API_URL` to that HTTPS URL.
+If Lovable cannot host Docker services, do not spend credits trying to rewrite
+the sandbox. Report exactly: `Docker/Node service hosting unavailable`, and
+still deploy the Supabase functions so they are ready once the URL exists.
+
+After setting secrets, deploy:
+
+```text
+supabase functions deploy ai-agent
+supabase functions deploy code-sandbox
+```
+
+Do one minimal sandbox smoke test only:
+
+```json
+{"language":"python","code":"print(2 + 2)","timeoutMs":5000}
+```
+
+Expected result: `stdout` contains `4`, `exitCode` is `0`, and the response does
+not say demo/mock/fallback.
+
 ## Repository / production rules
 
 1. Use the connected Alsamos production Supabase project.

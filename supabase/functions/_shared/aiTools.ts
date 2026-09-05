@@ -6,7 +6,7 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchPageText, isPublicHttpUrl } from "./net.ts";
-import { runJavaScript } from "./sandbox.ts";
+import { runSandboxCode } from "./sandbox.ts";
 import { duckDuckGoSearch, type WebHit } from "./webFallback.ts";
 import {
   generateImageBytes,
@@ -143,12 +143,18 @@ export const TOOL_SPECS: Record<string, ToolSpec> = {
     function: {
       name: "run_code",
       description:
-        "Execute JavaScript in a sandbox with no network or filesystem access. Use for calculations, data transforms, algorithm checks and verifying code you wrote. Return the value you care about with `return`.",
+        "Execute code in an isolated Ubuntu Docker sandbox when configured, otherwise JavaScript in a restricted Deno fallback. Use for calculations, data transforms, algorithm checks and verifying code you wrote.",
       parameters: {
         type: "object",
         properties: {
-          code: str("JavaScript source. Top-level await and `return` are allowed."),
-          timeout_ms: num("Timeout in ms (max 10000)."),
+          language: {
+            type: "string",
+            enum: ["javascript", "typescript", "python", "bash"],
+            description: "Programming language to run.",
+          },
+          code: str("Source code to run."),
+          stdin: str("Optional stdin passed to the program."),
+          timeout_ms: num("Timeout in ms (max 30000 on remote sandbox)."),
         },
         required: ["code"],
         additionalProperties: false,
@@ -569,11 +575,22 @@ async function mediaJobStatus(args: Record<string, unknown>, ctx: ToolContext): 
 async function runCode(args: Record<string, unknown>): Promise<ToolOutcome> {
   const code = String(args.code ?? "");
   if (!code.trim()) return fail("code bo'sh.");
-  const timeout = clamp(args.timeout_ms, 200, 10000, 5000);
-  const result = await runJavaScript(code, timeout);
+  const timeout = clamp(args.timeout_ms, 200, 30000, 5000);
+  const result = await runSandboxCode(code, {
+    language: args.language,
+    timeoutMs: timeout,
+    stdin: typeof args.stdin === "string" ? args.stdin : "",
+  });
   const parts = [
     `ok: ${result.ok}`,
-    result.logs.length ? `stdout:\n${result.logs.join("\n")}` : "stdout: (bo'sh)",
+    `language: ${result.language ?? args.language ?? "javascript"}`,
+    result.stdout !== undefined
+      ? `stdout:\n${result.stdout || "(bo'sh)"}`
+      : result.logs.length
+        ? `stdout:\n${result.logs.join("\n")}`
+        : "stdout: (bo'sh)",
+    result.stderr ? `stderr:\n${result.stderr}` : "",
+    typeof result.exitCode === "number" ? `exit_code: ${result.exitCode}` : "",
     result.result !== null && result.result !== undefined
       ? `return: ${JSON.stringify(result.result).slice(0, 4000)}`
       : "return: undefined",
