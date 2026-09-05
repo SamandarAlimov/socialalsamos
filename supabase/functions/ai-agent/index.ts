@@ -1,19 +1,7 @@
 // Alsamos AI — agentik yakuniy nuqta.
 //
-// Bitta so'rov ichida model bir necha marta vositalarni chaqirishi mumkin
-// (web qidiruv -> sahifani o'qish -> kod ishga tushirish -> rasm yaratish ...).
-// Barcha bosqichlar SSE orqali UI ga real vaqtda uzatiladi:
-//
-//   data: {"type":"meta","model":"...","task":"code","language":"uz"}
-//   data: {"type":"tool_call","id":"...","name":"web_search","args":{...}}
-//   data: {"type":"tool_result","id":"...","ok":true,"summary":"...","data":{...}}
-//   data: {"type":"delta","text":"..."}
-//   data: {"type":"error","message":"..."}
-//   data: [DONE]
-//
-// AI so'rovlari ../_shared/geminiPool.ts orqali ketadi: bir nechta Gemini
-// kaliti navbat bilan ishlatiladi, limitga urilgani chetga qo'yiladi, hammasi
-// band bo'lsa Lovable gateway'iga qaytiladi.
+// Bitta so'rov ichida model bir necha marta vositalarni chaqirishi mumkin.
+// Barcha bosqichlar SSE orqali UI ga real vaqtda uzatiladi.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { guard, preflight, corsHeaders, guardError } from "../_shared/guard.ts";
@@ -25,6 +13,11 @@ import {
   type ConnectorRow,
   type ToolContext,
 } from "../_shared/aiTools.ts";
+import {
+  executePlatformTool,
+  platformSpecsFor,
+  PLATFORM_TOOL_NAMES,
+} from "../_shared/aiPlatformTools.ts";
 
 const FUNCTION_NAME = "ai-agent";
 const RATE_LIMIT = 120;
@@ -40,10 +33,6 @@ const MODEL_ROUTES: Record<string, string> = {
   vision: "google/gemini-3.6-flash",
 };
 
-// Standart holatda BARCHA guruhlar yoqilgan. Avval bu ro'yxat
-// ["web", "image", "code", "alsamos"] edi — shuning uchun model generate_video
-// ni umuman ko'rmasdi va "video qila olmayman" deb javob berardi. Foydalanuvchi
-// UI dan boshqacha tanlov yubormasa, hech qanday sun'iy cheklov bo'lmaydi.
 const DEFAULT_GROUPS = [
   "web",
   "image",
@@ -85,17 +74,24 @@ CAPABILITIES (real tools, use them instead of guessing)
 - Model in use: ${opts.model}
 - Connected plugins: ${opts.connectorNames.join(", ") || "(none)"}
 
+FIRST-PARTY USER DATA
+- my_search_insights reads ONLY the signed-in user's Alsamos search history. Use it for questions about what they searched most/recently; never guess from memory.
+- my_payment_history reads ONLY the signed-in user's Wallet ledger. Use it for their payment/transfer history, date ranges and counterparties. It is read-only and can never move money.
+- get_recommendation_preferences reads explicit feed preferences.
+- update_recommendation_preferences changes the REAL recommendation profile. Use it only when the user explicitly asks to change what Home/Videos recommend. Do not substitute remember() for a feed-tuning request.
+- If AI personalization is disabled, private first-party tools will refuse access; respect that decision.
+
 HOW TO WORK
 1. Plan briefly, then act. Chain tools when needed (search -> fetch -> compute -> answer).
 2. If a fact may be recent, uncertain, or numeric, verify it with web_search / web_fetch and cite sources as [1], [2] matching the tool output order.
 3. For math, data transforms, parsing or algorithm checks, ALWAYS verify with run_code instead of computing mentally.
 4. When writing code, produce complete, runnable files in fenced blocks with the language tag. Explain only what matters.
-5. MEDIA: when the user asks for a picture, logo, poster, illustration, mockup, or an edit of an image, call generate_image immediately — never ask them to switch anything on and never say you cannot create images. When they ask for a video, clip or animation, call generate_video; it waits for the render, and if it returns a job id with status running, tell the user it takes 1-3 minutes and then poll media_job_status with that job id. If a media tool fails, report the exact error from the tool, do not claim the feature is missing.
+5. MEDIA: when the user asks for a picture, logo, poster, illustration, mockup, or an edit of an image, call generate_image immediately. When they ask for a video, clip or animation, call generate_video; if it returns a running job id, poll media_job_status.
 6. Use connector tools (list_connector_tools, connector_call) for the user's external apps, including GitHub repositories.
-7. computer_task controls the user's own machine through the Alsamos Bridge agent. It is queued and requires the user's explicit approval on that device. Explain what you will run and why, and never queue destructive commands (rm -rf, disk formatting, credential exfiltration).
+7. computer_task controls the user's own machine through the Alsamos Bridge agent. It is queued and requires the user's explicit approval on that device. Never queue destructive commands or credential exfiltration.
 8. Never spend money, publish posts, or send messages without explicit user confirmation in the UI.
 9. If a tool fails, say so plainly with the error, then continue with the best alternative.
-10. Be concise by default; expand when the user asks for depth. Use Markdown headings, lists and tables where they help.
+10. Be concise by default; expand when the user asks for depth. Use Markdown where it helps.
 
 USER CONTEXT
 ${opts.userContext}
@@ -153,9 +149,6 @@ serve(async (req) => {
       return guardError(req, "INVALID_REQUEST", "messages massivi talab qilinadi.", 400);
     }
 
-    // Kalit manbalari: GEMINI_API_KEYS / GEMINI_API_KEY_1..10 (asosiy) yoki
-    // LOVABLE_API_KEY (zaxira). Ilgari LOVABLE_API_KEY majburiy edi — endi
-    // faqat Gemini kalitlari bilan ham to'liq ishlaydi.
     const lovableKey = Deno.env.get("LOVABLE_API_KEY");
     if (!hasGeminiKeys() && !lovableKey) {
       console.error("No AI credentials: set GEMINI_API_KEYS or LOVABLE_API_KEY");
@@ -166,13 +159,14 @@ serve(async (req) => {
     const userId = gate.userId;
     const admin = gate.admin;
 
-    // --- vositalar to'plami -------------------------------------------------
     const requestedGroups: string[] = Array.isArray(body.toolGroups) && body.toolGroups.length
       ? body.toolGroups.map(String)
       : DEFAULT_GROUPS;
     const enabled = toolsFromGroups(requestedGroups);
+    if (requestedGroups.includes("alsamos")) {
+      for (const name of PLATFORM_TOOL_NAMES) enabled.add(name);
+    }
 
-    // --- konnektorlar -------------------------------------------------------
     let connectors: ConnectorRow[] = [];
     if (userId && (enabled.has("connector_call") || enabled.has("list_connector_tools"))) {
       const { data } = await admin
@@ -183,7 +177,6 @@ serve(async (req) => {
       connectors = (data ?? []) as ConnectorRow[];
     }
 
-    // --- foydalanuvchi konteksti -------------------------------------------
     let userContext = "(mehmon foydalanuvchi)";
     let memories = "";
     if (userId) {
@@ -209,8 +202,14 @@ serve(async (req) => {
       : { task: requestedModel, language: "uz" };
     const model = MODEL_ROUTES[cls.task] ?? MODEL_ROUTES.balanced;
 
-    const toolSpecs = specsFor(enabled);
-    const ctx: ToolContext = { userId, admin, lovableKey, connectors, enabled };
+    const toolSpecs = [...specsFor(enabled), ...platformSpecsFor(enabled)];
+    const ctx: ToolContext = {
+      userId,
+      admin,
+      lovableKey: lovableKey ?? "",
+      connectors,
+      enabled,
+    };
 
     const conversation: ChatMessage[] = [
       {
@@ -249,8 +248,6 @@ serve(async (req) => {
           });
 
           for (let round = 0; round < MAX_ROUNDS; round += 1) {
-            // Har raund navbatdagi kalit bilan ketadi — uzun agentik zanjirlarda
-            // yuk kalitlar orasida tarqaladi va limitga urilish kamayadi.
             const { response: res, provider } = await aiFetch({
               lovableKey,
               body: {
@@ -328,7 +325,6 @@ serve(async (req) => {
             const calls = [...pending.values()].filter((c) => c.name);
 
             if (!calls.length) {
-              // Yakuniy javob tugadi.
               if (finishReason === "length") {
                 send({ type: "notice", message: "Javob uzunlik chegarasiga yetdi." });
               }
@@ -345,7 +341,6 @@ serve(async (req) => {
               })),
             });
 
-            // Vositalarni parallel bajaramiz.
             const results = await Promise.all(
               calls.map(async (call) => {
                 let args: Record<string, unknown> = {};
@@ -355,7 +350,10 @@ serve(async (req) => {
                   args = {};
                 }
                 send({ type: "tool_call", id: call.id, name: call.name, args });
-                const outcome = await executeTool(call.name, args, ctx);
+
+                const platformOutcome = await executePlatformTool(call.name, args, ctx);
+                const outcome = platformOutcome ?? await executeTool(call.name, args, ctx);
+
                 send({
                   type: "tool_result",
                   id: call.id,
