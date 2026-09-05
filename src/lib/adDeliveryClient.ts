@@ -4,6 +4,7 @@ export type AdFeedbackType = 'hide' | 'not_relevant' | 'seen_too_often' | 'repor
 const SESSION_ID_KEY = 'alsamos-ad-delivery-session-id-v2';
 const SESSION_STARTED_KEY = 'alsamos-ad-delivery-session-started-v2';
 const LOCAL_STATE_KEY = 'alsamos-ad-delivery-client-v2';
+const RELEVANCE_KEY = 'alsamos-ad-relevance-v1';
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -19,6 +20,12 @@ interface LocalDeliveryState {
   blockedAds: Record<string, number>;
 }
 
+interface RelevanceSnapshot {
+  updatedAt?: number;
+  interests?: string[];
+  mediaPreference?: string | null;
+}
+
 export interface DeliveryCandidate {
   id: string;
   user_id: string;
@@ -26,6 +33,7 @@ export interface DeliveryCandidate {
   impressions_count?: number | null;
   clicks_count?: number | null;
   created_at?: string | null;
+  target_interests?: string[] | null;
 }
 
 function localStorageSafe() {
@@ -68,6 +76,25 @@ function readState(now = Date.now()): LocalDeliveryState {
     };
   } catch {
     return emptyState(now);
+  }
+}
+
+function readRelevance(): RelevanceSnapshot {
+  const storage = localStorageSafe();
+  if (!storage) return {};
+  try {
+    const raw = storage.getItem(RELEVANCE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as RelevanceSnapshot) : null;
+    if (!parsed) return {};
+    return {
+      updatedAt: Number(parsed.updatedAt || 0),
+      interests: Array.isArray(parsed.interests)
+        ? parsed.interests.filter((value) => typeof value === 'string').slice(0, 20)
+        : [],
+      mediaPreference: typeof parsed.mediaPreference === 'string' ? parsed.mediaPreference : null,
+    };
+  } catch {
+    return {};
   }
 }
 
@@ -115,6 +142,7 @@ export function getAdRequestContext(extra: Record<string, unknown> = {}) {
       return null;
     }
   })();
+  const relevance = readRelevance();
 
   return {
     locale: typeof navigator !== 'undefined' ? navigator.language : null,
@@ -124,6 +152,9 @@ export function getAdRequestContext(extra: Record<string, unknown> = {}) {
         ? 'mobile'
         : 'desktop',
     session_age_seconds: getAdSessionAgeSeconds(),
+    interests: relevance.interests || [],
+    media_preference: relevance.mediaPreference || null,
+    relevance_updated_at: relevance.updatedAt || null,
     ...extra,
   };
 }
@@ -179,13 +210,15 @@ export function recordAdvertiserExposure(
 
 /**
  * Fallback ranking used while Ads Delivery V2 RPC is unavailable.
- * It deliberately values diversity and fatigue control over raw bid size.
+ * It values relevance, quality and diversity over raw bid size.
  */
 export function rankAdCandidates<T extends DeliveryCandidate>(
   candidates: T[],
   now = Date.now(),
 ): T[] {
   const state = readState(now);
+  const relevance = readRelevance();
+  const interestSet = new Set((relevance.interests || []).map((value) => value.toLowerCase()));
 
   return candidates
     .filter((ad) => !isAdBlockedLocally(ad.id, now))
@@ -200,9 +233,23 @@ export function rankAdCandidates<T extends DeliveryCandidate>(
       const recentAdvertiserPenalty = advertiser.lastAt && now - advertiser.lastAt < 6 * HOUR ? 0.25 : 1;
       const createdAt = ad.created_at ? new Date(ad.created_at).getTime() : 0;
       const freshness = createdAt && now - createdAt < 7 * DAY ? 1.05 : 1;
+      const targets = (ad.target_interests || []).map((value) => String(value).toLowerCase());
+      const interestMatches = targets.filter((value) => interestSet.has(value)).length;
+      const relevanceBoost = targets.length === 0
+        ? 1
+        : interestSet.size === 0
+          ? 0.95
+          : 0.85 + Math.min(0.65, interestMatches * 0.22);
+
       return {
         ad,
-        score: Math.log1p(bid * 100) * quality * fatigue * recentAdvertiserPenalty * freshness,
+        score:
+          Math.log1p(bid * 100)
+          * quality
+          * fatigue
+          * recentAdvertiserPenalty
+          * freshness
+          * relevanceBoost,
       };
     })
     .sort((a, b) => b.score - a.score)
