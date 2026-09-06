@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { db } from '@/lib/db';
-import { MoreHorizontal, Edit, Trash2, Pin, PinOff, Flag, Copy, Share2, Bookmark, EyeOff, Link, Sparkles } from 'lucide-react';
+import { MoreHorizontal, Edit, Trash2, Pin, PinOff, Flag, Copy, Share2, Bookmark, EyeOff, Link, Sparkles, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -214,6 +214,14 @@ export function PostActionsMenu({
         >
           {isOwner && (
             <>
+              <DropdownMenuItem
+                onClick={() => navigate(`/post/${postId}/insights`)}
+                className="cursor-pointer"
+              >
+                <BarChart3 className="h-4 w-4 mr-2 text-alsamos-orange" />
+                Analitika
+              </DropdownMenuItem>
+
               <DropdownMenuItem 
                 onClick={() => setShowEditDialog(true)}
                 className="cursor-pointer"
