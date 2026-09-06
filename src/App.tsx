@@ -12,6 +12,7 @@ import { ThemeProvider } from "next-themes";
 import { PushNotificationProvider } from "@/components/PushNotificationProvider";
 import { ChatWallpaperProvider } from "@/components/chat/ChatWallpaperProvider";
 import { ChatAccentProvider } from "@/components/chat/ChatAccentProvider";
+import { AccountControlGate } from "@/components/auth/AccountControlGate";
 
 // Pages
 import AuthPage from "./pages/AuthPage";
@@ -89,7 +90,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to={`/?next=${encodeURIComponent(next)}`} replace />;
   }
 
-  return <>{children}</>;
+  return <AccountControlGate>{children}</AccountControlGate>;
 }
 
 function AuthRoute({ children }: { children: React.ReactNode }) {
