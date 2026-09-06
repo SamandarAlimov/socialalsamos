@@ -324,19 +324,6 @@ export function ChatHeader({
         {/* Kanallar jonli eshittirish qiladi, 1:1 qo'ng'iroq ishlatmaydi */}
         {isChannel && isAdmin && <GoLiveButton />}
 
-        {canSendMoney && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setPaymentOpen(true)}
-            aria-label="Pul yuborish"
-            title="Pul yuborish"
-            className="h-9 w-9 rounded-full hover:bg-muted sm:h-10 sm:w-10"
-          >
-            <WalletCards className="h-[18px] w-[18px] text-muted-foreground sm:h-5 sm:w-5" />
-          </Button>
-        )}
-
         {!isSelfChat && !isChannel && (
           <>
             <Button
