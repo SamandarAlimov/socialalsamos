@@ -9021,12 +9021,22 @@ export type Database = {
         Args: { p_permission?: string }
         Returns: boolean
       }
+      admin_delete_mailbox_alias_v3: {
+        Args: { p_alias: string; p_reason: string; p_user_id: string }
+        Returns: boolean
+      }
       admin_finalize_user_deletion_v3: {
         Args: { p_error?: string; p_job_id: string; p_success: boolean }
         Returns: undefined
       }
       admin_get_user_details_v3: { Args: { p_user_id: string }; Returns: Json }
       admin_is_protected_user: { Args: { p_user_id: string }; Returns: boolean }
+      admin_list_mailbox_aliases_v3: {
+        Args: { p_user_id: string }
+        Returns: {
+          alias: string
+        }[]
+      }
       admin_list_users_v3: {
         Args: {
           p_limit?: number
