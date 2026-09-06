@@ -96,10 +96,14 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function AuthRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
   const [searchParams] = useSearchParams();
+  const isAddAccountFlow = searchParams.get('mode') === 'add-account';
 
   if (isLoading) return <FullscreenSpinner />;
 
-  if (isAuthenticated) {
+  // Normal auth remains guest-only. The explicit add-account flow is the one
+  // exception: an already authenticated user may reuse the real AuthPage to
+  // sign another account into a free local slot without logging out first.
+  if (isAuthenticated && !isAddAccountFlow) {
     const next = searchParams.get('next');
     const safeNext = next && next.startsWith('/') && !next.startsWith('//') ? next : '/home';
     return <Navigate to={safeNext} replace />;

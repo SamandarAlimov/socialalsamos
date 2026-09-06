@@ -10,6 +10,7 @@ import {
   Trash2,
   UserPlus,
 } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import {
   AlertDialog,
@@ -52,27 +53,23 @@ type SwitchAccountDialogProps = {
   onOpenChange: (open: boolean) => void;
 };
 
-type Mode = 'list' | 'add-existing' | 'create' | 'reauth';
-type BusyAction = 'switch' | 'add' | 'create' | 'reauth' | 'remove' | null;
+type Mode = 'list' | 'create' | 'reauth';
+type BusyAction = 'switch' | 'create' | 'reauth' | 'remove' | null;
 
 function modeTitle(mode: Mode) {
-  if (mode === 'add-existing') return 'Akkaunt qo‘shish';
   if (mode === 'create') return 'Yangi profil';
   if (mode === 'reauth') return 'Qayta kirish';
   return 'Hisobni almashtirish';
 }
 
 function modeDescription(mode: Mode) {
-  if (mode === 'add-existing') {
-    return 'Mavjud akkauntga kiring — keyin uni bir bosishda almashtirasiz.';
-  }
   if (mode === 'create') {
     return 'Joriy identifikator ostida yangi profil yarating.';
   }
   if (mode === 'reauth') {
     return 'Saqlangan akkaunt sessiyasini xavfsiz yangilang.';
   }
-  return 'Ushbu qurilmada saqlangan akkauntlar.';
+  return null;
 }
 
 function AccountSkeleton() {
@@ -104,7 +101,6 @@ export function SwitchAccountDialog({ open, onOpenChange }: SwitchAccountDialogP
     refresh,
     switchToAccount,
     authenticateAccount,
-    addExistingAccount,
     addAccount,
     removeAccount,
     setSaveLoginInfo,
@@ -112,6 +108,8 @@ export function SwitchAccountDialog({ open, onOpenChange }: SwitchAccountDialogP
 
   const { toast } = useToast();
   const isMobile = useIsMobile();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const [mode, setMode] = useState<Mode>('list');
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
@@ -119,11 +117,9 @@ export function SwitchAccountDialog({ open, onOpenChange }: SwitchAccountDialogP
   const [pendingAccount, setPendingAccount] = useState<LinkedAccount | null>(null);
   const [removeTarget, setRemoveTarget] = useState<LinkedAccount | null>(null);
 
-  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [saveLoginOnAdd, setSaveLoginOnAdd] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
 
   const switchingAccount = useMemo(
@@ -140,22 +136,27 @@ export function SwitchAccountDialog({ open, onOpenChange }: SwitchAccountDialogP
     setBusyAccountId(null);
     setPendingAccount(null);
     setRemoveTarget(null);
-    setIdentifier('');
     setPassword('');
     setUsername('');
     setDisplayName('');
-    setSaveLoginOnAdd(true);
     setFormError(null);
   }, [open, refresh]);
 
   const returnToList = () => {
     setMode('list');
     setPendingAccount(null);
-    setIdentifier('');
     setPassword('');
     setUsername('');
     setDisplayName('');
     setFormError(null);
+  };
+
+  const openExistingAccountAuth = () => {
+    if (busyAction) return;
+
+    const returnTo = `${location.pathname}${location.search}${location.hash}`;
+    onOpenChange(false);
+    navigate(`/?mode=add-account&next=${encodeURIComponent(returnTo)}`);
   };
 
   const handleSwitch = async (account: LinkedAccount) => {
@@ -184,28 +185,6 @@ export function SwitchAccountDialog({ open, onOpenChange }: SwitchAccountDialogP
       description: 'error' in result ? result.error : undefined,
       variant: 'destructive',
     });
-  };
-
-  const handleAddExisting = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setFormError(null);
-
-    if (!identifier.trim() || !password) {
-      setFormError('Login va parolni kiriting.');
-      return;
-    }
-
-    setBusyAction('add');
-    const result = await addExistingAccount(
-      identifier.trim(),
-      password,
-      saveLoginOnAdd,
-    );
-
-    if (result.ok) return;
-
-    setBusyAction(null);
-    setFormError('error' in result ? result.error : 'Akkaunt qo‘shilmadi.');
   };
 
   const handleReauth = async (event: React.FormEvent) => {
@@ -400,24 +379,13 @@ export function SwitchAccountDialog({ open, onOpenChange }: SwitchAccountDialogP
         type="button"
         whileTap={{ scale: 0.99 }}
         disabled={Boolean(busyAction)}
-        onClick={() => {
-          setIdentifier('');
-          setPassword('');
-          setSaveLoginOnAdd(true);
-          setFormError(null);
-          setMode('add-existing');
-        }}
+        onClick={openExistingAccountAuth}
         className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-muted/70 disabled:opacity-50"
       >
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-background">
           <Plus className="h-5 w-5" />
         </span>
-        <span className="min-w-0">
-          <span className="block text-sm font-semibold">Boshqa akkaunt qo‘shish</span>
-          <span className="block truncate text-xs text-muted-foreground">
-            Mavjud akkauntga kirib, shu qurilmada saqlash
-          </span>
-        </span>
+        <span className="block text-sm font-semibold">Boshqa akkaunt qo‘shish</span>
       </motion.button>
 
       {canAddAccount && (
@@ -448,68 +416,7 @@ export function SwitchAccountDialog({ open, onOpenChange }: SwitchAccountDialogP
           Joriy identifikatorda yangi profil limiti to‘lgan.
         </p>
       )}
-
-      <p className="px-3 pb-1 pt-1 text-[11px] leading-4 text-muted-foreground">
-        Parol va tokenlar account ro‘yxatiga yozilmaydi. Faqat xavfsiz profil metama’lumotlari eslab qolinadi.
-      </p>
     </div>
-  );
-
-  const addExistingForm = (
-    <form onSubmit={handleAddExisting} className="space-y-4 px-5 py-5">
-      <div className="space-y-2">
-        <Label htmlFor="switch-identifier">Email, username yoki telefon</Label>
-        <Input
-          id="switch-identifier"
-          value={identifier}
-          onChange={(event) => setIdentifier(event.target.value)}
-          placeholder="samandar yoki name@alsamos.com"
-          autoComplete="username"
-          autoCapitalize="none"
-          spellCheck={false}
-          autoFocus
-          required
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="switch-password">Parol</Label>
-        <Input
-          id="switch-password"
-          type="password"
-          autoComplete="current-password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          required
-        />
-      </div>
-
-      <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/60 px-3.5 py-3">
-        <div>
-          <p className="text-sm font-medium">Login ma’lumotini saqlash</p>
-          <p className="mt-0.5 text-xs leading-4 text-muted-foreground">
-            Keyingi safar account kartasi shu qurilmada qoladi.
-          </p>
-        </div>
-        <Switch
-          checked={saveLoginOnAdd}
-          onCheckedChange={setSaveLoginOnAdd}
-          disabled={Boolean(busyAction)}
-          aria-label="Login ma’lumotini saqlash"
-        />
-      </div>
-
-      {formError && <p className="text-sm text-destructive">{formError}</p>}
-
-      <Button type="submit" className="w-full rounded-xl" disabled={Boolean(busyAction)}>
-        {busyAction === 'add' ? (
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        ) : (
-          <LogIn className="mr-2 h-4 w-4" />
-        )}
-        Kirish
-      </Button>
-    </form>
   );
 
   const createForm = (
@@ -616,13 +523,7 @@ export function SwitchAccountDialog({ open, onOpenChange }: SwitchAccountDialogP
               : 'overflow-y-auto',
           )}
         >
-          {mode === 'list'
-            ? accountList
-            : mode === 'add-existing'
-              ? addExistingForm
-              : mode === 'create'
-                ? createForm
-                : reauthForm}
+          {mode === 'list' ? accountList : mode === 'create' ? createForm : reauthForm}
         </motion.div>
       </AnimatePresence>
 
@@ -674,6 +575,8 @@ export function SwitchAccountDialog({ open, onOpenChange }: SwitchAccountDialogP
     </button>
   ) : null;
 
+  const description = modeDescription(mode);
+
   const surface = isMobile ? (
     <Drawer
       open={open}
@@ -687,9 +590,11 @@ export function SwitchAccountDialog({ open, onOpenChange }: SwitchAccountDialogP
             {headerBack}
             <div className="min-w-0">
               <DrawerTitle className="text-base">{modeTitle(mode)}</DrawerTitle>
-              <DrawerDescription className="mt-1 text-xs leading-4">
-                {modeDescription(mode)}
-              </DrawerDescription>
+              {description && (
+                <DrawerDescription className="mt-1 text-xs leading-4">
+                  {description}
+                </DrawerDescription>
+              )}
             </div>
           </div>
         </DrawerHeader>
@@ -711,9 +616,9 @@ export function SwitchAccountDialog({ open, onOpenChange }: SwitchAccountDialogP
               {headerBack}
               <div className="min-w-0">
                 <DialogTitle>{modeTitle(mode)}</DialogTitle>
-                <DialogDescription className="mt-1">
-                  {modeDescription(mode)}
-                </DialogDescription>
+                {description && (
+                  <DialogDescription className="mt-1">{description}</DialogDescription>
+                )}
               </div>
             </div>
           </DialogHeader>
@@ -742,9 +647,7 @@ export function SwitchAccountDialog({ open, onOpenChange }: SwitchAccountDialogP
             </AlertDialogTitle>
             <AlertDialogDescription>
               Bu accountning o‘zi o‘chirilmaydi. Faqat shu qurilmadagi saqlangan login kartasi va lokal sessiya tozalanadi.
-              {removeTarget?.isActive
-                ? ' Joriy accountdan ham chiqiladi.'
-                : ''}
+              {removeTarget?.isActive ? ' Joriy accountdan ham chiqiladi.' : ''}
             </AlertDialogDescription>
           </AlertDialogHeader>
 
