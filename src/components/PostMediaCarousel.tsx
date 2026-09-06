@@ -310,7 +310,6 @@ export function PostMediaCarousel({
             src={currentMedia}
             poster={posters?.[currentIndex] ?? undefined}
             aspectMode="auto"
-            muted={true}
             autoPlay={false}
             className="rounded-none w-full h-full"
             onPlaybackError={advanceCurrentCandidate}
