@@ -215,3 +215,19 @@ export async function getAdminUserAudit(userId: string): Promise<AdminAuditEvent
   if (error) throw error;
   return (data || []) as AdminAuditEvent[];
 }
+
+export async function getAdminMailboxAliases(userId: string): Promise<string[]> {
+  const { data, error } = await db.rpc('admin_list_mailbox_aliases_v3', { p_user_id: userId });
+  if (error) throw error;
+  return (data || []).map((row: any) => String(row.alias)).filter(Boolean);
+}
+
+export async function deleteAdminMailboxAlias(userId: string, alias: string, reason: string) {
+  const { data, error } = await db.rpc('admin_delete_mailbox_alias_v3', {
+    p_user_id: userId,
+    p_alias: alias,
+    p_reason: reason,
+  });
+  if (error) throw error;
+  return Boolean(data);
+}
