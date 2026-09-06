@@ -265,7 +265,7 @@ export function PostExtras({
     Boolean(className?.split(/\s+/).includes('md:px-5'));
   const visualBleedClass = hasStandardCardGutter ? '-mx-4 md:-mx-5' : undefined;
   const visualFrameClass = hasStandardCardGutter
-    ? 'overflow-hidden border-y border-border/60'
+    ? 'overflow-hidden border-t border-border/60'
     : 'overflow-hidden rounded-2xl border border-border/60';
 
   const visualMediaType =
@@ -347,7 +347,7 @@ export function PostExtras({
         />
       )}
 
-      {labelOnlyLocation && <PlaceLabelCard label={labelOnlyLocation} />}
+      {labelOnlyLocation && <PlaceLabelCard label={legacyLocationLabel} />}
     </div>
   );
 }
