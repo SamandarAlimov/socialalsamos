@@ -11,7 +11,6 @@ import {
   Share2,
   Bookmark,
   MoreHorizontal,
-  X,
   ChevronLeft,
   ChevronRight,
   Pin,
@@ -368,15 +367,6 @@ export function PostViewModal({
                     </div>
                   </>
                 )}
-
-                <button
-                  type="button"
-                  onClick={() => onOpenChange(false)}
-                  aria-label={t('common.close', { defaultValue: 'Yopish' })}
-                  className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur transition hover:bg-black/70"
-                >
-                  <X className="h-4 w-4" />
-                </button>
               </div>
             )}
 
