@@ -93,7 +93,7 @@ export function FeedPostCard({
   const [showComments, setShowComments] = useState(false);
   const [showLikesDialog, setShowLikesDialog] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
-  const { recordView } = usePostViews();
+  const { recordView, markEngaged, markProfileClick } = usePostViews();
 
   // Recommendation quality depends on true impressions. A mounted card is not
   // automatically a view: it must be at least 55% visible for 900ms.
@@ -108,7 +108,7 @@ export function FeedPostCard({
     };
 
     if (typeof IntersectionObserver === 'undefined') {
-      dwellTimer = setTimeout(() => void recordView(post.id), 900);
+      dwellTimer = setTimeout(() => void recordView(post.id, node), 900);
       return clearDwell;
     }
 
@@ -118,7 +118,7 @@ export function FeedPostCard({
           if (!dwellTimer) {
             dwellTimer = setTimeout(() => {
               dwellTimer = null;
-              void recordView(post.id);
+              void recordView(post.id, node);
             }, 900);
           }
         } else {
@@ -161,6 +161,7 @@ export function FeedPostCard({
 
   const handleUserClick = (event: React.MouseEvent) => {
     event.stopPropagation();
+    markProfileClick(post.id);
     if (post.profile?.username) {
       navigate(`/user/${post.profile.username}`);
     } else if (post.user_id) {
@@ -254,7 +255,10 @@ export function FeedPostCard({
           <div className="flex items-center gap-1.5 md:gap-2">
             <button
               type="button"
-              onClick={onLike}
+              onClick={() => {
+                markEngaged(post.id);
+                onLike();
+              }}
               className={cn(
                 'transition-colors touch-feedback',
                 isLiked ? 'text-red-500' : 'text-muted-foreground hover:text-red-500',
@@ -276,7 +280,10 @@ export function FeedPostCard({
           </div>
           <button
             type="button"
-            onClick={() => setShowComments((current) => !current)}
+            onClick={() => {
+              markEngaged(post.id);
+              setShowComments((current) => !current);
+            }}
             className={cn(
               'flex items-center gap-1.5 transition-colors touch-feedback md:gap-2',
               showComments ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
@@ -288,7 +295,10 @@ export function FeedPostCard({
           </button>
           <button
             type="button"
-            onClick={() => setShowShareDialog(true)}
+            onClick={() => {
+              markEngaged(post.id);
+              setShowShareDialog(true);
+            }}
             className="flex items-center gap-1.5 text-muted-foreground transition-colors touch-feedback hover:text-foreground md:gap-2"
             aria-label="Ulashish"
           >
@@ -311,7 +321,10 @@ export function FeedPostCard({
           />
           <button
             type="button"
-            onClick={() => void onBookmark?.()}
+            onClick={() => {
+              markEngaged(post.id);
+              void onBookmark?.();
+            }}
             aria-pressed={Boolean(post.is_bookmarked)}
             aria-label={post.is_bookmarked ? 'Saqlanganlardan olib tashlash' : 'Postni saqlash'}
             className={cn(

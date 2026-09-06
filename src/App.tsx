@@ -22,6 +22,7 @@ import TermsPage from "./pages/legal/TermsPage";
 import HelpCenterPage from "./pages/legal/HelpCenterPage";
 import HomePage from "./pages/HomePage";
 import PostPermalinkPage from "./pages/PostPermalinkPage";
+import PostInsightsPage from "./pages/PostInsightsPage";
 import MessagesPage from "./pages/MessagesPage";
 import ProfilePage from "./pages/ProfilePage";
 import UserProfilePage from "./pages/UserProfilePage";
@@ -158,6 +159,7 @@ function AppRoutes() {
 
       <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
         <Route path="/home" element={<HomePage />} />
+        <Route path="/post/:postId/insights" element={<PostInsightsPage />} />
         <Route path="/post/:postId" element={<PostPermalinkPage />} />
         <Route path="/channel/:channel" element={<ChannelPermalink />} />
         <Route path="/group/:group" element={<GroupPermalink />} />
