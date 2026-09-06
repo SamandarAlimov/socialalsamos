@@ -1,14 +1,15 @@
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const migrationUrl = new URL(
-  '../../supabase/migrations/20260906150000_restore_conversation_creation_rls.sql',
-  import.meta.url,
+const migrationPath = resolve(
+  process.cwd(),
+  'supabase/migrations/20260906150000_restore_conversation_creation_rls.sql',
 );
-const messagesUrl = new URL('../hooks/useMessages.ts', import.meta.url);
+const messagesPath = resolve(process.cwd(), 'src/hooks/useMessages.ts');
 
-const migration = readFileSync(migrationUrl, 'utf8').toLowerCase();
-const messagesSource = readFileSync(messagesUrl, 'utf8');
+const migration = readFileSync(migrationPath, 'utf8').toLowerCase();
+const messagesSource = readFileSync(messagesPath, 'utf8');
 
 describe('conversation RLS bootstrap contract', () => {
   it('keeps the existing web bootstrap covered by owner-scoped RLS', () => {
