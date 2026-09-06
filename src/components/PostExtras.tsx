@@ -276,7 +276,7 @@ export function PostExtras({
         : 'image';
 
   return (
-    <div className={cn('space-y-3', className)}>
+    <div data-post-analytics-post-id={postId} className={cn('space-y-3', className)}>
       {visuals.length > 0 && (
         <div className={cn(visualFrameClass, visualBleedClass)}>
           <PostMediaCarousel
