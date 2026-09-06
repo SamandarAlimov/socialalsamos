@@ -347,7 +347,7 @@ export function PostExtras({
         />
       )}
 
-      {labelOnlyLocation && <PlaceLabelCard label={legacyLocationLabel} />}
+      {labelOnlyLocation && <PlaceLabelCard label={labelOnlyLocation} />}
     </div>
   );
 }
