@@ -12,6 +12,7 @@ import { ThemeProvider } from "next-themes";
 import { PushNotificationProvider } from "@/components/PushNotificationProvider";
 import { ChatWallpaperProvider } from "@/components/chat/ChatWallpaperProvider";
 import { ChatAccentProvider } from "@/components/chat/ChatAccentProvider";
+import { AccountControlGate } from "@/components/auth/AccountControlGate";
 
 // Pages
 import AuthPage from "./pages/AuthPage";
@@ -42,6 +43,9 @@ import MarketplacePage from "./pages/MarketplacePage";
 import MarketplaceProductPage from "./pages/MarketplaceProductPage";
 import MarketplaceChatHandoffPage from "./pages/MarketplaceChatHandoffPage";
 import AdminConsolePage from "./pages/AdminConsolePage";
+import AdminUsersPage from "./pages/AdminUsersPage";
+import AdminRegionsPage from "./pages/AdminRegionsPage";
+import AdminSystemPage from "./pages/AdminSystemPage";
 import AdminModerationHubPage from "./pages/AdminModerationHubPage";
 import AdminAdsReviewPage from "./pages/AdminAdsReviewPage";
 import AdminAdsIntegrityPage from "./pages/AdminAdsIntegrityPage";
@@ -86,7 +90,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to={`/?next=${encodeURIComponent(next)}`} replace />;
   }
 
-  return <>{children}</>;
+  return <AccountControlGate>{children}</AccountControlGate>;
 }
 
 function AuthRoute({ children }: { children: React.ReactNode }) {
@@ -188,6 +192,9 @@ function AppRoutes() {
         <Route path="/payment" element={<PaymentSettingsPage />} />
         <Route path="/feedback" element={<FeedbackPage />} />
         <Route path="/admin" element={<AdminConsolePage />} />
+        <Route path="/admin/users" element={<AdminUsersPage />} />
+        <Route path="/admin/regions" element={<AdminRegionsPage />} />
+        <Route path="/admin/system" element={<AdminSystemPage />} />
         <Route path="/admin/moderation" element={<AdminModerationHubPage />} />
         <Route path="/admin/feedback" element={<AdminFeedbackPage />} />
         <Route path="/admin/ads-review" element={<AdminAdsReviewPage />} />
