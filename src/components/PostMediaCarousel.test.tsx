@@ -4,8 +4,21 @@ import type { ReactNode } from 'react';
 import { PostMediaCarousel } from './PostMediaCarousel';
 
 vi.mock('@/components/VideoPlayer', () => ({
-  VideoPlayer: ({ src, onPlaybackError }: { src: string; onPlaybackError: () => void }) => (
-    <video data-testid="video" src={src} onError={onPlaybackError} />
+  VideoPlayer: ({
+    src,
+    muted,
+    onPlaybackError,
+  }: {
+    src: string;
+    muted?: boolean;
+    onPlaybackError: () => void;
+  }) => (
+    <video
+      data-testid="video"
+      data-muted={muted === undefined ? 'global' : String(muted)}
+      src={src}
+      onError={onPlaybackError}
+    />
   ),
 }));
 vi.mock('@/components/media/MediaFrame', () => ({
@@ -16,6 +29,17 @@ vi.mock('@/components/media/ImageLightbox', () => ({ ImageLightbox: () => null }
 afterEach(cleanup);
 
 describe('post media recovery', () => {
+  it('keeps feed video audio controlled by the shared player state', () => {
+    render(
+      <PostMediaCarousel
+        mediaUrls={['https://example.com/video.mp4']}
+        mediaType="video"
+      />,
+    );
+
+    expect(screen.getByTestId('video')).toHaveAttribute('data-muted', 'global');
+  });
+
   it('tries the saved alternative without removing or mutating either reference', () => {
     const urls = ['https://example.com/first.mp4'];
     const candidates = [[urls[0], 'https://example.com/original.mp4']];
