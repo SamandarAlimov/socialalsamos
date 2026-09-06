@@ -1,10 +1,16 @@
-import { memo, useCallback, useEffect } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { db } from '@/lib/db';
 import { isVisibleAt, type StorySticker } from '@/lib/storyStickers';
 import { useStoryStickers } from '@/hooks/useStoryStickers';
 import { StoryStickerView } from '@/components/stickers/StoryStickerView';
 
 interface StoryStickerOverlayProps {
+  /**
+   * Canonical post id. Legacy StoryViewer versions historically passed the
+   * `stories.id` here; the overlay resolves that id to stories.post_id so old
+   * callers cannot silently lose stickers after the unified Story migration.
+   */
   postId?: string;
   /** Faqat shu media uchun qo‘yilgan stikerlar (null — postga umumiy). */
   mediaId?: string | null;
@@ -19,6 +25,11 @@ interface StoryStickerOverlayProps {
   className?: string;
 }
 
+interface ResolvedStoryLink {
+  postId?: string;
+  mediaId?: string | null;
+}
+
 /**
  * Interaktiv story/reel stikerlarini media ustiga joylaydi.
  *
@@ -27,6 +38,11 @@ interface StoryStickerOverlayProps {
  *    telefon, planshet va to‘liq ekranda bir joyda turadi.
  * 2. O‘lcham `cqw` (container query width) orqali beriladi, ya’ni stiker
  *    konteyner bilan birga kattalashadi; ichkarida hamma o‘lchov `em` da.
+ *
+ * Unified Story compatibility: viewerning eski versiyasi `stories.id` ni
+ * yuborgan bo‘lsa, bu komponent uni `stories.post_id/media_id` ga aylantiradi.
+ * Reel va oddiy postlarda mos story row topilmaydi va berilgan postId o‘zicha
+ * ishlatiladi.
  */
 export const StoryStickerOverlay = memo(function StoryStickerOverlay({
   postId,
@@ -36,10 +52,57 @@ export const StoryStickerOverlay = memo(function StoryStickerOverlay({
   baseFontRatio = 0.075,
   className,
 }: StoryStickerOverlayProps) {
-  const { stickers, results, respond, fetchResults } = useStoryStickers(postId);
+  const [resolvedLink, setResolvedLink] = useState<ResolvedStoryLink>({
+    postId,
+    mediaId,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setResolvedLink({ postId, mediaId });
+    if (!postId) return () => undefined;
+
+    void (async () => {
+      const { data, error } = await db
+        .from('stories')
+        .select('post_id, media_id')
+        .eq('id', postId)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (!error && data?.post_id) {
+        setResolvedLink({
+          postId: String(data.post_id),
+          mediaId:
+            mediaId !== undefined
+              ? mediaId
+              : data.media_id
+                ? String(data.media_id)
+                : null,
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mediaId, postId]);
+
+  const { stickers, results, respond, fetchResults } = useStoryStickers(
+    resolvedLink.postId,
+  );
+
+  const effectiveMediaId =
+    mediaId !== undefined ? mediaId : resolvedLink.mediaId;
 
   const visible = stickers.filter((sticker) => {
-    if (mediaId !== undefined && sticker.mediaId !== null && sticker.mediaId !== mediaId) {
+    if (
+      effectiveMediaId !== undefined &&
+      sticker.mediaId !== null &&
+      sticker.mediaId !== effectiveMediaId
+    ) {
       return false;
     }
     if (typeof currentTime === 'number' && !isVisibleAt(sticker, currentTime)) {
@@ -67,7 +130,7 @@ export const StoryStickerOverlay = memo(function StoryStickerOverlay({
         try {
           await respond(sticker.id, answer);
         } catch (error) {
-          console.warn('Javobni yuborib bo\u2018lmadi:', error);
+          console.warn('Javobni yuborib bo‘lmadi:', error);
         }
       },
     [respond],
