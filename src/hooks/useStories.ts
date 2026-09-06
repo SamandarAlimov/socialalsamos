@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { resolveStorageUrl } from '@/lib/mediaUpload';
+import { db } from '@/lib/db';
 
 export interface Story {
   id: string;
@@ -37,6 +38,38 @@ export interface StoryGroup {
   all_story_ids: string[];
 }
 
+type StoryVisibility = 'public' | 'friends' | 'private';
+
+function storyPublishPayload(
+  mediaUrl: string,
+  mediaType: string,
+  caption: string | undefined,
+  visibility: StoryVisibility,
+) {
+  const kind = mediaType === 'video' ? 'video' : 'image';
+
+  return {
+    content: caption?.trim() ?? '',
+    mediaUrls: visibility === 'public' ? [mediaUrl] : [],
+    mediaType: kind,
+    collaboratorIds: [],
+    visibility,
+    postKind: 'story',
+    scheduledAt: null,
+    media: [
+      {
+        storageUrl: mediaUrl,
+        kind,
+      },
+    ],
+    poll: null,
+    location: null,
+    music: null,
+    formattedContent: null,
+    editState: null,
+  };
+}
+
 export function useStories() {
   const [storyGroups, setStoryGroups] = useState<StoryGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -60,7 +93,7 @@ export function useStories() {
           )
         `)
         .gt('expires_at', new Date().toISOString())
-        .neq('is_active', false)
+        .or('is_active.is.null,is_active.eq.true')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -86,7 +119,6 @@ export function useStories() {
         }),
       );
 
-      // Group stories by user
       const groupsMap = new Map<string, StoryGroup>();
 
       resolvedStories.forEach((story) => {
@@ -113,10 +145,10 @@ export function useStories() {
         }
       });
 
-      // Put current user's stories first
+      // Current user's stories always stay first in the Home rail.
       const groups = Array.from(groupsMap.values());
       if (user) {
-        const userIndex = groups.findIndex(g => g.user_id === user.id);
+        const userIndex = groups.findIndex((group) => group.user_id === user.id);
         if (userIndex > 0) {
           const [userGroup] = groups.splice(userIndex, 1);
           groups.unshift(userGroup);
@@ -124,87 +156,109 @@ export function useStories() {
       }
 
       setStoryGroups(groups);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error fetching stories:', error);
     } finally {
       setIsLoading(false);
     }
   }, [user]);
 
-  const createStory = useCallback(async (mediaUrl: string, mediaType: string, caption?: string) => {
+  /**
+   * Programmatic compatibility API. The visible Create UI uses StoryComposer,
+   * but old callers must still publish through the canonical linked graph.
+   * Direct `stories.insert()` is deliberately forbidden here.
+   */
+  const createStory = useCallback(async (
+    mediaUrl: string,
+    mediaType: string,
+    caption?: string,
+    visibility: StoryVisibility = 'public',
+  ) => {
     if (!user) {
       toast({
         title: 'Error',
-        description: 'You must be logged in to create a story',
+        description: 'Story yaratish uchun tizimga kiring',
+        variant: 'destructive',
+      });
+      return null;
+    }
+
+    if (mediaType !== 'image' && mediaType !== 'video') {
+      toast({
+        title: 'Story media turi noto‘g‘ri',
+        description: 'Story faqat rasm yoki video bo‘lishi mumkin.',
         variant: 'destructive',
       });
       return null;
     }
 
     try {
-      const { data, error } = await supabase
-        .from('stories')
-        .insert({
-          user_id: user.id,
-          media_url: mediaUrl,
-          media_type: mediaType,
-          caption,
-        })
-        .select()
-        .single();
+      const { data, error } = await db.rpc('publish_story_draft', {
+        p_payload: storyPublishPayload(mediaUrl, mediaType, caption, visibility),
+      });
 
       if (error) throw error;
 
-      fetchStories();
+      await fetchStories();
       toast({
-        title: 'Story Created',
-        description: 'Your story is now live!',
+        title: 'Story joylandi',
+        description: 'Story 24 soat davomida ko‘rinadi.',
       });
 
       return data;
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error creating story:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to create story',
+        title: 'Story joylanmadi',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Story yaratishda xatolik yuz berdi',
         variant: 'destructive',
       });
       return null;
     }
   }, [user, toast, fetchStories]);
 
+  /**
+   * Unified Story graph is deleted transactionally by the DB RPC. A direct
+   * stories.delete() would leave the linked post/media/stickers orphaned.
+   */
   const deleteStory = useCallback(async (storyId: string) => {
+    if (!user) return false;
+
     try {
-      const { error } = await supabase
-        .from('stories')
-        .delete()
-        .eq('id', storyId);
+      const { error } = await db.rpc('delete_story', {
+        p_story_id: storyId,
+      });
 
       if (error) throw error;
 
-      fetchStories();
+      await fetchStories();
       toast({
-        title: 'Story Deleted',
-        description: 'Your story has been removed.',
+        title: 'Story o‘chirildi',
+        description: 'Story va unga bog‘langan ma’lumotlar olib tashlandi.',
       });
-    } catch (error: any) {
+      return true;
+    } catch (error) {
       console.error('Error deleting story:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to delete story',
+        title: 'Story o‘chirilmadi',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Storini o‘chirishda xatolik yuz berdi',
         variant: 'destructive',
       });
+      return false;
     }
-  }, [toast, fetchStories]);
+  }, [fetchStories, toast, user]);
 
-  // Initial fetch
   useEffect(() => {
-    fetchStories();
+    void fetchStories();
   }, [fetchStories]);
 
-  // Real-time subscriptions for story updates
   useEffect(() => {
-    // Subscribe to new stories and story deletions
     const storiesChannel = supabase
       .channel('stories-realtime')
       .on(
@@ -216,23 +270,36 @@ export function useStories() {
         },
         (payload) => {
           if (payload.eventType === 'INSERT' || payload.eventType === 'DELETE') {
-            // Refetch all stories when new one is added or deleted
-            fetchStories();
+            void fetchStories();
           } else if (payload.eventType === 'UPDATE') {
-            // Update views_count in place without full refetch
-            const updatedStory = payload.new as any;
-            setStoryGroups(prev => 
-              prev.map(group => ({
+            const updatedStory = payload.new as Partial<Story> & { id?: string };
+            if (!updatedStory.id) return;
+
+            // Draft activation/deactivation changes rail visibility, so those
+            // updates require a canonical refetch. View counters can stay local.
+            if ('is_active' in (payload.new as Record<string, unknown>)) {
+              void fetchStories();
+              return;
+            }
+
+            setStoryGroups((previous) =>
+              previous.map((group) => ({
                 ...group,
-                stories: group.stories.map(story => 
-                  story.id === updatedStory.id 
-                    ? { ...story, views_count: updatedStory.views_count }
-                    : story
-                )
-              }))
+                stories: group.stories.map((story) =>
+                  story.id === updatedStory.id
+                    ? {
+                        ...story,
+                        views_count:
+                          typeof updatedStory.views_count === 'number'
+                            ? updatedStory.views_count
+                            : story.views_count,
+                      }
+                    : story,
+                ),
+              })),
             );
           }
-        }
+        },
       )
       .subscribe();
 
