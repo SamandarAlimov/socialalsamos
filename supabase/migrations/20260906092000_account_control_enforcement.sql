@@ -42,3 +42,9 @@ $$;
 
 revoke all on function public.get_my_account_control_v3() from public;
 grant execute on function public.get_my_account_control_v3() to authenticated;
+
+-- Internal helpers are called only by SECURITY DEFINER admin RPCs. They should
+-- not be discoverable as standalone privilege/role probes by normal users.
+revoke execute on function public.admin_control_authorized(text) from authenticated;
+revoke execute on function public.admin_user_role_keys(uuid) from authenticated;
+revoke execute on function public.admin_is_protected_user(uuid) from authenticated;
