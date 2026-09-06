@@ -11,6 +11,42 @@ Use GitHub `main` as the source. Codex has already pushed the runtime repairs.
 - Repository: `SamandarAlimov/socialalsamos`
 - Branch: `main`
 
+### Current media incident: inspect storage before any repair
+
+Use this focused sequence for the missing legacy media incident. Do not run the
+unrelated full-platform migration backlog as part of this investigation.
+
+1. Run the read-only audit against project `mbhjganbihamoiqmankv`:
+
+```text
+https://raw.githubusercontent.com/SamandarAlimov/socialalsamos/main/supabase/manual/legacy_media_read_only_audit.sql
+```
+
+2. Preserve the audit result. Confirm whether `message-attachments` exists, is
+   private, and contains the named object metadata. A CDN `HIT` is not proof that
+   its public origin is healthy; uncached legacy video requests returned
+   `NoSuchBucket` even when the cached URL played. Do not purge the CDN cache.
+3. If the bucket and objects exist, apply only this additive read policy (plus
+   any verified missing schema prerequisite), then deploy current `main`:
+
+```text
+https://raw.githubusercontent.com/SamandarAlimov/socialalsamos/main/supabase/migrations/20260906010535_legacy_post_storage_read_access.sql
+```
+
+4. Test a fresh signed URL for an old published post as a different viewer.
+   Test that an unrelated private chat attachment is denied. Keep the buckets
+   private. The policy does not modify posts, media references or storage objects.
+5. If the bucket or object metadata is absent, stop and report that evidence.
+   Do not create empty replacement buckets, remove URLs, downgrade posts to text,
+   rewrite historical object keys, or run the old `1261376` SQL. Recovery then
+   requires inspection of storage inventory/backups, not deleting post metadata.
+6. Report frontend deployment SHA separately from SQL execution. Commit
+   `611e164` was blocked by Vercel's build rate limit during this investigation;
+   an existing successful frontend deployment does not prove this fix is live.
+
+Detailed evidence and the access limits are recorded in
+`docs/LEGACY_MEDIA_INCIDENT_20260906.md`.
+
 Apply this SQL repair first if production still shows `post_views`,
 `increment_post_views`, or `get_eligible_ads_*` 404/403 errors:
 

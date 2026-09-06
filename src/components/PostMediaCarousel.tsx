@@ -18,6 +18,7 @@ interface PostMediaCarouselProps {
   posters?: Array<string | null | undefined>;
   altTexts?: Array<string | null | undefined>;
   overlays?: Array<ReactNode>;
+  onRetry?: () => void;
 }
 
 export function PostMediaCarousel({
@@ -28,6 +29,7 @@ export function PostMediaCarousel({
   posters,
   altTexts,
   overlays,
+  onRetry,
 }: PostMediaCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [candidateIndexes, setCandidateIndexes] = useState<Record<number, number>>({});
@@ -108,29 +110,20 @@ export function PostMediaCarousel({
     [imageEntries],
   );
 
-  const findAvailableIndex = useCallback(
-    (from: number, direction: -1 | 1) => {
-      for (
-        let index = from + direction;
-        index >= 0 && index < mediaUrls.length;
-        index += direction
-      ) {
-        if (!failedIndexes.has(index)) return index;
-      }
-      return -1;
-    },
-    [failedIndexes, mediaUrls.length],
-  );
+  const adjacentIndex = (from: number, direction: -1 | 1) => {
+    const index = from + direction;
+    return index >= 0 && index < mediaUrls.length ? index : -1;
+  };
 
   const goToPrevious = (event: React.MouseEvent) => {
     event.stopPropagation();
-    const previous = findAvailableIndex(currentIndex, -1);
+    const previous = adjacentIndex(currentIndex, -1);
     if (previous >= 0) setCurrentIndex(previous);
   };
 
   const goToNext = (event: React.MouseEvent) => {
     event.stopPropagation();
-    const next = findAvailableIndex(currentIndex, 1);
+    const next = adjacentIndex(currentIndex, 1);
     if (next >= 0) setCurrentIndex(next);
   };
 
@@ -138,7 +131,7 @@ export function PostMediaCarousel({
   const currentCandidateIndex = candidateIndexes[currentIndex] ?? 0;
   const isCurrentVideo = currentMedia ? isVideoAt(currentIndex) : false;
   const naturalRatio = ratios[currentIndex] ?? (isReel ? 9 / 16 : undefined);
-  const allFailed = mediaUrls.length > 0 && failedIndexes.size >= mediaUrls.length;
+  const currentFailed = failedIndexes.has(currentIndex);
 
   const advanceCurrentCandidate = useCallback(() => {
     const candidates = candidateSets[currentIndex] ?? [];
@@ -164,27 +157,29 @@ export function PostMediaCarousel({
     setCandidateIndexes({});
     setFailedIndexes(new Set());
     setRatios({});
-    setCurrentIndex(0);
-  }, []);
+    // A refreshed signed URL must not move the viewer to another album item.
+    setCurrentIndex((previous) => Math.min(previous, Math.max(0, mediaUrls.length - 1)));
+  }, [mediaUrls.length]);
 
   useEffect(() => {
     retryAll();
   }, [mediaSourceKey, retryAll]);
 
-  useEffect(() => {
-    if (!failedIndexes.has(currentIndex)) return;
-
-    const nextIndex = mediaUrls.findIndex((_, index) => !failedIndexes.has(index));
-    if (nextIndex >= 0 && nextIndex !== currentIndex) {
-      setCurrentIndex(nextIndex);
-    }
-  }, [currentIndex, failedIndexes, mediaUrls]);
+  const retryCurrent = () => {
+    setCandidateIndexes((previous) => ({ ...previous, [currentIndex]: 0 }));
+    setFailedIndexes((previous) => {
+      const next = new Set(previous);
+      next.delete(currentIndex);
+      return next;
+    });
+    onRetry?.();
+  };
 
   // Chrome/Edge touchpad pinch is exposed as Ctrl+wheel. On a post image that
   // gesture should open the media viewer instead of zooming the whole website.
   useEffect(() => {
     const node = mediaFrameRef.current;
-    if (!node || isCurrentVideo || !currentMedia) return;
+    if (!node || currentFailed || isCurrentVideo || !currentMedia) return;
 
     const onWheel = (event: WheelEvent) => {
       if (!event.ctrlKey && !event.metaKey) return;
@@ -195,29 +190,9 @@ export function PostMediaCarousel({
 
     node.addEventListener('wheel', onWheel, { passive: false });
     return () => node.removeEventListener('wheel', onWheel);
-  }, [currentIndex, currentMedia, isCurrentVideo, openImageViewer]);
+  }, [currentFailed, currentIndex, currentMedia, isCurrentVideo, openImageViewer]);
 
   if (mediaUrls.length === 0) return null;
-
-  if (allFailed) {
-    return (
-      <div
-        className="flex min-h-52 w-full flex-col items-center justify-center gap-3 bg-muted/30 px-5 py-8 text-center"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div>
-          <p className="text-sm font-semibold text-foreground">Media vaqtincha ochilmadi</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Saqlangan media ma'lumoti o'chirilmadi. Barcha mavjud manbalar sinaldi.
-          </p>
-        </div>
-        <Button type="button" variant="secondary" size="sm" onClick={retryAll}>
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Qayta urinish
-        </Button>
-      </div>
-    );
-  }
 
   const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
     didSwipeRef.current = false;
@@ -280,7 +255,7 @@ export function PostMediaCarousel({
 
       if (Math.abs(dx) >= 44 && elapsed < 900) {
         didSwipeRef.current = true;
-        const target = findAvailableIndex(currentIndex, dx < 0 ? 1 : -1);
+        const target = adjacentIndex(currentIndex, dx < 0 ? 1 : -1);
         if (target >= 0) setCurrentIndex(target);
       }
     }
@@ -295,8 +270,8 @@ export function PostMediaCarousel({
     didSwipeRef.current = false;
   };
 
-  const previousAvailable = findAvailableIndex(currentIndex, -1);
-  const nextAvailable = findAvailableIndex(currentIndex, 1);
+  const previousAvailable = adjacentIndex(currentIndex, -1);
+  const nextAvailable = adjacentIndex(currentIndex, 1);
 
   return (
     <div className="relative group w-full">
@@ -305,9 +280,11 @@ export function PostMediaCarousel({
         variant={isReel ? 'reel' : 'feed'}
         naturalRatio={naturalRatio}
         backdropUrl={
-          isCurrentVideo
-            ? posters?.[currentIndex] ?? null
-            : currentMedia || null
+          currentFailed
+            ? null
+            : isCurrentVideo
+              ? posters?.[currentIndex] ?? null
+              : currentMedia || null
         }
         className="touch-pan-y"
         onTouchStart={handleTouchStart}
@@ -315,7 +292,19 @@ export function PostMediaCarousel({
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchCancel}
       >
-        {isCurrentVideo ? (
+        {currentFailed ? (
+          <div
+            className="relative z-[1] flex h-full min-h-52 w-full flex-col items-center justify-center gap-3 bg-muted px-12 py-8 text-center"
+            onClick={(event) => event.stopPropagation()}
+            role="status"
+          >
+            <p className="text-sm font-semibold text-foreground">Media vaqtincha ochilmadi</p>
+            <Button type="button" variant="secondary" size="sm" onClick={retryCurrent}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Qayta urinish
+            </Button>
+          </div>
+        ) : isCurrentVideo ? (
           <VideoPlayer
             key={`${currentIndex}:${currentCandidateIndex}:${currentMedia}`}
             src={currentMedia}
@@ -376,6 +365,7 @@ export function PostMediaCarousel({
                 size="icon"
                 className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity bg-black/50 backdrop-blur-sm border-0 hover:bg-black/70 shadow-lg z-10"
                 onClick={goToPrevious}
+                aria-label="Oldingi media"
               >
                 <ChevronLeft className="h-5 w-5 text-white" />
               </Button>
@@ -386,6 +376,7 @@ export function PostMediaCarousel({
                 size="icon"
                 className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity bg-black/50 backdrop-blur-sm border-0 hover:bg-black/70 shadow-lg z-10"
                 onClick={goToNext}
+                aria-label="Keyingi media"
               >
                 <ChevronRight className="h-5 w-5 text-white" />
               </Button>
@@ -416,19 +407,17 @@ export function PostMediaCarousel({
             <button
               key={index}
               type="button"
-              disabled={failedIndexes.has(index)}
               aria-label={`${index + 1}-media`}
+              aria-current={index === currentIndex ? 'true' : undefined}
               onClick={(event) => {
                 event.stopPropagation();
-                if (!failedIndexes.has(index)) setCurrentIndex(index);
+                setCurrentIndex(index);
               }}
               className={cn(
                 'h-1.5 rounded-full transition-all duration-300',
-                failedIndexes.has(index)
-                  ? 'w-1.5 bg-muted-foreground/10'
-                  : index === currentIndex
-                    ? 'w-5 bg-foreground/80'
-                    : 'w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/50',
+                index === currentIndex
+                  ? 'w-5 bg-foreground/80'
+                  : 'w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/50',
               )}
             />
           ))}

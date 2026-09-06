@@ -132,7 +132,8 @@ export function PostExtras({
   legacyMusic,
   className,
 }: PostExtrasProps) {
-  const { media } = usePostMedia(postId);
+  const { media, refresh } = usePostMedia(postId);
+  const [retryVersion, setRetryVersion] = useState(0);
   const { location } = usePostLocation(postId);
   const { music } = usePostMusic(postId);
   const [legacyCandidateSets, setLegacyCandidateSets] = useState<string[][]>(
@@ -166,7 +167,7 @@ export function PostExtras({
     return () => {
       cancelled = true;
     };
-  }, [legacyMediaUrls]);
+  }, [legacyMediaUrls, retryVersion]);
 
   const fallbackLocation: PostLocation | null = legacyLocation
     ? {
@@ -279,6 +280,10 @@ export function PostExtras({
       {visuals.length > 0 && (
         <div className={cn(visualFrameClass, visualBleedClass)}>
           <PostMediaCarousel
+            onRetry={() => {
+              void refresh();
+              setRetryVersion((previous) => previous + 1);
+            }}
             mediaUrls={visuals.map((item) => item.urls[0])}
             mediaCandidates={visuals.map((item) => item.urls)}
             mediaType={visualMediaType}

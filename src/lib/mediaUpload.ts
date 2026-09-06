@@ -261,9 +261,16 @@ export async function resolveStorageUrlCandidates(
 ): Promise<string[]> {
   if (!value) return [];
 
-  if (isAlsamosPublicMediaUrl(value) || parseAlsamosMediaReference(value)) {
+  if (
+    isAlsamosPublicMediaUrl(value) ||
+    parseAlsamosMediaReference(value) ||
+    (bucket === EXTERNAL_MEDIA_BUCKET && key)
+  ) {
     try {
-      return uniqueMediaCandidates([await resolveStorageUrl(value, bucket, key, expiresIn), value]);
+      return uniqueMediaCandidates([
+        await resolveStorageUrl(value, bucket, key, expiresIn),
+        isBrowserMediaUrl(value) ? value : null,
+      ]);
     } catch {
       return isBrowserMediaUrl(value) ? [value] : [];
     }
