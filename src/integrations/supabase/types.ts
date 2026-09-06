@@ -1365,6 +1365,54 @@ export type Database = {
           },
         ]
       }
+      contact_discovery_matches: {
+        Row: {
+          created_at: string
+          last_seen_at: string
+          matched_user_id: string
+          owner_user_id: string
+          source: string
+        }
+        Insert: {
+          created_at?: string
+          last_seen_at?: string
+          matched_user_id: string
+          owner_user_id: string
+          source?: string
+        }
+        Update: {
+          created_at?: string
+          last_seen_at?: string
+          matched_user_id?: string
+          owner_user_id?: string
+          source?: string
+        }
+        Relationships: []
+      }
+      contact_discovery_rate_events: {
+        Row: {
+          created_at: string
+          id: number
+          matched_count: number
+          requested_count: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          matched_count?: number
+          requested_count: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          matched_count?: number
+          requested_count?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       content_hides: {
         Row: {
           created_at: string | null
@@ -4073,6 +4121,69 @@ export type Database = {
           },
         ]
       }
+      music_tracks: {
+        Row: {
+          album: string | null
+          artist: string | null
+          attribution: string | null
+          audio_url: string
+          cover_url: string | null
+          created_at: string
+          duration_seconds: number | null
+          external_id: string | null
+          genre: string | null
+          id: string
+          is_public: boolean
+          license: string | null
+          owner_id: string | null
+          source: Database["public"]["Enums"]["music_source"]
+          storage_bucket: string | null
+          storage_key: string | null
+          title: string
+          uses_count: number
+        }
+        Insert: {
+          album?: string | null
+          artist?: string | null
+          attribution?: string | null
+          audio_url: string
+          cover_url?: string | null
+          created_at?: string
+          duration_seconds?: number | null
+          external_id?: string | null
+          genre?: string | null
+          id?: string
+          is_public?: boolean
+          license?: string | null
+          owner_id?: string | null
+          source?: Database["public"]["Enums"]["music_source"]
+          storage_bucket?: string | null
+          storage_key?: string | null
+          title: string
+          uses_count?: number
+        }
+        Update: {
+          album?: string | null
+          artist?: string | null
+          attribution?: string | null
+          audio_url?: string
+          cover_url?: string | null
+          created_at?: string
+          duration_seconds?: number | null
+          external_id?: string | null
+          genre?: string | null
+          id?: string
+          is_public?: boolean
+          license?: string | null
+          owner_id?: string | null
+          source?: Database["public"]["Enums"]["music_source"]
+          storage_bucket?: string | null
+          storage_key?: string | null
+          title?: string
+          uses_count?: number
+        }
+        Relationships: []
+      }
       muted_users: {
         Row: {
           created_at: string | null
@@ -4537,6 +4648,48 @@ export type Database = {
         }
         Relationships: []
       }
+      places: {
+        Row: {
+          address: string | null
+          category: string | null
+          created_at: string
+          created_by: string | null
+          external_id: string | null
+          external_source: string | null
+          id: string
+          latitude: number
+          longitude: number
+          name: string
+          usage_count: number
+        }
+        Insert: {
+          address?: string | null
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          external_id?: string | null
+          external_source?: string | null
+          id?: string
+          latitude: number
+          longitude: number
+          name: string
+          usage_count?: number
+        }
+        Update: {
+          address?: string | null
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          external_id?: string | null
+          external_source?: string | null
+          id?: string
+          latitude?: number
+          longitude?: number
+          name?: string
+          usage_count?: number
+        }
+        Relationships: []
+      }
       poll_votes: {
         Row: {
           created_at: string | null
@@ -4570,6 +4723,78 @@ export type Database = {
           {
             foreignKeyName: "poll_votes_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_analytics_sessions: {
+        Row: {
+          completed: boolean
+          device_type: string
+          dwell_ms: number
+          engaged: boolean
+          first_seen_at: string
+          id: string
+          is_follower: boolean
+          last_seen_at: string
+          max_position_ms: number
+          media_duration_ms: number | null
+          post_id: string
+          profile_clicked: boolean
+          session_id: string
+          source: string
+          viewer_id: string
+          watch_ms: number
+        }
+        Insert: {
+          completed?: boolean
+          device_type?: string
+          dwell_ms?: number
+          engaged?: boolean
+          first_seen_at?: string
+          id?: string
+          is_follower?: boolean
+          last_seen_at?: string
+          max_position_ms?: number
+          media_duration_ms?: number | null
+          post_id: string
+          profile_clicked?: boolean
+          session_id: string
+          source?: string
+          viewer_id: string
+          watch_ms?: number
+        }
+        Update: {
+          completed?: boolean
+          device_type?: string
+          dwell_ms?: number
+          engaged?: boolean
+          first_seen_at?: string
+          id?: string
+          is_follower?: boolean
+          last_seen_at?: string
+          max_position_ms?: number
+          media_duration_ms?: number | null
+          post_id?: string
+          profile_clicked?: boolean
+          session_id?: string
+          source?: string
+          viewer_id?: string
+          watch_ms?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_analytics_sessions_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_analytics_sessions_viewer_id_fkey"
+            columns: ["viewer_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -4693,6 +4918,191 @@ export type Database = {
           },
         ]
       }
+      post_locations: {
+        Row: {
+          accuracy_m: number | null
+          created_at: string
+          heading: number | null
+          id: string
+          label: string | null
+          latitude: number
+          live_until: string | null
+          longitude: number
+          mode: Database["public"]["Enums"]["post_location_mode"]
+          place_id: string | null
+          post_id: string
+          updated_at: string
+        }
+        Insert: {
+          accuracy_m?: number | null
+          created_at?: string
+          heading?: number | null
+          id?: string
+          label?: string | null
+          latitude: number
+          live_until?: string | null
+          longitude: number
+          mode?: Database["public"]["Enums"]["post_location_mode"]
+          place_id?: string | null
+          post_id: string
+          updated_at?: string
+        }
+        Update: {
+          accuracy_m?: number | null
+          created_at?: string
+          heading?: number | null
+          id?: string
+          label?: string | null
+          latitude?: number
+          live_until?: string | null
+          longitude?: number
+          mode?: Database["public"]["Enums"]["post_location_mode"]
+          place_id?: string | null
+          post_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_locations_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_locations_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_media: {
+        Row: {
+          alt_text: string | null
+          aspect_ratio: string | null
+          created_at: string
+          duration_seconds: number | null
+          edit_state: Json | null
+          file_name: string | null
+          file_size: number | null
+          height: number | null
+          id: string
+          kind: Database["public"]["Enums"]["media_kind"]
+          mime_type: string | null
+          position: number
+          post_id: string
+          storage_bucket: string | null
+          storage_key: string | null
+          storage_url: string
+          thumbnail_bucket: string | null
+          thumbnail_key: string | null
+          thumbnail_url: string | null
+          width: number | null
+        }
+        Insert: {
+          alt_text?: string | null
+          aspect_ratio?: string | null
+          created_at?: string
+          duration_seconds?: number | null
+          edit_state?: Json | null
+          file_name?: string | null
+          file_size?: number | null
+          height?: number | null
+          id?: string
+          kind?: Database["public"]["Enums"]["media_kind"]
+          mime_type?: string | null
+          position?: number
+          post_id: string
+          storage_bucket?: string | null
+          storage_key?: string | null
+          storage_url: string
+          thumbnail_bucket?: string | null
+          thumbnail_key?: string | null
+          thumbnail_url?: string | null
+          width?: number | null
+        }
+        Update: {
+          alt_text?: string | null
+          aspect_ratio?: string | null
+          created_at?: string
+          duration_seconds?: number | null
+          edit_state?: Json | null
+          file_name?: string | null
+          file_size?: number | null
+          height?: number | null
+          id?: string
+          kind?: Database["public"]["Enums"]["media_kind"]
+          mime_type?: string | null
+          position?: number
+          post_id?: string
+          storage_bucket?: string | null
+          storage_key?: string | null
+          storage_url?: string
+          thumbnail_bucket?: string | null
+          thumbnail_key?: string | null
+          thumbnail_url?: string | null
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_media_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_music: {
+        Row: {
+          created_at: string
+          end_seconds: number | null
+          id: string
+          muted_original: boolean
+          post_id: string
+          start_seconds: number
+          track_id: string | null
+          volume: number
+        }
+        Insert: {
+          created_at?: string
+          end_seconds?: number | null
+          id?: string
+          muted_original?: boolean
+          post_id: string
+          start_seconds?: number
+          track_id?: string | null
+          volume?: number
+        }
+        Update: {
+          created_at?: string
+          end_seconds?: number | null
+          id?: string
+          muted_original?: boolean
+          post_id?: string
+          start_seconds?: number
+          track_id?: string | null
+          volume?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_music_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_music_track_id_fkey"
+            columns: ["track_id"]
+            isOneToOne: false
+            referencedRelation: "music_tracks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       post_product_tags: {
         Row: {
           created_at: string
@@ -4793,7 +5203,9 @@ export type Database = {
           content_search: unknown
           content_type: string
           created_at: string | null
+          edit_state: Json | null
           effects_used: string[]
+          formatted_content: Json | null
           hashtags: string[]
           id: string
           is_hidden: boolean | null
@@ -4811,7 +5223,10 @@ export type Database = {
           mentioned_users: string[] | null
           moderation_status: string | null
           poll_data: Json | null
+          post_kind: string
+          published_at: string | null
           reposts_count: number
+          scheduled_at: string | null
           shares_count: number | null
           source_avatar_url: string | null
           source_conversation_id: string | null
@@ -4819,6 +5234,7 @@ export type Database = {
           source_message_id: string | null
           source_title: string | null
           source_type: string | null
+          status: string
           tags: string[] | null
           thumbnail_url: string | null
           updated_at: string | null
@@ -4835,7 +5251,9 @@ export type Database = {
           content_search?: unknown
           content_type?: string
           created_at?: string | null
+          edit_state?: Json | null
           effects_used?: string[]
+          formatted_content?: Json | null
           hashtags?: string[]
           id?: string
           is_hidden?: boolean | null
@@ -4853,7 +5271,10 @@ export type Database = {
           mentioned_users?: string[] | null
           moderation_status?: string | null
           poll_data?: Json | null
+          post_kind?: string
+          published_at?: string | null
           reposts_count?: number
+          scheduled_at?: string | null
           shares_count?: number | null
           source_avatar_url?: string | null
           source_conversation_id?: string | null
@@ -4861,6 +5282,7 @@ export type Database = {
           source_message_id?: string | null
           source_title?: string | null
           source_type?: string | null
+          status?: string
           tags?: string[] | null
           thumbnail_url?: string | null
           updated_at?: string | null
@@ -4877,7 +5299,9 @@ export type Database = {
           content_search?: unknown
           content_type?: string
           created_at?: string | null
+          edit_state?: Json | null
           effects_used?: string[]
+          formatted_content?: Json | null
           hashtags?: string[]
           id?: string
           is_hidden?: boolean | null
@@ -4895,7 +5319,10 @@ export type Database = {
           mentioned_users?: string[] | null
           moderation_status?: string | null
           poll_data?: Json | null
+          post_kind?: string
+          published_at?: string | null
           reposts_count?: number
+          scheduled_at?: string | null
           shares_count?: number | null
           source_avatar_url?: string | null
           source_conversation_id?: string | null
@@ -4903,6 +5330,7 @@ export type Database = {
           source_message_id?: string | null
           source_title?: string | null
           source_type?: string | null
+          status?: string
           tags?: string[] | null
           thumbnail_url?: string | null
           updated_at?: string | null
@@ -6671,8 +7099,12 @@ export type Database = {
           expires_at: string | null
           id: string
           is_active: boolean | null
+          media_id: string | null
           media_type: string | null
           media_url: string
+          post_id: string | null
+          storage_bucket: string | null
+          storage_key: string | null
           text_overlay: string | null
           user_id: string
           views_count: number | null
@@ -6685,8 +7117,12 @@ export type Database = {
           expires_at?: string | null
           id?: string
           is_active?: boolean | null
+          media_id?: string | null
           media_type?: string | null
           media_url: string
+          post_id?: string | null
+          storage_bucket?: string | null
+          storage_key?: string | null
           text_overlay?: string | null
           user_id: string
           views_count?: number | null
@@ -6699,13 +7135,31 @@ export type Database = {
           expires_at?: string | null
           id?: string
           is_active?: boolean | null
+          media_id?: string | null
           media_type?: string | null
           media_url?: string
+          post_id?: string | null
+          storage_bucket?: string | null
+          storage_key?: string | null
           text_overlay?: string | null
           user_id?: string
           views_count?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "stories_media_id_fkey"
+            columns: ["media_id"]
+            isOneToOne: false
+            referencedRelation: "post_media"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stories_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "stories_user_id_fkey"
             columns: ["user_id"]
@@ -6797,6 +7251,110 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      story_sticker_responses: {
+        Row: {
+          created_at: string
+          id: string
+          numeric_value: number | null
+          option_index: number | null
+          sticker_id: string
+          text_answer: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          numeric_value?: number | null
+          option_index?: number | null
+          sticker_id: string
+          text_answer?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          numeric_value?: number | null
+          option_index?: number | null
+          sticker_id?: string
+          text_answer?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "story_sticker_responses_sticker_id_fkey"
+            columns: ["sticker_id"]
+            isOneToOne: false
+            referencedRelation: "story_stickers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      story_stickers: {
+        Row: {
+          config: Json
+          created_at: string
+          created_by: string | null
+          end_seconds: number | null
+          id: string
+          media_id: string | null
+          post_id: string
+          rotation: number
+          scale: number
+          start_seconds: number | null
+          type: Database["public"]["Enums"]["story_sticker_type"]
+          x: number
+          y: number
+          z: number
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          end_seconds?: number | null
+          id?: string
+          media_id?: string | null
+          post_id: string
+          rotation?: number
+          scale?: number
+          start_seconds?: number | null
+          type: Database["public"]["Enums"]["story_sticker_type"]
+          x?: number
+          y?: number
+          z?: number
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          end_seconds?: number | null
+          id?: string
+          media_id?: string | null
+          post_id?: string
+          rotation?: number
+          scale?: number
+          start_seconds?: number | null
+          type?: Database["public"]["Enums"]["story_sticker_type"]
+          x?: number
+          y?: number
+          z?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "story_stickers_media_id_fkey"
+            columns: ["media_id"]
+            isOneToOne: false
+            referencedRelation: "post_media"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "story_stickers_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
             referencedColumns: ["id"]
           },
         ]
@@ -8004,6 +8562,76 @@ export type Database = {
           },
         ]
       }
+      video_watch_segments: {
+        Row: {
+          bucket: number
+          post_id: string
+          updated_at: string
+          views: number
+        }
+        Insert: {
+          bucket: number
+          post_id: string
+          updated_at?: string
+          views?: number
+        }
+        Update: {
+          bucket?: number
+          post_id?: string
+          updated_at?: string
+          views?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_watch_segments_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      video_watch_sessions: {
+        Row: {
+          completed: boolean
+          created_at: string
+          duration_seconds: number | null
+          id: string
+          max_position_seconds: number | null
+          post_id: string
+          user_id: string | null
+          watched_seconds: number
+        }
+        Insert: {
+          completed?: boolean
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          max_position_seconds?: number | null
+          post_id: string
+          user_id?: string | null
+          watched_seconds?: number
+        }
+        Update: {
+          completed?: boolean
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          max_position_seconds?: number | null
+          post_id?: string
+          user_id?: string | null
+          watched_seconds?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_watch_sessions_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       view_history: {
         Row: {
           content_id: string
@@ -8265,6 +8893,7 @@ export type Database = {
         Args: { p_conversation_id: string; p_user_id: string }
         Returns: boolean
       }
+      activate_story_draft: { Args: { p_story_id: string }; Returns: boolean }
       admin_bulk_reserve: {
         Args: { p_category: string; p_reason?: string; p_usernames: string[] }
         Returns: {
@@ -8350,6 +8979,10 @@ export type Database = {
         Args: { field_name: string; target_user_id: string }
         Returns: boolean
       }
+      can_view_structured_post_compat: {
+        Args: { p_post_id: string }
+        Returns: boolean
+      }
       change_username: {
         Args: { p_username: string }
         Returns: {
@@ -8422,6 +9055,7 @@ export type Database = {
         }
         Returns: string
       }
+      create_story_draft: { Args: { p_payload: Json }; Returns: Json }
       create_video_call: {
         Args: {
           p_call_type?: string
@@ -8431,6 +9065,7 @@ export type Database = {
         Returns: string
       }
       decline_video_call: { Args: { p_call_id: string }; Returns: undefined }
+      discard_story_draft: { Args: { p_story_id: string }; Returns: boolean }
       effective_conversation_notification_settings: {
         Args: { p_conversation_id: string; p_user_id?: string }
         Returns: {
@@ -8469,6 +9104,135 @@ export type Database = {
           data_image_quality: number
         }[]
       }
+      get_eligible_ads_v2: {
+        Args: {
+          p_context?: Json
+          p_limit?: number
+          p_placement: string
+          p_session_id?: string
+        }
+        Returns: {
+          ad_type: string
+          bid_amount: number | null
+          billing_type: string
+          budget: number
+          call_to_action: string | null
+          clicks_count: number
+          created_at: string
+          daily_budget: number | null
+          description: string | null
+          destination_url: string | null
+          end_date: string | null
+          id: string
+          impressions_count: number
+          media_type: string
+          media_url: string
+          reach_count: number
+          spent: number
+          start_date: string | null
+          status: string
+          target_age_max: number | null
+          target_age_min: number | null
+          target_countries: string[] | null
+          target_gender: string | null
+          target_interests: string[] | null
+          title: string
+          updated_at: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "ads"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      get_eligible_ads_v4: {
+        Args: {
+          p_context?: Json
+          p_limit?: number
+          p_placement: string
+          p_session_id?: string
+        }
+        Returns: {
+          ad_type: string
+          bid_amount: number | null
+          billing_type: string
+          budget: number
+          call_to_action: string | null
+          clicks_count: number
+          created_at: string
+          daily_budget: number | null
+          description: string | null
+          destination_url: string | null
+          end_date: string | null
+          id: string
+          impressions_count: number
+          media_type: string
+          media_url: string
+          reach_count: number
+          spent: number
+          start_date: string | null
+          status: string
+          target_age_max: number | null
+          target_age_min: number | null
+          target_countries: string[] | null
+          target_gender: string | null
+          target_interests: string[] | null
+          title: string
+          updated_at: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "ads"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      get_eligible_ads_v5: {
+        Args: {
+          p_context?: Json
+          p_limit?: number
+          p_placement: string
+          p_session_id?: string
+        }
+        Returns: {
+          ad_type: string
+          bid_amount: number | null
+          billing_type: string
+          budget: number
+          call_to_action: string | null
+          clicks_count: number
+          created_at: string
+          daily_budget: number | null
+          description: string | null
+          destination_url: string | null
+          end_date: string | null
+          id: string
+          impressions_count: number
+          media_type: string
+          media_url: string
+          reach_count: number
+          spent: number
+          start_date: string | null
+          status: string
+          target_age_max: number | null
+          target_age_min: number | null
+          target_countries: string[] | null
+          target_gender: string | null
+          target_interests: string[] | null
+          title: string
+          updated_at: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "ads"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       get_email_for_identifier: {
         Args: { _identifier: string }
         Returns: string
@@ -8476,6 +9240,10 @@ export type Database = {
       get_live_stream_viewer_count: {
         Args: { p_stream_id: string }
         Returns: number
+      }
+      get_post_insights: {
+        Args: { p_days?: number; p_post_id: string }
+        Returns: Json
       }
       get_profile_private: {
         Args: { p_profile_id: string }
@@ -8514,6 +9282,22 @@ export type Database = {
           post_id: string
         }[]
       }
+      get_video_heatmap: {
+        Args: { post_id_param: string }
+        Returns: {
+          bucket: number
+          views: number
+        }[]
+      }
+      get_video_watch_stats: {
+        Args: { post_id_param: string }
+        Returns: {
+          avg_retention: number
+          avg_watched_seconds: number
+          completion_rate: number
+          sessions: number
+        }[]
+      }
       get_visible_presence: {
         Args: { target_user_id: string }
         Returns: {
@@ -8540,6 +9324,10 @@ export type Database = {
           p_is_video_on?: boolean
         }
         Returns: boolean
+      }
+      increment_post_views: {
+        Args: { post_id_param: string }
+        Returns: undefined
       }
       insert_inbound_email: {
         Args: {
@@ -8759,6 +9547,22 @@ export type Database = {
           users_count: number
         }[]
       }
+      my_contact_suggestions: {
+        Args: { p_limit?: number }
+        Returns: {
+          avatar_url: string
+          display_name: string
+          is_following: boolean
+          last_seen_at: string
+          mutual_count: number
+          user_id: string
+          username: string
+        }[]
+      }
+      owns_structured_post_compat: {
+        Args: { p_post_id: string }
+        Returns: boolean
+      }
       pause_unhealthy_app_releases: {
         Args: never
         Returns: {
@@ -8784,6 +9588,10 @@ export type Database = {
         Returns: Json
       }
       reap_stale_calls: { Args: { p_stale_seconds?: number }; Returns: Json }
+      recalculate_video_recommendation_rank: {
+        Args: { post_id_param: string }
+        Returns: undefined
+      }
       recommend_public_posts: {
         Args: { p_content_mode?: string; p_limit?: number; p_offset?: number }
         Returns: {
@@ -8817,6 +9625,17 @@ export type Database = {
         }
         Returns: undefined
       }
+      record_video_watch: {
+        Args: {
+          buckets_param?: number[]
+          completed_param?: boolean
+          duration_seconds_param?: number
+          max_position_seconds_param?: number
+          post_id_param: string
+          watched_seconds_param?: number
+        }
+        Returns: undefined
+      }
       refresh_hashtags_aggregated: { Args: never; Returns: undefined }
       refresh_mini_app_stats: { Args: never; Returns: undefined }
       refresh_popular_searches: { Args: never; Returns: undefined }
@@ -8838,6 +9657,15 @@ export type Database = {
           _target_user_id: string
         }
         Returns: Json
+      }
+      respond_story_sticker: {
+        Args: {
+          p_numeric_value?: number
+          p_option_index?: number
+          p_sticker_id: string
+          p_text_answer?: string
+        }
+        Returns: string
       }
       respond_to_message_request: {
         Args: { _accept: boolean; _conversation_id: string }
@@ -8927,6 +9755,19 @@ export type Database = {
         Args: { p_topics: string[] }
         Returns: undefined
       }
+      story_sticker_results: { Args: { p_sticker_id: string }; Returns: Json }
+      sync_my_contact_hashes: {
+        Args: { p_email_hashes?: string[]; p_phone_hashes?: string[] }
+        Returns: {
+          avatar_url: string
+          display_name: string
+          is_following: boolean
+          matched_by: string
+          mutual_count: number
+          user_id: string
+          username: string
+        }[]
+      }
       terminate_old_user_sessions: { Args: never; Returns: number }
       track_place_visit: {
         Args: {
@@ -8941,6 +9782,22 @@ export type Database = {
         }
         Returns: string
       }
+      track_post_analytics_session: {
+        Args: {
+          p_completed?: boolean
+          p_device_type?: string
+          p_dwell_ms?: number
+          p_engaged?: boolean
+          p_max_position_ms?: number
+          p_media_duration_ms?: number
+          p_post_id: string
+          p_profile_clicked?: boolean
+          p_session_id: string
+          p_source?: string
+          p_watch_ms?: number
+        }
+        Returns: undefined
+      }
       trending_public_posts: {
         Args: { p_limit?: number }
         Returns: {
@@ -8951,7 +9808,9 @@ export type Database = {
           content_search: unknown
           content_type: string
           created_at: string | null
+          edit_state: Json | null
           effects_used: string[]
+          formatted_content: Json | null
           hashtags: string[]
           id: string
           is_hidden: boolean | null
@@ -8969,7 +9828,10 @@ export type Database = {
           mentioned_users: string[] | null
           moderation_status: string | null
           poll_data: Json | null
+          post_kind: string
+          published_at: string | null
           reposts_count: number
+          scheduled_at: string | null
           shares_count: number | null
           source_avatar_url: string | null
           source_conversation_id: string | null
@@ -8977,6 +9839,7 @@ export type Database = {
           source_message_id: string | null
           source_title: string | null
           source_type: string | null
+          status: string
           tags: string[] | null
           thumbnail_url: string | null
           updated_at: string | null
@@ -9006,6 +9869,27 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
+      media_kind: "image" | "video" | "audio" | "document" | "archive" | "other"
+      music_source:
+        | "platform"
+        | "device"
+        | "jamendo"
+        | "audius"
+        | "fma"
+        | "ccmixter"
+        | "pixabay"
+      post_location_mode: "place" | "live"
+      story_sticker_type:
+        | "poll"
+        | "question"
+        | "quiz"
+        | "slider"
+        | "location"
+        | "music"
+        | "mention"
+        | "hashtag"
+        | "link"
+        | "countdown"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -9134,6 +10018,29 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "moderator", "user"],
+      media_kind: ["image", "video", "audio", "document", "archive", "other"],
+      music_source: [
+        "platform",
+        "device",
+        "jamendo",
+        "audius",
+        "fma",
+        "ccmixter",
+        "pixabay",
+      ],
+      post_location_mode: ["place", "live"],
+      story_sticker_type: [
+        "poll",
+        "question",
+        "quiz",
+        "slider",
+        "location",
+        "music",
+        "mention",
+        "hashtag",
+        "link",
+        "countdown",
+      ],
     },
   },
 } as const
