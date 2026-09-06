@@ -148,6 +148,84 @@ export type Database = {
           },
         ]
       }
+      admin_audit_log: {
+        Row: {
+          action: string
+          actor_id: string | null
+          after_state: Json
+          before_state: Json
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          reason: string | null
+          target_user_id: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          after_state?: Json
+          before_state?: Json
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          reason?: string | null
+          target_user_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          after_state?: Json
+          before_state?: Json
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          reason?: string | null
+          target_user_id?: string | null
+        }
+        Relationships: []
+      }
+      admin_user_deletion_jobs: {
+        Row: {
+          completed_at: string | null
+          error_message: string | null
+          id: string
+          reason: string
+          requested_at: string
+          requested_by: string
+          status: string
+          target_user_id: string
+          updated_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          error_message?: string | null
+          id?: string
+          reason: string
+          requested_at?: string
+          requested_by: string
+          status?: string
+          target_user_id: string
+          updated_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          error_message?: string | null
+          id?: string
+          reason?: string
+          requested_at?: string
+          requested_by?: string
+          status?: string
+          target_user_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ads: {
         Row: {
           ad_type: string
@@ -7580,6 +7658,44 @@ export type Database = {
           },
         ]
       }
+      user_account_controls: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          reason: string | null
+          status: string
+          suspended_until: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          reason?: string | null
+          status?: string
+          suspended_until?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          reason?: string | null
+          status?: string
+          suspended_until?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_account_controls_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_activity_logs: {
         Row: {
           activity_type: string
@@ -8901,6 +9017,72 @@ export type Database = {
           skipped: number
         }[]
       }
+      admin_control_authorized: {
+        Args: { p_permission?: string }
+        Returns: boolean
+      }
+      admin_finalize_user_deletion_v3: {
+        Args: { p_error?: string; p_job_id: string; p_success: boolean }
+        Returns: undefined
+      }
+      admin_get_user_details_v3: { Args: { p_user_id: string }; Returns: Json }
+      admin_is_protected_user: { Args: { p_user_id: string }; Returns: boolean }
+      admin_list_users_v3: {
+        Args: {
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+          p_status?: string
+        }
+        Returns: {
+          account_status: string
+          avatar_url: string
+          country: string
+          created_at: string
+          display_name: string
+          followers_count: number
+          following_count: number
+          is_online: boolean
+          is_verified: boolean
+          last_seen: string
+          posts_count: number
+          roles: string[]
+          status_reason: string
+          suspended_until: string
+          total_count: number
+          user_id: string
+          username: string
+        }[]
+      }
+      admin_prepare_user_deletion_v3: {
+        Args: { p_reason: string; p_user_id: string }
+        Returns: string
+      }
+      admin_recent_audit_v3: {
+        Args: { p_limit?: number }
+        Returns: {
+          action: string
+          actor_id: string
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          metadata: Json
+          reason: string
+          target_user_id: string
+        }[]
+      }
+      admin_region_summary_v3: {
+        Args: never
+        Returns: {
+          country: string
+          new_30d_count: number
+          online_count: number
+          posts_count: number
+          users_count: number
+          verified_count: number
+        }[]
+      }
       admin_release_username_to_user: {
         Args: { p_target_user_id: string; p_username: string }
         Returns: {
@@ -8939,9 +9121,50 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_set_user_account_status_v3: {
+        Args: {
+          p_reason: string
+          p_status: string
+          p_suspended_until?: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      admin_system_health_v3: { Args: never; Returns: Json }
       admin_unreserve_username: {
         Args: { p_username: string }
         Returns: boolean
+      }
+      admin_update_user_profile_v3: {
+        Args: { p_patch: Json; p_reason: string; p_user_id: string }
+        Returns: Json
+      }
+      admin_user_audit_v3: {
+        Args: { p_limit?: number; p_user_id: string }
+        Returns: {
+          action: string
+          actor_id: string
+          after_state: Json
+          before_state: Json
+          created_at: string
+          id: string
+          metadata: Json
+          reason: string
+        }[]
+      }
+      admin_user_role_keys: { Args: { p_user_id: string }; Returns: string[] }
+      admin_write_audit: {
+        Args: {
+          p_action: string
+          p_after?: Json
+          p_before?: Json
+          p_entity_id?: string
+          p_entity_type?: string
+          p_metadata?: Json
+          p_reason?: string
+          p_target_user_id?: string
+        }
+        Returns: string
       }
       are_contacts: { Args: { a: string; b: string }; Returns: boolean }
       block_user: { Args: { _reason?: string; _target: string }; Returns: Json }
