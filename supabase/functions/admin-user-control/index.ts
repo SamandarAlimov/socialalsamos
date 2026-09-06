@@ -170,16 +170,50 @@ serve(async (req) => {
     }
     if (!reason) return authError(req, "REASON_REQUIRED", 400);
 
+    const { data: linkedAccount } = await admin
+      .from("identity_accounts")
+      .select("id, login_email")
+      .eq("user_id", targetUserId)
+      .maybeSingle();
+
+    const confirmEmail = body?.email_confirm !== false;
     const { data, error } = await admin.auth.admin.updateUserById(targetUserId, {
       email,
-      email_confirm: Boolean(body?.email_confirm ?? false),
+      email_confirm: confirmEmail,
     });
     if (error) {
       await audit(admin, actor.id, "auth.email.update.failed", targetUserId, reason, before, {}, { error: error.message });
       return authError(req, "EMAIL_UPDATE_FAILED", 409, error.message);
     }
+
+    // Alsamos multi-account auth resolves sessions through identity_accounts.login_email.
+    // Keep that lookup key synchronized with the Supabase Auth identity.
+    if (linkedAccount?.id) {
+      const { error: linkError } = await admin
+        .from("identity_accounts")
+        .update({ login_email: email })
+        .eq("id", linkedAccount.id);
+
+      if (linkError) {
+        if (typeof current.email === "string" && current.email) {
+          await admin.auth.admin.updateUserById(targetUserId, {
+            email: current.email,
+            email_confirm: Boolean(current.email_confirmed_at),
+          }).catch(() => {});
+        }
+        await audit(admin, actor.id, "auth.email.update.failed", targetUserId, reason, before, {}, {
+          error: linkError.message,
+          stage: "identity_account_sync",
+        });
+        return authError(req, "IDENTITY_EMAIL_SYNC_FAILED", 409, linkError.message);
+      }
+    }
+
     const after = safeAuthUser(data.user) ?? {};
-    await audit(admin, actor.id, "auth.email.update", targetUserId, reason, before, after);
+    await audit(admin, actor.id, "auth.email.update", targetUserId, reason, before, after, {
+      identity_account_synced: Boolean(linkedAccount?.id),
+      previous_login_email: linkedAccount?.login_email ?? null,
+    });
     return jsonResponse(req, { user: after });
   }
 
