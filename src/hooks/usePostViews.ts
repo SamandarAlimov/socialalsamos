@@ -134,6 +134,23 @@ function inferDeviceType(): string {
   return 'desktop';
 }
 
+function resolveAnalyticsContainer(
+  postId: string,
+  provided?: HTMLElement | null,
+): HTMLElement | null {
+  if (provided) return provided;
+  if (typeof document === 'undefined') return null;
+
+  // Home still uses its legacy inline PostCard while Profile uses the shared
+  // FeedPostCard. PostExtras is common to both and exposes this marker, so the
+  // qualified view callback can reliably recover the owning article without
+  // coupling analytics to either renderer.
+  const marker = document.querySelector<HTMLElement>(
+    `[data-post-analytics-post-id="${postId}"]`,
+  );
+  return marker?.closest<HTMLElement>('article') ?? marker;
+}
+
 function checkpointDwell(state: AnalyticsSessionState, now = Date.now()) {
   if (state.visibleSince !== null) {
     state.dwellMs += Math.max(0, now - state.visibleSince);
@@ -256,12 +273,10 @@ function ensureAnalyticsSession(
   userId: string,
   container?: HTMLElement | null,
 ): AnalyticsSessionState {
+  const resolvedContainer = resolveAnalyticsContainer(postId, container);
   const key = `${userId}:${postId}`;
   const existing = analyticsSessions.get(key);
-  if (existing) {
-    if (!existing.container && container) existing.container = container;
-    return existing;
-  }
+  if (existing) return existing;
 
   const state: AnalyticsSessionState = {
     key,
@@ -270,7 +285,7 @@ function ensureAnalyticsSession(
     sessionId: getSessionId(),
     source: inferSource(),
     deviceType: inferDeviceType(),
-    container: container ?? null,
+    container: resolvedContainer,
     dwellMs: 900,
     watchMs: 0,
     maxPositionMs: 0,
@@ -288,7 +303,7 @@ function ensureAnalyticsSession(
   };
   analyticsSessions.set(key, state);
 
-  if (container) {
+  if (resolvedContainer) {
     if (typeof IntersectionObserver !== 'undefined') {
       state.observer = new IntersectionObserver(
         ([entry]) => {
@@ -308,18 +323,18 @@ function ensureAnalyticsSession(
         },
         { threshold: [0, 0.55, 0.8] },
       );
-      state.observer.observe(container);
+      state.observer.observe(resolvedContainer);
     }
 
     const findVideo = () => {
-      const video = container.querySelector('video');
+      const video = resolvedContainer.querySelector('video');
       if (video instanceof HTMLVideoElement) attachVideo(state, video);
     };
     findVideo();
 
     if (typeof MutationObserver !== 'undefined') {
       state.mutationObserver = new MutationObserver(findVideo);
-      state.mutationObserver.observe(container, { childList: true, subtree: true });
+      state.mutationObserver.observe(resolvedContainer, { childList: true, subtree: true });
     }
   }
 
@@ -332,7 +347,10 @@ function markAnalyticsEngagement(
   postId: string,
   kind: 'engagement' | 'profile_click' = 'engagement',
 ) {
-  const state = ensureAnalyticsSession(postId, userId);
+  // Engagement enriches an already-qualified session; it never creates a view
+  // on its own. This keeps source/retention denominators aligned with real views.
+  const state = analyticsSessions.get(`${userId}:${postId}`);
+  if (!state) return;
   state.engaged = true;
   if (kind === 'profile_click') state.profileClicked = true;
   void flushAnalytics(state);
