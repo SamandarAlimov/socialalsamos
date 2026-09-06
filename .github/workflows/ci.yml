@@ -33,6 +33,9 @@ jobs:
       - name: Media regression tests
         run: npx vitest run src/lib/mediaRecovery.test.ts src/lib/mediaRefs.test.ts
 
+      - name: Create regression tests
+        run: npx vitest run src/lib/videoPipeline.test.ts src/lib/storyPublishing.test.ts
+
       - name: AI routing regression tests
         run: npx vitest run src/lib/ai/agentClient.test.ts
 
