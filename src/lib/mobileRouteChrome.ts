@@ -14,15 +14,18 @@ function normalizePath(pathname: string): string {
  *
  * - primary: Alsamos branded header + bottom navigation
  * - secondary: compact back header, no bottom navigation
- * - immersive: page owns the whole viewport (create/composer flows)
- *
- * Keeping this decision in one place prevents every page from inventing its
- * own mobile navigation rules and makes hamburger destinations consistent.
+ * - immersive: page owns its own top chrome
  */
 export function getMobileChromeMode(pathname: string): MobileChromeMode {
   const path = normalizePath(pathname);
   if (PRIMARY_ROUTES.has(path)) return 'primary';
   if (IMMERSIVE_ROUTES.has(path)) return 'immersive';
+
+  // Public user profile already renders its own back affordance. Rendering the
+  // shell MobileBackHeader as well produced the duplicate "Orqaga / Back"
+  // rows seen when a profile is opened from Videos.
+  if (path.startsWith('/user/')) return 'immersive';
+
   return 'secondary';
 }
 
