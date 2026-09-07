@@ -13,6 +13,7 @@ import { PushNotificationProvider } from "@/components/PushNotificationProvider"
 import { ChatWallpaperProvider } from "@/components/chat/ChatWallpaperProvider";
 import { ChatAccentProvider } from "@/components/chat/ChatAccentProvider";
 import { AccountControlGate } from "@/components/auth/AccountControlGate";
+import { MarketplaceDeliveryLocationDock } from "@/components/marketplace/MarketplaceDeliveryLocationDock";
 
 // Pages
 import AuthPage from "./pages/AuthPage";
@@ -233,6 +234,7 @@ function AppWithGlobalCall() {
               <ChatAccentProvider />
               <ChatWallpaperProvider />
               <AppRoutes />
+              <MarketplaceDeliveryLocationDock />
             </GlobalCallProvider>
           </OnlinePresenceProvider>
         </PushNotificationProvider>
