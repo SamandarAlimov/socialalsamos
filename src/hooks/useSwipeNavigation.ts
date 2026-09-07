@@ -15,6 +15,35 @@ const RIGHT_SWIPE_OVERRIDES: Record<string, string> = {
   '/home': '/create',
 };
 
+// Create is an immersive destination rather than a sequential feed tab.
+// Mirroring the Home -> Create gesture, a right-to-left swipe from Create
+// returns directly to Home instead of continuing to Videos.
+const LEFT_SWIPE_OVERRIDES: Record<string, string> = {
+  '/create': '/home',
+};
+
+interface SwipeNavigationOptions {
+  /**
+   * Prevent a page swipe from stealing a gesture that started on controls.
+   * Create uses this because its canvas contains editors, sliders and pickers.
+   */
+  ignoreInteractiveTargets?: boolean;
+  /** Enable finger movement from left to right. Defaults to true. */
+  allowRightSwipe?: boolean;
+  /** Enable finger movement from right to left. Defaults to true. */
+  allowLeftSwipe?: boolean;
+}
+
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+
+  return Boolean(
+    target.closest(
+      'button, a, input, textarea, select, [role="button"], [role="slider"], [contenteditable="true"], [data-swipe-navigation="ignore"]',
+    ),
+  );
+}
+
 /**
  * Mobile page navigation gesture.
  *
@@ -23,7 +52,7 @@ const RIGHT_SWIPE_OVERRIDES: Record<string, string> = {
  * Bu mobile Safari/Chrome inertial scroll'ini card ustidagi tapdan keyin
  * "qamalib" qolishidan saqlaydi.
  */
-export function useSwipeNavigation() {
+export function useSwipeNavigation(options: SwipeNavigationOptions = {}) {
   const navigate = useNavigate();
   const location = useLocation();
   const [swipeOffset, setSwipeOffset] = useState(0);
@@ -34,6 +63,11 @@ export function useSwipeNavigation() {
   const startTime = useRef(0);
   const intent = useRef<TouchAxis>('unknown');
   const offsetRef = useRef(0);
+  const gestureBlocked = useRef(false);
+
+  const allowRightSwipe = options.allowRightSwipe ?? true;
+  const allowLeftSwipe = options.allowLeftSwipe ?? true;
+  const ignoreInteractiveTargets = options.ignoreInteractiveTargets ?? false;
 
   const getCurrentIndex = useCallback(() => {
     return NAVIGATION_ORDER.indexOf(location.pathname);
@@ -43,8 +77,13 @@ export function useSwipeNavigation() {
     return RIGHT_SWIPE_OVERRIDES[location.pathname] ?? null;
   }, [location.pathname]);
 
+  const getLeftSwipeDestination = useCallback(() => {
+    return LEFT_SWIPE_OVERRIDES[location.pathname] ?? null;
+  }, [location.pathname]);
+
   const resetGesture = useCallback(() => {
     intent.current = 'unknown';
+    gestureBlocked.current = false;
     offsetRef.current = 0;
     setSwipeOffset(0);
     setIsSwiping(false);
@@ -53,6 +92,9 @@ export function useSwipeNavigation() {
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     const touch = e.touches[0];
     if (!touch) return;
+
+    gestureBlocked.current =
+      ignoreInteractiveTargets && isInteractiveTarget(e.target);
 
     startX.current = touch.clientX;
     startY.current = touch.clientY;
@@ -63,9 +105,11 @@ export function useSwipeNavigation() {
     // Tap/vertical scroll paytida render qilmaymiz.
     if (isSwiping) setIsSwiping(false);
     if (swipeOffset !== 0) setSwipeOffset(0);
-  }, [isSwiping, swipeOffset]);
+  }, [ignoreInteractiveTargets, isSwiping, swipeOffset]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (gestureBlocked.current) return;
+
     const touch = e.touches[0];
     if (!touch) return;
 
@@ -85,9 +129,13 @@ export function useSwipeNavigation() {
     if (intent.current !== 'horizontal') return;
 
     const currentIndex = getCurrentIndex();
-    const canSwipeRight = Boolean(getRightSwipeDestination()) || currentIndex > 0;
+    const canSwipeRight =
+      allowRightSwipe &&
+      (Boolean(getRightSwipeDestination()) || currentIndex > 0);
     const canSwipeLeft =
-      currentIndex < NAVIGATION_ORDER.length - 1 && currentIndex >= 0;
+      allowLeftSwipe &&
+      (Boolean(getLeftSwipeDestination()) ||
+        (currentIndex < NAVIGATION_ORDER.length - 1 && currentIndex >= 0));
 
     const nextOffset =
       (diffX > 0 && !canSwipeRight) || (diffX < 0 && !canSwipeLeft)
@@ -96,9 +144,20 @@ export function useSwipeNavigation() {
 
     offsetRef.current = nextOffset;
     setSwipeOffset(nextOffset);
-  }, [getCurrentIndex, getRightSwipeDestination]);
+  }, [
+    allowLeftSwipe,
+    allowRightSwipe,
+    getCurrentIndex,
+    getLeftSwipeDestination,
+    getRightSwipeDestination,
+  ]);
 
   const handleTouchEnd = useCallback(() => {
+    if (gestureBlocked.current) {
+      resetGesture();
+      return;
+    }
+
     const currentOffset = offsetRef.current;
     const currentIndex = getCurrentIndex();
 
@@ -110,21 +169,34 @@ export function useSwipeNavigation() {
         velocity > SWIPE_VELOCITY_THRESHOLD;
 
       if (shouldNavigate) {
-        if (currentOffset > 0) {
+        if (currentOffset > 0 && allowRightSwipe) {
           const overrideDestination = getRightSwipeDestination();
           if (overrideDestination) {
             navigate(overrideDestination);
           } else if (currentIndex > 0) {
             navigate(NAVIGATION_ORDER[currentIndex - 1]);
           }
-        } else if (currentIndex < NAVIGATION_ORDER.length - 1) {
-          navigate(NAVIGATION_ORDER[currentIndex + 1]);
+        } else if (currentOffset < 0 && allowLeftSwipe) {
+          const overrideDestination = getLeftSwipeDestination();
+          if (overrideDestination) {
+            navigate(overrideDestination);
+          } else if (currentIndex < NAVIGATION_ORDER.length - 1) {
+            navigate(NAVIGATION_ORDER[currentIndex + 1]);
+          }
         }
       }
     }
 
     resetGesture();
-  }, [getCurrentIndex, getRightSwipeDestination, navigate, resetGesture]);
+  }, [
+    allowLeftSwipe,
+    allowRightSwipe,
+    getCurrentIndex,
+    getLeftSwipeDestination,
+    getRightSwipeDestination,
+    navigate,
+    resetGesture,
+  ]);
 
   const handleTouchCancel = useCallback(() => {
     resetGesture();
