@@ -14,8 +14,20 @@ function fallbackLabel(latitude: number, longitude: number) {
   return latitude.toFixed(4) + ', ' + longitude.toFixed(4);
 }
 
+function validLocation(value: MarketplaceDeliveryLocation | null | undefined) {
+  return Boolean(
+    value &&
+    Number.isFinite(Number(value.latitude)) &&
+    Number.isFinite(Number(value.longitude)) &&
+    Math.abs(Number(value.latitude)) <= 90 &&
+    Math.abs(Number(value.longitude)) <= 180 &&
+    typeof value.label === 'string' &&
+    value.label.trim(),
+  );
+}
+
 export function useMarketplaceDeliveryLocation() {
-  const [location, setLocation] = useState<MarketplaceDeliveryLocation | null>(null);
+  const [location, setLocationState] = useState<MarketplaceDeliveryLocation | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,19 +36,47 @@ export function useMarketplaceDeliveryLocation() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (
-        Number.isFinite(Number(parsed?.latitude)) &&
-        Number.isFinite(Number(parsed?.longitude)) &&
-        typeof parsed?.label === 'string'
-      ) {
-        setLocation({
+      const parsed = JSON.parse(raw) as MarketplaceDeliveryLocation;
+      if (validLocation(parsed)) {
+        setLocationState({
           latitude: Number(parsed.latitude),
           longitude: Number(parsed.longitude),
-          label: parsed.label,
+          label: parsed.label.trim(),
           accuracy: Number.isFinite(Number(parsed.accuracy)) ? Number(parsed.accuracy) : null,
         });
       }
+    } catch {
+      // Optional preference only.
+    }
+  }, []);
+
+  const setLocation = useCallback((next: MarketplaceDeliveryLocation | null) => {
+    setError(null);
+    if (!next) {
+      setLocationState(null);
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {
+        // Optional preference only.
+      }
+      return;
+    }
+
+    if (!validLocation(next)) {
+      setError('Tanlangan joylashuv ma’lumoti noto‘g‘ri.');
+      return;
+    }
+
+    const normalized: MarketplaceDeliveryLocation = {
+      latitude: Number(next.latitude),
+      longitude: Number(next.longitude),
+      label: next.label.trim(),
+      accuracy: Number.isFinite(Number(next.accuracy)) ? Number(next.accuracy) : null,
+    };
+
+    setLocationState(normalized);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
     } catch {
       // Optional preference only.
     }
@@ -85,11 +125,6 @@ export function useMarketplaceDeliveryLocation() {
       };
 
       setLocation(next);
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      } catch {
-        // Optional preference only.
-      }
       return next;
     } catch (reason: any) {
       setError(
@@ -101,7 +136,7 @@ export function useMarketplaceDeliveryLocation() {
     } finally {
       setIsLocating(false);
     }
-  }, []);
+  }, [setLocation]);
 
-  return { location, isLocating, error, locate };
+  return { location, isLocating, error, locate, setLocation };
 }
