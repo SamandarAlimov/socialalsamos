@@ -36,7 +36,7 @@ import CreateEntryPage from "./pages/CreateEntryPage";
 import StickerPacksPage from "./pages/StickerPacksPage";
 import StickerModerationPage from "./pages/StickerModerationPage";
 import MapPage from "./pages/MapPage";
-import VideosPage from "./pages/VideosPage";
+import VideosPage from "./pages/VideosPageProfessional";
 import DiscoveryPage from "./pages/DiscoveryPage";
 import SearchPage from "./pages/SearchPage";
 import WebViewerPage from "./pages/WebViewerPage";
