@@ -52,6 +52,18 @@ function cleanOptions(value: unknown): Record<string, string> {
   return out;
 }
 
+function sameOptions(left: unknown, right: unknown) {
+  const a = cleanOptions(left);
+  const b = cleanOptions(right);
+  const aEntries = Object.entries(a).sort(([aKey], [bKey]) => aKey.localeCompare(bKey));
+  const bEntries = Object.entries(b).sort(([aKey], [bKey]) => aKey.localeCompare(bKey));
+  if (aEntries.length !== bEntries.length) return false;
+  return aEntries.every(([key, value], index) => {
+    const pair = bEntries[index];
+    return pair?.[0] === key && pair?.[1] === value;
+  });
+}
+
 function safeQuantity(value: unknown, fallback = 1) {
   const quantity = Math.floor(Number(value));
   return Number.isFinite(quantity) ? Math.min(999, Math.max(1, quantity)) : fallback;
@@ -251,6 +263,8 @@ export function isRecentMarketplaceProductMessage(
     productId: string;
     variantId?: string;
     intent?: MarketplaceChatIntent;
+    quantity?: number;
+    options?: Record<string, string>;
   },
   now = Date.now(),
   windowMs = 20_000,
@@ -261,6 +275,8 @@ export function isRecentMarketplaceProductMessage(
     if (payload.product_id !== target.productId) return false;
     if ((payload.selection.variant_id || undefined) !== (target.variantId || undefined)) return false;
     if (target.intent && payload.intent !== target.intent) return false;
+    if (target.quantity != null && payload.selection.quantity !== safeQuantity(target.quantity, 1)) return false;
+    if (target.options && !sameOptions(payload.selection.options, target.options)) return false;
 
     const createdAt = new Date(row.created_at).getTime();
     return Number.isFinite(createdAt) && now - createdAt >= 0 && now - createdAt <= windowMs;
