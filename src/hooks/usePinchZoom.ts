@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 
 interface ZoomState {
   scale: number;
@@ -27,22 +27,16 @@ export function usePinchZoom(
   minScale = 1,
   targetRef?: React.RefObject<HTMLDivElement>,
 ): UsePinchZoomReturn {
-  const [state, setState] = useState<ZoomState>({
-    scale: 1,
-    translateX: 0,
-    translateY: 0,
-  });
-
+  const [state, setState] = useState<ZoomState>({ scale: 1, translateX: 0, translateY: 0 });
   const internalContainerRef = useRef<HTMLDivElement>(null);
   const containerRef = targetRef ?? internalContainerRef;
-  const initialDistance = useRef<number>(0);
-  const initialScale = useRef<number>(1);
-  const lastTap = useRef<number>(0);
+  const initialDistance = useRef(0);
+  const initialScale = useRef(1);
+  const lastTap = useRef(0);
   const lastTouchCenter = useRef<{ x: number; y: number } | null>(null);
-  const isPinching = useRef<boolean>(false);
-  const isDragging = useRef<boolean>(false);
+  const isPinching = useRef(false);
+  const isDragging = useRef(false);
   const dragStart = useRef<{ x: number; y: number } | null>(null);
-
   const isZoomed = state.scale > 1;
 
   const getDistance = (touches: React.TouchList) => {
@@ -53,9 +47,7 @@ export function usePinchZoom(
   };
 
   const getCenter = (touches: React.TouchList) => {
-    if (touches.length < 2) {
-      return { x: touches[0].clientX, y: touches[0].clientY };
-    }
+    if (touches.length < 2) return { x: touches[0].clientX, y: touches[0].clientY };
     return {
       x: (touches[0].clientX + touches[1].clientX) / 2,
       y: (touches[0].clientY + touches[1].clientY) / 2,
@@ -63,19 +55,15 @@ export function usePinchZoom(
   };
 
   const clampTranslation = useCallback((tx: number, ty: number, scale: number) => {
-    if (!containerRef.current || scale <= 1) {
-      return { x: 0, y: 0 };
-    }
-
+    if (!containerRef.current || scale <= 1) return { x: 0, y: 0 };
     const rect = containerRef.current.getBoundingClientRect();
     const maxX = (rect.width * (scale - 1)) / 2;
     const maxY = (rect.height * (scale - 1)) / 2;
-
     return {
       x: Math.max(-maxX, Math.min(maxX, tx)),
       y: Math.max(-maxY, Math.min(maxY, ty)),
     };
-  }, []);
+  }, [containerRef]);
 
   const resetZoom = useCallback(() => {
     setState({ scale: 1, translateX: 0, translateY: 0 });
@@ -83,64 +71,45 @@ export function usePinchZoom(
 
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 2) {
-      // Pinch start
       isPinching.current = true;
       initialDistance.current = getDistance(e.touches);
       initialScale.current = state.scale;
       lastTouchCenter.current = getCenter(e.touches);
     } else if (e.touches.length === 1 && isZoomed) {
-      // Pan start when zoomed
       isDragging.current = true;
       dragStart.current = {
         x: e.touches[0].clientX - state.translateX,
         y: e.touches[0].clientY - state.translateY,
       };
     }
-  }, [state.scale, state.translateX, state.translateY, isZoomed]);
+  }, [isZoomed, state.scale, state.translateX, state.translateY]);
 
   const onTouchMove = useCallback((e: React.TouchEvent) => {
     if (isPinching.current && e.touches.length === 2) {
       e.preventDefault();
       const currentDistance = getDistance(e.touches);
       const currentCenter = getCenter(e.touches);
-      
       let newScale = initialScale.current * (currentDistance / initialDistance.current);
       newScale = Math.max(minScale, Math.min(maxScale, newScale));
-
-      // Calculate translation to zoom towards pinch center
       let newTranslateX = state.translateX;
       let newTranslateY = state.translateY;
-
       if (lastTouchCenter.current) {
-        const deltaX = currentCenter.x - lastTouchCenter.current.x;
-        const deltaY = currentCenter.y - lastTouchCenter.current.y;
-        newTranslateX += deltaX;
-        newTranslateY += deltaY;
+        newTranslateX += currentCenter.x - lastTouchCenter.current.x;
+        newTranslateY += currentCenter.y - lastTouchCenter.current.y;
       }
-
       const clamped = clampTranslation(newTranslateX, newTranslateY, newScale);
-      
-      setState({
-        scale: newScale,
-        translateX: clamped.x,
-        translateY: clamped.y,
-      });
-
+      setState({ scale: newScale, translateX: clamped.x, translateY: clamped.y });
       lastTouchCenter.current = currentCenter;
     } else if (isDragging.current && e.touches.length === 1 && dragStart.current) {
       e.preventDefault();
-      const newTranslateX = e.touches[0].clientX - dragStart.current.x;
-      const newTranslateY = e.touches[0].clientY - dragStart.current.y;
-      
-      const clamped = clampTranslation(newTranslateX, newTranslateY, state.scale);
-      
-      setState(prev => ({
-        ...prev,
-        translateX: clamped.x,
-        translateY: clamped.y,
-      }));
+      const clamped = clampTranslation(
+        e.touches[0].clientX - dragStart.current.x,
+        e.touches[0].clientY - dragStart.current.y,
+        state.scale,
+      );
+      setState((previous) => ({ ...previous, translateX: clamped.x, translateY: clamped.y }));
     }
-  }, [state.scale, state.translateX, state.translateY, clampTranslation, maxScale, minScale]);
+  }, [clampTranslation, maxScale, minScale, state.scale, state.translateX, state.translateY]);
 
   const onTouchEnd = useCallback((e: React.TouchEvent) => {
     if (e.touches.length < 2) {
@@ -150,18 +119,12 @@ export function usePinchZoom(
     if (e.touches.length === 0) {
       isDragging.current = false;
       dragStart.current = null;
-
-      // Snap back if scale is too low
-      if (state.scale < 1.1) {
-        resetZoom();
-      }
+      if (state.scale < 1.1) resetZoom();
     }
 
-    // Double tap detection
     if (e.touches.length === 0 && e.changedTouches.length === 1) {
       const now = Date.now();
       if (now - lastTap.current < 300) {
-        // Double tap detected
         if (isZoomed) {
           resetZoom();
         } else {
@@ -172,154 +135,93 @@ export function usePinchZoom(
             const y = touch.clientY - rect.top - rect.height / 2;
             const newScale = 2;
             const clamped = clampTranslation(-x * (newScale - 1), -y * (newScale - 1), newScale);
-            setState({
-              scale: newScale,
-              translateX: clamped.x,
-              translateY: clamped.y,
-            });
+            setState({ scale: newScale, translateX: clamped.x, translateY: clamped.y });
           }
         }
       }
       lastTap.current = now;
     }
-  }, [state.scale, isZoomed, resetZoom, clampTranslation]);
+  }, [clampTranslation, containerRef, isZoomed, resetZoom, state.scale]);
 
   const onDoubleClick = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     if (isZoomed) {
       resetZoom();
-    } else {
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (rect) {
-        const x = e.clientX - rect.left - rect.width / 2;
-        const y = e.clientY - rect.top - rect.height / 2;
-        const newScale = 2;
-        const clamped = clampTranslation(-x * (newScale - 1), -y * (newScale - 1), newScale);
-        setState({
-          scale: newScale,
-          translateX: clamped.x,
-          translateY: clamped.y,
-        });
-      }
-    }
-  }, [isZoomed, resetZoom, clampTranslation]);
-
-  const onWheel = useCallback((e: React.WheelEvent) => {
-    // Detect if this is a touchpad scroll (two-finger scroll) vs intentional pinch-to-zoom
-    // Touchpad scrolls typically have small deltaY values and no ctrlKey (unless pinch gesture)
-    // Real pinch-to-zoom on touchpads sets e.ctrlKey = true
-    // Normal two-finger scrolling should NOT trigger zoom - let the page scroll naturally
-    
-    // Only zoom if:
-    // 1. ctrlKey is pressed (intentional pinch gesture on touchpad, or Ctrl+scroll)
-    // 2. Already zoomed in and user is scrolling to zoom out
-    const isIntentionalZoom = e.ctrlKey;
-    const isZoomingOut = isZoomed && e.deltaY > 0;
-    
-    if (!isIntentionalZoom && !isZoomingOut) {
-      // Allow normal page scrolling - don't prevent default and don't zoom
       return;
     }
-    
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = e.clientX - rect.left - rect.width / 2;
+    const y = e.clientY - rect.top - rect.height / 2;
+    const newScale = 2;
+    const clamped = clampTranslation(-x * (newScale - 1), -y * (newScale - 1), newScale);
+    setState({ scale: newScale, translateX: clamped.x, translateY: clamped.y });
+  }, [clampTranslation, containerRef, isZoomed, resetZoom]);
+
+  const onWheel = useCallback((e: React.WheelEvent) => {
+    const intentionalZoom = e.ctrlKey;
+    const zoomingOut = isZoomed && e.deltaY > 0;
+    if (!intentionalZoom && !zoomingOut) return;
     e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    const newScale = Math.max(minScale, Math.min(maxScale, state.scale + delta));
-
-    if (newScale === 1) {
+    const nextScale = Math.max(minScale, Math.min(maxScale, state.scale + (e.deltaY > 0 ? -0.1 : 0.1)));
+    if (nextScale === 1) {
       resetZoom();
-    } else {
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (rect) {
-        const x = e.clientX - rect.left - rect.width / 2;
-        const y = e.clientY - rect.top - rect.height / 2;
-        
-        const scaleRatio = newScale / state.scale;
-        const newTranslateX = state.translateX * scaleRatio - x * (scaleRatio - 1);
-        const newTranslateY = state.translateY * scaleRatio - y * (scaleRatio - 1);
-        
-        const clamped = clampTranslation(newTranslateX, newTranslateY, newScale);
-        setState({
-          scale: newScale,
-          translateX: clamped.x,
-          translateY: clamped.y,
-        });
-      }
+      return;
     }
-  }, [state.scale, state.translateX, state.translateY, resetZoom, clampTranslation, maxScale, minScale, isZoomed]);
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = e.clientX - rect.left - rect.width / 2;
+    const y = e.clientY - rect.top - rect.height / 2;
+    const ratio = nextScale / state.scale;
+    const clamped = clampTranslation(
+      state.translateX * ratio - x * (ratio - 1),
+      state.translateY * ratio - y * (ratio - 1),
+      nextScale,
+    );
+    setState({ scale: nextScale, translateX: clamped.x, translateY: clamped.y });
+  }, [clampTranslation, containerRef, isZoomed, maxScale, minScale, resetZoom, state.scale, state.translateX, state.translateY]);
 
-  // Browser-level zoomni faqat media hududida ushlab qolamiz.
-  // Chrome/Edge trackpad pinch gesture'ni ctrlKey=true bo'lgan WheelEvent
-  // sifatida yuboradi. Passive listener bo'lsa preventDefault ishlamaydi,
-  // shuning uchun native passive:false listener majburiy.
   useEffect(() => {
     const node = containerRef.current;
     if (!node) return;
-
-    const preventBrowserWheelZoom = (event: WheelEvent) => {
-      if (event.ctrlKey) event.preventDefault();
+    const preventWheelZoom = (event: WheelEvent) => { if (event.ctrlKey) event.preventDefault(); };
+    const preventTouchZoom = (event: TouchEvent) => {
+      if (event.touches.length >= 2 || isPinching.current || isDragging.current) event.preventDefault();
     };
-
-    const preventBrowserTouchZoom = (event: TouchEvent) => {
-      if (
-        event.touches.length >= 2 ||
-        isPinching.current ||
-        isDragging.current
-      ) {
-        event.preventDefault();
-      }
-    };
-
-    const preventSafariGestureZoom = (event: Event) => {
-      event.preventDefault();
-    };
-
-    node.addEventListener('wheel', preventBrowserWheelZoom, { passive: false });
-    node.addEventListener('touchmove', preventBrowserTouchZoom, {
-      passive: false,
-    });
-    node.addEventListener(
-      'gesturestart',
-      preventSafariGestureZoom as EventListener,
-      { passive: false },
-    );
-    node.addEventListener(
-      'gesturechange',
-      preventSafariGestureZoom as EventListener,
-      { passive: false },
-    );
-
+    const preventSafariGesture = (event: Event) => event.preventDefault();
+    node.addEventListener('wheel', preventWheelZoom, { passive: false });
+    node.addEventListener('touchmove', preventTouchZoom, { passive: false });
+    node.addEventListener('gesturestart', preventSafariGesture as EventListener, { passive: false });
+    node.addEventListener('gesturechange', preventSafariGesture as EventListener, { passive: false });
     return () => {
-      node.removeEventListener('wheel', preventBrowserWheelZoom);
-      node.removeEventListener('touchmove', preventBrowserTouchZoom);
-      node.removeEventListener(
-        'gesturestart',
-        preventSafariGestureZoom as EventListener,
-      );
-      node.removeEventListener(
-        'gesturechange',
-        preventSafariGestureZoom as EventListener,
-      );
+      node.removeEventListener('wheel', preventWheelZoom);
+      node.removeEventListener('touchmove', preventTouchZoom);
+      node.removeEventListener('gesturestart', preventSafariGesture as EventListener);
+      node.removeEventListener('gesturechange', preventSafariGesture as EventListener);
     };
   }, [containerRef]);
 
-  // Reset zoom when component unmounts.
-  useEffect(() => {
-    return () => resetZoom();
-  }, [resetZoom]);
+  useEffect(() => () => resetZoom(), [resetZoom]);
 
-  return {
+  return useMemo(() => ({
     scale: state.scale,
     translateX: state.translateX,
     translateY: state.translateY,
     isZoomed,
-    handlers: {
-      onTouchStart,
-      onTouchMove,
-      onTouchEnd,
-      onDoubleClick,
-      onWheel,
-    },
+    handlers: { onTouchStart, onTouchMove, onTouchEnd, onDoubleClick, onWheel },
     resetZoom,
     containerRef: containerRef as React.RefObject<HTMLDivElement>,
-  };
+  }), [
+    containerRef,
+    isZoomed,
+    onDoubleClick,
+    onTouchEnd,
+    onTouchMove,
+    onTouchStart,
+    onWheel,
+    resetZoom,
+    state.scale,
+    state.translateX,
+    state.translateY,
+  ]);
 }

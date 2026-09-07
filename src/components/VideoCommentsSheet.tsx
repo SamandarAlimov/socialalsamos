@@ -23,17 +23,7 @@ interface VideoCommentsSheetProps {
   commentsCount: number;
 }
 
-function CommentsHeader({
-  commentsCount,
-  onClose,
-  desktop = false,
-}: {
-  commentsCount: number;
-  onClose: () => void;
-  desktop?: boolean;
-}) {
-  const title = commentsCount > 0 ? commentsCount + ' ta izoh' : 'Izohlar';
-
+function DesktopHeader({ commentsCount, onClose }: { commentsCount: number; onClose: () => void }) {
   return (
     <div className="flex items-center justify-between gap-3">
       <div className="flex min-w-0 items-center gap-2.5">
@@ -41,24 +31,13 @@ function CommentsHeader({
           <MessageCircle className="h-4.5 w-4.5" />
         </span>
         <div className="min-w-0">
-          {desktop ? (
-            <SheetTitle className="truncate text-base font-semibold text-foreground">{title}</SheetTitle>
-          ) : (
-            <DrawerTitle className="truncate text-base font-semibold text-foreground">{title}</DrawerTitle>
-          )}
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
-            Izohlar va javoblar
-          </p>
+          <SheetTitle className="truncate text-base font-semibold">
+            {commentsCount > 0 ? `${commentsCount} ta izoh` : 'Izohlar'}
+          </SheetTitle>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">Izohlar va javoblar</p>
         </div>
       </div>
-
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={onClose}
-        className="h-9 w-9 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-        aria-label="Izohlarni yopish"
-      >
+      <Button variant="ghost" size="icon" onClick={onClose} className="h-9 w-9 rounded-full" aria-label="Izohlarni yopish">
         <X className="h-4.5 w-4.5" />
       </Button>
     </div>
@@ -66,9 +45,9 @@ function CommentsHeader({
 }
 
 /**
- * Mobile: Instagram/TikTok uslubidagi bottom sheet.
- * Tablet/Desktop: video surface theme bilan uyg'un, o'ng tomondan keladigan
- * compact comments panel. Light rejimda oq/neytral, dark rejimda qora surface.
+ * Video comments are intentionally an immersive surface:
+ * - mobile/tablet-small: Instagram/YouTube-style draggable bottom sheet;
+ * - desktop/tablet-wide: right side panel that does not cover the player.
  */
 export function VideoCommentsSheet({
   isOpen,
@@ -81,13 +60,24 @@ export function VideoCommentsSheet({
   if (isMobile) {
     return (
       <Drawer open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <DrawerContent className="flex h-[74dvh] max-h-[760px] flex-col overflow-hidden rounded-t-[28px] border-border/70 bg-background text-foreground shadow-2xl dark:bg-neutral-950">
-          <div className="mx-auto mt-2 h-1.5 w-10 rounded-full bg-muted-foreground/20" />
-          <DrawerHeader className="shrink-0 border-b border-border/60 bg-background px-4 pb-3 pt-2 dark:bg-neutral-950">
-            <CommentsHeader commentsCount={commentsCount} onClose={onClose} />
+        <DrawerContent className="dark flex h-[72dvh] max-h-[780px] min-h-[420px] flex-col overflow-hidden rounded-t-[30px] border-x-0 border-b-0 border-t border-white/10 bg-neutral-950 text-white shadow-[0_-24px_80px_rgba(0,0,0,.55)]">
+          <div className="mx-auto mt-2.5 h-1 w-11 shrink-0 rounded-full bg-white/30" />
+          <DrawerHeader className="relative shrink-0 border-b border-white/8 px-4 pb-3 pt-2 text-center">
+            <DrawerTitle className="text-[15px] font-semibold text-white">
+              Izohlar{commentsCount > 0 ? ` · ${commentsCount}` : ''}
+            </DrawerTitle>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              className="absolute right-2 top-0 h-9 w-9 rounded-full text-white/70 hover:bg-white/10 hover:text-white"
+              aria-label="Izohlarni yopish"
+            >
+              <X className="h-4.5 w-4.5" />
+            </Button>
           </DrawerHeader>
 
-          <div className="min-h-0 flex-1 overflow-hidden bg-background dark:bg-neutral-950">
+          <div className="dark min-h-0 flex-1 overflow-hidden bg-neutral-950 text-white [color-scheme:dark]">
             <CommentsSection postId={postId} layout="panel" />
           </div>
         </DrawerContent>
@@ -103,15 +93,10 @@ export function VideoCommentsSheet({
         overlayClassName="bg-black/10 backdrop-blur-[0.5px] dark:bg-black/45"
         hideDefaultClose
       >
-        <SheetHeader className="shrink-0 border-b border-border/60 bg-background px-4 py-3 text-left text-foreground dark:bg-neutral-950">
-          <CommentsHeader
-            commentsCount={commentsCount}
-            onClose={onClose}
-            desktop
-          />
+        <SheetHeader className="shrink-0 border-b border-border/60 px-4 py-3 text-left">
+          <DesktopHeader commentsCount={commentsCount} onClose={onClose} />
         </SheetHeader>
-
-        <div className="min-h-0 flex-1 overflow-hidden bg-background dark:bg-neutral-950">
+        <div className="min-h-0 flex-1 overflow-hidden">
           <CommentsSection postId={postId} layout="panel" />
         </div>
       </SheetContent>
