@@ -9,6 +9,7 @@ export interface MarketplaceDeliveryLocation {
 }
 
 const STORAGE_KEY = 'alsamos:marketplace:delivery-location';
+const CHANGE_EVENT = 'alsamos:marketplace:delivery-location-change';
 
 function fallbackLabel(latitude: number, longitude: number) {
   return latitude.toFixed(4) + ', ' + longitude.toFixed(4);
@@ -26,28 +27,49 @@ function validLocation(value: MarketplaceDeliveryLocation | null | undefined) {
   );
 }
 
+function normalizeLocation(value: MarketplaceDeliveryLocation): MarketplaceDeliveryLocation {
+  return {
+    latitude: Number(value.latitude),
+    longitude: Number(value.longitude),
+    label: value.label.trim(),
+    accuracy: Number.isFinite(Number(value.accuracy)) ? Number(value.accuracy) : null,
+  };
+}
+
+function readStoredLocation(): MarketplaceDeliveryLocation | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as MarketplaceDeliveryLocation;
+    return validLocation(parsed) ? normalizeLocation(parsed) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function useMarketplaceDeliveryLocation() {
   const [location, setLocationState] = useState<MarketplaceDeliveryLocation | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as MarketplaceDeliveryLocation;
-      if (validLocation(parsed)) {
-        setLocationState({
-          latitude: Number(parsed.latitude),
-          longitude: Number(parsed.longitude),
-          label: parsed.label.trim(),
-          accuracy: Number.isFinite(Number(parsed.accuracy)) ? Number(parsed.accuracy) : null,
-        });
-      }
-    } catch {
-      // Optional preference only.
-    }
+    setLocationState(readStoredLocation());
+
+    const handleCustomChange = (event: Event) => {
+      const detail = (event as CustomEvent<MarketplaceDeliveryLocation | null>).detail;
+      setLocationState(detail && validLocation(detail) ? normalizeLocation(detail) : null);
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === STORAGE_KEY) setLocationState(readStoredLocation());
+    };
+
+    window.addEventListener(CHANGE_EVENT, handleCustomChange);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener(CHANGE_EVENT, handleCustomChange);
+      window.removeEventListener('storage', handleStorage);
+    };
   }, []);
 
   const setLocation = useCallback((next: MarketplaceDeliveryLocation | null) => {
@@ -59,6 +81,9 @@ export function useMarketplaceDeliveryLocation() {
       } catch {
         // Optional preference only.
       }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: null }));
+      }
       return;
     }
 
@@ -67,18 +92,15 @@ export function useMarketplaceDeliveryLocation() {
       return;
     }
 
-    const normalized: MarketplaceDeliveryLocation = {
-      latitude: Number(next.latitude),
-      longitude: Number(next.longitude),
-      label: next.label.trim(),
-      accuracy: Number.isFinite(Number(next.accuracy)) ? Number(next.accuracy) : null,
-    };
-
+    const normalized = normalizeLocation(next);
     setLocationState(normalized);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
     } catch {
       // Optional preference only.
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: normalized }));
     }
   }, []);
 
