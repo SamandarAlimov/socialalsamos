@@ -84,9 +84,13 @@ export function useWebRTC(roomId: string | null) {
   const channelReconnectAttemptRef = useRef(0);
   const channelReconnectTimerRef = useRef<number | null>(null);
 
-  // Perfect-negotiation helpers
+  // Perfect-negotiation state is kept per peer. SDP changes for one peer must
+  // never overlap: Chrome rejects a second offer whose m-line order no longer
+  // matches the outstanding offer/answer exchange.
   const makingOfferRef = useRef<Map<string, boolean>>(new Map());
   const ignoreOfferRef = useRef<Map<string, boolean>>(new Map());
+  const isSettingRemoteAnswerPendingRef = useRef<Map<string, boolean>>(new Map());
+  const negotiationQueueRef = useRef<Map<string, Promise<void>>>(new Map());
 
   // Shared call timer start (persisted once to backend so both clients match)
   const callStartedStampedRef = useRef(false);
@@ -205,7 +209,8 @@ export function useWebRTC(roomId: string | null) {
 
   const isPoliteForPeer = useCallback(
     (peerId: string) => {
-      // Deterministic: lower uuid string is "polite" to avoid offer collisions.
+      // Deterministic perfect-negotiation role. Exactly one side rolls back
+      // when simultaneous offers (glare) happen.
       if (!user?.id) return true;
       return user.id.localeCompare(peerId) < 0;
     },
@@ -274,9 +279,25 @@ export function useWebRTC(roomId: string | null) {
     [persistSignal]
   );
 
+  const enqueuePeerNegotiation = useCallback((peerId: string, task: () => Promise<void>) => {
+    const previous = negotiationQueueRef.current.get(peerId) ?? Promise.resolve();
+    const next = previous
+      .catch(() => undefined)
+      .then(task);
+
+    negotiationQueueRef.current.set(peerId, next);
+    void next.finally(() => {
+      if (negotiationQueueRef.current.get(peerId) === next) {
+        negotiationQueueRef.current.delete(peerId);
+      }
+    });
+    return next;
+  }, []);
+
   const closePeer = useCallback((peerId: string) => {
     const pc = peerConnectionsRef.current.get(peerId);
     if (pc) {
+      pc.onnegotiationneeded = null;
       pc.onicecandidate = null;
       pc.ontrack = null;
       pc.onconnectionstatechange = null;
@@ -288,6 +309,8 @@ export function useWebRTC(roomId: string | null) {
     pendingCandidatesRef.current.delete(peerId);
     makingOfferRef.current.delete(peerId);
     ignoreOfferRef.current.delete(peerId);
+    isSettingRemoteAnswerPendingRef.current.delete(peerId);
+    negotiationQueueRef.current.delete(peerId);
 
     setParticipants((prev) => prev.filter((p) => p.id !== peerId));
   }, []);
@@ -317,6 +340,8 @@ export function useWebRTC(roomId: string | null) {
       ) {
         restartAttemptsRef.current.set(peerId, attempt + 1);
         try {
+          // restartIce() intentionally does not create/send an offer itself.
+          // negotiationneeded below is the single serialized offer producer.
           pc.restartIce();
         } catch {
           // A following state transition/backlog signal can still recover it.
@@ -333,27 +358,33 @@ export function useWebRTC(roomId: string | null) {
 
       const pc = new RTCPeerConnection(DEFAULT_CONFIG);
 
-      // Only the deterministic initiator creates the initial offer. This avoids
-      // the previous double-offer race where both peers fired negotiationneeded
-      // and then the presence handler created another offer on top of it.
-      pc.onnegotiationneeded = async () => {
-        if (!user?.id || user.id.localeCompare(peerId) > 0) return;
-        try {
-          if (pc.signalingState !== "stable") return;
-          makingOfferRef.current.set(peerId, true);
-          const offer = await pc.createOffer();
-          if (pc.signalingState !== "stable") return;
-          await pc.setLocalDescription(offer);
-          await sendSignal("offer", {
-            from: user.id,
-            to: peerId,
-            sdp: pc.localDescription ?? offer,
-          });
-        } catch (e) {
-          console.error("[WebRTC] negotiationneeded error", e);
-        } finally {
-          makingOfferRef.current.set(peerId, false);
-        }
+      // Single offer producer. Track addition, ICE restart and future media
+      // renegotiation all pass through the same per-peer queue.
+      pc.onnegotiationneeded = () => {
+        if (!user?.id) return;
+        void enqueuePeerNegotiation(peerId, async () => {
+          if (pc.connectionState === "closed" || pc.signalingState !== "stable") return;
+
+          try {
+            makingOfferRef.current.set(peerId, true);
+            const offer = await pc.createOffer();
+            if (pc.connectionState === "closed" || pc.signalingState !== "stable") return;
+            await pc.setLocalDescription(offer);
+            await sendSignal("offer", {
+              from: user.id,
+              to: peerId,
+              sdp: pc.localDescription ?? offer,
+            });
+          } catch (e) {
+            // InvalidState can legitimately happen when a remote offer wins a
+            // glare race before our queued task reaches setLocalDescription.
+            if (pc.signalingState !== "closed") {
+              console.error("[WebRTC] negotiationneeded error", e);
+            }
+          } finally {
+            makingOfferRef.current.set(peerId, false);
+          }
+        });
       };
 
       pc.onicecandidate = (event) => {
@@ -427,7 +458,7 @@ export function useWebRTC(roomId: string | null) {
       peerConnectionsRef.current.set(peerId, pc);
       return pc;
     },
-    [scheduleIceRestart, sendSignal, stampCallStartedAt, user?.id]
+    [enqueuePeerNegotiation, scheduleIceRestart, sendSignal, stampCallStartedAt, user?.id]
   );
 
   const handleOffer = useCallback(
@@ -436,61 +467,97 @@ export function useWebRTC(roomId: string | null) {
       if (!stream || !user?.id) return;
 
       const pc = ensurePeerConnection(from, stream);
-      const makingOffer = makingOfferRef.current.get(from) ?? false;
-      const offerCollision = makingOffer || pc.signalingState !== "stable";
-      const polite = isPoliteForPeer(from);
-      const shouldIgnore = !polite && offerCollision;
-      ignoreOfferRef.current.set(from, shouldIgnore);
-      if (shouldIgnore) return;
+      await enqueuePeerNegotiation(from, async () => {
+        if (pc.connectionState === "closed") return;
 
-      try {
-        await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+        const makingOffer = makingOfferRef.current.get(from) ?? false;
+        const isSettingRemoteAnswerPending =
+          isSettingRemoteAnswerPendingRef.current.get(from) ?? false;
+        const readyForOffer =
+          !makingOffer &&
+          (pc.signalingState === "stable" || isSettingRemoteAnswerPending);
+        const offerCollision = !readyForOffer;
+        const polite = isPoliteForPeer(from);
+        const shouldIgnore = !polite && offerCollision;
 
-        const pending = pendingCandidatesRef.current.get(from) || [];
-        for (const c of pending) {
-          try {
-            await pc.addIceCandidate(new RTCIceCandidate(c));
-          } catch {
-            // ignore
+        ignoreOfferRef.current.set(from, shouldIgnore);
+        if (shouldIgnore) return;
+
+        try {
+          // Polite peer explicitly rolls back its outstanding local offer.
+          // This preserves transceiver/m-line ordering before accepting the
+          // remote offer and is the missing half of Perfect Negotiation.
+          if (offerCollision && pc.signalingState !== "stable") {
+            await pc.setLocalDescription({ type: "rollback" });
           }
+
+          await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+          ignoreOfferRef.current.set(from, false);
+
+          const pending = pendingCandidatesRef.current.get(from) || [];
+          for (const c of pending) {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(c));
+            } catch {
+              // A stale ICE generation can safely be discarded.
+            }
+          }
+          pendingCandidatesRef.current.delete(from);
+
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+
+          await sendSignal("answer", {
+            from: user.id,
+            to: from,
+            sdp: pc.localDescription ?? answer,
+          });
+        } catch (e) {
+          console.error("[WebRTC] handleOffer error", e);
         }
-        pendingCandidatesRef.current.delete(from);
-
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-
-        await sendSignal("answer", {
-          from: user.id,
-          to: from,
-          sdp: pc.localDescription ?? answer,
-        });
-      } catch (e) {
-        console.error("[WebRTC] handleOffer error", e);
-      }
+      });
     },
-    [ensurePeerConnection, isPoliteForPeer, sendSignal, user?.id]
+    [enqueuePeerNegotiation, ensurePeerConnection, isPoliteForPeer, sendSignal, user?.id]
   );
 
-  const handleAnswer = useCallback(async (from: string, sdp: RTCSessionDescriptionInit) => {
-    const pc = peerConnectionsRef.current.get(from);
-    if (!pc) return;
+  const handleAnswer = useCallback(
+    async (from: string, sdp: RTCSessionDescriptionInit) => {
+      const pc = peerConnectionsRef.current.get(from);
+      if (!pc) return;
 
-    try {
-      await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+      await enqueuePeerNegotiation(from, async () => {
+        if (pc.connectionState === "closed") return;
 
-      const pending = pendingCandidatesRef.current.get(from) || [];
-      for (const c of pending) {
-        try {
-          await pc.addIceCandidate(new RTCIceCandidate(c));
-        } catch {
-          // ignore
+        // Realtime + call_signals backlog can deliver an old answer twice or
+        // after a glare rollback. It must not be applied to a stable/new state.
+        if (pc.signalingState !== "have-local-offer") {
+          console.debug("[WebRTC] stale answer ignored", from, pc.signalingState);
+          return;
         }
-      }
-      pendingCandidatesRef.current.delete(from);
-    } catch (e) {
-      console.error("[WebRTC] handleAnswer error", e);
-    }
-  }, []);
+
+        try {
+          isSettingRemoteAnswerPendingRef.current.set(from, true);
+          await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+          ignoreOfferRef.current.set(from, false);
+
+          const pending = pendingCandidatesRef.current.get(from) || [];
+          for (const c of pending) {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(c));
+            } catch {
+              // A stale ICE generation can safely be discarded.
+            }
+          }
+          pendingCandidatesRef.current.delete(from);
+        } catch (e) {
+          console.error("[WebRTC] handleAnswer error", e);
+        } finally {
+          isSettingRemoteAnswerPendingRef.current.set(from, false);
+        }
+      });
+    },
+    [enqueuePeerNegotiation]
+  );
 
   const handleIce = useCallback(async (from: string, candidate: RTCIceCandidateInit) => {
     const pc = peerConnectionsRef.current.get(from);
@@ -500,7 +567,11 @@ export function useWebRTC(roomId: string | null) {
       try {
         await pc.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (e) {
-        console.error("[WebRTC] addIceCandidate error", e);
+        // ICE can race with glare rollback. Only surface it when we are not
+        // deliberately ignoring the collided offer.
+        if (!ignoreOfferRef.current.get(from)) {
+          console.error("[WebRTC] addIceCandidate error", e);
+        }
       }
     } else {
       const pending = pendingCandidatesRef.current.get(from) || [];
@@ -581,31 +652,6 @@ export function useWebRTC(roomId: string | null) {
       channelRef.current = null;
     }
 
-    const maybeMakeOffer = async (peerId: string) => {
-      // The lower user id is the only initial offer initiator. The actual
-      // negotiationneeded handler has the same guard, so this is now only a
-      // safety kick for peers discovered through presence.
-      if (!user?.id || user.id.localeCompare(peerId) > 0) return;
-      const pc = peerConnectionsRef.current.get(peerId);
-      if (!pc || pc.signalingState !== "stable") return;
-
-      try {
-        makingOfferRef.current.set(peerId, true);
-        const offer = await pc.createOffer();
-        if (pc.signalingState !== "stable") return;
-        await pc.setLocalDescription(offer);
-        await sendSignal("offer", {
-          from: user.id,
-          to: peerId,
-          sdp: pc.localDescription ?? offer,
-        });
-      } catch (e) {
-        console.error("[WebRTC] initial offer error", e);
-      } finally {
-        makingOfferRef.current.set(peerId, false);
-      }
-    };
-
     const channel = supabase.channel(`webrtc:${roomId}`, {
       config: {
         presence: { key: user.id },
@@ -636,12 +682,11 @@ export function useWebRTC(roomId: string | null) {
           return next;
         });
 
+        // Creating the peer adds local tracks, which fires negotiationneeded.
+        // Do not create a second explicit offer here; that was the race that
+        // produced the Chrome m-line order InvalidAccessError.
         for (const peerId of ids) {
           ensurePeerConnection(peerId, stream);
-        }
-
-        for (const peerId of ids) {
-          void maybeMakeOffer(peerId);
         }
       })
       .on("presence", { event: "leave" }, ({ leftPresences }) => {
@@ -822,6 +867,8 @@ export function useWebRTC(roomId: string | null) {
     pendingCandidatesRef.current.clear();
     makingOfferRef.current.clear();
     ignoreOfferRef.current.clear();
+    isSettingRemoteAnswerPendingRef.current.clear();
+    negotiationQueueRef.current.clear();
     seenSignalIdsRef.current.clear();
     reconnectTimersRef.current.forEach((timer) => window.clearTimeout(timer));
     reconnectTimersRef.current.clear();

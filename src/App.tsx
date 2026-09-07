@@ -13,6 +13,7 @@ import { PushNotificationProvider } from "@/components/PushNotificationProvider"
 import { ChatWallpaperProvider } from "@/components/chat/ChatWallpaperProvider";
 import { ChatAccentProvider } from "@/components/chat/ChatAccentProvider";
 import { AccountControlGate } from "@/components/auth/AccountControlGate";
+import { MarketplaceDeliveryLocationDock } from "@/components/marketplace/MarketplaceDeliveryLocationDock";
 
 // Pages
 import AuthPage from "./pages/AuthPage";
@@ -42,6 +43,7 @@ import WebViewerPage from "./pages/WebViewerPage";
 import MarketplacePage from "./pages/MarketplacePage";
 import MarketplaceProductPage from "./pages/MarketplaceProductPage";
 import MarketplaceChatHandoffPage from "./pages/MarketplaceChatHandoffPage";
+import MarketplaceStorePage from "./pages/MarketplaceStorePage";
 import AdminConsolePage from "./pages/AdminConsolePage";
 import AdminUsersPage from "./pages/AdminUsersPage";
 import AdminRegionsPage from "./pages/AdminRegionsPage";
@@ -100,9 +102,6 @@ function AuthRoute({ children }: { children: React.ReactNode }) {
 
   if (isLoading) return <FullscreenSpinner />;
 
-  // Normal auth remains guest-only. The explicit add-account flow is the one
-  // exception: an already authenticated user may reuse the real AuthPage to
-  // sign another account into a free local slot without logging out first.
   if (isAuthenticated && !isAddAccountFlow) {
     const next = searchParams.get('next');
     const safeNext = next && next.startsWith('/') && !next.startsWith('//') ? next : '/home';
@@ -111,10 +110,6 @@ function AuthRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-/**
- * Older profile cards shared posts as `/user/:username?post=<id>`.
- * Resolve those already-circulating links to the canonical `/post/:id` route.
- */
 function UserProfileRoute() {
   const [searchParams] = useSearchParams();
   const postId = searchParams.get('post');
@@ -181,6 +176,7 @@ function AppRoutes() {
         <Route path="/marketplace" element={<MarketplacePage />} />
         <Route path="/marketplace/chat" element={<MarketplaceChatHandoffPage />} />
         <Route path="/marketplace/product/:productId" element={<MarketplaceProductPage />} />
+        <Route path="/marketplace/store/:sellerId" element={<MarketplaceStorePage />} />
         <Route path="/map" element={<MapPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/create" element={<CreateEntryPage />} />
@@ -238,6 +234,7 @@ function AppWithGlobalCall() {
               <ChatAccentProvider />
               <ChatWallpaperProvider />
               <AppRoutes />
+              <MarketplaceDeliveryLocationDock />
             </GlobalCallProvider>
           </OnlinePresenceProvider>
         </PushNotificationProvider>

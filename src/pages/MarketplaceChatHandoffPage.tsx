@@ -20,6 +20,77 @@ function safeQuantity(value: string | null, max: number) {
   return Math.min(Math.max(1, max), requested, 999);
 }
 
+async function ensureSelfConversation(userId: string) {
+  const { data: memberships, error: membershipError } = await supabase
+    .from('conversation_participants')
+    .select('conversation_id')
+    .eq('user_id', userId);
+
+  if (membershipError) throw membershipError;
+
+  const conversationIds = (memberships || []).map(row => row.conversation_id);
+  if (conversationIds.length > 0) {
+    const { data: privateConversations, error: privateError } = await supabase
+      .from('conversations')
+      .select('id, type')
+      .in('id', conversationIds)
+      .eq('type', 'private');
+
+    if (privateError) throw privateError;
+
+    const privateIds = (privateConversations || []).map(row => row.id);
+    if (privateIds.length > 0) {
+      const { data: participants, error: participantsError } = await supabase
+        .from('conversation_participants')
+        .select('conversation_id, user_id')
+        .in('conversation_id', privateIds);
+
+      if (participantsError) throw participantsError;
+
+      const membersByConversation = new Map<string, string[]>();
+      for (const row of participants || []) {
+        const members = membersByConversation.get(row.conversation_id) || [];
+        members.push(row.user_id);
+        membersByConversation.set(row.conversation_id, members);
+      }
+
+      const existingId = privateIds.find(id => {
+        const members = membersByConversation.get(id) || [];
+        return members.length === 1 && members[0] === userId;
+      });
+
+      if (existingId) return { id: existingId };
+    }
+  }
+
+  const { data: conversation, error: conversationError } = await supabase
+    .from('conversations')
+    .insert({
+      type: 'private',
+      owner_id: userId,
+      last_message_at: new Date().toISOString(),
+    })
+    .select('id')
+    .single();
+
+  if (conversationError) throw conversationError;
+
+  const { error: participantError } = await supabase
+    .from('conversation_participants')
+    .insert({
+      conversation_id: conversation.id,
+      user_id: userId,
+      role: 'owner',
+    });
+
+  if (participantError) {
+    await supabase.from('conversations').delete().eq('id', conversation.id);
+    throw participantError;
+  }
+
+  return { id: conversation.id };
+}
+
 export default function MarketplaceChatHandoffPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -41,18 +112,17 @@ export default function MarketplaceChatHandoffPage() {
       return;
     }
 
-    if (sellerUserId === user.id) {
-      setError('O‘zingizga marketplace xabari yuborib bo‘lmaydi.');
-      return;
-    }
-
     startedRef.current = true;
     let cancelled = false;
 
     const handoff = async () => {
       try {
+        const conversationPromise = sellerUserId === user.id
+          ? ensureSelfConversation(user.id)
+          : createPrivateConversation(sellerUserId);
+
         const [conversation, product] = await Promise.all([
-          createPrivateConversation(sellerUserId),
+          conversationPromise,
           fetchMarketplaceProductById(productId),
         ]);
 
@@ -99,6 +169,7 @@ export default function MarketplaceChatHandoffPage() {
           ? selectedVariant.quantity
           : Math.max(1, Number(product.quantity ?? 1));
         const quantity = safeQuantity(searchParams.get('qty'), available);
+        const selectedOptions = selectedVariant?.options || {};
         const unitPrice = Number(selectedVariant?.price ?? product.price ?? 0);
         const productUrl = `${window.location.origin}/marketplace/product/${encodeURIComponent(product.id)}`;
         const message = buildMarketplaceProductMessage(
@@ -109,7 +180,7 @@ export default function MarketplaceChatHandoffPage() {
           {
             variantId: selectedVariant?.id,
             variantSku: selectedVariant?.sku || undefined,
-            options: selectedVariant?.options || {},
+            options: selectedOptions,
             quantity,
             unitPrice,
             imageUrl: selectedVariant?.image_url || product.images?.[0]?.url || undefined,
@@ -134,6 +205,8 @@ export default function MarketplaceChatHandoffPage() {
             productId: product.id,
             variantId: selectedVariant?.id,
             intent,
+            quantity,
+            options: selectedOptions,
           },
         );
 
