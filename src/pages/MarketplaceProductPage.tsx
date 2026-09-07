@@ -224,7 +224,7 @@ export default function MarketplaceProductPage() {
         initialVariantId={sharedSelection.variantId}
         initialQuantity={sharedSelection.quantity}
         onClose={goBack}
-        onSellerClick={(sellerId) => navigate(`/marketplace?seller=${sellerId}`)}
+        onSellerClick={(sellerId) => navigate(`/marketplace/store/${encodeURIComponent(sellerId)}`)}
         onMessageSeller={(sellerUserId, context) => {
           if (!sellerUserId) {
             navigate('/messages');
