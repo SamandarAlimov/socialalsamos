@@ -169,6 +169,7 @@ export default function MarketplaceChatHandoffPage() {
           ? selectedVariant.quantity
           : Math.max(1, Number(product.quantity ?? 1));
         const quantity = safeQuantity(searchParams.get('qty'), available);
+        const selectedOptions = selectedVariant?.options || {};
         const unitPrice = Number(selectedVariant?.price ?? product.price ?? 0);
         const productUrl = `${window.location.origin}/marketplace/product/${encodeURIComponent(product.id)}`;
         const message = buildMarketplaceProductMessage(
@@ -179,7 +180,7 @@ export default function MarketplaceChatHandoffPage() {
           {
             variantId: selectedVariant?.id,
             variantSku: selectedVariant?.sku || undefined,
-            options: selectedVariant?.options || {},
+            options: selectedOptions,
             quantity,
             unitPrice,
             imageUrl: selectedVariant?.image_url || product.images?.[0]?.url || undefined,
@@ -204,6 +205,8 @@ export default function MarketplaceChatHandoffPage() {
             productId: product.id,
             variantId: selectedVariant?.id,
             intent,
+            quantity,
+            options: selectedOptions,
           },
         );
 
