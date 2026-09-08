@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ChevronRight, MapPin } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -9,6 +9,7 @@ import {
   MARKETPLACE_LOCATION_PICKER_OPEN_EVENT,
   useMarketplaceDeliveryLocation,
 } from '@/hooks/useMarketplaceDeliveryLocation';
+import { cn } from '@/lib/utils';
 
 const RETURN_ROUTE_KEY = 'alsamos:marketplace:return-route';
 
@@ -19,20 +20,21 @@ function safeInternalRoute(value: string | null) {
 /**
  * Shared Marketplace chrome bridge.
  *
- * Delivery address UI stays contextual: product/cart/checkout can ask for the
- * picker without a permanent floating dock covering commerce content.
+ * Delivery selection is contextual instead of a permanent floating dock:
+ * - Marketplace browse gets a compact address control inside its real header;
+ * - product/cart/checkout can open the same picker through the shared event;
+ * - the mobile Marketplace back action is mounted into the sticky header row.
  *
- * The Marketplace home back button is portaled directly into the real sticky
- * header row. The row can be replaced once on mobile when useIsMobile settles
- * and PullToRefresh mounts, so the MutationObserver deliberately keeps
- * watching instead of disconnecting after the first match. This prevents the
- * portal from getting stranded in a detached, invisible header node.
+ * MarketplacePage can be replaced once on mobile when responsive hooks settle,
+ * so the observer deliberately keeps the portal targets synchronized while the
+ * route is mounted instead of disconnecting after the first match.
  */
 export function MarketplaceDeliveryLocationDock() {
   const route = useLocation();
   const navigate = useNavigate();
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [headerTarget, setHeaderTarget] = useState<HTMLElement | null>(null);
+  const [headerRowTarget, setHeaderRowTarget] = useState<HTMLElement | null>(null);
+  const [headerShellTarget, setHeaderShellTarget] = useState<HTMLElement | null>(null);
   const { location, setLocation } = useMarketplaceDeliveryLocation();
 
   useEffect(() => {
@@ -56,31 +58,29 @@ export function MarketplaceDeliveryLocationDock() {
 
   useEffect(() => {
     if (route.pathname !== '/marketplace') {
-      setHeaderTarget(null);
+      setHeaderRowTarget(null);
+      setHeaderShellTarget(null);
       return;
     }
 
-    const findTarget = () =>
-      document.querySelector<HTMLElement>('.marketplace-neutral > header > div > div');
-
-    const syncTarget = () => {
-      const target = findTarget();
-      setHeaderTarget(current => (current === target ? current : target));
+    const syncTargets = () => {
+      const shell = document.querySelector<HTMLElement>('.marketplace-neutral > header > div');
+      const row = shell?.firstElementChild instanceof HTMLElement ? shell.firstElementChild : null;
+      setHeaderShellTarget(current => (current === shell ? current : shell));
+      setHeaderRowTarget(current => (current === row ? current : row));
     };
 
-    syncTarget();
+    syncTargets();
 
-    // Keep observing while the Marketplace home route is mounted. On mobile
-    // the first header can be replaced after the responsive hook resolves.
-    const observer = new MutationObserver(syncTarget);
+    const observer = new MutationObserver(syncTargets);
     observer.observe(document.body, { childList: true, subtree: true });
 
     return () => observer.disconnect();
   }, [route.pathname]);
 
   const goBack = () => {
-    // The main Marketplace back action should return to the app surface from
-    // which Marketplace was entered, even after browsing products internally.
+    // Marketplace home should return to the app surface from which Marketplace
+    // was entered, even if the browser history also contains product routes.
     try {
       const stored = sessionStorage.getItem(RETURN_ROUTE_KEY);
       if (safeInternalRoute(stored) && !stored!.startsWith('/marketplace')) {
@@ -100,11 +100,16 @@ export function MarketplaceDeliveryLocationDock() {
     navigate('/home', { replace: true });
   };
 
-  const showPicker = route.pathname.startsWith('/marketplace') && route.pathname !== '/marketplace/chat';
+  const marketplaceParams = new URLSearchParams(route.search);
+  const tab = marketplaceParams.get('tab');
+  const showBrowseLocation =
+    route.pathname === '/marketplace' && (!tab || tab === 'browse');
+  const showPicker =
+    route.pathname.startsWith('/marketplace') && route.pathname !== '/marketplace/chat';
 
   return (
     <>
-      {route.pathname === '/marketplace' && headerTarget
+      {route.pathname === '/marketplace' && headerRowTarget
         ? createPortal(
             <Button
               type="button"
@@ -116,7 +121,48 @@ export function MarketplaceDeliveryLocationDock() {
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>,
-            headerTarget,
+            headerRowTarget,
+          )
+        : null}
+
+      {showBrowseLocation && headerShellTarget
+        ? createPortal(
+            <div className="mt-2 flex min-w-0 md:justify-end">
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                className={cn(
+                  'group flex w-full min-w-0 items-center gap-3 rounded-2xl border px-3 py-2 text-left transition',
+                  'border-border/50 bg-muted/30 hover:border-foreground/20 hover:bg-muted/55',
+                  'md:w-auto md:min-w-[300px] md:max-w-[420px]',
+                )}
+                aria-label={location ? `Yetkazish manzili: ${location.label}` : 'Yetkazish manzilini tanlash'}
+              >
+                <span
+                  className={cn(
+                    'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition',
+                    location
+                      ? 'bg-foreground text-background'
+                      : 'bg-background text-muted-foreground shadow-sm',
+                  )}
+                >
+                  <MapPin className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                    Yetkazish manzili
+                  </span>
+                  <span className="mt-0.5 block truncate text-xs font-semibold text-foreground">
+                    {location?.label || 'Xaritadan yoki qidiruvdan manzil tanlang'}
+                  </span>
+                </span>
+                <span className="hidden shrink-0 text-[10px] font-semibold text-muted-foreground sm:inline">
+                  {location ? 'O‘zgartirish' : 'Tanlash'}
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5" />
+              </button>
+            </div>,
+            headerShellTarget,
           )
         : null}
 
