@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import {
   Activity,
   ArrowLeft,
+  BarChart3,
   Eye,
   Fingerprint,
   Gauge,
