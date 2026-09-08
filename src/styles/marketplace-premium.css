@@ -43,6 +43,30 @@
   scroll-snap-align: start;
 }
 
+/*
+ * Desktop/tablet catalog is navigation, not a scrollable mini-window. Nested
+ * vertical + horizontal scrollbars made the left rail feel like an iframe and
+ * were especially awkward with trackpads. Let the document own vertical
+ * scrolling and force every category row to the available sidebar width.
+ */
+@media (min-width: 1024px) {
+  .marketplace-neutral aside {
+    overflow-x: hidden;
+  }
+
+  .marketplace-neutral aside [class*="overflow-y-auto"] {
+    max-height: none !important;
+    overflow: visible !important;
+    padding-right: 0 !important;
+  }
+
+  .marketplace-neutral aside button[aria-pressed] {
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+  }
+}
+
 @media (max-width: 767px) {
   .marketplace-neutral [class~="bottom-[78px]"] {
     bottom: env(safe-area-inset-bottom) !important;
