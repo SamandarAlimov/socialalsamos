@@ -518,13 +518,14 @@ export function useWebRTC(roomId: string | null) {
           }
           pendingCandidatesRef.current.delete(from);
 
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
+          // Implicit answer creation keeps the m-line order of the remote offer.
+          await pc.setLocalDescription();
+          if (!pc.localDescription) return;
 
           await sendSignal("answer", {
             from: user.id,
             to: from,
-            sdp: pc.localDescription ?? answer,
+            sdp: pc.localDescription,
           });
         } catch (e) {
           console.error("[WebRTC] handleOffer error", e);
