@@ -28,6 +28,11 @@ import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { StoryStickerOverlay } from '@/components/stickers/StoryStickerOverlay';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { VideoScrubBar } from '@/components/video/VideoScrubBar';
+import {
+  VideoCollaboratorByline,
+  VideoLikedByFollowing,
+  useVideoSocialContext,
+} from '@/components/video/VideoSocialContext';
 import { VideoWatchPanel, type VideoPlaybackSnapshot } from '@/components/video/VideoWatchPanel';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
@@ -137,6 +142,11 @@ function VideoCard({
   const { recordView } = usePostViews();
   const { trackProgress, markCompleted, markSeek, finishWatch } = useVideoWatchTracker();
   const heatmap = useVideoHeatmap(video.id, 48, { enabled: isActive });
+  const { acceptedCollaborators, likedByFollowing } = useVideoSocialContext(
+    video.id,
+    isActive,
+    video.likes_count || 0,
+  );
 
   const videoUrl = video.media_urls?.[0] || '';
   const posterUrl = video.media_urls?.[1];
@@ -620,6 +630,12 @@ function VideoCard({
                   <span className="truncate text-sm font-semibold text-white">@{video.profile?.username || 'user'}</span>
                   {video.profile?.is_verified && <VerifiedBadge size="xs" />}
                 </button>
+                {isActive && (
+                  <VideoCollaboratorByline
+                    collaborators={acceptedCollaborators}
+                    className="max-w-[150px]"
+                  />
+                )}
                 {video.user_id !== currentUserId && (
                   <Button variant="outline" size="sm" onClick={(event) => { event.stopPropagation(); onFollow(); }} className="ml-1 h-7 shrink-0 rounded-full border-white/50 bg-black/20 px-3 text-xs font-semibold text-white backdrop-blur-md hover:bg-white/10 hover:text-white">
                     {video.is_following ? t('common.following', 'Following') : t('common.follow', 'Follow')}
@@ -646,6 +662,15 @@ function VideoCard({
                 <Music2 className="h-3.5 w-3.5" />
                 <span className="truncate">Original Sound · {video.profile?.display_name || video.profile?.username}</span>
               </div>
+
+              {isActive && (
+                <VideoLikedByFollowing
+                  profiles={likedByFollowing}
+                  likesCount={video.likes_count || 0}
+                  onClick={onLikesClick}
+                  className="mt-2"
+                />
+              )}
             </div>
 
             <div className="flex shrink-0 flex-col items-center gap-3" onPointerDown={stopBubble} onPointerUp={stopBubble}>
