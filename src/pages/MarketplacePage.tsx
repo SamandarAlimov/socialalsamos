@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
+  BadgePercent,
   ChevronRight,
   ClipboardList,
   Crown,
@@ -63,6 +64,13 @@ function isMarketplaceTab(value: string | null): value is MarketplaceTab {
   return value === 'browse' || value === 'orders' || value === 'selling' || value === 'saved';
 }
 
+function discountRate(product: Product) {
+  const price = Number(product.price || 0);
+  const compare = Number(product.compare_at_price || 0);
+  if (price < 0 || compare <= price) return 0;
+  return Math.round(((compare - price) / compare) * 100);
+}
+
 export default function MarketplacePage() {
   const isMobile = useIsMobile();
   const { user } = useAuth();
@@ -93,6 +101,7 @@ export default function MarketplacePage() {
   const [conditionFilter, setConditionFilter] = useState('all');
   const [inStockOnly, setInStockOnly] = useState(false);
   const [shippingOnly, setShippingOnly] = useState(false);
+  const [discountOnly, setDiscountOnly] = useState(false);
   const [selectedSellerId, setSelectedSellerId] = useState<string | null>(null);
   const [sellingView, setSellingView] = useState<'products' | 'orders'>('products');
 
@@ -238,6 +247,7 @@ export default function MarketplacePage() {
       if (conditionFilter !== 'all' && product.condition !== conditionFilter) return false;
       if (inStockOnly && Number(product.quantity) <= 0) return false;
       if (shippingOnly && !product.shipping_available) return false;
+      if (discountOnly && discountRate(product) <= 0) return false;
       return true;
     });
 
@@ -256,6 +266,7 @@ export default function MarketplacePage() {
   }, [
     activeRange,
     conditionFilter,
+    discountOnly,
     inStockOnly,
     priceRange,
     products,
@@ -268,6 +279,7 @@ export default function MarketplacePage() {
     (conditionFilter !== 'all' ? 1 : 0) +
     (inStockOnly ? 1 : 0) +
     (shippingOnly ? 1 : 0) +
+    (discountOnly ? 1 : 0) +
     (sortBy !== 'newest' ? 1 : 0);
 
   const resetFilters = useCallback(() => {
@@ -275,11 +287,19 @@ export default function MarketplacePage() {
     setConditionFilter('all');
     setInStockOnly(false);
     setShippingOnly(false);
+    setDiscountOnly(false);
     setSortBy('newest');
   }, []);
 
   const featuredProducts = useMemo(
     () => products.filter(product => product.is_featured),
+    [products],
+  );
+  const discountedProducts = useMemo(
+    () => [...products]
+      .filter(product => discountRate(product) > 0 && Number(product.quantity) > 0)
+      .sort((a, b) => discountRate(b) - discountRate(a))
+      .slice(0, 10),
     [products],
   );
   const trendingProducts = useMemo(
@@ -311,7 +331,7 @@ export default function MarketplacePage() {
   ];
 
   const sellerViews = [
-    { id: 'products' as const, label: 'Mahsulotlar', icon: Package },
+    { id: 'products' as const, label: seller?.business_type === 'restaurant' ? 'Menyu' : 'Mahsulotlar', icon: Package },
     { id: 'orders' as const, label: 'Buyurtmalar', icon: ClipboardList },
   ];
 
@@ -399,6 +419,12 @@ export default function MarketplacePage() {
       </div>
 
       <div className="space-y-2">
+        <ToggleRow
+          checked={discountOnly}
+          onChange={setDiscountOnly}
+          label="Faqat chegirmali"
+          description="Eski narxi ko‘rsatilgan real chegirmalar"
+        />
         <ToggleRow
           checked={inStockOnly}
           onChange={setInStockOnly}
@@ -493,6 +519,28 @@ export default function MarketplacePage() {
                 <MarketplaceProductImage product={featuredProducts[0]} className="h-full w-full object-cover" />
               </button>
             )}
+          </div>
+        </section>
+      )}
+
+      {discountedProducts.length > 0 && selectedCategory === 'all' && !searchQuery && (
+        <section className="space-y-3 rounded-[28px] border border-red-500/15 bg-red-500/[0.025] p-4 sm:p-5">
+          <SectionHeading
+            title="Chegirmalar"
+            icon={<BadgePercent className="h-4 w-4 text-red-500" />}
+            action="Barchasini ko‘rish"
+            onAction={() => {
+              setDiscountOnly(true);
+              window.setTimeout(() => window.scrollTo({ top: document.body.scrollHeight * 0.45, behavior: 'smooth' }), 0);
+            }}
+          />
+          <p className="-mt-1 text-xs text-muted-foreground">Eski narx bilan solishtirilgan, cardda foizi ko‘rinadigan takliflar.</p>
+          <div className="marketplace-x-rail -mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
+            {discountedProducts.map(product => (
+              <div key={product.id} className="w-[46vw] min-w-[158px] max-w-[190px] shrink-0 sm:w-44">
+                <ProductCard product={product} onSelect={handleProductSelect} onLikeChange={refreshProducts} />
+              </div>
+            ))}
           </div>
         </section>
       )}
@@ -896,7 +944,10 @@ export default function MarketplacePage() {
               exit={{ opacity: 0 }}
               className="min-w-0"
             >
-              <PageTitle title="Sotuvchi markazi" subtitle="Mahsulot, buyurtma va savdo boshqaruvi." />
+              <PageTitle
+                title={seller?.business_type === 'restaurant' ? 'Restoran markazi' : 'Sotuvchi markazi'}
+                subtitle={seller?.business_type === 'restaurant' ? 'Menyu, buyurtma va tayyorlash oqimini boshqaring.' : 'Mahsulot, buyurtma va savdo boshqaruvi.'}
+              />
               {!user ? (
                 <EmptyState
                   icon={<Store className="h-14 w-14" />}
@@ -918,7 +969,7 @@ export default function MarketplacePage() {
                     <div className="flex min-w-0 items-center justify-between gap-3 border-b border-border/50 px-4 py-4">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-extrabold">{seller.business_name}</p>
-                        <p className="text-xs text-muted-foreground">Sotuvchi markazi</p>
+                        <p className="text-xs text-muted-foreground">{seller.business_type === 'restaurant' ? 'Restoran markazi' : 'Sotuvchi markazi'}</p>
                       </div>
                       <Button variant="outline" size="sm" className="shrink-0 rounded-xl" onClick={() => setShowDashboard(true)}>
                         <LayoutDashboard className="mr-1.5 h-4 w-4" />
@@ -927,7 +978,7 @@ export default function MarketplacePage() {
                     </div>
                     <div className="grid grid-cols-3 divide-x divide-border/50">
                       {[
-                        { value: sellerProducts.length, label: 'Mahsulotlar' },
+                        { value: sellerProducts.length, label: seller.business_type === 'restaurant' ? 'Menyu' : 'Mahsulotlar' },
                         { value: seller.total_sales ?? 0, label: 'Sotuvlar' },
                         { value: (seller.rating ?? 0) > 0 ? seller.rating.toFixed(1) : '—', label: 'Reyting' },
                       ].map(stat => (
@@ -968,7 +1019,7 @@ export default function MarketplacePage() {
                       <div className="flex flex-wrap gap-2">
                         <Button className="rounded-xl" onClick={() => setShowCreateProduct(true)}>
                           <Plus className="mr-2 h-4 w-4" />
-                          Mahsulot qo‘shish
+                          {seller.business_type === 'restaurant' ? 'Taom qo‘shish' : 'Mahsulot qo‘shish'}
                         </Button>
                         <Button variant="outline" className="rounded-xl" onClick={() => setShowDashboard(true)}>
                           <LayoutDashboard className="mr-2 h-4 w-4" />
@@ -989,8 +1040,8 @@ export default function MarketplacePage() {
                       ) : (
                         <EmptyState
                           icon={<Package className="h-12 w-12" />}
-                          title="Mahsulotlar yo‘q"
-                          description="Birinchi mahsulotingizni joylang."
+                          title={seller.business_type === 'restaurant' ? 'Menyu bo‘sh' : 'Mahsulotlar yo‘q'}
+                          description={seller.business_type === 'restaurant' ? 'Birinchi taomingizni menyuga qo‘shing.' : 'Birinchi mahsulotingizni joylang.'}
                         />
                       )}
                     </>

@@ -107,6 +107,15 @@
   display: none !important;
 }
 
+/* Verification uses the same Alsamos blue language on cards, stores and detail. */
+.marketplace-neutral > .relative.min-h-full svg.text-amber-500 {
+  color: rgb(14 165 233) !important;
+}
+
+.marketplace-neutral > .relative.min-h-full div[class*="p-3.5"] svg[class*="text-foreground"] {
+  color: rgb(14 165 233);
+}
+
 /* Replace the legacy text-only eligible review form with the media composer portal. */
 .marketplace-neutral [data-marketplace-review-host="true"] > * {
   display: none !important;
