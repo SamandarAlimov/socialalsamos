@@ -44,7 +44,45 @@
 }
 
 /*
- * Desktop/tablet catalog is navigation, not a scrollable mini-window. Nested
+ * Category navigation is intentionally different by device class:
+ * - phones keep the familiar one-finger horizontal rail;
+ * - tablets get a stable wrapping grid with no sideways mini-scroll;
+ * - desktop uses the catalogue column and lets the document own scrolling.
+ *
+ * This only targets the `lg:hidden` categories section, so product/trending
+ * carousels remain horizontally scrollable where that interaction is useful.
+ */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .marketplace-neutral section[class~="lg:hidden"] > .marketplace-x-rail {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    overflow: visible !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    touch-action: pan-y;
+    scroll-snap-type: none;
+  }
+
+  .marketplace-neutral section[class~="lg:hidden"] > .marketplace-x-rail > * {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    flex: none !important;
+    scroll-snap-align: none;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .marketplace-neutral section[class~="lg:hidden"] > .marketplace-x-rail {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+/*
+ * Desktop catalogue is navigation, not a scrollable mini-window. Nested
  * vertical + horizontal scrollbars made the left rail feel like an iframe and
  * were especially awkward with trackpads. Let the document own vertical
  * scrolling and force every category row to the available sidebar width.
