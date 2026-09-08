@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { resolveMapClickPlace } from '@/lib/mapPlaces';
 
 export interface MarketplaceDeliveryLocation {
   latitude: number;
@@ -10,10 +9,7 @@ export interface MarketplaceDeliveryLocation {
 
 const STORAGE_KEY = 'alsamos:marketplace:delivery-location';
 const CHANGE_EVENT = 'alsamos:marketplace:delivery-location-change';
-
-function fallbackLabel(latitude: number, longitude: number) {
-  return latitude.toFixed(4) + ', ' + longitude.toFixed(4);
-}
+export const MARKETPLACE_LOCATION_PICKER_OPEN_EVENT = 'alsamos:marketplace:delivery-location-picker-open';
 
 function validLocation(value: MarketplaceDeliveryLocation | null | undefined) {
   return Boolean(
@@ -104,61 +100,23 @@ export function useMarketplaceDeliveryLocation() {
     }
   }, []);
 
+  /**
+   * Marketplace'da "manzilni aniqlash" endi GPS'ga majburlamaydi.
+   * Bir xil map-picker product detail, cart va checkoutdan ochiladi; pickerning
+   * ichida foydalanuvchi joriy joyini ham, boshqa odam uchun istalgan manzilni
+   * ham qidiruv/xarita orqali tanlay oladi.
+   */
   const locate = useCallback(async () => {
-    if (!('geolocation' in navigator)) {
-      setError('Qurilma joylashuvni aniqlashni qo‘llab-quvvatlamaydi');
-      return null;
-    }
+    setError(null);
+    if (typeof window === 'undefined') return null;
 
     setIsLocating(true);
-    setError(null);
-
-    try {
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 12000,
-          maximumAge: 60000,
-        });
-      });
-
-      const latitude = position.coords.latitude;
-      const longitude = position.coords.longitude;
-      let label = fallbackLabel(latitude, longitude);
-
-      try {
-        const place = await resolveMapClickPlace({ latitude, longitude }, 16);
-        if (place) {
-          label =
-            [place.name, place.address]
-              .filter(Boolean)
-              .filter((value, index, all) => all.indexOf(value) === index)
-              .join(', ') || label;
-        }
-      } catch {
-        // Coordinates are still a valid real location if reverse lookup fails.
-      }
-
-      const next: MarketplaceDeliveryLocation = {
-        latitude,
-        longitude,
-        label,
-        accuracy: position.coords.accuracy ?? null,
-      };
-
-      setLocation(next);
-      return next;
-    } catch (reason: any) {
-      setError(
-        reason?.code === 1
-          ? 'Joylashuvga ruxsat berilmadi'
-          : 'Joylashuvni aniqlab bo‘lmadi',
-      );
-      return null;
-    } finally {
-      setIsLocating(false);
-    }
-  }, [setLocation]);
+    window.dispatchEvent(new CustomEvent(MARKETPLACE_LOCATION_PICKER_OPEN_EVENT));
+    // Picker UI darhol ochiladi; real geolocation faqat foydalanuvchi uning
+    // ichidagi "Joriy joylashuvim" tugmasini tanlaganda so'raladi.
+    requestAnimationFrame(() => setIsLocating(false));
+    return null;
+  }, []);
 
   return { location, isLocating, error, locate, setLocation };
 }
