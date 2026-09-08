@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
   ChevronRight,
+  Globe2,
   MapPin,
   Minus,
   Plus,
@@ -18,6 +19,7 @@ import {
   useCart, CartItem, getCartItemStock, getCartItemUnitPrice, getVariantOptionsLabel,
 } from '@/hooks/useMarketplace';
 import { CheckoutSheet } from '@/components/marketplace/CheckoutSheet';
+import { InternationalCheckoutSheet } from '@/components/marketplace/InternationalCheckoutSheet';
 import { formatPrice, getShippingCost } from '@/lib/marketplace';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -46,8 +48,18 @@ export function CartSheet({ open, onOpenChange }: CartSheetProps) {
   } = useCart();
   const { location, locate } = useMarketplaceDeliveryLocation();
   const [showCheckout, setShowCheckout] = useState(false);
+  const [showInternationalCheckout, setShowInternationalCheckout] = useState(false);
 
   const hasBlockingIssues = unavailableItems.length > 0;
+  const internationalEligibility = useMemo(() => {
+    const sellerIds = new Set(items.map(item => item.product?.seller_id).filter(Boolean));
+    const containsFood = items.some(item => Boolean((item.product as any)?.is_food));
+    return {
+      eligible: items.length > 0 && sellerIds.size === 1 && !containsFood && !hasBlockingIssues,
+      containsFood,
+      multiSeller: sellerIds.size > 1,
+    };
+  }, [items, hasBlockingIssues]);
 
   return (
     <>
@@ -81,12 +93,8 @@ export function CartSheet({ open, onOpenChange }: CartSheetProps) {
                 <ShoppingBag className="h-10 w-10 text-muted-foreground/30" />
               </div>
               <h3 className="mb-1 text-lg font-semibold">{marketplaceUz.cart.emptyTitle}</h3>
-              <p className="mb-5 max-w-xs text-sm text-muted-foreground">
-                {marketplaceUz.cart.emptyDescription}
-              </p>
-              <Button onClick={() => onOpenChange(false)} className="rounded-xl">
-                Xarid qilish
-              </Button>
+              <p className="mb-5 max-w-xs text-sm text-muted-foreground">{marketplaceUz.cart.emptyDescription}</p>
+              <Button onClick={() => onOpenChange(false)} className="rounded-xl">Xarid qilish</Button>
             </div>
           ) : (
             <>
@@ -95,14 +103,12 @@ export function CartSheet({ open, onOpenChange }: CartSheetProps) {
                   {hasBlockingIssues && (
                     <div className="flex items-start gap-2 rounded-xl bg-destructive/10 p-3 text-xs text-destructive">
                       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                      <span>
-                        {marketplaceUz.cart.unavailable(unavailableItems.length)}
-                      </span>
+                      <span>{marketplaceUz.cart.unavailable(unavailableItems.length)}</span>
                     </div>
                   )}
 
                   <AnimatePresence initial={false}>
-                    {items.map((item) => (
+                    {items.map(item => (
                       <motion.div
                         key={item.id}
                         layout
@@ -112,13 +118,8 @@ export function CartSheet({ open, onOpenChange }: CartSheetProps) {
                       >
                         <CartItemCard
                           item={item}
-                          onUpdateQuantity={async (qty) => {
-                            await updateQuantity(item.id, qty);
-                          }}
-                          onRemove={async () => {
-                            await removeFromCart(item.id);
-                            await refresh();
-                          }}
+                          onUpdateQuantity={async qty => { await updateQuantity(item.id, qty); }}
+                          onRemove={async () => { await removeFromCart(item.id); await refresh(); }}
                         />
                       </motion.div>
                     ))}
@@ -126,7 +127,7 @@ export function CartSheet({ open, onOpenChange }: CartSheetProps) {
                 </div>
               </ScrollArea>
 
-              <div className="space-y-4 border-t border-border/30 bg-background/95 p-4 backdrop-blur-xl">
+              <div className="space-y-4 border-t border-border/30 bg-background/98 p-4 backdrop-blur-xl">
                 <button
                   type="button"
                   onClick={() => void locate()}
@@ -139,43 +140,52 @@ export function CartSheet({ open, onOpenChange }: CartSheetProps) {
                     <MapPin className="h-4 w-4" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                      Yetkazish manzili
-                    </span>
-                    <span className="mt-0.5 block truncate text-xs font-semibold">
-                      {location?.label || 'Xaritadan manzil tanlang'}
-                    </span>
+                    <span className="block text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Yetkazish manzili</span>
+                    <span className="mt-0.5 block truncate text-xs font-semibold">{location?.label || 'Xaritadan manzil tanlang'}</span>
                   </span>
                   <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5" />
                 </button>
 
+                {!internationalEligibility.containsFood && (
+                  <button
+                    type="button"
+                    disabled={!internationalEligibility.eligible}
+                    onClick={() => {
+                      setShowInternationalCheckout(true);
+                      onOpenChange(false);
+                    }}
+                    className={cn(
+                      'group flex w-full min-w-0 items-center gap-3 rounded-2xl border p-3 text-left transition',
+                      internationalEligibility.eligible
+                        ? 'border-sky-500/25 bg-sky-500/[0.05] hover:bg-sky-500/[0.09]'
+                        : 'cursor-not-allowed border-border/40 bg-muted/15 opacity-55',
+                    )}
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600">
+                      <Globe2 className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-xs font-extrabold">Xalqaro yetkazish</span>
+                      <span className="mt-0.5 block text-[10px] leading-4 text-muted-foreground">
+                        {internationalEligibility.multiSeller
+                          ? 'Davlatlararo buyurtmada sotuvchilarni alohida rasmiylashtiring'
+                          : 'Avia · avto · dengiz · multimodal · bojxona taxmini'}
+                      </span>
+                    </span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5" />
+                  </button>
+                )}
+
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <ShieldCheck className="h-3.5 w-3.5 text-green-500" />
-                    <span>{marketplaceUz.cart.securePayment}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Truck className="h-3.5 w-3.5 text-blue-500" />
-                    <span>{marketplaceUz.cart.delivery}</span>
-                  </div>
+                  <div className="flex items-center gap-1"><ShieldCheck className="h-3.5 w-3.5 text-green-500" /><span>{marketplaceUz.cart.securePayment}</span></div>
+                  <div className="flex items-center gap-1"><Truck className="h-3.5 w-3.5 text-blue-500" /><span>{marketplaceUz.cart.delivery}</span></div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{marketplaceUz.cart.productsCount(itemCount)}</span>
-                    <span className="tabular-nums">{formatPrice(total, currency)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Yetkazib berish</span>
-                    <span className="tabular-nums">
-                      {shippingTotal > 0 ? formatPrice(shippingTotal, currency) : 'Bepul'}
-                    </span>
-                  </div>
+                  <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">{marketplaceUz.cart.productsCount(itemCount)}</span><span className="tabular-nums">{formatPrice(total, currency)}</span></div>
+                  <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">Mahalliy yetkazib berish</span><span className="tabular-nums">{shippingTotal > 0 ? formatPrice(shippingTotal, currency) : 'Bepul'}</span></div>
                   <div className="my-1 h-px bg-border/30" />
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{marketplaceUz.cart.total}</span>
-                    <span className="text-lg font-bold tabular-nums">{formatPrice(grandTotal, currency)}</span>
-                  </div>
+                  <div className="flex items-center justify-between"><span className="text-sm font-medium">{marketplaceUz.cart.total}</span><span className="text-lg font-bold tabular-nums">{formatPrice(grandTotal, currency)}</span></div>
                 </div>
 
                 <Button
@@ -183,7 +193,7 @@ export function CartSheet({ open, onOpenChange }: CartSheetProps) {
                   disabled={hasBlockingIssues}
                   onClick={() => { setShowCheckout(true); onOpenChange(false); }}
                 >
-                  {marketplaceUz.cart.checkout} — {formatPrice(grandTotal, currency)}
+                  Mahalliy checkout — {formatPrice(grandTotal, currency)}
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
@@ -191,10 +201,16 @@ export function CartSheet({ open, onOpenChange }: CartSheetProps) {
           )}
         </SheetContent>
       </Sheet>
+
       <CheckoutSheet
         open={showCheckout}
         onOpenChange={setShowCheckout}
         onSuccess={() => { setShowCheckout(false); refresh(); }}
+      />
+      <InternationalCheckoutSheet
+        open={showInternationalCheckout}
+        onOpenChange={setShowInternationalCheckout}
+        onSuccess={() => { setShowInternationalCheckout(false); refresh(); }}
       />
     </>
   );
@@ -223,85 +239,40 @@ function CartItemCard({ item, onUpdateQuantity, onRemove }: {
   const exceedsStock = !isSoldOut && item.quantity > stock;
 
   return (
-    <div
-      className={cn(
-        'flex gap-3 rounded-xl border p-3 transition-colors',
-        isSoldOut || exceedsStock ? 'border-destructive/40 bg-destructive/5' : 'border-border/20 bg-muted/20',
-      )}
-    >
+    <div className={cn('flex gap-3 rounded-xl border p-3 transition-colors', isSoldOut || exceedsStock ? 'border-destructive/40 bg-destructive/5' : 'border-border/20 bg-muted/20')}>
       <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-muted ring-1 ring-border/20">
         {image && !imageFailed ? (
-          <img
-            src={image}
-            alt={product.title}
-            className="h-full w-full object-cover"
-            loading="lazy"
-            decoding="async"
-            onError={() => setImageFailed(true)}
-          />
+          <img src={image} alt={product.title} className="h-full w-full object-cover" loading="lazy" decoding="async" onError={() => setImageFailed(true)} />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-muted-foreground/40">
-            <ShoppingBag className="h-5 w-5" />
-          </div>
+          <div className="flex h-full w-full items-center justify-center text-muted-foreground/40"><ShoppingBag className="h-5 w-5" /></div>
         )}
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col justify-between">
         <div>
           <h4 className="line-clamp-1 text-sm font-medium">{product.title}</h4>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
-            {product.seller?.business_name}
-          </p>
-          {variantLabel && (
-            <p className="mt-0.5 line-clamp-1 text-[11px] font-medium text-foreground/75">
-              {variantLabel}
-            </p>
-          )}
+          <p className="mt-0.5 text-[11px] text-muted-foreground">{product.seller?.business_name}</p>
+          {variantLabel && <p className="mt-0.5 line-clamp-1 text-[11px] font-medium text-foreground/75">{variantLabel}</p>}
           {isSoldOut ? (
             <p className="mt-0.5 text-[11px] font-medium text-destructive">{marketplaceUz.cart.soldOut}</p>
           ) : exceedsStock ? (
-            <p className="mt-0.5 text-[11px] font-medium text-destructive">
-              {marketplaceUz.cart.stockOnly(stock)}
-            </p>
+            <p className="mt-0.5 text-[11px] font-medium text-destructive">{marketplaceUz.cart.stockOnly(stock)}</p>
           ) : itemShipping > 0 ? (
-            <p className="mt-0.5 text-[11px] text-muted-foreground">
-              + {formatPrice(itemShipping, currency)} {marketplaceUz.cart.shippingSuffix}
-            </p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">+ {formatPrice(itemShipping, currency)} {marketplaceUz.cart.shippingSuffix}</p>
           ) : null}
         </div>
 
         <div className="mt-1.5 flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            <button
-              className="flex h-7 w-7 items-center justify-center rounded-lg border border-border/30 bg-muted/60 transition-colors hover:bg-muted"
-              onClick={() => onUpdateQuantity(item.quantity - 1)}
-              aria-label={marketplaceUz.cart.decrease}
-            >
-              <Minus className="h-3 w-3" />
-            </button>
+            <button className="flex h-7 w-7 items-center justify-center rounded-lg border border-border/30 bg-muted/60 transition-colors hover:bg-muted" onClick={() => onUpdateQuantity(item.quantity - 1)} aria-label={marketplaceUz.cart.decrease}><Minus className="h-3 w-3" /></button>
             <span className="w-7 text-center text-sm font-semibold tabular-nums">{item.quantity}</span>
-            <button
-              className="flex h-7 w-7 items-center justify-center rounded-lg border border-border/30 bg-muted/60 transition-colors hover:bg-muted disabled:opacity-40"
-              onClick={() => onUpdateQuantity(item.quantity + 1)}
-              disabled={item.quantity >= stock}
-              aria-label={marketplaceUz.cart.increase}
-            >
-              <Plus className="h-3 w-3" />
-            </button>
+            <button className="flex h-7 w-7 items-center justify-center rounded-lg border border-border/30 bg-muted/60 transition-colors hover:bg-muted disabled:opacity-40" onClick={() => onUpdateQuantity(item.quantity + 1)} disabled={item.quantity >= stock} aria-label={marketplaceUz.cart.increase}><Plus className="h-3 w-3" /></button>
           </div>
-          <span className="text-sm font-bold tabular-nums text-foreground">
-            {formatPrice(itemTotal, currency)}
-          </span>
+          <span className="text-sm font-bold tabular-nums text-foreground">{formatPrice(itemTotal, currency)}</span>
         </div>
       </div>
 
-      <button
-        className="self-start rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500"
-        onClick={onRemove}
-        aria-label={marketplaceUz.cart.remove}
-      >
-        <Trash2 className="h-4 w-4" />
-      </button>
+      <button className="self-start rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500" onClick={onRemove} aria-label={marketplaceUz.cart.remove}><Trash2 className="h-4 w-4" /></button>
     </div>
   );
 }
