@@ -27,6 +27,18 @@ function formatCount(value: number | null | undefined) {
   return `${compact >= 10 ? compact.toFixed(0) : compact.toFixed(1).replace(/\.0$/, '')}M`;
 }
 
+function VerifiedMerchantMark({ className }: { className?: string }) {
+  return (
+    <span
+      className="inline-flex shrink-0 items-center"
+      title="Alsamos tomonidan tasdiqlangan rasmiy sotuvchi"
+      aria-label="Tasdiqlangan rasmiy sotuvchi"
+    >
+      <ShieldCheck className={cn('h-3 w-3 text-sky-500', className)} />
+    </span>
+  );
+}
+
 export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }: ProductCardProps) {
   const { triggerHaptic } = useHapticFeedback();
   const { toggleLike } = useProductActions();
@@ -77,7 +89,6 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
     }
   };
 
-  /** Local category fallback; no external placeholder request. */
   const ImageFallback = () => (
     <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-muted to-muted/40 text-muted-foreground/40">
       <CategoryIcon
@@ -116,6 +127,11 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
               <span className="rounded-md bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white">{marketplaceUz.card.sold}</span>
             </div>
           )}
+          {hasDiscount && !isSoldOut && (
+            <span className="absolute left-1.5 top-1.5 rounded-md bg-red-500 px-1.5 py-0.5 text-[9px] font-extrabold text-white shadow">
+              −{discountPercent}%
+            </span>
+          )}
         </div>
         <div className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
           <div>
@@ -123,7 +139,7 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
             {product.seller && (
               <div className="mt-1 flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
                 <span className="truncate">{product.seller.business_name}</span>
-                {product.seller.is_verified && <ShieldCheck className="h-3 w-3 shrink-0 text-foreground" />}
+                {product.seller.is_verified && <VerifiedMerchantMark />}
                 {sellerRating > 0 && (
                   <span className="ml-1 inline-flex shrink-0 items-center gap-0.5">
                     <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
@@ -303,7 +319,7 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
         {product.seller && (
           <div className="mt-auto flex items-center gap-1 border-t border-border/30 pt-1 text-[11px] text-muted-foreground">
             <span className="min-w-0 flex-1 truncate">{product.seller.business_name}</span>
-            {product.seller.is_verified && <ShieldCheck className="h-3 w-3 shrink-0 text-foreground" />}
+            {product.seller.is_verified && <VerifiedMerchantMark />}
             {(product.seller.total_sales ?? 0) > 0 && (
               <span className="shrink-0 text-[9px]">{marketplaceUz.card.sales(product.seller.total_sales ?? 0)}</span>
             )}
