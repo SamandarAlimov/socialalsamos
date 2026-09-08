@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Store, Building2, User, Briefcase, ArrowRight, Check, Landmark } from 'lucide-react';
+import { Store, Building2, User, Briefcase, ArrowRight, Check, Landmark, UtensilsCrossed } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -24,6 +24,12 @@ const businessTypes = [
     id: 'business',
     ...copy.types.business,
     icon: Store,
+  },
+  {
+    id: 'restaurant',
+    title: 'Restoran / kafe',
+    description: 'Taomlar menyusi, kelgan buyurtmalar va tayyorlash jarayonini Marketplace ichida boshqaring.',
+    icon: UtensilsCrossed,
   },
   {
     id: 'enterprise',
@@ -56,11 +62,11 @@ export function BecomeSeller({ onSuccess }: BecomeSellerProps) {
   };
 
   return (
-    <div className="max-w-lg mx-auto p-6">
+    <div className="mx-auto max-w-lg p-6">
       {step === 1 && (
         <div className="space-y-6">
-          <div className="text-center space-y-2">
-            <div className="w-16 h-16 rounded-full bg-foreground/10 flex items-center justify-center mx-auto mb-4">
+          <div className="space-y-2 text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-foreground/10">
               <Briefcase className="h-8 w-8 text-foreground" />
             </div>
             <h2 className="text-2xl font-bold">{copy.startSelling}</h2>
@@ -73,17 +79,15 @@ export function BecomeSeller({ onSuccess }: BecomeSellerProps) {
               <Card
                 key={type.id}
                 className={cn(
-                  'p-4 cursor-pointer transition-all hover:border-foreground',
+                  'cursor-pointer p-4 transition-all hover:border-foreground',
                   businessType === type.id && 'border-foreground bg-foreground/5',
                 )}
                 onClick={() => setBusinessType(type.id)}
               >
                 <div className="flex items-center gap-4">
                   <div className={cn(
-                    'w-12 h-12 rounded-xl flex items-center justify-center',
-                    businessType === type.id
-                      ? 'bg-foreground text-background'
-                      : 'bg-muted',
+                    'flex h-12 w-12 items-center justify-center rounded-xl',
+                    businessType === type.id ? 'bg-foreground text-background' : 'bg-muted',
                   )}>
                     <type.icon className="h-6 w-6" />
                   </div>
@@ -97,6 +101,12 @@ export function BecomeSeller({ onSuccess }: BecomeSellerProps) {
             ))}
           </div>
 
+          {businessType === 'restaurant' && (
+            <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-3 text-xs leading-relaxed text-muted-foreground">
+              Restoran profili yaratilgach, Sotuvchi markazidagi Buyurtmalar oynasi avtomatik ravishda “Yangi → Tayyorlanmoqda → Tayyor / yo‘lda” rejimiga o‘tadi.
+            </div>
+          )}
+
           <Button className="w-full" size="lg" onClick={() => setStep(2)}>
             {copy.continue}
             <ArrowRight className="ml-2 h-4 w-4" />
@@ -106,17 +116,19 @@ export function BecomeSeller({ onSuccess }: BecomeSellerProps) {
 
       {step === 2 && (
         <div className="space-y-6">
-          <div className="text-center space-y-2">
-            <h2 className="text-2xl font-bold">{copy.shopDetails}</h2>
-            <p className="text-muted-foreground">{copy.shopDetailsDescription}</p>
+          <div className="space-y-2 text-center">
+            <h2 className="text-2xl font-bold">{businessType === 'restaurant' ? 'Restoran ma’lumotlari' : copy.shopDetails}</h2>
+            <p className="text-muted-foreground">
+              {businessType === 'restaurant' ? 'Restoran yoki kafe nomi va xaridorlarga ko‘rinadigan qisqa tavsifni kiriting.' : copy.shopDetailsDescription}
+            </p>
           </div>
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="businessName">{copy.shopName}</Label>
+              <Label htmlFor="businessName">{businessType === 'restaurant' ? 'Restoran nomi' : copy.shopName}</Label>
               <Input
                 id="businessName"
-                placeholder={copy.shopNamePlaceholder}
+                placeholder={businessType === 'restaurant' ? 'Masalan, Alsamos Kitchen' : copy.shopNamePlaceholder}
                 value={businessName}
                 onChange={event => setBusinessName(event.target.value)}
               />
@@ -126,7 +138,7 @@ export function BecomeSeller({ onSuccess }: BecomeSellerProps) {
               <Label htmlFor="description">{copy.descriptionOptional}</Label>
               <Textarea
                 id="description"
-                placeholder={copy.descriptionPlaceholder}
+                placeholder={businessType === 'restaurant' ? 'Oshxona turi, xizmat, halol menyu va boshqa muhim ma’lumotlar…' : copy.descriptionPlaceholder}
                 value={description}
                 onChange={event => setDescription(event.target.value)}
                 rows={4}
@@ -135,19 +147,13 @@ export function BecomeSeller({ onSuccess }: BecomeSellerProps) {
           </div>
 
           <div className="flex gap-3">
-            <Button variant="outline" className="flex-1" onClick={() => setStep(1)}>
-              {copy.back}
-            </Button>
-            <Button
-              className="flex-1"
-              onClick={handleSubmit}
-              disabled={!businessName.trim() || isLoading}
-            >
+            <Button variant="outline" className="flex-1" onClick={() => setStep(1)}>{copy.back}</Button>
+            <Button className="flex-1" onClick={handleSubmit} disabled={!businessName.trim() || isLoading}>
               {isLoading ? copy.creating : copy.createShop}
             </Button>
           </div>
 
-          <p className="text-xs text-center text-muted-foreground">{copy.terms}</p>
+          <p className="text-center text-xs text-muted-foreground">{copy.terms}</p>
         </div>
       )}
     </div>

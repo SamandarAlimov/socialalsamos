@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { ProductDetail } from '@/components/marketplace/ProductDetail';
 import { CartSheet } from '@/components/marketplace/CartSheet';
 import { CheckoutSheet } from '@/components/marketplace/CheckoutSheet';
+import { MarketplaceReviewComposer } from '@/components/marketplace/MarketplaceReviewComposer';
+import { MarketplaceReviewMediaWall } from '@/components/marketplace/MarketplaceReviewMediaWall';
 import { fetchMarketplaceProductById, Product, useCart } from '@/hooks/useMarketplace';
 import { marketplaceUz } from '@/i18n/marketplace';
 import { parseMarketplaceSelectionFromUrl } from '@/lib/marketplaceChat';
@@ -58,14 +60,11 @@ export default function MarketplaceProductPage() {
     const previousTitle = document.title;
     document.title = `${product.title} | Alsamos Bozor`;
 
-    const description =
-      product.description?.trim().slice(0, 180) ||
-      `${product.title} — Alsamos Bozor`;
+    const description = product.description?.trim().slice(0, 180) || `${product.title} — Alsamos Bozor`;
     const image = product.images?.[0]?.url || '';
-    const canonicalUrl =
-      typeof window !== 'undefined'
-        ? `${window.location.origin}/marketplace/product/${product.id}`
-        : '';
+    const canonicalUrl = typeof window !== 'undefined'
+      ? `${window.location.origin}/marketplace/product/${product.id}`
+      : '';
 
     const touched: Array<{ element: HTMLMetaElement; previous: string | null }> = [];
     const setMeta = (selector: string, attr: 'name' | 'property', key: string, value: string) => {
@@ -114,21 +113,16 @@ export default function MarketplaceProductPage() {
       description,
       image: product.images?.map(item => item.url) ?? [],
       sku: product.id,
-      brand: product.seller?.business_name
-        ? { '@type': 'Brand', name: product.seller.business_name }
-        : undefined,
+      brand: product.seller?.business_name ? { '@type': 'Brand', name: product.seller.business_name } : undefined,
       offers: {
         '@type': 'Offer',
         url: canonicalUrl,
         priceCurrency: product.currency || 'USD',
         price: product.price,
-        availability:
-          product.status === 'active' && Number(product.quantity) > 0
-            ? 'https://schema.org/InStock'
-            : 'https://schema.org/OutOfStock',
-        seller: product.seller?.business_name
-          ? { '@type': 'Organization', name: product.seller.business_name }
-          : undefined,
+        availability: product.status === 'active' && Number(product.quantity) > 0
+          ? 'https://schema.org/InStock'
+          : 'https://schema.org/OutOfStock',
+        seller: product.seller?.business_name ? { '@type': 'Organization', name: product.seller.business_name } : undefined,
       },
     });
     document.head.appendChild(jsonLd);
@@ -136,13 +130,9 @@ export default function MarketplaceProductPage() {
     return () => {
       document.title = previousTitle;
       touched.forEach(({ element, previous }) => {
-        if (element.dataset.marketplaceProduct === 'true' && previous == null) {
-          element.remove();
-        } else if (previous == null) {
-          element.removeAttribute('content');
-        } else {
-          element.setAttribute('content', previous);
-        }
+        if (element.dataset.marketplaceProduct === 'true' && previous == null) element.remove();
+        else if (previous == null) element.removeAttribute('content');
+        else element.setAttribute('content', previous);
       });
       if (canonical) {
         if (previousCanonical == null) canonical.remove();
@@ -205,9 +195,7 @@ export default function MarketplaceProductPage() {
         </div>
         <div>
           <h1 className="text-lg font-bold">{marketplaceUz.page.notFound}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Mahsulot o‘chirilgan, sotuvdan olingan yoki havola noto‘g‘ri bo‘lishi mumkin.
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">Mahsulot o‘chirilgan, sotuvdan olingan yoki havola noto‘g‘ri bo‘lishi mumkin.</p>
         </div>
         <Button variant="outline" className="rounded-xl" onClick={goBack}>
           <ArrowLeft className="mr-2 h-4 w-4" />
@@ -239,10 +227,7 @@ export default function MarketplaceProductPage() {
           });
           if (context.variantId) params.set('variant', context.variantId);
           if (context.variantSku) params.set('sku', context.variantSku);
-          if (Object.keys(context.options).length > 0) {
-            params.set('opts', JSON.stringify(context.options));
-          }
-
+          if (Object.keys(context.options).length > 0) params.set('opts', JSON.stringify(context.options));
           navigate(`/marketplace/chat?${params.toString()}`);
         }}
         onBuyNow={async () => {
@@ -253,10 +238,11 @@ export default function MarketplaceProductPage() {
         onOpenCart={() => setShowCart(true)}
         onBrowseMarketplace={() => navigate('/marketplace')}
         onBrowseCategory={(slug) => navigate(`/marketplace?category=${slug}`)}
-        onProductSelect={(nextProduct) => {
-          navigate(`/marketplace/product/${nextProduct.id}`);
-        }}
+        onProductSelect={(nextProduct) => navigate(`/marketplace/product/${nextProduct.id}`)}
       />
+
+      <MarketplaceReviewComposer productId={product.id} />
+      <MarketplaceReviewMediaWall productId={product.id} />
 
       {productMapTarget && (
         <div className="pointer-events-none fixed bottom-24 right-4 z-40 md:bottom-6 md:right-6">

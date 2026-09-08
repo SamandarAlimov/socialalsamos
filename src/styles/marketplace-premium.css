@@ -43,7 +43,6 @@
   scroll-snap-align: start;
 }
 
-/* Phones use a rail, tablets use a calm wrapping catalogue grid. */
 @media (min-width: 640px) and (max-width: 1023px) {
   .marketplace-neutral section[class~="lg:hidden"] > .marketplace-x-rail {
     display: grid !important;
@@ -73,7 +72,6 @@
   }
 }
 
-/* Desktop catalogue belongs to the page scroll, never to a nested mini-window. */
 @media (min-width: 1024px) {
   .marketplace-neutral aside {
     overflow-x: hidden;
@@ -92,7 +90,6 @@
   }
 }
 
-/* Product detail containment: long prices, seller names and variants must shrink. */
 .marketplace-neutral > .relative.min-h-full {
   width: 100%;
   min-width: 0;
@@ -105,13 +102,18 @@
   max-width: 100%;
 }
 
-/*
- * Views are already shown next to likes/rating under the title. A second eye
- * floating over the product photo is visual noise, so media stays clean and
- * the single canonical counter lives with the product metadata.
- */
+/* Views already live beside likes/rating, so the photo stays visually clean. */
 .marketplace-neutral > .relative.min-h-full span.absolute.right-3.top-16 {
   display: none !important;
+}
+
+/* Replace the legacy text-only eligible review form with the media composer portal. */
+.marketplace-neutral [data-marketplace-review-host="true"] > * {
+  display: none !important;
+}
+
+.marketplace-neutral [data-marketplace-review-host="true"] > [data-marketplace-review-composer="premium"] {
+  display: block !important;
 }
 
 @media (max-width: 767px) {
@@ -125,7 +127,6 @@
     max-width: 100%;
   }
 
-  /* Premium commerce typography: visible at a glance without billboard sizing. */
   .marketplace-neutral > .relative.min-h-full h1.text-xl.font-bold {
     font-size: clamp(1.08rem, 4.9vw, 1.3rem) !important;
     line-height: 1.28 !important;

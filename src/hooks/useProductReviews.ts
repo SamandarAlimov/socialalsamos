@@ -3,6 +3,18 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import db from '@/lib/supabaseAny';
 import { marketplaceUz } from '@/i18n/marketplace';
+import type { ProductMediaDraft } from '@/lib/productMedia';
+
+export const MARKETPLACE_REVIEW_UPDATED_EVENT = 'alsamos:marketplace:review-updated';
+
+export interface ProductReviewMedia {
+  id: string;
+  url: string;
+  mediaType: 'image' | 'video';
+  thumbnailUrl: string | null;
+  durationSeconds: number | null;
+  position: number;
+}
 
 export interface ProductReview {
   id: string;
@@ -14,6 +26,7 @@ export interface ProductReview {
   content: string | null;
   created_at: string;
   updated_at: string;
+  media?: ProductReviewMedia[];
   user?: {
     username: string | null;
     display_name: string | null;
@@ -29,6 +42,18 @@ export type ReviewEligibility =
   | 'not_delivered';
 
 const PAGE_SIZE = 5;
+const MAX_REVIEW_MEDIA = 5;
+
+function normalizeReviewMedia(row: any): ProductReviewMedia {
+  return {
+    id: String(row.id),
+    url: String(row.url || ''),
+    mediaType: row.media_type === 'video' ? 'video' : 'image',
+    thumbnailUrl: row.thumbnail_url || null,
+    durationSeconds: row.duration_seconds == null ? null : Number(row.duration_seconds),
+    position: Number(row.position || 0),
+  };
+}
 
 export function useProductReviews(productId?: string | null) {
   const { user } = useAuth();
@@ -48,10 +73,7 @@ export function useProductReviews(productId?: string | null) {
       return;
     }
 
-    const { data, error } = await db.rpc('get_product_review_summary', {
-      _product_id: productId,
-    });
-
+    const { data, error } = await db.rpc('get_product_review_summary', { _product_id: productId });
     if (error) {
       console.warn('Product review summary failed:', error);
       return;
@@ -88,10 +110,35 @@ export function useProductReviews(productId?: string | null) {
     if (error) {
       console.warn('Product reviews failed:', error);
       setReviews([]);
-    } else {
-      setReviews((data ?? []) as ProductReview[]);
-      setReviewCount(Number(count ?? 0));
+      setIsLoading(false);
+      return;
     }
+
+    const baseReviews = (data ?? []) as ProductReview[];
+    const reviewIds = baseReviews.map(review => review.id);
+    let mediaByReview = new Map<string, ProductReviewMedia[]>();
+
+    if (reviewIds.length > 0) {
+      const mediaResult = await db
+        .from('product_review_media')
+        .select('id, review_id, media_type, url, thumbnail_url, duration_seconds, position')
+        .in('review_id', reviewIds)
+        .order('position', { ascending: true });
+
+      if (!mediaResult.error) {
+        mediaByReview = (mediaResult.data ?? []).reduce((map: Map<string, ProductReviewMedia[]>, row: any) => {
+          const current = map.get(row.review_id) ?? [];
+          current.push(normalizeReviewMedia(row));
+          map.set(row.review_id, current);
+          return map;
+        }, new Map<string, ProductReviewMedia[]>());
+      } else if (mediaResult.error.code !== '42P01') {
+        console.warn('Product review media failed:', mediaResult.error);
+      }
+    }
+
+    setReviews(baseReviews.map(review => ({ ...review, media: mediaByReview.get(review.id) ?? [] })));
+    setReviewCount(Number(count ?? 0));
     setIsLoading(false);
   }, [page, productId]);
 
@@ -108,14 +155,8 @@ export function useProductReviews(productId?: string | null) {
     }
 
     setEligibility('loading');
-
     const [existingResult, deliveredResult] = await Promise.all([
-      db
-        .from('product_reviews')
-        .select('id')
-        .eq('product_id', productId)
-        .eq('user_id', user.id)
-        .maybeSingle(),
+      db.from('product_reviews').select('id').eq('product_id', productId).eq('user_id', user.id).maybeSingle(),
       db
         .from('order_items')
         .select('order_id, order:orders!inner(id, buyer_id, status)')
@@ -131,7 +172,6 @@ export function useProductReviews(productId?: string | null) {
       setEligibleOrderId(null);
       return;
     }
-
     if (deliveredResult.data?.order_id) {
       setEligibleOrderId(deliveredResult.data.order_id);
       setEligibility('eligible');
@@ -155,10 +195,21 @@ export function useProductReviews(productId?: string | null) {
     void checkEligibility();
   }, [checkEligibility]);
 
+  useEffect(() => {
+    const handleReviewUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ productId?: string }>).detail;
+      if (detail?.productId && detail.productId !== productId) return;
+      void Promise.all([fetchSummary(), fetchReviews(page), checkEligibility()]);
+    };
+    window.addEventListener(MARKETPLACE_REVIEW_UPDATED_EVENT, handleReviewUpdated);
+    return () => window.removeEventListener(MARKETPLACE_REVIEW_UPDATED_EVENT, handleReviewUpdated);
+  }, [checkEligibility, fetchReviews, fetchSummary, page, productId]);
+
   const createReview = useCallback(async (
     rating: number,
     title: string,
     content: string,
+    media: ProductMediaDraft[] = [],
   ): Promise<boolean> => {
     if (!user || !productId || !eligibleOrderId) {
       toast({
@@ -170,29 +221,61 @@ export function useProductReviews(productId?: string | null) {
     }
 
     const safeRating = Math.min(5, Math.max(1, Math.round(rating)));
-    const { error } = await db.from('product_reviews').insert({
-      product_id: productId,
-      user_id: user.id,
-      order_id: eligibleOrderId,
-      rating: safeRating,
-      title: title.trim() || null,
-      content: content.trim() || null,
-    });
+    const { data: created, error } = await db
+      .from('product_reviews')
+      .insert({
+        product_id: productId,
+        user_id: user.id,
+        order_id: eligibleOrderId,
+        rating: safeRating,
+        title: title.trim() || null,
+        content: content.trim() || null,
+      })
+      .select('id')
+      .single();
 
-    if (error) {
-      const duplicate = error.code === '23505';
+    if (error || !created?.id) {
+      const duplicate = error?.code === '23505';
       toast({
         title: duplicate ? marketplaceUz.reviewActions.duplicateTitle : marketplaceUz.reviewActions.saveFailed,
-        description: duplicate
-          ? marketplaceUz.reviewActions.duplicateDescription
-          : marketplaceUz.reviewActions.retry,
+        description: duplicate ? marketplaceUz.reviewActions.duplicateDescription : marketplaceUz.reviewActions.retry,
         variant: 'destructive',
       });
       if (duplicate) setEligibility('already_reviewed');
       return false;
     }
 
-    toast({ title: marketplaceUz.reviewActions.published });
+    const safeMedia = media
+      .slice(0, MAX_REVIEW_MEDIA)
+      .filter((item, index, list) => item.mediaType !== 'video' || list.findIndex(candidate => candidate.mediaType === 'video') === index);
+
+    if (safeMedia.length > 0) {
+      const { error: mediaError } = await db.from('product_review_media').insert(
+        safeMedia.map((item, index) => ({
+          review_id: created.id,
+          user_id: user.id,
+          media_type: item.mediaType,
+          url: item.url,
+          thumbnail_url: item.thumbnailUrl,
+          duration_seconds: item.durationSeconds,
+          position: index,
+        })),
+      );
+
+      if (mediaError) {
+        console.warn('Review media save failed:', mediaError);
+        toast({
+          title: 'Sharh saqlandi',
+          description: 'Sharh e’lon qilindi, lekin rasm/video to‘liq biriktirilmadi.',
+          variant: 'destructive',
+        });
+      } else {
+        toast({ title: marketplaceUz.reviewActions.published, description: `${safeMedia.length} ta media bilan e’lon qilindi.` });
+      }
+    } else {
+      toast({ title: marketplaceUz.reviewActions.published });
+    }
+
     setEligibility('already_reviewed');
     setEligibleOrderId(null);
     setPage(0);
