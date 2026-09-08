@@ -1,38 +1,30 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { MediaFrame } from '@/components/media/MediaFrame';
 import { ImageLightbox } from '@/components/media/ImageLightbox';
 import { resolveTouchAxis, type TouchAxis } from '@/lib/touchGesture';
-import { uniqueMediaCandidates } from '@/lib/mediaRecovery';
 
 interface PostMediaCarouselProps {
-  /** Primary URL for each logical media item. Kept for backward compatibility. */
   mediaUrls: string[];
-  /** Ordered fallback URLs for each logical media item. */
-  mediaCandidates?: string[][];
   mediaType: string;
   mediaKinds?: Array<'image' | 'video'>;
   posters?: Array<string | null | undefined>;
   altTexts?: Array<string | null | undefined>;
   overlays?: Array<ReactNode>;
-  onRetry?: () => void;
 }
 
 export function PostMediaCarousel({
   mediaUrls,
-  mediaCandidates,
   mediaType,
   mediaKinds,
   posters,
   altTexts,
   overlays,
-  onRetry,
 }: PostMediaCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [candidateIndexes, setCandidateIndexes] = useState<Record<number, number>>({});
   const [ratios, setRatios] = useState<Record<number, number>>({});
   const [failedIndexes, setFailedIndexes] = useState<Set<number>>(() => new Set());
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -45,30 +37,9 @@ export function PostMediaCarousel({
   const isReel = mediaType === 'reel' || mediaType === 'short';
   const isVideoType = mediaType === 'video' || isReel;
 
-  const candidateSets = useMemo(
-    () =>
-      mediaUrls.map((url, index) =>
-        uniqueMediaCandidates([...(mediaCandidates?.[index] ?? []), url]),
-      ),
-    [mediaCandidates, mediaUrls],
-  );
-  const mediaSourceKey = useMemo(
-    () => candidateSets.map((items) => items.join('\u0001')).join('\u0002'),
-    [candidateSets],
-  );
-
-  const activeUrlAt = useCallback(
-    (index: number) => {
-      const candidates = candidateSets[index] ?? [];
-      const candidateIndex = candidateIndexes[index] ?? 0;
-      return candidates[candidateIndex] ?? candidates[0] ?? mediaUrls[index] ?? '';
-    },
-    [candidateIndexes, candidateSets, mediaUrls],
-  );
-
   const isVideoAt = useCallback(
     (index: number) => {
-      const url = activeUrlAt(index) || mediaUrls[index] || '';
+      const url = mediaUrls[index] ?? '';
       if (mediaKinds?.[index] === 'video') return true;
       if (mediaKinds?.[index] === 'image') return false;
 
@@ -77,24 +48,19 @@ export function PostMediaCarousel({
         /\.(mp4|webm|mov|m4v|ogv|mkv|avi|3gp|hevc)(?:[?#].*)?$/i.test(url)
       );
     },
-    [activeUrlAt, isVideoType, mediaKinds, mediaUrls],
+    [isVideoType, mediaKinds, mediaUrls],
   );
 
   const imageEntries = useMemo(
     () =>
       mediaUrls
-        .map((_, sourceIndex) => ({
-          url: activeUrlAt(sourceIndex),
+        .map((url, sourceIndex) => ({
+          url,
           sourceIndex,
           alt: altTexts?.[sourceIndex] || `Post media ${sourceIndex + 1}`,
         }))
-        .filter(
-          (item) =>
-            Boolean(item.url) &&
-            !failedIndexes.has(item.sourceIndex) &&
-            !isVideoAt(item.sourceIndex),
-        ),
-    [activeUrlAt, altTexts, failedIndexes, isVideoAt, mediaUrls],
+        .filter((item) => !isVideoAt(item.sourceIndex)),
+    [altTexts, isVideoAt, mediaUrls],
   );
 
   const openImageViewer = useCallback(
@@ -110,76 +76,41 @@ export function PostMediaCarousel({
     [imageEntries],
   );
 
-  const adjacentIndex = (from: number, direction: -1 | 1) => {
-    const index = from + direction;
-    return index >= 0 && index < mediaUrls.length ? index : -1;
-  };
-
   const goToPrevious = (event: React.MouseEvent) => {
     event.stopPropagation();
-    const previous = adjacentIndex(currentIndex, -1);
-    if (previous >= 0) setCurrentIndex(previous);
+    setCurrentIndex((previous) => (previous > 0 ? previous - 1 : previous));
   };
 
   const goToNext = (event: React.MouseEvent) => {
     event.stopPropagation();
-    const next = adjacentIndex(currentIndex, 1);
-    if (next >= 0) setCurrentIndex(next);
+    setCurrentIndex((previous) =>
+      previous < mediaUrls.length - 1 ? previous + 1 : previous,
+    );
   };
 
-  const currentMedia = activeUrlAt(currentIndex);
-  const currentCandidateIndex = candidateIndexes[currentIndex] ?? 0;
+  const currentMedia = mediaUrls[currentIndex] ?? '';
   const isCurrentVideo = currentMedia ? isVideoAt(currentIndex) : false;
   const naturalRatio = ratios[currentIndex] ?? (isReel ? 9 / 16 : undefined);
-  const currentFailed = failedIndexes.has(currentIndex);
-
-  const advanceCurrentCandidate = useCallback(() => {
-    const candidates = candidateSets[currentIndex] ?? [];
-    const nextCandidateIndex = (candidateIndexes[currentIndex] ?? 0) + 1;
-
-    if (nextCandidateIndex < candidates.length) {
-      setCandidateIndexes((previous) => ({
-        ...previous,
-        [currentIndex]: nextCandidateIndex,
-      }));
-      return;
-    }
-
-    setFailedIndexes((previous) => {
-      if (previous.has(currentIndex)) return previous;
-      const next = new Set(previous);
-      next.add(currentIndex);
-      return next;
-    });
-  }, [candidateIndexes, candidateSets, currentIndex]);
-
-  const retryAll = useCallback(() => {
-    setCandidateIndexes({});
-    setFailedIndexes(new Set());
-    setRatios({});
-    // A refreshed signed URL must not move the viewer to another album item.
-    setCurrentIndex((previous) => Math.min(previous, Math.max(0, mediaUrls.length - 1)));
-  }, [mediaUrls.length]);
 
   useEffect(() => {
-    retryAll();
-  }, [mediaSourceKey, retryAll]);
+    setFailedIndexes(new Set());
+    setCurrentIndex(0);
+  }, [mediaUrls.join('|')]);
 
-  const retryCurrent = () => {
-    setCandidateIndexes((previous) => ({ ...previous, [currentIndex]: 0 }));
-    setFailedIndexes((previous) => {
-      const next = new Set(previous);
-      next.delete(currentIndex);
-      return next;
-    });
-    onRetry?.();
-  };
+  useEffect(() => {
+    if (!failedIndexes.has(currentIndex)) return;
+
+    const nextIndex = mediaUrls.findIndex((_, index) => !failedIndexes.has(index));
+    if (nextIndex >= 0 && nextIndex !== currentIndex) {
+      setCurrentIndex(nextIndex);
+    }
+  }, [currentIndex, failedIndexes, mediaUrls]);
 
   // Chrome/Edge touchpad pinch is exposed as Ctrl+wheel. On a post image that
   // gesture should open the media viewer instead of zooming the whole website.
   useEffect(() => {
     const node = mediaFrameRef.current;
-    if (!node || currentFailed || isCurrentVideo || !currentMedia) return;
+    if (!node || isCurrentVideo || !currentMedia) return;
 
     const onWheel = (event: WheelEvent) => {
       if (!event.ctrlKey && !event.metaKey) return;
@@ -190,9 +121,11 @@ export function PostMediaCarousel({
 
     node.addEventListener('wheel', onWheel, { passive: false });
     return () => node.removeEventListener('wheel', onWheel);
-  }, [currentFailed, currentIndex, currentMedia, isCurrentVideo, openImageViewer]);
+  }, [currentIndex, currentMedia, isCurrentVideo, openImageViewer]);
 
   if (mediaUrls.length === 0) return null;
+
+  if (failedIndexes.size >= mediaUrls.length) return null;
 
   const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
     didSwipeRef.current = false;
@@ -233,6 +166,8 @@ export function PostMediaCarousel({
       if (swipeAxisRef.current === 'unknown') return;
     }
 
+    // Faqat carouselning real gorizontal swipe'i parent page gesture'idan
+    // ajratiladi. Vertikal gesture native feed scroll bo'lib qoladi.
     if (swipeAxisRef.current === 'horizontal') {
       event.stopPropagation();
     }
@@ -255,8 +190,11 @@ export function PostMediaCarousel({
 
       if (Math.abs(dx) >= 44 && elapsed < 900) {
         didSwipeRef.current = true;
-        const target = adjacentIndex(currentIndex, dx < 0 ? 1 : -1);
-        if (target >= 0) setCurrentIndex(target);
+        if (dx < 0 && currentIndex < mediaUrls.length - 1) {
+          setCurrentIndex((index) => index + 1);
+        } else if (dx > 0 && currentIndex > 0) {
+          setCurrentIndex((index) => index - 1);
+        }
       }
     }
 
@@ -270,21 +208,17 @@ export function PostMediaCarousel({
     didSwipeRef.current = false;
   };
 
-  const previousAvailable = adjacentIndex(currentIndex, -1);
-  const nextAvailable = adjacentIndex(currentIndex, 1);
-
   return (
     <div className="relative group w-full">
+      {/* Main Media Display */}
       <MediaFrame
         containerRef={mediaFrameRef}
         variant={isReel ? 'reel' : 'feed'}
         naturalRatio={naturalRatio}
         backdropUrl={
-          currentFailed
-            ? null
-            : isCurrentVideo
-              ? posters?.[currentIndex] ?? null
-              : currentMedia || null
+          isCurrentVideo
+            ? posters?.[currentIndex] ?? null
+            : currentMedia || null
         }
         className="touch-pan-y"
         onTouchStart={handleTouchStart}
@@ -292,27 +226,23 @@ export function PostMediaCarousel({
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchCancel}
       >
-        {currentFailed ? (
-          <div
-            className="relative z-[1] flex h-full min-h-52 w-full flex-col items-center justify-center gap-3 bg-muted px-12 py-8 text-center"
-            onClick={(event) => event.stopPropagation()}
-            role="status"
-          >
-            <p className="text-sm font-semibold text-foreground">Media vaqtincha ochilmadi</p>
-            <Button type="button" variant="secondary" size="sm" onClick={retryCurrent}>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Qayta urinish
-            </Button>
-          </div>
-        ) : isCurrentVideo ? (
+        {isCurrentVideo ? (
           <VideoPlayer
-            key={`${currentIndex}:${currentCandidateIndex}:${currentMedia}`}
+            key={currentMedia}
             src={currentMedia}
             poster={posters?.[currentIndex] ?? undefined}
             aspectMode="auto"
+            muted={true}
             autoPlay={false}
             className="rounded-none w-full h-full"
-            onPlaybackError={advanceCurrentCandidate}
+            onPlaybackError={() => {
+              setFailedIndexes((previous) => {
+                if (previous.has(currentIndex)) return previous;
+                const next = new Set(previous);
+                next.add(currentIndex);
+                return next;
+              });
+            }}
             onAspectRatio={(ratio) => {
               if (ratio > 0 && Number.isFinite(ratio)) {
                 setRatios((prev) => ({ ...prev, [currentIndex]: ratio }));
@@ -334,19 +264,19 @@ export function PostMediaCarousel({
             }}
           >
             <img
-              key={`${currentIndex}:${currentCandidateIndex}:${currentMedia}`}
+              key={currentMedia}
               src={currentMedia}
               alt={altTexts?.[currentIndex] || `Post media ${currentIndex + 1}`}
               className="h-full w-full select-none object-contain"
               loading="lazy"
               draggable={false}
-              onError={advanceCurrentCandidate}
               onLoad={(event) => {
                 const image = event.currentTarget;
                 if (image.naturalWidth && image.naturalHeight) {
                   setRatios((previous) => ({
                     ...previous,
-                    [currentIndex]: image.naturalWidth / image.naturalHeight,
+                    [currentIndex]:
+                      image.naturalWidth / image.naturalHeight,
                   }));
                 }
               }}
@@ -356,26 +286,25 @@ export function PostMediaCarousel({
 
         {overlays?.[currentIndex]}
 
+        {/* Navigation Arrows - Only show if multiple media and not zoomed */}
         {mediaUrls.length > 1 && (
           <>
-            {previousAvailable >= 0 && (
+            {currentIndex > 0 && (
               <Button
                 variant="secondary"
                 size="icon"
                 className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity bg-black/50 backdrop-blur-sm border-0 hover:bg-black/70 shadow-lg z-10"
                 onClick={goToPrevious}
-                aria-label="Oldingi media"
               >
                 <ChevronLeft className="h-5 w-5 text-white" />
               </Button>
             )}
-            {nextAvailable >= 0 && (
+            {currentIndex < mediaUrls.length - 1 && (
               <Button
                 variant="secondary"
                 size="icon"
                 className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity bg-black/50 backdrop-blur-sm border-0 hover:bg-black/70 shadow-lg z-10"
                 onClick={goToNext}
-                aria-label="Keyingi media"
               >
                 <ChevronRight className="h-5 w-5 text-white" />
               </Button>
@@ -383,11 +312,13 @@ export function PostMediaCarousel({
           </>
         )}
 
+        {/* Media Counter */}
         {mediaUrls.length > 1 && (
           <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md text-white text-xs px-2.5 py-1 rounded-full font-medium z-10">
             {currentIndex + 1}/{mediaUrls.length}
           </div>
         )}
+
       </MediaFrame>
 
       <ImageLightbox
@@ -400,23 +331,21 @@ export function PostMediaCarousel({
         onClose={() => setLightboxOpen(false)}
       />
 
+      {/* Dot Indicators - Only show if multiple media */}
       {mediaUrls.length > 1 && (
         <div className="flex justify-center gap-1.5 py-3">
           {mediaUrls.map((_, index) => (
             <button
               key={index}
-              type="button"
-              aria-label={`${index + 1}-media`}
-              aria-current={index === currentIndex ? 'true' : undefined}
-              onClick={(event) => {
-                event.stopPropagation();
+              onClick={(e) => {
+                e.stopPropagation();
                 setCurrentIndex(index);
               }}
               className={cn(
-                'h-1.5 rounded-full transition-all duration-300',
+                "h-1.5 rounded-full transition-all duration-300",
                 index === currentIndex
-                  ? 'w-5 bg-foreground/80'
-                  : 'w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/50',
+                  ? "w-5 bg-foreground/80"
+                  : "w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/50"
               )}
             />
           ))}
