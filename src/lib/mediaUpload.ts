@@ -11,12 +11,15 @@ import { uniqueMediaCandidates } from '@/lib/mediaRecovery';
 /**
  * Alsamos media arxitekturasi.
  *
- * Yangi binary fayllar faqat api.alsamos.com orqali alohida MinIO/S3 media
- * serveriga yoziladi. Supabase Storage bu modulda faqat tarixiy obyektlarni
- * o'qish/sign qilish uchun qoladi; yangi upload uchun yashirin fallback yo'q.
+ * Yangi binary fayllar uchun asosiy yo'l api.alsamos.com orqali alohida
+ * MinIO/S3 media serveridir. Shu servis vaqtincha ishlamasa, authenticated
+ * client mavjud `media` / `media-private` Supabase Storage bucketlariga
+ * user-prefixed kalit bilan failover qiladi. Bu fallback 20260902000000
+ * migrationdagi bucket/RLS kontrakti bilan bir xil xavfsizlik chegarasini
+ * saqlaydi va media serverdagi 5xx/timeout sabab chat yozuvini yo'qotmaydi.
  */
 
-/** Eski Supabase Storage bucketlari — faqat legacy compatibility uchun. */
+/** Supabase Storage bucketlari — legacy read va media-server failover uchun. */
 export const MEDIA_BUCKET = 'media';
 export const PRIVATE_MEDIA_BUCKET = 'media-private';
 const PUBLIC_BUCKETS = new Set([MEDIA_BUCKET]);
@@ -418,7 +421,7 @@ type ExternalPresignResponse = {
   visibility?: 'public' | 'private';
 };
 
-/** Asosiy va yagona yangi-upload yo'li: api.alsamos.com -> MinIO/S3. */
+/** Asosiy yangi-upload yo'li: api.alsamos.com -> MinIO/S3. */
 async function uploadViaExternalApi(
   file: File | Blob,
   token: string,
@@ -489,6 +492,88 @@ async function uploadViaExternalApi(
   };
 }
 
+function safeStorageSegment(value: string, fallback: string): string {
+  const leaf = value.replace(/\\/g, '/').split('/').pop()?.trim() || '';
+  const safe = leaf
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 140);
+  return safe || fallback;
+}
+
+function uploadNonce(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+  } catch {
+    // randomUUID is an enhancement; timestamp/random fallback remains unique enough.
+  }
+  return Math.random().toString(36).slice(2, 12);
+}
+
+/**
+ * Availability fallback for the dedicated media service.
+ *
+ * The storage migration requires the first path segment to equal auth.uid().
+ * Keeping that invariant here means the browser can fail over without a
+ * service-role key and without widening Storage RLS.
+ */
+async function uploadViaSupabaseStorage(
+  file: File | Blob,
+  userId: string,
+  filename: string,
+  contentType: string,
+  options: MediaUploadOptions,
+): Promise<MediaUploadResult> {
+  const visibility: MediaVisibility = options.visibility ?? 'public';
+  const bucket = bucketForMediaVisibility(visibility);
+  const safeType = safeStorageSegment(options.type || 'file', 'file');
+  const safeFilename = safeStorageSegment(filename, 'upload.bin');
+  const key = `${userId}/${safeType}/${Date.now()}-${uploadNonce()}-${safeFilename}`;
+
+  const { error } = await supabase.storage.from(bucket).upload(key, file, {
+    contentType,
+    cacheControl: visibility === 'public' ? '31536000' : '0',
+    upsert: false,
+  });
+
+  if (error) {
+    throw new Error(`Supabase Storage upload failed: ${error.message}`);
+  }
+
+  if (visibility === 'public') {
+    const publicUrl = supabase.storage.from(bucket).getPublicUrl(key).data.publicUrl;
+    if (!publicUrl) throw new Error('Supabase Storage public URL qaytarmadi');
+
+    return {
+      url: publicUrl,
+      storageUrl: publicUrl,
+      key,
+      bucket,
+      type: contentType,
+      name: filename,
+      size: file.size,
+    };
+  }
+
+  const storageUrl = makeStorageReference(bucket, key);
+  const signedUrl = await tryCreateSignedSupabaseUrl(bucket, key, 3600);
+  if (!signedUrl) {
+    throw new Error('Supabase Storage private media uchun signed URL qaytarmadi');
+  }
+
+  return {
+    url: signedUrl,
+    storageUrl,
+    key,
+    bucket,
+    type: contentType,
+    name: filename,
+    size: file.size,
+  };
+}
+
 export async function uploadMedia(
   file: File | Blob,
   options: MediaUploadOptions = {},
@@ -496,13 +581,14 @@ export async function uploadMedia(
   const { data } = await supabase.auth.getSession();
   const session = data.session;
 
-  if (!session?.access_token) {
+  if (!session?.access_token || !session.user?.id) {
     throw new Error('Sessiya topilmadi - qaytadan tizimga kiring');
   }
 
   const filename = options.filename || (file instanceof File ? file.name : 'upload.bin');
   const contentType = file.type || 'application/octet-stream';
   const visibility: MediaVisibility = options.visibility ?? 'public';
+  let primaryFailure = '';
 
   try {
     return await uploadViaExternalApi(
@@ -513,9 +599,26 @@ export async function uploadMedia(
       { ...options, visibility },
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    primaryFailure = error instanceof Error ? error.message : String(error);
+    console.warn(
+      '[MediaUpload] Primary media service failed; using authenticated Supabase Storage fallback.',
+      primaryFailure,
+    );
+  }
+
+  try {
+    return await uploadViaSupabaseStorage(
+      file,
+      session.user.id,
+      filename,
+      contentType,
+      { ...options, visibility },
+    );
+  } catch (fallbackError) {
+    const fallbackFailure =
+      fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
     throw new Error(
-      `Alsamos media serverga yuklab bo'lmadi. Fayl Supabase Storage'ga ko'chirilmadi: ${message}`,
+      `Media yuklash muvaffaqiyatsiz. Alsamos media server: ${primaryFailure}. Supabase fallback: ${fallbackFailure}`,
     );
   }
 }
