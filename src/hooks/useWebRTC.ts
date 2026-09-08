@@ -388,7 +388,7 @@ export function useWebRTC(roomId: string | null) {
           } catch (e) {
             // InvalidState can legitimately happen when a remote offer wins a
             // glare race before our queued task reaches setLocalDescription.
-            if (pc.signalingState !== "closed") {
+            if (pc.connectionState !== "closed") {
               console.error("[WebRTC] negotiationneeded error", e);
             }
           } finally {
