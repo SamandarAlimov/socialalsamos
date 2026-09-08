@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { MessageCircle, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -23,7 +24,7 @@ interface VideoCommentsSheetProps {
   commentsCount: number;
 }
 
-const MOBILE_COMMENT_SNAP_POINTS = [0.66, 0.98];
+const MOBILE_COMMENT_SNAP_POINTS = [0.64, 0.98];
 
 function DesktopHeader({ commentsCount, onClose }: { commentsCount: number; onClose: () => void }) {
   return (
@@ -63,6 +64,25 @@ export function VideoCommentsSheet({
 }: VideoCommentsSheetProps) {
   const isMobile = useIsMobile();
 
+  useEffect(() => {
+    if (!isOpen || typeof document === 'undefined') return;
+
+    const themeMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    const previousThemeColor = themeMeta?.getAttribute('content') ?? null;
+    const previousBodyBackground = document.body.style.backgroundColor;
+    const previousHtmlBackground = document.documentElement.style.backgroundColor;
+
+    themeMeta?.setAttribute('content', '#000000');
+    document.body.style.backgroundColor = '#000000';
+    document.documentElement.style.backgroundColor = '#000000';
+
+    return () => {
+      if (themeMeta && previousThemeColor) themeMeta.setAttribute('content', previousThemeColor);
+      document.body.style.backgroundColor = previousBodyBackground;
+      document.documentElement.style.backgroundColor = previousHtmlBackground;
+    };
+  }, [isOpen]);
+
   if (isMobile) {
     return (
       <Drawer
@@ -74,64 +94,32 @@ export function VideoCommentsSheet({
       >
         <DrawerContent
           data-video-comments-sheet="true"
-          overlayClassName="bg-black/25 backdrop-blur-[0.5px]"
-          handleClassName="mt-2 h-1 w-9 bg-white/35"
-          className="dark flex h-[98dvh] max-h-[98dvh] min-h-0 flex-col overflow-hidden rounded-t-[24px] border-x-0 border-b-0 border-t border-white/10 bg-neutral-950 text-white shadow-[0_-18px_60px_rgba(0,0,0,.48)]"
+          overlayClassName="bg-black/20 backdrop-blur-[0.5px]"
+          handleClassName="mt-1.5 h-[3px] w-10 bg-white/45"
+          className="dark flex h-[98dvh] max-h-[calc(100dvh-env(safe-area-inset-top,0px))] min-h-0 flex-col overflow-hidden rounded-t-[22px] border-x-0 border-b-0 border-t border-white/10 bg-[#09090a] text-white shadow-[0_-18px_60px_rgba(0,0,0,.5)]"
         >
-          <style>{`
-            [data-video-comments-sheet="true"] form[data-comment-composer="true"] {
-              padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
-            }
-            [data-video-comments-sheet="true"] form[data-comment-composer="true"] > div {
-              gap: 8px;
-              align-items: center;
-            }
-            [data-video-comments-sheet="true"] form[data-comment-composer="true"] > div > button[type="submit"] {
-              width: 36px;
-              min-width: 36px;
-              height: 36px;
-              padding: 0;
-              border-radius: 9999px;
-              font-size: 0;
-              background: rgb(255 255 255);
-              color: rgb(10 10 10);
-              box-shadow: none;
-            }
-            [data-video-comments-sheet="true"] form[data-comment-composer="true"] > div > button[type="submit"]::after {
-              content: "↑";
-              display: block;
-              font-size: 20px;
-              line-height: 1;
-              font-weight: 800;
-              transform: translateY(-1px);
-            }
-            [data-video-comments-sheet="true"] form[data-comment-composer="true"] > div > button[type="submit"]:disabled {
-              opacity: 1;
-              background: rgb(255 255 255 / 0.10);
-              color: rgb(255 255 255 / 0.32);
-            }
-            [data-video-comments-sheet="true"] form[data-comment-composer="true"] > div > button[type="submit"]:has(svg)::after {
-              display: none;
-            }
-          `}</style>
-
-          <DrawerHeader className="relative shrink-0 border-b border-white/8 px-4 pb-2 pt-1 text-center">
-            <DrawerTitle className="text-[14px] font-semibold leading-6 text-white">
+          <DrawerHeader className="relative shrink-0 border-b border-white/[0.07] px-4 pb-1.5 pt-0.5 text-center">
+            <DrawerTitle className="text-[13px] font-semibold leading-6 text-white">
               Izohlar{commentsCount > 0 ? ` · ${commentsCount}` : ''}
             </DrawerTitle>
             <Button
               variant="ghost"
               size="icon"
               onClick={onClose}
-              className="absolute right-2 top-0 h-8 w-8 rounded-full text-white/65 hover:bg-white/10 hover:text-white"
+              className="absolute right-2 top-[-2px] h-8 w-8 rounded-full text-white/60 hover:bg-white/10 hover:text-white"
               aria-label="Izohlarni yopish"
             >
               <X className="h-4 w-4" />
             </Button>
           </DrawerHeader>
 
-          <div className="dark min-h-0 flex-1 overflow-hidden bg-neutral-950 text-white [color-scheme:dark]">
-            <CommentsSection postId={postId} layout="panel" />
+          <div className="dark min-h-0 flex-1 overflow-hidden bg-[#0a0a0b] text-white [color-scheme:dark]">
+            <CommentsSection
+              postId={postId}
+              layout="panel"
+              appearance="immersive"
+              quickReactions
+            />
           </div>
         </DrawerContent>
       </Drawer>
