@@ -493,14 +493,19 @@ export function useWebRTC(roomId: string | null) {
         if (shouldIgnore) return;
 
         try {
-          // Polite peer explicitly rolls back its outstanding local offer.
-          // This preserves transceiver/m-line ordering before accepting the
-          // remote offer and is the missing half of Perfect Negotiation.
-          if (offerCollision && pc.signalingState !== "stable") {
-            await pc.setLocalDescription({ type: "rollback" });
+          // Chrome/Safari perform an implicit rollback inside
+          // setRemoteDescription(offer). Doing it explicitly first is what
+          // reordered the m-lines, so only fall back to it if needed.
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+          } catch (setRemoteError) {
+            if (offerCollision && pc.signalingState !== "stable") {
+              await pc.setLocalDescription({ type: "rollback" });
+              await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+            } else {
+              throw setRemoteError;
+            }
           }
-
-          await pc.setRemoteDescription(new RTCSessionDescription(sdp));
           ignoreOfferRef.current.set(from, false);
 
           const pending = pendingCandidatesRef.current.get(from) || [];
