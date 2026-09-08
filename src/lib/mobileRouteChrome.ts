@@ -21,6 +21,11 @@ export function getMobileChromeMode(pathname: string): MobileChromeMode {
   if (PRIMARY_ROUTES.has(path)) return 'primary';
   if (IMMERSIVE_ROUTES.has(path)) return 'immersive';
 
+  // Marketplace has its own search/header, product header, sticky purchase CTA
+  // and mobile bottom navigation. Shell chrome here caused duplicate back rows
+  // and stole valuable viewport width/height on product pages.
+  if (path === '/marketplace' || path.startsWith('/marketplace/')) return 'immersive';
+
   // Public user profile already renders its own back affordance. Rendering the
   // shell MobileBackHeader as well produced the duplicate "Orqaga / Back"
   // rows seen when a profile is opened from Videos.

@@ -1,27 +1,40 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Search, ShoppingBag, Plus, Store, Package, Heart, TrendingUp, Sparkles,
-  LayoutDashboard, Flame, Crown, ChevronRight, SlidersHorizontal, Grid3X3,
-  LayoutList, ClipboardList, AlertTriangle, RotateCcw, X, MapPin,
+  AlertTriangle,
+  ChevronRight,
+  ClipboardList,
+  Crown,
+  Flame,
+  Grid3X3,
+  Heart,
+  LayoutDashboard,
+  LayoutList,
+  MapPin,
+  Package,
+  Plus,
+  RotateCcw,
+  Search,
+  ShoppingBag,
+  SlidersHorizontal,
+  Sparkles,
+  Store,
+  X,
 } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { useHapticFeedback } from '@/hooks/useHapticFeedback';
-import { PullToRefresh } from '@/components/PullToRefresh';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useHapticFeedback } from '@/hooks/useHapticFeedback';
+import { useIsMobile } from '@/hooks/use-mobile';
 import {
-  useCategories,
-  useProducts,
-  useSellerProducts,
-  useSavedProducts,
-  useCart,
-  useNearbyMarketplaceProducts,
   Product,
+  useCart,
+  useCategories,
+  useNearbyMarketplaceProducts,
+  useProducts,
+  useSavedProducts,
+  useSellerProducts,
 } from '@/hooks/useMarketplace';
+import { PullToRefresh } from '@/components/PullToRefresh';
 import { ProductCard } from '@/components/marketplace/ProductCard';
 import { BecomeSeller } from '@/components/marketplace/BecomeSeller';
 import { CreateProductDialog } from '@/components/marketplace/CreateProductDialog';
@@ -32,80 +45,103 @@ import { SellerOrdersView } from '@/components/marketplace/SellerOrdersView';
 import { SellerStorefront } from '@/components/marketplace/SellerStorefront';
 import { VideoCommerceSection } from '@/components/marketplace/VideoCommerceSection';
 import { CategoryIcon } from '@/components/marketplace/CategoryIcon';
+import { MarketplaceBottomNav } from '@/components/marketplace/MarketplaceBottomNav';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Slider } from '@/components/ui/slider';
-import { formatPrice } from '@/lib/marketplace';
 import { cn } from '@/lib/utils';
+import { conditionLabel, formatPrice } from '@/lib/marketplace';
 import { marketplaceUz } from '@/i18n/marketplace';
+import '@/styles/marketplace-premium.css';
 
-const SEARCH_DEBOUNCE_MS = 350;
+const SEARCH_DEBOUNCE_MS = 300;
+
+type MarketplaceTab = 'browse' | 'orders' | 'selling' | 'saved';
+
+function isMarketplaceTab(value: string | null): value is MarketplaceTab {
+  return value === 'browse' || value === 'orders' || value === 'selling' || value === 'saved';
+}
 
 export default function MarketplacePage() {
   const isMobile = useIsMobile();
   const { user } = useAuth();
   const { triggerHaptic } = useHapticFeedback();
   const navigate = useNavigate();
-
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'browse');
 
-  // URL is the source of truth for the tab, so links like ?tab=orders work
-  // and the tab is preserved on refresh / share / back navigation.
+  const initialTab = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState<MarketplaceTab>(
+    isMarketplaceTab(initialTab) ? initialTab : 'browse',
+  );
+  const [selectedCategory, setSelectedCategory] = useState(
+    () => searchParams.get('category') || 'all',
+  );
+  const initialQuery = searchParams.get('q') || '';
+  const [searchInput, setSearchInput] = useState(initialQuery);
+  const [searchQuery, setSearchQuery] = useState(initialQuery);
+  const [searchFocused, setSearchFocused] = useState(false);
+
+  const [showCreateProduct, setShowCreateProduct] = useState(false);
+  const [showCart, setShowCart] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [showCatalog, setShowCatalog] = useState(false);
+  const [gridLayout, setGridLayout] = useState<'grid' | 'list'>('grid');
+  const [sortBy, setSortBy] = useState('newest');
+  const [priceRange, setPriceRange] = useState<[number, number] | null>(null);
+  const [conditionFilter, setConditionFilter] = useState('all');
+  const [inStockOnly, setInStockOnly] = useState(false);
+  const [shippingOnly, setShippingOnly] = useState(false);
+  const [selectedSellerId, setSelectedSellerId] = useState<string | null>(null);
+  const [sellingView, setSellingView] = useState<'products' | 'orders'>('products');
+
   useEffect(() => {
-    const t = searchParams.get('tab') || 'browse';
-    if (t !== activeTab) setActiveTab(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const tab = searchParams.get('tab');
+    const next = isMarketplaceTab(tab) ? tab : 'browse';
+    setActiveTab(current => (current === next ? current : next));
   }, [searchParams]);
 
-  const selectTab = useCallback((tab: string) => {
+  useEffect(() => {
+    const nextCategory = searchParams.get('category') || 'all';
+    setSelectedCategory(current => (current === nextCategory ? current : nextCategory));
+    setSelectedSellerId(searchParams.get('seller'));
+
+    const q = searchParams.get('q') || '';
+    setSearchInput(current => (current === q ? current : q));
+  }, [searchParams]);
+
+  useEffect(() => {
+    const productId = searchParams.get('product');
+    if (productId) navigate(`/marketplace/product/${productId}`, { replace: true });
+  }, [navigate, searchParams]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const query = searchInput.trim();
+      setSearchQuery(query);
+
+      const current = searchParams.get('q') || '';
+      if (current === query) return;
+
+      const next = new URLSearchParams(searchParams);
+      if (query) next.set('q', query);
+      else next.delete('q');
+      setSearchParams(next, { replace: true });
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [searchInput, searchParams, setSearchParams]);
+
+  const selectTab = useCallback((tab: MarketplaceTab) => {
     triggerHaptic('light');
     setActiveTab(tab);
     const next = new URLSearchParams(searchParams);
     if (tab === 'browse') next.delete('tab');
     else next.set('tab', tab);
     setSearchParams(next, { replace: true });
+    setSearchFocused(false);
   }, [searchParams, setSearchParams, triggerHaptic]);
-
-  const [selectedCategory, setSelectedCategory] = useState(
-    () => searchParams.get('category') || 'all',
-  );
-  const [searchInput, setSearchInput] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showCreateProduct, setShowCreateProduct] = useState(false);
-  const [showCart, setShowCart] = useState(false);
-  const [showDashboard, setShowDashboard] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
-  const [gridLayout, setGridLayout] = useState<'grid' | 'list'>('grid');
-  const [sortBy, setSortBy] = useState('newest');
-  /** null = no price filter applied (previously a hardcoded 0–10 000 window silently hid every expensive listing). */
-  const [priceRange, setPriceRange] = useState<[number, number] | null>(null);
-  const [searchFocused, setSearchFocused] = useState(false);
-  const [selectedSellerId, setSelectedSellerId] = useState<string | null>(null);
-  /** Seller area sub-view: own catalogue vs incoming order queue. */
-  const [sellingView, setSellingView] = useState<'products' | 'orders'>('products');
-
-  // Legacy/map links may still use ?product=<id>. Canonical route is a real page.
-  useEffect(() => {
-    const productId = searchParams.get('product');
-    if (!productId) return;
-    navigate(`/marketplace/product/${productId}`, { replace: true });
-  }, [navigate, searchParams]);
-
-  // Seller links are URL-addressable; URL is the single source of truth.
-  useEffect(() => {
-    setSelectedSellerId(searchParams.get('seller'));
-  }, [searchParams]);
-
-  useEffect(() => {
-    const category = searchParams.get('category') || 'all';
-    setSelectedCategory(category);
-  }, [searchParams]);
-
-  // Debounced search: one query per pause, not one per keystroke.
-  useEffect(() => {
-    const timer = setTimeout(() => setSearchQuery(searchInput.trim()), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [searchInput]);
 
   const { categories } = useCategories();
   const {
@@ -136,24 +172,38 @@ export default function MarketplacePage() {
   const productsLoading = nearCenter ? nearbyProducts.isLoading : catalogueLoading;
   const productsError = nearCenter ? nearbyProducts.error : catalogueError;
   const refreshProducts = nearCenter ? nearbyProducts.refresh : refreshCatalogue;
-  const { products: sellerProducts, seller, isLoading: sellerLoading, refresh: refreshSeller } = useSellerProducts();
-  const { products: savedProducts, isLoading: savedLoading, refresh: refreshSaved } = useSavedProducts();
-  const { itemCount, refresh: refreshCart } = useCart();
+
+  const {
+    products: sellerProducts,
+    seller,
+    isLoading: sellerLoading,
+    refresh: refreshSeller,
+  } = useSellerProducts();
+  const {
+    products: savedProducts,
+    isLoading: savedLoading,
+    refresh: refreshSaved,
+  } = useSavedProducts();
+  const { itemCount } = useCart();
 
   const handleRefresh = useCallback(async () => {
     if (activeTab === 'browse') await refreshProducts();
     else if (activeTab === 'selling') await refreshSeller();
     else if (activeTab === 'saved') await refreshSaved();
-  }, [activeTab, refreshProducts, refreshSeller, refreshSaved]);
+  }, [activeTab, refreshProducts, refreshSaved, refreshSeller]);
 
-  const handleCategorySelect = (slug: string) => {
+  const handleCategorySelect = useCallback((slug: string) => {
     triggerHaptic('light');
     setSelectedCategory(slug);
+    setActiveTab('browse');
+    setShowCatalog(false);
+
     const next = new URLSearchParams(searchParams);
+    next.delete('tab');
     if (slug === 'all') next.delete('category');
     else next.set('category', slug);
     setSearchParams(next, { replace: true });
-  };
+  }, [searchParams, setSearchParams, triggerHaptic]);
 
   const handleProductSelect = useCallback((product: Product) => {
     triggerHaptic('light');
@@ -166,11 +216,10 @@ export default function MarketplacePage() {
   }, [navigate, triggerHaptic]);
 
   const maxProductPrice = useMemo(
-    () => products.reduce((max, p) => Math.max(max, Number(p.price) || 0), 0),
+    () => products.reduce((max, product) => Math.max(max, Number(product.price) || 0), 0),
     [products],
   );
 
-  /** Slider bounds follow the catalogue instead of a fixed $10 000 ceiling. */
   const sliderMax = useMemo(() => {
     if (maxProductPrice <= 0) return 1000;
     const step = Math.pow(10, Math.max(1, String(Math.round(maxProductPrice)).length - 2));
@@ -178,45 +227,87 @@ export default function MarketplacePage() {
   }, [maxProductPrice]);
 
   const activeRange = priceRange ?? [0, sliderMax];
-  const priceFilterActive = priceRange !== null;
-
-  const featuredProducts = useMemo(() => products.filter(p => p.is_featured), [products]);
-
-  const trendingProducts = useMemo(
-    () => [...products].sort((a, b) => (b.views_count ?? 0) - (a.views_count ?? 0)).slice(0, 6),
+  const availableConditions = useMemo(
+    () => Array.from(new Set(products.map(product => product.condition).filter(Boolean))),
     [products],
   );
 
   const sortedProducts = useMemo(() => {
-    const filtered = priceFilterActive
-      ? products.filter(p => p.price >= activeRange[0] && p.price <= activeRange[1])
-      : products;
+    const filtered = products.filter(product => {
+      if (priceRange && (product.price < activeRange[0] || product.price > activeRange[1])) return false;
+      if (conditionFilter !== 'all' && product.condition !== conditionFilter) return false;
+      if (inStockOnly && Number(product.quantity) <= 0) return false;
+      if (shippingOnly && !product.shipping_available) return false;
+      return true;
+    });
 
     return [...filtered].sort((a, b) => {
       switch (sortBy) {
-        case 'price_low': return a.price - b.price;
-        case 'price_high': return b.price - a.price;
-        case 'popular': return (b.likes_count ?? 0) - (a.likes_count ?? 0);
-        case 'newest':
+        case 'price_low':
+          return a.price - b.price;
+        case 'price_high':
+          return b.price - a.price;
+        case 'popular':
+          return (b.likes_count ?? 0) - (a.likes_count ?? 0);
         default:
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       }
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [products, sortBy, priceFilterActive, activeRange[0], activeRange[1]]);
+  }, [
+    activeRange,
+    conditionFilter,
+    inStockOnly,
+    priceRange,
+    products,
+    shippingOnly,
+    sortBy,
+  ]);
 
-  const hiddenByPriceFilter = priceFilterActive ? products.length - sortedProducts.length : 0;
+  const activeFilterCount =
+    (priceRange ? 1 : 0) +
+    (conditionFilter !== 'all' ? 1 : 0) +
+    (inStockOnly ? 1 : 0) +
+    (shippingOnly ? 1 : 0) +
+    (sortBy !== 'newest' ? 1 : 0);
 
-  const resetFilters = () => {
+  const resetFilters = useCallback(() => {
     setPriceRange(null);
+    setConditionFilter('all');
+    setInStockOnly(false);
+    setShippingOnly(false);
     setSortBy('newest');
-  };
+  }, []);
 
-  const tabs = [
-    { id: 'browse', label: 'Barchasi', icon: TrendingUp },
+  const featuredProducts = useMemo(
+    () => products.filter(product => product.is_featured),
+    [products],
+  );
+  const trendingProducts = useMemo(
+    () =>
+      [...products]
+        .sort((a, b) => (b.views_count ?? 0) - (a.views_count ?? 0))
+        .slice(0, 10),
+    [products],
+  );
+
+  const searchSuggestions = useMemo(() => {
+    if (!searchInput.trim()) return [];
+    return sortedProducts.slice(0, 6);
+  }, [searchInput, sortedProducts]);
+
+  const categorySuggestions = useMemo(() => {
+    const query = searchInput.trim().toLocaleLowerCase();
+    if (!query) return [];
+    return categories
+      .filter(category => category.name.toLocaleLowerCase().includes(query))
+      .slice(0, 4);
+  }, [categories, searchInput]);
+
+  const desktopTabs: Array<{ id: MarketplaceTab; label: string; icon: typeof Store }> = [
+    { id: 'browse', label: 'Bozor', icon: Store },
     { id: 'orders', label: 'Buyurtmalar', icon: ClipboardList },
-    { id: 'selling', label: 'Sotish', icon: Package },
     { id: 'saved', label: 'Saqlangan', icon: Heart },
+    { id: 'selling', label: 'Sotuvchi markazi', icon: Package },
   ];
 
   const sellerViews = [
@@ -224,510 +315,643 @@ export default function MarketplacePage() {
     { id: 'orders' as const, label: 'Buyurtmalar', icon: ClipboardList },
   ];
 
-  const pageContent = (
-    <div className="marketplace-neutral min-h-screen bg-background pb-24 md:pb-4">
-      {/* Premium Glass Header */}
-      <div className="sticky top-0 z-30 border-b border-border/30">
-        <div className="bg-gradient-to-b from-background via-background/98 to-background/95 backdrop-blur-2xl">
-          <div className="max-w-7xl mx-auto px-4 py-3 space-y-3">
-            {/* Top Row */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  <div className="w-11 h-11 rounded-2xl bg-muted flex items-center justify-center shadow-sm">
-                    <Store className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                  <div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-background bg-foreground">
-                    <div className="h-1.5 w-1.5 rounded-full bg-background" />
-                  </div>
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold tracking-tight">Marketplace</h1>
-                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <span className="px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground font-medium">B2B</span>
-                    <span className="px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground font-medium">B2C</span>
-                    <span className="px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground font-medium">C2C</span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="relative h-10 w-10 rounded-xl bg-muted/50 hover:bg-muted"
-                  onClick={() => setShowCart(true)}
-                  aria-label={itemCount > 0 ? `Savat, ${itemCount} dona ${marketplaceUz.page.products}` : 'Savat'}
-                >
-                  <ShoppingBag className="h-5 w-5" />
-                  {itemCount > 0 && (
-                    <motion.span
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] flex items-center justify-center font-bold shadow-sm tabular-nums"
-                    >
-                      {itemCount > 99 ? '99+' : itemCount}
-                    </motion.span>
-                  )}
-                </Button>
-              </div>
-            </div>
-
-            {/* Premium Search */}
-            <div className="flex gap-2">
-              <div className={cn(
-                'relative flex-1 transition-all duration-300',
-                searchFocused && 'scale-[1.01]',
-              )}>
-                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 z-10">
-                  <Search className={cn(
-                    'h-4 w-4 transition-colors',
-                    searchFocused ? 'text-foreground' : 'text-muted-foreground',
-                  )} />
-                </div>
-                <Input
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  onFocus={() => setSearchFocused(true)}
-                  onBlur={() => setSearchFocused(false)}
-                  placeholder={marketplaceUz.page.searchPlaceholder}
-                  aria-label={marketplaceUz.page.searchLabel}
-                  className={cn(
-                    'pl-10 pr-9 h-11 rounded-xl border-border/50 bg-muted/40 backdrop-blur-sm',
-                    'focus:bg-background focus:border-border focus:ring-1 focus:ring-ring/40',
-                    'placeholder:text-muted-foreground/60 transition-all duration-300',
-                  )}
-                />
-                {searchInput && (
-                  <button
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    onClick={() => setSearchInput('')}
-                    aria-label={marketplaceUz.page.clearSearch}
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-              <Button
-                variant="outline"
-                size="icon"
-                className={cn(
-                  'h-11 w-11 rounded-xl border-border/50 bg-muted/40 hover:bg-muted shrink-0 relative',
-                  priceFilterActive && 'border-foreground/25 bg-background text-foreground',
-                )}
-                onClick={() => setShowFilters(true)}
-                aria-label={marketplaceUz.page.filters}
-              >
-                <SlidersHorizontal className="h-4 w-4" />
-                {priceFilterActive && (
-                  <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-foreground" />
-                )}
-              </Button>
-            </div>
-
-            {/* Premium Tab Navigation */}
-            <div className="grid grid-cols-4 gap-1 rounded-2xl border border-border/60 bg-muted/35 p-1" role="tablist">
-              {tabs.map((tab) => {
-                const Icon = tab.icon;
-                const isActive = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    role="tab"
-                    aria-selected={isActive}
-                    onClick={() => selectTab(tab.id)}
-                    className={cn(
-                      'flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-sm font-medium transition-colors',
-                      isActive
-                        ? 'bg-foreground text-background shadow-sm'
-                        : 'text-muted-foreground hover:bg-background/70 hover:text-foreground',
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span>{tab.label}</span>
-                    {tab.id === 'saved' && savedProducts.length > 0 && (
-                      <span className={cn(
-                        "ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold",
-                        isActive ? "bg-background/15 text-background" : "bg-background text-muted-foreground"
-                      )}>
-                        {savedProducts.length}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+  const filtersPanel = (
+    <div className="space-y-6">
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold">Saralash</p>
+          {activeFilterCount > 0 && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="text-xs font-semibold text-muted-foreground transition hover:text-foreground"
+            >
+              Tiklash
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            { id: 'newest', label: 'Eng yangi' },
+            { id: 'popular', label: 'Mashhur' },
+            { id: 'price_low', label: 'Arzon → Qimmat' },
+            { id: 'price_high', label: 'Qimmat → Arzon' },
+          ].map(option => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => setSortBy(option.id)}
+              className={cn(
+                'min-h-10 rounded-xl border px-3 py-2 text-xs font-semibold transition',
+                sortBy === option.id
+                  ? 'border-foreground bg-foreground text-background'
+                  : 'border-border/60 bg-background hover:border-foreground/30',
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Content */}
-      <div className="max-w-7xl mx-auto">
+      <div className="space-y-3">
+        <p className="text-sm font-semibold">Holati</p>
+        <div className="flex flex-wrap gap-2">
+          <FilterChip
+            active={conditionFilter === 'all'}
+            onClick={() => setConditionFilter('all')}
+            label="Barchasi"
+          />
+          {availableConditions.map(condition => (
+            <FilterChip
+              key={condition}
+              active={conditionFilter === condition}
+              onClick={() => setConditionFilter(condition)}
+              label={conditionLabel(condition)}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold">Narx</p>
+          <span className="text-[11px] text-muted-foreground">
+            {formatPrice(activeRange[0])} — {formatPrice(activeRange[1])}
+          </span>
+        </div>
+        <Slider
+          value={activeRange}
+          min={0}
+          max={sliderMax}
+          step={Math.max(1, Math.round(sliderMax / 100))}
+          onValueChange={value => setPriceRange([value[0], value[1]])}
+        />
+        {priceRange && (
+          <button
+            type="button"
+            onClick={() => setPriceRange(null)}
+            className="text-xs font-semibold text-muted-foreground hover:text-foreground"
+          >
+            Narx filtrini tozalash
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <ToggleRow
+          checked={inStockOnly}
+          onChange={setInStockOnly}
+          label="Faqat omborda bor"
+          description="Sotilib ketgan e’lonlarni yashiradi"
+        />
+        <ToggleRow
+          checked={shippingOnly}
+          onChange={setShippingOnly}
+          label="Yetkazib berish mavjud"
+          description="Yetkazish yoqilgan mahsulotlar"
+        />
+      </div>
+    </div>
+  );
+
+  const browseContent = (
+    <div className="min-w-0 space-y-6">
+      {nearCenter && (
+        <div className="flex min-w-0 items-center gap-2 rounded-2xl border border-border/60 bg-muted/30 px-3 py-2.5 text-sm">
+          <MapPin className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1 truncate">
+            Xaritadagi nuqtadan {nearRadiusKm} km ichidagi e’lonlar
+          </span>
+          <button
+            type="button"
+            className="shrink-0 text-xs font-bold text-foreground"
+            onClick={() => {
+              const next = new URLSearchParams(searchParams);
+              next.delete('lat');
+              next.delete('lng');
+              next.delete('near');
+              setSearchParams(next, { replace: true });
+            }}
+          >
+            Barchasi
+          </button>
+        </div>
+      )}
+
+      <section className="space-y-3 lg:hidden">
+        <SectionHeading title="Kategoriyalar" action="Barchasi" onAction={() => setShowCatalog(true)} />
+        <div className="marketplace-x-rail -mx-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
+          <CategoryTile
+            active={selectedCategory === 'all'}
+            label="Barchasi"
+            icon={<Sparkles className="h-5 w-5" />}
+            onClick={() => handleCategorySelect('all')}
+          />
+          {categories.map(category => (
+            <CategoryTile
+              key={category.id}
+              active={selectedCategory === category.slug}
+              label={category.name}
+              icon={<CategoryIcon slug={category.slug} name={category.name} className="h-5 w-5" />}
+              onClick={() => handleCategorySelect(category.slug)}
+            />
+          ))}
+        </div>
+      </section>
+
+      {featuredProducts.length > 0 && selectedCategory === 'all' && !searchQuery && (
+        <section className="relative overflow-hidden rounded-[28px] border border-border/60 bg-card">
+          <div className="absolute inset-0 bg-gradient-to-br from-muted/80 via-background to-background" />
+          <div className="relative grid min-w-0 gap-5 p-5 sm:grid-cols-[minmax(0,1fr)_180px] sm:items-center lg:p-7">
+            <div className="min-w-0">
+              <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                <Crown className="h-4 w-4" />
+                Tanlangan
+              </div>
+              <h2 className="max-w-xl text-xl font-extrabold tracking-tight sm:text-2xl">
+                Ishonchli savdo, bitta qulay bozorda
+              </h2>
+              <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
+                Oziq-ovqatdan elektronikagacha, avtomobildan uy-ro‘zg‘or buyumlarigacha — keraklisini tez toping.
+              </p>
+              <Button
+                className="mt-4 rounded-xl"
+                onClick={() => handleProductSelect(featuredProducts[0])}
+              >
+                Tanlangan mahsulot
+                <ChevronRight className="ml-1 h-4 w-4" />
+              </Button>
+            </div>
+            {featuredProducts[0]?.images?.[0]?.url && (
+              <button
+                type="button"
+                onClick={() => handleProductSelect(featuredProducts[0])}
+                className="mx-auto aspect-square w-full max-w-[180px] overflow-hidden rounded-2xl bg-muted shadow-xl"
+                aria-label={featuredProducts[0].title}
+              >
+                <MarketplaceProductImage product={featuredProducts[0]} className="h-full w-full object-cover" />
+              </button>
+            )}
+          </div>
+        </section>
+      )}
+
+      {trendingProducts.length > 0 && selectedCategory === 'all' && !searchQuery && (
+        <section className="space-y-3">
+          <SectionHeading
+            title="Hozir ommabop"
+            icon={<Flame className="h-4 w-4" />}
+            action="Ko‘proq"
+            onAction={() => setSortBy('popular')}
+          />
+          <div className="marketplace-x-rail -mx-4 flex gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
+            {trendingProducts.map(product => (
+              <button
+                type="button"
+                key={product.id}
+                className="w-[46vw] min-w-[154px] max-w-[190px] shrink-0 snap-start text-left sm:w-44"
+                onClick={() => handleProductSelect(product)}
+              >
+                <div className="aspect-square overflow-hidden rounded-2xl border border-border/40 bg-muted">
+                  <MarketplaceProductImage
+                    product={product}
+                    className="h-full w-full object-cover transition duration-500 hover:scale-105"
+                  />
+                </div>
+                <p className="mt-2 line-clamp-1 text-xs font-semibold">{product.title}</p>
+                <p className="mt-0.5 text-sm font-extrabold tabular-nums">
+                  {formatPrice(product.price, product.currency)}
+                </p>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {selectedCategory === 'all' && !searchQuery && (
+        <VideoCommerceSection onProductSelect={handleProductSelect} />
+      )}
+
+      <div className="flex min-w-0 items-end justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground">Natijalar</p>
+          <p className="truncate text-sm font-bold">
+            {sortedProducts.length} ta mahsulot
+            {activeFilterCount > 0 && (
+              <span className="ml-1.5 font-medium text-muted-foreground">
+                · {activeFilterCount} filtr
+              </span>
+            )}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1 rounded-xl border border-border/50 bg-muted/30 p-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn('h-8 w-8 rounded-lg', gridLayout === 'grid' && 'bg-background shadow-sm')}
+            onClick={() => setGridLayout('grid')}
+            aria-label="Katak ko‘rinishi"
+          >
+            <Grid3X3 className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn('h-8 w-8 rounded-lg', gridLayout === 'list' && 'bg-background shadow-sm')}
+            onClick={() => setGridLayout('list')}
+            aria-label="Ro‘yxat ko‘rinishi"
+          >
+            <LayoutList className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {productsError ? (
+        <EmptyState
+          icon={<AlertTriangle className="h-14 w-14" />}
+          title={marketplaceUz.page.loadFailed}
+          description={productsError}
+          action={
+            <Button variant="outline" className="rounded-xl" onClick={() => refreshProducts()}>
+              <RotateCcw className="mr-2 h-4 w-4" />
+              Qayta urinish
+            </Button>
+          }
+        />
+      ) : productsLoading ? (
+        <ProductSkeletonGrid layout={gridLayout} />
+      ) : sortedProducts.length > 0 ? (
+        <div
+          className={cn(
+            'min-w-0 gap-3 sm:gap-4',
+            gridLayout === 'grid'
+              ? 'grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4'
+              : 'grid grid-cols-1',
+          )}
+        >
+          {sortedProducts.map((product, index) => (
+            <motion.div
+              key={product.id}
+              className="min-w-0"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: Math.min(index, 6) * 0.025, duration: 0.2 }}
+            >
+              <ProductCard
+                product={product}
+                onSelect={handleProductSelect}
+                onLikeChange={refreshProducts}
+                layout={gridLayout}
+              />
+            </motion.div>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          icon={<Package className="h-14 w-14" />}
+          title="Mahsulot topilmadi"
+          description={
+            searchQuery
+              ? 'So‘rovni qisqartiring yoki boshqa kategoriya tanlang.'
+              : activeFilterCount > 0
+                ? 'Filtrlarni yumshatib ko‘ring.'
+                : 'Bu bo‘limda hali mahsulot yo‘q.'
+          }
+          action={
+            activeFilterCount > 0 ? (
+              <Button variant="outline" className="rounded-xl" onClick={resetFilters}>
+                Filtrlarni tozalash
+              </Button>
+            ) : undefined
+          }
+        />
+      )}
+    </div>
+  );
+
+  const pageContent = (
+    <div className="marketplace-neutral min-h-screen min-w-0 overflow-x-clip bg-background pb-32 md:pb-8">
+      <header className="sticky top-0 z-40 border-b border-border/40 bg-background/92 backdrop-blur-2xl">
+        <div className="mx-auto w-full max-w-7xl min-w-0 px-4 py-3 lg:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="hidden min-w-0 items-center gap-3 md:flex">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-foreground text-background">
+                <Store className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <h1 className="truncate text-lg font-extrabold tracking-tight">Alsamos Bozor</h1>
+                <p className="truncate text-[11px] text-muted-foreground">Xavfsiz savdo · keng katalog</p>
+              </div>
+            </div>
+
+            <div className="relative min-w-0 flex-1 md:mx-3">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                inputMode="search"
+                value={searchInput}
+                onChange={event => setSearchInput(event.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                onKeyDown={event => {
+                  if (event.key === 'Escape') {
+                    setSearchFocused(false);
+                    event.currentTarget.blur();
+                  }
+                }}
+                placeholder="Mahsulot, brend yoki turkum qidiring"
+                aria-label="Marketplace qidiruvi"
+                className="h-11 w-full rounded-2xl border-border/60 bg-muted/45 pl-10 pr-10 text-sm shadow-none transition focus:bg-background"
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  aria-label="Qidiruvni tozalash"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  onMouseDown={event => event.preventDefault()}
+                  onClick={() => setSearchInput('')}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+
+              <AnimatePresence>
+                {searchFocused && searchInput.trim() && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    className="absolute inset-x-0 top-[calc(100%+8px)] z-50 max-h-[60vh] overflow-y-auto rounded-2xl border border-border/60 bg-background p-2 shadow-2xl"
+                  >
+                    {categorySuggestions.length > 0 && (
+                      <div className="border-b border-border/40 pb-2">
+                        <p className="px-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          Turkumlar
+                        </p>
+                        {categorySuggestions.map(category => (
+                          <button
+                            type="button"
+                            key={category.id}
+                            className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-muted/60"
+                            onMouseDown={event => event.preventDefault()}
+                            onClick={() => {
+                              handleCategorySelect(category.slug);
+                              setSearchInput('');
+                              setSearchFocused(false);
+                            }}
+                          >
+                            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-muted">
+                              <CategoryIcon slug={category.slug} name={category.name} />
+                            </span>
+                            <span className="text-sm font-semibold">{category.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="pt-2">
+                      <p className="px-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Mahsulotlar
+                      </p>
+                      {searchSuggestions.length > 0 ? (
+                        searchSuggestions.map(product => (
+                          <button
+                            type="button"
+                            key={product.id}
+                            className="flex w-full min-w-0 items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-muted/60"
+                            onMouseDown={event => event.preventDefault()}
+                            onClick={() => {
+                              setSearchFocused(false);
+                              handleProductSelect(product);
+                            }}
+                          >
+                            <span className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-muted">
+                              <MarketplaceProductImage product={product} className="h-full w-full object-cover" />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-semibold">{product.title}</span>
+                              <span className="block text-xs font-bold text-muted-foreground">
+                                {formatPrice(product.price, product.currency)}
+                              </span>
+                            </span>
+                          </button>
+                        ))
+                      ) : (
+                        <p className="px-2 py-4 text-center text-xs text-muted-foreground">
+                          Natija topilmadi
+                        </p>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            <Button
+              variant="outline"
+              size="icon"
+              className={cn(
+                'relative h-11 w-11 shrink-0 rounded-2xl',
+                activeFilterCount > 0 && 'border-foreground/30 bg-foreground text-background',
+              )}
+              onClick={() => setShowFilters(true)}
+              aria-label="Filtrlar"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              {activeFilterCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold text-destructive-foreground">
+                  {activeFilterCount}
+                </span>
+              )}
+            </Button>
+
+            <Button
+              variant="outline"
+              size="icon"
+              className="relative hidden h-11 w-11 shrink-0 rounded-2xl sm:inline-flex"
+              onClick={() => setShowCart(true)}
+              aria-label="Savat"
+            >
+              <ShoppingBag className="h-4 w-4" />
+              {itemCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-foreground px-1 text-[9px] font-bold text-background">
+                  {itemCount > 99 ? '99+' : itemCount}
+                </span>
+              )}
+            </Button>
+
+            <Button
+              className="hidden h-11 shrink-0 rounded-2xl md:inline-flex"
+              onClick={() => selectTab('selling')}
+            >
+              <Plus className="mr-1.5 h-4 w-4" />
+              Sotish
+            </Button>
+          </div>
+
+          <nav className="mt-3 hidden items-center gap-5 md:flex" aria-label="Marketplace bo‘limlari">
+            {desktopTabs.map(tab => {
+              const Icon = tab.icon;
+              const active = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => selectTab(tab.id)}
+                  className={cn(
+                    'relative flex items-center gap-1.5 py-2 text-sm font-semibold transition',
+                    active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  {tab.label}
+                  {active && <span className="absolute inset-x-0 -bottom-[13px] h-0.5 rounded-full bg-foreground" />}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+      </header>
+
+      <main className="mx-auto w-full max-w-7xl min-w-0 px-4 py-5 lg:px-6">
         <AnimatePresence mode="wait">
-          {/* Browse Tab */}
           {activeTab === 'browse' && (
             <motion.div
               key="browse"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2 }}
-              className="space-y-5 p-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="grid min-w-0 gap-6 lg:grid-cols-[250px_minmax(0,1fr)]"
             >
-              {nearCenter && (
-                <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm">
-                  <MapPin className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 flex-1">
-                    Xaritadagi nuqtadan {nearRadiusKm} km ichidagi e'lonlar
-                  </span>
-                  <button
-                    type="button"
-                    className="text-xs font-semibold text-link hover:text-link-hover hover:underline"
-                    onClick={() => {
-                      const next = new URLSearchParams(searchParams);
-                      next.delete('lat');
-                      next.delete('lng');
-                      next.delete('near');
-                      setSearchParams(next, { replace: true });
-                    }}
-                  >
-                    {marketplaceUz.page.all}
-                  </button>
-                </div>
-              )}
-
-              {/* Category Chips — professional Lucide icons, no emoji stickers */}
-              <ScrollArea className="w-full">
-                <div className="flex gap-2 pb-1">
-                  <button
-                    onClick={() => handleCategorySelect('all')}
-                    aria-pressed={selectedCategory === 'all'}
-                    className={cn(
-                      'flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-300',
-                      selectedCategory === 'all'
-                        ? 'bg-background text-foreground shadow-sm ring-1 ring-border'
-                        : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground',
-                    )}
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    {marketplaceUz.page.all}
-                  </button>
-                  {categories.map((cat) => (
-                    <button
-                      key={cat.id}
-                      onClick={() => handleCategorySelect(cat.slug)}
-                      aria-pressed={selectedCategory === cat.slug}
-                      className={cn(
-                        'flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-300',
-                        selectedCategory === cat.slug
-                          ? 'bg-background text-foreground shadow-sm ring-1 ring-border'
-                          : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground',
-                      )}
-                    >
-                      <CategoryIcon slug={cat.slug} name={cat.name} />
-                      {cat.name}
-                    </button>
-                  ))}
-                </div>
-              </ScrollArea>
-
-              {/* Hero Banner */}
-              {featuredProducts.length > 0 && selectedCategory === 'all' && !searchQuery && (
-                <div className="relative overflow-hidden rounded-2xl bg-card border border-border/60">
-                  <div className="absolute inset-0 bg-gradient-to-br from-muted/30 to-transparent" />
-                  <div className="relative p-5 flex items-center gap-4">
-                    <div className="flex-1 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Crown className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{marketplaceUz.page.selected}</span>
-                      </div>
-                      <h2 className="text-lg font-bold leading-tight">
-                        {marketplaceUz.page.heroTitle}
-                      </h2>
-                      <p className="text-sm text-muted-foreground">
-                        {marketplaceUz.page.heroDescription}
-                      </p>
-                      <Button
-                        size="sm"
-                        className="mt-2 rounded-xl bg-foreground text-background shadow-sm hover:bg-foreground/90"
-                        onClick={() => handleProductSelect(featuredProducts[0])}
-                      >
-                        {marketplaceUz.page.view}
-                        <ChevronRight className="h-3.5 w-3.5 ml-1" />
-                      </Button>
+              <aside className="hidden min-w-0 lg:block">
+                <div className="sticky top-32 space-y-5">
+                  <section className="rounded-3xl border border-border/50 bg-card p-3">
+                    <div className="flex items-center justify-between px-2 pb-2">
+                      <p className="text-sm font-extrabold">Katalog</p>
+                      <span className="text-[10px] text-muted-foreground">{categories.length} turkum</span>
                     </div>
-                    {featuredProducts[0]?.images?.[0]?.url && (
-                      <button
-                        className="w-28 h-28 rounded-xl overflow-hidden ring-2 ring-border shadow-xl shrink-0"
-                        onClick={() => handleProductSelect(featuredProducts[0])}
-                        aria-label={featuredProducts[0].title}
-                      >
-                        <MarketplaceProductImage
-                          product={featuredProducts[0]}
-                          className="w-full h-full object-cover"
+                    <div className="max-h-[38vh] space-y-1 overflow-y-auto pr-1">
+                      <CategoryListButton
+                        active={selectedCategory === 'all'}
+                        label="Barcha mahsulotlar"
+                        icon={<Sparkles className="h-4 w-4" />}
+                        onClick={() => handleCategorySelect('all')}
+                      />
+                      {categories.map(category => (
+                        <CategoryListButton
+                          key={category.id}
+                          active={selectedCategory === category.slug}
+                          label={category.name}
+                          icon={<CategoryIcon slug={category.slug} name={category.name} />}
+                          onClick={() => handleCategorySelect(category.slug)}
                         />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Trending Section */}
-              {trendingProducts.length > 0 && selectedCategory === 'all' && !searchQuery && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 rounded-lg bg-muted">
-                        <Flame className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                      <h3 className="font-bold">{marketplaceUz.page.trending}</h3>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs text-muted-foreground"
-                      onClick={() => { setSortBy('popular'); setPriceRange(null); }}
-                    >
-                      {marketplaceUz.page.all} <ChevronRight className="h-3 w-3 ml-0.5" />
-                    </Button>
-                  </div>
-                  <ScrollArea className="w-full">
-                    <div className="flex gap-3 pb-2">
-                      {trendingProducts.map((product) => (
-                        <button
-                          key={product.id}
-                          className="w-36 shrink-0 text-left cursor-pointer group"
-                          onClick={() => handleProductSelect(product)}
-                        >
-                          <div className="aspect-square rounded-xl overflow-hidden bg-muted mb-2 ring-1 ring-border/30 group-hover:ring-foreground/20 transition-all">
-                            {product.images?.[0]?.url ? (
-                              <MarketplaceProductImage
-                                product={product}
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-muted-foreground/40">
-                                <CategoryIcon slug={product.category?.slug} name={product.category?.name} className="h-6 w-6" />
-                              </div>
-                            )}
-                          </div>
-                          <p className="text-xs font-medium line-clamp-1">{product.title}</p>
-                          <p className="text-sm font-bold text-foreground tabular-nums">
-                            {formatPrice(product.price, product.currency)}
-                          </p>
-                        </button>
                       ))}
                     </div>
-                  </ScrollArea>
-                </div>
-              )}
+                  </section>
 
-              {/* Video Commerce */}
-              {selectedCategory === 'all' && !searchQuery && (
-                <VideoCommerceSection onProductSelect={handleProductSelect} />
-              )}
+                  <section className="rounded-3xl border border-border/50 bg-card p-4">
+                    <div className="mb-4 flex items-center gap-2">
+                      <SlidersHorizontal className="h-4 w-4" />
+                      <p className="text-sm font-extrabold">Filtrlar</p>
+                      {activeFilterCount > 0 && (
+                        <span className="ml-auto rounded-full bg-foreground px-2 py-0.5 text-[10px] font-bold text-background">
+                          {activeFilterCount}
+                        </span>
+                      )}
+                    </div>
+                    {filtersPanel}
+                  </section>
+                </div>
+              </aside>
 
-              {/* Sort & Layout Controls */}
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-muted-foreground">
-                  <span className="font-semibold text-foreground tabular-nums">{sortedProducts.length}</span> {marketplaceUz.page.products}
-                  {hiddenByPriceFilter > 0 && (
-                    <button
-                      className="ml-2 text-xs font-medium text-link hover:text-link-hover hover:underline"
-                      onClick={resetFilters}
-                    >
-                      ({hiddenByPriceFilter} ta filtr bilan yashirilgan — tozalash)
-                    </button>
-                  )}
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className={cn('h-8 w-8 rounded-lg', gridLayout === 'grid' && 'bg-muted')}
-                    onClick={() => setGridLayout('grid')}
-                    aria-label={marketplaceUz.page.gridView}
-                    aria-pressed={gridLayout === 'grid'}
-                  >
-                    <Grid3X3 className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className={cn('h-8 w-8 rounded-lg', gridLayout === 'list' && 'bg-muted')}
-                    onClick={() => setGridLayout('list')}
-                    aria-label={marketplaceUz.page.listView}
-                    aria-pressed={gridLayout === 'list'}
-                  >
-                    <LayoutList className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* Products Grid */}
-              {productsError ? (
-                <div className="flex flex-col items-center justify-center py-14 text-center">
-                  <div className="w-16 h-16 rounded-2xl bg-destructive/10 flex items-center justify-center mb-4">
-                    <AlertTriangle className="h-8 w-8 text-destructive" />
-                  </div>
-                  <h3 className="font-semibold text-lg mb-1">{marketplaceUz.page.loadFailed}</h3>
-                  <p className="text-sm text-muted-foreground max-w-xs mb-4">{productsError}</p>
-                  <Button variant="outline" className="rounded-xl" onClick={() => refreshProducts()}>
-                    <RotateCcw className="h-4 w-4 mr-2" />
-                    {marketplaceUz.page.retry}
-                  </Button>
-                </div>
-              ) : productsLoading ? (
-                <div className={cn(
-                  'gap-3',
-                  gridLayout === 'grid'
-                    ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'
-                    : 'space-y-3',
-                )}>
-                  {[...Array(8)].map((_, i) => (
-                    <div key={i} className={cn(
-                      'rounded-2xl bg-muted/50 animate-pulse',
-                      gridLayout === 'grid' ? 'aspect-[3/4]' : 'h-32',
-                    )} />
-                  ))}
-                </div>
-              ) : sortedProducts.length > 0 ? (
-                <div className={cn(
-                  'gap-3',
-                  gridLayout === 'grid'
-                    ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'
-                    : 'space-y-3',
-                )}>
-                  {sortedProducts.map((product, i) => (
-                    <motion.div
-                      key={product.id}
-                      initial={{ opacity: 0, y: 12 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      // Stagger is capped so large result sets don't feel laggy
-                      transition={{ delay: Math.min(i, 8) * 0.03, duration: 0.3 }}
-                    >
-                      <ProductCard
-                        product={product}
-                        onSelect={handleProductSelect}
-                        onLikeChange={refreshProducts}
-                        layout={gridLayout}
-                      />
-                    </motion.div>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState
-                  icon={<Package className="h-16 w-16" />}
-                  title={marketplaceUz.page.notFound}
-                  description={
-                    searchQuery
-                      ? "Boshqa so'z bilan izlab ko'ring"
-                      : priceFilterActive
-                        ? "Narx filtri juda tor — filtrni tozalab ko'ring"
-                        : marketplaceUz.page.firstListing
-                  }
-                />
-              )}
+              {browseContent}
             </motion.div>
           )}
 
-          {/* Orders Tab */}
           {activeTab === 'orders' && (
-            <motion.div
+            <motion.section
               key="orders"
-              initial={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              className="p-4 sm:p-5"
+              exit={{ opacity: 0 }}
+              className="min-w-0"
             >
+              <PageTitle title="Buyurtmalar" subtitle="Xaridlaringiz holatini bir joyda kuzating." />
               {!user ? (
                 <EmptyState
-                  icon={<ClipboardList className="h-16 w-16" />}
-                  title={marketplaceUz.page.signIn}
-                  description={marketplaceUz.page.ordersSignIn}
+                  icon={<ClipboardList className="h-14 w-14" />}
+                  title="Kirish talab qilinadi"
+                  description="Buyurtmalaringizni ko‘rish uchun hisobga kiring."
                 />
               ) : (
                 <OrdersView onProductSelect={handleOrderProductSelect} />
               )}
-            </motion.div>
+            </motion.section>
           )}
 
-          {/* Selling Tab */}
           {activeTab === 'selling' && (
-            <motion.div
+            <motion.section
               key="selling"
-              initial={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              className="p-4"
+              exit={{ opacity: 0 }}
+              className="min-w-0"
             >
+              <PageTitle title="Sotuvchi markazi" subtitle="Mahsulot, buyurtma va savdo boshqaruvi." />
               {!user ? (
                 <EmptyState
-                  icon={<Store className="h-16 w-16" />}
-                  title={marketplaceUz.page.signIn}
-                  description={marketplaceUz.page.sellingSignIn}
+                  icon={<Store className="h-14 w-14" />}
+                  title="Kirish talab qilinadi"
+                  description="Sotishni boshlash uchun hisobga kiring."
                 />
               ) : !seller ? (
                 <BecomeSeller onSuccess={refreshSeller} />
               ) : showDashboard ? (
                 <div className="space-y-4">
-                  <Button variant="outline" onClick={() => setShowDashboard(false)} className="rounded-xl">
-                    ← Orqaga
+                  <Button variant="outline" className="rounded-xl" onClick={() => setShowDashboard(false)}>
+                    Orqaga
                   </Button>
                   <SellerDashboard onClose={() => setShowDashboard(false)} />
                 </div>
               ) : (
                 <div className="space-y-5">
-                  {/* Seller overview: neutral, information-first cards. */}
-                  <div className="overflow-hidden rounded-2xl border border-border/70 bg-card">
-                    <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3.5">
+                  <div className="overflow-hidden rounded-3xl border border-border/60 bg-card">
+                    <div className="flex min-w-0 items-center justify-between gap-3 border-b border-border/50 px-4 py-4">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold">{seller.business_name}</p>
+                        <p className="truncate text-sm font-extrabold">{seller.business_name}</p>
                         <p className="text-xs text-muted-foreground">Sotuvchi markazi</p>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 rounded-lg px-2.5 text-xs"
-                        onClick={() => setShowDashboard(true)}
-                      >
-                        <LayoutDashboard className="mr-1.5 h-3.5 w-3.5" />
+                      <Button variant="outline" size="sm" className="shrink-0 rounded-xl" onClick={() => setShowDashboard(true)}>
+                        <LayoutDashboard className="mr-1.5 h-4 w-4" />
                         Analitika
                       </Button>
                     </div>
-                    <div className="grid grid-cols-3 divide-x divide-border/60">
+                    <div className="grid grid-cols-3 divide-x divide-border/50">
                       {[
                         { value: sellerProducts.length, label: 'Mahsulotlar' },
-                        { value: seller.total_sales ?? 0, label: marketplaceUz.page.sales },
-                        { value: (seller.rating ?? 0) > 0 ? seller.rating.toFixed(1) : '—', label: marketplaceUz.page.rating },
-                      ].map((stat) => (
-                        <div key={stat.label} className="px-3 py-4 text-center">
-                          <p className="text-xl font-semibold tabular-nums sm:text-2xl">{stat.value}</p>
-                          <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{stat.label}</p>
+                        { value: seller.total_sales ?? 0, label: 'Sotuvlar' },
+                        { value: (seller.rating ?? 0) > 0 ? seller.rating.toFixed(1) : '—', label: 'Reyting' },
+                      ].map(stat => (
+                        <div key={stat.label} className="min-w-0 px-2 py-4 text-center">
+                          <p className="truncate text-xl font-extrabold tabular-nums">{stat.value}</p>
+                          <p className="truncate text-[10px] text-muted-foreground">{stat.label}</p>
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  {/*
-                    Seller sub-navigation. The incoming order queue used to be
-                    buried inside the analytics dashboard, so sellers had no
-                    obvious place to accept or ship an order.
-                  */}
-                  <div className="grid grid-cols-2 gap-1 rounded-2xl border border-border/60 bg-muted/35 p-1" role="tablist">
-                    {sellerViews.map((view) => {
+                  <div className="inline-flex rounded-2xl border border-border/60 bg-muted/30 p-1">
+                    {sellerViews.map(view => {
                       const Icon = view.icon;
-                      const isActive = sellingView === view.id;
                       return (
                         <button
                           key={view.id}
-                          role="tab"
-                          aria-selected={isActive}
-                          onClick={() => { triggerHaptic('light'); setSellingView(view.id); }}
+                          type="button"
+                          onClick={() => setSellingView(view.id)}
                           className={cn(
-                            'flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
-                            isActive
-                              ? 'bg-foreground text-background shadow-sm'
-                              : 'text-muted-foreground hover:bg-background/70 hover:text-foreground',
+                            'flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-semibold transition',
+                            sellingView === view.id
+                              ? 'bg-background text-foreground shadow-sm'
+                              : 'text-muted-foreground',
                           )}
                         >
                           <Icon className="h-4 w-4" />
@@ -741,103 +965,105 @@ export default function MarketplacePage() {
                     <SellerOrdersView />
                   ) : (
                     <>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
-                        <Button
-                          className="h-11 rounded-xl bg-foreground text-background shadow-sm hover:bg-foreground/90"
-                          onClick={() => setShowCreateProduct(true)}
-                        >
+                      <div className="flex flex-wrap gap-2">
+                        <Button className="rounded-xl" onClick={() => setShowCreateProduct(true)}>
                           <Plus className="mr-2 h-4 w-4" />
-                          {marketplaceUz.page.addProduct}
+                          Mahsulot qo‘shish
                         </Button>
-                        <Button
-                          variant="outline"
-                          className="h-11 rounded-xl px-4"
-                          onClick={() => setShowDashboard(true)}
-                        >
+                        <Button variant="outline" className="rounded-xl" onClick={() => setShowDashboard(true)}>
                           <LayoutDashboard className="mr-2 h-4 w-4" />
-                          {marketplaceUz.page.sellerDashboard}
+                          Dashboard
                         </Button>
                       </div>
 
                       {sellerLoading ? (
-                        <div className="grid grid-cols-2 gap-3">
-                          {[...Array(4)].map((_, i) => (
-                            <div key={i} className="aspect-[3/4] rounded-2xl bg-muted/50 animate-pulse" />
-                          ))}
-                        </div>
+                        <ProductSkeletonGrid layout="grid" />
                       ) : sellerProducts.length > 0 ? (
-                        <div className="grid grid-cols-2 gap-3">
-                          {sellerProducts.map((product) => (
-                            <ProductCard key={product.id} product={product} onSelect={handleProductSelect} />
+                        <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                          {sellerProducts.map(product => (
+                            <div key={product.id} className="min-w-0">
+                              <ProductCard product={product} onSelect={handleProductSelect} />
+                            </div>
                           ))}
                         </div>
                       ) : (
                         <EmptyState
                           icon={<Package className="h-12 w-12" />}
-                          title={marketplaceUz.page.emptyProductsTitle}
-                          description={marketplaceUz.page.firstProduct}
+                          title="Mahsulotlar yo‘q"
+                          description="Birinchi mahsulotingizni joylang."
                         />
                       )}
                     </>
                   )}
                 </div>
               )}
-            </motion.div>
+            </motion.section>
           )}
 
-          {/* Saved Tab */}
           {activeTab === 'saved' && (
-            <motion.div
+            <motion.section
               key="saved"
-              initial={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              className="p-4"
+              exit={{ opacity: 0 }}
+              className="min-w-0"
             >
+              <PageTitle title="Saqlangan" subtitle="Keyinroq ko‘rish uchun belgilagan mahsulotlaringiz." />
               {!user ? (
                 <EmptyState
-                  icon={<Heart className="h-16 w-16" />}
-                  title={marketplaceUz.page.signIn}
-                  description={marketplaceUz.page.savedSignIn}
+                  icon={<Heart className="h-14 w-14" />}
+                  title="Kirish talab qilinadi"
+                  description="Saqlangan mahsulotlarni ko‘rish uchun hisobga kiring."
                 />
               ) : savedLoading ? (
-                <div className="grid grid-cols-2 gap-3">
-                  {[...Array(4)].map((_, i) => (
-                    <div key={i} className="aspect-[3/4] rounded-2xl bg-muted/50 animate-pulse" />
-                  ))}
-                </div>
+                <ProductSkeletonGrid layout="grid" />
               ) : savedProducts.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {savedProducts.map((product) => (
-                    <ProductCard
-                      key={product.id}
-                      product={product}
-                      onSelect={handleProductSelect}
-                      onLikeChange={refreshSaved}
-                    />
+                <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                  {savedProducts.map(product => (
+                    <div key={product.id} className="min-w-0">
+                      <ProductCard
+                        product={product}
+                        onSelect={handleProductSelect}
+                        onLikeChange={refreshSaved}
+                      />
+                    </div>
                   ))}
                 </div>
               ) : (
                 <EmptyState
-                  icon={<Heart className="h-16 w-16" />}
-                  title={marketplaceUz.page.savedEmptyTitle}
-                  description={marketplaceUz.page.savedEmptyDescription}
+                  icon={<Heart className="h-14 w-14" />}
+                  title="Hali saqlangan mahsulot yo‘q"
+                  description="Yurak belgisini bosgan mahsulotlaringiz shu yerda paydo bo‘ladi."
                 />
               )}
-            </motion.div>
+            </motion.section>
           )}
         </AnimatePresence>
-      </div>
+      </main>
+
+      <MarketplaceBottomNav
+        activeTab={activeTab}
+        itemCount={itemCount}
+        savedCount={savedProducts.length}
+        onBrowse={() => selectTab('browse')}
+        onCatalog={() => setShowCatalog(true)}
+        onCart={() => setShowCart(true)}
+        onSaved={() => selectTab('saved')}
+        onOrders={() => selectTab('orders')}
+      />
 
       <CreateProductDialog
         open={showCreateProduct}
         onOpenChange={setShowCreateProduct}
-        onSuccess={() => { refreshSeller(); refreshProducts(); }}
+        onSuccess={() => {
+          void refreshSeller();
+          void refreshProducts();
+        }}
       />
       <CartSheet open={showCart} onOpenChange={setShowCart} />
       <SellerStorefront
         sellerId={selectedSellerId}
-        onMessageSeller={(userId) => navigate(`/messages?user=${userId}`)}
+        onMessageSeller={userId => navigate(`/messages?user=${userId}`)}
         onClose={() => {
           setSelectedSellerId(null);
           if (searchParams.has('seller')) {
@@ -849,81 +1075,61 @@ export default function MarketplacePage() {
         onProductSelect={handleProductSelect}
       />
 
-      {/* Filters Sheet */}
+      <Sheet open={showCatalog} onOpenChange={setShowCatalog}>
+        <SheetContent
+          side="bottom"
+          className="max-h-[88dvh] rounded-t-[30px] border-x border-t border-border/60 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+        >
+          <SheetHeader className="text-left">
+            <SheetTitle>Katalog</SheetTitle>
+            <p className="text-xs text-muted-foreground">
+              Kerakli turkumni tanlang — qidiruv va filtrlar shu katalogga moslashadi.
+            </p>
+          </SheetHeader>
+          <div className="mt-4 grid grid-cols-2 gap-2 overflow-y-auto pb-4 sm:grid-cols-3">
+            <CategoryListButton
+              active={selectedCategory === 'all'}
+              label="Barcha mahsulotlar"
+              icon={<Sparkles className="h-4 w-4" />}
+              onClick={() => handleCategorySelect('all')}
+            />
+            {categories.map(category => (
+              <CategoryListButton
+                key={category.id}
+                active={selectedCategory === category.slug}
+                label={category.name}
+                icon={<CategoryIcon slug={category.slug} name={category.name} />}
+                onClick={() => handleCategorySelect(category.slug)}
+              />
+            ))}
+          </div>
+        </SheetContent>
+      </Sheet>
+
       <Sheet open={showFilters} onOpenChange={setShowFilters}>
         <SheetContent
           side={isMobile ? 'bottom' : 'right'}
           className={cn(
             'p-0',
             isMobile
-              ? 'max-h-[86dvh] rounded-t-[28px] border-x border-t border-border/70'
-              : 'w-[420px] border-l border-border/70 sm:max-w-[420px]'
+              ? 'max-h-[90dvh] rounded-t-[30px] border-x border-t border-border/60'
+              : 'w-[420px] border-l border-border/60 sm:max-w-[420px]',
           )}
         >
-          <SheetHeader className="border-b border-border/60 px-5 py-4 text-left">
-            <SheetTitle className="text-base">Filtr va saralash</SheetTitle>
-            <p className="text-xs text-muted-foreground">Natijalarni tezroq topish uchun ko‘rinishni sozlang.</p>
+          <SheetHeader className="border-b border-border/50 px-5 py-4 text-left">
+            <SheetTitle>Filtr va saralash</SheetTitle>
+            <p className="text-xs text-muted-foreground">
+              Natijalarni sizga mos holatga keltiring.
+            </p>
           </SheetHeader>
-          <div className="space-y-6 overflow-y-auto px-5 py-5">
-            <div className="space-y-3">
-              <label className="text-sm font-medium">Saralash</label>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { id: 'newest', label: 'Eng yangi' },
-                  { id: 'popular', label: 'Mashhur' },
-                  { id: 'price_low', label: 'Arzon → Qimmat' },
-                  { id: 'price_high', label: 'Qimmat → Arzon' },
-                ].map(s => (
-                  <button
-                    key={s.id}
-                    onClick={() => setSortBy(s.id)}
-                    className={cn(
-                      'min-h-11 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors',
-                      sortBy === s.id
-                        ? 'border-foreground bg-foreground text-background'
-                        : 'border-border/60 bg-muted/35 text-muted-foreground hover:bg-muted hover:text-foreground',
-                    )}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">
-                  Narx: {formatPrice(activeRange[0])} — {formatPrice(activeRange[1])}
-                </label>
-                {priceFilterActive && (
-                  <button
-                    className="text-xs font-semibold text-foreground underline-offset-4 hover:underline"
-                    onClick={() => setPriceRange(null)}
-                  >
-                    Tozalash
-                  </button>
-                )}
-              </div>
-              <Slider
-                value={activeRange}
-                min={0}
-                max={sliderMax}
-                step={Math.max(1, Math.round(sliderMax / 100))}
-                onValueChange={(value) => setPriceRange([value[0], value[1]])}
-                className="py-2"
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Katalogdagi eng yuqori narx: {formatPrice(maxProductPrice)}
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-2 border-t border-border/60 pt-4">
+          <div className="max-h-[calc(90dvh-82px)] overflow-y-auto px-5 py-5">
+            {filtersPanel}
+            <div className="sticky bottom-0 mt-6 grid grid-cols-2 gap-2 border-t border-border/50 bg-background pt-4">
               <Button variant="outline" className="h-11 rounded-xl" onClick={resetFilters}>
                 Tiklash
               </Button>
-              <Button
-                className="h-11 rounded-xl bg-foreground text-background hover:bg-foreground/90"
-                onClick={() => setShowFilters(false)}
-              >
-                Qo‘llash
+              <Button className="h-11 rounded-xl" onClick={() => setShowFilters(false)}>
+                {sortedProducts.length} natijani ko‘rish
               </Button>
             </div>
           </div>
@@ -941,6 +1147,206 @@ export default function MarketplacePage() {
   }
 
   return pageContent;
+}
+
+function FilterChip({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'rounded-full border px-3 py-1.5 text-xs font-semibold transition',
+        active
+          ? 'border-foreground bg-foreground text-background'
+          : 'border-border/60 bg-background text-muted-foreground hover:text-foreground',
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+function ToggleRow({
+  checked,
+  label,
+  description,
+  onChange,
+}: {
+  checked: boolean;
+  label: string;
+  description: string;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className="flex w-full items-center justify-between gap-3 rounded-2xl border border-border/50 bg-background p-3 text-left"
+    >
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold">{label}</span>
+        <span className="block text-[11px] text-muted-foreground">{description}</span>
+      </span>
+      <span
+        className={cn(
+          'relative h-6 w-11 shrink-0 rounded-full transition',
+          checked ? 'bg-foreground' : 'bg-muted',
+        )}
+      >
+        <span
+          className={cn(
+            'absolute top-1 h-4 w-4 rounded-full bg-background shadow transition',
+            checked ? 'left-6' : 'left-1',
+          )}
+        />
+      </span>
+    </button>
+  );
+}
+
+function CategoryTile({
+  active,
+  label,
+  icon,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-[86px] shrink-0 snap-start text-center"
+      aria-pressed={active}
+    >
+      <span
+        className={cn(
+          'mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border transition',
+          active
+            ? 'border-foreground bg-foreground text-background shadow-lg'
+            : 'border-border/50 bg-muted/55 text-muted-foreground',
+        )}
+      >
+        {icon}
+      </span>
+      <span className={cn('mt-1.5 block line-clamp-2 text-[11px] leading-tight', active && 'font-bold')}>
+        {label}
+      </span>
+    </button>
+  );
+}
+
+function CategoryListButton({
+  active,
+  label,
+  icon,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        'flex min-w-0 items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition',
+        active
+          ? 'bg-foreground text-background'
+          : 'bg-muted/35 text-foreground hover:bg-muted/70',
+      )}
+    >
+      <span
+        className={cn(
+          'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
+          active ? 'bg-background/15' : 'bg-background',
+        )}
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{label}</span>
+      <ChevronRight className="h-4 w-4 shrink-0 opacity-40" />
+    </button>
+  );
+}
+
+function SectionHeading({
+  title,
+  action,
+  icon,
+  onAction,
+}: {
+  title: string;
+  action?: string;
+  icon?: React.ReactNode;
+  onAction?: () => void;
+}) {
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-2">
+        {icon && <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-muted">{icon}</span>}
+        <h2 className="truncate text-base font-extrabold sm:text-lg">{title}</h2>
+      </div>
+      {action && onAction && (
+        <button
+          type="button"
+          onClick={onAction}
+          className="flex shrink-0 items-center gap-0.5 text-xs font-bold text-muted-foreground hover:text-foreground"
+        >
+          {action}
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function PageTitle({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div className="mb-5">
+      <h1 className="text-xl font-extrabold tracking-tight sm:text-2xl">{title}</h1>
+      <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+    </div>
+  );
+}
+
+function ProductSkeletonGrid({ layout }: { layout: 'grid' | 'list' }) {
+  return (
+    <div
+      className={cn(
+        'min-w-0 gap-3',
+        layout === 'grid'
+          ? 'grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4'
+          : 'grid grid-cols-1',
+      )}
+    >
+      {Array.from({ length: 8 }).map((_, index) => (
+        <div
+          key={index}
+          className={cn(
+            'animate-pulse rounded-2xl bg-muted/55',
+            layout === 'grid' ? 'aspect-[3/4]' : 'h-28',
+          )}
+        />
+      ))}
+    </div>
+  );
 }
 
 function MarketplaceProductImage({
@@ -977,12 +1383,23 @@ function MarketplaceProductImage({
   );
 }
 
-function EmptyState({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
+function EmptyState({
+  icon,
+  title,
+  description,
+  action,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  action?: React.ReactNode;
+}) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="text-muted-foreground/20 mb-4">{icon}</div>
-      <h3 className="font-semibold text-lg mb-1">{title}</h3>
-      <p className="text-sm text-muted-foreground max-w-xs">{description}</p>
+    <div className="flex min-h-64 flex-col items-center justify-center px-4 py-12 text-center">
+      <div className="mb-4 text-muted-foreground/25">{icon}</div>
+      <h3 className="text-lg font-bold">{title}</h3>
+      <p className="mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>
+      {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }
