@@ -83,6 +83,7 @@ export function useWebRTC(roomId: string | null) {
   const seenSignalIdsRef = useRef<Set<string>>(new Set());
   const channelReconnectAttemptRef = useRef(0);
   const channelReconnectTimerRef = useRef<number | null>(null);
+  const iceServersRef = useRef<RTCIceServer[] | null>(null);
 
   // Perfect-negotiation state is kept per peer. SDP changes for one peer must
   // never overlap: Chrome rejects a second offer whose m-line order no longer
