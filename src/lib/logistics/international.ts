@@ -1,6 +1,6 @@
 export type InternationalServiceLevel = 'economy' | 'standard' | 'express';
 export type InternationalIncoterm = 'DAP' | 'DDP';
-export type LogisticsTransportMode = 'courier' | 'road' | 'air' | 'sea' | 'rail' | 'multimodal' | 'pickup';
+export type LogisticsTransportMode = 'courier' | 'truck' | 'air' | 'sea' | 'rail' | 'multimodal' | 'pickup';
 
 export interface InternationalShippingQuote {
   quote_id: string;
@@ -57,13 +57,13 @@ export const ISO_COUNTRY_CODES = [
   'VA','VC','VE','VG','VI','VN','VU','WF','WS','YE','YT','ZA','ZM','ZW',
 ] as const;
 
-let displayNames: Intl.DisplayNames | null | undefined;
+let displayNames: any = undefined;
 
 export function countryLabel(code: string) {
   try {
     if (displayNames === undefined) {
       displayNames = typeof Intl !== 'undefined' && 'DisplayNames' in Intl
-        ? new Intl.DisplayNames(['uz', 'en'], { type: 'region' })
+        ? new (Intl as any).DisplayNames(['uz', 'en'], { type: 'region' })
         : null;
     }
     return displayNames?.of(code) || code;
@@ -79,6 +79,7 @@ export const INTERNATIONAL_COUNTRY_OPTIONS = ISO_COUNTRY_CODES
 export function transportModeLabel(mode?: string | null) {
   const labels: Record<string, string> = {
     courier: 'Kuryer',
+    truck: 'Avtomobil',
     road: 'Avtomobil',
     air: 'Avia',
     sea: 'Dengiz',
@@ -104,6 +105,8 @@ export function normalizeInternationalQuote(value: unknown): InternationalShippi
   const q = value as Record<string, unknown>;
   if (!q.quote_id || !q.destination_country_code) return null;
   const num = (key: string) => Number(q[key] ?? 0);
+  const rawMode = String(q.transport_mode || 'multimodal').toLowerCase();
+  const normalizedMode = rawMode === 'road' ? 'truck' : rawMode;
   return {
     quote_id: String(q.quote_id),
     origin_country_code: String(q.origin_country_code || ''),
@@ -111,7 +114,7 @@ export function normalizeInternationalQuote(value: unknown): InternationalShippi
     international: Boolean(q.international),
     service_level: String(q.service_level || 'standard') as InternationalServiceLevel,
     incoterm: String(q.incoterm || 'DAP') as InternationalIncoterm,
-    transport_mode: String(q.transport_mode || 'multimodal') as LogisticsTransportMode,
+    transport_mode: normalizedMode as LogisticsTransportMode,
     currency: String(q.currency || 'USD'),
     cart_value: num('cart_value'),
     billable_weight_kg: num('billable_weight_kg'),
