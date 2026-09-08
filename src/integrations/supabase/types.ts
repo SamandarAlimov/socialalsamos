@@ -9195,6 +9195,10 @@ export type Database = {
         Args: { p_stream_id: string; p_user_id: string }
         Returns: boolean
       }
+      can_owner_add_conversation_participant: {
+        Args: { p_conversation_id: string; p_target_user_id: string }
+        Returns: boolean
+      }
       can_read_conversation: {
         Args: { p_conversation_id: string; p_user_id: string }
         Returns: boolean
@@ -9207,6 +9211,7 @@ export type Database = {
         Args: { p_call_id: string; p_user_id: string }
         Returns: boolean
       }
+      can_view_post: { Args: { p_post_id: string }; Returns: boolean }
       can_view_presence: { Args: { target_user_id: string }; Returns: boolean }
       can_view_profile_field: {
         Args: { field_name: string; target_user_id: string }
@@ -9298,6 +9303,7 @@ export type Database = {
         Returns: string
       }
       decline_video_call: { Args: { p_call_id: string }; Returns: undefined }
+      delete_story: { Args: { p_story_id: string }; Returns: Json }
       discard_story_draft: { Args: { p_story_id: string }; Returns: boolean }
       effective_conversation_notification_settings: {
         Args: { p_conversation_id: string; p_user_id?: string }
@@ -9474,6 +9480,7 @@ export type Database = {
         Args: { p_stream_id: string }
         Returns: number
       }
+      get_my_account_control_v3: { Args: never; Returns: Json }
       get_post_insights: {
         Args: { p_days?: number; p_post_id: string }
         Returns: Json
@@ -9599,6 +9606,10 @@ export type Database = {
       }
       is_conversation_restricted: {
         Args: { p_conversation_id: string; p_kind?: string; p_user_id: string }
+        Returns: boolean
+      }
+      is_my_conversation: {
+        Args: { p_conversation_id: string }
         Returns: boolean
       }
       is_post_poll_expired: { Args: { p_post_id: string }; Returns: boolean }
