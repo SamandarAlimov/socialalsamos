@@ -356,7 +356,9 @@ export function useWebRTC(roomId: string | null) {
       const existing = peerConnectionsRef.current.get(peerId);
       if (existing) return existing;
 
-      const pc = new RTCPeerConnection(DEFAULT_CONFIG);
+      const pc = new RTCPeerConnection({
+        iceServers: iceServersRef.current ?? DEFAULT_CONFIG.iceServers,
+      });
 
       // Single offer producer. Track addition, ICE restart and future media
       // renegotiation all pass through the same per-peer queue.
@@ -365,15 +367,22 @@ export function useWebRTC(roomId: string | null) {
         void enqueuePeerNegotiation(peerId, async () => {
           if (pc.connectionState === "closed" || pc.signalingState !== "stable") return;
 
+          // Deterministic initiator: for the FIRST negotiation only the
+          // impolite peer offers. This removes glare entirely, which is what
+          // produced Chrome's "order of m-lines ... does not match" error.
+          if (!pc.currentRemoteDescription && isPoliteForPeer(peerId)) return;
+
           try {
             makingOfferRef.current.set(peerId, true);
-            const offer = await pc.createOffer();
-            if (pc.connectionState === "closed" || pc.signalingState !== "stable") return;
-            await pc.setLocalDescription(offer);
+            // Implicit setLocalDescription(): the browser creates the offer at
+            // apply time, so transceiver/m-line order can never drift between
+            // createOffer() and setLocalDescription().
+            await pc.setLocalDescription();
+            if (!pc.localDescription) return;
             await sendSignal("offer", {
               from: user.id,
               to: peerId,
-              sdp: pc.localDescription ?? offer,
+              sdp: pc.localDescription,
             });
           } catch (e) {
             // InvalidState can legitimately happen when a remote offer wins a
