@@ -35,7 +35,7 @@ export function useAdminAccess() {
           .maybeSingle(),
       ]);
 
-      const roleKeys = !assignmentResult?.error && Array.isArray(assignmentResult?.data)
+      const roleKeys: string[] = !assignmentResult?.error && Array.isArray(assignmentResult?.data)
         ? Array.from(new Set(assignmentResult.data.map((row: any) => String(row.role_key)).filter(Boolean)))
         : [];
       const legacyAdmin = !legacyResult.error && Boolean(legacyResult.data);
