@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { MapPin } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { detectMediaKind, formatBytes } from '@/lib/postComposer';
+import { detectMediaKind, formatBytes, type MediaKind } from '@/lib/postComposer';
 import { usePostMedia, type PostMediaItem } from '@/hooks/usePostMedia';
 import { usePostLocation, type PostLocation } from '@/hooks/usePostLocation';
 import { usePostMusic } from '@/hooks/usePostMusic';
@@ -12,7 +12,11 @@ import { PostMusicCard } from '@/components/PostMusicCard';
 import { PostAudioPlayer } from '@/components/PostAudioPlayer';
 import { PostDocumentCard } from '@/components/PostDocumentViewer';
 import { fileNameFromUrl } from '@/lib/documentPreview';
-import { resolveStorageUrl } from '@/lib/mediaUpload';
+import { resolveStorageUrlCandidates } from '@/lib/mediaUpload';
+import {
+  mergeMediaCandidateGroups,
+  type MediaCandidateGroup,
+} from '@/lib/mediaRecovery';
 import { PostMediaCarousel } from '@/components/PostMediaCarousel';
 import { MediaStickerOverlay } from '@/components/stickers/MediaStickerOverlay';
 import type { WithEditState } from '@/lib/stickerPlacements';
@@ -20,34 +24,75 @@ import type { LegacyPostLocation, PostMusic } from '@/lib/postMarkers';
 
 interface PostExtrasProps {
   postId: string;
+  /** `posts.has_poll` — keraksiz so‘rovlarni oldini oladi. */
   hasPoll?: boolean;
+  /** Post egasi bo‘lsa live joylashuvni to‘xtatish tugmasi chiqadi. */
   isOwner?: boolean;
+  /**
+   * Eski sxemadagi fayllar (`posts.media_urls`). Bu massiv user data hisoblanadi:
+   * structured `post_media` mavjud bo'lsa ham o'chirilmaydi va fallback bo'lib qoladi.
+   */
   legacyMediaUrls?: string[] | null;
   legacyMediaType?: string | null;
+  /** Production structured schema hali deploy bo'lmaganda content markeridan tiklanadi. */
   legacyLocation?: LegacyPostLocation | null;
+  /** Koordinatasiz eski joylashuv (masalan "Joriy joylashuv") — nom bilan karta chiziladi. */
   legacyLocationLabel?: string | null;
+  /** `[MUSIC]{...}` markeridan olingan musiqa — `post_music` bo‘lmasa ishlatiladi. */
   legacyMusic?: PostMusic | null;
   className?: string;
 }
 
-function AudioCard({ item }: { item: PostMediaItem }) {
+function mediaKindFromLegacyUrl(
+  url: string,
+  index: number,
+  total: number,
+  legacyMediaType?: string | null,
+): MediaKind {
+  let kind = detectMediaKind({ name: fileNameFromUrl(url), type: '' });
+
+  if (kind === 'other' && (index === 0 || total === 1)) {
+    if (
+      legacyMediaType === 'video' ||
+      legacyMediaType === 'reel' ||
+      legacyMediaType === 'short'
+    ) {
+      kind = 'video';
+    } else if (legacyMediaType === 'image') {
+      kind = 'image';
+    } else if (legacyMediaType === 'audio') {
+      kind = 'audio';
+    }
+  }
+
+  return kind;
+}
+
+function AudioCard({
+  url,
+  item,
+}: {
+  url: string;
+  item?: PostMediaItem;
+}) {
   const details = [
-    item.duration_seconds
+    item?.duration_seconds
       ? Math.floor(item.duration_seconds / 60) + ':' + String(Math.round(item.duration_seconds % 60)).padStart(2, '0')
       : 'Audio',
-    item.file_size ? formatBytes(item.file_size) : null,
+    item?.file_size ? formatBytes(item.file_size) : null,
   ].filter(Boolean).join(' · ');
 
   return (
     <PostAudioPlayer
-      src={item.storage_url}
-      title={item.file_name ?? 'Audio'}
+      src={url}
+      title={item?.file_name ?? fileNameFromUrl(url, 'Audio')}
       subtitle={details}
-      durationSeconds={item.duration_seconds}
+      durationSeconds={item?.duration_seconds}
     />
   );
 }
 
+/** Koordinatasi yo‘q eski joylashuv uchun karta (xarita rasmi bo‘lmaydi). */
 function PlaceLabelCard({ label }: { label: string }) {
   return (
     <Link
@@ -60,12 +105,22 @@ function PlaceLabelCard({ label }: { label: string }) {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">{label}</span>
-        <span className="block truncate text-xs text-muted-foreground">Xaritada ochish</span>
+        <span className="block truncate text-xs text-muted-foreground">
+          Xaritada ochish
+        </span>
       </span>
     </Link>
   );
 }
 
+/**
+ * Lentadagi post ostiga qo‘shiladigan strukturali kontent bloki.
+ *
+ * Muhim compatibility qoidasi: `post_media` va `posts.media_urls` bir-birini
+ * almashtirmaydi. Ular position bo'yicha bitta logical media'ga birlashtiriladi
+ * va har bir URL playback fallback sifatida saqlanadi. Shu sabab migration yoki
+ * eski CDN/bucket holati bir foydalanuvchi mediasini feed'dan yo'qotmaydi.
+ */
 export function PostExtras({
   postId,
   hasPoll,
@@ -77,37 +132,42 @@ export function PostExtras({
   legacyMusic,
   className,
 }: PostExtrasProps) {
-  const { media } = usePostMedia(postId);
+  const { media, refresh } = usePostMedia(postId);
+  const [retryVersion, setRetryVersion] = useState(0);
   const { location } = usePostLocation(postId);
   const { music } = usePostMusic(postId);
-  const [resolvedLegacyMedia, setResolvedLegacyMedia] = useState<string[]>(legacyMediaUrls ?? []);
+  const [legacyCandidateSets, setLegacyCandidateSets] = useState<string[][]>(
+    () => (legacyMediaUrls ?? []).map((url) => (url ? [url] : [])),
+  );
 
   useEffect(() => {
     let cancelled = false;
-    const source = (legacyMediaUrls ?? []).filter(Boolean);
+    const source = legacyMediaUrls ?? [];
 
     if (source.length === 0) {
-      setResolvedLegacyMedia([]);
+      setLegacyCandidateSets([]);
       return;
     }
 
     void Promise.all(
       source.map(async (url) => {
+        if (!url) return [];
         try {
-          return await resolveStorageUrl(url);
+          const candidates = await resolveStorageUrlCandidates(url);
+          return candidates.length > 0 ? candidates : [url];
         } catch (error) {
           console.warn('Legacy post media URL resolve failed:', error);
-          return url;
+          return [url];
         }
       }),
     ).then((resolved) => {
-      if (!cancelled) setResolvedLegacyMedia(resolved);
+      if (!cancelled) setLegacyCandidateSets(resolved);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [legacyMediaUrls]);
+  }, [legacyMediaUrls, retryVersion]);
 
   const fallbackLocation: PostLocation | null = legacyLocation
     ? {
@@ -133,7 +193,8 @@ export function PostExtras({
     : null;
 
   const displayLocation = location ?? fallbackLocation;
-  const labelOnlyLocation = !displayLocation && legacyLocationLabel ? legacyLocationLabel : null;
+  const labelOnlyLocation =
+    !displayLocation && legacyLocationLabel ? legacyLocationLabel : null;
 
   const structuredAudioUrl = music?.playback_url ?? music?.track?.audio_url ?? null;
   const structuredMusic: PostMusic | null =
@@ -148,34 +209,51 @@ export function PostExtras({
       : null;
   const displayMusic = structuredMusic ?? legacyMusic ?? null;
 
-  const visuals = media.filter((item) => item.kind === 'image' || item.kind === 'video');
-  const others = media.filter((item) => item.kind !== 'image' && item.kind !== 'video');
-
-  const legacy = media.length === 0 ? resolvedLegacyMedia : [];
-
-  const legacyItems = useMemo(
+  const structuredGroups = useMemo<MediaCandidateGroup[]>(
     () =>
-      legacy.map((url, index) => {
-        let kind = detectMediaKind({ name: fileNameFromUrl(url), type: '' });
+      media.map((item) => ({
+        position: item.position,
+        kind: item.kind,
+        urls: item.storage_candidates?.length
+          ? item.storage_candidates
+          : [item.storage_url],
+      })),
+    [media],
+  );
 
-        if (kind === 'other' && (index === 0 || legacy.length === 1)) {
-          if (legacyMediaType === 'video' || legacyMediaType === 'reel' || legacyMediaType === 'short') {
-            kind = 'video';
-          } else if (legacyMediaType === 'image') {
-            kind = 'image';
-          } else if (legacyMediaType === 'audio') {
-            kind = 'audio';
-          }
-        }
+  const legacyGroups = useMemo<MediaCandidateGroup[]>(() => {
+    const source = legacyMediaUrls ?? [];
+    return source
+      .map((url, index) => ({
+        position: index,
+        kind: mediaKindFromLegacyUrl(url ?? '', index, source.length, legacyMediaType),
+        urls: legacyCandidateSets[index]?.length
+          ? legacyCandidateSets[index]
+          : url
+            ? [url]
+            : [],
+      }))
+      .filter((item) => item.urls.length > 0);
+  }, [legacyCandidateSets, legacyMediaType, legacyMediaUrls]);
 
-        return { url, kind };
-      }),
-    [legacy, legacyMediaType],
+  const mergedMedia = useMemo(
+    () => mergeMediaCandidateGroups(structuredGroups, legacyGroups),
+    [legacyGroups, structuredGroups],
+  );
+  const structuredByPosition = useMemo(
+    () => new Map(media.map((item) => [item.position, item] as const)),
+    [media],
+  );
+
+  const visuals = mergedMedia.filter(
+    (item) => item.kind === 'image' || item.kind === 'video',
+  );
+  const others = mergedMedia.filter(
+    (item) => item.kind !== 'image' && item.kind !== 'video',
   );
 
   const hasAnything =
-    media.length > 0 ||
-    legacy.length > 0 ||
+    mergedMedia.length > 0 ||
     Boolean(displayLocation) ||
     Boolean(labelOnlyLocation) ||
     Boolean(displayMusic) ||
@@ -187,77 +265,69 @@ export function PostExtras({
     Boolean(className?.split(/\s+/).includes('md:px-5'));
   const visualBleedClass = hasStandardCardGutter ? '-mx-4 md:-mx-5' : undefined;
   const visualFrameClass = hasStandardCardGutter
-    ? 'overflow-hidden border-y border-border/60'
+    ? 'overflow-hidden border-t border-border/60'
     : 'overflow-hidden rounded-2xl border border-border/60';
+
+  const visualMediaType =
+    legacyMediaType === 'reel' || legacyMediaType === 'short'
+      ? legacyMediaType
+      : visuals.some((item) => item.kind === 'video')
+        ? 'mixed'
+        : 'image';
 
   return (
     <div data-post-analytics-post-id={postId} className={cn('space-y-3', className)}>
-      {legacyItems.filter((item) => item.kind === 'image' || item.kind === 'video').length > 0 && (
-        <div className={cn(visualBleedClass, hasStandardCardGutter && 'border-y border-border/60')}>
-          <PostMediaCarousel
-            mediaUrls={legacyItems
-              .filter((item) => item.kind === 'image' || item.kind === 'video')
-              .map((item) => item.url)}
-            mediaType={
-              legacyItems.some((item) => item.kind === 'video')
-                ? 'mixed'
-                : legacyMediaType || 'image'
-            }
-            mediaKinds={legacyItems
-              .filter((item) => item.kind === 'image' || item.kind === 'video')
-              .map((item) => item.kind as 'image' | 'video')}
-          />
-        </div>
-      )}
-
-      {legacyItems
-        .filter((item) => item.kind === 'audio')
-        .map((item) => (
-          <PostAudioPlayer
-            key={item.url}
-            src={item.url}
-            title={fileNameFromUrl(item.url, 'Audio')}
-            subtitle="Audio"
-          />
-        ))}
-
-      {legacyItems
-        .filter((item) => item.kind === 'document' || item.kind === 'archive' || item.kind === 'other')
-        .map((item) => (
-          <PostDocumentCard key={item.url} url={item.url} fileName={fileNameFromUrl(item.url)} />
-        ))}
-
       {visuals.length > 0 && (
         <div className={cn(visualFrameClass, visualBleedClass)}>
           <PostMediaCarousel
-            mediaUrls={visuals.map((item) => item.storage_url)}
-            mediaType={visuals.some((item) => item.kind === 'video') ? 'mixed' : 'image'}
+            onRetry={() => {
+              void refresh();
+              setRetryVersion((previous) => previous + 1);
+            }}
+            mediaUrls={visuals.map((item) => item.urls[0])}
+            mediaCandidates={visuals.map((item) => item.urls)}
+            mediaType={visualMediaType}
             mediaKinds={visuals.map((item) => item.kind as 'image' | 'video')}
-            posters={visuals.map((item) => item.thumbnail_url)}
-            altTexts={visuals.map((item) => item.alt_text ?? item.file_name)}
-            overlays={visuals.map((item) => (
-              <MediaStickerOverlay
-                key={item.id}
-                editState={(item as PostMediaItem & WithEditState).edit_state}
-                idPrefix={item.id}
-              />
-            ))}
+            posters={visuals.map(
+              (item) => structuredByPosition.get(item.position)?.thumbnail_url,
+            )}
+            altTexts={visuals.map((item) => {
+              const structured = structuredByPosition.get(item.position);
+              return structured?.alt_text ?? structured?.file_name ?? null;
+            })}
+            overlays={visuals.map((item) => {
+              const structured = structuredByPosition.get(item.position);
+              return structured ? (
+                <MediaStickerOverlay
+                  key={structured.id}
+                  editState={(structured as PostMediaItem & WithEditState).edit_state}
+                  idPrefix={structured.id}
+                />
+              ) : null;
+            })}
           />
         </div>
       )}
 
-      {others.map((item) =>
-        item.kind === 'audio' ? (
-          <AudioCard key={item.id} item={item} />
+      {others.map((group) => {
+        const structured = structuredByPosition.get(group.position);
+        const url = group.urls[0];
+
+        return group.kind === 'audio' ? (
+          <AudioCard
+            key={`audio:${group.position}:${url}`}
+            url={url}
+            item={structured}
+          />
         ) : (
           <PostDocumentCard
-            key={item.id}
-            url={item.storage_url}
-            fileName={item.file_name}
-            fileSize={item.file_size}
+            key={`file:${group.position}:${url}`}
+            url={url}
+            fileName={structured?.file_name ?? fileNameFromUrl(url)}
+            fileSize={structured?.file_size}
           />
-        ),
-      )}
+        );
+      })}
 
       {displayMusic && (
         <PostMusicCard
@@ -271,7 +341,10 @@ export function PostExtras({
       {hasPoll && <PollCard postId={postId} />}
 
       {displayLocation && (
-        <PostLocationCard location={displayLocation} isOwner={Boolean(location) && isOwner} />
+        <PostLocationCard
+          location={displayLocation}
+          isOwner={Boolean(location) && isOwner}
+        />
       )}
 
       {labelOnlyLocation && <PlaceLabelCard label={labelOnlyLocation} />}
