@@ -108,6 +108,7 @@ function VideoCard({
   const userPausedRef = useRef(false);
   const likeBurstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const playFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const surfacePointerRef = useRef<{ pointerId: number; x: number; y: number; moved: boolean } | null>(null);
   const zoom = usePinchZoom(2.5, 1, frameRef);
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -148,6 +149,7 @@ function VideoCard({
       el?.pause();
       if (el) el.currentTime = 0;
       userPausedRef.current = false;
+      surfacePointerRef.current = null;
       setIsPlaying(false);
       setExpanded(false);
       zoom.resetZoom();
@@ -254,6 +256,49 @@ function VideoCard({
     return true;
   }, [speed]);
 
+  const cancelSurfacePointer = useCallback(() => {
+    surfacePointerRef.current = null;
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    if (holdActiveRef.current) endHold();
+    tapIntent.clearPending();
+  }, [endHold, tapIntent]);
+
+  const handleSurfacePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    surfacePointerRef.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      moved: false,
+    };
+    startHold();
+  }, [startHold]);
+
+  const handleSurfacePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const pointer = surfacePointerRef.current;
+    if (!pointer || pointer.pointerId !== event.pointerId || pointer.moved) return;
+    if (Math.hypot(event.clientX - pointer.x, event.clientY - pointer.y) <= 12) return;
+
+    pointer.moved = true;
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    if (holdActiveRef.current) endHold();
+    tapIntent.clearPending();
+  }, [endHold, tapIntent]);
+
+  const handleSurfacePointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const pointer = surfacePointerRef.current;
+    if (!pointer || pointer.pointerId !== event.pointerId) return;
+    surfacePointerRef.current = null;
+    const wasHold = endHold();
+    if (!wasHold && !pointer.moved) tapIntent.registerTap(event.clientX, event.clientY);
+  }, [endHold, tapIntent]);
+
   const handleSeek = useCallback((time: number) => {
     const el = videoRef.current;
     if (!el) return;
@@ -336,6 +381,13 @@ function VideoCard({
   }, [isActive, keyboardEnabled, onMuteToggle, seekBy, toggleFullscreen, togglePlay]);
 
   const stopBubble = (event: React.SyntheticEvent) => event.stopPropagation();
+  const collapseExpandedFromInfo = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!expanded) return;
+    const target = event.target as HTMLElement;
+    if (target.closest('button, a, [role="button"]')) return;
+    event.stopPropagation();
+    setExpanded(false);
+  }, [expanded]);
 
   return (
     <div className="relative flex h-full w-full snap-start snap-always select-none items-center justify-center bg-black">
@@ -355,6 +407,11 @@ function VideoCard({
               ),
         )}
         style={{ touchAction: zoom.isZoomed ? 'none' : 'pan-y' }}
+        onPointerDown={handleSurfacePointerDown}
+        onPointerMove={handleSurfacePointerMove}
+        onPointerUp={handleSurfacePointerUp}
+        onPointerCancel={cancelSurfacePointer}
+        onPointerLeave={cancelSurfacePointer}
         onWheel={zoom.handlers.onWheel}
         onTouchStart={(event) => {
           if (event.touches.length >= 2 || zoom.isZoomed) {
@@ -401,15 +458,6 @@ function VideoCard({
           muted={globalMuted}
           playsInline
           preload={isActive ? 'auto' : 'metadata'}
-          onPointerDown={(event) => {
-            if (event.pointerType === 'mouse' && event.button !== 0) return;
-            startHold();
-          }}
-          onPointerUp={(event) => {
-            if (!endHold()) tapIntent.registerTap(event.clientX, event.clientY);
-          }}
-          onPointerCancel={() => endHold()}
-          onPointerLeave={() => endHold()}
           onContextMenu={(event) => event.preventDefault()}
           onDoubleClick={(event) => event.preventDefault()}
           onLoadedMetadata={(event) => {
@@ -485,7 +533,7 @@ function VideoCard({
 
         <div className={cn('absolute inset-x-0 z-30 flex flex-col gap-2 px-3', isMobile ? 'bottom-[calc(env(safe-area-inset-bottom,0px)+70px)]' : 'bottom-0 pb-3')}>
           <div className="flex items-end gap-3">
-            <div className="min-w-0 flex-1" onPointerDown={stopBubble} onPointerUp={stopBubble}>
+            <div className="min-w-0 flex-1" onPointerDown={stopBubble} onPointerUp={stopBubble} onClick={collapseExpandedFromInfo}>
               <div className="mb-1.5 flex items-center gap-2.5">
                 <StoryAvatar userId={video.profile?.id || video.user_id} username={video.profile?.username} displayName={video.profile?.display_name} avatarUrl={video.profile?.avatar_url} isVerified={!!video.profile?.is_verified} size="sm" showRing />
                 <button type="button" onClick={(event) => { event.stopPropagation(); onProfileClick(); }} className="flex min-w-0 items-center gap-1.5">
@@ -502,7 +550,7 @@ function VideoCard({
               {video.content && (
                 <div className="mb-2">
                   {expanded ? (
-                    <div className="max-h-[32vh] overflow-y-auto whitespace-pre-wrap pr-1 text-[13px] leading-relaxed text-white" onClick={stopBubble}>
+                    <div className="max-h-[32vh] overflow-y-auto whitespace-pre-wrap pr-1 text-[13px] leading-relaxed text-white">
                       {video.content}
                       <button type="button" onClick={(event) => { event.stopPropagation(); setExpanded(false); }} className="ml-2 text-xs font-semibold text-white/70">{t('common.less', 'less')}</button>
                     </div>

@@ -23,6 +23,8 @@ interface VideoCommentsSheetProps {
   commentsCount: number;
 }
 
+const MOBILE_COMMENT_SNAP_POINTS = [0.66, 0.98];
+
 function DesktopHeader({ commentsCount, onClose }: { commentsCount: number; onClose: () => void }) {
   return (
     <div className="flex items-center justify-between gap-3">
@@ -46,8 +48,12 @@ function DesktopHeader({ commentsCount, onClose }: { commentsCount: number; onCl
 
 /**
  * Video comments are intentionally an immersive surface:
- * - mobile/tablet-small: Instagram/YouTube-style draggable bottom sheet;
+ * - mobile/tablet-small: Instagram-style two-stage drawer. It opens with video
+ *   still visible above it, then can be dragged almost edge-to-edge for reading;
  * - desktop/tablet-wide: right side panel that does not cover the player.
+ *
+ * Opening this surface never changes the video's play state. A playing video keeps
+ * playing; a user-paused video stays paused because VideosPage remains active.
  */
 export function VideoCommentsSheet({
   isOpen,
@@ -59,21 +65,68 @@ export function VideoCommentsSheet({
 
   if (isMobile) {
     return (
-      <Drawer open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <DrawerContent className="dark flex h-[72dvh] max-h-[780px] min-h-[420px] flex-col overflow-hidden rounded-t-[30px] border-x-0 border-b-0 border-t border-white/10 bg-neutral-950 text-white shadow-[0_-24px_80px_rgba(0,0,0,.55)]">
-          <div className="mx-auto mt-2.5 h-1 w-11 shrink-0 rounded-full bg-white/30" />
-          <DrawerHeader className="relative shrink-0 border-b border-white/8 px-4 pb-3 pt-2 text-center">
-            <DrawerTitle className="text-[15px] font-semibold text-white">
+      <Drawer
+        open={isOpen}
+        onOpenChange={(open) => !open && onClose()}
+        shouldScaleBackground={false}
+        snapPoints={MOBILE_COMMENT_SNAP_POINTS}
+        fadeFromIndex={1}
+      >
+        <DrawerContent
+          data-video-comments-sheet="true"
+          overlayClassName="bg-black/25 backdrop-blur-[0.5px]"
+          handleClassName="mt-2 h-1 w-9 bg-white/35"
+          className="dark flex h-[98dvh] max-h-[98dvh] min-h-0 flex-col overflow-hidden rounded-t-[24px] border-x-0 border-b-0 border-t border-white/10 bg-neutral-950 text-white shadow-[0_-18px_60px_rgba(0,0,0,.48)]"
+        >
+          <style>{`
+            [data-video-comments-sheet="true"] form[data-comment-composer="true"] {
+              padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+            }
+            [data-video-comments-sheet="true"] form[data-comment-composer="true"] > div {
+              gap: 8px;
+              align-items: center;
+            }
+            [data-video-comments-sheet="true"] form[data-comment-composer="true"] > div > button[type="submit"] {
+              width: 36px;
+              min-width: 36px;
+              height: 36px;
+              padding: 0;
+              border-radius: 9999px;
+              font-size: 0;
+              background: rgb(255 255 255);
+              color: rgb(10 10 10);
+              box-shadow: none;
+            }
+            [data-video-comments-sheet="true"] form[data-comment-composer="true"] > div > button[type="submit"]::after {
+              content: "↑";
+              display: block;
+              font-size: 20px;
+              line-height: 1;
+              font-weight: 800;
+              transform: translateY(-1px);
+            }
+            [data-video-comments-sheet="true"] form[data-comment-composer="true"] > div > button[type="submit"]:disabled {
+              opacity: 1;
+              background: rgb(255 255 255 / 0.10);
+              color: rgb(255 255 255 / 0.32);
+            }
+            [data-video-comments-sheet="true"] form[data-comment-composer="true"] > div > button[type="submit"]:has(svg)::after {
+              display: none;
+            }
+          `}</style>
+
+          <DrawerHeader className="relative shrink-0 border-b border-white/8 px-4 pb-2 pt-1 text-center">
+            <DrawerTitle className="text-[14px] font-semibold leading-6 text-white">
               Izohlar{commentsCount > 0 ? ` · ${commentsCount}` : ''}
             </DrawerTitle>
             <Button
               variant="ghost"
               size="icon"
               onClick={onClose}
-              className="absolute right-2 top-0 h-9 w-9 rounded-full text-white/70 hover:bg-white/10 hover:text-white"
+              className="absolute right-2 top-0 h-8 w-8 rounded-full text-white/65 hover:bg-white/10 hover:text-white"
               aria-label="Izohlarni yopish"
             >
-              <X className="h-4.5 w-4.5" />
+              <X className="h-4 w-4" />
             </Button>
           </DrawerHeader>
 
