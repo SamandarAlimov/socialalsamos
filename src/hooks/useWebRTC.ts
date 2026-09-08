@@ -468,7 +468,7 @@ export function useWebRTC(roomId: string | null) {
       peerConnectionsRef.current.set(peerId, pc);
       return pc;
     },
-    [enqueuePeerNegotiation, scheduleIceRestart, sendSignal, stampCallStartedAt, user?.id]
+    [enqueuePeerNegotiation, isPoliteForPeer, scheduleIceRestart, sendSignal, stampCallStartedAt, user?.id]
   );
 
   const handleOffer = useCallback(
