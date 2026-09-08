@@ -1,85 +1,132 @@
-import { useState } from 'react';
-import { MapPin, Navigation, X } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 import { MarketplaceLocationPicker } from '@/components/marketplace/MarketplaceLocationPicker';
-import { useMarketplaceDeliveryLocation } from '@/hooks/useMarketplaceDeliveryLocation';
-import { cn } from '@/lib/utils';
+import {
+  MARKETPLACE_LOCATION_PICKER_OPEN_EVENT,
+  useMarketplaceDeliveryLocation,
+} from '@/hooks/useMarketplaceDeliveryLocation';
+import { useIsMobile } from '@/hooks/use-mobile';
+
+const RETURN_ROUTE_KEY = 'alsamos:marketplace:return-route';
+
+function safeInternalRoute(value: string | null) {
+  return Boolean(value && value.startsWith('/') && !value.startsWith('//') && !value.includes('\\'));
+}
 
 /**
- * A persistent Marketplace destination control. It intentionally lives outside
- * individual sheets so product pages, cart and checkout all read the same
- * delivery point through useMarketplaceDeliveryLocation.
+ * Marketplace chrome bridge.
+ *
+ * The old implementation rendered a permanently floating delivery-location
+ * pill above every Marketplace screen. That obscured products and competed
+ * with the Marketplace bottom nav. This bridge is intentionally invisible
+ * until a product/cart/checkout asks for an address; then it opens the shared
+ * map picker. It also injects a real mobile back button into the Marketplace
+ * header without bringing back the global app-shell header.
  */
 export function MarketplaceDeliveryLocationDock() {
   const route = useLocation();
+  const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [headerTarget, setHeaderTarget] = useState<HTMLElement | null>(null);
   const { location, setLocation } = useMarketplaceDeliveryLocation();
 
-  if (!route.pathname.startsWith('/marketplace')) return null;
-  if (route.pathname === '/marketplace/chat') return null;
+  useEffect(() => {
+    if (!route.pathname.startsWith('/marketplace')) {
+      try {
+        sessionStorage.setItem(
+          RETURN_ROUTE_KEY,
+          `${route.pathname}${route.search}${route.hash}`,
+        );
+      } catch {
+        // Navigation fallback remains /home when session storage is unavailable.
+      }
+    }
+  }, [route.hash, route.pathname, route.search]);
+
+  useEffect(() => {
+    const openPicker = () => setPickerOpen(true);
+    window.addEventListener(MARKETPLACE_LOCATION_PICKER_OPEN_EVENT, openPicker);
+    return () => window.removeEventListener(MARKETPLACE_LOCATION_PICKER_OPEN_EVENT, openPicker);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobile || route.pathname !== '/marketplace') {
+      setHeaderTarget(null);
+      return;
+    }
+
+    const findTarget = () =>
+      document.querySelector<HTMLElement>('.marketplace-neutral > header > div > div');
+
+    const immediate = findTarget();
+    if (immediate) {
+      setHeaderTarget(immediate);
+      return;
+    }
+
+    const observer = new MutationObserver(() => {
+      const target = findTarget();
+      if (target) {
+        setHeaderTarget(target);
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [isMobile, route.pathname]);
+
+  const goBack = () => {
+    const historyIndex = Number(window.history.state?.idx);
+    if (Number.isFinite(historyIndex) && historyIndex > 0) {
+      navigate(-1);
+      return;
+    }
+
+    let fallback = '/home';
+    try {
+      const stored = sessionStorage.getItem(RETURN_ROUTE_KEY);
+      if (safeInternalRoute(stored) && !stored!.startsWith('/marketplace')) fallback = stored!;
+    } catch {
+      // /home is a safe deterministic fallback.
+    }
+    navigate(fallback, { replace: true });
+  };
+
+  const showPicker = route.pathname.startsWith('/marketplace') && route.pathname !== '/marketplace/chat';
 
   return (
     <>
-      <div className="pointer-events-none fixed inset-x-0 bottom-20 z-40 flex justify-center px-3 md:bottom-5">
-        <div
-          className={cn(
-            'pointer-events-auto flex max-w-[min(92vw,560px)] items-center gap-2 rounded-full border border-border/60 bg-background/92 p-1.5 shadow-2xl backdrop-blur-2xl',
-            location && 'pr-1',
-          )}
-        >
-          <button
-            type="button"
-            onClick={() => setPickerOpen(true)}
-            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left hover:bg-muted/55"
-          >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground text-background">
-              <MapPin className="h-3.5 w-3.5" />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
-                Yetkazish manzili
-              </span>
-              <span className="block max-w-[42vw] truncate text-xs font-semibold sm:max-w-sm">
-                {location?.label || 'Xaritadan manzil tanlang'}
-              </span>
-            </span>
-          </button>
-
-          <Button
-            type="button"
-            size="sm"
-            className="h-9 shrink-0 rounded-full px-3 text-xs"
-            onClick={() => setPickerOpen(true)}
-          >
-            <Navigation className="mr-1.5 h-3.5 w-3.5" />
-            {location ? 'O‘zgartirish' : 'Tanlash'}
-          </Button>
-
-          {location && (
+      {isMobile && route.pathname === '/marketplace' && headerTarget
+        ? createPortal(
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="h-9 w-9 shrink-0 rounded-full text-muted-foreground"
-              onClick={() => setLocation(null)}
-              aria-label="Yetkazish manzilini tozalash"
+              className="order-first h-11 w-11 shrink-0 rounded-2xl border border-border/50 bg-background/80 shadow-sm md:hidden"
+              onClick={goBack}
+              aria-label="Oldingi sahifaga qaytish"
             >
-              <X className="h-3.5 w-3.5" />
-            </Button>
-          )}
-        </div>
-      </div>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>,
+            headerTarget,
+          )
+        : null}
 
-      <MarketplaceLocationPicker
-        open={pickerOpen}
-        onOpenChange={setPickerOpen}
-        value={location}
-        onSelect={setLocation}
-        title="Yetkazish manzilini tanlang"
-        description="Siz hozir turgan joy emas, buyurtma yetkazilishi kerak bo‘lgan istalgan manzilni xaritadan yoki qidiruvdan tanlang."
-      />
+      {showPicker && (
+        <MarketplaceLocationPicker
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          value={location}
+          onSelect={setLocation}
+          title="Yetkazish manzilini tanlang"
+          description="Joriy joylashuvingizni tanlang yoki xarita va qidiruv orqali buyurtma yetkazilishi kerak bo‘lgan boshqa manzilni belgilang."
+        />
+      )}
     </>
   );
 }
