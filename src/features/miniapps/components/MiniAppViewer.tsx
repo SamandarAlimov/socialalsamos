@@ -100,7 +100,7 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
           sessionId: sessionId.current,
           hasUrl: Boolean(url),
           hasText: Boolean(text),
-        });
+        } as any);
       } catch (error) {
         // Native share oynasini foydalanuvchi yopsa bu xato sifatida ko'rsatilmaydi.
         if (error instanceof DOMException && error.name === 'AbortError') return;
