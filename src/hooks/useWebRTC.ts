@@ -651,6 +651,10 @@ export function useWebRTC(roomId: string | null) {
     currentRoomRef.current = roomId;
     channelReconnectAttemptRef.current = 0;
 
+    // Load TURN/STUN before any peer connection is created, otherwise relay
+    // candidates are missing and calls connect signalling-only (no media).
+    iceServersRef.current = await loadIceServers();
+
     const stream = await startLocalStream(video, true);
     if (!stream) {
       currentRoomRef.current = null;
