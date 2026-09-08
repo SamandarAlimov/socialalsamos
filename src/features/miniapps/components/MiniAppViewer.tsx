@@ -154,7 +154,7 @@ export function MiniAppViewer({ app, onClose }: MiniAppViewerProps) {
         status: resolution.status,
         transferId: resolution.transferId ?? null,
         sessionId: sessionId.current,
-      });
+      } as any);
 
       if (resolution.status === 'paid') {
         toast({
