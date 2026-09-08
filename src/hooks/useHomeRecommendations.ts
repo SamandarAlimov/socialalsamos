@@ -213,10 +213,10 @@ export async function loadRecommendationProfileForUser(
       .in('id', interactedPostIds);
 
     if (metadataResult.error) {
-      metadataResult = await db
+      metadataResult = (await db
         .from('posts')
         .select('id, user_id, content, media_type, media_urls, created_at')
-        .in('id', interactedPostIds);
+        .in('id', interactedPostIds)) as typeof metadataResult;
     }
 
     const [hashtagResult] = await Promise.allSettled([

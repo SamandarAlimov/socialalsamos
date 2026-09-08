@@ -82,7 +82,7 @@ export default function PostPermalinkPage() {
         result = {
           ...fallback,
           data: fallback.data ? { ...fallback.data, formatted_content: null } : null,
-        };
+        } as typeof result;
       }
 
       if (cancelled) return;
