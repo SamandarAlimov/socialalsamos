@@ -24,12 +24,31 @@
   max-width: 100%;
 }
 
-.marketplace-x-rail,
-.marketplace-neutral .alsamos-scrollbar {
+/* Premium sticky chrome: keep the glass feel, but do not let busy product imagery
+   wash out gray/black labels underneath the header. */
+.marketplace-neutral > header.sticky {
+  background-color: hsl(var(--background) / 0.975) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(125%);
+  backdrop-filter: blur(24px) saturate(125%);
+}
+
+/* Horizontal commerce rails must still allow a vertical page swipe to escape to the
+   document. `pan-x` alone was swallowing downward swipes over trending cards. */
+.marketplace-x-rail {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-inline: contain;
   scroll-snap-type: x proximity;
-  touch-action: pan-x;
+  touch-action: pan-x pan-y;
+  scrollbar-width: none;
+}
+
+/* Radix ScrollArea viewports are vertical in Marketplace sheets/dialogs. They used
+   to inherit the rail's horizontal touch policy, which blocked cart scrolling when
+   the gesture started on a product card. */
+.marketplace-neutral .alsamos-scrollbar {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
   scrollbar-width: none;
 }
 
@@ -38,9 +57,12 @@
   display: none;
 }
 
-.marketplace-x-rail > *,
-.marketplace-neutral .alsamos-scrollbar > * {
+.marketplace-x-rail > * {
   scroll-snap-align: start;
+}
+
+.marketplace-neutral .alsamos-scrollbar > * {
+  scroll-snap-align: none;
 }
 
 @media (min-width: 640px) and (max-width: 1023px) {
@@ -181,6 +203,76 @@
   .marketplace-neutral [class~="bottom-[78px]"] {
     bottom: env(safe-area-inset-bottom) !important;
     padding-bottom: calc(0.75rem + env(safe-area-inset-bottom)) !important;
+  }
+
+  /* MarketplaceLocationPicker: the old 620px minimum plus a 360px map could make
+     the centered dialog taller than an iPhone viewport, leaving the confirmation
+     controls under the home indicator. Keep the information panel independently
+     scrollable, let the map shrink responsibly, and pin a high-contrast safe-area
+     footer inside the visible viewport. */
+  .marketplace-neutral > div[class*="min-h-[620px]"] {
+    min-height: 0 !important;
+    max-height: calc(100dvh - 148px);
+    grid-template-rows: auto minmax(220px, 1fr) auto !important;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .marketplace-neutral > div[class*="min-h-[620px]"] > div:first-child {
+    max-height: 38dvh;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+
+  .marketplace-neutral > div[class*="min-h-[620px]"] > div[class*="min-h-[360px]"] {
+    min-height: 220px !important;
+  }
+
+  .marketplace-neutral > div[class*="min-h-[620px]"] > div:last-child {
+    position: sticky;
+    bottom: 0;
+    z-index: 60;
+    padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
+    background-color: hsl(var(--background) / 0.985);
+    -webkit-backdrop-filter: blur(20px) saturate(120%);
+    backdrop-filter: blur(20px) saturate(120%);
+    box-shadow: 0 -12px 30px hsl(var(--foreground) / 0.08);
+  }
+
+  .marketplace-neutral > div[class*="min-h-[620px]"] > div:last-child > div:last-child {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.25fr);
+    gap: 0.5rem;
+    margin-left: 0;
+  }
+
+  .marketplace-neutral > div[class*="min-h-[620px]"] > div:last-child button {
+    width: 100%;
+    min-width: 0;
+    min-height: 3rem;
+    border-radius: 0.875rem;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .marketplace-neutral > div[class*="min-h-[620px]"] > div:last-child button:first-child {
+    border-color: hsl(var(--foreground) / 0.18) !important;
+    background-color: hsl(var(--background)) !important;
+    color: hsl(var(--foreground)) !important;
+  }
+
+  .marketplace-neutral > div[class*="min-h-[620px]"] > div:last-child button:last-child {
+    border-color: hsl(var(--foreground)) !important;
+    background-color: hsl(var(--foreground)) !important;
+    color: hsl(var(--background)) !important;
+    box-shadow: 0 10px 24px hsl(var(--foreground) / 0.16);
   }
 }
 
