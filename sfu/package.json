@@ -1,0 +1,15 @@
+{
+  "name": "alsamos-self-hosted-sfu",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node --check server.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.87.1",
+    "mediasoup": "^3.26.0",
+    "ws": "^8.18.3"
+  }
+}
