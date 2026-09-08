@@ -42,11 +42,18 @@ import {
 const HOLD_TO_SPEED_MS = 300;
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
 
+export interface VideoPlaybackSnapshot {
+  time: number;
+  paused: boolean;
+}
+
 export interface VideoWatchPanelProps {
   videos: VideoPost[];
   activeVideoId: string;
-  onSelectVideo: (videoId: string) => void;
-  onClose: () => void;
+  initialPlayback?: VideoPlaybackSnapshot | null;
+  onSelectVideo: (videoId: string, currentPlayback: VideoPlaybackSnapshot) => void;
+  onClose: (currentPlayback: VideoPlaybackSnapshot) => void;
+  onPlaybackChange?: (videoId: string, playback: VideoPlaybackSnapshot) => void;
   onLike: (videoId: string) => void;
   onBookmark: (videoId: string) => void;
   onFollow: (userId: string) => void;
@@ -60,8 +67,10 @@ export interface VideoWatchPanelProps {
 export function VideoWatchPanel({
   videos,
   activeVideoId,
+  initialPlayback = null,
   onSelectVideo,
   onClose,
+  onPlaybackChange,
   onLike,
   onBookmark,
   onFollow,
@@ -88,14 +97,19 @@ export function VideoWatchPanel({
   const holdActiveRef = useRef(false);
   const speedRef = useRef(1);
   const mutedRef = useRef(readVideosMutedPreference());
+  const initialPlaybackRef = useRef<VideoPlaybackSnapshot | null>(initialPlayback);
+  const pendingPlaybackRef = useRef<VideoPlaybackSnapshot | null>(initialPlayback);
+  const desiredPausedRef = useRef(initialPlayback?.paused ?? false);
   const zoom = usePinchZoom(2.5, 1, playerRef);
 
-  const [isPlaying, setIsPlaying] = useState(true);
+  initialPlaybackRef.current = initialPlayback;
+
+  const [isPlaying, setIsPlaying] = useState(!(initialPlayback?.paused ?? false));
   const [isEnded, setIsEnded] = useState(false);
   const [isMuted, setIsMuted] = useState(mutedRef.current);
   const [speed, setSpeed] = useState(1);
   const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
+  const [currentTime, setCurrentTime] = useState(initialPlayback?.time ?? 0);
   const [buffered, setBuffered] = useState(0);
   const [ratio, setRatio] = useState<number | null>(null);
   const [showControls, setShowControls] = useState(true);
@@ -116,6 +130,46 @@ export function VideoWatchPanel({
     hideTimerRef.current = setTimeout(() => setShowControls(false), 3000);
   }, []);
 
+  const getCurrentPlayback = useCallback((): VideoPlaybackSnapshot => {
+    const el = videoRef.current;
+    const time = el && Number.isFinite(el.currentTime) ? el.currentTime : currentTime;
+    const paused = el ? el.paused : !isPlaying;
+    return { time: Math.max(0, time || 0), paused };
+  }, [currentTime, isPlaying]);
+
+  const publishPlayback = useCallback((playback = getCurrentPlayback()) => {
+    onPlaybackChange?.(activeVideoId, playback);
+    return playback;
+  }, [activeVideoId, getCurrentPlayback, onPlaybackChange]);
+
+  const applyPendingPlayback = useCallback((el: HTMLVideoElement) => {
+    const playback = pendingPlaybackRef.current;
+    if (playback) {
+      const durationLimit = Number.isFinite(el.duration) && el.duration > 0
+        ? Math.max(0, el.duration - 0.05)
+        : playback.time;
+      const target = Math.min(Math.max(0, playback.time || 0), durationLimit);
+      if (Math.abs(el.currentTime - target) > 0.08) el.currentTime = target;
+      setCurrentTime(target);
+      pendingPlaybackRef.current = null;
+    }
+
+    el.muted = mutedRef.current;
+    el.playbackRate = speedRef.current;
+
+    if (desiredPausedRef.current) {
+      el.pause();
+      setIsPlaying(false);
+    } else {
+      void el.play().catch(() => setIsPlaying(false));
+    }
+  }, []);
+
+  const closeWithPlayback = useCallback(() => {
+    const playback = publishPlayback();
+    onClose(playback);
+  }, [onClose, publishPlayback]);
+
   useEffect(() => {
     mutedRef.current = isMuted;
     writeVideosMutedPreference(isMuted);
@@ -134,25 +188,26 @@ export function VideoWatchPanel({
   }, []);
 
   useEffect(() => {
-    setCurrentTime(0);
+    const playback = initialPlaybackRef.current ?? { time: 0, paused: false };
+    pendingPlaybackRef.current = playback;
+    desiredPausedRef.current = playback.paused;
+    setCurrentTime(playback.time);
     setDuration(0);
     setBuffered(0);
     setRatio(null);
     setDescriptionOpen(false);
     setIsEnded(false);
-    setIsPlaying(true);
+    setIsPlaying(!playback.paused);
     zoom.resetZoom();
     revealControls();
 
     requestAnimationFrame(() => {
       const el = videoRef.current;
       if (!el) return;
-      el.currentTime = 0;
-      el.muted = mutedRef.current;
-      el.playbackRate = speedRef.current;
-      void el.play().catch(() => setIsPlaying(false));
+      if (el.readyState >= 1) applyPendingPlayback(el);
+      else if (playback.paused) el.pause();
     });
-  }, [activeVideoId, revealControls, zoom.resetZoom]);
+  }, [activeVideoId, applyPendingPlayback, revealControls, zoom.resetZoom]);
 
   useEffect(() => {
     const handler = () => setIsFullscreen(Boolean(document.fullscreenElement));
@@ -175,13 +230,18 @@ export function VideoWatchPanel({
         setCurrentTime(0);
         setIsEnded(false);
       }
+      desiredPausedRef.current = false;
       void el.play().catch(() => setIsPlaying(false));
+      publishPlayback({ time: el.currentTime, paused: false });
     } else {
+      desiredPausedRef.current = true;
+      const time = el.currentTime;
       el.pause();
+      publishPlayback({ time, paused: true });
     }
     lightTap();
     revealControls();
-  }, [isEnded, lightTap, revealControls]);
+  }, [isEnded, lightTap, publishPlayback, revealControls]);
 
   const doubleTapLike = useCallback(() => {
     if (!video) return;
@@ -206,7 +266,10 @@ export function VideoWatchPanel({
       clearPending();
       holdActiveRef.current = true;
       el.playbackRate = 2;
-      if (el.paused) void el.play().catch(() => setIsPlaying(false));
+      if (el.paused) {
+        desiredPausedRef.current = false;
+        void el.play().catch(() => setIsPlaying(false));
+      }
       mediumTap();
     }, HOLD_TO_SPEED_MS);
   }, [clearPending, mediumTap]);
@@ -227,16 +290,18 @@ export function VideoWatchPanel({
     if (!el || !Number.isFinite(el.duration)) return;
     el.currentTime = Math.min(el.duration, Math.max(0, el.currentTime + delta));
     setCurrentTime(el.currentTime);
+    publishPlayback({ time: el.currentTime, paused: el.paused });
     revealControls();
-  }, [revealControls]);
+  }, [publishPlayback, revealControls]);
 
   const handleSeek = useCallback((time: number) => {
     const el = videoRef.current;
     if (!el) return;
     el.currentTime = time;
     setCurrentTime(time);
+    publishPlayback({ time, paused: el.paused });
     if (time < duration) setIsEnded(false);
-  }, [duration]);
+  }, [duration, publishPlayback]);
 
   const cycleSpeed = useCallback(() => {
     setSpeed((current) => {
@@ -269,12 +334,12 @@ export function VideoWatchPanel({
         case 'l': event.preventDefault(); seekBy(10); break;
         case 'm': event.preventDefault(); setIsMuted((value) => !value); break;
         case 'f': event.preventDefault(); void toggleFullscreen(); break;
-        case 'escape': if (!document.fullscreenElement) { event.preventDefault(); onClose(); } break;
+        case 'escape': if (!document.fullscreenElement) { event.preventDefault(); closeWithPlayback(); } break;
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [keyboardEnabled, onClose, seekBy, toggleFullscreen, togglePlay]);
+  }, [closeWithPlayback, keyboardEnabled, seekBy, toggleFullscreen, togglePlay]);
 
   if (!video) return null;
 
@@ -290,7 +355,16 @@ export function VideoWatchPanel({
       </div>
       <div className="py-1">
         {upNext.map((item) => (
-          <VideoUpNextItem key={item.id} video={item} onClick={() => { onSelectVideo(item.id); lightTap(); }} onProfileClick={() => onOpenProfile(item)} />
+          <VideoUpNextItem
+            key={item.id}
+            video={item}
+            onClick={() => {
+              const playback = publishPlayback();
+              onSelectVideo(item.id, playback);
+              lightTap();
+            }}
+            onProfileClick={() => onOpenProfile(item)}
+          />
         ))}
       </div>
     </div>
@@ -341,31 +415,44 @@ export function VideoWatchPanel({
             className={cn('relative z-[1] h-full w-full will-change-transform', fitCover ? 'object-cover' : 'object-contain')}
             style={{ transform: `translate3d(${zoom.translateX}px, ${zoom.translateY}px, 0) scale(${zoom.scale})`, transformOrigin: 'center center' }}
             playsInline
-            autoPlay
             muted={isMuted}
             onLoadedMetadata={(event) => {
               const el = event.currentTarget;
               setDuration(Number.isFinite(el.duration) ? el.duration : 0);
               if (el.videoWidth && el.videoHeight) setRatio(el.videoWidth / el.videoHeight);
-              el.playbackRate = speedRef.current;
-              el.muted = mutedRef.current;
+              applyPendingPlayback(el);
             }}
-            onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+            onCanPlay={(event) => {
+              if (!desiredPausedRef.current && !isEnded) void event.currentTarget.play().catch(() => setIsPlaying(false));
+            }}
+            onTimeUpdate={(event) => {
+              const el = event.currentTarget;
+              setCurrentTime(el.currentTime);
+              onPlaybackChange?.(activeVideoId, { time: el.currentTime, paused: el.paused });
+            }}
             onProgress={(event) => { const el = event.currentTarget; if (el.buffered.length) setBuffered(el.buffered.end(el.buffered.length - 1)); }}
-            onPlay={() => { setIsPlaying(true); setIsEnded(false); }}
+            onPlay={(event) => {
+              desiredPausedRef.current = false;
+              setIsPlaying(true);
+              setIsEnded(false);
+              onPlaybackChange?.(activeVideoId, { time: event.currentTarget.currentTime, paused: false });
+            }}
             onPause={() => setIsPlaying(false)}
             onEnded={(event) => {
               // No autoplay/auto-next: stop on the current item and expose replay.
-              setCurrentTime(event.currentTarget.duration || duration);
+              const endTime = event.currentTarget.duration || duration;
+              desiredPausedRef.current = true;
+              setCurrentTime(endTime);
               setIsEnded(true);
               setIsPlaying(false);
+              onPlaybackChange?.(activeVideoId, { time: endTime, paused: true });
               setShowControls(true);
               if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
             }}
           />
 
           <div className={cn('pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent p-3 transition-opacity', showControls ? 'opacity-100' : 'opacity-0')}>
-            <Button variant="ghost" size="icon" onClick={(event) => { event.stopPropagation(); onClose(); }} className={cn('h-10 w-10 rounded-full bg-black/30 text-white hover:bg-white/15', showControls ? 'pointer-events-auto' : 'pointer-events-none')} aria-label="Videolarga qaytish"><ArrowLeft className="h-5 w-5" /></Button>
+            <Button variant="ghost" size="icon" onClick={(event) => { event.stopPropagation(); closeWithPlayback(); }} className={cn('h-10 w-10 rounded-full bg-black/30 text-white hover:bg-white/15', showControls ? 'pointer-events-auto' : 'pointer-events-none')} aria-label="Videolarga qaytish"><ArrowLeft className="h-5 w-5" /></Button>
             <div className={cn('flex items-center gap-2', showControls ? 'pointer-events-auto' : 'pointer-events-none')}>
               <Button variant="ghost" size="sm" onClick={cycleSpeed} className="h-9 rounded-full bg-black/30 px-3 text-xs font-semibold text-white">{speed}x</Button>
               <Button variant="ghost" size="icon" onClick={() => setFitCover((value) => !value)} className="h-10 w-10 rounded-full bg-black/30 text-white" aria-label="Sig‘dirish">{fitCover ? <Minimize2 className="h-4.5 w-4.5" /> : <Maximize2 className="h-4.5 w-4.5" />}</Button>

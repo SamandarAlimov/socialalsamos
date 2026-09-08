@@ -28,7 +28,7 @@ import { StoryAvatar } from '@/components/stories/StoryAvatar';
 import { StoryStickerOverlay } from '@/components/stickers/StoryStickerOverlay';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { VideoScrubBar } from '@/components/video/VideoScrubBar';
-import { VideoWatchPanel } from '@/components/video/VideoWatchPanel';
+import { VideoWatchPanel, type VideoPlaybackSnapshot } from '@/components/video/VideoWatchPanel';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -69,13 +69,15 @@ type VideoRouteState = {
 interface VideoCardProps {
   video: VideoPost;
   isActive: boolean;
+  resumePlayback?: VideoPlaybackSnapshot | null;
+  onPlaybackChange: (playback: VideoPlaybackSnapshot) => void;
   onLike: () => void;
   onBookmark: () => void;
   onCommentClick: () => void;
   onShareClick: () => void;
   onLikesClick: () => void;
   onProfileClick: () => void;
-  onWatchClick: () => void;
+  onWatchClick: (playback: VideoPlaybackSnapshot) => void;
   onFollow: () => void;
   currentUserId?: string | null;
   isMobile: boolean;
@@ -87,6 +89,8 @@ interface VideoCardProps {
 function VideoCard({
   video,
   isActive,
+  resumePlayback = null,
+  onPlaybackChange,
   onLike,
   onBookmark,
   onCommentClick,
@@ -109,7 +113,12 @@ function VideoCard({
   const likeBurstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const playFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const surfacePointerRef = useRef<{ pointerId: number; x: number; y: number; moved: boolean } | null>(null);
+  const wasActiveRef = useRef(false);
+  const resumeAppliedRef = useRef(false);
+  const resumePlaybackRef = useRef<VideoPlaybackSnapshot | null>(resumePlayback);
   const zoom = usePinchZoom(2.5, 1, frameRef);
+
+  resumePlaybackRef.current = resumePlayback;
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [showPlayFeedback, setShowPlayFeedback] = useState(false);
@@ -143,12 +152,39 @@ function VideoCard({
     void el.play().catch(() => setIsPlaying(false));
   }, [globalMuted, isActive, speed]);
 
+  const applyResumePlayback = useCallback((el: HTMLVideoElement) => {
+    if (resumeAppliedRef.current) return;
+    const playback = resumePlaybackRef.current;
+    userPausedRef.current = playback?.paused ?? false;
+
+    if (playback && Number.isFinite(playback.time)) {
+      const durationLimit = Number.isFinite(el.duration) && el.duration > 0
+        ? Math.max(0, el.duration - 0.05)
+        : playback.time;
+      const target = Math.min(Math.max(0, playback.time || 0), durationLimit);
+      if (Math.abs(el.currentTime - target) > 0.08) el.currentTime = target;
+      setCurrentTime(target);
+    }
+    resumeAppliedRef.current = true;
+  }, []);
+
   useEffect(() => {
-    if (!isActive) {
-      const el = videoRef.current;
-      el?.pause();
-      if (el) el.currentTime = 0;
+    const becameActive = isActive && !wasActiveRef.current;
+    const becameInactive = !isActive && wasActiveRef.current;
+    wasActiveRef.current = isActive;
+    const el = videoRef.current;
+
+    if (becameInactive) {
+      if (el) {
+        onPlaybackChange({
+          time: Number.isFinite(el.currentTime) ? el.currentTime : currentTime,
+          paused: userPausedRef.current,
+        });
+        el.pause();
+        el.currentTime = 0;
+      }
       userPausedRef.current = false;
+      resumeAppliedRef.current = false;
       surfacePointerRef.current = null;
       setIsPlaying(false);
       setExpanded(false);
@@ -157,10 +193,20 @@ function VideoCard({
       return;
     }
 
-    userPausedRef.current = false;
+    if (!becameActive) return;
+
+    resumeAppliedRef.current = false;
+    userPausedRef.current = resumePlaybackRef.current?.paused ?? false;
+    if (el?.readyState && el.readyState >= 1) applyResumePlayback(el);
     recordView(video.id);
-    attemptPlay();
-  }, [attemptPlay, finishWatch, isActive, recordView, video.id, zoom]);
+
+    if (!userPausedRef.current && (!resumePlaybackRef.current || el?.readyState && el.readyState >= 1)) {
+      attemptPlay();
+    } else if (userPausedRef.current) {
+      el?.pause();
+      setIsPlaying(false);
+    }
+  }, [applyResumePlayback, attemptPlay, currentTime, finishWatch, isActive, onPlaybackChange, recordView, video.id, zoom]);
 
   useEffect(() => {
     const el = videoRef.current;
@@ -206,13 +252,16 @@ function VideoCard({
     if (el.paused || el.ended) {
       userPausedRef.current = false;
       if (el.ended) el.currentTime = 0;
+      onPlaybackChange({ time: el.currentTime, paused: false });
       void el.play().catch(() => setIsPlaying(false));
     } else {
       userPausedRef.current = true;
+      const time = el.currentTime;
       el.pause();
+      onPlaybackChange({ time, paused: true });
     }
     flashPlayState();
-  }, [flashPlayState, lightTap]);
+  }, [flashPlayState, lightTap, onPlaybackChange]);
 
   const doubleTapLike = useCallback(() => {
     successFeedback();
@@ -238,11 +287,12 @@ function VideoCard({
       el.playbackRate = 2;
       if (el.paused) {
         userPausedRef.current = false;
+        onPlaybackChange({ time: el.currentTime, paused: false });
         void el.play().catch(() => setIsPlaying(false));
       }
       mediumTap();
     }, HOLD_TO_SPEED_MS);
-  }, [mediumTap, tapIntent]);
+  }, [mediumTap, onPlaybackChange, tapIntent]);
 
   const endHold = useCallback(() => {
     if (holdTimerRef.current) {
@@ -305,14 +355,16 @@ function VideoCard({
     markSeek(video.id);
     el.currentTime = time;
     setCurrentTime(time);
-  }, [markSeek, video.id]);
+    onPlaybackChange({ time, paused: userPausedRef.current });
+  }, [markSeek, onPlaybackChange, video.id]);
 
   const seekBy = useCallback((delta: number) => {
     const el = videoRef.current;
     if (!el || !Number.isFinite(el.duration)) return;
     markSeek(video.id);
     el.currentTime = Math.min(el.duration, Math.max(0, el.currentTime + delta));
-  }, [markSeek, video.id]);
+    onPlaybackChange({ time: el.currentTime, paused: userPausedRef.current });
+  }, [markSeek, onPlaybackChange, video.id]);
 
   const cycleSpeed = useCallback(() => {
     setSpeed((current) => {
@@ -466,7 +518,11 @@ function VideoCard({
             setDuration(Number.isFinite(el.duration) ? el.duration : 0);
             el.playbackRate = speed;
             el.muted = globalMuted;
-            if (isActive && !userPausedRef.current) attemptPlay();
+            if (isActive) {
+              applyResumePlayback(el);
+              if (!userPausedRef.current) attemptPlay();
+              else el.pause();
+            }
           }}
           onCanPlay={() => {
             if (isActive && !userPausedRef.current) attemptPlay();
@@ -475,26 +531,50 @@ function VideoCard({
             const el = event.currentTarget;
             setCurrentTime(el.currentTime);
             if (el.buffered.length) setBuffered(el.buffered.end(el.buffered.length - 1));
-            if (isActive) trackProgress(video.id, el.currentTime, el.duration);
+            if (isActive) {
+              trackProgress(video.id, el.currentTime, el.duration);
+              onPlaybackChange({ time: el.currentTime, paused: userPausedRef.current });
+            }
           }}
           onSeeking={() => markSeek(video.id)}
           onEnded={(event) => {
             markCompleted(video.id);
             const el = event.currentTarget;
+            userPausedRef.current = false;
             setCurrentTime(0);
-            if (isActive && !userPausedRef.current) {
+            onPlaybackChange({ time: 0, paused: false });
+            if (isActive) {
               el.currentTime = 0;
               void el.play().catch(() => setIsPlaying(false));
             } else {
               setIsPlaying(false);
             }
           }}
-          onPlay={() => setIsPlaying(true)}
+          onPlay={(event) => {
+            userPausedRef.current = false;
+            setIsPlaying(true);
+            if (isActive) onPlaybackChange({ time: event.currentTarget.currentTime, paused: false });
+          }}
           onPause={() => setIsPlaying(false)}
         />
 
         <div className="absolute right-3 top-[max(12px,env(safe-area-inset-top))] z-[35] flex items-center gap-2" onPointerDown={stopBubble} onPointerUp={stopBubble}>
-          <button type="button" onClick={(event) => { event.stopPropagation(); lightTap(); onWatchClick(); }} aria-label="Kengaytirilgan ko‘rish" className="flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white ring-1 ring-white/15 backdrop-blur-xl active:scale-90">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              lightTap();
+              const el = videoRef.current;
+              const playback = {
+                time: el && Number.isFinite(el.currentTime) ? el.currentTime : currentTime,
+                paused: userPausedRef.current || Boolean(el?.paused),
+              };
+              onPlaybackChange(playback);
+              onWatchClick(playback);
+            }}
+            aria-label="Kengaytirilgan ko‘rish"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white ring-1 ring-white/15 backdrop-blur-xl active:scale-90"
+          >
             <ListVideo className="h-5 w-5" />
           </button>
           <button type="button" onClick={(event) => { event.stopPropagation(); onMuteToggle(); }} aria-label={globalMuted ? 'Ovozni yoqish' : 'Ovozni o‘chirish'} className="flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white ring-1 ring-white/15 backdrop-blur-xl active:scale-90">
@@ -666,6 +746,7 @@ export default function VideosPage() {
   const [globalMuted, setGlobalMuted] = useState(readVideosMutedPreference);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const playbackByVideoRef = useRef<Record<string, VideoPlaybackSnapshot>>({});
   const initialPositionedRef = useRef(false);
   const touchStartY = useRef(0);
   const touchStartX = useRef(0);
@@ -673,6 +754,19 @@ export default function VideosPage() {
   const touchAxisRef = useRef<TouchAxis>('unknown');
   const { mediumTap, lightTap } = useHapticFeedback();
   const isDeepLink = initialDeepLinkRef.current;
+
+  const rememberPlayback = useCallback((videoId: string, playback: VideoPlaybackSnapshot) => {
+    if (!videoId || !Number.isFinite(playback.time)) return;
+    playbackByVideoRef.current[videoId] = {
+      time: Math.max(0, playback.time),
+      paused: playback.paused,
+    };
+  }, []);
+
+  const openWatchPanel = useCallback((videoId: string, playback: VideoPlaybackSnapshot) => {
+    rememberPlayback(videoId, playback);
+    setWatchVideoId(videoId);
+  }, [rememberPlayback]);
 
   useEffect(() => {
     writeVideosMutedPreference(globalMuted);
@@ -811,8 +905,15 @@ export default function VideosPage() {
   const shareVideo = rankedVideos.find((item) => item.id === shareVideoId);
   const likesVideo = rankedVideos.find((item) => item.id === likesVideoId);
 
-  const closeWatchPanel = useCallback(() => {
-    const index = rankedVideos.findIndex((item) => item.id === watchVideoId);
+  const selectWatchVideo = useCallback((videoId: string, currentPlayback: VideoPlaybackSnapshot) => {
+    if (watchVideoId) rememberPlayback(watchVideoId, currentPlayback);
+    setWatchVideoId(videoId);
+  }, [rememberPlayback, watchVideoId]);
+
+  const closeWatchPanel = useCallback((currentPlayback: VideoPlaybackSnapshot) => {
+    const currentWatchId = watchVideoId;
+    if (currentWatchId) rememberPlayback(currentWatchId, currentPlayback);
+    const index = rankedVideos.findIndex((item) => item.id === currentWatchId);
     setWatchVideoId(null);
     if (index >= 0) {
       setActiveIndex(index);
@@ -821,7 +922,7 @@ export default function VideosPage() {
         if (container) container.scrollTo({ top: index * container.clientHeight, behavior: 'auto' });
       });
     }
-  }, [rankedVideos, watchVideoId]);
+  }, [rankedVideos, rememberPlayback, watchVideoId]);
 
   const floatingBack = isDeepLink ? (
     <div className={cn('absolute left-3 z-50', isMobile ? 'top-[calc(env(safe-area-inset-top,0px)+12px)]' : 'top-4')}>
@@ -858,13 +959,15 @@ export default function VideosPage() {
                 <VideoCard
                   video={video}
                   isActive={index === activeIndex && !watchVideoId}
+                  resumePlayback={playbackByVideoRef.current[video.id] ?? null}
+                  onPlaybackChange={(playback) => rememberPlayback(video.id, playback)}
                   onLike={() => likeVideo(video.id)}
                   onBookmark={() => toggleBookmark(video.id)}
                   onCommentClick={() => { setSelectedVideoId(video.id); setCommentsOpen(true); }}
                   onShareClick={() => { setShareVideoId(video.id); setShareDialogOpen(true); }}
                   onLikesClick={() => { setLikesVideoId(video.id); setLikesDialogOpen(true); }}
                   onProfileClick={() => openProfile(video)}
-                  onWatchClick={() => setWatchVideoId(video.id)}
+                  onWatchClick={(playback) => openWatchPanel(video.id, playback)}
                   onFollow={() => toggleFollow(video.user_id)}
                   currentUserId={user?.id}
                   isMobile={isMobile}
@@ -882,8 +985,10 @@ export default function VideosPage() {
         <VideoWatchPanel
           videos={rankForContext(watchVideoId)}
           activeVideoId={watchVideoId}
-          onSelectVideo={setWatchVideoId}
+          initialPlayback={playbackByVideoRef.current[watchVideoId] ?? null}
+          onSelectVideo={selectWatchVideo}
           onClose={closeWatchPanel}
+          onPlaybackChange={rememberPlayback}
           onLike={likeVideo}
           onBookmark={toggleBookmark}
           onFollow={toggleFollow}
