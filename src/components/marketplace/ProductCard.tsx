@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Heart, MapPin, ShieldCheck, Star, Truck } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Eye, Heart, MapPin, ShieldCheck, Star, Truck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { marketplaceUz } from '@/i18n/marketplace';
@@ -16,12 +16,31 @@ interface ProductCardProps {
   layout?: 'grid' | 'list';
 }
 
+function formatCount(value: number | null | undefined) {
+  const count = Math.max(0, Number(value || 0));
+  if (count < 1000) return String(count);
+  if (count < 1_000_000) {
+    const compact = count / 1000;
+    return `${compact >= 10 ? compact.toFixed(0) : compact.toFixed(1).replace(/\.0$/, '')}K`;
+  }
+  const compact = count / 1_000_000;
+  return `${compact >= 10 ? compact.toFixed(0) : compact.toFixed(1).replace(/\.0$/, '')}M`;
+}
+
 export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }: ProductCardProps) {
   const { triggerHaptic } = useHapticFeedback();
   const { toggleLike } = useProductActions();
   const [isLiked, setIsLiked] = useState(product.is_liked || false);
   const [isLiking, setIsLiking] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setIsLiked(Boolean(product.is_liked));
+  }, [product.is_liked, product.id]);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [product.id, product.images?.[0]?.url]);
 
   const mainImage = product.images?.[0]?.url;
   const { hasDiscount, percent: discountPercent } = getDiscount(product.price, product.compare_at_price);
@@ -31,10 +50,12 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
   const shippingPrice = Number(product.shipping_price ?? 0);
   const deliveryLabel = product.shipping_available
     ? shippingPrice > 0
-      ? 'Yetkazish bor'
+      ? `Yetkazish ${formatPrice(shippingPrice, currency)}`
       : 'Bepul yetkazish'
     : 'Olib ketish';
   const productCondition = conditionLabel(product.condition);
+  const views = Number(product.views_count ?? 0);
+  const likes = Number(product.likes_count ?? 0);
 
   const handleLike = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -84,6 +105,7 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
               alt={product.title}
               className={cn('h-full w-full object-cover', isSoldOut && 'opacity-60 grayscale-[30%]')}
               loading="lazy"
+              decoding="async"
               onError={() => setImageFailed(true)}
             />
           ) : (
@@ -99,14 +121,21 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
           <div>
             <h3 className="line-clamp-2 text-sm font-medium leading-snug">{product.title}</h3>
             {product.seller && (
-              <div className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+              <div className="mt-1 flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
                 <span className="truncate">{product.seller.business_name}</span>
                 {product.seller.is_verified && <ShieldCheck className="h-3 w-3 shrink-0 text-foreground" />}
+                {sellerRating > 0 && (
+                  <span className="ml-1 inline-flex shrink-0 items-center gap-0.5">
+                    <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                    <span className="font-semibold text-foreground/80">{sellerRating.toFixed(1)}</span>
+                  </span>
+                )}
               </div>
             )}
             <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
               <span className="rounded-md bg-muted/70 px-1.5 py-0.5 font-medium text-foreground/80">{productCondition}</span>
               <span className="inline-flex items-center gap-1"><Truck className="h-3 w-3" />{deliveryLabel}</span>
+              {views > 0 && <span className="inline-flex items-center gap-1"><Eye className="h-3 w-3" />{formatCount(views)}</span>}
               {product.location && <span className="inline-flex min-w-0 items-center gap-1"><MapPin className="h-3 w-3 shrink-0" /><span className="max-w-32 truncate">{product.location}</span></span>}
             </div>
           </div>
@@ -129,6 +158,7 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
               disabled={isLiking}
               aria-label={isLiked ? marketplaceUz.card.removeSaved : marketplaceUz.card.save}
               aria-pressed={isLiked}
+              aria-busy={isLiking}
             >
               <Heart className={cn('h-4 w-4', isLiked && 'fill-red-500 text-red-500')} />
             </Button>
@@ -184,6 +214,7 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
             disabled={isLiking}
             aria-label={isLiked ? marketplaceUz.card.removeSaved : marketplaceUz.card.save}
             aria-pressed={isLiked}
+            aria-busy={isLiking}
           >
             <Heart className={cn('h-3.5 w-3.5', isLiked && 'fill-current')} />
           </Button>
@@ -228,7 +259,7 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
           )}
         </div>
 
-        <h3 className="min-h-[2.1rem] line-clamp-2 text-[12.5px] leading-snug text-foreground/90">
+        <h3 className="min-h-[2.1rem] line-clamp-2 text-[12.5px] leading-snug text-foreground/90 sm:text-[13px]">
           {product.title}
         </h3>
 
@@ -236,20 +267,29 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
           <span className="rounded-md bg-muted/65 px-1.5 py-0.5 font-semibold text-foreground/80">
             {productCondition}
           </span>
-          <span className="inline-flex items-center gap-1 rounded-md bg-muted/45 px-1.5 py-0.5 text-muted-foreground">
-            <Truck className="h-2.5 w-2.5" />
-            {deliveryLabel}
+          <span className="inline-flex max-w-full items-center gap-1 rounded-md bg-muted/45 px-1.5 py-0.5 text-muted-foreground">
+            <Truck className="h-2.5 w-2.5 shrink-0" />
+            <span className="truncate">{deliveryLabel}</span>
           </span>
         </div>
 
-        {sellerRating > 0 && (
-          <div className="flex items-center gap-1 text-[11px]">
-            <div className="flex items-center gap-0.5">
-              <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-              <span className="font-semibold tabular-nums">{sellerRating.toFixed(1)}</span>
-            </div>
-            <span className="text-muted-foreground">·</span>
-            <span className="text-muted-foreground">{marketplaceUz.card.sales(product.seller?.total_sales ?? 0)}</span>
+        {(sellerRating > 0 || views > 0 || likes > 0) && (
+          <div className="flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground">
+            {sellerRating > 0 && (
+              <span className="inline-flex items-center gap-0.5">
+                <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                <span className="font-semibold tabular-nums text-foreground/85">{sellerRating.toFixed(1)}</span>
+              </span>
+            )}
+            {views > 0 && (
+              <span className="inline-flex items-center gap-0.5">
+                <Eye className="h-3 w-3" />
+                {formatCount(views)}
+              </span>
+            )}
+            {likes > 0 && (
+              <span className="truncate">{formatCount(likes)} saqlash</span>
+            )}
           </div>
         )}
 
@@ -264,6 +304,9 @@ export function ProductCard({ product, onSelect, onLikeChange, layout = 'grid' }
           <div className="mt-auto flex items-center gap-1 border-t border-border/30 pt-1 text-[11px] text-muted-foreground">
             <span className="min-w-0 flex-1 truncate">{product.seller.business_name}</span>
             {product.seller.is_verified && <ShieldCheck className="h-3 w-3 shrink-0 text-foreground" />}
+            {(product.seller.total_sales ?? 0) > 0 && (
+              <span className="shrink-0 text-[9px]">{marketplaceUz.card.sales(product.seller.total_sales ?? 0)}</span>
+            )}
           </div>
         )}
       </div>
