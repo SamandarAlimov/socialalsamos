@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BadgeCheck, ExternalLink, Loader2, Package, ShoppingBag } from 'lucide-react';
+import { BadgeCheck, ExternalLink, Layers3, Loader2, Package, ShoppingBag } from 'lucide-react';
 
 import { fetchMarketplaceProductById, type Product } from '@/hooks/useMarketplace';
 import { formatPrice } from '@/lib/marketplace';
@@ -133,9 +133,10 @@ export function MarketplaceLinkPreview({ url, isMine, className }: MarketplaceLi
   if (failed || !product) return null;
 
   const authoritativeOptions = variant?.options || selection.options;
-  const optionEntries = Object.entries(authoritativeOptions).slice(0, 4);
+  const optionEntries = Object.entries(authoritativeOptions).slice(0, 6);
   const quantity = Math.max(1, Math.min(selection.quantity || 1, variant?.quantity || product.quantity || 1));
   const unitPrice = Number(variant?.price ?? product.price ?? 0);
+  const lineTotal = unitPrice * quantity;
   const currency = product.currency || 'USD';
   const imageUrl = !imageFailed
     ? variant?.image_url || product.images?.[0]?.url || null
@@ -148,7 +149,7 @@ export function MarketplaceLinkPreview({ url, isMine, className }: MarketplaceLi
       href={url}
       onClick={(event) => event.stopPropagation()}
       className={cn(
-        'group block w-[340px] max-w-full overflow-hidden rounded-2xl border text-left no-underline shadow-sm transition-all hover:-translate-y-px hover:shadow-md',
+        'group block w-[350px] max-w-full overflow-hidden rounded-2xl border text-left no-underline shadow-sm transition-all hover:-translate-y-px hover:shadow-md',
         isMine
           ? 'border-bubble-own-accent/15 bg-black/[0.035] text-bubble-own-foreground'
           : 'border-border/60 bg-background text-foreground',
@@ -201,28 +202,40 @@ export function MarketplaceLinkPreview({ url, isMine, className }: MarketplaceLi
           </p>
 
           {optionEntries.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {optionEntries.map(([name, value]) => (
-                <span
-                  key={name}
-                  className={cn(
-                    'rounded-lg px-2 py-1 text-[10px] font-medium',
-                    isMine ? 'bg-bubble-own-foreground/[0.08]' : 'bg-muted',
-                  )}
-                >
-                  {name}: {value}
-                </span>
-              ))}
+            <div className="mt-2 rounded-xl border border-current/10 p-2">
+              <div className="mb-1.5 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.1em] opacity-55">
+                <Layers3 className="h-3 w-3" /> Tanlangan variant
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {optionEntries.map(([name, value]) => (
+                  <span
+                    key={name}
+                    className={cn(
+                      'rounded-lg px-2 py-1 text-[10px] font-semibold',
+                      isMine ? 'bg-bubble-own-foreground/[0.08]' : 'bg-muted',
+                    )}
+                  >
+                    {name}: {value}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
 
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] opacity-65">
             {variant?.sku && <span>SKU {variant.sku}</span>}
-            {quantity > 1 && <span>{quantity} dona</span>}
+            <span>{quantity} dona</span>
             <span>{unavailable ? 'Hozir mavjud emas' : 'Mahsulotni ko‘rish'}</span>
           </div>
         </div>
       </div>
+
+      {quantity > 1 && (
+        <div className="flex items-center justify-between border-t border-current/10 px-3 py-2 text-xs">
+          <span className="opacity-60">{quantity} × {formatPrice(unitPrice, currency)}</span>
+          <strong className="tabular-nums">Jami {formatPrice(lineTotal, currency)}</strong>
+        </div>
+      )}
     </a>
   );
 }
