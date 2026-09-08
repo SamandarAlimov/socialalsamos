@@ -12,6 +12,59 @@ export interface ProfilePhoto {
 
 // profile_photos jadvali generated types'ga hali kirmagan bo'lishi mumkin
 const db = supabase as any;
+const PROFILE_FALLBACK_BUCKET = 'media';
+
+function safeAvatarFileName(name: string): string {
+  const cleaned = name
+    .normalize('NFKD')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '')
+    .toLowerCase();
+  return cleaned.slice(-80) || 'avatar.jpg';
+}
+
+function shortRandomId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID().slice(0, 8);
+  }
+  return Math.random().toString(36).slice(2, 10);
+}
+
+/**
+ * Profil rasmi identity-critical media hisoblanadi. Asosiy Alsamos media API
+ * vaqtincha 5xx/Cloudflare xato qaytarsa foydalanuvchi profilini butunlay
+ * bloklab qo'ymaslik uchun eski public `media` bucketga favqulodda fallback
+ * qilamiz. Bu faqat aynan tizimga kirgan userning o'z papkasiga yozadi.
+ */
+async function uploadAvatarEmergencyFallback(
+  file: File,
+  userId: string,
+): Promise<{ url: string; key: string }> {
+  const { data } = await supabase.auth.getSession();
+  if (!data.session?.user?.id || data.session.user.id !== userId) {
+    throw new Error('Profil rasmini yuklash uchun sessiyani yangilang');
+  }
+
+  const key = `${userId}/avatar/${Date.now()}-${shortRandomId()}-${safeAvatarFileName(file.name)}`;
+  const { error } = await supabase.storage.from(PROFILE_FALLBACK_BUCKET).upload(key, file, {
+    contentType: file.type || 'image/jpeg',
+    cacheControl: '3600',
+    upsert: false,
+  });
+
+  if (error) {
+    throw new Error(`Profil rasmi fallback yuklashda xatolik: ${error.message}`);
+  }
+
+  const url = supabase.storage.from(PROFILE_FALLBACK_BUCKET).getPublicUrl(key).data.publicUrl;
+  if (!url) {
+    await supabase.storage.from(PROFILE_FALLBACK_BUCKET).remove([key]).catch(() => undefined);
+    throw new Error('Profil rasmi uchun public URL olinmadi');
+  }
+
+  return { url, key };
+}
 
 export function useProfilePhotos(userId?: string | null) {
   const [photos, setPhotos] = useState<ProfilePhoto[]>([]);
@@ -53,17 +106,42 @@ export function useProfilePhotos(userId?: string | null) {
       if (!userId) return null;
 
       setUploading(true);
+      let fallbackKey: string | null = null;
+
       try {
-        const uploaded = await uploadMedia(file, { type: 'avatar', visibility: 'public' });
+        let imageUrl: string;
+
+        try {
+          const uploaded = await uploadMedia(file, { type: 'avatar', visibility: 'public' });
+          imageUrl = uploaded.url;
+        } catch (mediaError) {
+          // api.alsamos.com / media-presign ishlamay qolsa profil rasmini
+          // yuklash user uchun baribir ishlashi kerak.
+          console.warn(
+            '[ProfilePhotos] Primary media upload failed; using authenticated Supabase fallback.',
+            mediaError,
+          );
+          const fallback = await uploadAvatarEmergencyFallback(file, userId);
+          imageUrl = fallback.url;
+          fallbackKey = fallback.key;
+        }
 
         const { error } = await db
           .from('profile_photos')
-          .insert({ user_id: userId, image_url: uploaded.url });
+          .insert({ user_id: userId, image_url: imageUrl });
 
-        if (error) throw error;
+        if (error) {
+          if (fallbackKey) {
+            await supabase.storage
+              .from(PROFILE_FALLBACK_BUCKET)
+              .remove([fallbackKey])
+              .catch(() => undefined);
+          }
+          throw error;
+        }
 
         await fetchPhotos();
-        return uploaded.url;
+        return imageUrl;
       } finally {
         setUploading(false);
       }
