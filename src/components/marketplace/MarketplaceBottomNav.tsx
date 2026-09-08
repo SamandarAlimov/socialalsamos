@@ -83,19 +83,19 @@ export function MarketplaceBottomNav({
         aria-current={activeTab === 'selling' ? 'page' : undefined}
         onClick={() => navigate('/marketplace?tab=selling')}
         className={cn(
-          'fixed bottom-[calc(env(safe-area-inset-bottom)+88px)] right-4 z-50 flex h-12 items-center gap-2 rounded-full border px-4 text-xs font-extrabold shadow-xl backdrop-blur-2xl transition active:scale-95 md:hidden',
+          'fixed bottom-[calc(env(safe-area-inset-bottom)+88px)] right-4 z-50 flex h-12 items-center gap-2 rounded-full border px-4 text-xs font-extrabold backdrop-blur-3xl transition duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30 md:hidden',
           activeTab === 'selling'
-            ? 'border-foreground bg-foreground text-background'
-            : 'border-border/60 bg-background/92 text-foreground',
+            ? 'border-foreground bg-foreground text-background shadow-[0_14px_34px_rgba(0,0,0,0.22)]'
+            : 'border-foreground/[0.12] bg-background/[0.98] text-foreground shadow-[0_14px_34px_rgba(0,0,0,0.16)] ring-1 ring-foreground/[0.04]',
         )}
       >
-        <Plus className="h-4 w-4" />
+        <Plus className="h-4 w-4" strokeWidth={2.3} />
         Sotish
       </button>
 
       <nav
         aria-label="Marketplace navigatsiyasi"
-        className="fixed bottom-[calc(env(safe-area-inset-bottom)+12px)] left-1/2 z-50 flex w-[calc(100%-24px)] max-w-[480px] -translate-x-1/2 items-center justify-around rounded-[28px] border border-border/50 bg-background/88 px-2 py-2 shadow-[0_18px_50px_rgba(0,0,0,0.18)] backdrop-blur-2xl md:hidden"
+        className="fixed bottom-[calc(env(safe-area-inset-bottom)+12px)] left-1/2 z-50 flex w-[calc(100%-24px)] max-w-[480px] -translate-x-1/2 items-center justify-around rounded-[28px] border border-foreground/[0.12] bg-background/[0.98] px-2 py-2 text-foreground shadow-[0_18px_50px_rgba(0,0,0,0.20)] ring-1 ring-foreground/[0.04] backdrop-blur-3xl md:hidden"
       >
         {items.map(item => {
           const Icon = item.icon;
@@ -107,18 +107,21 @@ export function MarketplaceBottomNav({
               aria-label={item.badge > 0 ? `${item.label}, ${item.badge}` : item.label}
               onClick={item.onClick}
               className={cn(
-                'relative flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[20px] px-1 py-2 text-[10px] font-semibold transition active:scale-95',
+                'relative flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[20px] px-1 py-2 text-[10px] font-bold transition duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/25',
                 item.active
-                  ? 'bg-foreground text-background shadow-sm'
-                  : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                  ? 'bg-foreground text-background shadow-[0_8px_22px_rgba(0,0,0,0.16)]'
+                  : 'text-foreground/[0.70] hover:bg-foreground/[0.06] hover:text-foreground',
               )}
             >
               <span className="relative">
-                <Icon className="h-[21px] w-[21px]" strokeWidth={item.active ? 2.4 : 2} />
+                <Icon
+                  className="h-[21px] w-[21px]"
+                  strokeWidth={item.active ? 2.5 : 2.15}
+                />
                 {item.badge > 0 && (
                   <span
                     className={cn(
-                      'absolute -right-2.5 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[8px] font-extrabold',
+                      'absolute -right-2.5 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[8px] font-extrabold shadow-sm ring-2 ring-background',
                       item.active
                         ? 'bg-background text-foreground'
                         : 'bg-destructive text-destructive-foreground',
