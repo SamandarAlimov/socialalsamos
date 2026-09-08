@@ -69,3 +69,44 @@ export function getIceServers(): RTCIceServer[] {
 }
 
 export const ICE_SERVERS = getIceServers();
+
+let cachedRemote: RTCIceServer[] | null = null;
+let inflight: Promise<RTCIceServer[]> | null = null;
+
+/**
+ * Production ICE configuration. TURN credentials are stored server-side in
+ * `public.call_webrtc_config` so they can be rotated without a redeploy, and
+ * they are shared with the Flutter client. Falls back to the static config.
+ */
+export async function loadIceServers(): Promise<RTCIceServer[]> {
+  if (cachedRemote) return cachedRemote;
+  if (inflight) return inflight;
+
+  inflight = (async () => {
+    try {
+      const { supabase } = await import("@/integrations/supabase/client");
+      const { data } = await supabase
+        .from("call_webrtc_config")
+        .select("value")
+        .eq("key", "ice_servers")
+        .maybeSingle();
+
+      const value = (data as { value?: unknown } | null)?.value;
+      if (Array.isArray(value) && value.length > 0) {
+        const servers = value as RTCIceServer[];
+        const hasStun = servers.some((s) =>
+          (Array.isArray(s.urls) ? s.urls : [s.urls]).some((u) => String(u).startsWith("stun:")),
+        );
+        cachedRemote = hasStun ? servers : [...STUN_SERVERS, ...servers];
+        return cachedRemote;
+      }
+    } catch (e) {
+      console.warn("[ICE] remote config unavailable, using defaults", e);
+    }
+
+    cachedRemote = getIceServers();
+    return cachedRemote;
+  })();
+
+  return inflight;
+}
