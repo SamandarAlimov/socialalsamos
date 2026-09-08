@@ -11,15 +11,15 @@ import { uniqueMediaCandidates } from '@/lib/mediaRecovery';
 /**
  * Alsamos media arxitekturasi.
  *
- * Yangi binary fayllar uchun asosiy yo'l api.alsamos.com orqali alohida
- * MinIO/S3 media serveridir. Shu servis vaqtincha ishlamasa, authenticated
- * client mavjud `media` / `media-private` Supabase Storage bucketlariga
- * user-prefixed kalit bilan failover qiladi. Bu fallback 20260902000000
- * migrationdagi bucket/RLS kontrakti bilan bir xil xavfsizlik chegarasini
- * saqlaydi va media serverdagi 5xx/timeout sabab chat yozuvini yo'qotmaydi.
+ * Tashqi media server vaqtincha o'chirilgan paytda yangi binary fayllar
+ * to'g'ridan-to'g'ri `media` / `media-private` Supabase Storage bucketlariga
+ * yoziladi. Tashqi upload faqat VITE_EXTERNAL_MEDIA_UPLOAD_ENABLED=true
+ * bo'lganda qayta yoqiladi va o'shanda ham Supabase fallback saqlanib qoladi.
+ * Eski Alsamos media reference'larini o'qish qo'llab-quvvatlanadi, shuning
+ * uchun server tiklanganda tarixiy media regressiyasiz yana resolve bo'ladi.
  */
 
-/** Supabase Storage bucketlari — legacy read va media-server failover uchun. */
+/** Supabase Storage bucketlari — yangi uploadlar va legacy read uchun. */
 export const MEDIA_BUCKET = 'media';
 export const PRIVATE_MEDIA_BUCKET = 'media-private';
 const PUBLIC_BUCKETS = new Set([MEDIA_BUCKET]);
@@ -30,6 +30,10 @@ const EXTERNAL_API = String(
 const EXTERNAL_MEDIA_PUBLIC_BASE = String(
   import.meta.env.VITE_MEDIA_PUBLIC_BASE_URL || 'https://media.alsamos.com/media',
 ).replace(/\/+$/, '');
+const EXTERNAL_MEDIA_UPLOAD_ENABLED =
+  String(import.meta.env.VITE_EXTERNAL_MEDIA_UPLOAD_ENABLED ?? '')
+    .trim()
+    .toLowerCase() === 'true';
 
 function canUseSameOriginApiProxy(): boolean {
   if (typeof window === 'undefined') return false;
@@ -421,7 +425,7 @@ type ExternalPresignResponse = {
   visibility?: 'public' | 'private';
 };
 
-/** Asosiy yangi-upload yo'li: api.alsamos.com -> MinIO/S3. */
+/** Optional upload yo'li: faqat VITE_EXTERNAL_MEDIA_UPLOAD_ENABLED=true bo'lsa ishlaydi. */
 async function uploadViaExternalApi(
   file: File | Blob,
   token: string,
@@ -513,11 +517,10 @@ function uploadNonce(): string {
 }
 
 /**
- * Availability fallback for the dedicated media service.
+ * Supabase Storage yangi uploadlar uchun vaqtinchalik asosiy storage hisoblanadi.
  *
- * The storage migration requires the first path segment to equal auth.uid().
- * Keeping that invariant here means the browser can fail over without a
- * service-role key and without widening Storage RLS.
+ * Storage migration first path segment auth.uid() bo'lishini talab qiladi.
+ * Shu invariant browserga service-role key bermasdan RLS chegarasini saqlaydi.
  */
 async function uploadViaSupabaseStorage(
   file: File | Blob,
@@ -588,20 +591,38 @@ export async function uploadMedia(
   const filename = options.filename || (file instanceof File ? file.name : 'upload.bin');
   const contentType = file.type || 'application/octet-stream';
   const visibility: MediaVisibility = options.visibility ?? 'public';
-  let primaryFailure = '';
+  const normalizedOptions = { ...options, visibility };
 
+  // Tashqi media server o'chirilgan paytda hech qanday presign/timeout kutmaymiz.
+  // Flag default false: yangi fayllar bevosita Supabase Storage'ga yoziladi.
+  if (!EXTERNAL_MEDIA_UPLOAD_ENABLED) {
+    try {
+      return await uploadViaSupabaseStorage(
+        file,
+        session.user.id,
+        filename,
+        contentType,
+        normalizedOptions,
+      );
+    } catch (error) {
+      const failure = error instanceof Error ? error.message : String(error);
+      throw new Error(`Media yuklash muvaffaqiyatsiz. Supabase Storage: ${failure}`);
+    }
+  }
+
+  let primaryFailure = '';
   try {
     return await uploadViaExternalApi(
       file,
       session.access_token,
       filename,
       contentType,
-      { ...options, visibility },
+      normalizedOptions,
     );
   } catch (error) {
     primaryFailure = error instanceof Error ? error.message : String(error);
     console.warn(
-      '[MediaUpload] Primary media service failed; using authenticated Supabase Storage fallback.',
+      '[MediaUpload] External media service failed; using authenticated Supabase Storage fallback.',
       primaryFailure,
     );
   }
@@ -612,7 +633,7 @@ export async function uploadMedia(
       session.user.id,
       filename,
       contentType,
-      { ...options, visibility },
+      normalizedOptions,
     );
   } catch (fallbackError) {
     const fallbackFailure =
